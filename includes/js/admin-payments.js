@@ -1,0 +1,246 @@
+jQuery(document).ready(function($) {
+    // Simple modal element
+    var $modal = $('<div id="mj-qr-modal" style="display:none; position:fixed; left:0; top:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:99999; align-items:center; justify-content:center;">' +
+        '<div style="background:#fff; padding:30px; max-width:550px; width:90%; border-radius:8px; text-align:center; position:relative; box-shadow:0 5px 20px rgba(0,0,0,0.3);">' +
+        '<button class="button" id="mj-qr-close" style="position:absolute; right:10px; top:10px; padding:5px 10px;">✕ Fermer</button>' +
+        '<div id="mj-qr-content" style="margin-top:20px;"></div>' +
+        '</div></div>');
+    $('body').append($modal);
+
+    $(document).on('click', '.mj-show-qr-btn', function(e) {
+        e.preventDefault();
+        var memberId = $(this).data('member-id');
+        var $btn = $(this);
+        $btn.prop('disabled', true).text('⏳ Génération...');
+
+        $.post(mjPayments.ajaxurl, { 
+            action: 'mj_admin_get_qr', 
+            member_id: memberId, 
+            nonce: mjPayments.nonce 
+        }, function(resp) {
+            $btn.prop('disabled', false).text('QR paiement');
+            
+            if (!resp || !resp.success) {
+                console.error('QR Error:', resp);
+                alert('Erreur: ' + (resp.data ? resp.data : 'Impossible de générer le QR code'));
+                return;
+            }
+            
+            var data = resp.data;
+            // Escape HTML to prevent XSS
+            var escapeHtml = function(text) {
+                var map = {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;'
+                };
+                return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
+            };
+            
+            var isStripe = data.stripe_session_id ? true : false;
+            var paymentMethod = isStripe ? '💳 Stripe' : '🔗 Lien simple';
+            var url = data.checkout_url || data.confirm_url || '';
+            
+            var html = '<h3 style="margin-top:0; color:#0073aa;">Demande de paiement</h3>' +
+                '<p style="font-size:12px; color:#666;"><strong>Méthode:</strong> ' + paymentMethod + '</p>' +
+                '<p><strong>Montant:</strong> ' + escapeHtml(data.amount) + ' €</p>' +
+                '<p><strong>ID Paiement:</strong> #' + escapeHtml(data.payment_id) + '</p>' +
+                '<div style="margin:20px 0; padding:15px; background:#f9f9f9; border-radius:4px; border:2px dashed #0073aa;">' +
+                '<p style="margin:0 0 15px 0;"><strong>📱 QR Code (scannez avec un téléphone):</strong></p>' +
+                '<p><a href="' + escapeHtml(url) + '" target="_blank" title="Cliquer pour confirmer le paiement">' +
+                '<img src="' + escapeHtml(data.qr_url) + '" style="max-width:100%; max-height:300px; border:2px solid #ddd; padding:8px; border-radius:4px; background:white;" alt="QR Code Paiement">' +
+                '</a></p>' +
+                '</div>' +
+                '<p style="font-size:12px; color:#666; margin:10px 0;">Scannez le QR-code ou cliquez sur l\'image pour ouvrir le paiement</p>' +
+                '<hr style="margin:15px 0; border:none; border-top:1px solid #ddd;">' +
+                '<p><strong>🔗 Lien direct:</strong></p>' +
+                '<input type="text" readonly value="' + escapeHtml(url) + '" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:4px; box-sizing:border-box; font-size:11px; margin-bottom:10px;" onclick="this.select()">' +
+                '<button class="button" type="button" onclick="copyToClipboard(this, \'' + escapeHtml(url).replace(/'/g, '\\\'') + '\')">📋 Copier le lien</button>' +
+                '<p style="font-size:11px; color:#999; margin:10px 0 0 0;"><em>Vous pouvez partager ce lien par email ou SMS</em></p>';
+                
+            $('#mj-qr-content').html(html);
+            $('#mj-qr-modal').css('display', 'flex');
+        }, 'json')
+        .fail(function(jqXHR, textStatus, errorThrown) {
+            $btn.prop('disabled', false).text('QR paiement');
+            console.error('AJAX Error:', textStatus, errorThrown);
+            alert('Erreur de communication avec le serveur: ' + textStatus);
+        });
+    });
+
+    $(document).on('click', '.mj-mark-paid-btn', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var memberId = $btn.data('member-id');
+        if (!memberId) {
+            return;
+        }
+
+        if (!window.confirm('Confirmer que ce membre a remis sa cotisation ?')) {
+            return;
+        }
+
+        var originalText = $btn.text();
+        $btn.prop('disabled', true).text('Validation...');
+
+        $.post(mjPayments.ajaxurl, {
+            action: 'mj_member_mark_paid',
+            member_id: memberId,
+            nonce: mjPayments.nonce
+        }, function(resp) {
+            if (!resp || !resp.success) {
+                var message = (resp && resp.data && resp.data.message) ? resp.data.message : 'Impossible d\'enregistrer la cotisation.';
+                alert(message);
+                $btn.prop('disabled', false).text(originalText);
+                return;
+            }
+
+            var successMessage = (resp.data && resp.data.message) ? resp.data.message : 'Cotisation enregistrée.';
+            if (resp.data && resp.data.recorded_by && resp.data.recorded_by.name) {
+                successMessage += '\n' + 'Enregistré par : ' + resp.data.recorded_by.name + ' (ID ' + resp.data.recorded_by.id + ')';
+            }
+            alert(successMessage);
+            window.location.reload();
+        }, 'json').fail(function(jqXHR, textStatus) {
+            alert('Erreur de communication avec le serveur: ' + textStatus);
+            $btn.prop('disabled', false).text(originalText);
+        });
+    });
+
+    $(document).on('click', '#mj-qr-close', function(e) {
+        e.preventDefault();
+        $('#mj-qr-modal').hide();
+    });
+
+    // Close modal when clicking outside
+    $(document).on('click', '#mj-qr-modal', function(e) {
+        if (e.target === this) {
+            $('#mj-qr-modal').hide();
+        }
+    });
+
+    function escapeHtml(text) {
+        var map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return String(text || '').replace(/[&<>"']/g, function(m) { return map[m]; });
+    }
+
+    function loadPaymentHistory(memberId, triggerButton) {
+        if (triggerButton) {
+            triggerButton.prop('disabled', true).text('⏳ Chargement...');
+        }
+
+        $.post(mjPayments.ajaxurl, {
+            action: 'mj_admin_get_payment_history',
+            member_id: memberId,
+            nonce: mjPayments.nonce
+        }, function(resp) {
+            if (triggerButton) {
+                triggerButton.prop('disabled', false).text('💳 Historique Paiements');
+            }
+
+            if (!resp || !resp.success) {
+                console.error('Payment History Error:', resp);
+                alert('Erreur: ' + (resp.data ? resp.data : 'Impossible de récupérer l\'historique des paiements'));
+                return;
+            }
+
+            var data = resp.data || {};
+            var canDelete = !!data.can_delete;
+            var html = '<h3 style="margin-top:0; color:#0073aa;">Historique des paiements</h3>';
+
+            if (data.payments && data.payments.length > 0) {
+                html += '<ul style="list-style:none; padding:0;">';
+                data.payments.forEach(function(payment) {
+                    html += '<li style="margin-bottom:10px; padding:10px; border:1px solid #ddd; border-radius:4px; position:relative;">' +
+                        '<strong>Date:</strong> ' + escapeHtml(payment.date) + '<br>' +
+                        '<strong>Montant:</strong> ' + escapeHtml(payment.amount) + ' €<br>' +
+                        '<strong>Référence:</strong> ' + escapeHtml(payment.reference) + '<br>' +
+                        '<strong>Statut:</strong> ' + escapeHtml(payment.status_label || payment.status || 'Inconnu') + '<br>' +
+                        '<strong>Méthode:</strong> ' + escapeHtml(payment.method || '') +
+                        (canDelete ? '<div style="margin-top:8px;"><button class="button button-small mj-delete-payment-btn" data-member-id="' + escapeHtml(memberId) + '" data-history-id="' + escapeHtml(payment.history_id || '') + '" data-payment-id="' + escapeHtml(payment.payment_id || '') + '">🗑️ Supprimer</button></div>' : '') +
+                        '</li>';
+                });
+                html += '</ul>';
+            } else {
+                html += '<p>Aucun paiement trouvé pour ce membre.</p>';
+            }
+
+            $('#mj-qr-content').html(html);
+            $('#mj-qr-modal').css('display', 'flex');
+        }, 'json')
+        .fail(function(jqXHR, textStatus, errorThrown) {
+            if (triggerButton) {
+                triggerButton.prop('disabled', false).text('💳 Historique Paiements');
+            }
+            console.error('AJAX Error:', textStatus, errorThrown);
+            alert('Erreur de communication avec le serveur: ' + textStatus);
+        });
+    }
+
+    $(document).on('click', '.mj-payment-history-btn', function(e) {
+        e.preventDefault();
+        var memberId = $(this).data('member-id');
+        loadPaymentHistory(memberId, $(this));
+    });
+
+    $(document).on('click', '.mj-delete-payment-btn', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var memberId = $btn.data('member-id');
+        var historyId = $btn.data('history-id');
+        var paymentId = $btn.data('payment-id');
+
+        if (!confirm('Supprimer ce paiement ?')) {
+            return;
+        }
+
+        $btn.prop('disabled', true).text('Suppression...');
+
+        $.post(mjPayments.ajaxurl, {
+            action: 'mj_admin_delete_payment',
+            member_id: memberId,
+            history_id: historyId,
+            payment_id: paymentId,
+            nonce: mjPayments.nonce
+        }, function(resp) {
+            if (!resp || !resp.success) {
+                console.error('Delete Payment Error:', resp);
+                alert('Impossible de supprimer le paiement: ' + (resp && resp.data ? resp.data : 'erreur inconnue'));
+                $btn.prop('disabled', false).text('🗑️ Supprimer');
+                return;
+            }
+
+            // Reload history list
+            loadPaymentHistory(memberId);
+        }, 'json').fail(function(jqXHR, textStatus, errorThrown) {
+            console.error('AJAX Error:', textStatus, errorThrown);
+            alert('Erreur de communication avec le serveur: ' + textStatus);
+            $btn.prop('disabled', false).text('🗑️ Supprimer');
+        });
+    });
+});
+
+// Helper function to copy to clipboard
+function copyToClipboard(button, text) {
+    var tempInput = document.createElement('input');
+    tempInput.value = text;
+    document.body.appendChild(tempInput);
+    tempInput.select();
+    document.execCommand('copy');
+    document.body.removeChild(tempInput);
+    
+    var originalText = button.textContent;
+    button.textContent = '✅ Copié!';
+    setTimeout(function() {
+        button.textContent = originalText;
+    }, 2000);
+}
+

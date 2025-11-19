@@ -1,0 +1,382 @@
+.mj-member-login-component {
+    --mj-member-login-primary: var(--e-global-color-primary, #0073aa);
+    --mj-member-login-primary-hover: var(--e-global-color-primary-hover, #005f8d);
+    --mj-member-login-text: #ffffff;
+    --mj-member-login-modal-bg: #ffffff;
+    --mj-member-login-modal-text: #1f1f1f;
+    --mj-member-login-backdrop: rgba(17, 24, 39, 0.55);
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+}
+
+.mj-member-login-component[data-preview="1"] .mj-member-login-component__preview-note {
+    margin-bottom: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-left: 4px solid rgba(0, 115, 170, 0.6);
+    background: rgba(0, 115, 170, 0.08);
+    color: rgba(17, 24, 39, 0.85);
+    font-size: 0.85rem;
+    border-radius: 6px;
+}
+
+body.mj-member-login-open {
+    overflow: hidden;
+}
+
+.mj-member-login-component--align-center,
+.mj-member-login-component--align-right,
+.mj-member-login-component--align-stretch {
+    display: flex;
+    width: 100%;
+}
+
+.mj-member-login-component--align-center {
+    justify-content: center;
+}
+
+.mj-member-login-component--align-right {
+    justify-content: flex-end;
+}
+
+.mj-member-login-component--align-stretch {
+    justify-content: stretch;
+}
+
+.mj-member-login-component--align-stretch .mj-member-login-component__trigger,
+.mj-member-login-component--align-stretch .mj-member-login-component__trigger--account {
+    width: 100%;
+}
+
+.mj-member-login-component__trigger,
+.mj-member-login-component__submit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--mj-member-login-primary);
+    background-color: var(--mj-member-login-primary);
+    color: var(--mj-member-login-text);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.25s ease, border-color 0.25s ease, transform 0.2s ease;
+    box-shadow: 0 10px 30px rgba(0, 115, 170, 0.18);
+}
+
+.mj-member-login-component__trigger-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    color: inherit;
+}
+
+.mj-member-login-component__trigger-icon i,
+.mj-member-login-component__trigger-icon svg,
+.mj-member-login-component__trigger-icon .elementor-icon,
+.mj-member-login-component__trigger-icon .elementor-icon i,
+.mj-member-login-component__trigger-icon .elementor-icon svg {
+    display: block;
+    width: 1.1em;
+    height: 1.1em;
+}
+
+.mj-member-login-component__trigger-icon svg {
+    fill: currentColor;
+}
+
+.mj-member-login-component__trigger-icon .elementor-icon {
+    color: inherit;
+}
+
+/* Editor tweaks */
+.elementor-editor-active .elementor-control-button_icon .elementor-control-input-wrapper .elementor-icons-select2 {
+    min-width: 240px;
+}
+
+.elementor-editor-active .elementor-control-button_icon .elementor-icons-select2 .select2-selection {
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+}
+
+.elementor-editor-active .elementor-control-button_icon .elementor-icon-picker__dropdown {
+    min-width: 260px;
+}
+
+.elementor-editor-active .elementor-control-button_icon .select2-dropdown {
+    min-width: 88px;
+}
+
+.mj-member-login-component__trigger-icon i {
+    font-size: 1.1em;
+}
+
+.mj-member-login-component__trigger-label {
+    display: inline-flex;
+    align-items: center;
+    line-height: 1.2;
+}
+
+.mj-member-login-component__trigger:hover,
+.mj-member-login-component__submit:hover {
+    background-color: var(--mj-member-login-primary-hover);
+    border-color: var(--mj-member-login-primary-hover);
+    transform: translateY(-1px);
+}
+
+.mj-member-login-component__trigger:focus-visible,
+.mj-member-login-component__submit:focus-visible {
+    outline: 2px solid var(--mj-member-login-primary-hover);
+    outline-offset: 3px;
+}
+
+.mj-member-login-component__modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+    transition: opacity 0.25s ease;
+    z-index: 100000;
+}
+
+.mj-member-login-component__modal.is-active {
+    opacity: 1;
+    pointer-events: auto;
+    visibility: visible;
+}
+
+.mj-member-login-component__backdrop {
+    position: absolute;
+    inset: 0;
+    background: var(--mj-member-login-backdrop);
+    backdrop-filter: blur(2px);
+}
+
+.mj-member-login-component__dialog {
+    position: relative;
+    width: min(480px, calc(100% - 32px));
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    background: var(--mj-member-login-modal-bg);
+    color: var(--mj-member-login-modal-text);
+    border-radius: 16px;
+    box-shadow: 0 30px 60px rgba(15, 23, 42, 0.2);
+    padding: 32px;
+    z-index: 1;
+}
+
+.mj-member-login-component__close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    border: none;
+    background: transparent;
+    color: currentColor;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.mj-member-login-component__title {
+    font-size: 1.5rem;
+    margin: 0 0 0.5rem;
+}
+
+.mj-member-login-component__description {
+    margin: 0 0 1.5rem;
+    color: rgba(31, 41, 55, 0.82);
+}
+
+.mj-member-login-component__errors {
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    border-left: 4px solid #d63638;
+    background: #fef2f2;
+    color: #8b1a1c;
+    border-radius: 8px;
+    font-size: 0.95rem;
+}
+
+.mj-member-login-component__errors p {
+    margin: 0;
+}
+
+.mj-member-login-component__form {
+    display: grid;
+    gap: 1rem;
+}
+
+.mj-member-login-component__field label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+}
+
+.mj-member-login-component__field input[type="text"],
+.mj-member-login-component__field input[type="email"],
+.mj-member-login-component__field input[type="password"] {
+    width: 100%;
+    padding: 0.65rem 0.85rem;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.9);
+    background: #f9fafb;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    font-size: 1rem;
+}
+
+.mj-member-login-component__field input[type="text"]:focus,
+.mj-member-login-component__field input[type="email"]:focus,
+.mj-member-login-component__field input[type="password"]:focus {
+    border-color: var(--mj-member-login-primary);
+    box-shadow: 0 0 0 3px rgba(0, 115, 170, 0.18);
+    outline: none;
+    background: #ffffff;
+}
+
+.mj-member-login-component__field--inline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.mj-member-login-component__remember {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.mj-member-login-component__link {
+    font-weight: 500;
+    color: var(--mj-member-login-primary);
+    text-decoration: none;
+}
+
+.mj-member-login-component__link:hover {
+    text-decoration: underline;
+}
+
+.mj-member-login-component__actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.mj-member-login-component__extras {
+    margin-top: 0.5rem;
+    text-align: center;
+}
+
+.mj-member-login-component__link--register {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    font-weight: 600;
+}
+
+.mj-member-login-component__account-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0.75rem;
+}
+
+.mj-member-login-component__member {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0 0 1.25rem;
+}
+
+.mj-member-login-component__member-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: #e2e8f0;
+    border: 1px solid rgba(15, 23, 42, 0.1);
+    flex-shrink: 0;
+}
+
+.mj-member-login-component__member-avatar img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.mj-member-login-component__member-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.mj-member-login-component__member-name {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.mj-member-login-component__account-item {
+    margin: 0;
+}
+
+.mj-member-login-component__account-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 0.85rem 1.1rem;
+    border-radius: 12px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    background: #f9fafb;
+    color: inherit;
+    text-decoration: none;
+    font-weight: 600;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.mj-member-login-component__account-link:hover,
+.mj-member-login-component__account-link:focus-visible {
+    transform: translateY(-1px);
+    border-color: rgba(0, 115, 170, 0.4);
+    background: #ffffff;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+    outline: none;
+}
+
+.mj-member-login-component__account-icon {
+    font-size: 1.4rem;
+    line-height: 1;
+    color: rgba(15, 23, 42, 0.45);
+}
+
+@media (max-width: 600px) {
+    .mj-member-login-component__dialog {
+        padding: 24px 20px;
+        border-radius: 12px;
+    }
+
+    .mj-member-login-component__actions {
+        justify-content: center;
+    }
+
+    .mj-member-login-component__trigger,
+    .mj-member-login-component__submit {
+        width: 100%;
+    }
+}

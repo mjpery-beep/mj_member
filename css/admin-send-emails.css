@@ -1,0 +1,279 @@
+
+.mj-send-email-form {
+    max-width: 960px;
+}
+
+.mj-send-email-form .mj-fieldset {
+    border: 1px solid #dcdcde;
+    border-radius: 6px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+    background: #fff;
+}
+
+.mj-send-email-form .mj-fieldset legend {
+    font-weight: 600;
+    padding: 0 6px;
+}
+
+.mj-send-email-form .mj-field-group {
+    margin-bottom: 18px;
+}
+
+.mj-send-email-form label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.mj-send-email-form select,
+.mj-send-email-form input[type="text"],
+.mj-send-email-form input[type="email"] {
+    width: 100%;
+    max-width: 420px;
+}
+
+.mj-send-email-form .mj-choice-grid {
+    display: grid;
+    gap: 6px 12px;
+}
+
+.mj-send-email-form .mj-recipient-hint {
+    font-size: 13px;
+    color: #555d66;
+    margin-top: 4px;
+}
+
+.mj-send-email-form .mj-helper-text {
+    margin-bottom: 18px;
+    font-size: 13px;
+    color: #3c434a;
+    background: #f6f7f7;
+    border-left: 4px solid #0073aa;
+    padding: 12px 14px;
+    border-radius: 4px;
+}
+
+.mj-send-email-form .mj-email-editor-wrapper {
+    margin-top: 20px;
+}
+
+.mj-send-email-form .mj-template-help {
+    font-size: 12px;
+    color: #6c7781;
+    margin-top: 6px;
+}
+
+.mj-send-email-form .mj-placeholder-list {
+    margin: 12px 0 0;
+    padding-left: 18px;
+    font-size: 12px;
+    color: #6c7781;
+}
+
+.mj-send-email-form .mj-placeholder-list li {
+    margin: 2px 0;
+}
+
+.mj-hidden {
+    display: none !important;
+}
+
+.mj-template-loading {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #555d66;
+}
+
+.mj-template-loading .spinner {
+    visibility: visible;
+}
+
+.mj-actions {
+    margin-top: 12px;
+}
+
+.mj-email-progress {
+    margin-top: 24px;
+    border: 1px solid #dcdcde;
+    border-radius: 6px;
+    background: #fff;
+    padding: 16px 18px;
+}
+
+.mj-email-progress h2 {
+    margin-top: 0;
+    font-size: 18px;
+}
+
+.mj-email-progress-summary {
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.mj-email-progress-summary.is-error {
+    color: #d63638;
+}
+
+.mj-email-progress-log {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.mj-email-log-heading {
+    font-weight: 600;
+    color: #1d2327;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.mj-email-log-entry {
+    border-left: 4px solid #8c8f94;
+    background: #f6f7f7;
+    padding: 12px 14px;
+    border-radius: 4px;
+}
+
+.mj-email-log-entry__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    font-weight: 600;
+}
+
+.mj-email-log-entry__status-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mj-email-log-entry__status {
+    font-weight: 500;
+    color: #2c3338;
+}
+
+.mj-email-log-entry__toggle {
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.mj-email-log-entry__emails {
+    font-size: 13px;
+    color: #50575e;
+    margin-top: 4px;
+}
+
+.mj-email-log-entry__message {
+    font-size: 13px;
+    margin-top: 6px;
+    color: #3c434a;
+}
+
+.mj-email-log-entry__errors {
+    font-size: 12px;
+    color: #b5271f;
+    margin-top: 4px;
+}
+
+.mj-email-log-entry__preview {
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    background: #fff;
+}
+
+.mj-email-log-entry__preview-subject {
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.mj-email-log-entry__preview-body {
+    font-size: 13px;
+    color: #2c3338;
+}
+
+.mj-email-log-entry__preview-body img {
+    max-width: 100%;
+    height: auto;
+}
+
+.mj-email-log-entry.is-success {
+    border-color: #46b450;
+    background: #f1fdf3;
+}
+
+.mj-email-log-entry.is-error {
+    border-color: #d63638;
+    background: #fef4f3;
+}
+
+.mj-email-log-entry.is-skipped {
+    border-color: #8c8f94;
+    background: #fbfbfb;
+}
+
+.mj-email-log-entry.is-pending {
+    border-color: #72aee6;
+    background: #f0f6fc;
+}
+
+.mj-email-log-entry.is-test-mode {
+    border-color: #f0b429;
+    background: #fff8e5;
+}
+
+.mj-email-log-entry__badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: #dcdcde;
+    color: #4a4a4a;
+}
+
+.mj-email-log-entry__badge--test {
+    background: #ffe08a;
+    color: #7a5200;
+}
+
+.mj-email-progress-finished {
+    font-weight: 500;
+    margin-left: 6px;
+    color: #1a7f37;
+}
+
+.mj-email-progress-note {
+    font-weight: 400;
+    margin-left: 6px;
+}
+
+.mj-email-progress-note--test {
+    display: inline-block;
+    background: #fff8e5;
+    border-left: 3px solid #f0b429;
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: #7a5200;
+    font-size: 12px;
+}
+
+.mj-email-summary-line {
+    display: inline-block;
+}
+
+.mj-send-email-form.is-sending button[type="submit"] {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
