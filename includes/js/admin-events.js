@@ -94,4 +94,44 @@
             deadlineInput.value = formatDateTimeLocal(defaultDeadline);
         });
     }
+
+    function escapeHtml(value) {
+        return $('<div>').text(value || '').html();
+    }
+
+    var locationSelect = $('#mj-event-location');
+    var locationPreview = $('#mj-event-location-preview');
+
+    function renderLocationPreview() {
+        if (!locationSelect.length || !locationPreview.length) {
+            return;
+        }
+
+        var option = locationSelect.find('option:selected');
+        if (!option.length || option.val() === '0') {
+            locationPreview.html('<p class="description">Choisissez un lieu pour afficher un apercu.</p>');
+            return;
+        }
+
+        var name = escapeHtml(option.text());
+        var address = escapeHtml(option.data('address'));
+        var notes = escapeHtml(option.data('notes'));
+        var mapSrc = option.data('map') || '';
+
+        var html = '<strong>' + name + '</strong><br />';
+        if (address) {
+            html += '<span>' + address + '</span><br />';
+        }
+        if (notes) {
+            html += '<span class="description">Notes: ' + notes + '</span><br />';
+        }
+        if (mapSrc) {
+            html += '<div class="mj-event-location-map" style="margin-top:10px; max-width:520px;"><iframe src="' + mapSrc + '" width="520" height="260" style="border:0;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div>';
+        }
+
+        locationPreview.html(html);
+    }
+
+    locationSelect.on('change', renderLocationPreview);
+    renderLocationPreview();
 })(jQuery);

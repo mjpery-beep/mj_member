@@ -39,12 +39,14 @@ class MjEvents_List_Table extends WP_List_Table {
     public function get_columns() {
         return array(
             'cb'                    => '<input type="checkbox" />',
+            'cover'                 => 'Visuel',
             'title'                 => 'Titre',
             'status'                => 'Statut',
             'type'                  => 'Type',
             'date_debut'            => 'Début',
             'date_fin'              => 'Fin',
             'date_fin_inscription'  => 'Fin d\'inscription',
+            'location'              => 'Lieu',
             'age_range'             => 'Âges',
             'prix'                  => 'Tarif',
             'registrations'         => 'Inscriptions',
@@ -61,6 +63,7 @@ class MjEvents_List_Table extends WP_List_Table {
             'date_debut'           => array('date_debut', true),
             'date_fin'             => array('date_fin', true),
             'date_fin_inscription' => array('date_fin_inscription', true),
+            'location'             => array('location', false),
             'prix'                 => array('prix', false),
             'updated_at'           => array('updated_at', true),
         );
@@ -101,31 +104,13 @@ class MjEvents_List_Table extends WP_List_Table {
             'type'   => $type_filter,
         );
 
-        $allowed_orderby = array('title', 'status', 'type', 'date_debut', 'date_fin', 'date_fin_inscription', 'prix', 'updated_at');
-        $orderby         = isset($_REQUEST['orderby']) ? sanitize_key(wp_unslash($_REQUEST['orderby'])) : 'date_debut';
-        if (!in_array($orderby, $allowed_orderby, true)) {
-            $orderby = 'date_debut';
-        }
-
-        $order = isset($_REQUEST['order']) ? strtoupper(sanitize_text_field(wp_unslash($_REQUEST['order']))) : 'DESC';
-        $order = $order === 'ASC' ? 'ASC' : 'DESC';
-
-        $orderby_map = array(
-            'title'                => 'title',
-            'status'               => 'status',
-            'type'                 => 'type',
-            'date_debut'           => 'date_debut',
-            'date_fin'             => 'date_fin',
-            'date_fin_inscription' => 'date_fin_inscription',
-            'prix'                 => 'prix',
-            'updated_at'           => 'updated_at',
-        );
-
-        $wpdb         = MjTools::getWpdb();
-        $events_table = mj_member_get_events_table_name();
+        $wpdb            = MjTools::getWpdb();
+        $events_table    = mj_member_get_events_table_name();
+        $locations_table = mj_member_get_event_locations_table_name();
 
         if (!mj_member_table_exists($events_table)) {
             mj_member_upgrade_to_2_2($wpdb);
+            mj_member_upgrade_to_2_3($wpdb);
 
             if (!mj_member_table_exists($events_table)) {
                 $this->items = array();
@@ -137,24 +122,60 @@ class MjEvents_List_Table extends WP_List_Table {
                 return;
             }
         }
+
+        if (!mj_member_table_exists($locations_table)) {
+            mj_member_upgrade_to_2_3($wpdb);
+        }
+
+        $has_locations = mj_member_table_exists($locations_table);
+
+        $allowed_orderby = array('title', 'status', 'type', 'date_debut', 'date_fin', 'date_fin_inscription', 'location', 'prix', 'updated_at');
+        $orderby         = isset($_REQUEST['orderby']) ? sanitize_key(wp_unslash($_REQUEST['orderby'])) : 'date_debut';
+        if (!in_array($orderby, $allowed_orderby, true)) {
+            $orderby = 'date_debut';
+        }
+
+        $order = isset($_REQUEST['order']) ? strtoupper(sanitize_text_field(wp_unslash($_REQUEST['order']))) : 'DESC';
+        $order = $order === 'ASC' ? 'ASC' : 'DESC';
+
+        $orderby_map = array(
+            'title'                => 'events.title',
+            'status'               => 'events.status',
+            'type'                 => 'events.type',
+            'date_debut'           => 'events.date_debut',
+            'date_fin'             => 'events.date_fin',
+            'date_fin_inscription' => 'events.date_fin_inscription',
+            'location'             => $has_locations ? 'location_name' : 'events.title',
+            'prix'                 => 'events.prix',
+            'updated_at'           => 'events.updated_at',
+        );
         $where_parts  = array();
         $where_values = array();
 
         if ($status_filter !== '') {
-            $where_parts[]  = 'status = %s';
+            $where_parts[]  = 'events.status = %s';
             $where_values[] = $status_filter;
         }
 
         if ($type_filter !== '') {
-            $where_parts[]  = 'type = %s';
+            $where_parts[]  = 'events.type = %s';
             $where_values[] = $type_filter;
         }
 
         if ($search !== '') {
-            $like            = '%' . $wpdb->esc_like($search) . '%';
-            $where_parts[]   = '(title LIKE %s OR description LIKE %s)';
+            $like             = '%' . $wpdb->esc_like($search) . '%';
+            $search_condition = '(events.title LIKE %s OR events.description LIKE %s';
+            if ($has_locations) {
+                $search_condition .= ' OR locations.name LIKE %s OR locations.city LIKE %s';
+            }
+            $search_condition .= ')';
+            $where_parts[]   = $search_condition;
             $where_values[]  = $like;
             $where_values[]  = $like;
+            if ($has_locations) {
+                $where_values[] = $like;
+                $where_values[] = $like;
+            }
         }
 
         $where_sql = '';
@@ -162,7 +183,36 @@ class MjEvents_List_Table extends WP_List_Table {
             $where_sql = 'WHERE ' . implode(' AND ', $where_parts);
         }
 
-        $query_base = "SELECT id, title, status, type, cover_id, description, age_min, age_max, date_debut, date_fin, date_fin_inscription, prix, created_at, updated_at FROM $events_table $where_sql ORDER BY " . $orderby_map[$orderby] . " $order LIMIT %d OFFSET %d";
+        $select_fields = array(
+            'events.id AS id',
+            'events.title AS title',
+            'events.status AS status',
+            'events.type AS type',
+            'events.cover_id AS cover_id',
+            'events.description AS description',
+            'events.age_min AS age_min',
+            'events.age_max AS age_max',
+            'events.date_debut AS date_debut',
+            'events.date_fin AS date_fin',
+            'events.date_fin_inscription AS date_fin_inscription',
+            'events.location_id AS location_id',
+            'events.prix AS prix',
+            'events.created_at AS created_at',
+            'events.updated_at AS updated_at',
+        );
+
+        if ($has_locations) {
+            $select_fields[] = 'locations.name AS location_name';
+            $select_fields[] = 'locations.city AS location_city';
+        } else {
+            $select_fields[] = 'NULL AS location_name';
+            $select_fields[] = 'NULL AS location_city';
+        }
+
+        $select_clause = implode(', ', $select_fields);
+        $join_sql = $has_locations ? " LEFT JOIN {$locations_table} AS locations ON locations.id = events.location_id" : '';
+
+        $query_base = "SELECT {$select_clause} FROM {$events_table} AS events{$join_sql} {$where_sql} ORDER BY " . $orderby_map[$orderby] . " {$order} LIMIT %d OFFSET %d";
 
         $items_params   = $where_values;
         $items_params[] = $per_page;
@@ -172,7 +222,7 @@ class MjEvents_List_Table extends WP_List_Table {
         $prepared_query = call_user_func_array(array($wpdb, 'prepare'), $items_params);
         $items          = $wpdb->get_results($prepared_query, ARRAY_A);
 
-        $count_query = "SELECT COUNT(*) FROM $events_table $where_sql";
+        $count_query = "SELECT COUNT(DISTINCT events.id) FROM {$events_table} AS events{$join_sql} {$where_sql}";
         if (!empty($where_values)) {
             $count_params = $where_values;
             array_unshift($count_params, $count_query);
@@ -244,6 +294,23 @@ class MjEvents_List_Table extends WP_List_Table {
         return esc_html($label);
     }
 
+    public function column_cover($item) {
+        $cover_id = isset($item['cover_id']) ? (int) $item['cover_id'] : 0;
+        if ($cover_id <= 0) {
+            return '<span style="color:#6c757d;">Aucun visuel</span>';
+        }
+
+        $image_html = wp_get_attachment_image($cover_id, array(80, 80), false, array(
+            'style' => 'max-height:60px;width:auto;border-radius:4px;display:block;margin:0 auto;',
+        ));
+
+        if (!$image_html) {
+            return '<span style="color:#6c757d;">Aucun visuel</span>';
+        }
+
+        return wp_kses_post($image_html);
+    }
+
     public function column_date_debut($item) {
         if (empty($item['date_debut'])) {
             return '—';
@@ -281,6 +348,21 @@ class MjEvents_List_Table extends WP_List_Table {
         }
 
         return esc_html(wp_date('d/m/Y H:i', $timestamp));
+    }
+
+    public function column_location($item) {
+        $name = isset($item['location_name']) ? trim((string) $item['location_name']) : '';
+        $city = isset($item['location_city']) ? trim((string) $item['location_city']) : '';
+
+        if ($name === '') {
+            return '<span style="color:#6c757d;">Non défini</span>';
+        }
+
+        if ($city !== '') {
+            return esc_html($name) . '<br /><span style="color:#6c757d;font-size:11px;">' . esc_html($city) . '</span>';
+        }
+
+        return esc_html($name);
     }
 
     public function column_age_range($item) {

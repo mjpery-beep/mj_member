@@ -12,6 +12,22 @@ class MjMembers_CRUD extends MjTools {
     const STATUS_ACTIVE = 'active';
     const STATUS_INACTIVE = 'inactive';
 
+    /** @var array<int,string>|null */
+    private static $tableColumns = null;
+    /** @var array<string,int> */
+    private static $columnMaxLengths = array(
+        'first_name' => 100,
+        'last_name' => 100,
+        'email' => 150,
+        'phone' => 30,
+        'address' => 250,
+        'city' => 120,
+        'postal_code' => 20,
+        'role' => 20,
+        'status' => 50,
+        'description_courte' => 255,
+    );
+
     public static function getAllowedRoles() {
         return array(
             self::ROLE_JEUNE,
@@ -300,9 +316,13 @@ class MjMembers_CRUD extends MjTools {
             'date_last_payement' => self::sanitizeDateTime($data['date_last_payement'] ?? ''),
             'photo_id' => isset($data['photo_id']) ? intval($data['photo_id']) : null,
             'photo_usage_consent' => !empty($data['photo_usage_consent']) ? 1 : 0,
+            'newsletter_opt_in' => array_key_exists('newsletter_opt_in', $data) ? (!empty($data['newsletter_opt_in']) ? 1 : 0) : 1,
+            'sms_opt_in' => array_key_exists('sms_opt_in', $data) ? (!empty($data['sms_opt_in']) ? 1 : 0) : 1,
             'wp_user_id' => self::sanitizeUserId($data['wp_user_id'] ?? null),
         );
 
+        $insert = self::enforceColumnLengths($insert);
+        $insert = self::filterAvailableColumns($insert);
         $insert = self::stripNulls($insert);
         $result = self::getWpdb()->insert($table_name, $insert);
 
@@ -330,7 +350,7 @@ class MjMembers_CRUD extends MjTools {
         $updates = array();
 
         $allowed_fields = array(
-            'first_name','last_name','email','phone','birth_date','role','guardian_id','is_autonomous','requires_payment','address','city','postal_code','notes','description_courte','description_longue','status','date_last_payement','photo_id','photo_usage_consent','wp_user_id'
+            'first_name','last_name','email','phone','birth_date','role','guardian_id','is_autonomous','requires_payment','address','city','postal_code','notes','description_courte','description_longue','status','date_last_payement','photo_id','photo_usage_consent','newsletter_opt_in','sms_opt_in','wp_user_id'
         );
 
         foreach ($data as $field => $value) {
@@ -340,7 +360,7 @@ class MjMembers_CRUD extends MjTools {
 
             switch ($field) {
                 case 'email':
-                    $updates[$field] = self::sanitizeOptionalEmail($value);
+                    $updates[$field] = self::sanitizeOptionalEmail($value, false);
                     break;
                 case 'first_name':
                 case 'last_name':
@@ -381,6 +401,8 @@ class MjMembers_CRUD extends MjTools {
                     break;
                 case 'is_autonomous':
                 case 'photo_usage_consent':
+                case 'newsletter_opt_in':
+                case 'sms_opt_in':
                     $updates[$field] = !empty($value) ? 1 : 0;
                     break;
                 case 'photo_id':
@@ -394,13 +416,16 @@ class MjMembers_CRUD extends MjTools {
             }
         }
 
+        $updates = self::enforceColumnLengths($updates);
+        $updates = self::filterAvailableColumns($updates);
+
         if (empty($updates)) {
-            return false;
+            return 0;
         }
 
         $effective_role = $updates['role'] ?? $current->role;
 
-        if (array_key_exists('email', $updates) && $updates['email'] !== null && !is_email($updates['email'])) {
+        if (array_key_exists('email', $updates) && $updates['email'] !== null && $updates['email'] !== '' && !is_email($updates['email'])) {
             return false;
         }
 
@@ -529,13 +554,17 @@ class MjMembers_CRUD extends MjTools {
         return (int) !empty($value);
     }
 
-    private static function sanitizeOptionalEmail($value) {
+    private static function sanitizeOptionalEmail($value, $allow_null = true) {
         if ($value === null || $value === '') {
-            return null;
+            return $allow_null ? null : '';
         }
 
         $email = sanitize_email($value);
-        return $email === '' ? null : $email;
+        if ($email === '') {
+            return $allow_null ? null : '';
+        }
+
+        return $email;
     }
 
     private static function sanitizeOptionalText($value) {
@@ -576,6 +605,85 @@ class MjMembers_CRUD extends MjTools {
 
         $user_id = intval($value);
         return $user_id > 0 ? $user_id : null;
+    }
+
+    private static function getTableColumns() {
+        if (self::$tableColumns !== null) {
+            return self::$tableColumns;
+        }
+
+        $table = self::getTableName(self::TABLE_NAME);
+        $table_sql = esc_sql($table);
+        $results = self::getWpdb()->get_results("SHOW COLUMNS FROM `$table_sql`", ARRAY_A);
+
+        if (empty($results)) {
+            self::$tableColumns = array();
+            return self::$tableColumns;
+        }
+
+        $columns = array();
+        foreach ($results as $row) {
+            if (isset($row['Field'])) {
+                $columns[] = strtolower((string) $row['Field']);
+            }
+        }
+
+        self::$tableColumns = $columns;
+        return self::$tableColumns;
+    }
+
+    private static function filterAvailableColumns(array $data) {
+        $columns = self::getTableColumns();
+        if (empty($columns)) {
+            return $data;
+        }
+
+        foreach (array_keys($data) as $key) {
+            if (!in_array(strtolower($key), $columns, true)) {
+                unset($data[$key]);
+            }
+        }
+
+        return $data;
+    }
+
+    public static function resetColumnCache() {
+        self::$tableColumns = null;
+    }
+
+    public static function hasColumn($column) {
+        if ($column === '' || $column === null) {
+            return false;
+        }
+
+        $columns = self::getTableColumns();
+        if (empty($columns)) {
+            return false;
+        }
+
+        return in_array(strtolower($column), $columns, true);
+    }
+
+    private static function enforceColumnLengths(array $data) {
+        foreach (self::$columnMaxLengths as $column => $length) {
+            if (!isset($data[$column])) {
+                continue;
+            }
+
+            $value = $data[$column];
+            if (!is_string($value)) {
+                continue;
+            }
+
+            $len_fn = function_exists('mb_strlen') ? 'mb_strlen' : 'strlen';
+            $substr_fn = function_exists('mb_substr') ? 'mb_substr' : 'substr';
+
+            if ($len_fn($value) > $length) {
+                $data[$column] = $substr_fn($value, 0, $length);
+            }
+        }
+
+        return $data;
     }
 
     private static function resolveGuardianId($guardian_id, $role, $self_id) {

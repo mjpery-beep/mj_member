@@ -185,6 +185,8 @@ if (!function_exists('mj_member_render_account_component')) {
                     'postal_code' => sanitize_text_field(wp_unslash($_POST['member_postal_code'] ?? '')),
                     'city' => sanitize_text_field(wp_unslash($_POST['member_city'] ?? '')),
                     'photo_usage_consent' => !empty($_POST['member_photo_consent']) ? 1 : 0,
+                    'newsletter_opt_in' => !empty($_POST['member_newsletter_opt_in']) ? 1 : 0,
+                    'sms_opt_in' => !empty($_POST['member_sms_opt_in']) ? 1 : 0,
                 );
 
                 $birth_date = sanitize_text_field(wp_unslash($_POST['member_birth_date'] ?? ''));
@@ -351,6 +353,18 @@ if (!function_exists('mj_member_render_account_component')) {
                             <label>
                                 <input type="checkbox" name="member_photo_consent" value="1" <?php checked((int) $member->photo_usage_consent, 1); ?> />
                                 <span><?php esc_html_e('J’autorise l’utilisation d’images dans le cadre des activités de la MJ.', 'mj-member'); ?></span>
+                            </label>
+                        </div>
+                        <div class="mj-member-field mj-member-field--inline">
+                            <label>
+                                <input type="checkbox" name="member_newsletter_opt_in" value="1" <?php checked(!empty($member->newsletter_opt_in)); ?> />
+                                <span><?php esc_html_e('Je souhaite recevoir les newsletters et informations par email.', 'mj-member'); ?></span>
+                            </label>
+                        </div>
+                        <div class="mj-member-field mj-member-field--inline">
+                            <label>
+                                <input type="checkbox" name="member_sms_opt_in" value="1" <?php checked(!empty($member->sms_opt_in)); ?> />
+                                <span><?php esc_html_e('Je souhaite recevoir des SMS importants de la MJ.', 'mj-member'); ?></span>
                             </label>
                         </div>
                         <input type="hidden" name="mj_member_account_form" value="1" />

@@ -20,7 +20,7 @@
 - [x] Créer template/composant Elementor "Mes informations" utilisable sur la page mon compte
     - [x] Permettre au membre de modifier ses informations personnelles et sa photo.
     - [x] Créer template/composant Elementor  qui Afficher le statut de la cotisation (dernier paiement, montant, rappel si dû). Si la cotisation a expirée on peut créer le liens vers le stripe. 
-    - [ ] Quand je suis tuteur je dois payer pour mes enfants (afficher la cotisation des enfants dans le template/composant Elementor du statut cotisation)
+    - [x] Quand je suis tuteur je dois payer pour mes enfants (afficher la cotisation des enfants dans le template/composant Elementor du statut cotisation)
     - [x] Créer template/composant Elementor pour Lister les événements / stages auxquels le membre est inscrit.
 
 ## 3. Paiements Stripe
@@ -44,53 +44,73 @@
     - Champs: event_id, member_id, guardian_id, statut (en_attente, valide, annule), notes, created_at.
     - [x] Empêcher l'inscription si la date limite est depassee ou si l'age est hors plage.
     - [x] Envoyer une notification email au tuteur et a l'equipe MJ lors d'une inscription.
-- [ ] Ajouter un lien vers un membre (Animateur en charge de l'event) Lors d'une inscription prévenir le membre qui est en charge de l'event
-- [ ] Corrigé le bug d'échappement dans la description détaillée de l'évenement. (exemple : C\'est cool)
-- [ ] Associer un lieux a l'évènement 
-- [ ] Faire un gestionnaire de lieux pour éviter de les ré-encodé.
-        - géolocalisation, utilise google map qui affiche le lieux en fonction de l'adresse
-        - cover image du lieu (logo)
-        - Préencode les lieux de base : La bibi, La Mj Péry, La citadelle, ...
+- [x] Ajouter un lien vers un membre (Animateur en charge de l'event) Lors d'une inscription prévenir le membre qui est en charge de l'event
+    -> la liste des lieux utilise maintenant le fallback de la table legacy et l'animateur recoit un mail avec le lien admin.
+- [x] Corrigé le bug d'échappement dans la description détaillée de l'évenement. (exemple : C\'est cool)
+
+- [x] Associer un lieux a l'évènement 
+- [x] Faire un gestionnaire de lieux pour éviter de les ré-encodé.
+        - [x] géolocalisation, utilise google map qui affiche le lieux en fonction de l'adresse
+        - [x] cover image du lieu (logo)
+        - [x] Préencode les lieux de base : La bibi, La Mj Péry, La citadelle, ...
 
 
-## 5. Composant Elementor "Liste des stages"
-- [ ] Ajouter un widget Elementor pour afficher les evenements actifs.
-    - [ ] Parametres: type(s) d'evenement, nombre max, tri (date debut DESC), affichage grille ou liste.
-    - [ ] Utiliser la cover comme visuel, fallback si absent.
-- [ ] Bouton "S'inscrire" conditionnel.
-    - [ ] Cache automatiquement si la date de fin d'inscription est depassee.
-    - [ ] Si utilisateur connecte: ouvrir un panneau permettant de choisir un jeune associe ou soi-meme.
-    - [ ] Si non connecte: afficher le composant modal de connexion.
+## 5. Composants Elementor Evenements
+- [x] Ajouter un widget Elementor pour lister les evenements actifs (vue liste).
+    - [x] Parametres: type(s) d'evenement, type (stage, soirée, sortie), nombre max, tri (date debut DESC), affichage grille ou liste.
+    - [x] Utiliser la cover comme visuel, fallback si absent.
+    - [x] Propose différents layout d'affichage (des évènements)
+- [x] Bouton "S'inscrire" conditionnel integre au widget liste.
+    - [x] Cache automatiquement si la date de fin d'inscription est depassee.
+    - [x] Si utilisateur connecte: ouvrir un panneau permettant de choisir un jeune associe ou soi-meme.
+    - [x] Si non connecte: afficher le composant modal de connexion.
+    - [x] Si un membre s'est déjà inscrit affiche le dans la partie "Qui participera ?"
+    - [x] Ajoute un champs de texte "note" pour que la personne s'inscrive communique. 
+    - [x] Ajoute un bouton pour se désinscrire (fait un genre de bouton on/off pour chaque membre)
+            (La note Message pour l’équipe (optionnel) concerne chaque membre)
+    - [x] Ajoute un carte interactive (google map) pour montrer ou se trouve l'évenement. 
+    - [x] ajoute la description du lieu et l'image en petit
+    - [x] quand on est Animateur on peut voir les inscrit 
+    - [x] Ajouter un champ "Parent autoriser" sur l'event et permetre l'inscription du tuteur sur cette condition.
+    - [ ] Ajouter dans les paramètres du composant Elementor "widget event liste" plus d'option sur l'apparence (bouton, titre, tarifs (on/off/si 0 off), layout,...).
+- [x] Ajouter un widget Elementor "Calendrier des evenements" affichant les evenements par date.
+    - [x] Navigation mensuelle et mise en avant du prochain evenement.
+    - [x] Synchroniser les filtres (type, statut) avec le widget liste.
+    - [x] Ajouter sur le calendrier la photo de l'event en tout petit. 
+    - [x] Ajouter dans les paramètres du composant Elementor Calendrier plus d'option sur l'apparence.
+    - [x] Ajouter sur le calendrier "onclick event > modal box > avec tout les détails (description, titre,maps, s'inscrire)"
+    - [ ] Retirer l'option Mettre en avant le prochain évènement
+
+    - [ ] Mettre dans une autre couleur la date d'aujourd'hui.
+- [ ] Ajouter un widget Elementor "Lieux MJ" sous forme de carte google maps listant les lieux partenaires.
+    - [ ] Afficher la cover en tout petit sur le marker google maps quand on click on vois le détailt : cover (légèrement plus grand), adresse, infos pratiques.
+    - [ ] Options d'affichage: grille, slider ou carte interactive.
 - [ ] Assurer la compatibilite responsive et l'utilisation des couleurs globales Elementor.
 
 ## 6. Tableau de bord administrateur
-- [ ] Creer une page "Tableau de bord" dans le menu MJ Member.
-    - [ ] Bloc "Presentation de la MJ" editable via `wp_options`.
-    - [ ] Indicateurs clefs: membres actifs, paiements recents (30 jours), animateurs actifs.
-    - [ ] Graphique (barres ou ligne) sur les inscriptions/paiements mensuels.
-- [ ] Ajouter un widget WordPress Dashboard affichant un resume des stats.
+- [x] Creer une page "Tableau de bord" dans le menu MJ Member.
+    - [x] Bloc "Presentation de la MJ" editable via `wp_options`.
+    - [x] Indicateurs clefs: membres actifs, paiements recents (30 jours), animateurs actifs.
+    - [x] Graphique (barres ou ligne) sur les inscriptions/paiements mensuels.
+- [x] Ajouter un widget WordPress Dashboard affichant un resume des stats.
 
-## 8. Import CSV des membres
-- [ ] Ajouter une page d'outil "Import CSV".
-    - [ ] Upload securise avec nonce et verification de type MIME.
-    - [ ] Mapping des colonnes CSV -> champs (email, prenom, nom, role, date_naissance, adresse, etc.).
-    - [ ] Mode simulation (dry-run) pour afficher un rapport avant import definitif.
-    - [ ] Rapport final: lignes importees, ignorees, erreurs detaillees.
-- [ ] Option pour creer/associer des comptes WordPress lors de l'import (choix login auto ou fourni).
-- [ ] Documentation utilisateur sur le format attendu.
+## 7. Envoie de sms
+- [ ] Le membre peux décider si il veux recevoir des sms ainsi que des newsletters. 
+- [ ] Le module d'envoie d'email permet aussi d'envoyé des sms. 
+- [ ] Les templates mails comporte aussi un champs avec le sms (texte plus concis)
 
-## 9. Dans la page admin des membres
-- [ ] Ajouter un bouton "Recu 2 EURO" qui va automatiquement mettre à jour la date de paiement. 
-        - [ ] Il faut concerver l'utilisateur (Nom de Animateur) qui a cliquer sur se bouton et voir l'information apparaitre dans l'historique des paiements 
+## 8. Import CSV membres
+- [x] Créer une interface d'import CSV dans l'admin MJ Member.
+    - [x] Permettre le mapping des colonnes CSV aux champs membres.
+    - [x] Gérer les doublons basés sur l'email (mettre à jour ou ignorer).
+    - [x] Afficher un rapport détaillé après import (nombre importés, mis à jour, erreurs).
 
 ## 10. Qualite et tests
-- [ ] Ecrire des jeux de donnees de test pour les evenements et l'import CSV.
-- [ ] Tester les upgrades schema sur un clone de site (verifier absence de colonnes manquantes).
 - [ ] Rediger une checklist QA couvrant: paiement Stripe, connexion modal, inscription a un stage, import CSV.
 
 ## 11. Notifications et emails
-- [ ] Logger les envois d'emails dans une table dédiée afin de faciliter le support.
-
+- [x] Logger les envois d'emails dans une table dédiée afin de faciliter le support.
+- [ ] Prévoir un panel dans l'admin pour voir les log d'email
 
 ## 13. Securite et conformite
 - [ ] Vérifier les capacités et nonces sur toutes les nouvelles pages admin (import, tableau de bord, etc.).

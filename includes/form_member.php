@@ -63,6 +63,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
         'requires_payment' => $requires_payment,
         'date_last_payement' => $date_last_payement_input,
         'member_is_autonomous' => ($current_role === MjMembers_CRUD::ROLE_JEUNE) ? !empty($_POST['member_is_autonomous']) : true,
+        'member_newsletter_opt_in' => !empty($_POST['member_newsletter_opt_in']),
+        'member_sms_opt_in' => !empty($_POST['member_sms_opt_in']),
         'guardian_mode' => isset($_POST['guardian_mode']) ? sanitize_text_field($_POST['guardian_mode']) : 'existing',
         'guardian_id' => isset($_POST['guardian_id']) ? intval($_POST['guardian_id']) : 0,
         'guardian_last_name' => isset($_POST['guardian_last_name']) ? sanitize_text_field($_POST['guardian_last_name']) : '',
@@ -189,6 +191,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
             'date_last_payement' => $date_last_payement_db,
             'is_autonomous' => $input_data['member_is_autonomous'] ? 1 : 0,
             'guardian_id' => null,
+            'newsletter_opt_in' => !empty($input_data['member_newsletter_opt_in']) ? 1 : 0,
+            'sms_opt_in' => !empty($input_data['member_sms_opt_in']) ? 1 : 0,
         );
 
         if ($current_role === MjMembers_CRUD::ROLE_JEUNE) {
@@ -339,6 +343,8 @@ $form_defaults = array(
     'requires_payment' => $default_requires_payment,
     'date_last_payement' => $last_payment_value,
     'member_is_autonomous' => $default_is_autonomous,
+    'member_newsletter_opt_in' => $member ? (isset($member->newsletter_opt_in) ? (bool) $member->newsletter_opt_in : true) : true,
+    'member_sms_opt_in' => $member ? (isset($member->sms_opt_in) ? (bool) $member->sms_opt_in : true) : true,
     'guardian_mode' => $default_guardian_mode,
     'guardian_id' => $default_guardian_id,
     'guardian_last_name' => $guardian ? $guardian->last_name : '',
@@ -370,6 +376,8 @@ $form_values['status'] = in_array($form_values['status'], array(MjMembers_CRUD::
     : MjMembers_CRUD::STATUS_ACTIVE;
 $form_values['requires_payment'] = !empty($form_values['requires_payment']);
 $form_values['member_is_autonomous'] = !empty($form_values['member_is_autonomous']);
+$form_values['member_newsletter_opt_in'] = !empty($form_values['member_newsletter_opt_in']);
+$form_values['member_sms_opt_in'] = !empty($form_values['member_sms_opt_in']);
 $form_values['guardian_id'] = isset($form_values['guardian_id']) ? intval($form_values['guardian_id']) : 0;
 if (!in_array($form_values['guardian_mode'], array('existing', 'new'), true)) {
     $form_values['guardian_mode'] = 'existing';
@@ -435,6 +443,20 @@ $member_email_required = ($form_values['member_role'] !== MjMembers_CRUD::ROLE_J
                     <th><label for="member_phone">Téléphone</label></th>
                     <td>
                         <input type="tel" id="member_phone" name="member_phone" value="<?php echo esc_attr($form_values['member_phone']); ?>" class="regular-text" />
+                    </td>
+                </tr>
+                <tr>
+                    <th>Préférences de contact</th>
+                    <td>
+                        <label style="display:block;margin-bottom:6px;">
+                            <input type="checkbox" name="member_newsletter_opt_in" value="1" <?php checked($form_values['member_newsletter_opt_in'], true); ?> />
+                            Recevoir les newsletters et communications par email
+                        </label>
+                        <label style="display:block;">
+                            <input type="checkbox" name="member_sms_opt_in" value="1" <?php checked($form_values['member_sms_opt_in'], true); ?> />
+                            Recevoir des SMS informatifs de la MJ
+                        </label>
+                        <p class="description">Ces réglages sont également visibles dans l’espace membre.</p>
                     </td>
                 </tr>
                 <tr class="js-role-jeune">

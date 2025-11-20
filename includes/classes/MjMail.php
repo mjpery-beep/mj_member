@@ -206,6 +206,24 @@ class MjMail extends MjTools {
         return $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE slug = %s", sanitize_text_field($id_or_slug)));
     }
 
+    public static function get_placeholders($member, array $context = array()) {
+        return self::build_placeholders($member, $context);
+    }
+
+    public static function replace_placeholders($text, $member, array $context = array()) {
+        $text = (string) $text;
+        if ($text === '') {
+            return '';
+        }
+
+        $placeholders = self::get_placeholders($member, $context);
+        if (empty($placeholders)) {
+            return $text;
+        }
+
+        return str_replace(array_keys($placeholders), array_values($placeholders), $text);
+    }
+
     protected static function get_guardian_for_member($member, array $context = array()) {
         if (!empty($context['guardian']) && is_object($context['guardian'])) {
             return $context['guardian'];
@@ -747,6 +765,92 @@ class MjMail extends MjTools {
         return apply_filters('mj_member_email_recipients', $recipients, $member, $context);
     }
 
+    public static function log_email_event(array $entry) {
+        global $wpdb;
+
+        $table = $wpdb->prefix . 'mj_email_logs';
+        static $table_exists = null;
+
+        if ($table_exists === null) {
+            if (function_exists('mj_member_table_exists')) {
+                $table_exists = mj_member_table_exists($table);
+            } else {
+                $table_exists = ($wpdb->get_var($wpdb->prepare(
+                    'SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s',
+                    DB_NAME,
+                    $table
+                )) === $table);
+            }
+        }
+
+        if (!$table_exists) {
+            return false;
+        }
+
+        $defaults = array(
+            'member_id' => 0,
+            'template_id' => 0,
+            'template_slug' => '',
+            'subject' => '',
+            'recipients' => array(),
+            'status' => 'sent',
+            'is_test_mode' => false,
+            'error_message' => '',
+            'body_html' => '',
+            'body_plain' => '',
+            'headers' => array(),
+            'context' => array(),
+            'source' => '',
+        );
+
+        $data = wp_parse_args($entry, $defaults);
+
+        $allowed_status = array('sent', 'failed', 'simulated', 'skipped');
+        if (!in_array($data['status'], $allowed_status, true)) {
+            $data['status'] = 'sent';
+        }
+
+        $recipients = is_array($data['recipients']) ? array_values(array_filter(array_map('strval', $data['recipients']))) : array();
+        $headers = is_array($data['headers']) ? $data['headers'] : array();
+        $context_store = $data['context'];
+        if (!is_string($context_store)) {
+            $context_store = wp_json_encode($context_store);
+        }
+        if (!is_string($context_store)) {
+            $context_store = '';
+        }
+
+        $recipients_json = wp_json_encode($recipients);
+        if (!is_string($recipients_json)) {
+            $recipients_json = '';
+        }
+
+        $headers_json = wp_json_encode($headers);
+        if (!is_string($headers_json)) {
+            $headers_json = '';
+        }
+
+        $insert_data = array(
+            'member_id' => $data['member_id'] > 0 ? (int) $data['member_id'] : 0,
+            'template_id' => $data['template_id'] > 0 ? (int) $data['template_id'] : 0,
+            'template_slug' => (string) $data['template_slug'],
+            'subject' => (string) $data['subject'],
+            'recipients' => $recipients_json,
+            'status' => (string) $data['status'],
+            'is_test_mode' => $data['is_test_mode'] ? 1 : 0,
+            'error_message' => (string) $data['error_message'],
+            'body_html' => (string) $data['body_html'],
+            'body_plain' => (string) $data['body_plain'],
+            'headers' => $headers_json,
+            'context' => $context_store,
+            'source' => (string) $data['source'],
+        );
+
+        $insert_format = array('%d', '%d', '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s');
+
+        return (bool) $wpdb->insert($table, $insert_data, $insert_format);
+    }
+
     // Send template to a member object
     static public function send_template_to_member($template_id_or_slug, $member, array $context = array()) {
         $template = self::get_template_by($template_id_or_slug);
@@ -792,6 +896,20 @@ class MjMail extends MjTools {
                 'placeholders' => $placeholders,
                 'template' => $template,
             ), $context);
+            self::log_email_event(array(
+                'member_id' => isset($member->id) ? (int) $member->id : 0,
+                'template_id' => isset($template->id) ? (int) $template->id : 0,
+                'template_slug' => isset($template->slug) ? (string) $template->slug : '',
+                'subject' => $subject,
+                'recipients' => $recipients,
+                'status' => 'simulated',
+                'is_test_mode' => true,
+                'body_html' => $message,
+                'body_plain' => $plain_body,
+                'headers' => $headers,
+                'context' => $context,
+                'source' => 'template_to_member',
+            ));
             return true;
         }
 
@@ -802,6 +920,22 @@ class MjMail extends MjTools {
                 $sent = false;
             }
         }
+
+        self::log_email_event(array(
+            'member_id' => isset($member->id) ? (int) $member->id : 0,
+            'template_id' => isset($template->id) ? (int) $template->id : 0,
+            'template_slug' => isset($template->slug) ? (string) $template->slug : '',
+            'subject' => $subject,
+            'recipients' => $recipients,
+            'status' => $sent ? 'sent' : 'failed',
+            'is_test_mode' => false,
+            'error_message' => $sent ? '' : 'wp_mail reported a failure for at least one recipient.',
+            'body_html' => $message,
+            'body_plain' => $plain_body,
+            'headers' => $headers,
+            'context' => $context,
+            'source' => 'template_to_member',
+        ));
 
         return $sent;
     }
@@ -867,6 +1001,18 @@ class MjMail extends MjTools {
 
         if (!empty($prepared['test_mode'])) {
             do_action('mj_member_email_simulated', $member, $prepared, $context);
+            self::log_email_event(array(
+                'member_id' => isset($member->id) ? (int) $member->id : 0,
+                'subject' => $prepared['subject'],
+                'recipients' => $prepared['recipients'],
+                'status' => 'simulated',
+                'is_test_mode' => true,
+                'body_html' => $prepared['message_html'],
+                'body_plain' => $prepared['body_plain'],
+                'headers' => $prepared['headers'],
+                'context' => $context,
+                'source' => 'custom_email',
+            ));
             return true;
         }
 
@@ -877,6 +1023,20 @@ class MjMail extends MjTools {
                 $sent = false;
             }
         }
+
+        self::log_email_event(array(
+            'member_id' => isset($member->id) ? (int) $member->id : 0,
+            'subject' => $prepared['subject'],
+            'recipients' => $prepared['recipients'],
+            'status' => $sent ? 'sent' : 'failed',
+            'is_test_mode' => false,
+            'error_message' => $sent ? '' : 'wp_mail reported a failure for at least one recipient.',
+            'body_html' => $prepared['message_html'],
+            'body_plain' => $prepared['body_plain'],
+            'headers' => $prepared['headers'],
+            'context' => $context,
+            'source' => 'custom_email',
+        ));
 
         return $sent;
     }

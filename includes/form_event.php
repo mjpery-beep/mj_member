@@ -10,7 +10,9 @@ if (!current_user_can(MJ_MEMBER_CAPABILITY)) {
 
 require_once plugin_dir_path(__FILE__) . 'classes/MjEvents_CRUD.php';
 require_once plugin_dir_path(__FILE__) . 'classes/MjMembers_CRUD.php';
+require_once plugin_dir_path(__FILE__) . 'classes/MjEventAnimateurs.php';
 require_once plugin_dir_path(__FILE__) . 'classes/MjEventRegistrations.php';
+require_once plugin_dir_path(__FILE__) . 'classes/MjEventLocations.php';
 
 if (!function_exists('mj_member_parse_event_datetime')) {
     function mj_member_parse_event_datetime($value) {
@@ -82,9 +84,37 @@ $status_labels = MjEvents_CRUD::get_status_labels();
 $type_labels = MjEvents_CRUD::get_type_labels();
 $registration_status_labels = MjEventRegistrations::get_status_labels();
 $member_role_labels = MjMembers_CRUD::getRoleLabels();
+$locations_for_select = MjEventLocations::get_all(array('orderby' => 'name'));
+if (is_wp_error($locations_for_select)) {
+    $locations_for_select = array();
+}
+$animateur_assignments_ready = class_exists('MjEventAnimateurs') ? MjEventAnimateurs::is_ready() : false;
+$animateur_column_supported = function_exists('mj_member_column_exists') ? mj_member_column_exists(mj_member_get_events_table_name(), 'animateur_id') : false;
+if (!$animateur_column_supported && $animateur_assignments_ready && function_exists('mj_member_column_exists')) {
+    $animateur_column_supported = mj_member_column_exists(mj_member_get_events_table_name(), 'animateur_id');
+}
+$animateur_filters = array('role' => MjMembers_CRUD::ROLE_ANIMATEUR);
+$animateurs_for_select = MjMembers_CRUD::getAll(0, 0, 'last_name', 'ASC', '', $animateur_filters);
+if (!is_array($animateurs_for_select)) {
+    $animateurs_for_select = array();
+}
+$available_animateur_ids = array();
+$animateur_index = array();
+foreach ($animateurs_for_select as $animateur_item) {
+    if (!is_object($animateur_item) || !isset($animateur_item->id)) {
+        continue;
+    }
+    $animateur_id_value = (int) $animateur_item->id;
+    if ($animateur_id_value <= 0) {
+        continue;
+    }
+    $available_animateur_ids[$animateur_id_value] = true;
+    $animateur_index[$animateur_id_value] = $animateur_item;
+}
 
 $defaults = MjEvents_CRUD::get_default_values();
 $form_values = $defaults;
+$form_values['animateur_ids'] = array();
 
 $timezone = wp_timezone();
 $now_timestamp = current_time('timestamp');
@@ -97,11 +127,18 @@ $form_values['date_fin'] = wp_date('Y-m-d\TH:i', $default_end, $timezone);
 $form_values['date_fin_inscription'] = wp_date('Y-m-d\TH:i', $default_deadline, $timezone);
 
 if ($event) {
+    $assigned_animateurs = class_exists('MjEventAnimateurs') ? MjEventAnimateurs::get_ids_by_event($event_id) : array();
+    if (empty($assigned_animateurs) && $animateur_column_supported && isset($event->animateur_id) && (int) $event->animateur_id > 0) {
+        $assigned_animateurs = array((int) $event->animateur_id);
+    }
+
     $form_values = array_merge($form_values, array(
         'title' => $event->title,
         'status' => $event->status,
         'type' => $event->type,
         'cover_id' => (int) $event->cover_id,
+        'location_id' => (int) (isset($event->location_id) ? $event->location_id : 0),
+        'allow_guardian_registration' => !empty($event->allow_guardian_registration) ? 1 : 0,
         'description' => $event->description,
         'age_min' => (int) $event->age_min,
         'age_max' => (int) $event->age_max,
@@ -110,7 +147,11 @@ if ($event) {
         'date_fin_inscription' => mj_member_format_event_datetime($event->date_fin_inscription),
         'prix' => number_format((float) $event->prix, 2, '.', ''),
     ));
+    $form_values['animateur_ids'] = $assigned_animateurs;
+    $form_values['animateur_id'] = !empty($assigned_animateurs) ? (int) $assigned_animateurs[0] : 0;
 }
+
+$form_values['allow_guardian_registration'] = !empty($form_values['allow_guardian_registration']);
 
 $errors = array();
 $success_message = '';
@@ -120,6 +161,8 @@ $registrations = array();
 $members_for_select = array();
 $registration_selected_member = 0;
 $registration_notes_value = '';
+$current_event_location = null;
+$event_location_preview_html = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
     if (!wp_verify_nonce($_POST['mj_event_nonce'], 'mj_event_form')) {
@@ -199,7 +242,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
     $price_input = str_replace(',', '.', $price_input);
     $prix = number_format(max(0, (float) $price_input), 2, '.', '');
 
-    $description = isset($_POST['event_description']) ? wp_kses_post($_POST['event_description']) : '';
+    $description = isset($_POST['event_description']) ? wp_kses_post(wp_unslash($_POST['event_description'])) : '';
+
+    $location_id = isset($_POST['event_location_id']) ? (int) $_POST['event_location_id'] : 0;
+    $location_check = null;
+    if ($location_id > 0) {
+        $location_check = MjEventLocations::find($location_id);
+        if (!$location_check) {
+            $errors[] = 'Le lieu selectionne est invalide.';
+            $location_id = 0;
+            $location_check = null;
+        }
+    }
+
+    $animateur_ids_input = isset($_POST['event_animateur_ids']) ? (array) $_POST['event_animateur_ids'] : array();
+    $animateur_ids = array();
+    foreach ($animateur_ids_input as $candidate_id) {
+        $candidate_id = (int) $candidate_id;
+        if ($candidate_id <= 0) {
+            continue;
+        }
+
+        if (!isset($available_animateur_ids[$candidate_id])) {
+            $errors[] = 'Un animateur selectionne est invalide.';
+            continue;
+        }
+
+        $animateur_ids[$candidate_id] = $candidate_id;
+    }
+
+    $animateur_ids_list = array_values($animateur_ids);
+    $primary_animateur_id = !empty($animateur_ids_list) ? (int) $animateur_ids_list[0] : 0;
+    $allow_guardian_registration = !empty($_POST['event_allow_guardian_registration']) ? 1 : 0;
 
     $form_values = array_merge($form_values, array(
         'title' => $title,
@@ -213,7 +287,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
         'date_fin' => $date_fin_input,
         'date_fin_inscription' => $date_fin_inscription_input,
         'prix' => $prix,
+        'location_id' => $location_id,
+        'animateur_id' => $animateur_column_supported ? $primary_animateur_id : 0,
+        'allow_guardian_registration' => ($allow_guardian_registration === 1),
     ));
+    $form_values['animateur_ids'] = $animateur_ids_list;
 
     if (empty($errors)) {
         $payload = array(
@@ -228,6 +306,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
             'date_fin' => $date_fin,
             'date_fin_inscription' => $date_fin_inscription !== '' ? $date_fin_inscription : null,
             'prix' => $prix,
+            'location_id' => $location_id,
+            'animateur_id' => $animateur_column_supported ? $primary_animateur_id : null,
+            'allow_guardian_registration' => $allow_guardian_registration,
         );
 
         if ($action === 'add') {
@@ -236,12 +317,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
                 $success_message = 'Evenement cree avec succes.';
                 $action = 'edit';
                 $event_id = $new_id;
+                if (class_exists('MjEventAnimateurs')) {
+                    MjEventAnimateurs::sync_for_event($event_id, $animateur_ids_list);
+                }
                 $event = MjEvents_CRUD::find($event_id);
                 if ($event) {
                     $form_values['title'] = $event->title;
                     $form_values['status'] = $event->status;
                     $form_values['type'] = $event->type;
                     $form_values['cover_id'] = (int) $event->cover_id;
+                    $form_values['location_id'] = (int) (isset($event->location_id) ? $event->location_id : 0);
                     $form_values['description'] = $event->description;
                     $form_values['age_min'] = (int) $event->age_min;
                     $form_values['age_max'] = (int) $event->age_max;
@@ -249,6 +334,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
                     $form_values['date_fin'] = mj_member_format_event_datetime($event->date_fin);
                     $form_values['date_fin_inscription'] = mj_member_format_event_datetime($event->date_fin_inscription);
                     $form_values['prix'] = number_format((float) $event->prix, 2, '.', '');
+                    $form_values['allow_guardian_registration'] = !empty($event->allow_guardian_registration);
+                }
+                if (class_exists('MjEventAnimateurs')) {
+                    $synced_ids = MjEventAnimateurs::get_ids_by_event($event_id);
+                    $form_values['animateur_ids'] = $synced_ids;
+                    $form_values['animateur_id'] = !empty($synced_ids) ? (int) $synced_ids[0] : 0;
+                } else {
+                    $form_values['animateur_ids'] = $animateur_ids_list;
+                    $form_values['animateur_id'] = $primary_animateur_id;
                 }
             } else {
                 $errors[] = 'Erreur lors de la creation de l evenement.';
@@ -257,14 +351,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
             $update_result = MjEvents_CRUD::update($event_id, $payload);
             if ($update_result) {
                 $success_message = 'Evenement mis a jour avec succes.';
+                if (class_exists('MjEventAnimateurs')) {
+                    MjEventAnimateurs::sync_for_event($event_id, $animateur_ids_list);
+                }
                 $event = MjEvents_CRUD::find($event_id);
                 if ($event) {
                     $form_values['date_debut'] = mj_member_format_event_datetime($event->date_debut);
                     $form_values['date_fin'] = mj_member_format_event_datetime($event->date_fin);
                     $form_values['date_fin_inscription'] = mj_member_format_event_datetime($event->date_fin_inscription);
                     $form_values['cover_id'] = (int) $event->cover_id;
+                    $form_values['location_id'] = (int) (isset($event->location_id) ? $event->location_id : 0);
                     $form_values['description'] = $event->description;
                     $form_values['prix'] = number_format((float) $event->prix, 2, '.', '');
+                    $form_values['allow_guardian_registration'] = !empty($event->allow_guardian_registration);
+                }
+                if (class_exists('MjEventAnimateurs')) {
+                    $synced_ids = MjEventAnimateurs::get_ids_by_event($event_id);
+                    $form_values['animateur_ids'] = $synced_ids;
+                    $form_values['animateur_id'] = !empty($synced_ids) ? (int) $synced_ids[0] : 0;
+                } else {
+                    $form_values['animateur_ids'] = $animateur_ids_list;
+                    $form_values['animateur_id'] = $primary_animateur_id;
                 }
             } else {
                 $errors[] = 'Erreur lors de la mise a jour de l evenement.';
@@ -380,6 +487,40 @@ if ($action === 'edit' && $event_id > 0 && $event) {
     }
 }
 
+$manage_locations_url = add_query_arg(array('page' => 'mj_locations'), admin_url('admin.php'));
+$current_event_location = null;
+$event_location_map_src = '';
+$event_location_address = '';
+if (!empty($form_values['location_id'])) {
+    $current_event_location = MjEventLocations::find((int) $form_values['location_id']);
+    if ($current_event_location) {
+        $event_location_map_src = MjEventLocations::build_map_embed_src($current_event_location);
+        $event_location_address = MjEventLocations::format_address($current_event_location);
+    }
+}
+
+$animateur_fallback_cache = array();
+$assigned_animateurs_display = array();
+if (!empty($form_values['animateur_ids']) && is_array($form_values['animateur_ids'])) {
+    foreach ($form_values['animateur_ids'] as $assigned_candidate) {
+        $assigned_id = (int) $assigned_candidate;
+        if ($assigned_id <= 0 || isset($assigned_animateurs_display[$assigned_id])) {
+            continue;
+        }
+        if (isset($animateur_index[$assigned_id])) {
+            $assigned_member = $animateur_index[$assigned_id];
+        } else {
+            if (!isset($animateur_fallback_cache[$assigned_id])) {
+                $animateur_fallback_cache[$assigned_id] = MjMembers_CRUD::getById($assigned_id);
+            }
+            $assigned_member = $animateur_fallback_cache[$assigned_id];
+        }
+        if ($assigned_member) {
+            $assigned_animateurs_display[$assigned_id] = $assigned_member;
+        }
+    }
+}
+
 if ($event) {
     $_GET['event'] = $event_id;
     $_GET['action'] = 'edit';
@@ -473,6 +614,142 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                     <input type="hidden" id="mj-event-cover-id" name="event_cover_id" value="<?php echo esc_attr((int) $form_values['cover_id']); ?>" />
                     <button type="button" class="button" id="mj-event-cover-select">Choisir une image</button>
                     <button type="button" class="button" id="mj-event-cover-remove">Retirer</button>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row"><label for="mj-event-location">Lieu</label></th>
+                <td>
+                    <select id="mj-event-location" name="event_location_id" style="min-width:260px;">
+                        <option value="0">Aucun lieu defini</option>
+                        <?php foreach ($locations_for_select as $location_item) : ?>
+                            <?php
+                            $location_data = (array) $location_item;
+                            $location_id_option = isset($location_data['id']) ? (int) $location_data['id'] : 0;
+                            if ($location_id_option <= 0) {
+                                continue;
+                            }
+                            $address_option = MjEventLocations::format_address($location_data);
+                            $map_option = MjEventLocations::build_map_embed_src($location_data);
+                            $notes_option = isset($location_data['notes']) ? $location_data['notes'] : '';
+                            $city_option = isset($location_data['city']) ? $location_data['city'] : '';
+                            $label_text = isset($location_data['name']) ? $location_data['name'] : 'Lieu #' . $location_id_option;
+                            if ($city_option !== '') {
+                                $label_text .= ' (' . $city_option . ')';
+                            }
+                            $option_attributes = sprintf(
+                                ' data-address="%s" data-map="%s" data-notes="%s" data-city="%s" data-country="%s"',
+                                esc_attr($address_option),
+                                esc_attr($map_option),
+                                esc_attr($notes_option),
+                                esc_attr($city_option),
+                                esc_attr(isset($location_data['country']) ? $location_data['country'] : '')
+                            );
+                            ?>
+                            <option value="<?php echo esc_attr($location_id_option); ?>" <?php selected((int) $form_values['location_id'], $location_id_option); echo $option_attributes; ?>>
+                                <?php echo esc_html($label_text); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <p class="description">Administrez les lieux depuis <a href="<?php echo esc_url($manage_locations_url); ?>" target="_blank" rel="noopener noreferrer">la page des lieux</a>.</p>
+                    <div id="mj-event-location-preview" class="mj-event-location-preview" style="margin-top:12px;">
+                        <?php if ($current_event_location) : ?>
+                            <strong><?php echo esc_html($current_event_location->name); ?></strong><br />
+                            <?php if ($event_location_address !== '') : ?>
+                                <span><?php echo esc_html($event_location_address); ?></span><br />
+                            <?php endif; ?>
+                            <?php if (!empty($current_event_location->notes)) : ?>
+                                <span class="description">Notes: <?php echo esc_html($current_event_location->notes); ?></span><br />
+                            <?php endif; ?>
+                            <?php if ($event_location_map_src !== '') : ?>
+                                <div class="mj-event-location-map" style="margin-top:10px; max-width:520px;">
+                                    <iframe src="<?php echo esc_url($event_location_map_src); ?>" width="520" height="260" style="border:0;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+                                </div>
+                            <?php endif; ?>
+                        <?php else : ?>
+                            <p class="description">Choisissez un lieu pour afficher un apercu.</p>
+                        <?php endif; ?>
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row"><label for="mj-event-animateur">Animateurs referents</label></th>
+                <td>
+                    <select id="mj-event-animateur" name="event_animateur_ids[]" style="min-width:260px;" multiple="multiple"<?php echo $animateur_assignments_ready ? '' : ' data-info="legacy-mode"'; ?>>
+                        <?php foreach ($animateurs_for_select as $animateur_item) : ?>
+                            <?php
+                            if (!is_object($animateur_item)) {
+                                continue;
+                            }
+                            $animateur_id_option = isset($animateur_item->id) ? (int) $animateur_item->id : 0;
+                            if ($animateur_id_option <= 0) {
+                                continue;
+                            }
+                            $first_name = isset($animateur_item->first_name) ? $animateur_item->first_name : '';
+                            $last_name = isset($animateur_item->last_name) ? $animateur_item->last_name : '';
+                            $display_name = trim($first_name . ' ' . $last_name);
+                            if ($display_name === '') {
+                                $display_name = 'Animateur #' . $animateur_id_option;
+                            }
+                            $email_attr = '';
+                            if (!empty($animateur_item->email) && is_email($animateur_item->email)) {
+                                $email_attr = ' data-email="' . esc_attr($animateur_item->email) . '"';
+                            }
+                            $is_selected = in_array($animateur_id_option, $form_values['animateur_ids'], true);
+                            ?>
+                            <option value="<?php echo esc_attr($animateur_id_option); ?>" <?php selected($is_selected, true, true); echo $email_attr; ?>>
+                                <?php echo esc_html($display_name); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <?php if ($animateur_assignments_ready) : ?>
+                        <p class="description">Selectionnez un ou plusieurs animateurs referents (laissez vide si aucun); chacun recevra une notification lors des nouvelles inscriptions.</p>
+                    <?php else : ?>
+                        <p class="description">Plusieurs animateurs peuvent etre selectionnes apres la migration des evenements (wp eval "mj_member_upgrade_to_2_3(\$GLOBALS['wpdb']);"). Pour l instant, seul le premier animateur choisi sera memorise; laissez vide pour aucun.</p>
+                    <?php endif; ?>
+                    <?php if (!empty($assigned_animateurs_display)) : ?>
+                        <div class="mj-event-animateur-list" style="margin-top:8px;">
+                            <strong>Animateur(s) assigne(s)</strong>
+                            <ul style="margin:6px 0 0 18px;">
+                                <?php foreach ($assigned_animateurs_display as $assigned_id => $assigned_member) : ?>
+                                    <?php
+                                    $assigned_first = isset($assigned_member->first_name) ? $assigned_member->first_name : '';
+                                    $assigned_last = isset($assigned_member->last_name) ? $assigned_member->last_name : '';
+                                    $assigned_name = trim($assigned_first . ' ' . $assigned_last);
+                                    if ($assigned_name === '') {
+                                        $assigned_name = 'Membre #' . $assigned_id;
+                                    }
+                                    $assigned_email = (!empty($assigned_member->email) && is_email($assigned_member->email)) ? $assigned_member->email : '';
+                                    $member_edit_url = add_query_arg(
+                                        array(
+                                            'page' => 'mj_members',
+                                            'action' => 'edit',
+                                            'member' => $assigned_id,
+                                        ),
+                                        admin_url('admin.php')
+                                    );
+                                    ?>
+                                    <li>
+                                        <a href="<?php echo esc_url($member_edit_url); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html($assigned_name); ?></a>
+                                        <?php if ($assigned_email !== '') : ?>
+                                            — <a href="mailto:<?php echo esc_attr($assigned_email); ?>"><?php echo esc_html($assigned_email); ?></a>
+                                        <?php else : ?>
+                                            — <span class="description">Email manquant</span>
+                                        <?php endif; ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </div>
+                    <?php endif; ?>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row"><label for="mj-event-allow-guardian">Autoriser les tuteurs</label></th>
+                <td>
+                    <label for="mj-event-allow-guardian">
+                        <input type="checkbox" id="mj-event-allow-guardian" name="event_allow_guardian_registration" value="1" <?php checked(!empty($form_values['allow_guardian_registration']), true); ?> />
+                        Les tuteurs peuvent s'inscrire eux-memes a cet evenement
+                    </label>
+                    <p class="description">Par defaut, seuls les jeunes et leurs dependants peuvent s'inscrire. Cochez pour ouvrir les inscriptions aux tuteurs.</p>
                 </td>
             </tr>
             <tr>

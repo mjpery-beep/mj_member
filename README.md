@@ -40,6 +40,13 @@ MJ Member est un module WordPress conçu pour centraliser la gestion des adhére
 - Utilisez le bouton **Ajouter** pour enregistrer un nouvel adhérent
 - Sélectionnez **Modifier** ou **Supprimer** directement depuis la liste selon vos actions
 
+## Paiements Stripe en mode test
+
+- Le plugin est livré avec Stripe configuré en mode test pour éviter tout encaissement réel.
+- Pour simuler un paiement, utilisez la carte bancaire fictive suivante : `4242 4242 4242 4242`, choisissez n'importe quelle date d'expiration future et un CVC à trois chiffres (ex. `123`).
+- Stripe demande parfois un code postal ; vous pouvez saisir `10000`.
+- Les paiements testés apparaissent dans le tableau de bord Stripe en mode test et aident à vérifier les inscriptions sans risque.
+
 ## Protection des données
 
 - Les formulaires sont sécurisés pour éviter les modifications non autorisées
@@ -48,9 +55,10 @@ MJ Member est un module WordPress conçu pour centraliser la gestion des adhére
 
 ## Développement futur
 
-- [ ] Import/Export CSV
-- [ ] Envoi d'emails d'inscription avec le lien du paiement
-- [ ] Tableau de bord de statistiques (participation, renouvellements, paiements)
+- [ ] Suivi des activités : planifier les ateliers et relier chaque jeune à ses participations
+- [ ] Rappels automatiques : emails ou SMS pour les renouvellements d'adhésion et les paiements à venir
+- [ ] Rapports prêts à l'emploi : exports pour les subventions et les bilans associatifs
+- [ ] Pointage sur place : scan de carte ou QR code pour enregistrer les présences des jeunes
 
 ## Support
 

@@ -54,6 +54,38 @@ jQuery(document).ready(function($) {
                 return formatPhotoConsentBadge(normalized);
             case 'email':
                 return formatEmailLink(normalized);
+            case 'birth_date':
+                if (normalized === '') {
+                    return '<span style="color:#999;">—</span>';
+                }
+
+                var parts = normalized.split('-');
+                if (parts.length === 3) {
+                    var year = parseInt(parts[0], 10);
+                    var month = parseInt(parts[1], 10);
+                    var day = parseInt(parts[2], 10);
+
+                    if (!Number.isNaN(year) && !Number.isNaN(month) && !Number.isNaN(day)) {
+                        var today = new Date();
+                        var age = today.getFullYear() - year;
+                        var monthDiff = (today.getMonth() + 1) - month;
+                        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < day)) {
+                            age -= 1;
+                        }
+                        if (age < 0) {
+                            age = 0;
+                        }
+
+                        var formattedDay = String(day).padStart(2, '0');
+                        var formattedMonth = String(month).padStart(2, '0');
+                        var formattedDate = formattedDay + '/' + formattedMonth + '/' + year;
+                        var ageLabel = age + ' ans';
+
+                        return escapeHtml(ageLabel) + '<br><span class="mj-birth-date-display" style="color:#555;font-size:12px;">' + escapeHtml(formattedDate) + '</span>';
+                    }
+                }
+
+                return escapeHtml(normalized);
             default:
                 return escapeHtml(normalized);
         }

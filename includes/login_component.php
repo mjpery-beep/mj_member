@@ -633,7 +633,7 @@ if (!function_exists('mj_member_render_login_modal_component')) {
                         <?php if (!empty($errors)) : ?>
                             <div class="mj-member-login-component__errors">
                                 <?php foreach ($errors as $error) : ?>
-                                    <p><?php echo esc_html($error); ?></p>
+                                    <p><?php echo wp_kses_post($error); ?></p>
                                 <?php endforeach; ?>
                             </div>
                         <?php endif; ?>
@@ -768,6 +768,27 @@ if (!function_exists('mj_member_register_elementor_login_widget')) {
             }
         }
 
+        if (!class_exists('Mj_Member_Elementor_Events_Widget', false)) {
+            $events_widget = MJ_MEMBER_PATH . 'includes/elementor/class-mj-member-events-widget.php';
+            if (file_exists($events_widget)) {
+                require_once $events_widget;
+            }
+        }
+
+        if (!class_exists('Mj_Member_Elementor_Events_Calendar_Widget', false)) {
+            $events_calendar_widget = MJ_MEMBER_PATH . 'includes/elementor/class-mj-member-events-calendar-widget.php';
+            if (file_exists($events_calendar_widget)) {
+                require_once $events_calendar_widget;
+            }
+        }
+
+        if (!class_exists('Mj_Member_Elementor_Locations_Widget', false)) {
+            $locations_widget = MJ_MEMBER_PATH . 'includes/elementor/class-mj-member-locations-widget.php';
+            if (file_exists($locations_widget)) {
+                require_once $locations_widget;
+            }
+        }
+
         if (class_exists('Mj_Member_Elementor_Login_Widget')) {
             $widgets_manager->register(new \Mj_Member_Elementor_Login_Widget());
         }
@@ -782,6 +803,18 @@ if (!function_exists('mj_member_register_elementor_login_widget')) {
 
         if (class_exists('Mj_Member_Elementor_Registrations_Widget')) {
             $widgets_manager->register(new \Mj_Member_Elementor_Registrations_Widget());
+        }
+
+        if (class_exists('Mj_Member_Elementor_Events_Widget')) {
+            $widgets_manager->register(new \Mj_Member_Elementor_Events_Widget());
+        }
+
+        if (class_exists('Mj_Member_Elementor_Events_Calendar_Widget')) {
+            $widgets_manager->register(new \Mj_Member_Elementor_Events_Calendar_Widget());
+        }
+
+        if (class_exists('Mj_Member_Elementor_Locations_Widget')) {
+            $widgets_manager->register(new \Mj_Member_Elementor_Locations_Widget());
         }
     }
 }

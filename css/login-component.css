@@ -54,6 +54,7 @@ body.mj-member-login-open {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    flex-direction: row;
     gap: 0.5rem;
     padding: 0.75rem 1.5rem;
     border-radius: 999px;
@@ -73,17 +74,25 @@ body.mj-member-login-open {
     align-items: center;
     justify-content: center;
     line-height: 1;
+    font-size: 0.9em;
     color: inherit;
+    width: 1.75em;
+    height: 1.75em;
+    flex-shrink: 0;
+    overflow: hidden;
 }
 
+.mj-member-login-component__trigger-icon-shape,
 .mj-member-login-component__trigger-icon i,
 .mj-member-login-component__trigger-icon svg,
 .mj-member-login-component__trigger-icon .elementor-icon,
 .mj-member-login-component__trigger-icon .elementor-icon i,
 .mj-member-login-component__trigger-icon .elementor-icon svg {
     display: block;
-    width: 1.1em;
-    height: 1.1em;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100%;
+    max-height: 100%;
 }
 
 .mj-member-login-component__trigger-icon svg {
@@ -92,6 +101,7 @@ body.mj-member-login-open {
 
 .mj-member-login-component__trigger-icon .elementor-icon {
     color: inherit;
+    font-size: 1em;
 }
 
 /* Editor tweaks */
@@ -114,7 +124,7 @@ body.mj-member-login-open {
 }
 
 .mj-member-login-component__trigger-icon i {
-    font-size: 1.1em;
+    font-size: 1em;
 }
 
 .mj-member-login-component__trigger-label {

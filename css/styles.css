@@ -200,6 +200,275 @@
     color: #c82333;
 }
 
+.mj-member-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.mj-member-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px !important;
+    border-radius: 999px;
+    border: 1px solid #d0d7de;
+    background: #ffffff;
+    color: #1f2937;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    transition: all 0.15s ease-in-out;
+}
+
+.mj-member-action-btn:hover,
+.mj-member-action-btn:focus {
+    border-color: #1d4ed8;
+    color: #1d4ed8;
+    box-shadow: 0 4px 10px rgba(29, 78, 216, 0.18);
+    outline: none;
+}
+
+.mj-member-action-btn--primary {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+    color: #ffffff;
+}
+
+.mj-member-action-btn--primary:hover,
+.mj-member-action-btn--primary:focus {
+    background: #1739a8;
+    border-color: #1739a8;
+    color: #ffffff;
+}
+
+.mj-member-action-btn--secondary {
+    background: #f1f5f9;
+    border-color: #cbd5f5;
+    color: #0f172a;
+}
+
+.mj-member-action-btn--secondary:hover,
+.mj-member-action-btn--secondary:focus {
+    border-color: #1d4ed8;
+}
+
+.mj-member-action-btn--danger {
+    background: #fff1f2;
+    border-color: #dc2626;
+    color: #b91c1c;
+}
+
+.mj-member-action-btn--danger:hover,
+.mj-member-action-btn--danger:focus {
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #ffffff;
+}
+
+.mj-login-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #e0f2fe;
+    color: #0f172a;
+    font-weight: 600;
+}
+
+.mj-login-pill a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: inherit;
+    text-decoration: none;
+}
+
+.mj-login-pill--missing {
+    background: #f1f5f9;
+    color: #64748b;
+    font-style: italic;
+}
+
+.mj-login-pill--role-default {
+    background: #e0f2fe;
+    color: #0f172a;
+}
+
+.mj-login-pill--role-administrator {
+    background: #fdf2f8;
+    color: #9d174d;
+}
+
+.mj-login-pill--role-editor {
+    background: #eef2ff;
+    color: #4338ca;
+}
+
+.mj-login-pill--role-author {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.mj-login-pill--role-contributor {
+    background: #fef9c3;
+    color: #854d0e;
+}
+
+.mj-login-pill--role-subscriber {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.mj-login-pill--role-shop-manager {
+    background: #cffafe;
+    color: #0e7490;
+}
+
+.mj-login-icon {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.mj-login-text {
+    font-weight: 600;
+}
+
+.mj-login-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
+}
+
+.mj-login-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.mj-payment-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.mj-payment-status {
+    display: flex;
+    align-items: center;
+}
+
+.mj-payment-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.mj-payment-status-pill--muted {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.mj-payment-status-pill--success {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.mj-payment-status-pill--warning {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.mj-payment-status-pill--danger {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.mj-payment-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.mj-payment-action {
+    background: #e0f2fe;
+    color: #0f172a;
+}
+
+.mj-payment-action--qr {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.mj-payment-action--qr:hover,
+.mj-payment-action--qr:focus {
+    box-shadow: 0 4px 10px rgba(146, 64, 14, 0.18);
+}
+
+.mj-payment-action--mark {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.mj-payment-action--mark:hover,
+.mj-payment-action--mark:focus {
+    box-shadow: 0 4px 10px rgba(22, 163, 74, 0.18);
+}
+
+.mj-payment-action--history {
+    background: #e0e7ff;
+    color: #312e81;
+}
+
+.mj-payment-action--history:hover,
+.mj-payment-action--history:focus {
+    box-shadow: 0 4px 10px rgba(49, 46, 129, 0.18);
+}
+
+
+.mj-member-login-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: none;
+    background: #e0f2fe;
+    color: #0f172a;
+    font-weight: 600;
+    font-size: 13px;
+    line-height: 1;
+    text-decoration: none;
+    box-shadow: none;
+    appearance: none;
+    cursor: pointer;
+    transition: transform 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.mj-member-login-action:hover,
+.mj-member-login-action:focus {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(14, 116, 144, 0.15);
+    outline: none;
+}
+
+.mj-member-login-action--create {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.mj-member-login-action--create:hover,
+.mj-member-login-action--create:focus {
+    box-shadow: 0 4px 10px rgba(22, 163, 74, 0.15);
+}
+
 /* Photo styles */
 .mj-photo-container {
     text-align: center;

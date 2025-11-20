@@ -536,21 +536,70 @@ class Mj_Member_Elementor_Login_Widget extends Widget_Base {
 
         echo mj_member_render_login_modal_component($args);
     }
-
+    
     private function build_button_icon_html($settings) {
         if ($this->icons_manager_available()) {
             $icon_setting = isset($settings['button_icon']) ? $settings['button_icon'] : null;
+
             if (is_array($icon_setting) && !empty($icon_setting['value'])) {
                 if (method_exists(Icons_Manager::class, 'enqueue_font')) {
                     Icons_Manager::enqueue_font($icon_setting);
                 }
-                return Icons_Manager::render_icon(
+
+                ob_start();
+                $rendered = Icons_Manager::render_icon(
                     $icon_setting,
                     array(
                         'aria-hidden' => 'true',
                         'class' => 'mj-member-login-component__trigger-icon-shape',
-                    ),
-                    false
+                    )
+                );
+                $icon_html = ob_get_clean();
+
+                if (is_string($rendered) && trim($rendered) !== '') {
+                    $icon_html = $rendered;
+                }
+
+                if (is_string($icon_html)) {
+                    $icon_html = trim($icon_html);
+                }
+
+                if (!empty($icon_html)) {
+                    if (strpos($icon_html, 'mj-member-login-component__trigger-icon-shape') === false) {
+                        $replaced = 0;
+                        $icon_html = preg_replace(
+                            '/^(<\w+\s+[^>]*class=")(.*?)"/i',
+                            '$1$2 mj-member-login-component__trigger-icon-shape"',
+                            $icon_html,
+                            1,
+                            $replaced
+                        );
+
+                        if (empty($replaced)) {
+                            $icon_html = preg_replace(
+                                '/^(<\w+)/i',
+                                '$1 class="mj-member-login-component__trigger-icon-shape"',
+                                $icon_html,
+                                1
+                            );
+                        }
+                    }
+
+                    if (strpos($icon_html, 'aria-hidden') === false) {
+                        $icon_html = preg_replace(
+                            '/^(<\w+\s+)/i',
+                            '$1aria-hidden="true" ',
+                            $icon_html,
+                            1
+                        );
+                    }
+
+                    return $icon_html;
+                }
+            } elseif (is_string($icon_setting) && trim($icon_setting) !== '') {
+                return sprintf(
+                    '<i class="mj-member-login-component__trigger-icon-shape %s" aria-hidden="true"></i>',
+                    esc_attr(trim($icon_setting))
                 );
             }
         }

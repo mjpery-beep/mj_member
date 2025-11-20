@@ -22,6 +22,7 @@ class MjMembers_List_Table extends WP_List_Table {
         'age',
         'role',
         'email',
+        'login',
         'phone',
         'guardian',
         'requires_payment',
@@ -35,6 +36,8 @@ class MjMembers_List_Table extends WP_List_Table {
 
     /** @var array<int, object|null> */
     private $guardianCache = array();
+    /** @var array<int, WP_User|null> */
+    private $userCache = array();
     /** @var array<string, mixed> */
     private $activeFilters = array();
 
@@ -84,6 +87,7 @@ class MjMembers_List_Table extends WP_List_Table {
         $total_items  = MjMembers_CRUD::countAll($search, $this->activeFilters);
 
         $this->hydrateGuardians($members);
+        $this->hydrateUsers($members);
 
         $this->items = $members;
         $this->set_pagination_args(array(
@@ -102,6 +106,7 @@ class MjMembers_List_Table extends WP_List_Table {
             'age'                 => 'Âge',
             'role'                => 'Rôle',
             'email'               => 'Email',
+            'login'               => 'Identifiant',
             'phone'               => 'Téléphone',
             'guardian'            => 'Responsable',
             'requires_payment'    => 'Cotisation',
@@ -184,22 +189,45 @@ class MjMembers_List_Table extends WP_List_Table {
     }
 
     public function column_age($item) {
-        if (empty($item->birth_date)) {
-            return '—';
+        $member_id = isset($item->id) ? (int) $item->id : 0;
+        $birth_iso = '';
+        $display_html = '<span style="color:#999;">Ajouter</span>';
+
+        if (!empty($item->birth_date)) {
+            $birth_timestamp = strtotime($item->birth_date);
+            if ($birth_timestamp) {
+                $birth_iso = gmdate('Y-m-d', $birth_timestamp);
+                $now = current_time('timestamp');
+                $age = (int) floor(($now - $birth_timestamp) / YEAR_IN_SECONDS);
+                if ($age < 0) {
+                    $age = 0;
+                }
+
+                $formatted_date = wp_date('d/m/Y', $birth_timestamp);
+                $display_html = esc_html(sprintf('%d ans', $age));
+                $display_html .= '<br><span class="mj-birth-date-display" style="color:#555;font-size:12px;">' . esc_html($formatted_date) . '</span>';
+            } else {
+                $display_html = '<span style="color:#999;">—</span>';
+            }
+        } else {
+            $display_html = '<span style="color:#999;">—</span>';
         }
 
-        $birth_timestamp = strtotime($item->birth_date);
-        if (!$birth_timestamp) {
-            return '—';
+        $attributes = array(
+            'class' => 'mj-editable',
+            'data-member-id' => (string) $member_id,
+            'data-field-name' => 'birth_date',
+            'data-field-type' => 'date',
+            'data-field-value' => $birth_iso,
+            'title' => 'Cliquez pour éditer',
+        );
+
+        $attr_html = '';
+        foreach ($attributes as $name => $value) {
+            $attr_html .= sprintf(' %s="%s"', $name, esc_attr($value));
         }
 
-        $now = current_time('timestamp');
-        $age = (int) floor(($now - $birth_timestamp) / YEAR_IN_SECONDS);
-        if ($age < 0) {
-            $age = 0;
-        }
-
-        return esc_html($age . ' ans');
+        return '<span' . $attr_html . '>' . $display_html . '</span>';
     }
 
     public function column_email($item) {
@@ -209,6 +237,89 @@ class MjMembers_List_Table extends WP_List_Table {
 
         $link = '<a href="mailto:' . esc_attr($item->email) . '">' . esc_html($item->email) . '</a>';
         return '<span class="mj-editable" data-member-id="' . esc_attr($item->id) . '" data-field-name="email" data-field-type="email" title="Cliquez pour éditer">' . $link . '</span>';
+    }
+
+    public function column_login($item) {
+        $login = isset($item->member_account_login) ? trim((string) $item->member_account_login) : '';
+        $has_user = !empty($item->wp_user_id);
+
+        if ($has_user && $login === '') {
+            if (!empty($item->wp_user_login)) {
+                $login = trim((string) $item->wp_user_login);
+            } else {
+                $user = get_user_by('ID', (int) $item->wp_user_id);
+                if ($user instanceof WP_User) {
+                    $login = trim((string) $user->user_login);
+                    $item->wp_user_login = $login;
+                    if (empty($item->wp_user_email)) {
+                        $item->wp_user_email = (string) $user->user_email;
+                    }
+                    if (empty($item->wp_user_roles) && is_array($user->roles)) {
+                        $item->wp_user_roles = $user->roles;
+                    }
+                }
+            }
+        }
+
+        $roles = array();
+        if (!empty($item->wp_user_roles) && is_array($item->wp_user_roles)) {
+            $roles = $item->wp_user_roles;
+        } elseif (!empty($item->wp_user) && $item->wp_user instanceof WP_User) {
+            $roles = is_array($item->wp_user->roles) ? $item->wp_user->roles : array();
+        }
+
+        $role_meta = $this->resolveWpRoleMeta($roles);
+        $user_link = $has_user ? get_edit_user_link((int) $item->wp_user_id) : '';
+
+        $output = array();
+        if ($has_user && $login !== '') {
+            $pill_classes = array('mj-login-pill');
+            if ($role_meta['class'] !== '') {
+                $pill_classes[] = 'mj-login-pill--role-' . sanitize_html_class($role_meta['class']);
+            }
+            $pill_class_attr = implode(' ', array_map('sanitize_html_class', $pill_classes));
+            $icon_markup = $role_meta['icon'] !== '' ? '<span class="mj-login-icon" aria-hidden="true">' . esc_html($role_meta['icon']) . '</span>' : '';
+            $login_markup = $icon_markup . '<span class="mj-login-text">' . esc_html($login) . '</span>';
+            if ($user_link) {
+                $login_markup = '<a href="' . esc_url($user_link) . '" target="_blank" rel="noopener noreferrer">' . $login_markup . '</a>';
+            }
+            $title_attr = $role_meta['label'] !== '' ? ' title="' . esc_attr(sprintf(__('Rôle WordPress : %s', 'mj-member'), $role_meta['label'])) . '"' : '';
+            $output[] = '<span class="' . esc_attr($pill_class_attr) . '"' . $title_attr . '>' . $login_markup . '</span>';
+        }
+
+        $buttons = array();
+        $member_name = trim(((string) ($item->first_name ?? '')) . ' ' . ((string) ($item->last_name ?? '')));
+        $member_name = $member_name !== '' ? $member_name : __('Membre', 'mj-member');
+        $button_label = $has_user ? __('Détails', 'mj-member') : __('Créer un compte', 'mj-member');
+        $button_icon = $has_user ? '🔎' : '✨';
+        $button_classes = array('mj-member-login-action', 'mj-link-user-btn');
+        if (!$has_user) {
+            $button_classes[] = 'mj-member-login-action--create';
+        }
+
+        $button_attrs = array(
+            'data-member-id'      => (string) $item->id,
+            'data-member-name'    => $member_name,
+            'data-member-role'    => $item->role,
+            'data-has-user'       => $has_user ? '1' : '0',
+            'data-login'          => $login,
+            'data-wp-role'        => $role_meta['key'],
+            'data-wp-role-label'  => $role_meta['label'],
+            'data-user-edit-url'  => $user_link,
+        );
+
+        $button_attr_html = '';
+        foreach ($button_attrs as $name => $value) {
+            $button_attr_html .= ' ' . $name . '="' . esc_attr($value) . '"';
+        }
+
+        $buttons[] = '<button type="button" class="' . esc_attr(implode(' ', $button_classes)) . '"' . $button_attr_html . '>' . esc_html($button_icon . ' ' . $button_label) . '</button>';
+
+        if (!empty($buttons)) {
+            $output[] = '<div class="mj-login-actions">' . implode('', $buttons) . '</div>';
+        }
+
+        return '<div class="mj-login-cell">' . implode('', $output) . '</div>';
     }
 
     public function column_phone($item) {
@@ -271,27 +382,58 @@ class MjMembers_List_Table extends WP_List_Table {
     }
 
     public function column_payment_status($item) {
-        if (empty($item->requires_payment)) {
-            return '<span class="badge" style="background-color:#6c757d;color:#fff;padding:3px 8px;border-radius:12px;font-size:12px;">Non concerné</span>';
+        $requires_payment = !empty($item->requires_payment);
+        $status_modifier   = 'muted';
+        $status_label      = esc_html__('Non concerné', 'mj-member');
+
+        if ($requires_payment) {
+            $payment_time = null;
+            if (!empty($item->date_last_payement)) {
+                $timestamp = strtotime($item->date_last_payement);
+                if ($timestamp !== false) {
+                    $payment_time = $timestamp;
+                }
+            }
+
+            if ($payment_time === null) {
+                $status_modifier = 'danger';
+                $status_label    = esc_html__('Non payé', 'mj-member');
+            } else {
+                $current_time = current_time('timestamp');
+                $days_diff    = (int) floor(($current_time - $payment_time) / DAY_IN_SECONDS);
+                $days_diff    = max(0, $days_diff);
+                $days_display = number_format_i18n($days_diff);
+
+                if ($days_diff < 30) {
+                    $status_modifier = 'success';
+                    $status_label    = sprintf(esc_html__('À jour (%s j)', 'mj-member'), $days_display);
+                } elseif ($days_diff < 60) {
+                    $status_modifier = 'warning';
+                    $status_label    = sprintf(esc_html__('À renouveler (%s j)', 'mj-member'), $days_display);
+                } else {
+                    $status_modifier = 'danger';
+                    $status_label    = sprintf(esc_html__('Retard (%s j)', 'mj-member'), $days_display);
+                }
+            }
         }
 
-        if (empty($item->date_last_payement)) {
-            return '<span class="badge" style="background-color:#d63638;color:#fff;padding:3px 8px;border-radius:12px;font-size:12px;">Non payé</span>';
+        $badge_html = '<span class="mj-payment-status-pill mj-payment-status-pill--' . esc_attr($status_modifier) . '">' . $status_label . '</span>';
+
+        $actions = array();
+
+        if ($requires_payment) {
+            $actions[] = '<button type="button" class="mj-member-login-action mj-payment-action mj-payment-action--qr mj-show-qr-btn" data-member-id="' . esc_attr($item->id) . '">⚡ ' . esc_html__('QR paiement', 'mj-member') . '</button>';
+            $actions[] = '<button type="button" class="mj-member-login-action mj-payment-action mj-payment-action--mark mj-mark-paid-btn" data-member-id="' . esc_attr($item->id) . '">✅ ' . esc_html__('Marquer payé', 'mj-member') . '</button>';
         }
 
-        $payment_time = strtotime($item->date_last_payement);
-        $current_time = strtotime(current_time('mysql'));
-        $days         = (int) floor(($current_time - $payment_time) / DAY_IN_SECONDS);
+        $actions[] = '<button type="button" class="mj-member-login-action mj-payment-action mj-payment-action--history mj-payment-history-btn" data-member-id="' . esc_attr($item->id) . '">💳 ' . esc_html__('Historique', 'mj-member') . '</button>';
 
-        if ($days < 30) {
-            return '<span class="badge" style="background-color:#28a745;color:#fff;padding:3px 8px;border-radius:12px;font-size:12px;">À jour (' . esc_html($days) . ' j)</span>';
+        $actions_html = '';
+        if (!empty($actions)) {
+            $actions_html = '<div class="mj-payment-actions">' . implode('', $actions) . '</div>';
         }
 
-        if ($days < 60) {
-            return '<span class="badge" style="background-color:#fd7e14;color:#fff;padding:3px 8px;border-radius:12px;font-size:12px;">À renouveler (' . esc_html($days) . ' j)</span>';
-        }
-
-        return '<span class="badge" style="background-color:#d63638;color:#fff;padding:3px 8px;border-radius:12px;font-size:12px;">Retard (' . esc_html($days) . ' j)</span>';
+        return '<div class="mj-payment-cell"><div class="mj-payment-status">' . $badge_html . '</div>' . $actions_html . '</div>';
     }
 
     public function column_photo_usage_consent($item) {
@@ -330,32 +472,36 @@ class MjMembers_List_Table extends WP_List_Table {
         );
 
         $buttons = array();
-        $buttons[] = '<a href="' . esc_url($edit_url) . '" class="button button-small">✏️ Éditer</a>';
-        $buttons[] = '<a href="' . esc_url($delete_url) . '" class="button button-small button-link-delete" onclick="return confirm(\'Êtes-vous sûr ?\');">🗑️ Supprimer</a>';
+        $member_name = trim(((string) ($item->first_name ?? '')) . ' ' . ((string) ($item->last_name ?? '')));
+        $member_name = $member_name !== '' ? $member_name : __('Membre', 'mj-member');
 
-        if (!empty($item->requires_payment)) {
-            $buttons[] = '<button class="button button-small mj-show-qr-btn" data-member-id="' . esc_attr($item->id) . '">QR Paiement</button>';
-            $buttons[] = '<button class="button button-small mj-mark-paid-btn" data-member-id="' . esc_attr($item->id) . '">A payé sa cotisation</button>';
+        $buttons[] = '<a href="' . esc_url($edit_url) . '" class="button button-small mj-member-action-btn mj-member-action-btn--primary">✏️ ' . esc_html__('Éditer', 'mj-member') . '</a>';
+        $buttons[] = '<a href="' . esc_url($delete_url) . '" class="button button-small button-link-delete mj-member-action-btn mj-member-action-btn--danger" onclick="return confirm(\'Êtes-vous sûr ?\');">🗑️ ' . esc_html__('Supprimer', 'mj-member') . '</a>';
+
+        $login = isset($item->member_account_login) ? trim((string) $item->member_account_login) : '';
+        if ($login === '' && !empty($item->wp_user_login)) {
+            $login = (string) $item->wp_user_login;
         }
 
-        $buttons[] = '<button class="button button-small mj-payment-history-btn" data-member-id="' . esc_attr($item->id) . '">💳 Historique</button>';
-
-        $has_user = !empty($item->wp_user_id);
-        $can_manage_account = $has_user || !empty($item->email);
-
-        if ($can_manage_account) {
-            $button_label = $has_user ? 'Compte WP' : 'Créer compte WP';
-            $buttons[] = '<button class="button button-small mj-link-user-btn" data-member-id="' . esc_attr($item->id) . '" data-member-name="' . esc_attr(trim($item->first_name . ' ' . $item->last_name)) . '" data-member-role="' . esc_attr($item->role) . '" data-has-user="' . ($has_user ? '1' : '0') . '">' . esc_html($button_label) . '</button>';
-        }
-
-        if ($has_user) {
-            $user_link = get_edit_user_link((int) $item->wp_user_id);
-            if ($user_link) {
-                $buttons[] = '<a href="' . esc_url($user_link) . '" class="button button-small" target="_blank" rel="noopener noreferrer">Voir le compte</a>';
+        if ($login === '' && !empty($item->wp_user_id)) {
+            $user = get_user_by('ID', (int) $item->wp_user_id);
+            if ($user instanceof WP_User) {
+                $login = (string) $user->user_login;
+                if (empty($item->wp_user_email)) {
+                    $item->wp_user_email = (string) $user->user_email;
+                }
             }
         }
+        $reset_email = isset($item->wp_user_email) && $item->wp_user_email !== '' ? $item->wp_user_email : (string) ($item->email ?? '');
+        if ($login !== '' && $reset_email !== '') {
+            $buttons[] = '<button type="button" class="button button-small mj-member-action-btn mj-member-action-btn--secondary mj-reset-password-btn" data-member-id="' . esc_attr($item->id) . '" data-login="' . esc_attr($login) . '" data-email="' . esc_attr($reset_email) . '" data-member-name="' . esc_attr($member_name) . '">🔐 ' . esc_html__('Réinitialiser', 'mj-member') . '</button>';
+        }
 
-        return implode(' ', $buttons);
+        if (empty($buttons)) {
+            return '';
+        }
+
+        return '<div class="mj-member-actions">' . implode('', $buttons) . '</div>';
     }
 
     public function extra_tablenav($which) {
@@ -446,6 +592,7 @@ class MjMembers_List_Table extends WP_List_Table {
             'first_name'          => 'Prénom',
             'role'                => 'Rôle',
             'email'               => 'Email',
+            'login'               => 'Identifiant',
             'phone'               => 'Téléphone',
             'guardian'            => 'Responsable',
             'requires_payment'    => 'Cotisation',
@@ -549,6 +696,65 @@ class MjMembers_List_Table extends WP_List_Table {
         return $filters;
     }
 
+    private function hydrateUsers(array &$members) {
+        if (empty($members)) {
+            return;
+        }
+
+        $user_ids = array();
+        foreach ($members as $member) {
+            if (!empty($member->wp_user_id)) {
+                $user_ids[] = (int) $member->wp_user_id;
+            }
+        }
+
+        $user_ids = array_unique(array_filter($user_ids));
+        if (empty($user_ids)) {
+            foreach ($members as $member) {
+                $member->wp_user = null;
+                $member->wp_user_login = '';
+                $member->wp_user_email = '';
+            }
+            return;
+        }
+
+        $missing_ids = array();
+        foreach ($user_ids as $user_id) {
+            if (!array_key_exists($user_id, $this->userCache)) {
+                $missing_ids[] = $user_id;
+            }
+        }
+
+        if (!empty($missing_ids)) {
+            $users = get_users(array(
+                'include' => $missing_ids,
+            ));
+
+            foreach ($missing_ids as $missing_id) {
+                $this->userCache[$missing_id] = null;
+            }
+
+            foreach ($users as $user_object) {
+                $this->userCache[(int) $user_object->ID] = $user_object;
+            }
+        }
+
+        foreach ($members as $member) {
+            $user_id = !empty($member->wp_user_id) ? (int) $member->wp_user_id : 0;
+            if ($user_id && isset($this->userCache[$user_id]) && $this->userCache[$user_id] instanceof WP_User) {
+                $member->wp_user = $this->userCache[$user_id];
+                $member->wp_user_login = $this->userCache[$user_id]->user_login;
+                $member->wp_user_email = $this->userCache[$user_id]->user_email;
+                $member->wp_user_roles = is_array($this->userCache[$user_id]->roles) ? $this->userCache[$user_id]->roles : array();
+            } else {
+                $member->wp_user = null;
+                $member->wp_user_login = '';
+                $member->wp_user_email = '';
+                $member->wp_user_roles = array();
+            }
+        }
+    }
+
     private function hydrateGuardians(array &$members) {
         $guardian_ids = array();
         foreach ($members as $member) {
@@ -612,5 +818,59 @@ class MjMembers_List_Table extends WP_List_Table {
 
     private function roleIcon($role) {
         return '';
+    }
+
+    /**
+     * @param array<int, string> $roles
+     * @return array{key:string,label:string,icon:string,class:string}
+     */
+    private function resolveWpRoleMeta(array $roles) {
+        $primary_role = '';
+        foreach ($roles as $candidate) {
+            if (is_string($candidate) && $candidate !== '') {
+                $primary_role = $candidate;
+                break;
+            }
+        }
+
+        $label = '';
+        if ($primary_role !== '') {
+            if (function_exists('wp_roles')) {
+                $roles_object = wp_roles();
+                if ($roles_object instanceof WP_Roles && isset($roles_object->roles[$primary_role])) {
+                    $label = translate_user_role($roles_object->roles[$primary_role]['name']);
+                }
+            }
+            if ($label === '') {
+                $label = ucwords(str_replace(array('-', '_'), ' ', $primary_role));
+            }
+        }
+
+        $map = array(
+            'administrator' => array('icon' => '👑', 'class' => 'administrator'),
+            'editor'        => array('icon' => '📝', 'class' => 'editor'),
+            'author'        => array('icon' => '✍️', 'class' => 'author'),
+            'contributor'   => array('icon' => '🧾', 'class' => 'contributor'),
+            'subscriber'    => array('icon' => '🙋', 'class' => 'subscriber'),
+            'shop_manager'  => array('icon' => '🛒', 'class' => 'shop-manager'),
+        );
+
+        $icon = '👤';
+        $class = 'default';
+        if ($primary_role !== '') {
+            if (isset($map[$primary_role])) {
+                $icon = $map[$primary_role]['icon'];
+                $class = $map[$primary_role]['class'];
+            } else {
+                $class = strtolower(str_replace('_', '-', $primary_role));
+            }
+        }
+
+        return array(
+            'key'   => $primary_role,
+            'label' => $label,
+            'icon'  => $icon,
+            'class' => $class,
+        );
     }
 }

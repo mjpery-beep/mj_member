@@ -298,6 +298,78 @@ if (!function_exists('mj_member_get_guardian_children')) {
     }
 }
 
+if (!function_exists('mj_member_get_guardian_children_statuses')) {
+    /**
+     * @param object $guardian_member
+     * @param array<string,mixed> $args
+     * @return array<int,array<string,mixed>>
+     */
+    function mj_member_get_guardian_children_statuses($guardian_member, $args = array()) {
+        if (!mj_member_can_manage_children($guardian_member)) {
+            return array();
+        }
+
+        $children = mj_member_get_guardian_children($guardian_member);
+        if (empty($children) || !is_array($children)) {
+            return array();
+        }
+
+        $entries = array();
+        foreach ($children as $child) {
+            if (!$child || !is_object($child)) {
+                continue;
+            }
+
+            $status = mj_member_get_membership_status($child, $args);
+
+            $full_name = trim(sprintf('%s %s', (string) ($child->first_name ?? ''), (string) ($child->last_name ?? '')));
+            if ($full_name === '') {
+                $full_name = !empty($child->nickname) ? (string) $child->nickname : sprintf(__('Jeune #%d', 'mj-member'), (int) $child->id);
+            }
+
+            $requires_payment = !empty($status['requires_payment']) && in_array($status['status'], array('missing', 'expired', 'expiring'), true);
+
+            $birth_date_value = '';
+            if (!empty($child->birth_date) && $child->birth_date !== '0000-00-00') {
+                $timestamp = strtotime((string) $child->birth_date);
+                if ($timestamp) {
+                    $birth_date_value = gmdate('Y-m-d', $timestamp);
+                } else {
+                    $birth_date_value = sanitize_text_field((string) $child->birth_date);
+                }
+            }
+
+            $profile = array(
+                'id' => isset($child->id) ? (int) $child->id : 0,
+                'first_name' => isset($child->first_name) ? sanitize_text_field((string) $child->first_name) : '',
+                'last_name' => isset($child->last_name) ? sanitize_text_field((string) $child->last_name) : '',
+                'email' => isset($child->email) ? sanitize_email((string) $child->email) : '',
+                'phone' => isset($child->phone) ? sanitize_text_field((string) $child->phone) : '',
+                'birth_date' => $birth_date_value,
+                'notes' => isset($child->notes) ? sanitize_textarea_field((string) $child->notes) : '',
+                'is_autonomous' => !empty($child->is_autonomous) ? 1 : 0,
+                'photo_usage_consent' => !empty($child->photo_usage_consent) ? 1 : 0,
+                'full_name' => $full_name,
+            );
+
+            $entries[] = array(
+                'id' => isset($child->id) ? (int) $child->id : 0,
+                'full_name' => $full_name,
+                'status' => isset($status['status']) ? sanitize_key($status['status']) : 'unknown',
+                'status_label' => isset($status['status_label']) ? sanitize_text_field($status['status_label']) : __('Statut indisponible', 'mj-member'),
+                'description' => isset($status['description']) ? sanitize_text_field($status['description']) : '',
+                'last_payment_display' => isset($status['last_payment_display']) ? sanitize_text_field($status['last_payment_display']) : '',
+                'expires_display' => isset($status['expires_display']) ? sanitize_text_field($status['expires_display']) : '',
+                'amount' => isset($status['amount']) ? (float) $status['amount'] : 0.0,
+                'requires_payment' => $requires_payment,
+                'profile' => $profile,
+            );
+        }
+
+        return $entries;
+    }
+}
+
 if (!function_exists('mj_member_get_payment_timeline')) {
     function mj_member_get_payment_timeline($member_id, $limit = 10) {
         if (!class_exists('MjMembers_CRUD')) {
@@ -626,4 +698,168 @@ if (!function_exists('mj_member_ajax_create_payment_link')) {
 
     add_action('wp_ajax_mj_member_create_payment_link', 'mj_member_ajax_create_payment_link');
     add_action('wp_ajax_nopriv_mj_member_create_payment_link', 'mj_member_ajax_create_payment_link');
+}
+
+if (!function_exists('mj_member_ajax_create_child_payment_link')) {
+    function mj_member_ajax_create_child_payment_link() {
+        if (!is_user_logged_in()) {
+            wp_send_json_error(array('message' => __('Vous devez être connecté pour gérer les cotisations des jeunes.', 'mj-member')), 403);
+        }
+
+        $nonce = isset($_POST['nonce']) ? sanitize_text_field(wp_unslash($_POST['nonce'])) : '';
+        if (!wp_verify_nonce($nonce, 'mj_member_create_child_payment_link')) {
+            wp_send_json_error(array('message' => __('La vérification de sécurité a échoué. Merci de recharger la page.', 'mj-member')), 403);
+        }
+
+        $child_id = isset($_POST['child_id']) ? (int) $_POST['child_id'] : 0;
+        if ($child_id <= 0) {
+            wp_send_json_error(array('message' => __('Jeune invalide.', 'mj-member')), 400);
+        }
+
+        $guardian = mj_member_get_current_member();
+        if (!$guardian || !mj_member_can_manage_children($guardian)) {
+            wp_send_json_error(array('message' => __('Vous n’êtes pas autorisé à payer pour ce jeune.', 'mj-member')), 403);
+        }
+
+        $children = mj_member_get_guardian_children($guardian);
+        $target_child = null;
+        if (!empty($children)) {
+            foreach ($children as $child) {
+                if ($child && (int) $child->id === $child_id) {
+                    $target_child = $child;
+                    break;
+                }
+            }
+        }
+
+        if (!$target_child) {
+            wp_send_json_error(array('message' => __('Ce jeune n’est pas lié à votre profil.', 'mj-member')), 403);
+        }
+
+        $status = mj_member_get_membership_status($target_child);
+        if (empty($status['requires_payment']) || !in_array($status['status'], array('missing', 'expired', 'expiring'), true)) {
+            wp_send_json_error(array('message' => __('La cotisation de ce jeune est déjà à jour.', 'mj-member')));
+        }
+
+        if (!class_exists('MjPayments')) {
+            wp_send_json_error(array('message' => __('Le module de paiement n’est pas disponible.', 'mj-member')), 500);
+        }
+
+        $amount = (float) apply_filters('mj_member_child_membership_amount', (float) $status['amount'], $target_child, $guardian);
+        $payment = MjPayments::create_stripe_payment((int) $target_child->id, $amount);
+
+        if (!$payment || empty($payment['checkout_url'])) {
+            wp_send_json_error(array('message' => __('Impossible de générer le lien de paiement pour ce jeune.', 'mj-member')), 500);
+        }
+
+        wp_send_json_success(array(
+            'redirect_url' => esc_url_raw($payment['checkout_url']),
+        ));
+    }
+
+    add_action('wp_ajax_mj_member_create_child_payment_link', 'mj_member_ajax_create_child_payment_link');
+}
+
+if (!function_exists('mj_member_ajax_update_child_profile')) {
+    function mj_member_ajax_update_child_profile() {
+        if (!is_user_logged_in()) {
+            wp_send_json_error(array('message' => __('Vous devez être connecté pour modifier ce jeune.', 'mj-member')), 403);
+        }
+
+        $nonce = isset($_POST['nonce']) ? sanitize_text_field(wp_unslash($_POST['nonce'])) : '';
+        if ($nonce === '' || !wp_verify_nonce($nonce, 'mj_member_update_child_profile')) {
+            wp_send_json_error(array('message' => __('La vérification de sécurité a échoué. Merci de réessayer.', 'mj-member')), 400);
+        }
+
+        $child_id = isset($_POST['child_id']) ? (int) $_POST['child_id'] : 0;
+        if ($child_id <= 0) {
+            wp_send_json_error(array('message' => __('Jeune introuvable.', 'mj-member')), 400);
+        }
+
+        $guardian = mj_member_get_current_member();
+        if (!$guardian || !mj_member_can_manage_children($guardian)) {
+            wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
+        }
+
+        $children = mj_member_get_guardian_children($guardian);
+        $target_child = null;
+        if (!empty($children)) {
+            foreach ($children as $child) {
+                if ($child && (int) $child->id === $child_id) {
+                    $target_child = $child;
+                    break;
+                }
+            }
+        }
+
+        if (!$target_child) {
+            wp_send_json_error(array('message' => __('Jeune introuvable ou non associé à votre compte.', 'mj-member')), 404);
+        }
+
+        $updates = array();
+        $field_callbacks = array(
+            'first_name' => 'sanitize_text_field',
+            'last_name' => 'sanitize_text_field',
+            'email' => 'sanitize_email',
+            'phone' => 'sanitize_text_field',
+            'birth_date' => 'sanitize_text_field',
+        );
+
+        if (class_exists('MjMembers_CRUD') && MjMembers_CRUD::hasColumn('notes')) {
+            $field_callbacks['notes'] = 'sanitize_textarea_field';
+        }
+
+        foreach ($field_callbacks as $field => $callback) {
+            if (array_key_exists($field, $_POST)) {
+                $value = call_user_func($callback, wp_unslash((string) $_POST[$field]));
+                $updates[$field] = $value;
+            }
+        }
+
+        if (array_key_exists('first_name', $updates) && $updates['first_name'] === '') {
+            wp_send_json_error(array('message' => __('Le prénom est obligatoire.', 'mj-member')), 400);
+        }
+
+        if (array_key_exists('last_name', $updates) && $updates['last_name'] === '') {
+            wp_send_json_error(array('message' => __('Le nom de famille est obligatoire.', 'mj-member')), 400);
+        }
+
+        $updates['is_autonomous'] = !empty($_POST['is_autonomous']) ? 1 : 0;
+        $updates['photo_usage_consent'] = !empty($_POST['photo_usage_consent']) ? 1 : 0;
+
+        if (isset($updates['birth_date']) && $updates['birth_date'] === '') {
+            $updates['birth_date'] = null;
+        }
+
+        if (isset($updates['email']) && $updates['email'] === '') {
+            $updates['email'] = '';
+        }
+
+        $result = MjMembers_CRUD::update($child_id, $updates);
+        if ($result === false) {
+            wp_send_json_error(array('message' => __('Impossible de mettre à jour ce jeune pour le moment.', 'mj-member')), 500);
+        }
+
+        $refreshed_child = null;
+        $refreshed_children = mj_member_get_guardian_children_statuses($guardian);
+        if (!empty($refreshed_children)) {
+            foreach ($refreshed_children as $entry) {
+                if ((int) $entry['id'] === $child_id) {
+                    $refreshed_child = $entry;
+                    break;
+                }
+            }
+        }
+
+        if (!$refreshed_child) {
+            wp_send_json_error(array('message' => __('Les informations ont été mises à jour, mais le rechargement des données a échoué.', 'mj-member')), 500);
+        }
+
+        wp_send_json_success(array(
+            'child' => $refreshed_child,
+            'message' => __('Les informations du jeune ont été mises à jour.', 'mj-member'),
+        ));
+    }
+
+    add_action('wp_ajax_mj_member_update_child_profile', 'mj_member_ajax_update_child_profile');
 }

@@ -29,28 +29,22 @@ if ($notice_raw !== '') {
     printf('<div class="%1$s"><p>%2$s</p></div>', esc_attr($class), esc_html($message));
 }
 
-if ($action === 'delete' && $location_id > 0) {
-    $nonce_action = 'mj_location_delete_' . $location_id;
-    if (!isset($_GET['_wpnonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['_wpnonce'])), $nonce_action)) {
-        $errors[] = 'Verification de securite echouee.';
-    } else {
-        $delete = MjEventLocations::delete($location_id);
-        if (is_wp_error($delete)) {
-            $errors[] = $delete->get_error_message();
-        } else {
-            $redirect = add_query_arg(
-                array(
-                    'page' => 'mj_locations',
-                    'mj_locations_message' => rawurlencode('Lieu supprime.'),
-                ),
-                admin_url('admin.php')
-            );
-            wp_safe_redirect($redirect);
-            exit;
-        }
-    }
-    $action = 'list';
-    $location_id = 0;
+$state = array();
+if (isset($GLOBALS['mj_member_locations_form_state']) && is_array($GLOBALS['mj_member_locations_form_state'])) {
+    $state = $GLOBALS['mj_member_locations_form_state'];
+    unset($GLOBALS['mj_member_locations_form_state']);
+}
+
+if (isset($state['force_action'])) {
+    $action = $state['force_action'];
+}
+
+if (isset($state['location_id'])) {
+    $location_id = (int) $state['location_id'];
+}
+
+if (!empty($state['errors']) && is_array($state['errors'])) {
+    $errors = array_merge($errors, $state['errors']);
 }
 
 $default_values = MjEventLocations::get_default_values();
@@ -66,75 +60,28 @@ if ($action === 'edit' && $location_id > 0) {
     } else {
         $form_values = array_merge($form_values, (array) $existing);
         $map_embed_url = MjEventLocations::build_map_embed_src($existing);
+        if (!isset($form_values['notes']) || $form_values['notes'] === null) {
+            $form_values['notes'] = '';
+        }
     }
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_location_nonce'])) {
-    $nonce_value = sanitize_text_field(wp_unslash($_POST['mj_location_nonce']));
-    if (!wp_verify_nonce($nonce_value, 'mj_location_save')) {
-        $form_errors[] = 'Verification de securite echouee.';
-    } else {
-        $submitted = array(
-            'name' => isset($_POST['location_name']) ? sanitize_text_field(wp_unslash($_POST['location_name'])) : '',
-            'slug' => isset($_POST['location_slug']) ? sanitize_title(wp_unslash($_POST['location_slug'])) : '',
-            'address_line' => isset($_POST['location_address']) ? sanitize_text_field(wp_unslash($_POST['location_address'])) : '',
-            'postal_code' => isset($_POST['location_postal_code']) ? sanitize_text_field(wp_unslash($_POST['location_postal_code'])) : '',
-            'city' => isset($_POST['location_city']) ? sanitize_text_field(wp_unslash($_POST['location_city'])) : '',
-            'country' => isset($_POST['location_country']) ? sanitize_text_field(wp_unslash($_POST['location_country'])) : '',
-            'latitude' => isset($_POST['location_latitude']) ? sanitize_text_field(wp_unslash($_POST['location_latitude'])) : '',
-            'longitude' => isset($_POST['location_longitude']) ? sanitize_text_field(wp_unslash($_POST['location_longitude'])) : '',
-            'map_query' => isset($_POST['location_map_query']) ? sanitize_text_field(wp_unslash($_POST['location_map_query'])) : '',
-            'notes' => isset($_POST['location_notes']) ? sanitize_textarea_field(wp_unslash($_POST['location_notes'])) : '',
-        );
+if (!empty($state['form_errors']) && is_array($state['form_errors'])) {
+    $form_errors = array_merge($form_errors, $state['form_errors']);
+}
 
-        $cover_id = isset($_POST['location_cover_id']) ? (int) $_POST['location_cover_id'] : 0;
-        $submitted['cover_id'] = $cover_id;
-
-        if ($submitted['name'] === '') {
-            $form_errors[] = 'Le nom du lieu est obligatoire.';
-        }
-
-        $form_values = array_merge($form_values, $submitted);
-
-        if ($action === 'edit' && $location_id <= 0) {
-            $form_errors[] = 'Edition impossible: identifiant invalide.';
-        }
-
-        if (empty($form_errors)) {
-            if ($action === 'edit') {
-                $result = MjEventLocations::update($location_id, $submitted);
-                if (is_wp_error($result)) {
-                    $form_errors[] = $result->get_error_message();
-                } else {
-                    $redirect = add_query_arg(
-                        array(
-                            'page' => 'mj_locations',
-                            'mj_locations_message' => rawurlencode('Lieu mis a jour.'),
-                        ),
-                        admin_url('admin.php')
-                    );
-                    wp_safe_redirect($redirect);
-                    exit;
-                }
-            } else {
-                $result = MjEventLocations::create($submitted);
-                if (is_wp_error($result)) {
-                    $form_errors[] = $result->get_error_message();
-                } else {
-                    $redirect = add_query_arg(
-                        array(
-                            'page' => 'mj_locations',
-                            'mj_locations_message' => rawurlencode('Lieu cree avec succes.'),
-                        ),
-                        admin_url('admin.php')
-                    );
-                    wp_safe_redirect($redirect);
-                    exit;
-                }
-            }
-        }
+if (!empty($state['form_values']) && is_array($state['form_values'])) {
+    $form_values = array_merge($form_values, $state['form_values']);
+    if (!isset($form_values['notes']) || $form_values['notes'] === null) {
+        $form_values['notes'] = '';
     }
+}
 
+if (isset($state['map_embed_url'])) {
+    $map_embed_url = $state['map_embed_url'];
+}
+
+if ($map_embed_url === '') {
     $map_embed_url = MjEventLocations::build_map_embed_src($form_values);
 }
 
@@ -309,12 +256,12 @@ $list_url = add_query_arg(array('page' => 'mj_locations'), admin_url('admin.php'
                             <strong><?php echo esc_html($location->name); ?></strong><br />
                             <span class="description">Slug: <?php echo esc_html($location->slug); ?></span>
                         </td>
-                        <td><?php echo $address_display !== '' ? esc_html($address_display) : '<span style="color:#6c757d;">—</span>'; ?></td>
+                        <td><?php echo $address_display !== '' ? esc_html($address_display) : '<span style="color:#6c757d;">-</span>'; ?></td>
                         <td>
                             <?php if ($map_link !== '') : ?>
                                 <a class="button button-small" href="<?php echo esc_url(str_replace('&output=embed', '', $map_link)); ?>" target="_blank" rel="noopener noreferrer">Voir</a>
                             <?php else : ?>
-                                <span style="color:#6c757d;">—</span>
+                                <span style="color:#6c757d;">-</span>
                             <?php endif; ?>
                         </td>
                         <td>
@@ -322,7 +269,7 @@ $list_url = add_query_arg(array('page' => 'mj_locations'), admin_url('admin.php'
                             if (!empty($location->cover_id)) {
                                 echo wp_get_attachment_image((int) $location->cover_id, array(64, 64), false, array('style' => 'max-width:64px;height:auto;'));
                             } else {
-                                echo '<span style="color:#6c757d;">—</span>';
+                                echo '<span style="color:#6c757d;">-</span>';
                             }
                             ?>
                         </td>

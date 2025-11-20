@@ -4,7 +4,7 @@
 Plugin Name: MJ Member
 Plugin URI: https://mj-pery.be
 Description: Gestion des membres avec table CRUD
-Version: 2.1.0
+Version: 2.5.0
 Author: Simon
 */
 // Exit if accessed directly
@@ -13,8 +13,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants
-define( 'MJ_MEMBER_VERSION', '2.3.0' );
-define( 'MJ_MEMBER_SCHEMA_VERSION', '2.3.0' );
+define( 'MJ_MEMBER_VERSION', '2.5.0' );
+define( 'MJ_MEMBER_SCHEMA_VERSION', '2.5.0' );
 define( 'MJ_MEMBER_PATH', plugin_dir_path( __FILE__ ) );
 define( 'MJ_MEMBER_URL', plugin_dir_url( __FILE__ ) );
 define( 'MJ_MEMBER_CAPABILITY', 'mj_manage_members' );
@@ -64,12 +64,15 @@ function mj_member_remove_capabilities() {
 require plugin_dir_path( __FILE__ ) . 'includes/classes/MjTools.php';
 require plugin_dir_path( __FILE__ ) . 'includes/classes/MjMembers_CRUD.php';
 require plugin_dir_path( __FILE__ ) . 'includes/classes/MjPayments.php';
+require plugin_dir_path( __FILE__ ) . 'includes/classes/MjSms.php';
 require plugin_dir_path( __FILE__ ) . 'includes/classes/MjEvents_CRUD.php';
 require plugin_dir_path( __FILE__ ) . 'includes/classes/MjEventRegistrations.php';
 require plugin_dir_path( __FILE__ ) . 'includes/classes/MjEventLocations.php';
 require plugin_dir_path( __FILE__ ) . 'includes/classes/MjStripeConfig.php';
 require plugin_dir_path( __FILE__ ) . 'includes/security.php'; // SÉCURITÉ
 require plugin_dir_path( __FILE__ ) . 'includes/member_accounts.php';
+require plugin_dir_path( __FILE__ ) . 'includes/dashboard.php';
+require plugin_dir_path( __FILE__ ) . 'includes/events_public.php';
 require plugin_dir_path( __FILE__ ) . 'includes/login_component.php';
 require plugin_dir_path( __FILE__ ) . 'includes/shortcode_inscription.php';
 require plugin_dir_path( __FILE__ ) . 'includes/shortcode_member_account.php';
@@ -238,6 +241,30 @@ function mj_member_get_event_locations_table_name() {
     $candidates = array(
         $wpdb->prefix . 'mj_event_locations',
         $wpdb->prefix . 'event_locations',
+        $wpdb->prefix . 'mj_locations',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
+function mj_member_get_event_animateurs_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_event_animateurs',
+        $wpdb->prefix . 'event_animateurs',
     );
 
     foreach ($candidates as $candidate) {
@@ -330,6 +357,31 @@ function mj_member_ensure_auxiliary_tables() {
         $wpdb->query("ALTER TABLE $payments_hist_table ADD COLUMN payer_id mediumint(9) DEFAULT NULL AFTER member_id");
         $wpdb->query("ALTER TABLE $payments_hist_table ADD KEY payer_idx (payer_id)");
     }
+
+    // Journal des emails envoyés
+    $email_logs_table = $wpdb->prefix . 'mj_email_logs';
+    $sql_email_logs = "CREATE TABLE IF NOT EXISTS $email_logs_table (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        member_id bigint(20) unsigned DEFAULT NULL,
+        template_id mediumint(9) DEFAULT NULL,
+        template_slug varchar(190) DEFAULT NULL,
+        subject varchar(255) NOT NULL DEFAULT '',
+        recipients longtext NOT NULL,
+        status varchar(20) NOT NULL DEFAULT 'sent',
+        is_test_mode tinyint(1) NOT NULL DEFAULT 0,
+        error_message text DEFAULT NULL,
+        body_html longtext DEFAULT NULL,
+        body_plain longtext DEFAULT NULL,
+        headers longtext DEFAULT NULL,
+        context longtext DEFAULT NULL,
+        source varchar(120) NOT NULL DEFAULT '',
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY member_idx (member_id),
+        KEY status_idx (status),
+        KEY template_idx (template_slug(100))
+    ) $charset_collate;";
+    dbDelta($sql_email_logs);
 }
 
 function mj_member_seed_email_templates() {
@@ -455,7 +507,11 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_1($wpdb);
     mj_member_upgrade_to_2_2($wpdb);
     mj_member_upgrade_to_2_3($wpdb);
-    mj_member_upgrade_to_2_3($wpdb);
+    mj_member_upgrade_to_2_4($wpdb);
+
+    if (class_exists('MjMembers_CRUD')) {
+        MjMembers_CRUD::resetColumnCache();
+    }
 
     update_option('mj_member_schema_version', MJ_MEMBER_SCHEMA_VERSION);
     $running = false;
@@ -736,10 +792,19 @@ function mj_custom_admin_styles($hook) {
             'submitUpdate' => __('Mettre à jour', 'mj-member'),
             'cancel' => __('Annuler', 'mj-member'),
             'passwordLabel' => __('Mot de passe généré :', 'mj-member'),
+            'suggestedPasswordLabel' => __('Mot de passe suggéré :', 'mj-member'),
+            'copyLabel' => __('Copier', 'mj-member'),
             'copySuccess' => __('Mot de passe copié dans le presse-papiers.', 'mj-member'),
             'roleLabel' => __('Rôle WordPress attribué', 'mj-member'),
+            'roleTitleTemplate' => __('Rôle WordPress : %s', 'mj-member'),
             'accountPasswordLabel' => __('Mot de passe du compte WordPress', 'mj-member'),
-            'accountPasswordHint' => __('Laissez vide pour générer un mot de passe automatique.', 'mj-member'),
+            'accountPasswordHint' => __('Laissez vide pour générer un mot de passe automatique ou utilisez la suggestion sécurisée (7 caractères).', 'mj-member'),
+            'suggestPassword' => __('Suggérer un mot de passe', 'mj-member'),
+            'passwordSuggested' => __('Mot de passe suggéré et rempli.', 'mj-member'),
+            'detailsLabel' => __('Détails', 'mj-member'),
+            'accountLoginLabel' => __('Identifiant du compte WordPress', 'mj-member'),
+            'accountLoginPlaceholder' => __('ex : prenom.nom', 'mj-member'),
+            'accountLoginHint' => __('Choisissez un identifiant unique (lettres, chiffres, points et tirets). Laissez vide pour proposer automatiquement un identifiant.', 'mj-member'),
             'chooseRolePlaceholder' => __('Sélectionnez un rôle…', 'mj-member'),
             'successLinked' => __('Le compte WordPress est maintenant lié.', 'mj-member'),
             'errorGeneric' => __('Une erreur est survenue. Merci de réessayer.', 'mj-member'),
@@ -829,7 +894,17 @@ function mj_link_member_user_callback() {
 
     $member_id = isset($_POST['member_id']) ? intval($_POST['member_id']) : 0;
     $manual_password = isset($_POST['manual_password']) ? wp_unslash($_POST['manual_password']) : '';
+    $manual_login_raw = isset($_POST['manual_login']) ? wp_unslash($_POST['manual_login']) : '';
+    $manual_login = sanitize_user($manual_login_raw, true);
     $target_role = isset($_POST['role']) ? sanitize_key($_POST['role']) : '';
+
+    if ($manual_login_raw !== '' && $manual_login === '') {
+        wp_send_json_error(array('message' => __('Identifiant fourni invalide.', 'mj-member')));
+    }
+
+    if ($manual_login !== '' && !validate_username($manual_login)) {
+        wp_send_json_error(array('message' => __('Cet identifiant contient des caractères non autorisés.', 'mj-member')));
+    }
 
     if ($member_id <= 0) {
         wp_send_json_error(array('message' => __('Identifiant membre manquant.', 'mj-member')));
@@ -853,10 +928,6 @@ function mj_link_member_user_callback() {
         $existing_user = get_user_by('email', $member->email);
     }
 
-    if (!$existing_user && empty($member->email)) {
-        wp_send_json_error(array('message' => __('L’adresse e-mail du membre est requise pour créer un compte.', 'mj-member')));
-    }
-
     $user_created = false;
     $generated_password = '';
     $user_login = '';
@@ -866,7 +937,21 @@ function mj_link_member_user_callback() {
             wp_send_json_error(array('message' => __('Vous n’avez pas les droits suffisants pour modifier ce compte utilisateur.', 'mj-member')), 403);
         }
 
-        $update_data = array('ID' => $existing_user->ID, 'role' => $target_role);
+        $desired_login = $existing_user->user_login;
+        if ($manual_login !== '') {
+            $existing_login_owner = username_exists($manual_login);
+            if ($existing_login_owner && (int) $existing_login_owner !== (int) $existing_user->ID) {
+                wp_send_json_error(array('message' => __('Cet identifiant est déjà utilisé par un autre compte.', 'mj-member')));
+            }
+            $desired_login = $manual_login;
+        }
+
+        $update_data = array(
+            'ID'            => $existing_user->ID,
+            'role'          => $target_role,
+            'user_login'    => $desired_login,
+            'user_nicename' => sanitize_title($desired_login),
+        );
         if (!empty($member->first_name)) {
             $update_data['first_name'] = $member->first_name;
         }
@@ -880,47 +965,55 @@ function mj_link_member_user_callback() {
         }
 
         $user_id = $existing_user->ID;
+        $user_login = $desired_login;
     } else {
         if (!current_user_can('create_users')) {
             wp_send_json_error(array('message' => __('Vous n’avez pas les droits pour créer des utilisateurs.', 'mj-member')), 403);
         }
 
-        $candidates = array();
-        if (!empty($member->email)) {
-            $email_login = sanitize_user(current(explode('@', $member->email)), true);
-            if (!empty($email_login)) {
-                $candidates[] = $email_login;
+        if ($manual_login !== '') {
+            if (username_exists($manual_login)) {
+                wp_send_json_error(array('message' => __('Cet identifiant est déjà utilisé par un autre compte.', 'mj-member')));
             }
-        }
-
-        $name_login = sanitize_user($member->first_name . '.' . $member->last_name, true);
-        if (!empty($name_login)) {
-            $candidates[] = $name_login;
-        }
-
-        $fallback_login = 'member' . $member->id;
-        $candidates[] = sanitize_user($fallback_login, true);
-
-        foreach ($candidates as $candidate) {
-            if ($candidate === '') {
-                continue;
+            $user_login = $manual_login;
+        } else {
+            $candidates = array();
+            if (!empty($member->email) && is_email($member->email)) {
+                $email_login = sanitize_user(current(explode('@', $member->email)), true);
+                if (!empty($email_login)) {
+                    $candidates[] = $email_login;
+                }
             }
-            $login_candidate = $candidate;
-            $suffix = 1;
-            while (username_exists($login_candidate)) {
-                $login_candidate = $candidate . $suffix;
-                $suffix++;
-            }
-            $user_login = $login_candidate;
-            break;
-        }
 
-        if ($user_login === '') {
-            $user_login = 'member' . $member->id;
-            $suffix = 1;
-            while (username_exists($user_login)) {
-                $user_login = 'member' . $member->id . '_' . $suffix;
-                $suffix++;
+            $name_login = sanitize_user(trim(($member->first_name ?? '') . '.' . ($member->last_name ?? '')), true);
+            if (!empty($name_login)) {
+                $candidates[] = $name_login;
+            }
+
+            $fallback_login = sanitize_user('member' . $member->id, true);
+            $candidates[] = $fallback_login !== '' ? $fallback_login : 'member' . $member->id;
+
+            foreach ($candidates as $candidate) {
+                if ($candidate === '') {
+                    continue;
+                }
+                $login_candidate = $candidate;
+                $suffix = 1;
+                while (username_exists($login_candidate)) {
+                    $login_candidate = $candidate . $suffix;
+                    $suffix++;
+                }
+                $user_login = $login_candidate;
+                break;
+            }
+
+            if ($user_login === '') {
+                $user_login = 'member' . $member->id;
+                $suffix = 1;
+                while (username_exists($user_login)) {
+                    $user_login = 'member' . $member->id . '_' . $suffix;
+                    $suffix++;
+                }
             }
         }
 
@@ -935,9 +1028,18 @@ function mj_link_member_user_callback() {
         }
 
         $generated_password = $manual_password !== '' ? $manual_password : wp_generate_password(12, true, false);
+        $user_email = '';
+        if (!empty($member->email) && is_email($member->email)) {
+            $user_email = $member->email;
+        } else {
+            $user_email = sanitize_email($user_login . '@mj-member.local');
+            if ($user_email === '') {
+                $user_email = 'member' . $member->id . '@mj-member.local';
+            }
+        }
         $user_id = wp_insert_user(array(
             'user_login' => $user_login,
-            'user_email' => $member->email,
+            'user_email' => $user_email,
             'user_pass' => $generated_password,
             'first_name' => $member->first_name,
             'last_name' => $member->last_name,
@@ -966,7 +1068,11 @@ function mj_link_member_user_callback() {
         }
     }
 
-    MjMembers_CRUD::update($member_id, array('wp_user_id' => $user_id));
+    $member_login_value = $manual_login !== '' ? $manual_login : ($user_login !== '' ? $user_login : ($existing_user ? $existing_user->user_login : ''));
+    MjMembers_CRUD::update($member_id, array(
+        'wp_user_id'           => $user_id,
+        'member_account_login' => $member_login_value,
+    ));
 
     $response = array(
         'user_id' => $user_id,
@@ -982,7 +1088,10 @@ function mj_link_member_user_callback() {
     $user_object = get_user_by('id', $user_id);
     if ($user_object) {
         $response['login'] = $user_object->user_login;
+        $response['member_login'] = $member_login_value !== '' ? $member_login_value : $user_object->user_login;
+        $response['user_email'] = $user_object->user_email;
     }
+    $response['member_login'] = $response['member_login'] ?? $member_login_value;
 
     if (!empty($generated_password)) {
         $response['generated_password'] = $generated_password;
@@ -1071,6 +1180,7 @@ function mj_inline_edit_member_callback() {
             'last_name',
             'email',
             'phone',
+            'birth_date',
             'role',
             'status',
             'date_last_payement',
@@ -1117,6 +1227,20 @@ function mj_inline_edit_member_callback() {
                 break;
             case 'phone':
                 $field_value = sanitize_text_field($field_value);
+                break;
+            case 'birth_date':
+                $clean_date = sanitize_text_field($field_value);
+                if ($clean_date === '') {
+                    $field_value = null;
+                    break;
+                }
+
+                $timestamp = strtotime($clean_date);
+                if (!$timestamp) {
+                    wp_send_json_error(array('message' => 'Date invalide'));
+                }
+
+                $field_value = gmdate('Y-m-d', $timestamp);
                 break;
             case 'role':
                 $field_value = sanitize_text_field($field_value);
@@ -1231,25 +1355,35 @@ function mj_upload_member_photo_callback() {
 add_action('admin_menu', 'mj_add_admin_menu');
 function mj_add_admin_menu() {
     // Top level menu 'Mj Péry'
-    $parent = add_menu_page(
+    add_menu_page(
         'Maison de Jeune',
         'Maison de Jeune',
         MJ_MEMBER_CAPABILITY,
         'mj_member',
-        'mj_members_page',
+        'mj_member_dashboard_page',
         'dashicons-admin-site',
         30
     );
 
+    add_submenu_page(
+        'mj_member',
+        __('Tableau de bord', 'mj-member'),
+        __('Tableau de bord', 'mj-member'),
+        MJ_MEMBER_CAPABILITY,
+        'mj_member_dashboard',
+        'mj_member_dashboard_page'
+    );
 
-    // Submenu alias to support links with page=mj_members
+    remove_submenu_page('mj_member', 'mj_member');
+
     add_submenu_page('mj_member', 'Membres', 'Membres', MJ_MEMBER_CAPABILITY, 'mj_members', 'mj_members_page');
 
     // Submenu: Événements / Stages
     add_submenu_page('mj_member', 'Événements', 'Événements', MJ_MEMBER_CAPABILITY, 'mj_events', 'mj_events_page');
 
     // Submenu: Lieux d'événements
-    add_submenu_page('mj_member', 'Lieux', 'Lieux', MJ_MEMBER_CAPABILITY, 'mj_locations', 'mj_event_locations_page');
+    $locations_hook = add_submenu_page('mj_member', 'Lieux', 'Lieux', MJ_MEMBER_CAPABILITY, 'mj_locations', 'mj_event_locations_page');
+    add_action('load-' . $locations_hook, 'mj_member_handle_locations_actions');
 
     // Submenu: Template emails
     add_submenu_page('mj_member', 'Template emails', 'Template emails', MJ_MEMBER_CAPABILITY, 'mj_email_templates', 'mj_email_templates_page');
@@ -1349,6 +1483,8 @@ function mj_install()
     dbDelta($sql_payments);
     dbDelta($sql_payment_history);
     mj_member_upgrade_to_2_2($wpdb);
+    mj_member_upgrade_to_2_3($wpdb);
+    mj_member_upgrade_to_2_4($wpdb);
     
     // Ajouter des données de test
     mj_install_test_data($table_name);
@@ -1732,6 +1868,7 @@ function mj_member_upgrade_to_2_2($wpdb) {
         date_fin datetime NOT NULL,
         date_fin_inscription datetime DEFAULT NULL,
         prix decimal(10,2) NOT NULL DEFAULT 0.00,
+        allow_guardian_registration tinyint(1) NOT NULL DEFAULT 0,
         created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY  (id),
@@ -1765,6 +1902,7 @@ function mj_member_upgrade_to_2_2($wpdb) {
 function mj_member_upgrade_to_2_3($wpdb) {
     $events_table = $wpdb->prefix . 'mj_events';
     $locations_table = $wpdb->prefix . 'mj_event_locations';
+    $event_animateurs_table = $wpdb->prefix . 'mj_event_animateurs';
     $charset_collate = $wpdb->get_charset_collate();
 
     if (!function_exists('dbDelta')) {
@@ -1792,16 +1930,79 @@ function mj_member_upgrade_to_2_3($wpdb) {
     ) $charset_collate;";
 
     dbDelta($sql_locations);
+    dbDelta("CREATE TABLE $event_animateurs_table (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        event_id bigint(20) unsigned NOT NULL,
+        animateur_id bigint(20) unsigned NOT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        UNIQUE KEY uniq_event_animateur (event_id, animateur_id),
+        KEY idx_event (event_id),
+        KEY idx_animateur (animateur_id)
+    ) $charset_collate;");
 
     if (mj_member_table_exists($events_table) && !mj_member_column_exists($events_table, 'location_id')) {
         $wpdb->query("ALTER TABLE $events_table ADD COLUMN location_id bigint(20) unsigned DEFAULT NULL AFTER prix");
+    }
+
+    if (mj_member_table_exists($events_table) && !mj_member_column_exists($events_table, 'animateur_id')) {
+        $wpdb->query("ALTER TABLE $events_table ADD COLUMN animateur_id bigint(20) unsigned DEFAULT NULL AFTER location_id");
     }
 
     if (mj_member_table_exists($events_table) && !mj_member_index_exists($events_table, 'idx_location')) {
         $wpdb->query("ALTER TABLE $events_table ADD KEY idx_location (location_id)");
     }
 
+    if (mj_member_table_exists($events_table) && !mj_member_index_exists($events_table, 'idx_animateur')) {
+        $wpdb->query("ALTER TABLE $events_table ADD KEY idx_animateur (animateur_id)");
+    }
+
+    if (mj_member_table_exists($events_table) && mj_member_table_exists($event_animateurs_table) && mj_member_column_exists($events_table, 'animateur_id')) {
+        $existing_pairs = $wpdb->get_results("SELECT id AS event_id, animateur_id FROM $events_table WHERE animateur_id IS NOT NULL AND animateur_id > 0", ARRAY_A);
+        if (!empty($existing_pairs)) {
+            foreach ($existing_pairs as $pair) {
+                $event_id = (int) $pair['event_id'];
+                $animateur_id = (int) $pair['animateur_id'];
+                if ($event_id <= 0 || $animateur_id <= 0) {
+                    continue;
+                }
+
+                $wpdb->query($wpdb->prepare(
+                    "INSERT IGNORE INTO $event_animateurs_table (event_id, animateur_id, created_at) VALUES (%d, %d, %s)",
+                    $event_id,
+                    $animateur_id,
+                    current_time('mysql')
+                ));
+            }
+        }
+    }
+
     mj_member_seed_default_locations($wpdb, $locations_table);
+    mj_member_seed_events_from_csv($wpdb);
+}
+
+function mj_member_upgrade_to_2_4($wpdb) {
+    $events_table = $wpdb->prefix . 'mj_events';
+
+    if (!mj_member_table_exists($events_table)) {
+        return;
+    }
+
+    if (mj_member_column_exists($events_table, 'allow_guardian_registration')) {
+        return;
+    }
+
+    $after_column = '';
+    if (mj_member_column_exists($events_table, 'animateur_id')) {
+        $after_column = ' AFTER animateur_id';
+    } elseif (mj_member_column_exists($events_table, 'location_id')) {
+        $after_column = ' AFTER location_id';
+    } elseif (mj_member_column_exists($events_table, 'prix')) {
+        $after_column = ' AFTER prix';
+    }
+
+    $sql = "ALTER TABLE $events_table ADD COLUMN allow_guardian_registration tinyint(1) NOT NULL DEFAULT 0" . $after_column;
+    $wpdb->query($sql);
 }
 
 function mj_member_seed_default_locations($wpdb, $locations_table) {
@@ -1868,6 +2069,358 @@ function mj_member_seed_default_locations($wpdb, $locations_table) {
             ),
             array('%s', '%s', '%s', '%s', '%s', '%s', '%s')
         );
+    }
+}
+
+function mj_member_seed_events_from_csv($wpdb) {
+    $option_key = 'mj_member_events_seeded_from_csv';
+    if (get_option($option_key, '') === '1') {
+        return;
+    }
+
+    $events_table = mj_member_get_events_table_name();
+    if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $events_table)) !== $events_table) {
+        return;
+    }
+
+    $existing_events = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$events_table}");
+    if ($existing_events > 0) {
+        update_option($option_key, '1', false);
+        return;
+    }
+
+    $csv_path = plugin_dir_path(__FILE__) . 'data/event.csv';
+    if (!file_exists($csv_path) || !is_readable($csv_path)) {
+        return;
+    }
+
+    $handle = fopen($csv_path, 'r');
+    if (!$handle) {
+        return;
+    }
+
+    $headers = fgetcsv($handle, 0, ',', '"');
+    if (!$headers) {
+        fclose($handle);
+        return;
+    }
+
+    $header_map = array();
+    foreach ($headers as $index => $label) {
+        $normalized = strtolower(trim((string) $label));
+        if ($normalized !== '') {
+            $header_map[$normalized] = $index;
+        }
+    }
+
+    $required = array('title', 'status', 'type', 'date_debut', 'date_fin');
+    foreach ($required as $key) {
+        if (!isset($header_map[$key])) {
+            fclose($handle);
+            return;
+        }
+    }
+
+    $status_map = array(
+        'STATUS_ACTIF' => MjEvents_CRUD::STATUS_ACTIVE,
+        'STATUS_BROUILLON' => MjEvents_CRUD::STATUS_DRAFT,
+        'STATUS_PASSE' => MjEvents_CRUD::STATUS_PAST,
+    );
+
+    $type_map = array(
+        'TYPE_STAGE' => MjEvents_CRUD::TYPE_STAGE,
+        'TYPE_SOIREE' => MjEvents_CRUD::TYPE_SOIREE,
+        'TYPE_SORTIE' => MjEvents_CRUD::TYPE_SORTIE,
+    );
+
+    $normalize_datetime = static function ($value) {
+        $value = trim((string) $value);
+        if ($value === '' || strtoupper($value) === 'NULL') {
+            return '';
+        }
+
+        $value = preg_replace('/^(\d{4}-\d{2}):(\d{2})(\s+.+)$/', '$1-$2$3', $value);
+
+        $timestamp = strtotime($value);
+        if ($timestamp === false) {
+            return sanitize_text_field($value);
+        }
+
+        return date('Y-m-d H:i:s', $timestamp);
+    };
+
+    $inserted = 0;
+
+    while (($row = fgetcsv($handle, 0, ',', '"')) !== false) {
+        $raw_title = isset($header_map['title']) ? (string) $row[$header_map['title']] : '';
+        $title = sanitize_text_field($raw_title);
+        if ($title === '') {
+            continue;
+        }
+
+        $status_key = isset($header_map['status']) ? strtoupper(trim((string) $row[$header_map['status']])) : '';
+        $status = isset($status_map[$status_key]) ? $status_map[$status_key] : MjEvents_CRUD::STATUS_DRAFT;
+
+        $type_key = isset($header_map['type']) ? strtoupper(trim((string) $row[$header_map['type']])) : '';
+        $type = isset($type_map[$type_key]) ? $type_map[$type_key] : MjEvents_CRUD::TYPE_STAGE;
+
+        $description_raw = isset($header_map['description']) ? (string) $row[$header_map['description']] : '';
+        $description = $description_raw !== '' ? wp_kses_post($description_raw) : '';
+
+        $cover_raw = isset($header_map['cover_id']) ? trim((string) $row[$header_map['cover_id']]) : '';
+        $cover_id = ($cover_raw === '' || strtoupper($cover_raw) === 'NULL') ? 0 : (int) $cover_raw;
+
+        $location_raw = isset($header_map['location_id']) ? trim((string) $row[$header_map['location_id']]) : '';
+        $location_id = ($location_raw === '' || strtoupper($location_raw) === 'NULL') ? 0 : (int) $location_raw;
+
+        $primary_raw = isset($header_map['animateur_id']) ? trim((string) $row[$header_map['animateur_id']]) : '';
+        $primary_animateur = ($primary_raw === '' || strtoupper($primary_raw) === 'NULL') ? 0 : (int) $primary_raw;
+
+        $animateur_ids_raw = isset($header_map['animateur_ids']) ? trim((string) $row[$header_map['animateur_ids']]) : '';
+        $animateur_pool = array();
+        if ($animateur_ids_raw !== '' && strtoupper($animateur_ids_raw) !== 'NULL') {
+            $trimmed = trim($animateur_ids_raw, "[] ");
+            if ($trimmed !== '') {
+                $parts = preg_split('/\s*,\s*/', $trimmed);
+                if (is_array($parts)) {
+                    foreach ($parts as $candidate) {
+                        $candidate = trim($candidate);
+                        if ($candidate === '') {
+                            continue;
+                        }
+                        $candidate_id = (int) $candidate;
+                        if ($candidate_id > 0) {
+                            $animateur_pool[$candidate_id] = $candidate_id;
+                        }
+                    }
+                }
+            }
+        }
+
+        $animateur_ids = array();
+        if ($primary_animateur > 0) {
+            $animateur_ids[$primary_animateur] = $primary_animateur;
+        }
+        foreach ($animateur_pool as $candidate_id) {
+            if (!isset($animateur_ids[$candidate_id])) {
+                $animateur_ids[$candidate_id] = $candidate_id;
+            }
+        }
+        $animateur_list = array_values($animateur_ids);
+        if ($primary_animateur <= 0 && !empty($animateur_list)) {
+            $primary_animateur = (int) $animateur_list[0];
+        }
+
+        $age_min_raw = isset($header_map['age_min']) ? trim((string) $row[$header_map['age_min']]) : '';
+        $age_min = ($age_min_raw === '' || strtoupper($age_min_raw) === 'NULL') ? 12 : (int) $age_min_raw;
+
+        $age_max_raw = isset($header_map['age_max']) ? trim((string) $row[$header_map['age_max']]) : '';
+        $age_max = ($age_max_raw === '' || strtoupper($age_max_raw) === 'NULL') ? 26 : (int) $age_max_raw;
+
+        $start_raw = isset($header_map['date_debut']) ? trim((string) $row[$header_map['date_debut']]) : '';
+        $end_raw = isset($header_map['date_fin']) ? trim((string) $row[$header_map['date_fin']]) : '';
+        $deadline_raw = isset($header_map['date_fin_inscription']) ? trim((string) $row[$header_map['date_fin_inscription']]) : '';
+
+        $start_date = $normalize_datetime($start_raw);
+        $end_date = $normalize_datetime($end_raw);
+        $deadline = $normalize_datetime($deadline_raw);
+
+        if ($start_date === '' || $end_date === '') {
+            continue;
+        }
+
+        $price_raw = isset($header_map['prix']) ? trim((string) $row[$header_map['prix']]) : '';
+        $price_value = str_replace(',', '.', $price_raw);
+        $price = $price_value === '' ? 0.0 : (float) $price_value;
+
+        $event_data = array(
+            'title' => $title,
+            'status' => $status,
+            'type' => $type,
+            'description' => $description,
+            'age_min' => $age_min,
+            'age_max' => $age_max,
+            'date_debut' => $start_date,
+            'date_fin' => $end_date,
+            'prix' => $price,
+        );
+
+        if ($cover_id > 0) {
+            $event_data['cover_id'] = $cover_id;
+        }
+
+        if ($location_id > 0) {
+            $event_data['location_id'] = $location_id;
+        }
+
+        if ($deadline !== '') {
+            $event_data['date_fin_inscription'] = $deadline;
+        }
+
+        if ($primary_animateur > 0) {
+            $event_data['animateur_id'] = $primary_animateur;
+        }
+
+        $created_at_raw = isset($header_map['created_at']) ? trim((string) $row[$header_map['created_at']]) : '';
+        $created_at = $normalize_datetime($created_at_raw);
+
+        $updated_at_raw = isset($header_map['updated_at']) ? trim((string) $row[$header_map['updated_at']]) : '';
+        $updated_at = $normalize_datetime($updated_at_raw);
+
+        $event_id = MjEvents_CRUD::create($event_data);
+        if (!$event_id) {
+            continue;
+        }
+
+        if (!empty($animateur_list) && class_exists('MjEventAnimateurs')) {
+            MjEventAnimateurs::sync_for_event($event_id, $animateur_list);
+        } elseif ($primary_animateur > 0 && class_exists('MjEventAnimateurs')) {
+            MjEventAnimateurs::sync_for_event($event_id, array($primary_animateur));
+        }
+
+        $dates_to_update = array();
+        $date_formats = array();
+
+        if ($created_at !== '' && strtotime($created_at) !== false) {
+            $dates_to_update['created_at'] = $created_at;
+            $date_formats[] = '%s';
+        }
+
+        if ($updated_at !== '' && strtotime($updated_at) !== false) {
+            $dates_to_update['updated_at'] = $updated_at;
+            $date_formats[] = '%s';
+        }
+
+        if (!empty($dates_to_update)) {
+            $wpdb->update(
+                $events_table,
+                $dates_to_update,
+                array('id' => $event_id),
+                $date_formats,
+                array('%d')
+            );
+        }
+
+        $inserted++;
+    }
+
+    fclose($handle);
+
+    if ($inserted > 0) {
+        update_option($option_key, '1', false);
+    }
+}
+
+function mj_member_handle_locations_actions() {
+    if (!current_user_can(MJ_MEMBER_CAPABILITY)) {
+        return;
+    }
+
+    $action = isset($_REQUEST['action']) ? sanitize_key(wp_unslash($_REQUEST['action'])) : 'list';
+    $location_id = isset($_REQUEST['location']) ? (int) $_REQUEST['location'] : 0;
+
+    $state = array();
+
+    if ($action === 'delete') {
+        if ($location_id <= 0) {
+            $state['errors'][]    = 'Identifiant de lieu invalide.';
+            $state['force_action'] = 'list';
+        } else {
+            $nonce_action = 'mj_location_delete_' . $location_id;
+            $nonce_value  = isset($_GET['_wpnonce']) ? sanitize_text_field(wp_unslash($_GET['_wpnonce'])) : '';
+            if (!$nonce_value || !wp_verify_nonce($nonce_value, $nonce_action)) {
+                $state['errors'][] = 'Verification de securite echouee.';
+                $state['force_action'] = 'list';
+            } else {
+                $delete = MjEventLocations::delete($location_id);
+                if (is_wp_error($delete)) {
+                    $state['errors'][] = $delete->get_error_message();
+                    $state['force_action'] = 'list';
+                } else {
+                    $redirect = add_query_arg(
+                        array(
+                            'page' => 'mj_locations',
+                            'mj_locations_message' => rawurlencode('Lieu supprime.'),
+                        ),
+                        admin_url('admin.php')
+                    );
+                    wp_safe_redirect($redirect);
+                    exit;
+                }
+            }
+        }
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_location_nonce'])) {
+        $nonce_value = sanitize_text_field(wp_unslash($_POST['mj_location_nonce']));
+        if (!wp_verify_nonce($nonce_value, 'mj_location_save')) {
+            $state['form_errors'][] = 'Verification de securite echouee.';
+        } else {
+            $submitted = array(
+                'name'         => isset($_POST['location_name']) ? sanitize_text_field(wp_unslash($_POST['location_name'])) : '',
+                'slug'         => isset($_POST['location_slug']) ? sanitize_title(wp_unslash($_POST['location_slug'])) : '',
+                'address_line' => isset($_POST['location_address']) ? sanitize_text_field(wp_unslash($_POST['location_address'])) : '',
+                'postal_code'  => isset($_POST['location_postal_code']) ? sanitize_text_field(wp_unslash($_POST['location_postal_code'])) : '',
+                'city'         => isset($_POST['location_city']) ? sanitize_text_field(wp_unslash($_POST['location_city'])) : '',
+                'country'      => isset($_POST['location_country']) ? sanitize_text_field(wp_unslash($_POST['location_country'])) : '',
+                'latitude'     => isset($_POST['location_latitude']) ? sanitize_text_field(wp_unslash($_POST['location_latitude'])) : '',
+                'longitude'    => isset($_POST['location_longitude']) ? sanitize_text_field(wp_unslash($_POST['location_longitude'])) : '',
+                'map_query'    => isset($_POST['location_map_query']) ? sanitize_text_field(wp_unslash($_POST['location_map_query'])) : '',
+                'notes'        => isset($_POST['location_notes']) ? sanitize_textarea_field(wp_unslash($_POST['location_notes'])) : '',
+            );
+
+            $cover_id = isset($_POST['location_cover_id']) ? (int) $_POST['location_cover_id'] : 0;
+            $submitted['cover_id'] = $cover_id;
+
+            if ($submitted['name'] === '') {
+                $state['form_errors'][] = 'Le nom du lieu est obligatoire.';
+            }
+
+            $form_action    = $action === 'edit' ? 'edit' : 'add';
+            $target_location = $form_action === 'edit' ? (int) $location_id : 0;
+
+            if ($form_action === 'edit' && $target_location <= 0) {
+                $state['form_errors'][] = 'Edition impossible: identifiant invalide.';
+            }
+
+            if (empty($state['form_errors'])) {
+                if ($form_action === 'edit' && $target_location > 0) {
+                    $result = MjEventLocations::update($target_location, $submitted);
+                    $success_message = 'Lieu mis a jour.';
+                } else {
+                    $result = MjEventLocations::create($submitted);
+                    $success_message = 'Lieu cree avec succes.';
+                }
+
+                if (is_wp_error($result)) {
+                    $state['form_errors'][] = $result->get_error_message();
+                } else {
+                    $redirect = add_query_arg(
+                        array(
+                            'page' => 'mj_locations',
+                            'mj_locations_message' => rawurlencode($success_message),
+                        ),
+                        admin_url('admin.php')
+                    );
+                    wp_safe_redirect($redirect);
+                    exit;
+                }
+            }
+
+            if (!empty($state['form_errors'])) {
+                $state['force_action'] = $form_action;
+                $state['location_id']  = $target_location;
+                $state['form_values']  = array_merge(MjEventLocations::get_default_values(), $submitted);
+                $state['form_values']['cover_id'] = $submitted['cover_id'];
+                $state['map_embed_url'] = MjEventLocations::build_map_embed_src($state['form_values']);
+            }
+        }
+    }
+
+    if (!empty($state)) {
+        $GLOBALS['mj_member_locations_form_state'] = $state;
+    } else {
+        unset($GLOBALS['mj_member_locations_form_state']);
     }
 }
 

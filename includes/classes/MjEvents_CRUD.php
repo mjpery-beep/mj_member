@@ -22,6 +22,9 @@ class MjEvents_CRUD {
         'status' => '%s',
         'type' => '%s',
         'cover_id' => '%d',
+        'location_id' => '%d',
+        'animateur_id' => '%d',
+        'allow_guardian_registration' => '%d',
         'description' => '%s',
         'age_min' => '%d',
         'age_max' => '%d',
@@ -121,6 +124,16 @@ class MjEvents_CRUD {
             $nullable_columns[] = 'date_fin_inscription';
             unset($data['date_fin_inscription']);
         }
+        if (array_key_exists('location_id', $data) && (int) $data['location_id'] <= 0) {
+            $nullable_columns[] = 'location_id';
+            unset($data['location_id']);
+        }
+        if (!self::supports_animateur_column()) {
+            unset($data['animateur_id']);
+        } elseif (array_key_exists('animateur_id', $data) && (int) $data['animateur_id'] <= 0) {
+            $nullable_columns[] = 'animateur_id';
+            unset($data['animateur_id']);
+        }
 
         list($filtered, $formats) = self::prepare_for_db($data);
         if (empty($filtered) && empty($nullable_columns)) {
@@ -154,6 +167,10 @@ class MjEvents_CRUD {
             'status' => self::STATUS_DRAFT,
             'type' => self::TYPE_STAGE,
             'cover_id' => 0,
+            'location_id' => 0,
+            'allow_guardian_registration' => 0,
+            'animateur_id' => 0,
+            'animateur_ids' => array(),
             'description' => '',
             'age_min' => 12,
             'age_max' => 26,
@@ -177,6 +194,10 @@ class MjEvents_CRUD {
                 continue;
             }
 
+            if ($column === 'animateur_id' && !self::supports_animateur_column()) {
+                continue;
+            }
+
             $value = $data[$column];
 
             if ($column === 'description' && $value === null) {
@@ -193,10 +214,13 @@ class MjEvents_CRUD {
 
             switch ($column) {
                 case 'cover_id':
+                case 'location_id':
+                case 'animateur_id':
                 case 'age_min':
                 case 'age_max':
+                case 'allow_guardian_registration':
                     $value = (int) $value;
-                    if ($value <= 0 && $column === 'cover_id') {
+                    if ($value <= 0 && in_array($column, array('cover_id', 'location_id', 'animateur_id'), true)) {
                         continue 2;
                     }
                     break;
@@ -213,5 +237,22 @@ class MjEvents_CRUD {
         }
 
         return array($prepared, $formats);
+    }
+
+    private static function supports_animateur_column() {
+        static $supported = null;
+
+        if ($supported !== null) {
+            return $supported;
+        }
+
+        if (!function_exists('mj_member_column_exists')) {
+            $supported = false;
+            return $supported;
+        }
+
+        $table = mj_member_get_events_table_name();
+        $supported = mj_member_column_exists($table, 'animateur_id');
+        return $supported;
     }
 }

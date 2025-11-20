@@ -4,6 +4,8 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+require_once plugin_dir_path(__FILE__) . 'MjEventAnimateurs.php';
+
 class MjEventRegistrations {
     const STATUS_PENDING = 'en_attente';
     const STATUS_CONFIRMED = 'valide';
@@ -205,6 +207,15 @@ class MjEventRegistrations {
             return new WP_Error('mj_event_registration_deadline', 'La date limite est depassee.');
         }
 
+        $allow_guardian_registration = 0;
+        if (isset($event->allow_guardian_registration)) {
+            $allow_guardian_registration = (int) $event->allow_guardian_registration;
+        }
+        $member_role = isset($member->role) ? sanitize_key($member->role) : '';
+        if ($allow_guardian_registration !== 1 && $member_role === MjMembers_CRUD::ROLE_TUTEUR) {
+            return new WP_Error('mj_event_registration_guardian_blocked', 'Les tuteurs ne peuvent pas s\'inscrire a cet evenement.');
+        }
+
         $age_validation = self::validate_age($event, $member);
         if (is_wp_error($age_validation)) {
             return $age_validation;
@@ -301,6 +312,17 @@ class MjEventRegistrations {
             $guardian = MjMembers_CRUD::getById($guardian_id);
         }
 
+        $animateur_members = array();
+        if (class_exists('MjEventAnimateurs')) {
+            $animateur_members = MjEventAnimateurs::get_members_by_event((int) $event->id);
+        }
+        if (empty($animateur_members) && !empty($event->animateur_id)) {
+            $legacy_animateur = MjMembers_CRUD::getById((int) $event->animateur_id);
+            if ($legacy_animateur) {
+                $animateur_members[] = $legacy_animateur;
+            }
+        }
+
         $subject = 'Nouvelle inscription: ' . $event->title;
         $event_dates = self::format_event_dates($event);
         $member_first = isset($member->first_name) ? $member->first_name : '';
@@ -331,12 +353,40 @@ class MjEventRegistrations {
             $message_lines[] = 'Notes: ' . $registration->notes;
         }
 
+        if (!empty($animateur_members)) {
+            $message_lines[] = '';
+            if (count($animateur_members) === 1) {
+                $first_animateur = reset($animateur_members);
+                if ($first_animateur) {
+                    $message_lines[] = 'Animateur referent: ' . self::format_member_summary($first_animateur);
+                }
+            } else {
+                $message_lines[] = 'Animateurs referents:';
+                foreach ($animateur_members as $animateur_member) {
+                    $message_lines[] = ' - ' . self::format_member_summary($animateur_member);
+                }
+            }
+        }
+
         $message_lines[] = '';
         $message_lines[] = 'Bien a vous,';
         $message_lines[] = get_bloginfo('name');
 
         $body = implode("\n", $message_lines);
+        $animateur_body = $body;
+        if (!empty($event->id)) {
+            $event_admin_url = add_query_arg(
+                array(
+                    'page' => 'mj_events',
+                    'action' => 'edit',
+                    'event' => (int) $event->id,
+                ),
+                admin_url('admin.php')
+            );
+            $animateur_body .= "\n\nGestion de l evenement: " . $event_admin_url;
+        }
         $headers = array('Content-Type: text/plain; charset=UTF-8');
+        $sent_addresses = array();
 
         $recipient = '';
         if ($guardian && !empty($guardian->email) && is_email($guardian->email)) {
@@ -347,11 +397,30 @@ class MjEventRegistrations {
 
         if ($recipient !== '') {
             wp_mail($recipient, $subject, $body, $headers);
+            $sent_addresses[strtolower($recipient)] = true;
         }
 
         $notify_email = get_option('mj_notify_email', '');
         if ($notify_email !== '' && is_email($notify_email)) {
-            wp_mail($notify_email, $subject, $body, $headers);
+            $normalized_notify = strtolower($notify_email);
+            if (!isset($sent_addresses[$normalized_notify])) {
+                wp_mail($notify_email, $subject, $body, $headers);
+                $sent_addresses[$normalized_notify] = true;
+            }
+        }
+
+        if (!empty($animateur_members)) {
+            foreach ($animateur_members as $animateur_member) {
+                if (empty($animateur_member->email) || !is_email($animateur_member->email)) {
+                    continue;
+                }
+                $animateur_email_norm = strtolower($animateur_member->email);
+                if (isset($sent_addresses[$animateur_email_norm])) {
+                    continue;
+                }
+                wp_mail($animateur_member->email, $subject, $animateur_body, $headers);
+                $sent_addresses[$animateur_email_norm] = true;
+            }
         }
     }
 
@@ -378,5 +447,20 @@ class MjEventRegistrations {
         }
 
         return $start_str . ' -> ' . $end_str;
+    }
+
+    private static function format_member_summary($member) {
+        $first = isset($member->first_name) ? $member->first_name : '';
+        $last = isset($member->last_name) ? $member->last_name : '';
+        $name = trim($first . ' ' . $last);
+        if ($name === '') {
+            $name = 'Animateur #' . (isset($member->id) ? (int) $member->id : 0);
+        }
+
+        if (!empty($member->email) && is_email($member->email)) {
+            $name .= ' (' . $member->email . ')';
+        }
+
+        return $name;
     }
 }

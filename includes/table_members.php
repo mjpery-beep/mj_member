@@ -16,7 +16,7 @@ if (isset($_POST['mj_save_columns'])) {
     $visible_columns = isset($_POST['mj_columns']) ? (array) $_POST['mj_columns'] : array();
     
     // Nettoyer et valider les colonnes
-    $valid_columns = array('photo', 'last_name', 'first_name', 'age', 'role', 'email', 'phone', 'guardian', 'requires_payment', 'status', 'date_last_payement', 'payment_status', 'photo_usage_consent', 'date_inscription', 'actions');
+    $valid_columns = array('photo', 'last_name', 'first_name', 'age', 'role', 'email', 'login', 'phone', 'guardian', 'requires_payment', 'status', 'date_last_payement', 'payment_status', 'photo_usage_consent', 'date_inscription', 'actions');
     $visible_columns = array_intersect($visible_columns, $valid_columns);
     
     // Sauvegarder les préférences

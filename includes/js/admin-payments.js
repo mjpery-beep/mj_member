@@ -143,7 +143,7 @@ jQuery(document).ready(function($) {
             nonce: mjPayments.nonce
         }, function(resp) {
             if (triggerButton) {
-                triggerButton.prop('disabled', false).text('💳 Historique Paiements');
+                triggerButton.prop('disabled', false).text('💳 Historique');
             }
 
             if (!resp || !resp.success) {
@@ -178,7 +178,7 @@ jQuery(document).ready(function($) {
         }, 'json')
         .fail(function(jqXHR, textStatus, errorThrown) {
             if (triggerButton) {
-                triggerButton.prop('disabled', false).text('💳 Historique Paiements');
+                triggerButton.prop('disabled', false).text('💳 Historique');
             }
             console.error('AJAX Error:', textStatus, errorThrown);
             alert('Erreur de communication avec le serveur: ' + textStatus);
