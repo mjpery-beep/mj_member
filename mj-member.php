@@ -28,6 +28,7 @@ require plugin_dir_path( __FILE__ ) . 'includes/classes/MjTools.php';
 require plugin_dir_path( __FILE__ ) . 'includes/classes/crud/MjMembers_CRUD.php';
 require plugin_dir_path( __FILE__ ) . 'includes/classes/MjPayments.php';
 require plugin_dir_path( __FILE__ ) . 'includes/classes/MjSms.php';
+require plugin_dir_path( __FILE__ ) . 'includes/classes/sms/MjSmsTwilio.php';
 require plugin_dir_path( __FILE__ ) . 'includes/classes/crud/MjEvents_CRUD.php';
 require plugin_dir_path( __FILE__ ) . 'includes/classes/crud/MjEventRegistrations.php';
 require plugin_dir_path( __FILE__ ) . 'includes/classes/crud/MjEventLocations.php';

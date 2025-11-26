@@ -133,7 +133,7 @@ function mj_member_prepare_email_send_callback() {
 
     foreach ($recipients as $member) {
         $member_id = isset($member->id) ? (int) $member->id : 0;
-        $label     = mj_member_format_member_label($member);
+        $label     = mj_member_format_send_label($member);
 
         $emails = $send_email ? mj_member_collect_email_targets($member, false) : array();
         $phones = $send_sms ? mj_member_collect_sms_targets($member) : array();
@@ -275,7 +275,7 @@ function mj_member_send_single_email_callback() {
     }
 
     list($resolved_recipients, $context) = mj_member_build_email_context($member, $selected_template);
-    $label = mj_member_format_member_label($member);
+    $label = mj_member_format_send_label($member);
 
     $email_result = array(
         'status' => $send_email ? 'pending' : 'disabled',
@@ -291,6 +291,7 @@ function mj_member_send_single_email_callback() {
         'errors' => array(),
         'phones' => array(),
         'testMode' => false,
+        'preview' => null,
     );
 
     $context_request = array('request' => array('template_id' => $template_identifier, 'member_id' => $member_id));
@@ -472,6 +473,19 @@ function mj_member_send_single_email_callback() {
 
             $sms_result['phones'] = isset($sms_delivery['phones']) ? (array) $sms_delivery['phones'] : array();
             $sms_result['testMode'] = !empty($sms_delivery['test_mode']);
+            $rendered_sms_body = '';
+            if (!empty($sms_delivery['rendered_message'])) {
+                $rendered_sms_body = (string) $sms_delivery['rendered_message'];
+            } elseif ($sms_body !== '') {
+                $rendered_sms_body = $sms_body;
+            }
+            if ($rendered_sms_body !== '') {
+                $sms_result['preview'] = array(
+                    'body' => $rendered_sms_body,
+                    'raw' => $sms_body,
+                    'testMode' => $sms_result['testMode'],
+                );
+            }
 
             if (!empty($sms_delivery['success'])) {
                 $sms_result['status'] = 'sent';
@@ -481,6 +495,25 @@ function mj_member_send_single_email_callback() {
                 $error_message = !empty($sms_delivery['error']) ? (string) $sms_delivery['error'] : __('Impossible d’envoyer le SMS.', 'mj-member');
                 $sms_result['message'] = $error_message;
                 $sms_result['errors'][] = $error_message;
+
+                $error_details = array();
+                if (!empty($sms_delivery['error_details']) && is_array($sms_delivery['error_details'])) {
+                    $error_details = $sms_delivery['error_details'];
+                } elseif (!empty($sms_delivery['errors']) && is_array($sms_delivery['errors'])) {
+                    $error_details = $sms_delivery['errors'];
+                }
+
+                if (!empty($error_details)) {
+                    foreach ($error_details as $detail) {
+                        $detail = trim((string) $detail);
+                        if ($detail === '') {
+                            continue;
+                        }
+                        if (!in_array($detail, $sms_result['errors'], true)) {
+                            $sms_result['errors'][] = $detail;
+                        }
+                    }
+                }
             }
         }
     }
@@ -503,6 +536,9 @@ function mj_member_send_single_email_callback() {
     }
 
     $combined_errors = array_merge($email_result['errors'], $sms_result['errors']);
+    if (!empty($combined_errors)) {
+        $combined_errors = array_values(array_unique(array_map('strval', $combined_errors)));
+    }
     $combined_message = trim(implode(' ', array_filter(array($email_result['message'], $sms_result['message']))));
     if ($combined_message === '' && $overall_status === 'sent') {
         $combined_message = __('Communication envoyée.', 'mj-member');
@@ -520,10 +556,32 @@ function mj_member_send_single_email_callback() {
         'message'   => $combined_message,
         'errors'    => $combined_errors,
         'preview'   => $email_result['preview'],
+        'smsPreview' => $sms_result['preview'],
         'testMode'  => ($email_result['testMode'] || $sms_result['testMode']),
         'channels'  => array(
             'email' => $email_result['status'],
             'sms' => $sms_result['status'],
         ),
     ));
+}
+
+function mj_member_format_send_label($member) {
+    if (!is_object($member)) {
+        return '';
+    }
+
+    $name_parts = array();
+    if (!empty($member->last_name)) {
+        $name_parts[] = (string) $member->last_name;
+    }
+    if (!empty($member->first_name)) {
+        $name_parts[] = (string) $member->first_name;
+    }
+
+    if (!empty($name_parts)) {
+        return trim(implode(' ', $name_parts));
+    }
+
+    $member_id = isset($member->id) ? (int) $member->id : 0;
+    return $member_id > 0 ? sprintf(__('Membre #%d', 'mj-member'), $member_id) : __('Membre', 'mj-member');
 }

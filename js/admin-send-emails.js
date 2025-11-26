@@ -155,14 +155,24 @@
         return emails.join(', ');
     }
 
-    function createLogEntry(recipient, status, message, emails) {
+    function formatPhones(phones) {
+        if (!Array.isArray(phones) || !phones.length) {
+            return '';
+        }
+        return phones.join(', ');
+    }
+
+    function createLogEntry(recipient, status, message, emails, phones) {
         const effectiveStatus = status || 'pending';
         const $entry = $('<div>', { class: 'mj-email-log-entry ' + statusClass(effectiveStatus) });
 
         const labels = {
             show: getLocalized('previewShow') || 'Voir le message',
             hide: getLocalized('previewHide') || 'Masquer le message',
-            subject: getLocalized('previewSubjectLabel') || 'Sujet'
+            subject: getLocalized('previewSubjectLabel') || 'Sujet',
+            sms: getLocalized('previewSmsLabel') || 'SMS',
+            smsRendered: getLocalized('previewSmsRenderedLabel') || 'SMS envoyé',
+            smsRaw: getLocalized('previewSmsRawLabel') || 'Texte saisi'
         };
 
         const $header = $('<div>', { class: 'mj-email-log-entry__header' });
@@ -178,9 +188,25 @@
         $statusGroup.append($status, $statusBadge, $toggle);
         $header.append($name, $statusGroup);
 
+        const emailLabelText = getLocalized('logEmailsLabel') || 'Email(s)';
+        const phoneLabelText = getLocalized('logPhonesLabel') || 'SMS';
+        const smsInlineLabelText = getLocalized('smsInlineLabel') || phoneLabelText;
+        const errorsLabelText = getLocalized('logErrorDetailsLabel') || '';
+
         const $emails = $('<div>', { class: 'mj-email-log-entry__emails' });
-        if (emails && emails.length) {
-            $emails.text(formatEmails(emails));
+        const formattedEmails = formatEmails(emails);
+        if (formattedEmails) {
+            $emails.text(emailLabelText + ' : ' + formattedEmails);
+        } else {
+            $emails.addClass('mj-hidden');
+        }
+
+        const $phones = $('<div>', { class: 'mj-email-log-entry__phones' });
+        const formattedPhones = formatPhones(phones);
+        if (formattedPhones) {
+            $phones.text(phoneLabelText + ' : ' + formattedPhones);
+        } else {
+            $phones.addClass('mj-hidden');
         }
 
         const $message = $('<div>', { class: 'mj-email-log-entry__message' });
@@ -188,10 +214,21 @@
             $message.text(message);
         }
 
+        const $smsInline = $('<div>', { class: 'mj-email-log-entry__sms-inline mj-hidden' });
+
         const $preview = $('<div>', { class: 'mj-email-log-entry__preview mj-hidden' });
+        const $previewEmail = $('<div>', { class: 'mj-email-log-entry__preview-block mj-email-log-entry__preview-block--email' });
         const $previewSubject = $('<div>', { class: 'mj-email-log-entry__preview-subject' });
         const $previewBody = $('<div>', { class: 'mj-email-log-entry__preview-body' });
-        $preview.append($previewSubject, $previewBody);
+        $previewEmail.append($previewSubject, $previewBody);
+
+        const $previewSms = $('<div>', { class: 'mj-email-log-entry__preview-block mj-email-log-entry__preview-block--sms mj-hidden' });
+        const $previewSmsHeading = $('<div>', { class: 'mj-email-log-entry__preview-subject' });
+        const $previewSmsBody = $('<div>', { class: 'mj-email-log-entry__preview-body mj-email-log-entry__preview-body--sms' });
+        const $previewSmsRaw = $('<div>', { class: 'mj-email-log-entry__preview-note mj-hidden' });
+        $previewSms.append($previewSmsHeading, $previewSmsBody, $previewSmsRaw);
+
+        $preview.append($previewEmail, $previewSms);
 
         $toggle.on('click', function () {
             const isHidden = $preview.hasClass('mj-hidden');
@@ -204,23 +241,34 @@
             }
         });
 
-        $entry.append($header, $emails, $message, $preview);
+        $entry.append($header, $emails, $phones, $message, $smsInline, $preview);
         $entry.data('statusEl', $status);
         $entry.data('emailsEl', $emails);
+        $entry.data('phonesEl', $phones);
         $entry.data('messageEl', $message);
+        $entry.data('smsInlineEl', $smsInline);
         $entry.data('toggleEl', $toggle);
         $entry.data('statusBadgeEl', $statusBadge);
         $entry.data('previewEl', $preview);
         $entry.data('previewSubjectEl', $previewSubject);
         $entry.data('previewBodyEl', $previewBody);
+        $entry.data('previewSmsWrapperEl', $previewSms);
+        $entry.data('previewSmsHeadingEl', $previewSmsHeading);
+        $entry.data('previewSmsBodyEl', $previewSmsBody);
+        $entry.data('previewSmsRawEl', $previewSmsRaw);
         $entry.data('previewLabels', labels);
+        $entry.data('emailsLabel', emailLabelText);
+        $entry.data('phonesLabel', phoneLabelText);
+        $entry.data('smsInlineLabel', smsInlineLabelText);
+        $entry.data('errorsLabel', errorsLabelText);
 
         return $entry;
     }
 
-    function updateLogEntry($entry, status, message, emails, errors, preview, meta) {
+    function updateLogEntry($entry, status, message, emails, phones, errors, preview, smsPreview, meta) {
         const $statusEl = $entry.data('statusEl');
         const $emailsEl = $entry.data('emailsEl');
+        const $phonesEl = $entry.data('phonesEl');
         const $messageEl = $entry.data('messageEl');
 
         $entry.removeClass('is-pending is-success is-error is-skipped').addClass(statusClass(status));
@@ -229,12 +277,39 @@
             $statusEl.text(statusLabel(status));
         }
 
+        const emailLabel = $entry.data('emailsLabel') || (getLocalized('logEmailsLabel') || 'Email(s)');
         if ($emailsEl && $emailsEl.length) {
-            $emailsEl.text(formatEmails(emails));
+            const formattedEmails = formatEmails(emails);
+            if (formattedEmails) {
+                $emailsEl.text(emailLabel + ' : ' + formattedEmails).removeClass('mj-hidden');
+            } else {
+                $emailsEl.addClass('mj-hidden').text('');
+            }
+        }
+
+        const phoneLabel = $entry.data('phonesLabel') || (getLocalized('logPhonesLabel') || 'SMS');
+        if ($phonesEl && $phonesEl.length) {
+            const formattedPhones = formatPhones(phones);
+            if (formattedPhones) {
+                $phonesEl.text(phoneLabel + ' : ' + formattedPhones).removeClass('mj-hidden');
+            } else {
+                $phonesEl.addClass('mj-hidden').text('');
+            }
         }
 
         if ($messageEl && $messageEl.length) {
             $messageEl.text(message || '');
+        }
+
+        const $smsInlineEl = $entry.data('smsInlineEl');
+        const smsInlineLabel = $entry.data('smsInlineLabel') || (getLocalized('smsInlineLabel') || 'SMS');
+        if ($smsInlineEl && $smsInlineEl.length) {
+            if (smsPreview && (smsPreview.body || smsPreview.raw)) {
+                const smsText = smsPreview.body || smsPreview.raw || '';
+                $smsInlineEl.text(smsInlineLabel + ' : ' + smsText).removeClass('mj-hidden');
+            } else {
+                $smsInlineEl.addClass('mj-hidden').text('');
+            }
         }
 
         const isTestMode = !!(meta && meta.testMode);
@@ -251,7 +326,22 @@
 
         $entry.find('.mj-email-log-entry__errors').remove();
         if (errors && errors.length) {
-            const $errors = $('<div>', { class: 'mj-email-log-entry__errors', text: errors.join(' | ') });
+            const errorsLabel = $entry.data('errorsLabel') || (getLocalized('logErrorDetailsLabel') || '');
+            const $errors = $('<div>', { class: 'mj-email-log-entry__errors' });
+            if (errorsLabel) {
+                $errors.append($('<div>', { class: 'mj-email-log-entry__errors-title', text: errorsLabel }));
+            }
+
+            if (errors.length === 1) {
+                $errors.append($('<div>', { class: 'mj-email-log-entry__errors-item', text: errors[0] }));
+            } else {
+                const $list = $('<ul>', { class: 'mj-email-log-entry__errors-list' });
+                errors.forEach(function (err) {
+                    $list.append($('<li>', { text: err }));
+                });
+                $errors.append($list);
+            }
+
             $entry.append($errors);
         }
 
@@ -259,24 +349,75 @@
         const $previewEl = $entry.data('previewEl');
         const $previewSubjectEl = $entry.data('previewSubjectEl');
         const $previewBodyEl = $entry.data('previewBodyEl');
-        const labels = $entry.data('previewLabels') || { show: 'Voir le message', hide: 'Masquer le message', subject: 'Sujet' };
+        const $previewSmsWrapper = $entry.data('previewSmsWrapperEl');
+        const $previewSmsHeading = $entry.data('previewSmsHeadingEl');
+        const $previewSmsBody = $entry.data('previewSmsBodyEl');
+        const $previewSmsRaw = $entry.data('previewSmsRawEl');
+        const labels = $entry.data('previewLabels') || {
+            show: 'Voir le message',
+            hide: 'Masquer le message',
+            subject: 'Sujet',
+            sms: 'SMS',
+            smsRendered: 'SMS envoyé',
+            smsRaw: 'Texte saisi'
+        };
 
         if ($toggle && $previewEl && $previewSubjectEl && $previewBodyEl) {
-            const hasPreview = preview && (preview.html || preview.body || preview.subject);
-            if (hasPreview) {
-                const bodyHtml = preview.body || preview.html || '';
-                const subjectText = preview.subject || '';
-                $toggle.removeClass('mj-hidden');
-                $previewSubjectEl.text(labels.subject + ' : ' + subjectText);
-                if (bodyHtml) {
-                    $previewBodyEl.html(bodyHtml);
+            const hasEmailPreview = preview && (preview.html || preview.body || preview.subject);
+            const hasSmsPreview = smsPreview && (smsPreview.body || smsPreview.raw);
+            const hasAnyPreview = hasEmailPreview || hasSmsPreview;
+            const isSmsOnly = !hasEmailPreview && hasSmsPreview;
+
+            if (hasAnyPreview) {
+                if (hasEmailPreview) {
+                    const bodyHtml = preview.body || preview.html || '';
+                    const subjectText = preview.subject || '';
+                    $previewSubjectEl.text(labels.subject + ' : ' + subjectText);
+                    if (bodyHtml) {
+                        $previewBodyEl.html(bodyHtml);
+                    } else {
+                        $previewBodyEl.empty();
+                    }
+                    $previewBodyEl.removeClass('mj-hidden');
                 } else {
-                    $previewBodyEl.empty();
+                    $previewSubjectEl.empty();
+                    $previewBodyEl.empty().addClass('mj-hidden');
                 }
-                if ($previewEl.hasClass('mj-hidden')) {
-                    $toggle.text(labels.show);
+
+                if ($previewSmsWrapper && $previewSmsHeading && $previewSmsBody && $previewSmsRaw) {
+                    if (hasSmsPreview) {
+                        $previewSmsHeading.text(labels.sms);
+                        const rendered = smsPreview.body || '';
+                        const rawMessage = smsPreview.raw || '';
+                        $previewSmsBody.text(labels.smsRendered + ' : ' + rendered);
+
+                        if (rawMessage && rawMessage !== rendered) {
+                            $previewSmsRaw.text(labels.smsRaw + ' : ' + rawMessage).removeClass('mj-hidden');
+                        } else if (rawMessage && !rendered) {
+                            $previewSmsRaw.text(labels.smsRaw + ' : ' + rawMessage).removeClass('mj-hidden');
+                        } else {
+                            $previewSmsRaw.addClass('mj-hidden').empty();
+                        }
+
+                        $previewSmsWrapper.removeClass('mj-hidden');
+                    } else {
+                        $previewSmsWrapper.addClass('mj-hidden');
+                        $previewSmsHeading.empty();
+                        $previewSmsBody.empty();
+                        $previewSmsRaw.addClass('mj-hidden').empty();
+                    }
+                }
+
+                if (isSmsOnly) {
+                    $previewEl.removeClass('mj-hidden');
+                    $toggle.addClass('mj-hidden');
                 } else {
-                    $toggle.text(labels.hide);
+                    $toggle.removeClass('mj-hidden');
+                    if ($previewEl.hasClass('mj-hidden')) {
+                        $toggle.text(labels.show);
+                    } else {
+                        $toggle.text(labels.hide);
+                    }
                 }
             } else {
                 $toggle.addClass('mj-hidden');
@@ -284,6 +425,12 @@
                 $previewEl.addClass('mj-hidden');
                 $previewSubjectEl.empty();
                 $previewBodyEl.empty();
+                if ($previewSmsWrapper && $previewSmsHeading && $previewSmsBody && $previewSmsRaw) {
+                    $previewSmsWrapper.addClass('mj-hidden');
+                    $previewSmsHeading.empty();
+                    $previewSmsBody.empty();
+                    $previewSmsRaw.addClass('mj-hidden').empty();
+                }
             }
         }
     }
@@ -314,15 +461,16 @@
 
         skipped.forEach(function (item) {
             counters.skipped += 1;
-            const message = getLocalized('skippedNoEmail') || getLocalized('logSkipped');
-            const $entry = createLogEntry(item, 'skipped', message, item.emails || []);
-            updateLogEntry($entry, 'skipped', message, item.emails || [], [], null, null);
+            const defaultMessage = getLocalized('skippedNoEmail') || getLocalized('logSkipped');
+            const message = item.reason || defaultMessage;
+            const $entry = createLogEntry(item, 'skipped', message, item.emails || [], item.phones || []);
+            updateLogEntry($entry, 'skipped', message, item.emails || [], item.phones || [], [], null, null, null);
             $log.append($entry);
         });
     }
 
     function sendEmailForRecipient(recipient, requestPayload, $summary, $log, counters) {
-        const $entry = createLogEntry(recipient, 'pending', '', recipient.emails || []);
+        const $entry = createLogEntry(recipient, 'pending', '', recipient.emails || [], recipient.phones || []);
         $log.append($entry);
 
         const payload = $.extend({}, requestPayload, {
@@ -339,7 +487,7 @@
         }).done(function (response) {
             if (!response || !response.success || !response.data) {
                 counters.failed += 1;
-                updateLogEntry($entry, 'failed', getLocalized('sendError'), recipient.emails || [], [], null, null);
+                updateLogEntry($entry, 'failed', getLocalized('sendError'), recipient.emails || [], recipient.phones || [], [], null, null, null);
                 updateSummaryCounts($summary, counters);
                 return;
             }
@@ -358,11 +506,21 @@
                 counters.testMode = counters.testMode || !!data.testMode;
             }
 
-            updateLogEntry($entry, status, data.message || '', data.emails || recipient.emails || [], data.errors || [], data.preview || null, data);
+            updateLogEntry(
+                $entry,
+                status,
+                data.message || '',
+                data.emails || recipient.emails || [],
+                data.phones || recipient.phones || [],
+                data.errors || [],
+                data.preview || null,
+                data.smsPreview || null,
+                data
+            );
             updateSummaryCounts($summary, counters);
         }).fail(function () {
             counters.failed += 1;
-            updateLogEntry($entry, 'failed', getLocalized('sendError'), recipient.emails || [], [], null, null);
+            updateLogEntry($entry, 'failed', getLocalized('sendError'), recipient.emails || [], recipient.phones || [], [], null, null, null);
             updateSummaryCounts($summary, counters);
         });
     }

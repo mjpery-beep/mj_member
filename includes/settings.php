@@ -217,11 +217,15 @@ function mj_settings_page() {
     $stripe_test_mode_enabled = get_option('mj_stripe_test_mode', '0') === '1';
     $email_test_mode_enabled = get_option('mj_email_test_mode', '0') === '1';
     $sms_test_mode_enabled = get_option('mj_sms_test_mode', '0') === '1';
-    $sms_provider = get_option('mj_sms_provider', 'disabled');
-    if (!in_array($sms_provider, array('disabled', 'textbelt'), true)) {
-        $sms_provider = 'disabled';
+    $sms_default_provider = 'twilio';
+    $sms_provider = get_option('mj_sms_provider', $sms_default_provider);
+    if (!in_array($sms_provider, array('disabled', 'textbelt', 'twilio'), true)) {
+        $sms_provider = $sms_default_provider;
     }
     $sms_textbelt_api_key = get_option('mj_sms_textbelt_api_key', '');
+    $sms_twilio_sid = get_option('mj_sms_twilio_sid', '');
+    $sms_twilio_token = get_option('mj_sms_twilio_token', '');
+    $sms_twilio_from = get_option('mj_sms_twilio_from', '');
     $stripe_success_page_id = (int) get_option('mj_stripe_success_page', 0);
     $stripe_cancel_page_id = (int) get_option('mj_stripe_cancel_page', 0);
     $stripe_success_redirect = get_option('mj_stripe_success_redirect', '');
@@ -601,17 +605,81 @@ function mj_settings_page() {
                             <input type="email" name="mj_notify_email" value="<?php echo esc_attr($notify_email); ?>" class="regular-text">
                         </p>
 
+                        <h2>📱 SMS</h2>
+                        <?php if ($sms_test_mode_enabled) : ?>
+                            <div style="margin-bottom:12px; padding:12px 14px; background:#ecfdf3; border-left:4px solid #38a169; border-radius:4px; color:#22543d;">
+                                <strong><?php esc_html_e('Mode test SMS activé', 'mj-member'); ?></strong><br>
+                                <?php esc_html_e('Les SMS sont simulés : aucun message ne sera transmis tant que ce mode reste activé.', 'mj-member'); ?>
+                            </div>
+                        <?php endif; ?>
+                        <p style="margin:0 0 18px 0;">
+                            <label>
+                                <input type="checkbox" name="mj_sms_test_mode" value="1" <?php checked($sms_test_mode_enabled); ?> />
+                                <?php esc_html_e("Activer le mode test SMS (aucun SMS n'est envoyé)", 'mj-member'); ?>
+                            </label><br>
+                            <small style="color:#666;">
+                                <?php esc_html_e("En mode test, les SMS sont journalisés dans l'interface mais ne sont jamais transmis au fournisseur.", 'mj-member'); ?>
+                            </small>
+                        </p>
+                        <div class="mj-settings-card mj-settings-card--sms" style="margin:0 0 32px 0; padding:16px; background:#fff; border:1px solid #e5e7eb; border-radius:6px;">
+                            <h3 style="margin:0 0 12px 0;">📱 <?php esc_html_e('Service SMS', 'mj-member'); ?></h3>
+                            <p style="margin:0 0 12px 0;">
+                                <label for="mj-sms-provider"><strong><?php esc_html_e('Fournisseur SMS', 'mj-member'); ?></strong></label><br>
+                                <select name="mj_sms_provider" id="mj-sms-provider">
+                                    <option value="twilio" <?php selected($sms_provider, 'twilio'); ?>>Twilio (recommandé)</option>
+                                    <option value="textbelt" <?php selected($sms_provider, 'textbelt'); ?>>Textbelt</option>
+                                    <option value="disabled" <?php selected($sms_provider, 'disabled'); ?>><?php esc_html_e('Désactivé', 'mj-member'); ?></option>
+                                </select><br>
+                                <small style="color:#666;">
+                                    <?php esc_html_e('Choisissez le fournisseur utilisé pour l’envoi des SMS. Twilio est activé par défaut et nécessite un SID, un jeton et un numéro émetteur.', 'mj-member'); ?>
+                                </small>
+                            </p>
+                            <div class="mj-sms-provider-fields" data-sms-provider="twilio" <?php echo $sms_provider === 'twilio' ? '' : 'style="display:none;"'; ?>>
+                                <p style="margin:0 0 12px 0;">
+                                    <label for="mj-sms-twilio-sid"><?php esc_html_e('Account SID Twilio', 'mj-member'); ?></label><br>
+                                    <input type="text" name="mj_sms_twilio_sid" id="mj-sms-twilio-sid" value="<?php echo esc_attr($sms_twilio_sid); ?>" class="regular-text" autocomplete="off" placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+                                    <small style="color:#666; display:block; margin-top:4px;">
+                                        <?php esc_html_e('Copiez le SID du compte trouvé dans le tableau de bord Twilio.', 'mj-member'); ?>
+                                    </small>
+                                </p>
+                                <p style="margin:0 0 12px 0;">
+                                    <label for="mj-sms-twilio-token"><?php esc_html_e('Auth Token Twilio', 'mj-member'); ?></label><br>
+                                    <input type="password" name="mj_sms_twilio_token" id="mj-sms-twilio-token" value="<?php echo esc_attr($sms_twilio_token); ?>" class="regular-text" autocomplete="off" placeholder="••••••">
+                                    <small style="color:#666; display:block; margin-top:4px;">
+                                        <?php esc_html_e('Utilisez le jeton API principal ou un jeton secondaire disposant des droits SMS.', 'mj-member'); ?>
+                                    </small>
+                                </p>
+                                <p style="margin:0;">
+                                    <label for="mj-sms-twilio-from"><?php esc_html_e('Numéro Twilio expéditeur', 'mj-member'); ?></label><br>
+                                    <input type="text" name="mj_sms_twilio_from" id="mj-sms-twilio-from" value="<?php echo esc_attr($sms_twilio_from); ?>" class="regular-text" autocomplete="off" placeholder="+324XXXXXXXX">
+                                    <small style="color:#666; display:block; margin-top:4px;">
+                                        <?php esc_html_e('Renseignez un numéro Twilio valide (format international, ex. +32412345678).', 'mj-member'); ?>
+                                    </small>
+                                </p>
+                            </div>
+                            <div class="mj-sms-provider-fields" data-sms-provider="textbelt" <?php echo $sms_provider === 'textbelt' ? '' : 'style="display:none;"'; ?>>
+                                <p style="margin:0 0 12px 0;">
+                                    <label for="mj-sms-textbelt-api-key"><?php esc_html_e('Clé API Textbelt', 'mj-member'); ?></label><br>
+                                    <input type="text" name="mj_sms_textbelt_api_key" id="mj-sms-textbelt-api-key" value="<?php echo esc_attr($sms_textbelt_api_key); ?>" class="regular-text" autocomplete="off">
+                                    <small style="color:#666; display:block; margin-top:4px;">
+                                        <?php esc_html_e('Collez la clé fournie par Textbelt (exemple : key_live_xxxxxxxxx).', 'mj-member'); ?>
+                                    </small>
+                                </p>
+                            </div>
+                            <div style="margin-top:16px; padding:12px; background:#f8fafc; border:1px dashed #cbd5f5; border-radius:6px;">
+                                <p style="margin:0 0 6px 0;"><strong><?php esc_html_e('Procédure Twilio', 'mj-member'); ?></strong></p>
+                                <p style="margin:0 0 4px 0; color:#475569;">1. <?php esc_html_e('Créez un compte sur twilio.com et vérifiez votre numéro de contact.', 'mj-member'); ?></p>
+                                <p style="margin:0 0 4px 0; color:#475569;">2. <?php esc_html_e('Achetez un numéro SMS compatible (menu Phone Numbers) et copiez le dans le champ « Numéro Twilio expéditeur ».', 'mj-member'); ?></p>
+                                <p style="margin:0 0 8px 0; color:#475569;">3. <?php esc_html_e('Générez un Auth Token (Account > API Keys) puis collez le SID, le token et le numéro dans les champs ci-dessus.', 'mj-member'); ?></p>
+                                <p style="margin:0; color:#334155;"><strong><?php esc_html_e('Tarifs indicatifs', 'mj-member'); ?></strong>&nbsp;: <?php esc_html_e('~1,00 € HT/mois pour le numéro + ~0,07 € HT par SMS envoyé en Belgique/France (vérifiez les tarifs Twilio pour votre pays).', 'mj-member'); ?></p>
+                            </div>
+                        </div>
+
                         <h2>📮 Configuration SMTP</h2>
                         <?php if ($email_test_mode_enabled) : ?>
                             <div style="margin-bottom:12px; padding:12px 14px; background:#fff8e5; border-left:4px solid #f0b429; border-radius:4px; color:#7a5200;">
                                 <strong><?php esc_html_e('Mode test email activé', 'mj-member'); ?></strong><br>
                                 <?php esc_html_e('Les envois sont simulés : aucun message ne quittera le serveur tant que ce mode reste activé.', 'mj-member'); ?>
-                            </div>
-                        <?php endif; ?>
-                        <?php if ($sms_test_mode_enabled) : ?>
-                            <div style="margin-bottom:12px; padding:12px 14px; background:#ecfdf3; border-left:4px solid #38a169; border-radius:4px; color:#22543d;">
-                                <strong><?php esc_html_e('Mode test SMS activé', 'mj-member'); ?></strong><br>
-                                <?php esc_html_e('Les SMS sont simulés : aucun message ne sera transmis tant que ce mode reste activé.', 'mj-member'); ?>
                             </div>
                         <?php endif; ?>
                         <p style="margin:0 0 16px 0;">
@@ -623,37 +691,6 @@ function mj_settings_page() {
                                 <?php esc_html_e("En mode test, les emails sont préparés et visibles dans l'interface d'envoi mais ne sont pas transmis aux destinataires.", 'mj-member'); ?>
                             </small>
                         </p>
-                        <p style="margin:0 0 24px 0;">
-                            <label>
-                                <input type="checkbox" name="mj_sms_test_mode" value="1" <?php checked($sms_test_mode_enabled); ?> />
-                                <?php esc_html_e("Activer le mode test SMS (aucun SMS n'est envoyé)", 'mj-member'); ?>
-                            </label><br>
-                            <small style="color:#666;">
-                                <?php esc_html_e("En mode test, les SMS sont journalisés dans l'interface mais ne sont jamais transmis au fournisseur.", 'mj-member'); ?>
-                            </small>
-                        </p>
-                        <div class="mj-settings-card mj-settings-card--sms" style="margin:0 0 24px 0; padding:16px; background:#fff; border:1px solid #e5e7eb; border-radius:6px;">
-                            <h3 style="margin:0 0 12px 0;">📱 <?php esc_html_e('Service SMS', 'mj-member'); ?></h3>
-                            <p style="margin:0 0 12px 0;">
-                                <label for="mj-sms-provider"><strong><?php esc_html_e('Fournisseur SMS', 'mj-member'); ?></strong></label><br>
-                                <select name="mj_sms_provider" id="mj-sms-provider">
-                                    <option value="disabled" <?php selected($sms_provider, 'disabled'); ?>><?php esc_html_e('Désactivé', 'mj-member'); ?></option>
-                                    <option value="textbelt" <?php selected($sms_provider, 'textbelt'); ?>>Textbelt</option>
-                                </select><br>
-                                <small style="color:#666;">
-                                    <?php esc_html_e('Textbelt propose une API simple et abordable. Créez un compte sur textbelt.com pour acheter des crédits et récupérer votre clé.', 'mj-member'); ?>
-                                </small>
-                            </p>
-                            <div class="mj-sms-provider-textbelt" <?php echo $sms_provider === 'textbelt' ? '' : 'style="display:none;"'; ?>>
-                                <p style="margin:0 0 12px 0;">
-                                    <label for="mj-sms-textbelt-api-key"><?php esc_html_e('Clé API Textbelt', 'mj-member'); ?></label><br>
-                                    <input type="text" name="mj_sms_textbelt_api_key" id="mj-sms-textbelt-api-key" value="<?php echo esc_attr($sms_textbelt_api_key); ?>" class="regular-text" autocomplete="off">
-                                    <small style="color:#666; display:block; margin-top:4px;">
-                                        <?php esc_html_e('Collez la clé fournie par Textbelt (exemple : key_live_xxxxxxxxx).', 'mj-member'); ?>
-                                    </small>
-                                </p>
-                            </div>
-                        </div>
                         <p>
                             <label>Hôte SMTP</label><br>
                             <input type="text" name="mj_smtp_host" value="<?php echo esc_attr($smtp['host'] ?? ''); ?>" class="regular-text" placeholder="mail.example.com">
@@ -898,18 +935,18 @@ function mj_settings_page() {
         })();
         (function () {
             var providerSelect = document.getElementById('mj-sms-provider');
-            var textbeltContainer = document.querySelector('.mj-sms-provider-textbelt');
+            var providerSections = document.querySelectorAll('.mj-sms-provider-fields');
 
-            if (!providerSelect || !textbeltContainer) {
+            if (!providerSelect || !providerSections.length) {
                 return;
             }
 
             function toggleProviderFields() {
-                if (providerSelect.value === 'textbelt') {
-                    textbeltContainer.style.display = '';
-                } else {
-                    textbeltContainer.style.display = 'none';
-                }
+                var activeProvider = providerSelect.value;
+                Array.prototype.forEach.call(providerSections, function (section) {
+                    var sectionProvider = section.getAttribute('data-sms-provider');
+                    section.style.display = sectionProvider === activeProvider ? '' : 'none';
+                });
             }
 
             providerSelect.addEventListener('change', toggleProviderFields);

@@ -128,13 +128,15 @@ class MjSms extends MjTools {
      * @param object $member
      * @param string $message
      * @param array  $context
-     * @return array{
-     *     success:bool,
-     *     phones:string[],
-     *     test_mode:bool,
-     *     message:string,
-     *     error:string
-     * }
+    * @return array{
+    *     success:bool,
+    *     phones:string[],
+    *     test_mode:bool,
+    *     message:string,
+    *     error:string,
+    *     rendered_message:string,
+    *     error_details:string[]
+    * }
      */
     public static function send_to_member($member, $message, array $context = array()) {
         $result = array(
@@ -143,6 +145,8 @@ class MjSms extends MjTools {
             'test_mode' => false,
             'message' => '',
             'error' => '',
+            'rendered_message' => '',
+            'error_details' => array(),
         );
 
         if (!is_object($member) || !isset($member->id)) {
@@ -160,6 +164,8 @@ class MjSms extends MjTools {
             $result['error'] = __('Le contenu du SMS est vide.', 'mj-member');
             return $result;
         }
+
+        $result['rendered_message'] = $message;
 
         $phones = self::collect_targets($member, $context);
         if (empty($phones)) {
@@ -181,7 +187,7 @@ class MjSms extends MjTools {
          * Permet aux extensions de gérer l'envoi de SMS.
          * Retour attendu :
          *  - bool (succès / échec)
-         *  - array { success:bool, test_mode?:bool, message?:string, error?:string }
+        *  - array { success:bool, test_mode?:bool, message?:string, error?:string }
          *  - WP_Error en cas d'échec
          *  - null pour simuler l'envoi (mode test).
          */
@@ -189,6 +195,7 @@ class MjSms extends MjTools {
 
         if (is_wp_error($gateway_response)) {
             $result['error'] = $gateway_response->get_error_message();
+            $result['error_details'] = array($result['error']);
             return $result;
         }
 
@@ -200,6 +207,15 @@ class MjSms extends MjTools {
             }
             if (!$result['success'] && !empty($gateway_response['error'])) {
                 $result['error'] = (string) $gateway_response['error'];
+            }
+            if (!$result['success'] && !empty($gateway_response['errors']) && is_array($gateway_response['errors'])) {
+                $result['error_details'] = array_map('strval', $gateway_response['errors']);
+            } elseif (!$result['success'] && !empty($gateway_response['failures']) && is_array($gateway_response['failures'])) {
+                foreach ($gateway_response['failures'] as $failure) {
+                    if (is_array($failure) && !empty($failure['error'])) {
+                        $result['error_details'][] = (string) $failure['error'];
+                    }
+                }
             }
         } elseif (is_bool($gateway_response)) {
             $result['success'] = $gateway_response;
@@ -220,6 +236,9 @@ class MjSms extends MjTools {
             if ($result['error'] === '') {
                 $result['error'] = __('Impossible d’envoyer le SMS.', 'mj-member');
             }
+            if (empty($result['error_details'])) {
+                $result['error_details'] = array($result['error']);
+            }
         }
 
         return $result;
@@ -237,6 +256,81 @@ class MjSms extends MjTools {
         $provider = get_option('mj_sms_provider', 'disabled');
         if ($provider === 'disabled') {
             return new WP_Error('mj_sms_disabled', __('Aucun fournisseur SMS n’est configuré.', 'mj-member'));
+        }
+
+        if ($provider === 'twilio') {
+            $account_sid = trim((string) get_option('mj_sms_twilio_sid', ''));
+            $auth_token = trim((string) get_option('mj_sms_twilio_token', ''));
+            $from_number = trim((string) get_option('mj_sms_twilio_from', ''));
+
+            if ($account_sid === '' || $auth_token === '' || $from_number === '') {
+                return new WP_Error('mj_sms_missing_twilio_keys', __('Les identifiants Twilio sont incomplets.', 'mj-member'));
+            }
+
+            if (!class_exists('MjSmsTwilio')) {
+                $twilio_path = __DIR__ . '/sms/MjSmsTwilio.php';
+                if (file_exists($twilio_path)) {
+                    require_once $twilio_path;
+                }
+            }
+
+            if (!class_exists('MjSmsTwilio')) {
+                return new WP_Error('mj_sms_missing_twilio_client', __('Le client Twilio est introuvable.', 'mj-member'));
+            }
+
+            $twilio = new MjSmsTwilio($account_sid, $auth_token, $from_number);
+            $failures = array();
+            $failure_messages = array();
+
+            foreach ($phones as $phone) {
+                $sent = $twilio->send($phone, $message);
+                $success = false;
+                $detail = '';
+
+                if (is_wp_error($sent)) {
+                    $detail = $sent->get_error_message();
+                    $data = $sent->get_error_data();
+                    if (is_array($data) && !empty($data['status'])) {
+                        $detail .= sprintf(' [HTTP %s]', $data['status']);
+                    }
+                } elseif (is_array($sent)) {
+                    $success = !empty($sent['success']);
+                    if (!$success && !empty($sent['error'])) {
+                        $detail = (string) $sent['error'];
+                    }
+                } else {
+                    $success = (bool) $sent;
+                }
+
+                if ($success) {
+                    continue;
+                }
+
+                if ($detail === '') {
+                    $detail = __('Erreur Twilio inconnue.', 'mj-member');
+                }
+
+                $failures[] = array(
+                    'phone' => $phone,
+                    'error' => $detail,
+                );
+                $failure_messages[] = sprintf('%s : %s', $phone, $detail);
+            }
+
+            if (empty($failures)) {
+                return array(
+                    'success' => true,
+                    'message' => __('SMS envoyé via Twilio.', 'mj-member'),
+                );
+            }
+
+            $failure_messages = array_values(array_unique($failure_messages));
+            return array(
+                'success' => false,
+                'error' => implode(' | ', $failure_messages),
+                'errors' => $failure_messages,
+                'failures' => $failures,
+            );
         }
 
         if ($provider === 'textbelt') {
