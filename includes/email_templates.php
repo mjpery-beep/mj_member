@@ -10,11 +10,32 @@ function mj_email_templates_page() {
         $slug = sanitize_title($_POST['template_slug']);
         $subject = sanitize_text_field($_POST['template_subject']);
         $content = wp_kses_post($_POST['template_content']);
+        $sms_content = isset($_POST['template_sms_content']) ? sanitize_textarea_field($_POST['template_sms_content']) : '';
 
         if ($id > 0) {
-            $wpdb->update($table, array('slug' => $slug, 'subject' => $subject, 'content' => $content), array('id' => $id), array('%s','%s','%s'), array('%d'));
+            $wpdb->update(
+                $table,
+                array(
+                    'slug' => $slug,
+                    'subject' => $subject,
+                    'content' => $content,
+                    'sms_content' => $sms_content,
+                ),
+                array('id' => $id),
+                array('%s','%s','%s','%s'),
+                array('%d')
+            );
         } else {
-            $wpdb->insert($table, array('slug' => $slug, 'subject' => $subject, 'content' => $content), array('%s','%s','%s'));
+            $wpdb->insert(
+                $table,
+                array(
+                    'slug' => $slug,
+                    'subject' => $subject,
+                    'content' => $content,
+                    'sms_content' => $sms_content,
+                ),
+                array('%s','%s','%s','%s')
+            );
             $id = $wpdb->insert_id;
         }
 
@@ -83,6 +104,7 @@ function mj_email_templates_page() {
                         <label>Contenu</label><br>
                             <?php
                             $content = $editing ? $template->content : '';
+                            $sms_content_value = $editing ? (isset($template->sms_content) ? (string) $template->sms_content : '') : '';
                             // Helper: list of available placeholders
                             ?>
                             <div style="margin-bottom:8px; padding:8px; background:#fff8e1; border:1px solid #ffe08a; border-radius:4px;">
@@ -111,6 +133,11 @@ function mj_email_templates_page() {
                             <?php
                             wp_editor($content, 'template_content', array('textarea_name'=>'template_content','textarea_rows'=>10));
                             ?>
+                    </p>
+                    <p>
+                        <label>Contenu SMS (texte court, sans mise en forme)</label><br>
+                        <textarea name="template_sms_content" rows="4" class="large-text" placeholder="Message concis avec variables optionnelles."><?php echo esc_textarea($sms_content_value); ?></textarea>
+                        <span class="description">Utilisez les mêmes variables que pour l'email (ex&nbsp;: <code>{{member_first_name}}</code>). Gardez le message sous 160 caractères.</span>
                     </p>
                     <p>
                         <button class="button button-primary" type="submit" name="mj_save_template"><?php echo $editing ? 'Mettre à jour' : 'Créer'; ?></button>

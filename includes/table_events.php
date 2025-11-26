@@ -1,6 +1,6 @@
 <?php
 
-require_once plugin_dir_path(__FILE__) . 'classes/MjEvents_List_Table.php';
+require_once plugin_dir_path(__FILE__) . 'classes/table/MjEvents_List_Table.php';
 
 $table = new MjEvents_List_Table();
 $table->process_table_actions();

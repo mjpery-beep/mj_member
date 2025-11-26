@@ -161,6 +161,23 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
             )
         );
 
+        $this->add_control(
+            'card_title_tag',
+            array(
+                'label' => __('Balise du titre', 'mj-member'),
+                'type' => Controls_Manager::SELECT,
+                'options' => array(
+                    'h2' => 'H2',
+                    'h3' => 'H3',
+                    'h4' => 'H4',
+                    'h5' => 'H5',
+                    'p' => __('Paragraphe', 'mj-member'),
+                ),
+                'default' => 'h4',
+                'render_type' => 'template',
+            )
+        );
+
         $this->add_responsive_control(
             'grid_columns',
             array(
@@ -209,6 +226,34 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'show_cover',
+            array(
+                'label' => __('Afficher la vignette', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+            )
+        );
+
+        $this->add_control(
+            'cover_ratio',
+            array(
+                'label' => __('Ratio de la vignette', 'mj-member'),
+                'type' => Controls_Manager::SELECT,
+                'options' => array(
+                    '16-9' => '16:9',
+                    '4-3' => '4:3',
+                    '1-1' => '1:1',
+                    'auto' => __('Automatique', 'mj-member'),
+                ),
+                'default' => '16-9',
+                'condition' => array('show_cover' => 'yes'),
+            )
+        );
+
+        $this->add_control(
             'include_past',
             array(
                 'label' => __('Inclure les événements passés', 'mj-member'),
@@ -217,6 +262,18 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 'label_off' => __('Non', 'mj-member'),
                 'return_value' => 'yes',
                 'default' => 'no',
+            )
+        );
+
+        $this->add_control(
+            'show_badge',
+            array(
+                'label' => __('Afficher le badge de type', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
             )
         );
 
@@ -257,27 +314,53 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'price_display_mode',
+            array(
+                'label' => __('Tarif', 'mj-member'),
+                'type' => Controls_Manager::SELECT,
+                'options' => array(
+                    'show' => __('Afficher', 'mj-member'),
+                    'hide_zero' => __('Afficher sauf si 0 €', 'mj-member'),
+                    'hide' => __('Masquer', 'mj-member'),
+                ),
+                'default' => 'show',
+            )
+        );
+
+        $this->add_control(
             'show_price',
             array(
-                'label' => __('Afficher le tarif', 'mj-member'),
+                'label' => __('Afficher le tarif (hérité)', 'mj-member'),
                 'type' => Controls_Manager::SWITCHER,
                 'label_on' => __('Oui', 'mj-member'),
                 'label_off' => __('Non', 'mj-member'),
                 'return_value' => 'yes',
                 'default' => 'yes',
+                'condition' => array('price_display_mode' => ''),
             )
         );
 
         $this->add_control(
             'hide_price_if_zero',
             array(
-                'label' => __('Masquer si tarif à 0 €', 'mj-member'),
+                'label' => __('Masquer si tarif à 0 € (hérité)', 'mj-member'),
                 'type' => Controls_Manager::SWITCHER,
                 'label_on' => __('Oui', 'mj-member'),
                 'label_off' => __('Non', 'mj-member'),
                 'return_value' => 'yes',
                 'default' => 'yes',
-                'condition' => array('show_price' => 'yes'),
+                'condition' => array('price_display_mode' => ''),
+            )
+        );
+
+        $this->add_control(
+            'price_prefix',
+            array(
+                'label' => __('Préfixe du tarif', 'mj-member'),
+                'type' => Controls_Manager::TEXT,
+                'placeholder' => __('Tarif :', 'mj-member'),
+                'default' => __('Tarif :', 'mj-member'),
+                'condition' => array('price_display_mode' => array('show', 'hide_zero')),
             )
         );
 
@@ -299,6 +382,55 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 'default' => array(
                     'url' => Utils::get_placeholder_image_src(),
                 ),
+            )
+        );
+
+        $this->add_control(
+            'show_cta',
+            array(
+                'label' => __("Afficher le bouton d'inscription", 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+            )
+        );
+
+        $this->add_control(
+            'cta_label',
+            array(
+                'label' => __('Texte du bouton', 'mj-member'),
+                'type' => Controls_Manager::TEXT,
+                'default' => __("S'inscrire", 'mj-member'),
+                'label_block' => true,
+                'condition' => array('show_cta' => 'yes'),
+            )
+        );
+
+        $this->add_control(
+            'cta_registered_label',
+            array(
+                'label' => __('Texte si déjà inscrit', 'mj-member'),
+                'type' => Controls_Manager::TEXT,
+                'default' => __('Déjà inscrit', 'mj-member'),
+                'label_block' => true,
+                'condition' => array('show_cta' => 'yes'),
+            )
+        );
+
+        $this->add_control(
+            'cta_skin',
+            array(
+                'label' => __('Style du bouton', 'mj-member'),
+                'type' => Controls_Manager::SELECT,
+                'options' => array(
+                    'solid' => __('Plein', 'mj-member'),
+                    'outline' => __('Contour', 'mj-member'),
+                    'text' => __('Texte', 'mj-member'),
+                ),
+                'default' => 'solid',
+                'condition' => array('show_cta' => 'yes'),
             )
         );
 
@@ -389,7 +521,7 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         $this->add_group_control(
             Group_Control_Border::get_type(),
             array(
-                'name' => 'card_border',
+                'name' => 'card_border_box',
                 'selector' => '{{WRAPPER}} .mj-member-events__item',
             )
         );
@@ -575,6 +707,18 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'cta_border_color',
+            array(
+                'label' => __('Contour du bouton', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'global' => array('default' => Global_Colors::COLOR_TEXT),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-events' => '--mj-events-button-border: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
             'cta_text_color',
             array(
                 'label' => __('Texte du bouton', 'mj-member'),
@@ -583,6 +727,42 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 'selectors' => array(
                     '{{WRAPPER}} .mj-member-events' => '--mj-events-button-text: {{VALUE}};',
                 ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'cta_alignment',
+            array(
+                'label' => __('Alignement du bouton', 'mj-member'),
+                'type' => Controls_Manager::CHOOSE,
+                'options' => array(
+                    'flex-start' => array('title' => __('Gauche', 'mj-member'), 'icon' => 'eicon-text-align-left'),
+                    'center' => array('title' => __('Centre', 'mj-member'), 'icon' => 'eicon-text-align-center'),
+                    'flex-end' => array('title' => __('Droite', 'mj-member'), 'icon' => 'eicon-text-align-right'),
+                    'stretch' => array('title' => __('Largeur totale', 'mj-member'), 'icon' => 'eicon-text-align-justify'),
+                ),
+                'default' => 'flex-start',
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-events__actions' => 'align-items: {{VALUE}};',
+                    '{{WRAPPER}} .mj-member-events__cta' => 'align-self: {{VALUE}};',
+                ),
+                'condition' => array('show_cta' => 'yes'),
+            )
+        );
+
+        $this->add_control(
+            'cta_full_width',
+            array(
+                'label' => __('Bouton pleine largeur', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'no',
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-events__cta' => 'width: 100%;',
+                ),
+                'condition' => array('show_cta' => 'yes'),
             )
         );
 
@@ -712,13 +892,55 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         $show_description = isset($settings['show_description']) && $settings['show_description'] === 'yes';
         $show_location = isset($settings['show_location']) && $settings['show_location'] === 'yes';
         $show_map = isset($settings['show_map']) && $settings['show_map'] === 'yes';
-        $show_price = isset($settings['show_price']) && $settings['show_price'] === 'yes';
-        $hide_price_if_zero = isset($settings['hide_price_if_zero']) && $settings['hide_price_if_zero'] === 'yes';
         $layout = isset($settings['layout']) ? $settings['layout'] : 'grid';
         $card_layout = isset($settings['card_layout']) ? $settings['card_layout'] : 'standard';
         $allowed_card_layouts = array('standard', 'compact', 'horizontal');
         if (!in_array($card_layout, $allowed_card_layouts, true)) {
             $card_layout = 'standard';
+        }
+
+        $card_title_tag = isset($settings['card_title_tag']) ? strtolower((string) $settings['card_title_tag']) : 'h4';
+        $allowed_title_tags = array('h2', 'h3', 'h4', 'h5', 'p');
+        if (!in_array($card_title_tag, $allowed_title_tags, true)) {
+            $card_title_tag = 'h4';
+        }
+
+        $show_cover = !isset($settings['show_cover']) || $settings['show_cover'] === 'yes';
+        $cover_ratio = isset($settings['cover_ratio']) ? sanitize_key($settings['cover_ratio']) : '16-9';
+        $allowed_cover_ratios = array('16-9', '4-3', '1-1', 'auto');
+        if (!in_array($cover_ratio, $allowed_cover_ratios, true)) {
+            $cover_ratio = '16-9';
+        }
+
+        $show_badge = !isset($settings['show_badge']) || $settings['show_badge'] === 'yes';
+
+        $price_display_mode = isset($settings['price_display_mode']) ? sanitize_key($settings['price_display_mode']) : '';
+        $allowed_price_modes = array('show', 'hide_zero', 'hide');
+        $legacy_show_price = !isset($settings['show_price']) || $settings['show_price'] === 'yes';
+        $legacy_hide_zero = !isset($settings['hide_price_if_zero']) || $settings['hide_price_if_zero'] === 'yes';
+        if (!in_array($price_display_mode, $allowed_price_modes, true)) {
+            if ($legacy_show_price) {
+                $price_display_mode = $legacy_hide_zero ? 'hide_zero' : 'show';
+            } else {
+                $price_display_mode = 'hide';
+            }
+        }
+
+        $price_prefix = isset($settings['price_prefix']) ? sanitize_text_field((string) $settings['price_prefix']) : __('Tarif :', 'mj-member');
+
+        $show_cta = !isset($settings['show_cta']) || $settings['show_cta'] === 'yes';
+        $cta_label = isset($settings['cta_label']) && $settings['cta_label'] !== '' ? sanitize_text_field((string) $settings['cta_label']) : __("S'inscrire", 'mj-member');
+        $cta_registered_label = isset($settings['cta_registered_label']) && $settings['cta_registered_label'] !== '' ? sanitize_text_field((string) $settings['cta_registered_label']) : __('Déjà inscrit', 'mj-member');
+        if ($cta_label === '') {
+            $cta_label = __("S'inscrire", 'mj-member');
+        }
+        if ($cta_registered_label === '') {
+            $cta_registered_label = __('Déjà inscrit', 'mj-member');
+        }
+        $cta_skin = isset($settings['cta_skin']) ? sanitize_key($settings['cta_skin']) : 'solid';
+        $allowed_cta_skins = array('solid', 'outline', 'text');
+        if (!in_array($cta_skin, $allowed_cta_skins, true)) {
+            $cta_skin = 'solid';
         }
 
         $fallback_url = '';
@@ -731,88 +953,12 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
 
         $type_labels = method_exists('MjEvents_CRUD', 'get_type_labels') ? MjEvents_CRUD::get_type_labels() : array();
 
-        static $styles_printed = false;
-        if (!$styles_printed) {
-            $styles_printed = true;
-            echo '<style>'
-                . '.mj-member-events{display:flex;flex-direction:column;gap:24px;--mj-events-title-color:#0f172a;--mj-events-card-bg:#ffffff;--mj-events-border:#e3e6ea;--mj-events-border-soft:#e2e8f0;--mj-events-card-title:#0f172a;--mj-events-meta:#4b5563;--mj-events-excerpt:#475569;--mj-events-accent:#2563eb;--mj-events-accent-contrast:#ffffff;--mj-events-radius:14px;--mj-events-button-bg:#2563eb;--mj-events-button-hover:#1d4ed8;--mj-events-button-text:#ffffff;--mj-events-button-radius:999px;--mj-events-surface-soft:#f8fafc;}'
-                . '.mj-member-events__title{margin:0;font-size:1.75rem;font-weight:700;color:var(--mj-events-title-color);}'
-                . '.mj-member-events__grid{display:grid;gap:20px;}'
-                . '.mj-member-events__grid.is-grid{grid-template-columns:repeat(auto-fit,minmax(240px,1fr));}'
-                . '.mj-member-events__grid.is-list{grid-template-columns:1fr;}'
-                . '.mj-member-events__item{border:1px solid var(--mj-events-border);border-radius:var(--mj-events-radius);overflow:hidden;background:var(--mj-events-card-bg);display:flex;flex-direction:column;transition:box-shadow 0.2s ease,transform 0.2s ease;}'
-                . '.mj-member-events__item.layout-horizontal{flex-direction:row;}'
-                . '.mj-member-events__item.layout-horizontal .mj-member-events__item-body{flex:1;}'
-                . '.mj-member-events__item.layout-compact{border-radius:calc(var(--mj-events-radius) - 2px);}'
-                . '.mj-member-events__item:hover{box-shadow:0 18px 40px rgba(15,23,42,0.12);transform:translateY(-2px);}'
-                . '.mj-member-events__cover{position:relative;padding-bottom:56%;overflow:hidden;background:var(--mj-events-surface-soft);}'
-                . '.mj-member-events__cover.is-horizontal{flex:0 0 280px;padding-bottom:0;min-height:220px;}'
-                . '.mj-member-events__cover img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;}'
-                . '.mj-member-events__cover.is-horizontal img{position:static;height:100%;}'
-                . '.mj-member-events__item-body{display:flex;flex-direction:column;gap:12px;padding:20px;}'
-                . '.mj-member-events__item.layout-compact .mj-member-events__item-body{padding:16px;gap:8px;}'
-                . '.mj-member-events__item.layout-compact .mj-member-events__meta{font-size:0.85rem;}'
-                . '.mj-member-events__item-title{margin:0;font-size:1.1rem;font-weight:700;color:var(--mj-events-card-title);}'
-                . '.mj-member-events__item-title a{text-decoration:none;color:inherit;}'
-                . '.mj-member-events__item-title a:hover{color:var(--mj-events-accent);}'
-                . '.mj-member-events__meta{font-size:0.9rem;color:var(--mj-events-meta);display:flex;flex-wrap:wrap;gap:8px;}'
-                . '.mj-member-events__excerpt{margin:0;color:var(--mj-events-excerpt);font-size:0.95rem;line-height:1.5;}'
-                . '.mj-member-events__badge{display:inline-flex;align-items:center;gap:6px;background:var(--mj-events-accent);color:var(--mj-events-accent-contrast);font-weight:600;border-radius:999px;padding:4px 10px;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em;}'
-                . '.mj-member-events__price{font-weight:700;color:var(--mj-events-card-title);}'
-                . '.mj-member-events__actions{margin-top:auto;display:flex;flex-direction:column;gap:12px;}'
-                . '.mj-member-events__cta{display:inline-flex;align-items:center;gap:8px;background:var(--mj-events-button-bg);color:var(--mj-events-button-text);border:none;border-radius:var(--mj-events-button-radius);padding:10px 18px;font-weight:600;cursor:pointer;transition:background 0.2s ease,transform 0.2s ease,box-shadow 0.2s ease;}'
-                . '.mj-member-events__cta:hover{background:var(--mj-events-button-hover);transform:translateY(-1px);box-shadow:0 12px 32px rgba(37,99,235,0.25);}'
-                . '.mj-member-events__cta:disabled,.mj-member-events__cta[aria-disabled="true"]{opacity:0.6;cursor:not-allowed;transform:none;box-shadow:none;}'
-                . '.mj-member-events__cta.is-registered{background:#059669;}'
-                . '.mj-member-events__signup{display:none;border:1px solid var(--mj-events-border-soft);border-radius:12px;padding:16px;background:var(--mj-events-surface-soft);}'
-                . '.mj-member-events__signup.is-open{display:block;}'
-                . '.mj-member-events__signup-title{margin:0 0 12px;font-size:0.95rem;font-weight:600;color:var(--mj-events-card-title);}'
-                . '.mj-member-events__signup-options{margin:0 0 16px;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px;}'
-                . '.mj-member-events__signup-option{margin:0;display:flex;align-items:center;gap:12px;}'
-                . '.mj-member-events__signup-label{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--mj-events-card-title);flex:1;}'
-                . '.mj-member-events__signup-radio{width:18px;height:18px;}'
-                . '.mj-member-events__signup-name{font-size:0.95rem;}'
-                . '.mj-member-events__signup-option.is-registered .mj-member-events__signup-label{opacity:0.65;}'
-                . '.mj-member-events__signup-controls{margin-left:auto;display:flex;align-items:center;gap:8px;}'
-                . '.mj-member-events__signup-toggle{background:none;border:1px solid var(--mj-events-border-soft);border-radius:999px;padding:6px 14px;font-size:0.85rem;font-weight:600;color:#b91c1c;cursor:pointer;transition:background 0.2s ease,color 0.2s ease;}'
-                . '.mj-member-events__signup-toggle:hover{background:rgba(185,28,28,0.08);color:#7f1d1d;}'
-                . '.mj-member-events__signup-toggle:disabled{opacity:0.6;cursor:not-allowed;}'
-                . '.mj-member-events__signup-status{font-size:0.8rem;color:#059669;font-weight:600;}'
-                . '.mj-member-events__signup-empty{margin:0 0 12px;font-size:0.9rem;color:var(--mj-events-meta);}'
-                . '.mj-member-events__signup-info{margin:0 0 12px;font-size:0.9rem;font-weight:600;color:var(--mj-events-card-title);}'
-                . '.mj-member-events__signup-note{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}'
-                . '.mj-member-events__signup-note label{font-size:0.9rem;font-weight:600;color:var(--mj-events-card-title);}'
-                . '.mj-member-events__signup-note textarea{min-height:80px;border:1px solid var(--mj-events-border-soft);border-radius:10px;padding:10px 12px;font-size:0.95rem;resize:vertical;background:#ffffff;}'
-                . '.mj-member-events__signup-note textarea:focus{outline:2px solid var(--mj-events-accent);outline-offset:2px;}'
-                . '.mj-member-events__signup-actions{display:flex;align-items:center;gap:12px;}'
-                . '.mj-member-events__signup-submit{display:inline-flex;align-items:center;gap:8px;background:#0f172a;color:#ffffff;border:none;border-radius:10px;padding:10px 18px;font-weight:600;cursor:pointer;transition:background 0.2s ease;}'
-                . '.mj-member-events__signup-submit:hover{background:#1e293b;}'
-                . '.mj-member-events__signup-submit:disabled{opacity:0.6;cursor:not-allowed;}'
-                . '.mj-member-events__signup-cancel{background:none;border:none;color:var(--mj-events-meta);font-weight:600;cursor:pointer;text-decoration:underline;padding:0;}'
-                . '.mj-member-events__signup-feedback{margin-top:12px;font-size:0.85rem;color:var(--mj-events-card-title);}'
-                . '.mj-member-events__signup-feedback.is-error{color:#b91c1c;}'
-                . '.mj-member-events__location-details{display:flex;gap:12px;align-items:flex-start;background:var(--mj-events-surface-soft);border-radius:12px;padding:12px 14px;color:var(--mj-events-card-title);}'
-                . '.mj-member-events__location-thumb{flex:0 0 56px;width:56px;height:56px;border-radius:12px;object-fit:cover;border:1px solid var(--mj-events-border-soft);}'
-                . '.mj-member-events__location-note{margin:0;font-size:0.9rem;line-height:1.5;color:var(--mj-events-meta);}'
-                . '.mj-member-events__map{margin-top:16px;border-radius:12px;overflow:hidden;background:var(--mj-events-surface-soft);box-shadow:0 6px 16px rgba(15,23,42,0.08);}'
-                . '.mj-member-events__map iframe{display:block;width:100%;height:220px;border:0;}'
-                . '.mj-member-events__map-address{margin:12px 16px 0;font-size:0.9rem;color:var(--mj-events-card-title);font-weight:500;}'
-                . '.mj-member-events__map-link{display:inline-block;margin:10px 16px 16px;font-size:0.85rem;font-weight:600;color:var(--mj-events-accent);text-decoration:none;}'
-                . '.mj-member-events__map-link:hover{text-decoration:underline;}'
-                . '.mj-member-events__registrations{margin-top:16px;padding:14px;border:1px solid var(--mj-events-border-soft);border-radius:12px;background:#eef2ff;color:var(--mj-events-card-title);}'
-                . '.mj-member-events__registrations-title{margin:0 0 8px;font-size:0.95rem;font-weight:600;color:#1e293b;}'
-                . '.mj-member-events__registrations-list{margin:0;padding-left:18px;list-style:disc;font-size:0.9rem;color:var(--mj-events-card-title);}'
-                . '.mj-member-events__registrations-list li{margin-bottom:4px;}'
-                . '.mj-member-events__registrations-status{font-size:0.75rem;font-weight:600;color:var(--mj-events-accent);margin-left:6px;text-transform:uppercase;}'
-                . '.mj-member-events__registrations-empty{margin:0;font-size:0.9rem;color:var(--mj-events-meta);}'
-                . '.mj-member-events__feedback{font-size:0.9rem;font-weight:600;color:#059669;}'
-                . '.mj-member-events__feedback.is-error{color:#b91c1c;}'
-                . '.mj-member-events__closed{font-size:0.95rem;font-weight:600;color:#ef4444;}'
-                . '.mj-member-events__empty{margin:0;font-size:0.95rem;color:#6b7280;}'
-                . '</style>';
+        if (function_exists('mj_member_output_events_widget_styles')) {
+            mj_member_output_events_widget_styles();
         }
 
-        echo '<div class="mj-member-events">';
+        $instance_id = wp_unique_id('mj-member-events-');
+        echo '<div class="mj-member-events" data-mj-events-root="' . esc_attr($instance_id) . '">';
         if ($display_title && $title !== '') {
             echo '<h3 class="mj-member-events__title">' . esc_html($title) . '</h3>';
         }
@@ -824,41 +970,8 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         }
 
         wp_enqueue_script('mj-member-events-widget');
-
-        static $script_localized = false;
-        if (!$script_localized) {
-            $script_localized = true;
-            wp_localize_script(
-                'mj-member-events-widget',
-                'mjMemberEventsWidget',
-                array(
-                    'ajaxUrl' => esc_url_raw(admin_url('admin-ajax.php')),
-                    'nonce' => wp_create_nonce('mj-member-event-register'),
-                    'loginUrl' => esc_url_raw(wp_login_url()),
-                    'strings' => array(
-                        'chooseParticipant' => __('Qui participera ?', 'mj-member'),
-                        'confirm' => __('Confirmer l\'inscription', 'mj-member'),
-                        'cancel' => __('Annuler', 'mj-member'),
-                        'loginRequired' => __('Connectez-vous pour continuer.', 'mj-member'),
-                        'selectParticipant' => __('Merci de sélectionner un participant.', 'mj-member'),
-                        'genericError' => __('Une erreur est survenue. Merci de réessayer.', 'mj-member'),
-                        'registered' => __('Inscription envoyée', 'mj-member'),
-                        'success' => __('Inscription enregistrée !', 'mj-member'),
-                        'closed' => __('Inscriptions clôturées', 'mj-member'),
-                        'loading' => __('En cours...', 'mj-member'),
-                        'noParticipant' => __("Aucun profil disponible pour l'instant.", 'mj-member'),
-                        'alreadyRegistered' => __('Déjà inscrit', 'mj-member'),
-                        'allRegistered' => __('Tous les profils sont déjà inscrits pour cet événement.', 'mj-member'),
-                        'noteLabel' => __('Message pour l’équipe (optionnel)', 'mj-member'),
-                        'notePlaceholder' => __('Précisez une remarque utile (allergies, arrivée tardive, etc.).', 'mj-member'),
-                        'cta' => __("S'inscrire", 'mj-member'),
-                        'unregister' => __('Se désinscrire', 'mj-member'),
-                        'unregisterConfirm' => __('Annuler cette inscription ?', 'mj-member'),
-                        'unregisterSuccess' => __('Inscription annulée.', 'mj-member'),
-                        'unregisterError' => __('Impossible d\'annuler l\'inscription.', 'mj-member'),
-                    ),
-                )
-            );
+        if (function_exists('mj_member_ensure_events_widget_localized')) {
+            mj_member_ensure_events_widget_localized();
         }
 
         $grid_classes = array('mj-member-events__grid');
@@ -866,7 +979,14 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         echo '<div class="' . esc_attr(implode(' ', $grid_classes)) . '">';
 
         foreach ($events as $event) {
-            $cover_url = !empty($event['cover_url']) ? esc_url($event['cover_url']) : ($fallback_url ? esc_url($fallback_url) : '');
+            $cover_url = '';
+            if (!empty($event['cover_url'])) {
+                $cover_url = esc_url($event['cover_url']);
+            } elseif (!empty($event['article_cover_url'])) {
+                $cover_url = esc_url($event['article_cover_url']);
+            } elseif ($fallback_url) {
+                $cover_url = esc_url($fallback_url);
+            }
             $resolved_layout = $card_layout;
             if ($resolved_layout === 'horizontal' && $cover_url === '') {
                 $resolved_layout = 'standard';
@@ -879,8 +999,40 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 $type_label = ucfirst($event['type']);
             }
 
-            $date_range = mj_member_format_event_datetime_range($event['start_date'], $event['end_date']);
+            $occurrence_preview = function_exists('mj_member_prepare_event_occurrences_preview')
+                ? mj_member_prepare_event_occurrences_preview(
+                    $event,
+                    array(
+                        'max' => 4,
+                        'include_past' => false,
+                        'fetch_limit' => 12,
+                    )
+                )
+                : array(
+                    'items' => array(),
+                    'next' => null,
+                    'remaining' => 0,
+                    'has_multiple' => false,
+                );
+
+            $occurrence_items = isset($occurrence_preview['items']) && is_array($occurrence_preview['items'])
+                ? $occurrence_preview['items']
+                : array();
+            $occurrence_next = isset($occurrence_preview['next']) && is_array($occurrence_preview['next'])
+                ? $occurrence_preview['next']
+                : null;
+            $occurrence_remaining = isset($occurrence_preview['remaining']) ? (int) $occurrence_preview['remaining'] : 0;
+            $event_has_multiple_occurrences = !empty($occurrence_preview['has_multiple']);
+            $occurrence_next_label = ($occurrence_next && isset($occurrence_next['label'])) ? $occurrence_next['label'] : '';
+
+            $date_range = '';
+            if (!$event_has_multiple_occurrences) {
+                $date_range = mj_member_format_event_datetime_range($event['start_date'], $event['end_date']);
+            }
             $permalink = !empty($event['permalink']) ? esc_url($event['permalink']) : '';
+            if ($permalink === '' && !empty($event['article_permalink'])) {
+                $permalink = esc_url($event['article_permalink']);
+            }
             $deadline_string = isset($event['deadline']) ? trim((string) $event['deadline']) : '';
             $deadline_ts = ($deadline_string !== '' && $deadline_string !== '0000-00-00 00:00:00') ? strtotime($deadline_string) : false;
             $start_ts = !empty($event['start_date']) ? strtotime($event['start_date']) : false;
@@ -946,17 +1098,40 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
 
             $all_participants_registered = !empty($event_participants) && $registered_count === count($event_participants);
 
+            $should_show_cover = $show_cover && $cover_url !== '' && $resolved_layout !== 'compact';
+
             $card_classes = array('mj-member-events__item', 'layout-' . $resolved_layout);
-            $card_classes[] = $cover_url !== '' ? 'has-cover' : 'no-cover';
+            $card_classes[] = $should_show_cover ? 'has-cover' : 'no-cover';
             $card_class_attr = implode(' ', array_map('sanitize_html_class', $card_classes));
+            $location_type_slugs = array();
+            if (!empty($event['location_types']) && is_array($event['location_types'])) {
+                foreach ($event['location_types'] as $type_slug) {
+                    $normalized_slug = sanitize_title($type_slug);
+                    if ($normalized_slug === '') {
+                        continue;
+                    }
+                    $location_type_slugs[] = $normalized_slug;
+                }
+                if (!empty($location_type_slugs)) {
+                    $location_type_slugs = array_values(array_unique($location_type_slugs));
+                }
+            }
 
-            echo '<article class="' . esc_attr($card_class_attr) . '">';
+            $article_attributes = array('class="' . esc_attr($card_class_attr) . '"');
+            if (!empty($location_type_slugs)) {
+                $article_attributes[] = 'data-location-types="' . esc_attr(implode(',', $location_type_slugs)) . '"';
+            }
 
-            $should_show_cover = ($cover_url !== '') && $resolved_layout !== 'compact';
+            echo '<article ' . implode(' ', $article_attributes) . '>';
+
             if ($should_show_cover) {
                 $cover_classes = array('mj-member-events__cover');
                 if ($resolved_layout === 'horizontal') {
                     $cover_classes[] = 'is-horizontal';
+                } else {
+                    if ($cover_ratio !== '16-9') {
+                        $cover_classes[] = 'ratio-' . $cover_ratio;
+                    }
                 }
                 $cover_attr = implode(' ', array_map('sanitize_html_class', $cover_classes));
                 $image_alt = !empty($event['raw_location_name']) ? $event['raw_location_name'] : $event['title'];
@@ -967,14 +1142,17 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
 
             echo '<div class="mj-member-events__item-body">';
 
-            if ($type_label !== '') {
+            if ($show_badge && $type_label !== '') {
                 echo '<span class="mj-member-events__badge">' . esc_html($type_label) . '</span>';
             }
 
+            $heading_tag = $card_title_tag === 'p' ? 'p' : $card_title_tag;
+            $heading_open = '<' . $heading_tag . ' class="mj-member-events__item-title">';
+            $heading_close = '</' . $heading_tag . '>';
             if ($permalink) {
-                echo '<h4 class="mj-member-events__item-title"><a href="' . $permalink . '">' . esc_html($event['title']) . '</a></h4>';
+                echo $heading_open . '<a href="' . $permalink . '">' . esc_html($event['title']) . '</a>' . $heading_close;
             } else {
-                echo '<h4 class="mj-member-events__item-title">' . esc_html($event['title']) . '</h4>';
+                echo $heading_open . esc_html($event['title']) . $heading_close;
             }
 
             $meta_parts = array();
@@ -984,16 +1162,58 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
             if ($show_location && !empty($event['location'])) {
                 $meta_parts[] = $event['location'];
             }
-            if ($show_price) {
-                $price_value = isset($event['price']) ? (float) $event['price'] : 0.0;
+            if ($price_display_mode !== 'hide' && isset($event['price'])) {
+                $price_value = (float) $event['price'];
                 $is_zero_price = abs($price_value) < 0.01;
-                if (!$hide_price_if_zero || !$is_zero_price) {
-                    $meta_parts[] = sprintf(__('Tarif : %s €', 'mj-member'), number_format_i18n($price_value, 2));
+                if (!($price_display_mode === 'hide_zero' && $is_zero_price)) {
+                    $price_string = number_format_i18n($price_value, 2) . ' €';
+                    $prefix_trimmed = trim((string) $price_prefix);
+                    if ($prefix_trimmed !== '') {
+                        $price_string = $prefix_trimmed . ' ' . $price_string;
+                    }
+                    $meta_parts[] = $price_string;
                 }
             }
 
             if (!empty($meta_parts)) {
                 echo '<div class="mj-member-events__meta">' . esc_html(implode(' • ', $meta_parts)) . '</div>';
+            }
+
+            if ($event_has_multiple_occurrences && $occurrence_next_label !== '') {
+                $next_prefix = (!empty($occurrence_next['isToday'])) ? __("Aujourd'hui :", 'mj-member') : __('Prochaine occurrence :', 'mj-member');
+                echo '<p class="mj-member-events__occurrence-next">'
+                    . '<span class="mj-member-events__occurrence-prefix">' . esc_html($next_prefix) . '</span>'
+                    . '<span class="mj-member-events__occurrence-label">' . esc_html($occurrence_next_label) . '</span>'
+                    . '</p>';
+
+                $following_occurrences = array_slice($occurrence_items, 1);
+                if (!empty($following_occurrences) || $occurrence_remaining > 0) {
+                    echo '<ul class="mj-member-events__occurrences" aria-label="' . esc_attr__('Autres occurrences', 'mj-member') . '">';
+                    foreach ($following_occurrences as $following_occurrence) {
+                        if (!is_array($following_occurrence) || empty($following_occurrence['label'])) {
+                            continue;
+                        }
+                        $following_label = $following_occurrence['label'];
+                        $following_prefix = !empty($following_occurrence['isToday']) ? __("Aujourd'hui :", 'mj-member') : __('Ensuite :', 'mj-member');
+                        $following_classes = array('mj-member-events__occurrence');
+                        if (!empty($following_occurrence['isToday'])) {
+                            $following_classes[] = 'is-today';
+                        }
+                        echo '<li class="' . esc_attr(implode(' ', array_map('sanitize_html_class', $following_classes))) . '">'
+                            . '<span class="mj-member-events__occurrence-prefix">' . esc_html($following_prefix) . '</span>'
+                            . '<span class="mj-member-events__occurrence-label">' . esc_html($following_label) . '</span>'
+                            . '</li>';
+                    }
+
+                    if ($occurrence_remaining > 0) {
+                        $remaining_label = sprintf(_n('+ %d autre date', '+ %d autres dates', $occurrence_remaining, 'mj-member'), $occurrence_remaining);
+                        echo '<li class="mj-member-events__occurrence mj-member-events__occurrence--more">'
+                            . '<span class="mj-member-events__occurrence-label">' . esc_html($remaining_label) . '</span>'
+                            . '</li>';
+                    }
+
+                    echo '</ul>';
+                }
             }
 
             $display_excerpt = $show_description && !empty($event['excerpt']);
@@ -1002,6 +1222,10 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
             }
             if ($display_excerpt) {
                 echo '<p class="mj-member-events__excerpt">' . esc_html($event['excerpt']) . '</p>';
+            }
+
+            if ($permalink) {
+                echo '<a class="mj-member-events__detail-link" href="' . $permalink . '">' . esc_html__('Détail de l\'événement', 'mj-member') . '</a>';
             }
 
             $location_detail_notes = isset($event['location_description']) ? trim((string) $event['location_description']) : '';
@@ -1095,70 +1319,82 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 echo '</div>';
             }
 
-            echo '<div class="mj-member-events__actions">';
-            if ($registration_open) {
-                $button_label = __("S'inscrire", 'mj-member');
-                $button_attrs = array(
-                    'type' => 'button',
-                    'class' => 'mj-member-events__cta',
-                    'data-event-id' => (int) $event['id'],
-                );
-                $aria_label_text = $event['title'] !== ''
-                    ? sprintf(__("S'inscrire à %s", 'mj-member'), $event['title'])
-                    : __("S'inscrire à l'événement", 'mj-member');
-                $button_attrs['aria-label'] = $aria_label_text;
-
-                if ($is_user_logged_in) {
-                    $registration_payload = array(
-                        'eventId' => (int) $event['id'],
-                        'eventTitle' => $event['title'],
-                        'participants' => $event_participants,
-                        'allRegistered' => $all_participants_registered,
-                        'hasParticipants' => !empty($event_participants),
-                        'hasAvailableParticipants' => ($available_count > 0),
-                        'noteMaxLength' => 400,
+            $should_render_actions = ($show_cta && $registration_open) || !$registration_open;
+            if ($should_render_actions) {
+                echo '<div class="mj-member-events__actions">';
+                if ($registration_open && $show_cta) {
+                    $button_classes = array('mj-member-events__cta', 'is-skin-' . $cta_skin);
+                    $button_attrs = array(
+                        'type' => 'button',
+                        'class' => implode(' ', array_map('sanitize_html_class', $button_classes)),
+                        'data-event-id' => (int) $event['id'],
+                        'data-cta-label' => $cta_label,
+                        'data-cta-registered-label' => $cta_registered_label,
                     );
-                    if ($deadline_ts) {
-                        $registration_payload['deadline'] = gmdate('c', $deadline_ts);
+
+                    if ($event['title'] !== '') {
+                        if ($cta_label === __("S'inscrire", 'mj-member')) {
+                            $button_attrs['aria-label'] = sprintf(__("S'inscrire à %s", 'mj-member'), $event['title']);
+                        } else {
+                            $button_attrs['aria-label'] = $cta_label . ' – ' . $event['title'];
+                        }
+                    } else {
+                        $button_attrs['aria-label'] = $cta_label;
                     }
-                    $registration_payload_json = wp_json_encode($registration_payload);
-                    if (!is_string($registration_payload_json)) {
-                        $registration_payload_json = wp_json_encode(
-                            array(
-                                'eventId' => (int) $event['id'],
-                                'participants' => array(),
-                            )
+
+                    if ($is_user_logged_in) {
+                        $registration_payload = array(
+                            'eventId' => (int) $event['id'],
+                            'eventTitle' => $event['title'],
+                            'participants' => $event_participants,
+                            'allRegistered' => $all_participants_registered,
+                            'hasParticipants' => !empty($event_participants),
+                            'hasAvailableParticipants' => ($available_count > 0),
+                            'noteMaxLength' => 400,
                         );
+                        if ($deadline_ts) {
+                            $registration_payload['deadline'] = gmdate('c', $deadline_ts);
+                        }
+                        $registration_payload_json = wp_json_encode($registration_payload);
+                        if (!is_string($registration_payload_json)) {
+                            $registration_payload_json = wp_json_encode(
+                                array(
+                                    'eventId' => (int) $event['id'],
+                                    'participants' => array(),
+                                )
+                            );
+                        }
+                        if (!is_string($registration_payload_json)) {
+                            $registration_payload_json = '{}';
+                        }
+                        $button_attrs['data-registration'] = $registration_payload_json;
+                    } else {
+                        $button_attrs['data-requires-login'] = '1';
                     }
-                    if (!is_string($registration_payload_json)) {
-                        $registration_payload_json = '{}';
-                    }
-                    $button_attrs['data-registration'] = $registration_payload_json;
-                } else {
-                    $button_attrs['data-requires-login'] = '1';
-                }
 
-                $attr_fragments = array();
-                foreach ($button_attrs as $attr_key => $attr_value) {
-                    if (!is_scalar($attr_value)) {
-                        continue;
+                    $attr_fragments = array();
+                    foreach ($button_attrs as $attr_key => $attr_value) {
+                        if (!is_scalar($attr_value)) {
+                            continue;
+                        }
+                        $attr_fragments[] = $attr_key . '="' . esc_attr((string) $attr_value) . '"';
                     }
-                    $attr_fragments[] = $attr_key . '="' . esc_attr((string) $attr_value) . '"';
-                }
 
-                echo '<button ' . implode(' ', $attr_fragments) . '>' . esc_html($button_label) . '</button>';
-            } else {
-                echo '<span class="mj-member-events__closed">' . esc_html__('Inscriptions clôturées', 'mj-member') . '</span>';
+                    echo '<button ' . implode(' ', $attr_fragments) . '>' . esc_html($cta_label) . '</button>';
+                    echo '<div class="mj-member-events__signup" hidden></div>';
+                    echo '<div class="mj-member-events__feedback" aria-live="polite"></div>';
+                } elseif (!$registration_open) {
+                    echo '<span class="mj-member-events__closed">' . esc_html__('Inscriptions clôturées', 'mj-member') . '</span>';
+                }
+                echo '</div>';
             }
-            echo '<div class="mj-member-events__signup" hidden></div>';
-            echo '<div class="mj-member-events__feedback" aria-live="polite"></div>';
-            echo '</div>';
 
             echo '</div>';
             echo '</article>';
         }
 
         echo '</div>';
+        echo '<p class="mj-member-events__filtered-empty" hidden>' . esc_html__('Aucun événement ne correspond à ce filtre.', 'mj-member') . '</p>';
         echo '</div>';
     }
 }

@@ -3,6 +3,7 @@ jQuery(document).ready(function($) {
     const roleLabels = typeof mjMembers.roleLabels === 'object' && mjMembers.roleLabels !== null ? mjMembers.roleLabels : {};
     const statusLabels = typeof mjMembers.statusLabels === 'object' && mjMembers.statusLabels !== null ? mjMembers.statusLabels : { active: 'Actif', inactive: 'Inactif' };
     const photoConsentLabels = typeof mjMembers.photoConsentLabels === 'object' && mjMembers.photoConsentLabels !== null ? mjMembers.photoConsentLabels : { 1: 'Accepté', 0: 'Refusé' };
+    const labels = typeof mjMembers.labels === 'object' && mjMembers.labels !== null ? mjMembers.labels : {};
 
     function escapeHtml(value) {
         return $('<div>').text(value == null ? '' : value).html();
@@ -10,6 +11,66 @@ jQuery(document).ready(function($) {
 
     function normalizeValue(value) {
         return value == null ? '' : String(value);
+    }
+
+    function getLabel(key, fallback) {
+        if (Object.prototype.hasOwnProperty.call(labels, key)) {
+            const value = labels[key];
+            return value == null ? fallback : String(value);
+        }
+        return fallback;
+    }
+
+    function parseBooleanFlag(value) {
+        const normalized = normalizeValue(value).toLowerCase();
+        return !(normalized === '' || normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'non');
+    }
+
+    function formatIsoDateDisplay(value) {
+        const normalized = normalizeValue(value);
+        if (normalized === '') {
+            return '';
+        }
+
+        const isoCandidate = normalized.slice(0, 10);
+        const parts = isoCandidate.split('-');
+        if (parts.length === 3) {
+            const year = parts[0];
+            const month = parts[1];
+            const day = parts[2];
+            if (year.length === 4) {
+                return day.padStart(2, '0') + '/' + month.padStart(2, '0') + '/' + year;
+            }
+        }
+
+        return normalized;
+    }
+
+    function formatPaymentDateDisplay(value, requiresPayment) {
+        if (!requiresPayment) {
+            return escapeHtml(getLabel('paymentNotRequired', 'Non concerné'));
+        }
+
+        const normalized = normalizeValue(value);
+        if (normalized === '') {
+            return escapeHtml(getLabel('paymentNone', 'Aucun paiement'));
+        }
+
+        return escapeHtml(formatIsoDateDisplay(normalized));
+    }
+
+    function updatePaymentMetaAppearance($cell, requiresPayment, normalizedValue) {
+        if (!requiresPayment) {
+            $cell.addClass('mj-payment-meta-value--muted');
+            return;
+        }
+
+        const normalized = normalizeValue(normalizedValue);
+        if (normalized === '') {
+            $cell.addClass('mj-payment-meta-value--muted');
+        } else {
+            $cell.removeClass('mj-payment-meta-value--muted');
+        }
     }
 
     function formatRoleBadge(role) {
@@ -54,6 +115,8 @@ jQuery(document).ready(function($) {
                 return formatPhotoConsentBadge(normalized);
             case 'email':
                 return formatEmailLink(normalized);
+            case 'date_last_payement':
+                return formatPaymentDateDisplay(normalized, true);
             case 'birth_date':
                 if (normalized === '') {
                     return '<span style="color:#999;">—</span>';
@@ -187,8 +250,21 @@ jQuery(document).ready(function($) {
             if (response && response.success) {
                 const serverValue = response.data && typeof response.data.value !== 'undefined' ? response.data.value : fieldValue;
                 const normalized = normalizeValue(serverValue);
-                const displayHtml = getDisplayHtml(fieldName, normalized);
+                let displayHtml = getDisplayHtml(fieldName, normalized);
+                let requiresPaymentFlag = null;
+
+                if (fieldName === 'date_last_payement') {
+                    const requiresAttr = $cell.attr('data-requires-payment');
+                    requiresPaymentFlag = requiresAttr === undefined ? true : parseBooleanFlag(requiresAttr);
+                    displayHtml = formatPaymentDateDisplay(normalized, requiresPaymentFlag);
+                }
+
                 restoreEditableCell($cell, memberId, fieldName, displayHtml, normalized);
+
+                if (fieldName === 'date_last_payement') {
+                    updatePaymentMetaAppearance($cell, requiresPaymentFlag === null ? true : requiresPaymentFlag, normalized);
+                }
+
                 showNotice('Mise à jour réussie', 'success');
             } else {
                 const message = response && response.data && response.data.message ? response.data.message : 'Erreur inconnue';

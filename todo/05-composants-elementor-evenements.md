@@ -1,0 +1,31 @@
+# 5. Composants Elementor Evenements
+
+- [x] Ajouter un widget Elementor pour lister les evenements actifs (vue liste).
+    - [x] Parametres: type(s) d'evenement, type (stage, soirée, sortie), nombre max, tri (date debut DESC), affichage grille ou liste.
+    - [x] Utiliser la cover comme visuel, fallback si absent.
+    - [x] Propose différents layout d'affichage (des évènements)
+- [x] Bouton "S'inscrire" conditionnel integre au widget liste.
+    - [x] Cache automatiquement si la date de fin d'inscription est depassee.
+    - [x] Si utilisateur connecte: ouvrir un panneau permettant de choisir un jeune associe ou soi-meme.
+    - [x] Si non connecte: afficher le composant modal de connexion.
+    - [x] Si un membre s'est déjà inscrit affiche le dans la partie "Qui participera ?"
+    - [x] Ajoute un champs de texte "note" pour que la personne s'inscrive communique. 
+    - [x] Ajoute un bouton pour se désinscrire (fait un genre de bouton on/off pour chaque membre)
+            (La note Message pour l’équipe (optionnel) concerne chaque membre)
+    - [x] Ajoute un carte interactive (google map) pour montrer ou se trouve l'évenement. 
+    - [x] ajoute la description du lieu et l'image en petit
+    - [x] quand on est Animateur on peut voir les inscrit 
+    - [x] Ajouter un champ "Parent autoriser" sur l'event et permetre l'inscription du tuteur sur cette condition.
+    - [x] Ajouter dans les paramètres du composant Elementor "widget event liste" plus d'option sur l'apparence (bouton, titre, tarifs (on/off/si 0 off), layout,...).
+- [x] Ajouter un widget Elementor "Calendrier des evenements" affichant les evenements par date.
+    - [x] Navigation mensuelle et mise en avant du prochain evenement.
+    - [x] Synchroniser les filtres (type, statut) avec le widget liste.
+    - [x] Ajouter sur le calendrier la photo de l'event en tout petit. 
+    - [x] Ajouter dans les paramètres du composant Elementor Calendrier plus d'option sur l'apparence.
+    - [x] Ajouter sur le calendrier "onclick event > modal box > avec tout les détails (description, titre,maps, s'inscrire)"
+    - [x] Retirer l'option Mettre en avant le prochain évènement
+    - [x] Mettre dans une autre couleur la date d'aujourd'hui.
+- [x] Ajouter un widget Elementor "Lieux MJ" sous forme de carte google maps listant les lieux partenaires.
+    - [x] Afficher la cover en tout petit sur le marker google maps quand on click on vois le détailt : cover (légèrement plus grand), adresse, infos pratiques.
+    - [x] Options d'affichage: grille, slider ou carte interactive.
+- [x] Assurer la compatibilite responsive et l'utilisation des couleurs globales Elementor.

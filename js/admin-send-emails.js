@@ -1,5 +1,6 @@
 (function ($) {
     const fieldId = 'mj_email_content';
+    const smsFieldId = 'mj-sms-body';
     let editorReady = false;
     let pendingContent = null;
     let isSending = false;
@@ -39,6 +40,31 @@
         pendingContent = content;
         if (editorReady) {
             applyContentToEditor(content);
+        }
+    }
+
+    function setSmsContent(value) {
+        const textarea = document.getElementById(smsFieldId);
+        if (!textarea) {
+            return;
+        }
+        textarea.value = value || '';
+    }
+
+    function updateSmsFieldsetVisibility() {
+        const fieldset = document.getElementById('mj-sms-fieldset');
+        const checkbox = document.getElementById('mj-channel-sms');
+        const textarea = document.getElementById(smsFieldId);
+
+        if (!fieldset || !checkbox) {
+            return;
+        }
+
+        const isActive = checkbox.checked;
+        fieldset.classList.toggle('mj-hidden', !isActive);
+
+        if (textarea) {
+            textarea.disabled = !isActive;
         }
     }
 
@@ -437,6 +463,10 @@
                     if (typeof data.content === 'string') {
                         updateEditorContent(data.content);
                     }
+
+                    if (typeof data.sms_content === 'string') {
+                        setSmsContent(data.sms_content);
+                    }
                 }).fail(function () {
                     window.alert(mjSendEmails.errorLoadTemplate);
                 }).always(function () {
@@ -536,5 +566,11 @@
                 handlePrepareError($summary, getLocalized('prepareError'), enableForm);
             });
         });
+
+        const smsChannel = document.getElementById('mj-channel-sms');
+        if (smsChannel) {
+            smsChannel.addEventListener('change', updateSmsFieldsetVisibility);
+            updateSmsFieldsetVisibility();
+        }
     });
 })(window.jQuery);

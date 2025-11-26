@@ -863,3 +863,55 @@ if (!function_exists('mj_member_ajax_update_child_profile')) {
 
     add_action('wp_ajax_mj_member_update_child_profile', 'mj_member_ajax_update_child_profile');
 }
+
+if (!function_exists('mj_member_ajax_update_notification_preferences')) {
+    function mj_member_ajax_update_notification_preferences() {
+        if (!is_user_logged_in()) {
+            wp_send_json_error(array('message' => __('Vous devez être connecté pour modifier vos notifications.', 'mj-member')), 403);
+        }
+
+        $nonce = isset($_POST['nonce']) ? sanitize_text_field(wp_unslash($_POST['nonce'])) : '';
+        if ($nonce === '' || !wp_verify_nonce($nonce, 'mj_member_update_notification_preferences')) {
+            wp_send_json_error(array('message' => __('La vérification de sécurité a échoué. Merci de réessayer.', 'mj-member')), 400);
+        }
+
+        $preferences_raw = isset($_POST['preferences']) ? wp_unslash($_POST['preferences']) : array();
+        $preferences_data = array();
+
+        if (is_array($preferences_raw)) {
+            $preferences_data = $preferences_raw;
+        } elseif (is_string($preferences_raw) && $preferences_raw !== '') {
+            $decoded = json_decode($preferences_raw, true);
+            if (is_array($decoded)) {
+                $preferences_data = $decoded;
+            }
+        }
+
+        $member = mj_member_get_current_member();
+        if (!$member) {
+            wp_send_json_error(array('message' => __('Votre profil MJ est introuvable.', 'mj-member')), 404);
+        }
+
+        $updated = MjMembers_CRUD::updateNotificationPreferences($member->id, $preferences_data);
+        if ($updated === false) {
+            wp_send_json_error(array('message' => __('Impossible d’enregistrer vos préférences pour le moment.', 'mj-member')), 500);
+        }
+
+        $sms_opt_in = false;
+        foreach ($updated as $key => $value) {
+            if (strpos((string) $key, 'sms_') === 0 && !empty($value)) {
+                $sms_opt_in = true;
+                break;
+            }
+        }
+
+        wp_send_json_success(array(
+            'preferences' => $updated,
+            'newsletter_opt_in' => !empty($updated['email_event_news']),
+            'sms_opt_in' => $sms_opt_in,
+            'message' => __('Vos préférences de notification ont été enregistrées.', 'mj-member'),
+        ));
+    }
+
+    add_action('wp_ajax_mj_member_update_notification_preferences', 'mj_member_ajax_update_notification_preferences');
+}

@@ -1,8 +1,10 @@
 <?php
 
-require_once plugin_dir_path(__FILE__) . 'classes/MjMembers_List_Table.php';
+require_once plugin_dir_path(__FILE__) . 'classes/table/MjMembers_List_Table.php';
 
 $table = new MjMembers_List_Table();
+
+$notice = isset($_GET['mj_member_notice']) ? sanitize_key($_GET['mj_member_notice']) : '';
 
 // Gérer l'enregistrement des préférences de colonnes
 if (isset($_POST['mj_save_columns'])) {
@@ -16,7 +18,7 @@ if (isset($_POST['mj_save_columns'])) {
     $visible_columns = isset($_POST['mj_columns']) ? (array) $_POST['mj_columns'] : array();
     
     // Nettoyer et valider les colonnes
-    $valid_columns = array('photo', 'last_name', 'first_name', 'age', 'role', 'email', 'login', 'phone', 'guardian', 'requires_payment', 'status', 'date_last_payement', 'payment_status', 'photo_usage_consent', 'date_inscription', 'actions');
+    $valid_columns = array('photo', 'last_name', 'first_name', 'age', 'role', 'email', 'login', 'phone', 'guardian', 'requires_payment', 'status', 'payment_status', 'detail', 'photo_usage_consent', 'date_inscription', 'actions');
     $visible_columns = array_intersect($visible_columns, $valid_columns);
     
     // Sauvegarder les préférences
@@ -29,20 +31,14 @@ $table->process_bulk_action();
 // Maintenant préparer et afficher les éléments
 $table->prepare_items();
 
-// Gestion de la suppression simple
-if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])) {
-    if (!isset($_GET['nonce']) || !wp_verify_nonce($_GET['nonce'], 'mj_delete_nonce')) {
-        wp_die('Accès non autorisé');
-    }
-    
-    MjMembers_CRUD::delete(intval($_GET['id']));
-    wp_redirect(admin_url('admin.php?page=mj_members'));
-    exit;
-}
-
 ?>
 
 <div class="mj-members-container">
+    <?php if ($notice === 'deleted') : ?>
+        <div class="notice notice-success is-dismissible">
+            <p><?php esc_html_e('Le membre a bien ete supprime.', 'mj-member'); ?></p>
+        </div>
+    <?php endif; ?>
     <div style="margin-bottom: 20px;">
         <a href="<?php echo add_query_arg(array('page' => 'mj_members', 'action' => 'add')); ?>" class="button button-primary">
             ➕ Ajouter un membre

@@ -460,10 +460,9 @@ class MjMembers_List_Table extends WP_List_Table {
         $chips[] = $this->buildDetailRoleChip($item);
         $chips[] = $this->buildDetailStatusChip($item);
 
-        $age_data = $this->getAgeData($item);
-        if ($age_data['age'] !== null) {
-            $age_label = sprintf(_n('%d an', '%d ans', $age_data['age'], 'mj-member'), $age_data['age']);
-            $chips[] = '<span class="mj-detail-chip">' . esc_html($age_label) . '</span>';
+        $age_chip = $this->buildDetailAgeChip($item);
+        if ($age_chip !== '') {
+            $chips[] = $age_chip;
         }
 
         if (!empty($chips)) {
@@ -1092,6 +1091,55 @@ class MjMembers_List_Table extends WP_List_Table {
         return '<span' . $attr_html . '>' . esc_html($label) . '</span>';
     }
 
+    private function buildDetailAgeChip($item) {
+        $member_id = isset($item->id) ? (int) $item->id : 0;
+        $age_data = $this->getAgeData($item);
+
+        $has_birth_date = ($age_data['iso'] !== '');
+
+        $label_parts = array();
+        if ($age_data['age'] !== null) {
+            $label_parts[] = sprintf(_n('%d an', '%d ans', $age_data['age'], 'mj-member'), $age_data['age']);
+        }
+        if ($age_data['formatted'] !== '') {
+            $label_parts[] = $age_data['formatted'];
+        }
+
+        if (empty($label_parts)) {
+            $display = __('Définir la date de naissance', 'mj-member');
+        } else {
+            $display = implode(' - ', $label_parts);
+        }
+
+        $classes = array('mj-editable', 'mj-detail-chip', 'mj-detail-chip--interactive', 'mj-detail-chip--age');
+        if (!$has_birth_date) {
+            $classes[] = 'mj-detail-chip--empty';
+        }
+
+        $attributes = array(
+            'class'            => implode(' ', $classes),
+            'data-member-id'   => (string) $member_id,
+            'data-field-name'  => 'birth_date',
+            'data-field-type'  => 'date',
+            'data-field-value' => $age_data['iso'],
+            'title'            => __('Cliquez pour éditer', 'mj-member'),
+        );
+
+        if (!$has_birth_date) {
+            $attributes['data-field-value'] = '';
+        }
+
+        $attr_html = '';
+        foreach ($attributes as $attr_name => $attr_value) {
+            if ($attr_value === '') {
+                continue;
+            }
+            $attr_html .= ' ' . $attr_name . '="' . esc_attr($attr_value) . '"';
+        }
+
+        return '<span' . $attr_html . '>' . esc_html($display) . '</span>';
+    }
+
     private function buildDetailContactEntry($item, $field, $icon) {
         $member_id = isset($item->id) ? (int) $item->id : 0;
         $raw_value = isset($item->$field) ? trim((string) $item->$field) : '';
@@ -1183,7 +1231,7 @@ class MjMembers_List_Table extends WP_List_Table {
         $payment_meta = $this->getPaymentStatusMeta($item);
         $summary_items[] = $this->buildSummaryChip(
             '💶',
-            sprintf(esc_html__('Paiement : %s', 'mj-member'), $payment_meta['label']),
+            sprintf(esc_html__('Cotisation : %s', 'mj-member'), $payment_meta['label']),
             $payment_meta['modifier']
         );
 
@@ -1331,6 +1379,8 @@ class MjMembers_List_Table extends WP_List_Table {
                 return 'Jeune';
             case MjMembers_CRUD::ROLE_ANIMATEUR:
                 return 'Animateur';
+            case MjMembers_CRUD::ROLE_COORDINATEUR:
+                return 'Coordinateur';
             case MjMembers_CRUD::ROLE_BENEVOLE:
                 return 'Bénévole';
             case MjMembers_CRUD::ROLE_TUTEUR:

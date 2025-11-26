@@ -1,6 +1,10 @@
 <?php
 
 class MjSms extends MjTools {
+    public static function is_test_mode_enabled() {
+        return get_option('mj_sms_test_mode', '0') === '1';
+    }
+
     /**
      * Build placeholder map for a member using the email helper.
      *
@@ -165,6 +169,14 @@ class MjSms extends MjTools {
 
         $result['phones'] = $phones;
 
+        if (self::is_test_mode_enabled()) {
+            $result['success'] = true;
+            $result['test_mode'] = true;
+            $result['message'] = __('Mode test SMS actif : envoi simulé (aucun SMS sortant).', 'mj-member');
+            do_action('mj_member_sms_simulated', $phones, $message, $member, $context, $result);
+            return $result;
+        }
+
         /**
          * Permet aux extensions de gérer l'envoi de SMS.
          * Retour attendu :
@@ -212,4 +224,80 @@ class MjSms extends MjTools {
 
         return $result;
     }
+
+    public static function filter_default_gateway($gateway_response, $phones, $message, $member, $context) {
+        if ($gateway_response !== null) {
+            return $gateway_response;
+        }
+
+        if (!is_array($phones) || empty($phones)) {
+            return $gateway_response;
+        }
+
+        $provider = get_option('mj_sms_provider', 'disabled');
+        if ($provider === 'disabled') {
+            return new WP_Error('mj_sms_disabled', __('Aucun fournisseur SMS n’est configuré.', 'mj-member'));
+        }
+
+        if ($provider === 'textbelt') {
+            $api_key = trim((string) get_option('mj_sms_textbelt_api_key', ''));
+            if ($api_key === '') {
+                return new WP_Error('mj_sms_missing_key', __('La clé API Textbelt est manquante.', 'mj-member'));
+            }
+
+            $success = true;
+            $errors = array();
+
+            foreach ($phones as $phone) {
+                $response = wp_remote_post('https://textbelt.com/text', array(
+                    'timeout' => 15,
+                    'body' => array(
+                        'phone' => $phone,
+                        'message' => $message,
+                        'key' => $api_key,
+                    ),
+                ));
+
+                if (is_wp_error($response)) {
+                    $success = false;
+                    $errors[] = $response->get_error_message();
+                    continue;
+                }
+
+                $code = wp_remote_retrieve_response_code($response);
+                $body = wp_remote_retrieve_body($response);
+                $parsed = json_decode($body, true);
+
+                if ($code !== 200 || !is_array($parsed) || empty($parsed['success'])) {
+                    $success = false;
+                    if (is_array($parsed) && !empty($parsed['error'])) {
+                        $errors[] = (string) $parsed['error'];
+                    } else {
+                        $errors[] = sprintf(__('Erreur %d renvoyée par Textbelt.', 'mj-member'), $code);
+                    }
+                }
+            }
+
+            if ($success) {
+                return array(
+                    'success' => true,
+                    'message' => __('SMS envoyé via Textbelt.', 'mj-member'),
+                );
+            }
+
+            $errors = array_filter(array_unique($errors));
+            $error_message = !empty($errors)
+                ? implode(' ', $errors)
+                : __('Impossible d’envoyer le SMS via Textbelt.', 'mj-member');
+
+            return array(
+                'success' => false,
+                'error' => $error_message,
+            );
+        }
+
+        return $gateway_response;
+    }
 }
+
+add_filter('mj_member_sms_send', array('MjSms', 'filter_default_gateway'), 10, 4);

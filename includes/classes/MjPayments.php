@@ -5,77 +5,138 @@ class MjPayments extends MjTools {
      * Créer une session de paiement Stripe avec QR code
      * SÉCURITÉ: Ne retourne QUE les données sûres pour le frontend
      */
-    public static function create_stripe_payment($member_id, $amount = null) {
+    public static function create_stripe_payment($member_id, $amount = null, array $options = array()) {
         global $wpdb;
-        
-        // Charger le membre
+
         $member = MjMembers_CRUD::getById($member_id);
         if (!$member) {
             return false;
         }
-        
-        // Determine amount from configuration if not provided
+
         if (is_null($amount)) {
-            $amount = (float)get_option('mj_annual_fee', '2.00');
+            $amount = (float) get_option('mj_annual_fee', '2.00');
         } else {
-            $amount = (float)$amount;
+            $amount = (float) $amount;
         }
+
+        $context_type = isset($options['context']) ? sanitize_key($options['context']) : 'membership';
+        if ($context_type === '') {
+            $context_type = 'membership';
+        }
+
+        $event_id = isset($options['event_id']) ? (int) $options['event_id'] : 0;
+        $registration_id = isset($options['registration_id']) ? (int) $options['registration_id'] : 0;
+        $payer_id = isset($options['payer_id']) ? (int) $options['payer_id'] : 0;
+
+        $event = null;
+        if ($context_type === 'event') {
+            if (!empty($options['event']) && is_object($options['event'])) {
+                $event = $options['event'];
+            } elseif ($event_id > 0 && class_exists('MjEvents_CRUD')) {
+                $event = MjEvents_CRUD::find($event_id);
+            }
+        }
+
+        $member_name = self::format_member_name($member);
+        $product_name = 'Cotisation annuelle MJ Péry';
+        $product_description = 'Membership - ' . sanitize_text_field($member_name);
+
+        if ($context_type === 'event' && $event) {
+            $event_title = isset($event->title) ? sanitize_text_field($event->title) : 'Evenement';
+            $product_name = 'Evenement MJ - ' . $event_title;
+            $product_description = 'Inscription evenement #' . ($event_id > 0 ? $event_id : (isset($event->id) ? (int) $event->id : 0));
+        }
+
+        $metadata = array(
+            'payment_context' => $context_type,
+        );
+
+        if ($context_type === 'event') {
+            if ($event_id > 0) {
+                $metadata['event_id'] = $event_id;
+            } elseif ($event && !empty($event->id)) {
+                $metadata['event_id'] = (int) $event->id;
+            }
+            if ($registration_id > 0) {
+                $metadata['registration_id'] = $registration_id;
+            }
+        }
+
         $table = $wpdb->prefix . 'mj_payments';
         $token = wp_generate_password(24, false, false);
         $now = current_time('mysql');
-        
-        // Créer une session Stripe Checkout (la clé secrète est gérée en interne)
-        $checkout_session = self::create_checkout_session($member, $amount);
+
+        $checkout_session = self::create_checkout_session(
+            $member,
+            $amount,
+            array(
+                'product_name' => $product_name,
+                'product_description' => $product_description,
+                'metadata' => $metadata,
+                'success_query' => ($context_type === 'event' && ($event_id > 0 || $registration_id > 0)) ? array(
+                    'mj_event_id' => max(0, $event_id),
+                    'mj_registration_id' => max(0, $registration_id),
+                ) : array(),
+                'cancel_query' => ($context_type === 'event' && ($event_id > 0 || $registration_id > 0)) ? array(
+                    'mj_event_id' => max(0, $event_id),
+                    'mj_registration_id' => max(0, $registration_id),
+                ) : array(),
+            )
+        );
+
         if (!$checkout_session) {
             return false;
         }
-        
-        // Enregistrer le paiement en base de données
-        $wpdb->insert($table, array(
-            'member_id' => intval($member_id),
-            'amount' => number_format((float)$amount, 2, '.', ''),
-            'status' => 'pending',
-            'token' => $token,
-            'external_ref' => $checkout_session['id'], // Session ID de Stripe
-            'created_at' => $now
-        ), array('%d', '%f', '%s', '%s', '%s', '%s'));
-        
-        $payment_id = $wpdb->insert_id;
+
+        $wpdb->insert(
+            $table,
+            array(
+                'member_id' => (int) $member_id,
+                'payer_id' => $payer_id > 0 ? $payer_id : 0,
+                'event_id' => $event_id > 0 ? $event_id : 0,
+                'registration_id' => $registration_id > 0 ? $registration_id : 0,
+                'amount' => number_format((float) $amount, 2, '.', ''),
+                'status' => 'pending',
+                'token' => $token,
+                'external_ref' => $checkout_session['id'],
+                'context' => $context_type,
+                'created_at' => $now,
+            ),
+            array('%d', '%d', '%d', '%d', '%f', '%s', '%s', '%s', '%s')
+        );
+
+        $payment_id = (int) $wpdb->insert_id;
         if (!$payment_id) {
             return false;
         }
-        
-        // Générer le QR code avec l'URL de la session Stripe
+
         $qr_url = self::generate_qr_code($checkout_session['url']);
-        
-        // SÉCURITÉ: Retourner SEULEMENT les champs sûrs pour le frontend
+
         return array(
             'payment_id' => $payment_id,
             'token' => $token,
             'stripe_session_id' => $checkout_session['id'],
             'checkout_url' => $checkout_session['url'],
             'qr_url' => $qr_url,
-            'amount' => number_format((float)$amount, 2)
-            // NOTE: Ne jamais inclure mj_stripe_secret_key ou toute information sensible
+            'amount' => number_format((float) $amount, 2),
         );
     }
-    
 
     /**
      * Créer une session Stripe Checkout
      */
-    private static function create_checkout_session($member, $amount = null) {
+    private static function create_checkout_session($member, $amount = null, array $options = array()) {
         if (is_null($amount)) {
-            $amount = (float)get_option('mj_annual_fee', '2.00');
+            $amount = (float) get_option('mj_annual_fee', '2.00');
         } else {
-            $amount = (float)$amount;
+            $amount = (float) $amount;
         }
         $secret_key = self::get_secret_key_safely();
         if (empty($secret_key)) {
-            error_log('MjPayments: Clé secrète Stripe manquante');
+            error_log('MjPayments: Cle secrete Stripe manquante');
             return false;
         }
-        
+
         $member_name = self::format_member_name($member);
         $guardian = self::get_guardian_member($member);
 
@@ -83,7 +144,12 @@ class MjPayments extends MjTools {
         $guardian_email = ($guardian && !empty($guardian->email) && is_email($guardian->email)) ? $guardian->email : null;
         $primary_email = $member_email ?: $guardian_email;
 
-        // Construire les données pour la requête Stripe
+        $product_name = isset($options['product_name']) ? sanitize_text_field($options['product_name']) : 'Cotisation annuelle MJ Péry';
+        $product_description = isset($options['product_description']) ? sanitize_text_field($options['product_description']) : 'Membership - ' . sanitize_text_field($member_name);
+
+        $extra_metadata = (!empty($options['metadata']) && is_array($options['metadata'])) ? $options['metadata'] : array();
+        $context_logged = isset($extra_metadata['payment_context']) ? $extra_metadata['payment_context'] : 'membership';
+
         $success_page_id = (int) get_option('mj_stripe_success_page', 0);
         $success_base = '';
         if ($success_page_id > 0) {
@@ -98,13 +164,20 @@ class MjPayments extends MjTools {
         }
         $success_base = apply_filters('mj_member_stripe_success_redirect_base', $success_base, $member, $amount);
         $success_base_clean = esc_url_raw($success_base);
-        $success_url = add_query_arg(
-            array(
-                'stripe_success' => '1',
-                'session_id' => '{CHECKOUT_SESSION_ID}',
-            ),
-            $success_base_clean
+
+        $success_params = array(
+            'stripe_success' => '1',
+            'session_id' => '{CHECKOUT_SESSION_ID}',
         );
+        if (!empty($options['success_query']) && is_array($options['success_query'])) {
+            foreach ($options['success_query'] as $key => $value) {
+                if ($value === null || $value === '') {
+                    continue;
+                }
+                $success_params[sanitize_key($key)] = $value;
+            }
+        }
+        $success_url = add_query_arg($success_params, $success_base_clean);
         $success_url = str_replace(array('%7B', '%7D'), array('{', '}'), $success_url);
 
         $cancel_page_id = (int) get_option('mj_stripe_cancel_page', 0);
@@ -121,21 +194,28 @@ class MjPayments extends MjTools {
         }
         $cancel_base = apply_filters('mj_member_stripe_cancel_redirect_base', $cancel_base, $member, $amount);
         $cancel_base_clean = esc_url_raw($cancel_base);
-        $cancel_url = add_query_arg(
-            array(
-                'stripe_cancel' => '1',
-                'session_id' => '{CHECKOUT_SESSION_ID}',
-            ),
-            $cancel_base_clean
+
+        $cancel_params = array(
+            'stripe_cancel' => '1',
+            'session_id' => '{CHECKOUT_SESSION_ID}',
         );
+        if (!empty($options['cancel_query']) && is_array($options['cancel_query'])) {
+            foreach ($options['cancel_query'] as $key => $value) {
+                if ($value === null || $value === '') {
+                    continue;
+                }
+                $cancel_params[sanitize_key($key)] = $value;
+            }
+        }
+        $cancel_url = add_query_arg($cancel_params, $cancel_base_clean);
         $cancel_url = str_replace(array('%7B', '%7D'), array('{', '}'), $cancel_url);
 
         $data = array(
             'payment_method_types[]' => 'card',
             'line_items[0][price_data][currency]' => 'eur',
-            'line_items[0][price_data][unit_amount]' => intval($amount * 100), // Convertir en centimes
-            'line_items[0][price_data][product_data][name]' => 'Cotisation annuelle MJ Péry',
-            'line_items[0][price_data][product_data][description]' => 'Membership - ' . sanitize_text_field($member_name),
+            'line_items[0][price_data][unit_amount]' => intval($amount * 100),
+            'line_items[0][price_data][product_data][name]' => $product_name,
+            'line_items[0][price_data][product_data][description]' => $product_description,
             'line_items[0][quantity]' => '1',
             'mode' => 'payment',
             'success_url' => $success_url,
@@ -153,31 +233,46 @@ class MjPayments extends MjTools {
             $data['metadata[guardian_id]'] = (int) $guardian->id;
             $data['metadata[guardian_email]'] = $guardian_email;
         }
-        
-        // Faire l'appel API à Stripe
+
+        if (!empty($extra_metadata)) {
+            foreach ($extra_metadata as $meta_key => $meta_value) {
+                $meta_key = sanitize_key($meta_key);
+                if ($meta_key === '' || isset($data['metadata[' . $meta_key . ']'])) {
+                    continue;
+                }
+                if (is_scalar($meta_value)) {
+                    $data['metadata[' . $meta_key . ']'] = (string) $meta_value;
+                } else {
+                    $data['metadata[' . $meta_key . ']'] = wp_json_encode($meta_value);
+                }
+            }
+        }
+
         $response = self::stripe_api_call('POST', 'https://api.stripe.com/v1/checkout/sessions', $data, $secret_key);
-        
+
         if (!$response || isset($response['error'])) {
             error_log('MjPayments: Erreur API Stripe - ' . json_encode($response));
             self::log_stripe_event('checkout.session.create.error', array(
                 'member_id' => (int) $member->id,
                 'amount' => number_format((float) $amount, 2, '.', ''),
-                'error' => isset($response['error']) ? $response['error'] : 'unknown_error'
+                'error' => isset($response['error']) ? $response['error'] : 'unknown_error',
+                'context' => $context_logged,
             ));
             return false;
         }
-        
+
         self::log_stripe_event('checkout.session.created', array(
             'member_id' => (int) $member->id,
             'amount' => number_format((float) $amount, 2, '.', ''),
             'session_id' => isset($response['id']) ? $response['id'] : '',
             'success_redirect' => $success_base_clean,
-            'cancel_redirect' => $cancel_base_clean
+            'cancel_redirect' => $cancel_base_clean,
+            'context' => $context_logged,
         ));
-        
+
         return array(
             'id' => $response['id'],
-            'url' => $response['url']
+            'url' => $response['url'],
         );
     }
     
@@ -256,13 +351,11 @@ class MjPayments extends MjTools {
     }
     
     /**
-     * Générer un QR code via l'API Google ou Stripe
+     * Générer un QR code via un service public.
      */
     private static function generate_qr_code($url) {
-        // Utiliser l'API Google Chart pour générer un QR code
-        // Stripe fournit aussi des QR codes mais nous utilisons Google pour la simplicité
         $qr_text = rawurlencode($url);
-        return "https://chart.googleapis.com/chart?cht=qr&chs=300x300&chl={$qr_text}&chld=L|1";
+        return "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={$qr_text}&format=png&ecc=M&margin=0";
     }
     
     /**
@@ -301,11 +394,7 @@ class MjPayments extends MjTools {
         if (!$member) return false;
 
         $confirm_url = add_query_arg(array('mj_payment_confirm' => $token), site_url('/'));
-        $qr_text = rawurlencode($confirm_url);
-        /**
-         * @TODO utiliser l'api de Stripe pour générer le QR code
-         */
-        $qr_url = "https://chart.googleapis.com/chart?cht=qr&chs=300x300&chl={$qr_text}&chld=L|1";
+        $qr_url = self::generate_qr_code($confirm_url);
 
         return array(
             'payment_id' => $payment_id,
@@ -356,8 +445,7 @@ class MjPayments extends MjTools {
         } else {
             // Sinon, utiliser la méthode simple
             $confirm_url = add_query_arg(array('mj_payment_confirm' => $token), site_url('/'));
-            $qr_text = rawurlencode($confirm_url);
-            $qr_url = "https://chart.googleapis.com/chart?cht=qr&chs=300x300&chl={$qr_text}&chld=L|1";
+            $qr_url = self::generate_qr_code($confirm_url);
             $checkout_url = $confirm_url;
         }
 
@@ -468,6 +556,228 @@ class MjPayments extends MjTools {
         }
 
         return $cache[$guardian_id] ?: null;
+    }
+
+    private static function normalize_datetime_value($value) {
+        if ($value instanceof DateTimeInterface) {
+            return $value->getTimestamp();
+        }
+
+        $raw = (string) $value;
+        if ($raw === '' || $raw === '0000-00-00 00:00:00') {
+            return null;
+        }
+
+        $timestamp = strtotime($raw);
+        return $timestamp ?: null;
+    }
+
+    private static function format_context_label($context) {
+        switch ($context) {
+            case 'event':
+            case 'event_registration':
+                return __('Inscription événement', 'mj-member');
+            case 'membership':
+            case 'membership_renewal':
+                return __('Cotisation MJ Péry', 'mj-member');
+            case 'donation':
+                return __('Don MJ Péry', 'mj-member');
+            default:
+                $context = str_replace('_', ' ', (string) $context);
+                return ucfirst($context);
+        }
+    }
+
+    private static function format_status_label($status) {
+        switch ($status) {
+            case 'paid':
+            case 'succeeded':
+            case 'completed':
+                return __('Paiement confirmé', 'mj-member');
+            case 'pending':
+            case 'requires_payment_method':
+            case 'requires_action':
+                return __('Paiement en cours de confirmation', 'mj-member');
+            case 'canceled':
+            case 'cancelled':
+                return __('Paiement annulé', 'mj-member');
+            case 'failed':
+            case 'requires_payment_method_failed':
+                return __('Paiement échoué', 'mj-member');
+            default:
+                return __('Statut en attente de confirmation', 'mj-member');
+        }
+    }
+
+    private static function get_currency_symbol($payment_row) {
+        $default_symbol = '€';
+        return apply_filters('mj_member_payment_currency_symbol', $default_symbol, $payment_row);
+    }
+
+    /**
+     * Retourne un résumé prêt pour l'affichage côté frontend après un retour Stripe.
+     *
+     * @param string $session_id
+     * @param array<string,string> $args
+     * @return array<string,mixed>|null
+     */
+    public static function get_payment_summary_by_session($session_id, $args = array()) {
+        if (!is_string($session_id)) {
+            return null;
+        }
+
+        $session_id = sanitize_text_field($session_id);
+        if ($session_id === '') {
+            return null;
+        }
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'mj_payments';
+
+        $payment = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE external_ref = %s", $session_id));
+        if (!$payment) {
+            return null;
+        }
+
+        $amount = isset($payment->amount) ? (float) $payment->amount : 0.0;
+        $status = isset($payment->status) ? sanitize_key($payment->status) : 'pending';
+        $context = isset($payment->context) ? sanitize_key($payment->context) : 'membership';
+
+        $date_format = isset($args['date_format']) && $args['date_format'] !== '' ? $args['date_format'] : get_option('date_format', 'd/m/Y');
+        $time_format = isset($args['time_format']) && $args['time_format'] !== '' ? $args['time_format'] : get_option('time_format', 'H:i');
+
+        $created_ts = self::normalize_datetime_value(isset($payment->created_at) ? $payment->created_at : null);
+        $paid_ts = self::normalize_datetime_value(isset($payment->paid_at) ? $payment->paid_at : null);
+        $reference_ts = $paid_ts ?: $created_ts;
+
+        $date_display = $reference_ts ? wp_date($date_format, $reference_ts) : '';
+        $time_display = $reference_ts ? wp_date($time_format, $reference_ts) : '';
+        if ($date_display !== '' && $time_display !== '') {
+            $datetime_display = sprintf(__('Le %1$s à %2$s', 'mj-member'), $date_display, $time_display);
+        } else {
+            $datetime_display = $date_display !== '' ? $date_display : $time_display;
+        }
+
+        $member_data = array(
+            'id' => isset($payment->member_id) ? (int) $payment->member_id : 0,
+            'name' => '',
+            'role' => '',
+            'email' => '',
+        );
+
+        if ($member_data['id'] > 0 && class_exists('MjMembers_CRUD')) {
+            $member_obj = MjMembers_CRUD::getById($member_data['id']);
+            if ($member_obj) {
+                $member_data['name'] = self::format_member_name($member_obj);
+                $member_data['role'] = isset($member_obj->role) ? sanitize_key($member_obj->role) : '';
+                $member_email = isset($member_obj->email) ? sanitize_email($member_obj->email) : '';
+                if ($member_email !== '') {
+                    $member_data['email'] = $member_email;
+                }
+            }
+        }
+
+        $payer_data = null;
+        if (!empty($payment->payer_id) && class_exists('MjMembers_CRUD')) {
+            $payer_obj = MjMembers_CRUD::getById((int) $payment->payer_id);
+            if ($payer_obj) {
+                $payer_email = isset($payer_obj->email) ? sanitize_email($payer_obj->email) : '';
+                $payer_data = array(
+                    'id' => (int) $payment->payer_id,
+                    'name' => self::format_member_name($payer_obj),
+                    'email' => $payer_email,
+                );
+            }
+        }
+
+        $event_data = null;
+        if (!empty($payment->event_id) && class_exists('MjEvents_CRUD')) {
+            $event_obj = MjEvents_CRUD::find((int) $payment->event_id);
+            if ($event_obj) {
+                $event_start_ts = self::normalize_datetime_value(isset($event_obj->date_debut) ? $event_obj->date_debut : null);
+                $event_end_ts = self::normalize_datetime_value(isset($event_obj->date_fin) ? $event_obj->date_fin : null);
+
+                $event_date_range = '';
+                if ($event_start_ts && $event_end_ts) {
+                    $same_day = wp_date('Y-m-d', $event_start_ts) === wp_date('Y-m-d', $event_end_ts);
+                    if ($same_day) {
+                        $event_date_range = sprintf(__('Le %s', 'mj-member'), wp_date($date_format, $event_start_ts));
+                    } else {
+                        $event_date_range = sprintf(
+                            __('Du %1$s au %2$s', 'mj-member'),
+                            wp_date($date_format, $event_start_ts),
+                            wp_date($date_format, $event_end_ts)
+                        );
+                    }
+                } elseif ($event_start_ts) {
+                    $event_date_range = sprintf(__('Le %s', 'mj-member'), wp_date($date_format, $event_start_ts));
+                } elseif ($event_end_ts) {
+                    $event_date_range = sprintf(__('Le %s', 'mj-member'), wp_date($date_format, $event_end_ts));
+                }
+
+                $event_data = array(
+                    'id' => (int) $payment->event_id,
+                    'title' => isset($event_obj->title) ? sanitize_text_field($event_obj->title) : '',
+                    'start_timestamp' => $event_start_ts,
+                    'end_timestamp' => $event_end_ts,
+                    'date_range' => $event_date_range,
+                );
+            }
+        }
+
+        $registration_data = null;
+        if (!empty($payment->registration_id) && class_exists('MjEventRegistrations')) {
+            $registration_obj = MjEventRegistrations::get((int) $payment->registration_id);
+            if ($registration_obj) {
+                $status_key = isset($registration_obj->statut) ? sanitize_key($registration_obj->statut) : '';
+                $status_label = '';
+                if (method_exists('MjEventRegistrations', 'get_status_labels')) {
+                    $labels = MjEventRegistrations::get_status_labels();
+                    if (isset($labels[$status_key])) {
+                        $status_label = sanitize_text_field($labels[$status_key]);
+                    }
+                }
+
+                $registration_data = array(
+                    'id' => (int) $payment->registration_id,
+                    'status' => $status_key,
+                    'status_label' => $status_label,
+                );
+            }
+        }
+
+        $currency_symbol = self::get_currency_symbol($payment);
+        $amount_display = number_format_i18n($amount, 2);
+        if ($currency_symbol !== '') {
+            $amount_display .= ' ' . $currency_symbol;
+        }
+
+        $summary = array(
+            'session_id' => $session_id,
+            'status' => $status,
+            'status_label' => self::format_status_label($status),
+            'is_paid' => in_array($status, array('paid', 'succeeded', 'completed'), true),
+            'amount' => $amount,
+            'amount_display' => $amount_display,
+            'currency_symbol' => $currency_symbol,
+            'context' => $context,
+            'context_label' => self::format_context_label($context),
+            'created_timestamp' => $created_ts,
+            'created_at' => $created_ts ? wp_date('c', $created_ts) : null,
+            'paid_timestamp' => $paid_ts,
+            'paid_at' => $paid_ts ? wp_date('c', $paid_ts) : null,
+            'date_display' => $date_display,
+            'time_display' => $time_display,
+            'datetime_display' => $datetime_display,
+            'member' => $member_data,
+            'payer' => $payer_data,
+            'event' => $event_data,
+            'registration' => $registration_data,
+            'event_id' => isset($payment->event_id) ? (int) $payment->event_id : 0,
+            'registration_id' => isset($payment->registration_id) ? (int) $payment->registration_id : 0,
+        );
+
+        return apply_filters('mj_member_payment_success_summary', $summary, $payment, $session_id);
     }
 
     public static function collect_contact_emails($member) {
