@@ -459,25 +459,42 @@ class MjPayments extends MjTools {
         $html .= '<p>Si vous préférez, vous pouvez aussi confirmer le paiement en cliquant sur ce lien : <a href="' . esc_url($checkout_url) . '">' . esc_url($checkout_url) . '</a></p>';
         $html .= '<p>Merci,<br/>MJ Péry</p>';
 
-        $message = MjMail::getContainer($html);
-
         // Envoyer à la fois au jeune et au tuteur s'ils sont disponibles
-        $to = self::collect_contact_emails($member);
-
-        $headers = array('Content-Type: text/html; charset=UTF-8');
-
-        if (empty($to)) {
+        $recipients = self::collect_contact_emails($member);
+        if (empty($recipients)) {
             return false;
         }
 
-        $all_ok = true;
-        foreach ($to as $recipient) {
-            if (!wp_mail($recipient, $subject, $message, $headers)) {
-                $all_ok = false;
-            }
+        $mail_context = array(
+            'recipients' => $recipients,
+            'include_guardian' => true,
+            'payment_link' => $checkout_url,
+            'payment_qr_url' => $qr_url,
+            'payment_amount' => $amount,
+        );
+
+        $qr_block = '';
+        if (!empty($qr_url)) {
+            $qr_block = '<p><img src="' . esc_url($qr_url) . '" alt="QR code de paiement" style="max-width:260px;border:0" /></p>';
         }
 
-        return $all_ok ? $payment_id : false;
+        $sent = MjMail::send_notification_to_emails('payment_request', $recipients, array(
+            'member' => $member,
+            'context' => $mail_context,
+            'placeholders' => array(
+                '{{checkout_url}}' => $checkout_url,
+                '{{payment_checkout_url}}' => $checkout_url,
+                '{{payment_qr_url}}' => $qr_url,
+                '{{payment_qr_block}}' => $qr_block,
+            ),
+            'fallback_subject' => $subject,
+            'fallback_body' => $html,
+            'content_type' => 'text/html',
+            'wrap_html' => true,
+            'log_source' => 'payment_request',
+        ));
+
+        return $sent ? $payment_id : false;
     }
 
     /**

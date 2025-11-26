@@ -7,10 +7,11 @@ function mj_email_templates_page() {
     // Handle save
     if (isset($_POST['mj_save_template']) && check_admin_referer('mj_save_template_nonce')) {
         $id = isset($_POST['template_id']) ? intval($_POST['template_id']) : 0;
-        $slug = sanitize_title($_POST['template_slug']);
-        $subject = sanitize_text_field($_POST['template_subject']);
-        $content = wp_kses_post($_POST['template_content']);
-        $sms_content = isset($_POST['template_sms_content']) ? sanitize_textarea_field($_POST['template_sms_content']) : '';
+        $slug = isset($_POST['template_slug']) ? sanitize_title(wp_unslash($_POST['template_slug'])) : '';
+        $subject = isset($_POST['template_subject']) ? sanitize_text_field(wp_unslash($_POST['template_subject'])) : '';
+        $content = isset($_POST['template_content']) ? wp_kses_post(wp_unslash($_POST['template_content'])) : '';
+        $sms_raw = isset($_POST['template_sms_content']) ? wp_unslash($_POST['template_sms_content']) : '';
+        $sms_content = is_string($sms_raw) ? sanitize_textarea_field($sms_raw) : '';
 
         if ($id > 0) {
             $wpdb->update(
@@ -105,34 +106,121 @@ function mj_email_templates_page() {
                             <?php
                             $content = $editing ? $template->content : '';
                             $sms_content_value = $editing ? (isset($template->sms_content) ? (string) $template->sms_content : '') : '';
-                            // Helper: list of available placeholders
                             ?>
-                            <div style="margin-bottom:8px; padding:8px; background:#fff8e1; border:1px solid #ffe08a; border-radius:4px;">
-                                <strong>Variables disponibles :</strong>
-                                <div style="margin-top:6px;">
-                                    <strong>Membre</strong><br>
-                                    <code>{{member_first_name}}</code> <code>{{member_last_name}}</code> <code>{{member_full_name}}</code> <code>{{member_email}}</code> <code>{{member_phone}}</code> <code>{{member_role}}</code>
-                                    <br>
-                                    <strong>Tuteur</strong><br>
-                                    <code>{{guardian_first_name}}</code> <code>{{guardian_last_name}}</code> <code>{{guardian_full_name}}</code> <code>{{guardian_email}}</code>
-                                    <br>
-                                    <strong>Paiement</strong><br>
-                                    <code>{{payment_amount}}</code> <code>{{payment_amount_raw}}</code> <code>{{payment_link}}</code> <code>{{payment_qr_url}}</code> <code>{{payment_reference}}</code> <code>{{payment_last_date}}</code> <code>{{payment_date}}</code>
-                                    <br>
-                                    <strong>Paiements multiples</strong><br>
-                                    <code>{{children_payment_table}}</code> <code>{{children_payment_list}}</code> <code>{{children_payment_list_plain}}</code> <code>{{children_payment_total}}</code> <code>{{children_payment_total_raw}}</code> <code>{{children_payment_count}}</code>
-                                    <br>
-                                    <strong>Divers</strong><br>
-                                    <code>{{date_inscription}}</code> <code>{{site_name}}</code> <code>{{site_url}}</code> <code>{{today}}</code>
-                                    <br>
-                                    <code>{{tutor_nom}}</code> <code>{{tutor_prenom}}</code> <code>{{tutor_email}}</code>
-                                    <code>{{date_last_payement}}</code>
+                            <div class="mj-template-editor-wrapper" style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
+                                <div class="mj-template-editor-main" style="flex:1 1 480px; min-width:280px;">
+                                    <?php
+                                    wp_editor($content, 'template_content', array('textarea_name' => 'template_content', 'textarea_rows' => 10));
+                                    ?>
                                 </div>
-                                <div style="margin-top:6px; color:#555; font-size:12px;">Exemple : <em>Bonjour {{jeune_prenom}} {{jeune_nom}},</em></div>
+                                <aside class="mj-template-variables-wrapper" data-collapsed="0" style="flex:0 0 660px; max-width:660px; background:#fff8e1; border:1px solid #ffe08a; border-radius:6px; padding:12px; position:relative;">
+                                    <div class="mj-template-variables__header" style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px;">
+                                        <strong style="margin:0;">Variables disponibles</strong>
+                                        <button type="button" class="button mj-template-variables__toggle" aria-expanded="true">Masquer</button>
+                                    </div>
+                                    <div class="mj-template-variables__content" style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px;">
+                                        <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">
+                                            <strong style="display:block; margin-bottom:6px;">Membre</strong>
+                                            <ul style="margin:0; padding:0; list-style:none;">
+                                                <li><code>{{member_first_name}}</code> – Prénom du membre</li>
+                                                <li><code>{{member_last_name}}</code> – Nom du membre</li>
+                                                <li><code>{{member_full_name}}</code> – Nom complet</li>
+                                                <li><code>{{member_email}}</code> – Email principal</li>
+                                                <li><code>{{member_phone}}</code> – Téléphone principal</li>
+                                                <li><code>{{member_role}}</code> – Rôle MJ (jeune, tuteur…)</li>
+                                            </ul>
+                                        </div>
+                                        <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">
+                                            <strong style="display:block; margin-bottom:6px;">Tuteur</strong>
+                                            <ul style="margin:0; padding:0; list-style:none;">
+                                                <li><code>{{guardian_first_name}}</code> – Prénom du tuteur</li>
+                                                <li><code>{{guardian_last_name}}</code> – Nom du tuteur</li>
+                                                <li><code>{{guardian_full_name}}</code> – Nom complet</li>
+                                                <li><code>{{guardian_email}}</code> – Email de contact</li>
+                                                <li><code>{{guardian_summary_plain}}</code> – Résumé texte</li>
+                                                <li><code>{{guardian_summary_html}}</code> – Résumé mis en forme</li>
+                                            </ul>
+                                        </div>
+                                        <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">
+                                            <strong style="display:block; margin-bottom:6px;">Paiement</strong>
+                                            <ul style="margin:0; padding:0; list-style:none;">
+                                                <li><code>{{payment_amount}}</code> – Montant formaté (ex : 20,00)</li>
+                                                <li><code>{{payment_amount_raw}}</code> – Montant brut (ex : 20)</li>
+                                                <li><code>{{payment_link}}</code> – Lien de paiement</li>
+                                                <li><code>{{payment_checkout_url}}</code> – URL complète de paiement</li>
+                                                <li><code>{{payment_qr_url}}</code> – URL vers le QR code</li>
+                                                <li><code>{{payment_qr_block}}</code> – Bloc HTML du QR code</li>
+                                                <li><code>{{payment_reference}}</code> – Référence interne</li>
+                                                <li><code>{{payment_date}}</code> – Date de paiement</li>
+                                                <li><code>{{payment_last_date}}</code> – Dernier paiement enregistré</li>
+                                                <li><code>{{cash_payment_note}}</code> – Message de paiement en espèces</li>
+                                            </ul>
+                                        </div>
+                                        <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">
+                                            <strong style="display:block; margin-bottom:6px;">Paiements multiples</strong>
+                                            <ul style="margin:0; padding:0; list-style:none;">
+                                                <li><code>{{children_payment_table}}</code> – Tableau HTML des paiements</li>
+                                                <li><code>{{children_payment_list}}</code> – Liste HTML</li>
+                                                <li><code>{{children_payment_list_plain}}</code> – Liste texte</li>
+                                                <li><code>{{children_payment_total}}</code> – Total formaté</li>
+                                                <li><code>{{children_payment_total_raw}}</code> – Total brut</li>
+                                                <li><code>{{children_payment_count}}</code> – Nombre de paiements</li>
+                                            </ul>
+                                        </div>
+                                        <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">
+                                            <strong style="display:block; margin-bottom:6px;">Événement</strong>
+                                            <ul style="margin:0; padding:0; list-style:none;">
+                                                <li><code>{{event_title}}</code> – Titre de l'événement</li>
+                                                <li><code>{{event_dates}}</code> – Dates formatées</li>
+                                                <li><code>{{capacity_total}}</code> – Capacité totale</li>
+                                                <li><code>{{active_registrations}}</code> – Inscriptions actives</li>
+                                                <li><code>{{remaining_slots}}</code> – Places restantes</li>
+                                                <li><code>{{threshold}}</code> – Seuil d'alerte</li>
+                                                <li><code>{{event_admin_url}}</code> – URL d'administration</li>
+                                                <li><code>{{event_admin_link}}</code> – Lien HTML vers l'événement</li>
+                                                <li><code>{{event_details_list}}</code> – Liste HTML des détails</li>
+                                            </ul>
+                                        </div>
+                                        <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">
+                                            <strong style="display:block; margin-bottom:6px;">Inscriptions</strong>
+                                            <ul style="margin:0; padding:0; list-style:none;">
+                                                <li><code>{{registration_type}}</code> – Code du type (guardian/member)</li>
+                                                <li><code>{{registration_type_label}}</code> – Libellé lisible</li>
+                                                <li><code>{{registration_status}}</code> – Statut</li>
+                                                <li><code>{{registration_created_at}}</code> – Date de création</li>
+                                                <li><code>{{registration_notes}}</code> – Notes internes</li>
+                                                <li><code>{{participant_name}}</code> – Nom du participant</li>
+                                                <li><code>{{animateurs_list}}</code> – Animateurs référents</li>
+                                                <li><code>{{is_waitlist}}</code> – "1" si liste d'attente</li>
+                                                <li><code>{{is_promotion}}</code> – "1" si promotion</li>
+                                            </ul>
+                                        </div>
+                                        <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">
+                                            <strong style="display:block; margin-bottom:6px;">Participants</strong>
+                                            <ul style="margin:0; padding:0; list-style:none;">
+                                                <li><code>{{children_list}}</code> – Liste texte des jeunes</li>
+                                                <li><code>{{children_list_html}}</code> – Liste HTML des jeunes</li>
+                                                <li><code>{{member_contact_plain}}</code> – Coordonnées membre (texte)</li>
+                                                <li><code>{{member_contact_html}}</code> – Coordonnées membre (HTML)</li>
+                                            </ul>
+                                        </div>
+                                        <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">
+                                            <strong style="display:block; margin-bottom:6px;">Divers</strong>
+                                            <ul style="margin:0; padding:0; list-style:none;">
+                                                <li><code>{{date_inscription}}</code> – Date d'inscription</li>
+                                                <li><code>{{site_name}}</code> – Nom du site</li>
+                                                <li><code>{{site_url}}</code> – Adresse du site</li>
+                                                <li><code>{{today}}</code> – Date du jour</li>
+                                                <li><code>{{audience}}</code> – Public visé (admin, member…)</li>
+                                                <li><code>{{tutor_nom}}</code> – Nom tuteur (legacy)</li>
+                                                <li><code>{{tutor_prenom}}</code> – Prénom tuteur (legacy)</li>
+                                                <li><code>{{tutor_email}}</code> – Email tuteur (legacy)</li>
+                                                <li><code>{{date_last_payement}}</code> – Dernier paiement (legacy)</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </aside>
                             </div>
-                            <?php
-                            wp_editor($content, 'template_content', array('textarea_name'=>'template_content','textarea_rows'=>10));
-                            ?>
                     </p>
                     <p>
                         <label>Contenu SMS (texte court, sans mise en forme)</label><br>
@@ -144,6 +232,56 @@ function mj_email_templates_page() {
                         <a class="button" href="<?php echo esc_url(remove_query_arg(array('action','id'))); ?>">Retour à la liste</a>
                     </p>
                 </form>
+                <?php
+                static $mj_template_editor_assets_printed = false;
+                if (!$mj_template_editor_assets_printed) {
+                    $mj_template_editor_assets_printed = true;
+                    ?>
+                    <style>
+                        .mj-template-variables-wrapper.is-collapsed {
+                            flex: 0 0 180px !important;
+                            max-width: 180px !important;
+                            padding-right: 12px;
+                        }
+
+                        .mj-template-variables-wrapper.is-collapsed .mj-template-variables__content {
+                            display: none !important;
+                        }
+
+                        .mj-template-variables-wrapper.is-collapsed .mj-template-variables__header {
+                            margin-bottom: 0;
+                        }
+
+                        .mj-template-variables__toggle.button {
+                            white-space: nowrap;
+                        }
+
+                        @media (max-width: 720px) {
+                            .mj-template-variables-wrapper[data-collapsed="0"] .mj-template-variables__content {
+                                grid-template-columns: 1fr;
+                            }
+                        }
+                    </style>
+                    <script>
+                        document.addEventListener('DOMContentLoaded', function () {
+                            var toggleButtons = document.querySelectorAll('.mj-template-variables__toggle');
+                            toggleButtons.forEach(function (button) {
+                                button.addEventListener('click', function () {
+                                    var wrapper = button.closest('.mj-template-variables-wrapper');
+                                    if (!wrapper) {
+                                        return;
+                                    }
+                                    wrapper.classList.toggle('is-collapsed');
+                                    var collapsed = wrapper.classList.contains('is-collapsed');
+                                    button.textContent = collapsed ? 'Afficher' : 'Masquer';
+                                    button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+                                });
+                            });
+                        });
+                    </script>
+                    <?php
+                }
+                ?>
             </div>
         <?php endif; ?>
     </div>

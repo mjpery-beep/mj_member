@@ -314,23 +314,82 @@ HTML
 {{cash_payment_note}}
 HTML
         ),
+        'event_capacity_alert' => array(
+            'subject' => 'MJ Péry – Alerte capacité pour {{event_title}}',
+            'content' => <<<'HTML'
+<p>Bonjour,</p>
+<p>Le seuil de notification est atteint pour l'événement <strong>{{event_title}}</strong>.</p>
+{{event_details_list}}
+{{event_admin_link}}
+<p>Pensez à vérifier la liste d'attente et à prévenir votre équipe si nécessaire.</p>
+<p>— MJ Péry</p>
+HTML
+            ,
+            'sms' => 'Alerte MJ Péry : {{event_title}} compte {{active_registrations}} inscrits sur {{capacity_total}} (reste {{remaining_slots}}).',
+        ),
+        'registration_admin_notification' => array(
+            'subject' => 'MJ Péry – Nouvelle inscription en ligne',
+            'content' => <<<'HTML'
+<p>Bonjour,</p>
+<p>Une nouvelle inscription vient d'être envoyée depuis le site.</p>
+<p><strong>Type :</strong> {{registration_type_label}}</p>
+{{guardian_summary_html}}
+{{member_contact_html}}
+<h3>Participants</h3>
+{{children_list_html}}
+<p><strong>Résumé texte :</strong></p>
+<pre style="background:#f7f7f7;padding:12px;border-radius:6px;">{{children_list}}</pre>
+<p>— MJ Péry</p>
+HTML
+            ,
+            'sms' => 'MJ Péry : nouvelle inscription ({{registration_type_label}}). Participants : {{children_list}}.',
+        ),
+        'payment_request' => array(
+            'subject' => 'MJ Péry – Paiement à compléter pour {{member_full_name}}',
+            'content' => <<<'HTML'
+<p>Bonjour {{member_first_name}},</p>
+<p>Merci de finaliser la cotisation de <strong>{{payment_amount}} €</strong>.</p>
+{{payment_button}}
+<p>Vous pouvez également utiliser ce lien sécurisé : <a href="{{payment_checkout_url}}">{{payment_checkout_url}}</a></p>
+{{payment_qr_block}}
+{{cash_payment_note}}
+<p>— MJ Péry</p>
+HTML
+            ,
+            'sms' => 'MJ Péry : merci de régler {{payment_amount}} € pour {{member_full_name}} via {{payment_checkout_url}}.',
+        ),
     );
 
     foreach ($templates as $slug => $data) {
-        $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM $table WHERE slug = %s", $slug));
-        if ($exists) {
+        $existing = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE slug = %s", $slug));
+        if ($existing) {
+            $updates = array();
+            $formats = array();
+
+            if (isset($data['sms']) && (!isset($existing->sms_content) || $existing->sms_content === '')) {
+                $updates['sms_content'] = $data['sms'];
+                $formats[] = '%s';
+            }
+
+            if (!empty($updates)) {
+                $wpdb->update($table, $updates, array('id' => (int) $existing->id), $formats, array('%d'));
+            }
             continue;
         }
 
-        $wpdb->insert(
-            $table,
-            array(
-                'slug' => $slug,
-                'subject' => $data['subject'],
-                'content' => $data['content'],
-            ),
-            array('%s', '%s', '%s')
+        $insert_data = array(
+            'slug' => $slug,
+            'subject' => isset($data['subject']) ? $data['subject'] : '',
+            'content' => isset($data['content']) ? $data['content'] : '',
         );
+        $insert_formats = array('%s', '%s', '%s');
+
+        if (isset($data['sms'])) {
+            $insert_data['sms_content'] = $data['sms'];
+            $insert_formats[] = '%s';
+        }
+
+        $wpdb->insert($table, $insert_data, $insert_formats);
     }
 }
 add_action('init', 'mj_member_seed_email_templates', 15);

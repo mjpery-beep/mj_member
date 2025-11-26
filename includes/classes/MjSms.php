@@ -244,7 +244,7 @@ class MjSms extends MjTools {
         return $result;
     }
 
-    public static function filter_default_gateway($gateway_response, $phones, $message, $member, $context) {
+    public static function filter_default_gateway($gateway_response, $phones, $message, $member, $context = array()) {
         if ($gateway_response !== null) {
             return $gateway_response;
         }
@@ -394,4 +394,4 @@ class MjSms extends MjTools {
     }
 }
 
-add_filter('mj_member_sms_send', array('MjSms', 'filter_default_gateway'), 10, 4);
+add_filter('mj_member_sms_send', array('MjSms', 'filter_default_gateway'), 10, 5);

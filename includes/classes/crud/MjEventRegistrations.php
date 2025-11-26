@@ -911,26 +911,40 @@ class MjEventRegistrations {
             $message_lines[] = 'Dates: ' . $event_dates;
         }
 
+        $remaining_slots = max(0, $capacity_total - $active_after);
         $message_lines[] = 'Capacite totale: ' . $capacity_total;
         $message_lines[] = 'Inscriptions actives: ' . $active_after;
-        $message_lines[] = 'Places restantes estimees: ' . max(0, $capacity_total - $active_after);
+        $message_lines[] = 'Places restantes estimees: ' . $remaining_slots;
         if (!empty($event->capacity_waitlist)) {
             $message_lines[] = 'Limite liste d\'attente: ' . (int) $event->capacity_waitlist;
         }
 
-        $message_lines[] = '';
-        $message_lines[] = 'Pensee: verifier la liste d\'attente et preparer une communication au besoin.';
+        $admin_url = '';
         if (!empty($event->id)) {
-            $message_lines[] = 'Gestion: ' . add_query_arg(
+            $admin_url = add_query_arg(
                 array('page' => 'mj_events', 'action' => 'edit', 'event' => (int) $event->id),
                 admin_url('admin.php')
             );
         }
+
+        $message_lines[] = '';
+        $message_lines[] = 'Pensee: verifier la liste d\'attente et preparer une communication au besoin.';
+        if ($admin_url !== '') {
+            $message_lines[] = 'Gestion: ' . $admin_url;
+        }
         $message_lines[] = '';
         $message_lines[] = '— MJ Member';
 
-        $body = implode("\n", $message_lines);
-        $headers = array('Content-Type: text/plain; charset=UTF-8');
+        $details_list = array();
+        if ($event_dates !== '') {
+            $details_list[] = '<li>Dates : ' . esc_html($event_dates) . '</li>';
+        }
+        $details_list[] = '<li>Capacite totale : ' . esc_html((string) $capacity_total) . '</li>';
+        $details_list[] = '<li>Inscriptions confirmees : ' . esc_html((string) $active_after) . '</li>';
+        $details_list[] = '<li>Places restantes estimees : ' . esc_html((string) $remaining_slots) . '</li>';
+        if ($threshold > 0) {
+            $details_list[] = '<li>Seuil d\'alerte : ' . esc_html((string) $threshold) . '</li>';
+        }
 
         $recipients = array();
         $notify_email = get_option('mj_notify_email', '');
@@ -945,9 +959,25 @@ class MjEventRegistrations {
 
         $recipients = array_values(array_unique(array_filter($recipients)));
         if (!empty($recipients)) {
-            foreach ($recipients as $recipient) {
-                wp_mail($recipient, $subject, $body, $headers);
-            }
+            $placeholders = array(
+                '{{event_title}}' => $event->title,
+                '{{event_dates}}' => $event_dates,
+                '{{capacity_total}}' => $capacity_total,
+                '{{active_registrations}}' => $active_after,
+                '{{remaining_slots}}' => $remaining_slots,
+                '{{threshold}}' => $threshold,
+                '{{event_admin_url}}' => $admin_url !== '' ? esc_url($admin_url) : '',
+                '{{event_admin_link}}' => $admin_url !== '' ? '<p><a href="' . esc_url($admin_url) . '">' . esc_html__('Ouvrir la fiche événement', 'mj-member') . '</a></p>' : '',
+                '{{event_details_list}}' => !empty($details_list) ? '<ul>' . implode('', $details_list) . '</ul>' : '',
+            );
+
+            MjMail::send_notification_to_emails('event_capacity_alert', $recipients, array(
+                'placeholders' => $placeholders,
+                'fallback_subject' => $subject,
+                'fallback_body' => implode("\n", $message_lines),
+                'content_type' => 'text/plain',
+                'log_source' => 'event_capacity_alert',
+            ));
         }
 
         MjEvents_CRUD::update((int) $event->id, array('capacity_notified' => 1));
@@ -1172,7 +1202,6 @@ class MjEventRegistrations {
             );
             $animateur_body .= "\n\nGestion de l evenement: " . $event_admin_url;
         }
-        $headers = array('Content-Type: text/plain; charset=UTF-8');
         $sent_addresses = array();
 
         $recipient = '';
@@ -1182,8 +1211,40 @@ class MjEventRegistrations {
             $recipient = $member->email;
         }
 
+        $placeholders = array(
+            '{{event_title}}' => $event->title,
+            '{{event_dates}}' => $event_dates,
+            '{{participant_name}}' => $member_name,
+            '{{registration_status}}' => $status_label,
+            '{{registration_created_at}}' => wp_date('d/m/Y H:i', strtotime($registration->created_at)),
+            '{{registration_notes}}' => !empty($registration->notes) ? $registration->notes : '',
+            '{{is_waitlist}}' => $is_waitlist ? '1' : '0',
+            '{{is_promotion}}' => $is_promotion ? '1' : '0',
+            '{{animateurs_list}}' => self::format_animateurs_list($animateur_members),
+            '{{admin_url}}' => !empty($event->id) ? add_query_arg(
+                array(
+                    'page' => 'mj_events',
+                    'action' => 'edit',
+                    'event' => (int) $event->id,
+                ),
+                admin_url('admin.php')
+            ) : '',
+        );
+
         if ($recipient !== '') {
-            wp_mail($recipient, $subject, $body, $headers);
+            MjMail::send_notification_to_emails('event_registration_notice', array($recipient), array(
+                'member' => $member,
+                'context' => array(
+                    'guardian' => $guardian,
+                    'recipients' => array($recipient),
+                    'include_guardian' => false,
+                ),
+                'placeholders' => array_merge($placeholders, array('{{audience}}' => 'member_or_guardian')),
+                'fallback_subject' => $subject,
+                'fallback_body' => $body,
+                'content_type' => 'text/plain',
+                'log_source' => 'event_registration_notice',
+            ));
             $sent_addresses[strtolower($recipient)] = true;
         }
 
@@ -1191,7 +1252,15 @@ class MjEventRegistrations {
         if ($notify_email !== '' && is_email($notify_email)) {
             $normalized_notify = strtolower($notify_email);
             if (!isset($sent_addresses[$normalized_notify])) {
-                wp_mail($notify_email, $subject, $body, $headers);
+                MjMail::send_notification_to_emails('event_registration_notice', array($notify_email), array(
+                    'member' => $member,
+                    'context' => array('guardian' => $guardian),
+                    'placeholders' => array_merge($placeholders, array('{{audience}}' => 'admin')),
+                    'fallback_subject' => $subject,
+                    'fallback_body' => $body,
+                    'content_type' => 'text/plain',
+                    'log_source' => 'event_registration_notice',
+                ));
                 $sent_addresses[$normalized_notify] = true;
             }
         }
@@ -1205,7 +1274,25 @@ class MjEventRegistrations {
                 if (isset($sent_addresses[$animateur_email_norm])) {
                     continue;
                 }
-                wp_mail($animateur_member->email, $subject, $animateur_body, $headers);
+
+                $animateur_placeholders = array_merge($placeholders, array(
+                    '{{audience}}' => 'animateur',
+                ));
+
+                MjMail::send_notification_to_emails('event_registration_notice_animateur', array($animateur_member->email), array(
+                    'member' => $member,
+                    'context' => array(
+                        'guardian' => $guardian,
+                        'recipients' => array($animateur_member->email),
+                        'include_guardian' => false,
+                    ),
+                    'placeholders' => $animateur_placeholders,
+                    'fallback_subject' => $subject,
+                    'fallback_body' => $animateur_body,
+                    'content_type' => 'text/plain',
+                    'log_source' => 'event_registration_notice',
+                ));
+
                 $sent_addresses[$animateur_email_norm] = true;
             }
         }
@@ -1249,5 +1336,22 @@ class MjEventRegistrations {
         }
 
         return $name;
+    }
+
+    private static function format_animateurs_list($animateur_members) {
+        if (empty($animateur_members) || !is_array($animateur_members)) {
+            return '';
+        }
+
+        $items = array();
+        foreach ($animateur_members as $animateur_member) {
+            if (!is_object($animateur_member)) {
+                continue;
+            }
+            $items[] = self::format_member_summary($animateur_member);
+        }
+
+        $items = array_values(array_filter(array_map('trim', $items)));
+        return implode(', ', $items);
     }
 }

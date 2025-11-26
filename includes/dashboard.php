@@ -3,28 +3,24 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+if (!class_exists('MjEvents_CRUD') && defined('MJ_MEMBER_PATH')) {
+    $events_crud_path = trailingslashit(MJ_MEMBER_PATH) . 'includes/classes/crud/MjEvents_CRUD.php';
+    if (file_exists($events_crud_path)) {
+        require_once $events_crud_path;
+    }
+}
+
 function mj_member_dashboard_page() {
     if (!current_user_can(MJ_MEMBER_CAPABILITY)) {
         wp_die(esc_html__('Vous n\'avez pas les droits suffisants pour accéder à ce tableau de bord.', 'mj-member'));
     }
 
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_dashboard_nonce'])) {
-        check_admin_referer('mj_member_dashboard_save', 'mj_member_dashboard_nonce');
-
-        $about_content = '';
-        if (isset($_POST['mj_dashboard_about'])) {
-            $about_content = wp_kses_post(wp_unslash($_POST['mj_dashboard_about']));
-        }
-
-        update_option('mj_dashboard_about', $about_content);
-        add_settings_error('mj_member_dashboard', 'mj_dashboard_saved', __('Présentation mise à jour.', 'mj-member'), 'updated');
-    }
-
-    $about_content = get_option('mj_dashboard_about', '');
     $stats = mj_member_get_dashboard_stats();
     $series = mj_member_get_dashboard_monthly_series();
-
-    settings_errors('mj_member_dashboard');
+    $member_stats = mj_member_get_member_statistics();
+    $event_stats = mj_member_get_event_statistics();
+    $membership_summary = mj_member_get_membership_due_summary();
+        $recent_members = mj_member_get_recent_members();
 
     $timezone = wp_timezone();
     $max_value = 0;
@@ -40,6 +36,14 @@ function mj_member_dashboard_page() {
     $active_members = number_format_i18n((int) $stats['active_members']);
     $active_animateurs = number_format_i18n((int) $stats['active_animateurs']);
     $recent_registrations = number_format_i18n((int) $stats['recent_registrations']);
+    $members_total = number_format_i18n((int) $member_stats['total_members']);
+    $events_total = number_format_i18n((int) $event_stats['total_events']);
+    $events_upcoming = number_format_i18n((int) $event_stats['upcoming_events']);
+    $membership_requires_payment = number_format_i18n((int) $membership_summary['requires_payment_total']);
+    $membership_missing = number_format_i18n((int) $membership_summary['missing_count']);
+    $membership_expiring = number_format_i18n((int) $membership_summary['expiring_count']);
+    $membership_expired = number_format_i18n((int) $membership_summary['expired_count']);
+    $membership_up_to_date = number_format_i18n((int) $membership_summary['up_to_date_count']);
     ?>
     <div class="wrap mj-member-dashboard">
         <h1><?php esc_html_e('Tableau de bord MJ Member', 'mj-member'); ?></h1>
@@ -68,28 +72,6 @@ function mj_member_dashboard_page() {
         </div>
 
         <div class="mj-dashboard-split">
-            <div class="mj-dashboard-panel">
-                <h2><?php esc_html_e('Présentation de la MJ', 'mj-member'); ?></h2>
-                <form method="post">
-                    <?php wp_nonce_field('mj_member_dashboard_save', 'mj_member_dashboard_nonce'); ?>
-                    <?php
-                    wp_editor(
-                        $about_content,
-                        'mj_dashboard_about',
-                        array(
-                            'textarea_name' => 'mj_dashboard_about',
-                            'media_buttons' => false,
-                            'textarea_rows' => 8,
-                            'editor_height' => 220,
-                        )
-                    );
-                    ?>
-                    <p>
-                        <button type="submit" class="button button-primary"><?php esc_html_e('Enregistrer la présentation', 'mj-member'); ?></button>
-                    </p>
-                </form>
-            </div>
-
             <div class="mj-dashboard-panel">
                 <h2><?php esc_html_e('Inscriptions & paiements mensuels', 'mj-member'); ?></h2>
                 <?php if (!empty($series)) : ?>
@@ -122,6 +104,291 @@ function mj_member_dashboard_page() {
                     </p>
                 <?php else : ?>
                     <p><?php esc_html_e('Aucune donnée disponible pour la période sélectionnée.', 'mj-member'); ?></p>
+                <?php endif; ?>
+            </div>
+            <div class="mj-dashboard-panel mj-dashboard-panel--members">
+                <h2><?php esc_html_e('Statistiques membres', 'mj-member'); ?></h2>
+                <?php if ((int) $member_stats['total_members'] === 0) : ?>
+                    <p><?php esc_html_e('Aucune donnée membre disponible pour le moment.', 'mj-member'); ?></p>
+                <?php else : ?>
+                    <p class="mj-member-stats__summary"><?php printf(esc_html__('Total membres : %s', 'mj-member'), esc_html($members_total)); ?></p>
+                    <div class="mj-member-stats">
+                        <section class="mj-member-stats__section">
+                            <h3><?php esc_html_e('Répartition par rôle', 'mj-member'); ?></h3>
+                            <ul class="mj-member-stats__list">
+                                <?php foreach ($member_stats['roles'] as $role_stat) : ?>
+                        <section class="mj-event-stats__section">
+                            <h3><?php esc_html_e('Événements à venir', 'mj-member'); ?></h3>
+                            <?php if (empty($event_stats['upcoming_events_summary'])) : ?>
+                                <p class="mj-event-stats__empty"><?php esc_html_e('Aucun événement à venir trouvé.', 'mj-member'); ?></p>
+                            <?php else : ?>
+                                <table class="mj-event-stats__table">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col"><?php esc_html_e('Événement', 'mj-member'); ?></th>
+                                            <th scope="col"><?php esc_html_e('Date', 'mj-member'); ?></th>
+                                            <th scope="col"><?php esc_html_e('Inscriptions', 'mj-member'); ?></th>
+                                            <th scope="col"><?php esc_html_e('Liste d\'attente', 'mj-member'); ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($event_stats['upcoming_events_summary'] as $upcoming_event) :
+                                            $title = isset($upcoming_event['title']) ? $upcoming_event['title'] : '';
+                                            $date_label = isset($upcoming_event['date']) ? $upcoming_event['date'] : '';
+                                            $active_count = isset($upcoming_event['active_count']) ? (int) $upcoming_event['active_count'] : 0;
+                                            $capacity_total = isset($upcoming_event['capacity_total']) ? (int) $upcoming_event['capacity_total'] : 0;
+                                            $waitlist_count = isset($upcoming_event['waitlist_count']) ? (int) $upcoming_event['waitlist_count'] : 0;
+                                            $active_display = number_format_i18n($active_count);
+                                            if ($capacity_total > 0) {
+                                                $active_display = sprintf('%s/%s', $active_display, number_format_i18n($capacity_total));
+                                            }
+                                            $waitlist_display = $waitlist_count > 0 ? number_format_i18n($waitlist_count) : '-';
+                                            ?>
+                                            <tr>
+                                                <td><?php echo esc_html($title); ?></td>
+                                                <td><?php echo esc_html($date_label); ?></td>
+                                                <td><?php echo esc_html($active_display); ?></td>
+                                                <td><?php echo esc_html($waitlist_display); ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            <?php endif; ?>
+                        </section>
+                                    <li>
+                                        <?php
+                                        printf(
+                                            esc_html__('%1$s : %2$s (%3$s%%)', 'mj-member'),
+                                            esc_html($role_stat['label']),
+                                            esc_html(number_format_i18n((int) $role_stat['count'])),
+                                            esc_html(number_format_i18n((int) $role_stat['percent']))
+                                        );
+                                        ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                            <div class="mj-dashboard-panel mj-dashboard-panel--membership">
+                                <h2><?php esc_html_e('Échéances cotisations', 'mj-member'); ?></h2>
+                                <?php if ((int) $membership_summary['requires_payment_total'] === 0) : ?>
+                                    <p><?php esc_html_e('Aucun membre n\'est soumis à une cotisation annuelle.', 'mj-member'); ?></p>
+                                <?php else : ?>
+                                    <p class="mj-membership-summary__intro"><?php printf(
+                                        esc_html__('%s membres concernés par la cotisation annuelle.', 'mj-member'),
+                                        esc_html($membership_requires_payment)
+                                    ); ?></p>
+                                    <ul class="mj-membership-summary__metrics">
+                                        <li><strong><?php esc_html_e('À régler :', 'mj-member'); ?></strong> <?php echo esc_html($membership_missing); ?></li>
+                                        <li><strong><?php esc_html_e('Échéance imminente :', 'mj-member'); ?></strong> <?php echo esc_html($membership_expiring); ?></li>
+                                        <li><strong><?php esc_html_e('Expirées :', 'mj-member'); ?></strong> <?php echo esc_html($membership_expired); ?></li>
+                                        <li><strong><?php esc_html_e('À jour :', 'mj-member'); ?></strong> <?php echo esc_html($membership_up_to_date); ?></li>
+                                    </ul>
+                                    <section class="mj-membership-summary__upcoming">
+                                        <h3><?php esc_html_e('Prochaines échéances', 'mj-member'); ?></h3>
+                                        <?php if (empty($membership_summary['upcoming'])) : ?>
+                                            <p class="mj-membership-summary__empty"><?php esc_html_e('Aucune échéance imminente détectée.', 'mj-member'); ?></p>
+                                        <?php else : ?>
+                                            <table class="mj-membership-summary__table">
+                                                <thead>
+                                                    <tr>
+                                                        <th scope="col"><?php esc_html_e('Membre', 'mj-member'); ?></th>
+                                                        <th scope="col"><?php esc_html_e('Échéance', 'mj-member'); ?></th>
+                                                        <th scope="col"><?php esc_html_e('Statut', 'mj-member'); ?></th>
+                                                        <th scope="col"><?php esc_html_e('Délai', 'mj-member'); ?></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <?php foreach ($membership_summary['upcoming'] as $due_entry) :
+                                                        $label = isset($due_entry['label']) ? $due_entry['label'] : '';
+                                                        $deadline = isset($due_entry['deadline']) ? $due_entry['deadline'] : '';
+                                                        $status_label = isset($due_entry['status_label']) ? $due_entry['status_label'] : '';
+                                                        $delay_label = isset($due_entry['delay_label']) ? $due_entry['delay_label'] : '';
+                                                        ?>
+                                                        <tr>
+                                                            <td><?php echo esc_html($label); ?></td>
+                                                            <td><?php echo esc_html($deadline); ?></td>
+                                                            <td><?php echo esc_html($status_label); ?></td>
+                                                            <td><?php echo esc_html($delay_label); ?></td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                </tbody>
+                                            </table>
+                                        <?php endif; ?>
+                                    </section>
+                                <?php endif; ?>
+                            </div>
+                        </section>
+                        <section class="mj-member-stats__section">
+                            <h3><?php esc_html_e('Statut', 'mj-member'); ?></h3>
+                            <ul class="mj-member-stats__list">
+                                <?php foreach ($member_stats['statuses'] as $status_stat) : ?>
+                                    <li>
+                                        <?php
+                                        printf(
+                                            esc_html__('%1$s : %2$s (%3$s%%)', 'mj-member'),
+                                            esc_html($status_stat['label']),
+                                            esc_html(number_format_i18n((int) $status_stat['count'])),
+                                            esc_html(number_format_i18n((int) $status_stat['percent']))
+                                        );
+                                        ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </section>
+                        <section class="mj-member-stats__section">
+                            <h3><?php esc_html_e('Cotisations', 'mj-member'); ?></h3>
+                            <ul class="mj-member-stats__list">
+                                <?php foreach ($member_stats['payments'] as $payment_stat) : ?>
+                                    <li>
+                                        <?php
+                                        printf(
+                                            esc_html__('%1$s : %2$s (%3$s%%)', 'mj-member'),
+                                            esc_html($payment_stat['label']),
+                                            esc_html(number_format_i18n((int) $payment_stat['count'])),
+                                            esc_html(number_format_i18n((int) $payment_stat['percent']))
+                                        );
+                                        ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </section>
+                        <section class="mj-member-stats__section">
+                            <h3><?php esc_html_e('Tranches d\'âge', 'mj-member'); ?></h3>
+                            <ul class="mj-member-stats__list">
+                                <?php foreach ($member_stats['age_brackets'] as $age_stat) : ?>
+                                    <li>
+                                        <?php
+                                        printf(
+                                            esc_html__('%1$s : %2$s (%3$s%%)', 'mj-member'),
+                                            esc_html($age_stat['label']),
+                                            esc_html(number_format_i18n((int) $age_stat['count'])),
+                                            esc_html(number_format_i18n((int) $age_stat['percent']))
+                                        );
+                                        ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </section>
+                    </div>
+                <?php endif; ?>
+            </div>
+            <div class="mj-dashboard-panel mj-dashboard-panel--recent-members">
+                <h2><?php esc_html_e('Derniers membres inscrits', 'mj-member'); ?></h2>
+                <?php if (empty($recent_members)) : ?>
+                    <p><?php esc_html_e('Aucun membre enregistré pour le moment.', 'mj-member'); ?></p>
+                <?php else : ?>
+                    <table class="mj-recent-members__table">
+                        <thead>
+                            <tr>
+                                <th scope="col"><?php esc_html_e('Nom', 'mj-member'); ?></th>
+                                <th scope="col"><?php esc_html_e('Statut', 'mj-member'); ?></th>
+                                <th scope="col"><?php esc_html_e('Inscription', 'mj-member'); ?></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($recent_members as $member_row) :
+                                $name = isset($member_row['label']) ? $member_row['label'] : '';
+                                $status_label = isset($member_row['status_label']) ? $member_row['status_label'] : '';
+                                $status_class = isset($member_row['status']) ? $member_row['status'] : '';
+                                $date_label = isset($member_row['date_display']) ? $member_row['date_display'] : '';
+                                ?>
+                                <tr>
+                                    <td><?php echo esc_html($name); ?></td>
+                                    <td><span class="mj-status-badge mj-status-badge--<?php echo esc_attr($status_class); ?>"><?php echo esc_html($status_label); ?></span></td>
+                                    <td><?php echo esc_html($date_label); ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
+            </div>
+            <div class="mj-dashboard-panel mj-dashboard-panel--events">
+                <h2><?php esc_html_e('Statistiques événements', 'mj-member'); ?></h2>
+                <?php if ((int) $event_stats['total_events'] === 0) : ?>
+                    <p><?php esc_html_e('Aucun événement actif n\'est enregistré pour le moment.', 'mj-member'); ?></p>
+                <?php else : ?>
+                    <p class="mj-event-stats__summary"><?php printf(
+                        esc_html__('Événements actifs : %1$s (dont %2$s à venir)', 'mj-member'),
+                        esc_html($events_total),
+                        esc_html($events_upcoming)
+                    ); ?></p>
+                    <div class="mj-event-stats">
+                        <section class="mj-event-stats__section">
+                            <h3><?php esc_html_e('Inscriptions par statut', 'mj-member'); ?></h3>
+                            <ul class="mj-event-stats__list">
+                                <?php foreach ($event_stats['registration_breakdown'] as $registration_entry) : ?>
+                                    <li>
+                                        <?php
+                                        printf(
+                                            esc_html__('%1$s : %2$s (%3$s%%)', 'mj-member'),
+                                            esc_html($registration_entry['label']),
+                                            esc_html(number_format_i18n((int) $registration_entry['count'])),
+                                            esc_html(number_format_i18n((int) $registration_entry['percent']))
+                                        );
+                                        ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </section>
+                        <section class="mj-event-stats__section">
+                            <h3><?php esc_html_e('Annulations & liste d\'attente', 'mj-member'); ?></h3>
+                            <ul class="mj-event-stats__list">
+                                <li>
+                                    <?php
+                                    printf(
+                                        esc_html__('Annulations enregistrées : %s', 'mj-member'),
+                                        esc_html(number_format_i18n((int) $event_stats['cancelled_registrations']))
+                                    );
+                                    ?>
+                                </li>
+                                <li>
+                                    <?php
+                                    printf(
+                                        esc_html__('Inscriptions en liste d’attente : %s', 'mj-member'),
+                                        esc_html(number_format_i18n((int) $event_stats['waitlist_registrations']))
+                                    );
+                                    ?>
+                                </li>
+                                <li>
+                                    <?php
+                                    printf(
+                                        esc_html__('Inscriptions actives : %s', 'mj-member'),
+                                        esc_html(number_format_i18n((int) $event_stats['active_registrations']))
+                                    );
+                                    ?>
+                                </li>
+                            </ul>
+                        </section>
+                        <section class="mj-event-stats__section">
+                            <h3><?php esc_html_e('Événements complets', 'mj-member'); ?></h3>
+                            <?php if (empty($event_stats['full_events'])) : ?>
+                                <p class="mj-event-stats__empty"><?php esc_html_e('Aucun événement n\'est complet pour l\'instant.', 'mj-member'); ?></p>
+                            <?php else : ?>
+                                <ul class="mj-event-stats__list">
+                                    <?php foreach ($event_stats['full_events'] as $full_event) : ?>
+                                        <li>
+                                            <strong><?php echo esc_html($full_event['title']); ?></strong>
+                                            <span class="mj-event-stats__meta">
+                                                <?php
+                                                printf(
+                                                    esc_html__('%1$s - %2$s/%3$s inscrits', 'mj-member'),
+                                                    esc_html($full_event['date']),
+                                                    esc_html(number_format_i18n((int) $full_event['active_count'])),
+                                                    esc_html(number_format_i18n((int) $full_event['capacity_total']))
+                                                );
+                                                if (!empty($full_event['waitlist_count'])) {
+                                                    printf(
+                                                        esc_html__(' (%s en attente)', 'mj-member'),
+                                                        esc_html(number_format_i18n((int) $full_event['waitlist_count']))
+                                                    );
+                                                }
+                                                ?>
+                                            </span>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            <?php endif; ?>
+                        </section>
+                    </div>
                 <?php endif; ?>
             </div>
         </div>
@@ -243,6 +510,599 @@ function mj_member_get_dashboard_monthly_series($months = 6) {
     return array_values($series);
 }
 
+function mj_member_get_member_statistics() {
+    global $wpdb;
+
+    $table = MjMembers_CRUD::getTableName(MjMembers_CRUD::TABLE_NAME);
+    $total_members = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
+    $percent_base = $total_members > 0 ? $total_members : 1;
+
+    // Aggregate counts by role, status, payment situation, and age brackets.
+    $role_labels = MjMembers_CRUD::getRoleLabels();
+    $roles = array();
+    foreach ($role_labels as $key => $label) {
+        $roles[$key] = array(
+            'key' => $key,
+            'label' => $label,
+            'count' => 0,
+            'percent' => 0,
+        );
+    }
+    $roles['unknown'] = array(
+        'key' => 'unknown',
+        'label' => __('Non défini', 'mj-member'),
+        'count' => 0,
+        'percent' => 0,
+    );
+
+    $role_rows = $wpdb->get_results("SELECT role, COUNT(*) AS total FROM {$table} GROUP BY role");
+    foreach ($role_rows as $row) {
+        $role_key = (string) $row->role;
+        if ($role_key === '') {
+            $role_key = 'unknown';
+        }
+        $count = (int) $row->total;
+        if (!isset($roles[$role_key])) {
+            $label_fallback = sanitize_text_field($role_key);
+            $roles[$role_key] = array(
+                'key' => $role_key,
+                'label' => $label_fallback !== '' ? ucfirst($label_fallback) : __('Non défini', 'mj-member'),
+                'count' => 0,
+                'percent' => 0,
+            );
+        }
+        $roles[$role_key]['count'] = $count;
+    }
+
+    foreach ($roles as &$role) {
+        $role['percent'] = ($total_members > 0) ? round(($role['count'] / $percent_base) * 100) : 0;
+    }
+    unset($role);
+
+    $status_labels = array(
+        MjMembers_CRUD::STATUS_ACTIVE => __('Actif', 'mj-member'),
+        MjMembers_CRUD::STATUS_INACTIVE => __('Inactif', 'mj-member'),
+        'other' => __('Autre', 'mj-member'),
+    );
+    $statuses = array();
+    foreach ($status_labels as $key => $label) {
+        $statuses[$key] = array(
+            'key' => $key,
+            'label' => $label,
+            'count' => 0,
+            'percent' => 0,
+        );
+    }
+
+    $status_rows = $wpdb->get_results("SELECT status, COUNT(*) AS total FROM {$table} GROUP BY status");
+    foreach ($status_rows as $row) {
+        $status_key = (string) $row->status;
+        if ($status_key === '') {
+            $status_key = 'other';
+        }
+        $count = (int) $row->total;
+        if (!isset($statuses[$status_key])) {
+            $label_fallback = sanitize_text_field($status_key);
+            $statuses[$status_key] = array(
+                'key' => $status_key,
+                'label' => $label_fallback !== '' ? ucfirst($label_fallback) : __('Autre', 'mj-member'),
+                'count' => 0,
+                'percent' => 0,
+            );
+        }
+        $statuses[$status_key]['count'] = $count;
+    }
+
+    foreach ($statuses as &$status) {
+        $status['percent'] = ($total_members > 0) ? round(($status['count'] / $percent_base) * 100) : 0;
+    }
+    unset($status);
+
+    $payments = array(
+        'up_to_date' => array(
+            'key' => 'up_to_date',
+            'label' => __('Cotisations à jour', 'mj-member'),
+            'count' => 0,
+            'percent' => 0,
+        ),
+        'due' => array(
+            'key' => 'due',
+            'label' => __('Cotisations à régulariser', 'mj-member'),
+            'count' => 0,
+            'percent' => 0,
+        ),
+        'exempt' => array(
+            'key' => 'exempt',
+            'label' => __('Membres exonérés', 'mj-member'),
+            'count' => 0,
+            'percent' => 0,
+        ),
+    );
+
+    $payment_row = $wpdb->get_row("
+        SELECT
+            SUM(CASE WHEN requires_payment = 1 AND date_last_payement IS NOT NULL AND date_last_payement <> '0000-00-00 00:00:00' AND CAST(date_last_payement AS CHAR) <> '' THEN 1 ELSE 0 END) AS up_to_date,
+            SUM(CASE WHEN requires_payment = 1 AND (date_last_payement IS NULL OR date_last_payement = '0000-00-00 00:00:00' OR CAST(date_last_payement AS CHAR) = '') THEN 1 ELSE 0 END) AS due,
+            SUM(CASE WHEN requires_payment = 0 THEN 1 ELSE 0 END) AS exempt
+        FROM {$table}
+    ");
+    if ($payment_row) {
+        $payments['up_to_date']['count'] = (int) $payment_row->up_to_date;
+        $payments['due']['count'] = (int) $payment_row->due;
+        $payments['exempt']['count'] = (int) $payment_row->exempt;
+    }
+
+    foreach ($payments as &$payment) {
+        $payment['percent'] = ($total_members > 0) ? round(($payment['count'] / $percent_base) * 100) : 0;
+    }
+    unset($payment);
+
+    $age_brackets = array(
+        'under_12' => array(
+            'key' => 'under_12',
+            'label' => __('Moins de 12 ans', 'mj-member'),
+            'count' => 0,
+            'percent' => 0,
+        ),
+        'age_12_17' => array(
+            'key' => 'age_12_17',
+            'label' => __('12 à 17 ans', 'mj-member'),
+            'count' => 0,
+            'percent' => 0,
+        ),
+        'age_18_25' => array(
+            'key' => 'age_18_25',
+            'label' => __('18 à 25 ans', 'mj-member'),
+            'count' => 0,
+            'percent' => 0,
+        ),
+        'age_26_35' => array(
+            'key' => 'age_26_35',
+            'label' => __('26 à 35 ans', 'mj-member'),
+            'count' => 0,
+            'percent' => 0,
+        ),
+        'age_36_45' => array(
+            'key' => 'age_36_45',
+            'label' => __('36 à 45 ans', 'mj-member'),
+            'count' => 0,
+            'percent' => 0,
+        ),
+        'age_46_plus' => array(
+            'key' => 'age_46_plus',
+            'label' => __('46 ans et plus', 'mj-member'),
+            'count' => 0,
+            'percent' => 0,
+        ),
+        'unknown' => array(
+            'key' => 'unknown',
+            'label' => __('Âge non communiqué', 'mj-member'),
+            'count' => 0,
+            'percent' => 0,
+        ),
+    );
+
+    $age_row = $wpdb->get_row("
+        SELECT
+            SUM(CASE WHEN birth_date IS NULL OR birth_date = '0000-00-00' THEN 1 ELSE 0 END) AS unknown,
+            SUM(CASE WHEN birth_date IS NOT NULL AND birth_date <> '0000-00-00' AND TIMESTAMPDIFF(YEAR, birth_date, CURDATE()) < 12 THEN 1 ELSE 0 END) AS under_12,
+            SUM(CASE WHEN birth_date IS NOT NULL AND birth_date <> '0000-00-00' AND TIMESTAMPDIFF(YEAR, birth_date, CURDATE()) BETWEEN 12 AND 17 THEN 1 ELSE 0 END) AS age_12_17,
+            SUM(CASE WHEN birth_date IS NOT NULL AND birth_date <> '0000-00-00' AND TIMESTAMPDIFF(YEAR, birth_date, CURDATE()) BETWEEN 18 AND 25 THEN 1 ELSE 0 END) AS age_18_25,
+            SUM(CASE WHEN birth_date IS NOT NULL AND birth_date <> '0000-00-00' AND TIMESTAMPDIFF(YEAR, birth_date, CURDATE()) BETWEEN 26 AND 35 THEN 1 ELSE 0 END) AS age_26_35,
+            SUM(CASE WHEN birth_date IS NOT NULL AND birth_date <> '0000-00-00' AND TIMESTAMPDIFF(YEAR, birth_date, CURDATE()) BETWEEN 36 AND 45 THEN 1 ELSE 0 END) AS age_36_45,
+            SUM(CASE WHEN birth_date IS NOT NULL AND birth_date <> '0000-00-00' AND TIMESTAMPDIFF(YEAR, birth_date, CURDATE()) >= 46 THEN 1 ELSE 0 END) AS age_46_plus
+        FROM {$table}
+    ");
+    if ($age_row) {
+        foreach ($age_brackets as $key => &$entry) {
+            if (property_exists($age_row, $key)) {
+                $entry['count'] = (int) $age_row->{$key};
+            }
+            $entry['percent'] = ($total_members > 0) ? round(($entry['count'] / $percent_base) * 100) : 0;
+        }
+        unset($entry);
+    }
+
+    return array(
+        'total_members' => $total_members,
+        'roles' => array_values($roles),
+        'statuses' => array_values($statuses),
+        'payments' => array_values($payments),
+        'age_brackets' => array_values($age_brackets),
+    );
+}
+
+function mj_member_get_event_statistics() {
+    global $wpdb;
+
+    $events_table = mj_member_get_events_table_name();
+    $registrations_table = mj_member_get_event_registrations_table_name();
+
+    $timezone = wp_timezone();
+    $now = current_time('timestamp');
+    $today_start = wp_date('Y-m-d 00:00:00', $now, $timezone);
+
+    $stats = array(
+        'total_events' => 0,
+        'upcoming_events' => 0,
+        'registration_breakdown' => array(),
+        'active_registrations' => 0,
+        'cancelled_registrations' => 0,
+        'waitlist_registrations' => 0,
+        'total_registrations' => 0,
+        'full_events' => array(),
+        'upcoming_events_summary' => array(),
+    );
+
+    if (empty($events_table) || empty($registrations_table)) {
+        return $stats;
+    }
+
+    if (class_exists('MjEvents_CRUD')) {
+        $stats['total_events'] = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$events_table} WHERE status = %s",
+            MjEvents_CRUD::STATUS_ACTIVE
+        ));
+
+        $stats['upcoming_events'] = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$events_table}
+             WHERE status = %s
+             AND (date_debut IS NULL OR date_debut = '0000-00-00 00:00:00' OR date_debut >= %s)",
+            MjEvents_CRUD::STATUS_ACTIVE,
+            $today_start
+        ));
+    }
+
+    $status_labels = MjEventRegistrations::get_status_labels();
+    $status_totals = array(
+        MjEventRegistrations::STATUS_PENDING => 0,
+        MjEventRegistrations::STATUS_CONFIRMED => 0,
+        MjEventRegistrations::STATUS_WAITLIST => 0,
+        MjEventRegistrations::STATUS_CANCELLED => 0,
+    );
+    $total_registrations = 0;
+
+    $registration_rows = $wpdb->get_results("SELECT statut, COUNT(*) AS total FROM {$registrations_table} GROUP BY statut");
+    if (is_array($registration_rows)) {
+        foreach ($registration_rows as $row) {
+            $status_key = sanitize_key((string) $row->statut);
+            $count = isset($row->total) ? (int) $row->total : 0;
+            $total_registrations += $count;
+            if (isset($status_totals[$status_key])) {
+                $status_totals[$status_key] = $count;
+            } else {
+                $status_totals[$status_key] = $count;
+            }
+        }
+    }
+
+    $stats['total_registrations'] = $total_registrations;
+    $stats['active_registrations'] = $status_totals[MjEventRegistrations::STATUS_PENDING] + $status_totals[MjEventRegistrations::STATUS_CONFIRMED];
+    $stats['cancelled_registrations'] = $status_totals[MjEventRegistrations::STATUS_CANCELLED];
+    $stats['waitlist_registrations'] = $status_totals[MjEventRegistrations::STATUS_WAITLIST];
+
+    $registration_breakdown = array();
+    foreach ($status_totals as $status_key => $count) {
+        $label = isset($status_labels[$status_key]) ? $status_labels[$status_key] : ucfirst(str_replace('_', ' ', $status_key));
+        $percent = ($total_registrations > 0) ? round(($count / $total_registrations) * 100) : 0;
+        $registration_breakdown[] = array(
+            'status' => $status_key,
+            'label' => $label,
+            'count' => $count,
+            'percent' => $percent,
+        );
+    }
+    $stats['registration_breakdown'] = $registration_breakdown;
+
+    if (class_exists('MjEvents_CRUD')) {
+        $active_statuses = array(
+            MjEventRegistrations::STATUS_PENDING,
+            MjEventRegistrations::STATUS_CONFIRMED,
+        );
+        $active_placeholders = implode(',', array_fill(0, count($active_statuses), '%s'));
+
+        $full_events_query = "
+            SELECT
+                e.id,
+                e.title,
+                e.date_debut,
+                e.date_fin,
+                e.capacity_total,
+                COALESCE(SUM(CASE WHEN r.statut IN ($active_placeholders) THEN 1 ELSE 0 END), 0) AS active_count,
+                COALESCE(SUM(CASE WHEN r.statut = %s THEN 1 ELSE 0 END), 0) AS waitlist_count
+            FROM {$events_table} e
+            LEFT JOIN {$registrations_table} r ON r.event_id = e.id
+            WHERE e.status = %s AND e.capacity_total IS NOT NULL AND e.capacity_total > 0
+            GROUP BY e.id
+            HAVING active_count >= e.capacity_total
+            ORDER BY e.date_debut ASC
+            LIMIT 6
+        ";
+
+        $full_params = array_merge(
+            $active_statuses,
+            array(
+                MjEventRegistrations::STATUS_WAITLIST,
+                MjEvents_CRUD::STATUS_ACTIVE,
+            )
+        );
+
+        $prepared_query = call_user_func_array(array($wpdb, 'prepare'), array_merge(array($full_events_query), $full_params));
+        $full_rows = $wpdb->get_results($prepared_query);
+
+        if (is_array($full_rows)) {
+            foreach ($full_rows as $row) {
+                $title = isset($row->title) ? sanitize_text_field((string) $row->title) : '';
+                $date_debut = isset($row->date_debut) ? (string) $row->date_debut : '';
+                $formatted_date = '';
+                if ($date_debut !== '' && $date_debut !== '0000-00-00 00:00:00') {
+                    $timestamp = strtotime($date_debut);
+                    if ($timestamp) {
+                        $formatted_date = wp_date(get_option('date_format'), $timestamp, $timezone);
+                    }
+                }
+                if ($formatted_date === '') {
+                    $formatted_date = __('Date à confirmer', 'mj-member');
+                }
+
+                $stats['full_events'][] = array(
+                    'id' => isset($row->id) ? (int) $row->id : 0,
+                    'title' => $title,
+                    'date' => $formatted_date,
+                    'capacity_total' => isset($row->capacity_total) ? (int) $row->capacity_total : 0,
+                    'active_count' => isset($row->active_count) ? (int) $row->active_count : 0,
+                    'waitlist_count' => isset($row->waitlist_count) ? (int) $row->waitlist_count : 0,
+                );
+            }
+        }
+
+        $upcoming_query = "
+            SELECT
+                e.id,
+                e.title,
+                e.date_debut,
+                e.date_fin,
+                e.capacity_total,
+                COALESCE(SUM(CASE WHEN r.statut IN ($active_placeholders) THEN 1 ELSE 0 END), 0) AS active_count,
+                COALESCE(SUM(CASE WHEN r.statut = %s THEN 1 ELSE 0 END), 0) AS waitlist_count
+            FROM {$events_table} e
+            LEFT JOIN {$registrations_table} r ON r.event_id = e.id
+            WHERE e.status = %s
+              AND (e.date_debut IS NULL OR e.date_debut = '0000-00-00 00:00:00' OR e.date_debut >= %s)
+            GROUP BY e.id
+            ORDER BY
+                CASE WHEN e.date_debut IS NULL OR e.date_debut = '0000-00-00 00:00:00' THEN 1 ELSE 0 END,
+                e.date_debut ASC
+            LIMIT 6
+        ";
+
+        $upcoming_params = array_merge(
+            $active_statuses,
+            array(
+                MjEventRegistrations::STATUS_WAITLIST,
+                MjEvents_CRUD::STATUS_ACTIVE,
+                $today_start,
+            )
+        );
+
+        $prepared_upcoming_query = call_user_func_array(array($wpdb, 'prepare'), array_merge(array($upcoming_query), $upcoming_params));
+        $upcoming_rows = $wpdb->get_results($prepared_upcoming_query);
+
+        if (is_array($upcoming_rows)) {
+            foreach ($upcoming_rows as $row) {
+                $title = isset($row->title) ? sanitize_text_field((string) $row->title) : '';
+                $date_debut = isset($row->date_debut) ? (string) $row->date_debut : '';
+                $formatted_date = '';
+                if ($date_debut !== '' && $date_debut !== '0000-00-00 00:00:00') {
+                    $timestamp = strtotime($date_debut);
+                    if ($timestamp) {
+                        $formatted_date = wp_date(get_option('date_format'), $timestamp, $timezone);
+                    }
+                }
+                if ($formatted_date === '') {
+                    $formatted_date = __('Date à confirmer', 'mj-member');
+                }
+
+                $stats['upcoming_events_summary'][] = array(
+                    'id' => isset($row->id) ? (int) $row->id : 0,
+                    'title' => $title,
+                    'date' => $formatted_date,
+                    'capacity_total' => isset($row->capacity_total) ? (int) $row->capacity_total : 0,
+                    'active_count' => isset($row->active_count) ? (int) $row->active_count : 0,
+                    'waitlist_count' => isset($row->waitlist_count) ? (int) $row->waitlist_count : 0,
+                );
+            }
+        }
+    }
+
+    return $stats;
+}
+
+function mj_member_get_membership_due_summary() {
+    global $wpdb;
+
+    $summary = array(
+        'requires_payment_total' => 0,
+        'missing_count' => 0,
+        'expiring_count' => 0,
+        'expired_count' => 0,
+        'up_to_date_count' => 0,
+        'upcoming' => array(),
+    );
+
+    if (!class_exists('MjMembers_CRUD')) {
+        return $summary;
+    }
+
+    $members_table = MjMembers_CRUD::getTableName(MjMembers_CRUD::TABLE_NAME);
+    if (empty($members_table)) {
+        return $summary;
+    }
+
+    $expiration_days = (int) apply_filters('mj_member_payment_expiration_days', MJ_MEMBER_PAYMENT_EXPIRATION_DAYS);
+    $expiration_days = max(1, $expiration_days);
+    $expiring_threshold = (int) apply_filters('mj_member_membership_expiring_threshold_days', 30);
+    $expiring_threshold = max(0, $expiring_threshold);
+    $timezone = wp_timezone();
+    $now = current_time('timestamp');
+
+    $rows = $wpdb->get_results($wpdb->prepare(
+        "SELECT id, first_name, last_name, email, date_last_payement, requires_payment, status
+         FROM {$members_table}
+         WHERE requires_payment = 1 AND (status = %s OR status = %s OR status IS NULL)",
+        MjMembers_CRUD::STATUS_ACTIVE,
+        ''
+    ));
+
+    if (!is_array($rows) || empty($rows)) {
+        return $summary;
+    }
+
+    $summary['requires_payment_total'] = count($rows);
+    $upcoming_candidates = array();
+
+    foreach ($rows as $row) {
+        $last_payment = isset($row->date_last_payement) ? (string) $row->date_last_payement : '';
+        $requires_payment = !empty($row->requires_payment);
+
+        if (!$requires_payment) {
+            continue;
+        }
+
+        $first_name = isset($row->first_name) ? sanitize_text_field($row->first_name) : '';
+        $last_name = isset($row->last_name) ? sanitize_text_field($row->last_name) : '';
+        $label = trim($first_name . ' ' . $last_name);
+        if ($label === '') {
+            $email = isset($row->email) ? sanitize_email($row->email) : '';
+            $label = $email !== '' ? $email : sprintf(__('Membre #%d', 'mj-member'), (int) $row->id);
+        }
+
+        if ($last_payment === '' || $last_payment === '0000-00-00 00:00:00') {
+            $summary['missing_count']++;
+            continue;
+        }
+
+        $last_timestamp = strtotime($last_payment);
+        if (!$last_timestamp) {
+            $summary['missing_count']++;
+            continue;
+        }
+
+        $expiry_timestamp = $last_timestamp + ($expiration_days * DAY_IN_SECONDS);
+        $days_remaining = (int) floor(($expiry_timestamp - $now) / DAY_IN_SECONDS);
+        $deadline_display = wp_date(get_option('date_format', 'd/m/Y'), $expiry_timestamp, $timezone);
+
+        if ($expiry_timestamp <= $now) {
+            $summary['expired_count']++;
+            $upcoming_candidates[] = array(
+                'label' => $label,
+                'deadline' => $deadline_display,
+                'status_label' => __('Cotisation expirée', 'mj-member'),
+                'delay_label' => sprintf(__('En retard de %d jours', 'mj-member'), abs($days_remaining)),
+                'days' => $days_remaining,
+            );
+        } elseif ($days_remaining <= $expiring_threshold) {
+            $summary['expiring_count']++;
+            $delay_label = $days_remaining <= 0
+                ? __('Expire aujourd\'hui', 'mj-member')
+                : sprintf(__('Dans %d jours', 'mj-member'), $days_remaining);
+
+            $upcoming_candidates[] = array(
+                'label' => $label,
+                'deadline' => $deadline_display,
+                'status_label' => __('Renouvellement recommandé', 'mj-member'),
+                'delay_label' => $delay_label,
+                'days' => $days_remaining,
+            );
+        } else {
+            $summary['up_to_date_count']++;
+        }
+    }
+
+    if (!empty($upcoming_candidates)) {
+        usort($upcoming_candidates, function ($a, $b) {
+            if ($a['days'] === $b['days']) {
+                return strcmp($a['label'], $b['label']);
+            }
+            return $a['days'] <=> $b['days'];
+        });
+        $summary['upcoming'] = array_slice($upcoming_candidates, 0, 6);
+    }
+
+    return $summary;
+}
+
+function mj_member_get_recent_members($limit = 5) {
+    if (!class_exists('MjMembers_CRUD')) {
+        return array();
+    }
+
+    global $wpdb;
+    $table = MjMembers_CRUD::getTableName(MjMembers_CRUD::TABLE_NAME);
+    if (empty($table)) {
+        return array();
+    }
+
+    $limit = max(1, (int) $limit);
+
+    $sql = $wpdb->prepare(
+        "SELECT id, first_name, last_name, email, status, date_inscription
+         FROM {$table}
+         ORDER BY date_inscription DESC, id DESC
+         LIMIT %d",
+        $limit
+    );
+
+    $rows = $wpdb->get_results($sql);
+    if (empty($rows)) {
+        return array();
+    }
+
+    $status_labels = array(
+        MjMembers_CRUD::STATUS_ACTIVE => __('Actif', 'mj-member'),
+        MjMembers_CRUD::STATUS_INACTIVE => __('Inactif', 'mj-member'),
+    );
+
+    $timezone = wp_timezone();
+    $date_format = get_option('date_format', 'd/m/Y');
+
+    $items = array();
+    foreach ($rows as $row) {
+        $first = isset($row->first_name) ? sanitize_text_field((string) $row->first_name) : '';
+        $last = isset($row->last_name) ? sanitize_text_field((string) $row->last_name) : '';
+        $email = isset($row->email) ? sanitize_email((string) $row->email) : '';
+        $label = trim($first . ' ' . $last);
+        if ($label === '') {
+            $label = $email !== '' ? $email : sprintf(__('Membre #%d', 'mj-member'), (int) $row->id);
+        }
+
+        $status_key = isset($row->status) ? sanitize_key((string) $row->status) : '';
+        $status_label = isset($status_labels[$status_key]) ? $status_labels[$status_key] : ucfirst(str_replace('_', ' ', $status_key));
+        if ($status_label === '') {
+            $status_label = __('Inconnu', 'mj-member');
+        }
+
+        $date_raw = isset($row->date_inscription) ? (string) $row->date_inscription : '';
+        $date_display = __('Date non communiquée', 'mj-member');
+        if ($date_raw !== '' && $date_raw !== '0000-00-00 00:00:00') {
+            $timestamp = strtotime($date_raw);
+            if ($timestamp) {
+                $date_display = wp_date($date_format, $timestamp, $timezone);
+            }
+        }
+
+        $items[] = array(
+            'id' => isset($row->id) ? (int) $row->id : 0,
+            'label' => $label,
+            'status' => $status_key !== '' ? $status_key : 'unknown',
+            'status_label' => $status_label,
+            'date_display' => $date_display,
+        );
+    }
+
+    return $items;
+}
+
 function mj_member_dashboard_styles() {
     static $printed = false;
     if ($printed) {
@@ -272,6 +1132,45 @@ function mj_member_dashboard_styles() {
         .mj-dashboard-chart__legend-item::before { content: ''; width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
         .mj-dashboard-chart__legend-item--registrations::before { background: #2563eb; }
         .mj-dashboard-chart__legend-item--payments::before { background: #0ea5e9; }
+        .mj-dashboard-panel--members .mj-member-stats { display: grid; gap: 18px; }
+        .mj-member-stats__summary { margin: 0 0 14px; font-weight: 600; color: #1d2327; }
+        .mj-member-stats__section h3 { margin: 0 0 6px; font-size: 1rem; color: #1d2327; }
+        .mj-member-stats__list { margin: 0; padding-left: 1.2em; color: #2c3338; }
+        .mj-member-stats__list li { margin: 0 0 4px; }
+        @media (min-width: 900px) {
+            .mj-dashboard-panel--members .mj-member-stats { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+        }
+        .mj-dashboard-panel--membership .mj-membership-summary__intro { margin: 0 0 12px; color: #1d2327; font-weight: 600; }
+        .mj-membership-summary__metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 16px; margin: 0 0 18px; padding-left: 0; list-style: none; }
+        .mj-membership-summary__metrics li { margin: 0; color: #2c3338; }
+        .mj-membership-summary__upcoming h3 { margin: 0 0 8px; font-size: 1rem; color: #1d2327; }
+        .mj-membership-summary__empty { margin: 0; color: #50575e; }
+        .mj-membership-summary__table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .mj-membership-summary__table th,
+        .mj-membership-summary__table td { text-align: left; padding: 6px 0; border-bottom: 1px solid #dcdcde; }
+        .mj-membership-summary__table th { font-weight: 600; color: #1d2327; }
+        .mj-dashboard-panel--recent-members .mj-recent-members__table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .mj-recent-members__table th,
+        .mj-recent-members__table td { text-align: left; padding: 6px 0; border-bottom: 1px solid #dcdcde; }
+        .mj-recent-members__table th { font-weight: 600; color: #1d2327; }
+        .mj-status-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.8rem; line-height: 1.4; background: #f0f6ff; color: #1d2327; border: 1px solid #d0def5; }
+        .mj-status-badge--active { background: #def7ec; border-color: #b7f0d7; color: #046c4e; }
+        .mj-status-badge--inactive { background: #fde8e8; border-color: #f9d2d2; color: #9b1c1c; }
+        .mj-status-badge--unknown { background: #f3f4f6; border-color: #e5e7eb; color: #374151; }
+        .mj-dashboard-panel--events .mj-event-stats { display: grid; gap: 18px; }
+        .mj-event-stats__summary { margin: 0 0 14px; font-weight: 600; color: #1d2327; }
+        .mj-event-stats__section h3 { margin: 0 0 6px; font-size: 1rem; color: #1d2327; }
+        .mj-event-stats__list { margin: 0; padding-left: 1.2em; color: #2c3338; }
+        .mj-event-stats__list li { margin: 0 0 4px; }
+        .mj-event-stats__meta { display: block; font-size: 0.85rem; color: #50575e; }
+        .mj-event-stats__empty { margin: 0; color: #50575e; }
+        .mj-event-stats__table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .mj-event-stats__table th,
+        .mj-event-stats__table td { text-align: left; padding: 6px 0; border-bottom: 1px solid #dcdcde; }
+        .mj-event-stats__table th { font-weight: 600; color: #1d2327; }
+        @media (min-width: 900px) {
+            .mj-dashboard-panel--events .mj-event-stats { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+        }
         @media (max-width: 782px) {
             .mj-dashboard-chart__row { grid-template-columns: 1fr; gap: 6px; }
             .mj-dashboard-chart__counts { justify-self: flex-start; }

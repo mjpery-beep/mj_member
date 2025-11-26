@@ -404,8 +404,11 @@ if (!function_exists('mj_process_frontend_inscription')) {
         $notify_email = get_option('mj_notify_email') ?: get_option('admin_email');
         if (!empty($notify_email)) {
             $child_lines = array();
+            $child_items_html = array();
             foreach ($children as $child) {
-                $child_lines[] = sprintf('- %s %s (%s)', $child['first_name'], $child['last_name'], $child['birth_date']);
+                $line = sprintf('- %s %s (%s)', $child['first_name'], $child['last_name'], $child['birth_date']);
+                $child_lines[] = $line;
+                $child_items_html[] = sprintf('<li>%s</li>', esc_html(sprintf('%s %s (%s)', $child['first_name'], $child['last_name'], $child['birth_date'])));
             }
 
             $subject = 'Nouvelle inscription via le site MJ Péry';
@@ -430,7 +433,107 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 }
             }
 
-            wp_mail($notify_email, $subject, $body);
+            $registration_label = $requires_guardian
+                ? __('Inscription via un tuteur', 'mj-member')
+                : __('Inscription directe d\'un membre majeur', 'mj-member');
+
+            $guardian_summary_plain = '';
+            $guardian_summary_html = '';
+            if ($requires_guardian) {
+                $guardian_name = trim($guardian['first_name'] . ' ' . $guardian['last_name']);
+                $plain_parts = array();
+                if ($guardian_name !== '') {
+                    $plain_parts[] = $guardian_name;
+                }
+                if ($guardian['email'] !== '') {
+                    $plain_parts[] = $guardian['email'];
+                }
+                if ($guardian['phone'] !== '') {
+                    $plain_parts[] = $guardian['phone'];
+                }
+                $guardian_address_full = trim($guardian['address'] . ' ' . $guardian['postal_code'] . ' ' . $guardian['city']);
+                if ($guardian_address_full !== '') {
+                    $plain_parts[] = $guardian_address_full;
+                }
+                if (!empty($plain_parts)) {
+                    $guardian_summary_plain = implode(' | ', array_filter($plain_parts));
+                }
+
+                $html_rows = array();
+                if ($guardian_name !== '') {
+                    $html_rows[] = '<strong>Nom :</strong> ' . esc_html($guardian_name);
+                }
+                if ($guardian['email'] !== '') {
+                    $html_rows[] = '<strong>Email :</strong> ' . esc_html($guardian['email']);
+                }
+                if ($guardian['phone'] !== '') {
+                    $html_rows[] = '<strong>Téléphone :</strong> ' . esc_html($guardian['phone']);
+                }
+                if ($guardian_address_full !== '') {
+                    $html_rows[] = '<strong>Adresse :</strong> ' . esc_html($guardian_address_full);
+                }
+                if (!empty($html_rows)) {
+                    $guardian_summary_html = '<p>' . implode('<br>', $html_rows) . '</p>';
+                }
+            }
+
+            $member_contact_plain = '';
+            $member_contact_html = '';
+            if (!$requires_guardian && !empty($children[0])) {
+                $member_contact_name = trim($children[0]['first_name'] . ' ' . $children[0]['last_name']);
+                $member_plain_parts = array();
+                if ($member_contact_name !== '') {
+                    $member_plain_parts[] = $member_contact_name;
+                }
+                if (!empty($children[0]['email'])) {
+                    $member_plain_parts[] = $children[0]['email'];
+                }
+                if (!empty($children[0]['phone'])) {
+                    $member_plain_parts[] = $children[0]['phone'];
+                }
+                if (!empty($member_plain_parts)) {
+                    $member_contact_plain = implode(' | ', array_filter($member_plain_parts));
+                }
+
+                $member_html_rows = array();
+                if ($member_contact_name !== '') {
+                    $member_html_rows[] = '<strong>Membre :</strong> ' . esc_html($member_contact_name);
+                }
+                if (!empty($children[0]['email'])) {
+                    $member_html_rows[] = '<strong>Email :</strong> ' . esc_html($children[0]['email']);
+                }
+                if (!empty($children[0]['phone'])) {
+                    $member_html_rows[] = '<strong>Téléphone :</strong> ' . esc_html($children[0]['phone']);
+                }
+                if (!empty($member_html_rows)) {
+                    $member_contact_html = '<p>' . implode('<br>', $member_html_rows) . '</p>';
+                }
+            }
+
+            $placeholders = array(
+                '{{registration_type}}' => $requires_guardian ? 'guardian' : 'member',
+                '{{registration_type_label}}' => $registration_label,
+                '{{children_list}}' => implode("\n", $child_lines),
+                '{{children_list_html}}' => !empty($child_items_html) ? '<ul>' . implode('', $child_items_html) . '</ul>' : '',
+                '{{guardian_full_name}}' => $requires_guardian ? trim($guardian['first_name'] . ' ' . $guardian['last_name']) : '',
+                '{{guardian_email}}' => $requires_guardian ? $guardian['email'] : '',
+                '{{guardian_phone}}' => $requires_guardian ? $guardian['phone'] : '',
+                '{{guardian_address}}' => $requires_guardian ? trim($guardian['address'] . ' ' . $guardian['postal_code'] . ' ' . $guardian['city']) : '',
+                '{{guardian_summary_plain}}' => $guardian_summary_plain,
+                '{{guardian_summary_html}}' => $guardian_summary_html,
+                '{{member_email}}' => !$requires_guardian && !empty($children[0]['email']) ? $children[0]['email'] : '',
+                '{{member_phone}}' => !$requires_guardian && !empty($children[0]['phone']) ? $children[0]['phone'] : '',
+                '{{member_contact_plain}}' => $member_contact_plain,
+                '{{member_contact_html}}' => $member_contact_html,
+            );
+
+            MjMail::send_notification_to_emails('registration_admin_notification', array($notify_email), array(
+                'placeholders' => $placeholders,
+                'fallback_subject' => $subject,
+                'fallback_body' => $body,
+                'content_type' => 'text/plain',
+                'log_source' => 'registration_admin_notification',
+            ));
         }
 
         $ack_recipients = array();
@@ -444,11 +547,25 @@ if (!function_exists('mj_process_frontend_inscription')) {
 
         if (!empty($ack_recipients)) {
             $subject = 'Votre inscription a bien été envoyée';
-            $body = $requires_guardian
-                ? "Bonjour,\n\nNous avons bien reçu la pré-inscription de votre/vos jeune(s). L'équipe de la MJ Péry reviendra vers vous rapidement.\n\nÀ très vite !"
-                : "Bonjour,\n\nNous avons bien reçu votre demande d'inscription. L'équipe de la MJ Péry reviendra vers vous rapidement pour finaliser votre adhésion.\n\nÀ très vite !";
+            $fallback_body_guardian = "Bonjour,\n\nNous avons bien reçu la pré-inscription de votre/vos jeune(s). L'équipe de la MJ Péry reviendra vers vous rapidement.\n\nÀ très vite !";
+            $fallback_body_member = "Bonjour,\n\nNous avons bien reçu votre demande d'inscription. L'équipe de la MJ Péry reviendra vers vous rapidement pour finaliser votre adhésion.\n\nÀ très vite !";
+
             foreach ($ack_recipients as $recipient) {
-                wp_mail($recipient, $subject, $body);
+                $is_guardian = $requires_guardian;
+                $body = $is_guardian ? $fallback_body_guardian : $fallback_body_member;
+                $placeholders = array(
+                    '{{audience}}' => $is_guardian ? 'guardian' : 'member',
+                    '{{recipient_email}}' => $recipient,
+                    '{{guardian_full_name}}' => $requires_guardian ? trim($guardian['first_name'] . ' ' . $guardian['last_name']) : '',
+                );
+
+                MjMail::send_notification_to_emails('registration_acknowledgement', array($recipient), array(
+                    'placeholders' => $placeholders,
+                    'fallback_subject' => $subject,
+                    'fallback_body' => $body,
+                    'content_type' => 'text/plain',
+                    'log_source' => 'registration_acknowledgement',
+                ));
             }
         }
 

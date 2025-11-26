@@ -1056,6 +1056,175 @@ class MjMail extends MjTools {
     public static function send_payment_reminder($member, array $context = array()) {
         return self::send_template_to_member('payment_reminder', $member, $context);
     }
+
+    /**
+     * Send a templated notification to arbitrary email recipients with optional fallbacks.
+     *
+     * @param string|int $template_id_or_slug
+     * @param string[]   $recipients
+     * @param array      $args {
+     *     @type object|null   $member            Member object for placeholder resolution.
+     *     @type array         $context           Context passed to placeholder builder & logging.
+     *     @type array         $placeholders      Additional placeholders (key => value).
+     *     @type string        $fallback_subject  Subject used when template unavailable.
+     *     @type string        $fallback_body     Body used when template unavailable.
+     *     @type string        $content_type      Content type (default text/plain).
+     *     @type bool          $wrap_html         Whether to wrap HTML body with MJ container.
+     *     @type array         $headers           Additional headers.
+     *     @type string        $log_source        Value stored in email logs.
+     * }
+     * @return bool
+     */
+    public static function send_notification_to_emails($template_id_or_slug, array $recipients, array $args = array()) {
+        $defaults = array(
+            'member' => null,
+            'context' => array(),
+            'placeholders' => array(),
+            'fallback_subject' => '',
+            'fallback_body' => '',
+            'content_type' => 'text/plain',
+            'wrap_html' => false,
+            'headers' => array(),
+            'log_source' => 'notification',
+        );
+        $args = wp_parse_args($args, $defaults);
+
+        $sanitized_recipients = array();
+        foreach ($recipients as $recipient) {
+            $email = trim((string) $recipient);
+            if ($email !== '' && is_email($email)) {
+                $sanitized_recipients[] = $email;
+            }
+        }
+        $sanitized_recipients = array_values(array_unique($sanitized_recipients));
+        if (empty($sanitized_recipients)) {
+            return false;
+        }
+
+        $template = $template_id_or_slug !== '' ? self::get_template_by($template_id_or_slug) : null;
+        $context = is_array($args['context']) ? $args['context'] : array();
+
+        $placeholders = is_array($args['placeholders']) ? $args['placeholders'] : array();
+        $member = is_object($args['member']) ? $args['member'] : null;
+        if ($member) {
+            $member_placeholders = self::build_placeholders($member, $context);
+            if (!empty($member_placeholders)) {
+                $placeholders = array_merge($member_placeholders, $placeholders);
+            }
+        }
+
+        $subject = (string) $args['fallback_subject'];
+        $body_content = (string) $args['fallback_body'];
+        $original_content = $body_content;
+        $is_html = stripos($args['content_type'], 'html') !== false || !empty($args['wrap_html']);
+        $headers = array();
+        $template_slug = is_string($template_id_or_slug) ? (string) $template_id_or_slug : '';
+        $template_id = 0;
+
+        if ($template && is_object($template)) {
+            $template_subject = isset($template->subject) ? $template->subject : (isset($template->sujet) ? $template->sujet : '');
+            $template_body = isset($template->content) ? $template->content : (isset($template->text) ? $template->text : '');
+            if ($template_subject !== '') {
+                $subject = $template_subject;
+            }
+            if ($template_body !== '') {
+                $body_content = $template_body;
+                $original_content = $template_body;
+            }
+            $is_html = true;
+            if (!empty($template->slug)) {
+                $template_slug = (string) $template->slug;
+            }
+            if (!empty($template->id)) {
+                $template_id = (int) $template->id;
+            }
+        }
+
+        if (!empty($placeholders)) {
+            $keys = array_keys($placeholders);
+            $values = array_values($placeholders);
+            $subject = str_replace($keys, $values, $subject);
+            $body_content = str_replace($keys, $values, $body_content);
+        }
+
+        $plain_body = $body_content;
+        $message_to_send = $body_content;
+
+        if ($is_html) {
+            $body_content = do_shortcode($body_content);
+            $final_body = self::finalize_email_body($body_content, $placeholders, $original_content);
+            if (!empty($args['wrap_html']) || $template) {
+                $message_to_send = self::getContainer($final_body);
+            } else {
+                $message_to_send = $final_body;
+            }
+            $plain_body = trim(wp_strip_all_tags($message_to_send));
+            $headers[] = 'Content-Type: text/html; charset=UTF-8';
+        } else {
+            $headers[] = 'Content-Type: text/plain; charset=UTF-8';
+        }
+
+        if (!empty($args['headers']) && is_array($args['headers'])) {
+            $headers = array_merge($headers, $args['headers']);
+        }
+
+        if (self::is_test_mode_enabled()) {
+            $headers[] = 'X-MJ-Test-Mode: 1';
+            do_action('mj_member_email_simulated', $member, array(
+                'subject' => $subject,
+                'body' => $message_to_send,
+                'body_plain' => $plain_body,
+                'message_html' => $is_html ? $message_to_send : '',
+                'recipients' => $sanitized_recipients,
+                'headers' => $headers,
+                'test_mode' => true,
+                'placeholders' => $placeholders,
+                'template' => $template,
+            ), $context);
+
+            self::log_email_event(array(
+                'member_id' => ($member && isset($member->id)) ? (int) $member->id : 0,
+                'template_id' => $template_id,
+                'template_slug' => $template_slug,
+                'subject' => $subject,
+                'recipients' => $sanitized_recipients,
+                'status' => 'simulated',
+                'is_test_mode' => true,
+                'body_html' => $is_html ? $message_to_send : '',
+                'body_plain' => $plain_body,
+                'headers' => $headers,
+                'context' => $context,
+                'source' => $args['log_source'],
+            ));
+
+            return true;
+        }
+
+        $all_ok = true;
+        foreach ($sanitized_recipients as $email) {
+            if (!wp_mail($email, $subject, $message_to_send, $headers)) {
+                $all_ok = false;
+            }
+        }
+
+        self::log_email_event(array(
+            'member_id' => ($member && isset($member->id)) ? (int) $member->id : 0,
+            'template_id' => $template_id,
+            'template_slug' => $template_slug,
+            'subject' => $subject,
+            'recipients' => $sanitized_recipients,
+            'status' => $all_ok ? 'sent' : 'failed',
+            'is_test_mode' => false,
+            'error_message' => $all_ok ? '' : __('Au moins un envoi a échoué.', 'mj-member'),
+            'body_html' => $is_html ? $message_to_send : '',
+            'body_plain' => $plain_body,
+            'headers' => $headers,
+            'context' => $context,
+            'source' => $args['log_source'],
+        ));
+
+        return $all_ok;
+    }
 }
 
 // Initialize SMTP hook
