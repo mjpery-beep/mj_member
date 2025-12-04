@@ -1,50 +1,22 @@
 <?php
 
+use Mj\Member\Core\Config;
+
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Charge les classes nécessaires pour éviter les retours vides lorsque le fichier est inclus isolément.
-if (!class_exists('MjMembers_CRUD') && file_exists(MJ_MEMBER_PATH . 'includes/classes/crud/MjMembers_CRUD.php')) {
-    require_once MJ_MEMBER_PATH . 'includes/classes/crud/MjMembers_CRUD.php';
-}
-if (!class_exists('MjEvents_CRUD') && file_exists(MJ_MEMBER_PATH . 'includes/classes/crud/MjEvents_CRUD.php')) {
-    require_once MJ_MEMBER_PATH . 'includes/classes/crud/MjEvents_CRUD.php';
-}
-if (!class_exists('MjEventAnimateurs') && file_exists(MJ_MEMBER_PATH . 'includes/classes/crud/MjEventAnimateurs.php')) {
-    require_once MJ_MEMBER_PATH . 'includes/classes/crud/MjEventAnimateurs.php';
-}
-if (!class_exists('MjEventRegistrations') && file_exists(MJ_MEMBER_PATH . 'includes/classes/crud/MjEventRegistrations.php')) {
-    require_once MJ_MEMBER_PATH . 'includes/classes/crud/MjEventRegistrations.php';
-}
-if (!class_exists('MjEventAttendance') && file_exists(MJ_MEMBER_PATH . 'includes/classes/crud/MjEventAttendance.php')) {
-    require_once MJ_MEMBER_PATH . 'includes/classes/crud/MjEventAttendance.php';
-}
-if (!class_exists('MjEventSchedule') && file_exists(MJ_MEMBER_PATH . 'includes/classes/MjEventSchedule.php')) {
-    require_once MJ_MEMBER_PATH . 'includes/classes/MjEventSchedule.php';
-}
-if (!class_exists('MjEventLocations') && file_exists(MJ_MEMBER_PATH . 'includes/classes/crud/MjEventLocations.php')) {
-    require_once MJ_MEMBER_PATH . 'includes/classes/crud/MjEventLocations.php';
-}
-if (!class_exists('MjSms') && file_exists(MJ_MEMBER_PATH . 'includes/classes/MjSms.php')) {
-    require_once MJ_MEMBER_PATH . 'includes/classes/MjSms.php';
-}
-if (!class_exists('MjPayments') && file_exists(MJ_MEMBER_PATH . 'includes/classes/MjPayments.php')) {
-    require_once MJ_MEMBER_PATH . 'includes/classes/MjPayments.php';
-}
-if (!function_exists('mj_member_sync_member_user_account') && file_exists(MJ_MEMBER_PATH . 'includes/member_accounts.php')) {
-    require_once MJ_MEMBER_PATH . 'includes/member_accounts.php';
-}
+$pluginBasePath = Config::path();
 
 if (!function_exists('mj_member_register_animateur_account_assets')) {
     function mj_member_register_animateur_account_assets() {
-        $version = defined('MJ_MEMBER_VERSION') ? MJ_MEMBER_VERSION : '1.0.0';
-        $script_path = MJ_MEMBER_PATH . 'js/animateur-account.js';
+        $version = Config::version();
+        $script_path = Config::path() . 'js/animateur-account.js';
         $script_version = file_exists($script_path) ? (string) filemtime($script_path) : $version;
 
         wp_register_script(
             'mj-member-animateur-account',
-            MJ_MEMBER_URL . 'js/animateur-account.js',
+            Config::url() . 'js/animateur-account.js',
             array('jquery'),
             $script_version,
             true
@@ -295,7 +267,7 @@ if (!function_exists('mj_member_prepare_animateur_event_data')) {
             $member_role_labels = MjMembers_CRUD::getRoleLabels();
         }
 
-        $can_edit_members = function_exists('current_user_can') ? current_user_can(MJ_MEMBER_CAPABILITY) : false;
+        $can_edit_members = function_exists('current_user_can') ? current_user_can(Config::capability()) : false;
 
         $defaults = array(
             'include_past_occurrences' => true,
@@ -1609,6 +1581,61 @@ if (!function_exists(function: 'mj_member_render_animateur_component')) {
                 }
 
                 return $article_cover_cache[$article_id];
+            $pending_photo_items = array();
+            if (!empty($events) && class_exists('MjEventPhotos')) {
+                $event_ids = array_map('intval', wp_list_pluck($events, 'id'));
+                $pending_rows = MjEventPhotos::get_pending_for_events($event_ids, 30);
+
+                if (!empty($pending_rows)) {
+                    $event_cache = array();
+                    $member_cache = array();
+
+                    foreach ($pending_rows as $pending_row) {
+                        $photo_id = isset($pending_row->id) ? (int) $pending_row->id : 0;
+                        $event_id = isset($pending_row->event_id) ? (int) $pending_row->event_id : 0;
+                        $member_id = isset($pending_row->member_id) ? (int) $pending_row->member_id : 0;
+                        $attachment_id = isset($pending_row->attachment_id) ? (int) $pending_row->attachment_id : 0;
+
+                        if ($photo_id <= 0 || $event_id <= 0 || $attachment_id <= 0) {
+                            continue;
+                        }
+
+                        if (!isset($event_cache[$event_id]) && class_exists('MjEvents_CRUD')) {
+                            $event_cache[$event_id] = MjEvents_CRUD::find($event_id);
+                        }
+                        $event_record = isset($event_cache[$event_id]) ? $event_cache[$event_id] : null;
+                        $event_title = $event_record && !empty($event_record->title) ? (string) $event_record->title : sprintf(__('Événement #%d', 'mj-member'), $event_id);
+                        $event_link = $event_record ? mj_member_get_event_public_link($event_record) : '';
+
+                        if ($member_id > 0 && !isset($member_cache[$member_id]) && class_exists('MjMembers_CRUD')) {
+                            $member_cache[$member_id] = MjMembers_CRUD::getById($member_id);
+                        }
+
+                        $member = isset($member_cache[$member_id]) ? $member_cache[$member_id] : null;
+                        $member_label = $member ? mj_member_event_photos_format_member_name($member) : sprintf(__('Participant #%d', 'mj-member'), $member_id);
+
+                        $thumb_src = wp_get_attachment_image_src($attachment_id, 'medium');
+                        $full_src = wp_get_attachment_image_src($attachment_id, 'large');
+
+                        $submitted_at = isset($pending_row->created_at) ? strtotime((string) $pending_row->created_at) : 0;
+                        $submitted_label = $submitted_at ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $submitted_at) : '';
+
+                        $pending_photo_items[] = array(
+                            'id' => $photo_id,
+                            'event_id' => $event_id,
+                            'event_title' => $event_title,
+                            'event_link' => $event_link,
+                            'member_label' => $member_label,
+                            'attachment_id' => $attachment_id,
+                            'thumb' => $thumb_src ? esc_url($thumb_src[0]) : '',
+                            'full' => $full_src ? esc_url($full_src[0]) : '',
+                            'submitted' => $submitted_label,
+                            'caption' => !empty($pending_row->caption) ? sanitize_text_field($pending_row->caption) : '',
+                        );
+                    }
+                }
+            }
+
             };
 
             if (!empty($events)) {
@@ -1690,11 +1717,11 @@ if (!function_exists(function: 'mj_member_render_animateur_component')) {
         }
 
         $style_handle = 'mj-member-animateur-dashboard';
-        $style_path = MJ_MEMBER_PATH . 'css/styles.css';
-        $style_version = file_exists($style_path) ? (string) filemtime($style_path) : MJ_MEMBER_VERSION;
+        $style_path = Config::path() . 'css/styles.css';
+        $style_version = file_exists($style_path) ? (string) filemtime($style_path) : Config::version();
         wp_enqueue_style(
             $style_handle,
-            MJ_MEMBER_URL . 'css/styles.css',
+            Config::url() . 'css/styles.css',
             array(),
             $style_version
         );
@@ -1724,7 +1751,7 @@ if (!function_exists(function: 'mj_member_render_animateur_component')) {
             )
         );
 
-        $can_edit_members_cap = function_exists('current_user_can') ? current_user_can(MJ_MEMBER_CAPABILITY) : false;
+        $can_edit_members_cap = function_exists('current_user_can') ? current_user_can(Config::capability()) : false;
         $can_edit_members_cap = apply_filters('mj_member_animateur_can_edit_members', (bool) $can_edit_members_cap, $member, $settings);
 
         $can_remove_registrations_default = !$is_elementor_preview;
@@ -1936,7 +1963,7 @@ if (!function_exists(function: 'mj_member_render_animateur_component')) {
         $view_all_toggle_attrs = $view_all_is_toggle ? ' data-role="toggle-view-all" data-label-default="' . esc_attr($view_all['label']) . '" data-label-active="' . esc_attr($view_all['active_label']) . '"' : '';
 
         $member_links = array();
-        if (current_user_can(MJ_MEMBER_CAPABILITY)) {
+        if (current_user_can(Config::capability())) {
             $member_links[] = array(
                 'label' => __('Créer un membre', 'mj-member'),
                 'url' => add_query_arg(
@@ -2079,6 +2106,68 @@ if (!function_exists(function: 'mj_member_render_animateur_component')) {
             <?php else : ?>
                 <?php if (!$has_assigned_events) : ?>
                     <div class="mj-animateur-dashboard__notice mj-animateur-dashboard__notice--no-assignment"><?php esc_html_e('Aucun événement ne vous est assigné pour le moment.', 'mj-member'); ?></div>
+                <?php endif; ?>
+
+                <?php if (!empty($pending_photo_items)) :
+                    $animateur_redirect = function_exists('mj_member_get_current_url') ? mj_member_get_current_url() : home_url('/');
+                ?>
+                <section class="mj-animateur-dashboard__card mj-animateur-dashboard__card--photos">
+                    <div class="mj-animateur-dashboard__card-header">
+                        <h3 class="mj-animateur-dashboard__card-title"><?php esc_html_e('Photos à valider', 'mj-member'); ?></h3>
+                        <span class="mj-animateur-dashboard__chip"><?php echo esc_html(count($pending_photo_items)); ?></span>
+                    </div>
+                    <ul class="mj-animateur-dashboard__photo-list">
+                        <?php foreach ($pending_photo_items as $photo_item) :
+                            $photo_nonce = wp_create_nonce('mj-member-review-photo-' . $photo_item['id']);
+                            $thumb = $photo_item['thumb'] !== '' ? $photo_item['thumb'] : $photo_item['full'];
+                        ?>
+                        <li class="mj-animateur-dashboard__photo-item">
+                            <?php if ($thumb !== '') : ?>
+                                <a class="mj-animateur-dashboard__photo-thumb" href="<?php echo esc_url($photo_item['full']); ?>" target="_blank" rel="noopener">
+                                    <img src="<?php echo esc_url($thumb); ?>" alt="<?php echo esc_attr($photo_item['event_title']); ?>" loading="lazy" />
+                                </a>
+                            <?php endif; ?>
+                            <div class="mj-animateur-dashboard__photo-content">
+                                <p class="mj-animateur-dashboard__photo-meta">
+                                    <strong><?php echo esc_html($photo_item['event_title']); ?></strong>
+                                    <?php if ($photo_item['event_link'] !== '') : ?>
+                                        <a href="<?php echo esc_url($photo_item['event_link']); ?>" target="_blank" rel="noopener">
+                                            <?php esc_html_e('Voir la fiche', 'mj-member'); ?>
+                                        </a>
+                                    <?php endif; ?>
+                                </p>
+                                <p class="mj-animateur-dashboard__photo-meta mj-animateur-dashboard__photo-meta--secondary">
+                                    <?php echo esc_html($photo_item['member_label']); ?><?php if ($photo_item['submitted'] !== '') : ?> · <?php echo esc_html($photo_item['submitted']); ?><?php endif; ?>
+                                </p>
+                                <?php if ($photo_item['caption'] !== '') : ?>
+                                    <p class="mj-animateur-dashboard__photo-caption"><?php echo esc_html($photo_item['caption']); ?></p>
+                                <?php endif; ?>
+                                <div class="mj-animateur-dashboard__photo-actions">
+                                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                                        <input type="hidden" name="action" value="mj_member_review_event_photo" />
+                                        <input type="hidden" name="decision" value="approve" />
+                                        <input type="hidden" name="photo_id" value="<?php echo esc_attr($photo_item['id']); ?>" />
+                                        <input type="hidden" name="redirect_to" value="<?php echo esc_attr($animateur_redirect); ?>" />
+                                        <input type="hidden" name="source" value="animateur" />
+                                        <input type="hidden" name="_wpnonce" value="<?php echo esc_attr($photo_nonce); ?>" />
+                                        <button type="submit" class="mj-animateur-dashboard__photo-button mj-animateur-dashboard__photo-button--approve"><?php esc_html_e('Valider', 'mj-member'); ?></button>
+                                    </form>
+                                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                                        <input type="hidden" name="action" value="mj_member_review_event_photo" />
+                                        <input type="hidden" name="decision" value="reject" />
+                                        <input type="hidden" name="photo_id" value="<?php echo esc_attr($photo_item['id']); ?>" />
+                                        <input type="hidden" name="redirect_to" value="<?php echo esc_attr($animateur_redirect); ?>" />
+                                        <input type="hidden" name="source" value="animateur" />
+                                        <input type="hidden" name="_wpnonce" value="<?php echo esc_attr($photo_nonce); ?>" />
+                                        <input type="text" name="reason" placeholder="<?php esc_attr_e('Motif', 'mj-member'); ?>" />
+                                        <button type="submit" class="mj-animateur-dashboard__photo-button mj-animateur-dashboard__photo-button--reject"><?php esc_html_e('Refuser', 'mj-member'); ?></button>
+                                    </form>
+                                </div>
+                            </div>
+                        </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </section>
                 <?php endif; ?>
 
                 <?php if ($show_event_filter || $show_occurrence_filter || $view_all_has_link || $view_all_is_toggle) : ?>
@@ -2707,6 +2796,33 @@ if (!function_exists('mj_member_ajax_animateur_generate_payment_link')) {
             wp_send_json_error(array('message' => __('Membre introuvable pour cette inscription.', 'mj-member')));
         }
 
+        $occurrence_scope = 'all';
+        $occurrence_count = 1;
+        $occurrence_list = array();
+
+        if (class_exists('MjEventRegistrations') && method_exists('MjEventRegistrations', 'build_occurrence_summary')) {
+            $occurrence_summary = MjEventRegistrations::build_occurrence_summary($registration);
+            if (is_array($occurrence_summary)) {
+                if (!empty($occurrence_summary['scope'])) {
+                    $occurrence_scope = sanitize_key((string) $occurrence_summary['scope']);
+                }
+                if (!empty($occurrence_summary['count'])) {
+                    $candidate_count = (int) $occurrence_summary['count'];
+                    if ($occurrence_scope === 'custom' && $candidate_count > 0) {
+                        $occurrence_count = $candidate_count;
+                    }
+                }
+                if (!empty($occurrence_summary['occurrences']) && is_array($occurrence_summary['occurrences'])) {
+                    foreach ($occurrence_summary['occurrences'] as $occurrence_entry) {
+                        if (!is_array($occurrence_entry) || empty($occurrence_entry['start'])) {
+                            continue;
+                        }
+                        $occurrence_list[] = sanitize_text_field((string) $occurrence_entry['start']);
+                    }
+                }
+            }
+        }
+
         $payment = MjPayments::create_stripe_payment(
             $member_id,
             $event_price,
@@ -2717,6 +2833,9 @@ if (!function_exists('mj_member_ajax_animateur_generate_payment_link')) {
                 'event' => $event,
                 'payer_id' => get_current_user_id(),
                 'initiator' => 'animateur',
+                'occurrence_mode' => $occurrence_scope,
+                'occurrence_count' => $occurrence_count,
+                'occurrence_list' => $occurrence_list,
             )
         );
 
@@ -2724,7 +2843,10 @@ if (!function_exists('mj_member_ajax_animateur_generate_payment_link')) {
             wp_send_json_error(array('message' => __('Impossible de générer le lien de paiement.', 'mj-member')), 500);
         }
 
-        $amount_label = number_format_i18n((float) $event_price, 2);
+        $default_total = (float) $event_price * max(1, $occurrence_count);
+        $amount_label = isset($payment['amount_label']) && $payment['amount_label'] !== ''
+            ? $payment['amount_label']
+            : number_format_i18n(isset($payment['amount_raw']) ? (float) $payment['amount_raw'] : $default_total, 2);
         $message = sprintf(__('Lien généré. Montant : %s EUR.', 'mj-member'), $amount_label);
 
         wp_send_json_success(array(
@@ -2732,6 +2854,8 @@ if (!function_exists('mj_member_ajax_animateur_generate_payment_link')) {
             'qr_url' => isset($payment['qr_url']) ? esc_url_raw($payment['qr_url']) : '',
             'amount' => $amount_label,
             'message' => $message,
+            'occurrence_count' => $occurrence_count,
+            'occurrence_mode' => $occurrence_scope,
         ));
     }
 }
@@ -3184,7 +3308,7 @@ if (!function_exists('mj_member_ajax_animateur_remove_registration')) {
         }
 
         $member = mj_member_get_current_animateur_member();
-        $can_manage_members = function_exists('current_user_can') ? current_user_can(MJ_MEMBER_CAPABILITY) : false;
+        $can_manage_members = function_exists('current_user_can') ? current_user_can(Config::capability()) : false;
 
         if (!$member && !$can_manage_members) {
             wp_send_json_error(array('message' => __('Cet espace est réservé aux animateurs.', 'mj-member')), 403);
@@ -3238,7 +3362,7 @@ if (!function_exists('mj_member_ajax_animateur_quick_create_member')) {
     function mj_member_ajax_animateur_quick_create_member() {
         check_ajax_referer('mj_member_animateur', 'nonce');
 
-        if (!current_user_can(MJ_MEMBER_CAPABILITY)) {
+        if (!current_user_can(Config::capability())) {
             wp_send_json_error(
                 array(
                     'message' => __('Vous n\'avez pas l\'autorisation de créer un membre.', 'mj-member'),

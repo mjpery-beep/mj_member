@@ -1,17 +1,20 @@
 <?php
+
+use Mj\Member\Core\Config;
+
 if (!defined('ABSPATH')) {
     exit;
 }
 
-if (!class_exists('MjEvents_CRUD') && defined('MJ_MEMBER_PATH')) {
-    $events_crud_path = trailingslashit(MJ_MEMBER_PATH) . 'includes/classes/crud/MjEvents_CRUD.php';
+if (!class_exists('MjEvents_CRUD')) {
+    $events_crud_path = trailingslashit(Config::path()) . 'includes/classes/crud/MjEvents_CRUD.php';
     if (file_exists($events_crud_path)) {
         require_once $events_crud_path;
     }
 }
 
 function mj_member_dashboard_page() {
-    if (!current_user_can(MJ_MEMBER_CAPABILITY)) {
+    if (!current_user_can(Config::capability())) {
         wp_die(esc_html__('Vous n\'avez pas les droits suffisants pour accéder à ce tableau de bord.', 'mj-member'));
     }
 
@@ -20,7 +23,7 @@ function mj_member_dashboard_page() {
     $member_stats = mj_member_get_member_statistics();
     $event_stats = mj_member_get_event_statistics();
     $membership_summary = mj_member_get_membership_due_summary();
-        $recent_members = mj_member_get_recent_members();
+    $recent_members = mj_member_get_recent_members();
 
     $timezone = wp_timezone();
     $max_value = 0;
@@ -44,6 +47,9 @@ function mj_member_dashboard_page() {
     $membership_expiring = number_format_i18n((int) $membership_summary['expiring_count']);
     $membership_expired = number_format_i18n((int) $membership_summary['expired_count']);
     $membership_up_to_date = number_format_i18n((int) $membership_summary['up_to_date_count']);
+    $membership_upcoming_items = isset($membership_summary['upcoming']) ? $membership_summary['upcoming'] : array();
+    $upcoming_events_summary = isset($event_stats['upcoming_events_summary']) ? $event_stats['upcoming_events_summary'] : array();
+    $upcoming_events_displayed = number_format_i18n(count($upcoming_events_summary));
     ?>
     <div class="wrap mj-member-dashboard">
         <h1><?php esc_html_e('Tableau de bord MJ Member', 'mj-member'); ?></h1>
@@ -117,44 +123,6 @@ function mj_member_dashboard_page() {
                             <h3><?php esc_html_e('Répartition par rôle', 'mj-member'); ?></h3>
                             <ul class="mj-member-stats__list">
                                 <?php foreach ($member_stats['roles'] as $role_stat) : ?>
-                        <section class="mj-event-stats__section">
-                            <h3><?php esc_html_e('Événements à venir', 'mj-member'); ?></h3>
-                            <?php if (empty($event_stats['upcoming_events_summary'])) : ?>
-                                <p class="mj-event-stats__empty"><?php esc_html_e('Aucun événement à venir trouvé.', 'mj-member'); ?></p>
-                            <?php else : ?>
-                                <table class="mj-event-stats__table">
-                                    <thead>
-                                        <tr>
-                                            <th scope="col"><?php esc_html_e('Événement', 'mj-member'); ?></th>
-                                            <th scope="col"><?php esc_html_e('Date', 'mj-member'); ?></th>
-                                            <th scope="col"><?php esc_html_e('Inscriptions', 'mj-member'); ?></th>
-                                            <th scope="col"><?php esc_html_e('Liste d\'attente', 'mj-member'); ?></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php foreach ($event_stats['upcoming_events_summary'] as $upcoming_event) :
-                                            $title = isset($upcoming_event['title']) ? $upcoming_event['title'] : '';
-                                            $date_label = isset($upcoming_event['date']) ? $upcoming_event['date'] : '';
-                                            $active_count = isset($upcoming_event['active_count']) ? (int) $upcoming_event['active_count'] : 0;
-                                            $capacity_total = isset($upcoming_event['capacity_total']) ? (int) $upcoming_event['capacity_total'] : 0;
-                                            $waitlist_count = isset($upcoming_event['waitlist_count']) ? (int) $upcoming_event['waitlist_count'] : 0;
-                                            $active_display = number_format_i18n($active_count);
-                                            if ($capacity_total > 0) {
-                                                $active_display = sprintf('%s/%s', $active_display, number_format_i18n($capacity_total));
-                                            }
-                                            $waitlist_display = $waitlist_count > 0 ? number_format_i18n($waitlist_count) : '-';
-                                            ?>
-                                            <tr>
-                                                <td><?php echo esc_html($title); ?></td>
-                                                <td><?php echo esc_html($date_label); ?></td>
-                                                <td><?php echo esc_html($active_display); ?></td>
-                                                <td><?php echo esc_html($waitlist_display); ?></td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            <?php endif; ?>
-                        </section>
                                     <li>
                                         <?php
                                         printf(
@@ -167,55 +135,6 @@ function mj_member_dashboard_page() {
                                     </li>
                                 <?php endforeach; ?>
                             </ul>
-                            <div class="mj-dashboard-panel mj-dashboard-panel--membership">
-                                <h2><?php esc_html_e('Échéances cotisations', 'mj-member'); ?></h2>
-                                <?php if ((int) $membership_summary['requires_payment_total'] === 0) : ?>
-                                    <p><?php esc_html_e('Aucun membre n\'est soumis à une cotisation annuelle.', 'mj-member'); ?></p>
-                                <?php else : ?>
-                                    <p class="mj-membership-summary__intro"><?php printf(
-                                        esc_html__('%s membres concernés par la cotisation annuelle.', 'mj-member'),
-                                        esc_html($membership_requires_payment)
-                                    ); ?></p>
-                                    <ul class="mj-membership-summary__metrics">
-                                        <li><strong><?php esc_html_e('À régler :', 'mj-member'); ?></strong> <?php echo esc_html($membership_missing); ?></li>
-                                        <li><strong><?php esc_html_e('Échéance imminente :', 'mj-member'); ?></strong> <?php echo esc_html($membership_expiring); ?></li>
-                                        <li><strong><?php esc_html_e('Expirées :', 'mj-member'); ?></strong> <?php echo esc_html($membership_expired); ?></li>
-                                        <li><strong><?php esc_html_e('À jour :', 'mj-member'); ?></strong> <?php echo esc_html($membership_up_to_date); ?></li>
-                                    </ul>
-                                    <section class="mj-membership-summary__upcoming">
-                                        <h3><?php esc_html_e('Prochaines échéances', 'mj-member'); ?></h3>
-                                        <?php if (empty($membership_summary['upcoming'])) : ?>
-                                            <p class="mj-membership-summary__empty"><?php esc_html_e('Aucune échéance imminente détectée.', 'mj-member'); ?></p>
-                                        <?php else : ?>
-                                            <table class="mj-membership-summary__table">
-                                                <thead>
-                                                    <tr>
-                                                        <th scope="col"><?php esc_html_e('Membre', 'mj-member'); ?></th>
-                                                        <th scope="col"><?php esc_html_e('Échéance', 'mj-member'); ?></th>
-                                                        <th scope="col"><?php esc_html_e('Statut', 'mj-member'); ?></th>
-                                                        <th scope="col"><?php esc_html_e('Délai', 'mj-member'); ?></th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php foreach ($membership_summary['upcoming'] as $due_entry) :
-                                                        $label = isset($due_entry['label']) ? $due_entry['label'] : '';
-                                                        $deadline = isset($due_entry['deadline']) ? $due_entry['deadline'] : '';
-                                                        $status_label = isset($due_entry['status_label']) ? $due_entry['status_label'] : '';
-                                                        $delay_label = isset($due_entry['delay_label']) ? $due_entry['delay_label'] : '';
-                                                        ?>
-                                                        <tr>
-                                                            <td><?php echo esc_html($label); ?></td>
-                                                            <td><?php echo esc_html($deadline); ?></td>
-                                                            <td><?php echo esc_html($status_label); ?></td>
-                                                            <td><?php echo esc_html($delay_label); ?></td>
-                                                        </tr>
-                                                    <?php endforeach; ?>
-                                                </tbody>
-                                            </table>
-                                        <?php endif; ?>
-                                    </section>
-                                <?php endif; ?>
-                            </div>
                         </section>
                         <section class="mj-member-stats__section">
                             <h3><?php esc_html_e('Statut', 'mj-member'); ?></h3>
@@ -271,6 +190,103 @@ function mj_member_dashboard_page() {
                     </div>
                 <?php endif; ?>
             </div>
+        </div>
+
+        <div class="mj-dashboard-panels">
+            <div class="mj-dashboard-panel mj-dashboard-panel--membership">
+                <h2><?php esc_html_e('Cotisations à surveiller', 'mj-member'); ?></h2>
+                <?php if ((int) $membership_summary['requires_payment_total'] === 0) : ?>
+                    <p class="mj-membership-summary__empty"><?php esc_html_e('Toutes les cotisations requises sont à jour.', 'mj-member'); ?></p>
+                <?php else : ?>
+                    <p class="mj-membership-summary__intro"><?php printf(esc_html__('%s membre(s) nécessitent un suivi de paiement.', 'mj-member'), esc_html($membership_requires_payment)); ?></p>
+                    <ul class="mj-membership-summary__metrics">
+                        <li><?php printf(esc_html__('Paiement manquant : %s', 'mj-member'), esc_html($membership_missing)); ?></li>
+                        <li><?php printf(esc_html__('Expire sous 30 jours : %s', 'mj-member'), esc_html($membership_expiring)); ?></li>
+                        <li><?php printf(esc_html__('En retard : %s', 'mj-member'), esc_html($membership_expired)); ?></li>
+                        <li><?php printf(esc_html__('À jour après contrôle : %s', 'mj-member'), esc_html($membership_up_to_date)); ?></li>
+                    </ul>
+                    <?php if (empty($membership_upcoming_items)) : ?>
+                        <p class="mj-membership-summary__empty"><?php esc_html_e('Aucune échéance prioritaire sur les prochaines semaines.', 'mj-member'); ?></p>
+                    <?php else : ?>
+                        <div class="mj-membership-summary__upcoming">
+                            <h3><?php esc_html_e('Échéances prioritaires', 'mj-member'); ?></h3>
+                            <table class="mj-membership-summary__table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col"><?php esc_html_e('Membre', 'mj-member'); ?></th>
+                                        <th scope="col"><?php esc_html_e('Statut', 'mj-member'); ?></th>
+                                        <th scope="col"><?php esc_html_e('Échéance', 'mj-member'); ?></th>
+                                        <th scope="col"><?php esc_html_e('Délai', 'mj-member'); ?></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($membership_upcoming_items as $membership_item) :
+                                        $member_label = isset($membership_item['label']) ? $membership_item['label'] : '';
+                                        $status_label = isset($membership_item['status_label']) ? $membership_item['status_label'] : '';
+                                        $deadline_label = isset($membership_item['deadline']) ? $membership_item['deadline'] : '';
+                                        $delay_label = isset($membership_item['delay_label']) ? $membership_item['delay_label'] : '';
+                                        ?>
+                                        <tr>
+                                            <td><?php echo esc_html($member_label); ?></td>
+                                            <td><?php echo esc_html($status_label); ?></td>
+                                            <td><?php echo esc_html($deadline_label); ?></td>
+                                            <td><?php echo esc_html($delay_label); ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
+                <?php endif; ?>
+            </div>
+
+            <div class="mj-dashboard-panel mj-dashboard-panel--events-upcoming">
+                <h2><?php esc_html_e('Événements à venir', 'mj-member'); ?></h2>
+                <?php if (empty($upcoming_events_summary)) : ?>
+                    <p class="mj-events-upcoming__empty"><?php esc_html_e('Aucun événement à venir n\'est planifié pour le moment.', 'mj-member'); ?></p>
+                <?php else : ?>
+                    <p class="mj-events-upcoming__intro"><?php printf(esc_html__('Prochains événements actifs : %1$s (affichage des %2$s plus proches).', 'mj-member'), esc_html($events_upcoming), esc_html($upcoming_events_displayed)); ?></p>
+                    <table class="mj-events-upcoming__table">
+                        <thead>
+                            <tr>
+                                <th scope="col"><?php esc_html_e('Événement', 'mj-member'); ?></th>
+                                <th scope="col"><?php esc_html_e('Date', 'mj-member'); ?></th>
+                                <th scope="col"><?php esc_html_e('Inscriptions actives', 'mj-member'); ?></th>
+                                <th scope="col"><?php esc_html_e('Liste d\'attente', 'mj-member'); ?></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($upcoming_events_summary as $event_row) :
+                                $event_title = isset($event_row['title']) ? $event_row['title'] : '';
+                                $event_date = isset($event_row['date']) ? $event_row['date'] : '';
+                                $active_count = isset($event_row['active_count']) ? (int) $event_row['active_count'] : 0;
+                                $capacity_total = isset($event_row['capacity_total']) ? (int) $event_row['capacity_total'] : 0;
+                                $waitlist_count = isset($event_row['waitlist_count']) ? (int) $event_row['waitlist_count'] : 0;
+                                ?>
+                                <tr>
+                                    <td><?php echo esc_html($event_title); ?></td>
+                                    <td><?php echo esc_html($event_date); ?></td>
+                                    <td>
+                                        <?php
+                                        if ($capacity_total > 0) {
+                                            printf(
+                                                esc_html__('%1$s / %2$s', 'mj-member'),
+                                                esc_html(number_format_i18n($active_count)),
+                                                esc_html(number_format_i18n($capacity_total))
+                                            );
+                                        } else {
+                                            echo esc_html(number_format_i18n($active_count));
+                                        }
+                                        ?>
+                                    </td>
+                                    <td><?php echo esc_html(number_format_i18n($waitlist_count)); ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
+            </div>
+
             <div class="mj-dashboard-panel mj-dashboard-panel--recent-members">
                 <h2><?php esc_html_e('Derniers membres inscrits', 'mj-member'); ?></h2>
                 <?php if (empty($recent_members)) : ?>
@@ -301,6 +317,7 @@ function mj_member_dashboard_page() {
                     </table>
                 <?php endif; ?>
             </div>
+
             <div class="mj-dashboard-panel mj-dashboard-panel--events">
                 <h2><?php esc_html_e('Statistiques événements', 'mj-member'); ?></h2>
                 <?php if ((int) $event_stats['total_events'] === 0) : ?>
@@ -939,7 +956,7 @@ function mj_member_get_membership_due_summary() {
         return $summary;
     }
 
-    $expiration_days = (int) apply_filters('mj_member_payment_expiration_days', MJ_MEMBER_PAYMENT_EXPIRATION_DAYS);
+    $expiration_days = (int) apply_filters('mj_member_payment_expiration_days', Config::paymentExpirationDays());
     $expiration_days = max(1, $expiration_days);
     $expiring_threshold = (int) apply_filters('mj_member_membership_expiring_threshold_days', 30);
     $expiring_threshold = max(0, $expiring_threshold);
@@ -1117,6 +1134,7 @@ function mj_member_dashboard_styles() {
         .mj-dashboard-card__metric { font-size: 2rem; font-weight: 700; margin: 8px 0 4px; color: #1d2327; }
         .mj-dashboard-card__hint { margin: 0; color: #50575e; font-size: 0.9rem; }
         .mj-dashboard-split { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+        .mj-dashboard-panels { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-top: 24px; }
         .mj-dashboard-panel { background: #fff; border: 1px solid #dcdcde; border-radius: 10px; padding: 20px; box-shadow: 0 6px 18px rgba(0,0,0,0.04); }
         .mj-dashboard-panel h2 { margin-top: 0; }
         .mj-dashboard-chart { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
@@ -1149,6 +1167,12 @@ function mj_member_dashboard_styles() {
         .mj-membership-summary__table th,
         .mj-membership-summary__table td { text-align: left; padding: 6px 0; border-bottom: 1px solid #dcdcde; }
         .mj-membership-summary__table th { font-weight: 600; color: #1d2327; }
+        .mj-dashboard-panel--events-upcoming .mj-events-upcoming__intro { margin: 0 0 12px; color: #1d2327; font-weight: 600; }
+        .mj-events-upcoming__empty { margin: 0; color: #50575e; }
+        .mj-events-upcoming__table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .mj-events-upcoming__table th,
+        .mj-events-upcoming__table td { text-align: left; padding: 6px 0; border-bottom: 1px solid #dcdcde; }
+        .mj-events-upcoming__table th { font-weight: 600; color: #1d2327; }
         .mj-dashboard-panel--recent-members .mj-recent-members__table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
         .mj-recent-members__table th,
         .mj-recent-members__table td { text-align: left; padding: 6px 0; border-bottom: 1px solid #dcdcde; }
@@ -1171,6 +1195,9 @@ function mj_member_dashboard_styles() {
         @media (min-width: 900px) {
             .mj-dashboard-panel--events .mj-event-stats { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
         }
+        @media (min-width: 1100px) {
+            .mj-dashboard-panel--events-upcoming { grid-column: span 2; }
+        }
         @media (max-width: 782px) {
             .mj-dashboard-chart__row { grid-template-columns: 1fr; gap: 6px; }
             .mj-dashboard-chart__counts { justify-self: flex-start; }
@@ -1180,7 +1207,7 @@ function mj_member_dashboard_styles() {
 }
 
 function mj_member_register_wp_dashboard_widget() {
-    if (!current_user_can(MJ_MEMBER_CAPABILITY)) {
+    if (!current_user_can(Config::capability())) {
         return;
     }
 

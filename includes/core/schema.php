@@ -1,5 +1,7 @@
 <?php
 
+use Mj\Member\Core\Config;
+
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
@@ -437,7 +439,7 @@ function mj_member_run_schema_upgrade() {
         }
     }
 
-    $schema_needs_upgrade = version_compare($stored_version, MJ_MEMBER_SCHEMA_VERSION, '<')
+    $schema_needs_upgrade = version_compare($stored_version, Config::schemaVersion(), '<')
         || !empty($missing_columns)
         || !empty($missing_event_columns);
     
@@ -464,6 +466,9 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_9($wpdb);
     mj_member_upgrade_to_2_10($wpdb);
     mj_member_upgrade_to_2_11($wpdb);
+    mj_member_upgrade_to_2_12($wpdb);
+    mj_member_upgrade_to_2_13($wpdb);
+    mj_member_upgrade_to_2_14($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -480,7 +485,7 @@ function mj_member_run_schema_upgrade() {
         MjMembers_CRUD::resetColumnCache();
     }
 
-    update_option('mj_member_schema_version', MJ_MEMBER_SCHEMA_VERSION);
+    update_option('mj_member_schema_version', Config::schemaVersion());
     flush_rewrite_rules(false);
     $running = false;
 }
@@ -656,7 +661,7 @@ function mj_member_migrate_legacy_members($table_name) {
                         'last_name' => sanitize_text_field($row['tutor_nom']),
                         'email' => sanitize_email($row['tutor_email']),
                         'phone' => sanitize_text_field($row['tutor_phone']),
-                        'role' => 'tuteur',
+                        'role' => MjMembers_CRUD::ROLE_TUTEUR,
                         'status' => 'active',
                         'requires_payment' => 0,
                         'is_autonomous' => 1,
@@ -782,7 +787,7 @@ function mj_member_seed_events_from_csv($wpdb) {
         return;
     }
 
-    $csv_path = MJ_MEMBER_PATH . 'data/event.csv';
+    $csv_path = Config::path() . 'data/event.csv';
     if (!file_exists($csv_path) || !is_readable($csv_path)) {
         return;
     }
@@ -1357,6 +1362,88 @@ function mj_member_upgrade_to_2_11($wpdb) {
         }
 
         MjEvents_CRUD::sync_slug((int) $row->id, $base);
+    }
+}
+
+function mj_member_upgrade_to_2_12($wpdb) {
+    $photos_table = $wpdb->prefix . 'mj_event_photos';
+
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql = "CREATE TABLE {$photos_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        event_id bigint(20) unsigned NOT NULL,
+        registration_id bigint(20) unsigned DEFAULT NULL,
+        member_id bigint(20) unsigned NOT NULL,
+        attachment_id bigint(20) unsigned NOT NULL,
+        caption varchar(255) DEFAULT NULL,
+        status varchar(20) NOT NULL DEFAULT 'pending',
+        rejection_reason text DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        reviewed_at datetime DEFAULT NULL,
+        reviewed_by bigint(20) unsigned DEFAULT NULL,
+        PRIMARY KEY  (id),
+        KEY idx_event_status (event_id, status),
+        KEY idx_member (member_id),
+        KEY idx_registration (registration_id)
+    ) {$charset_collate};";
+
+    dbDelta($sql);
+}
+
+function mj_member_upgrade_to_2_13($wpdb) {
+    $table = $wpdb->prefix . 'mj_contact_messages';
+
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql = "CREATE TABLE {$table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        sender_name varchar(190) NOT NULL,
+        sender_email varchar(190) NOT NULL,
+        subject varchar(190) DEFAULT '',
+        message longtext NOT NULL,
+        target_type varchar(30) NOT NULL DEFAULT 'all',
+        target_reference bigint(20) unsigned DEFAULT NULL,
+        target_label varchar(190) DEFAULT '',
+        status varchar(20) NOT NULL DEFAULT 'nouveau',
+        is_read tinyint(1) NOT NULL DEFAULT 0,
+        assigned_to bigint(20) unsigned DEFAULT NULL,
+        source_url varchar(255) DEFAULT '',
+        activity_log longtext DEFAULT NULL,
+        meta longtext DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY idx_status (status),
+        KEY idx_target (target_type, target_reference),
+        KEY idx_assigned (assigned_to),
+        KEY idx_read (is_read)
+    ) {$charset_collate};";
+
+    dbDelta($sql);
+}
+
+function mj_member_upgrade_to_2_14($wpdb) {
+    $table = $wpdb->prefix . 'mj_contact_messages';
+
+    if (!mj_member_table_exists($table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($table, 'is_read')) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN is_read tinyint(1) NOT NULL DEFAULT 0 AFTER status");
+    }
+
+    if (!mj_member_index_exists($table, 'idx_read')) {
+        $wpdb->query("ALTER TABLE {$table} ADD KEY idx_read (is_read)");
     }
 }
 

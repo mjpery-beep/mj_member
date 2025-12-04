@@ -20,3 +20,6 @@
 - [18. Securite et conformite](18-securite-conformite.md)
 - [19. Documentation et support](19-documentation-support.md)
 - [20. Partage de photos lie aux evenements](20-partage-photos-evenements.md)
+- [21. Module photo pour les événements](21-module-photo-evenement.md)
+- [22. Widget formulaire de contact](22-widget-formulaire-contact.md)
+- [23. Refactorisation du module MJ Member](23-refactorisation-module.md)

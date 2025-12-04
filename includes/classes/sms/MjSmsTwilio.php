@@ -1,5 +1,12 @@
 <?php
-if (!defined('ABSPATH')) exit;
+
+namespace Mj\Member\Classes\Sms;
+
+use WP_Error;
+
+if (!defined('ABSPATH')) {
+    exit;
+}
 
 class MjSmsTwilio {
     private $account_sid;
@@ -67,3 +74,5 @@ class MjSmsTwilio {
         return new WP_Error('twilio_sms_error', $error_message, $error_data);
     }
 }
+
+    \class_alias(__NAMESPACE__ . '\\MjSmsTwilio', 'MjSmsTwilio');

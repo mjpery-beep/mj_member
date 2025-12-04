@@ -1,15 +1,17 @@
 <?php
 
-if (!class_exists('WP_List_Table')) {
+namespace Mj\Member\Classes\Table;
+
+use Mj\Member\Classes\Crud\MjMembers_CRUD;
+use Mj\Member\Classes\MjTools;
+use WP_List_Table;
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+if (!class_exists('\\WP_List_Table')) {
     require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
-}
-
-if (!class_exists('MjTools')) {
-    require_once dirname(__DIR__) . '/MjTools.php';
-}
-
-if (!class_exists('MjMembers_CRUD')) {
-    require_once dirname(__DIR__) . '/crud/MjMembers_CRUD.php';
 }
 
 class MjMembers_List_Table extends WP_List_Table {

@@ -1,5 +1,10 @@
 <?php
 
+namespace Mj\Member\Classes\Crud;
+
+use DateTime;
+use WP_Error;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -226,7 +231,7 @@ class MjEventClosures {
     /**
      * @param string $start
      * @param string $end
-     * @return array<string,bool>
+     * @return array<string,array<string,string>>
      */
     public static function get_dates_map_between($start, $end) {
         $start_norm = self::normalize_date($start);
@@ -241,9 +246,9 @@ class MjEventClosures {
             return array();
         }
 
-        $results = $wpdb->get_col(
+        $results = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT closure_date FROM {$table} WHERE closure_date BETWEEN %s AND %s",
+                "SELECT closure_date, description FROM {$table} WHERE closure_date BETWEEN %s AND %s",
                 $start_norm,
                 $end_norm
             )
@@ -254,10 +259,23 @@ class MjEventClosures {
         }
 
         $map = array();
-        foreach ($results as $date_value) {
-            $map[$date_value] = true;
+        foreach ($results as $entry) {
+            if (!is_object($entry) || empty($entry->closure_date)) {
+                continue;
+            }
+
+            $description = '';
+            if (isset($entry->description)) {
+                $description = sanitize_text_field((string) $entry->description);
+            }
+
+            $map[$entry->closure_date] = array(
+                'description' => $description,
+            );
         }
 
         return $map;
     }
 }
+
+class_alias(__NAMESPACE__ . '\\MjEventClosures', 'MjEventClosures');

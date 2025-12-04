@@ -1,4 +1,14 @@
 <?php
+
+namespace Mj\Member\Classes;
+
+use Exception;
+use Mj\Member\Core\Config;
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Configuration et gestion de l'intégration Stripe
  * SÉCURITÉ: Les clés secrètes ne doivent JAMAIS être exposées au frontend
@@ -398,7 +408,7 @@ class MjStripeConfig {
         // Charger la librairie Stripe si elle n'est pas déjà chargée
         if (!class_exists('Stripe\\Stripe')) {
             // Essayer avec Composer
-            $autoload_path = MJ_MEMBER_PATH . 'vendor/autoload.php';
+            $autoload_path = Config::path() . 'vendor/autoload.php';
             if (file_exists($autoload_path)) {
                 require_once $autoload_path;
             } else {
@@ -417,3 +427,5 @@ class MjStripeConfig {
 if (function_exists('add_action')) {
     add_action('plugins_loaded', array('MjStripeConfig', 'init'));
 }
+
+\class_alias(__NAMESPACE__ . '\\MjStripeConfig', 'MjStripeConfig');

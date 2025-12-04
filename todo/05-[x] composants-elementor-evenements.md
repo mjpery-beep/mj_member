@@ -29,3 +29,25 @@
     - [x] Afficher la cover en tout petit sur le marker google maps quand on click on vois le détailt : cover (légèrement plus grand), adresse, infos pratiques.
     - [x] Options d'affichage: grille, slider ou carte interactive.
 - [x] Assurer la compatibilite responsive et l'utilisation des couleurs globales Elementor.
+- [x] Supprimer la popup sur le click de l'event et ajouter le lien vers la page dédiée de l'évenement.
+## Dans le widget liste des évenements
+- [x] Récupère la couleur de l'event pour l'afficher dans la "Carte" 
+- [x] Supprime google maps et met juste le logo du lieu avec l'adresse en dessous.
+- [x] Supprime le bouton d'inscription
+- [x] Mets le prix dans un style spécial (uniquement si supérieur a zero)
+- [x] Soigne la mise ne page de la carte de l'event (alignement, espace, typo)
+- [x] Reconfigure le panel style du widget liste des évenements pour ajouter plus d'option (ex: couleur de fond (blanc), couleur du texte, taille des images, ... )
+- [x] Permettre de choisir le nombre d'événements par ligne en mode grille (2, 3, 4)
+- [x] Permettre de filtrer en fonctione de article associé. (Liste des articles wordpress lié a un évenement)
+- [x] Supprime "Détail de l'evenement"
+- [x] Afficher un résumé sur les évenements occurences de type "Tous les lundis de 16h00 à 21h00"
+- [x] Quand je clique sur la vignette ca ouvre la page dédiée de l'évenement
+- [x] Le bande "Soirée", "Stage" doit être affiché par dessus de la cover de l'évenement (coin supérieur droite)
+- [x] Supprime la liste d'occurences dans la carte de l'évenement
+- [x] Le modules n'affiche pas les évenements avec occurence (1 évenement avec plusieurs dates)
+- [x] Le widget list n'affiche pas les évenements avec occurence (1 évenement avec plusieurs dates)
+- [x] sur le widget list Supprime la liste des Participants inscrits
+- [x] sur le widget list permet dans le panel de config elementor de n'afficher qu'un seule éléments en mode wide (1 évenement par ligne avec image plus grande
+- [x] Remplace la phrase "Prochaine occurrence le ..." par "Prochaines dates : ..." (n'affiche pas l'heure)
+- [x] Fait une petite mise en page pour les heure d'ouverte
+- [x] retire l'information "Inscriptions cloturées"

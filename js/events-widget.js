@@ -45,9 +45,41 @@
     function openLoginModal() {
         var trigger = document.querySelector('[data-mj-login-trigger]');
         if (trigger) {
+            var targetId = trigger.getAttribute('data-target');
+            var modal = targetId ? document.getElementById(targetId) : null;
+
+            if (typeof window.mjMemberOpenLoginModal === 'function' && window.mjMemberOpenLoginModal(targetId || '')) {
+                return;
+            }
+
+            if (!modal) {
+                if (loginUrl) {
+                    window.location.href = loginUrl;
+                }
+                return;
+            }
+
+            trigger.setAttribute('data-force-open', '1');
             trigger.click();
+
+            if (!document.body.classList.contains('mj-member-login-open')) {
+                document.body.classList.add('mj-member-login-open');
+            }
+
+            modal.classList.add('is-active');
+            modal.setAttribute('aria-hidden', 'false');
+
+            var focusable = modal.querySelector('input:not([disabled]):not([type="hidden"])');
+            if (!focusable) {
+                focusable = modal.querySelector('button:not([disabled]), a[href], textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])');
+            }
+            if (focusable && typeof focusable.focus === 'function') {
+                focusable.focus();
+            }
+
             return;
         }
+
         if (loginUrl) {
             window.location.href = loginUrl;
         }

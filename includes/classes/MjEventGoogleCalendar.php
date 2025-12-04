@@ -1,5 +1,13 @@
 <?php
 
+namespace Mj\Member\Classes;
+
+use DateTime;
+use DateTimeImmutable;
+use DateTimeInterface;
+use DateTimeZone;
+use WP_Error;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -1232,3 +1240,5 @@ class MjEventGoogleCalendar {
         return substr($candidate, 0, 64);
     }
 }
+
+\class_alias(__NAMESPACE__ . '\\MjEventGoogleCalendar', 'MjEventGoogleCalendar');

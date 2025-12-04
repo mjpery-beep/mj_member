@@ -1,5 +1,12 @@
 <?php
 
+namespace Mj\Member\Classes\Crud;
+
+use DateTime;
+use DateTimeInterface;
+use Exception;
+use WP_Error;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -742,3 +749,5 @@ class MjEventAttendance {
         }
     }
 }
+
+class_alias(__NAMESPACE__ . '\\MjEventAttendance', 'MjEventAttendance');

@@ -132,36 +132,74 @@ jQuery(document).ready(function($) {
         return String(text || '').replace(/[&<>"']/g, function(m) { return map[m]; });
     }
 
-    function loadPaymentHistory(memberId, triggerButton) {
-        if (triggerButton) {
-            triggerButton.prop('disabled', true).text('⏳ Chargement...');
+    function loadPaymentHistory(memberId, triggerButton, filterValue) {
+        if (!memberId) {
+            return;
+        }
+
+        var $modal = $('#mj-qr-modal');
+        var selectedFilter = (typeof filterValue === 'string' && filterValue.length > 0) ? filterValue : ($modal.attr('data-active-filter') || 'all');
+
+        $modal.attr('data-member-id', memberId);
+        $modal.attr('data-active-filter', selectedFilter);
+
+        if (triggerButton && triggerButton.length) {
+            if (triggerButton.hasClass('mj-payment-history-btn')) {
+                triggerButton.data('mjOriginalText', triggerButton.text());
+                triggerButton.prop('disabled', true).text('⏳ Chargement...');
+            } else if (triggerButton.hasClass('mj-payment-filter-btn')) {
+                triggerButton.prop('disabled', true).addClass('is-loading');
+            }
         }
 
         $.post(mjPayments.ajaxurl, {
             action: 'mj_admin_get_payment_history',
             member_id: memberId,
+            payment_filter: selectedFilter,
             nonce: mjPayments.nonce
         }, function(resp) {
-            if (triggerButton) {
-                triggerButton.prop('disabled', false).text('💳 Historique');
+            if (triggerButton && triggerButton.length) {
+                if (triggerButton.hasClass('mj-payment-history-btn')) {
+                    var resetText = triggerButton.data('mjOriginalText') || '💳 Historique';
+                    triggerButton.prop('disabled', false).text(resetText);
+                } else if (triggerButton.hasClass('mj-payment-filter-btn')) {
+                    triggerButton.prop('disabled', false).removeClass('is-loading');
+                }
             }
 
             if (!resp || !resp.success) {
                 console.error('Payment History Error:', resp);
-                alert('Erreur: ' + (resp.data ? resp.data : 'Impossible de récupérer l\'historique des paiements'));
+                alert('Erreur: ' + (resp && resp.data ? resp.data : 'Impossible de récupérer l\'historique des paiements'));
                 return;
             }
 
             var data = resp.data || {};
             var canDelete = !!data.can_delete;
+            var activeFilter = data.active_filter || selectedFilter || 'all';
+            $modal.attr('data-active-filter', activeFilter);
+
             var html = '<h3 style="margin-top:0; color:#0073aa;">Historique des paiements</h3>';
 
-            if (data.payments && data.payments.length > 0) {
+            if (Array.isArray(data.filters) && data.filters.length) {
+                html += '<div class="mj-payment-history-filters" style="margin-bottom:15px; display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-start;">';
+                data.filters.forEach(function(filter) {
+                    var value = (filter && filter.value) ? filter.value : 'all';
+                    var label = (filter && filter.label) ? filter.label : value;
+                    var isActive = value === activeFilter;
+                    var buttonClass = isActive ? 'button button-primary' : 'button button-secondary';
+                    html += '<button type="button" class="' + buttonClass + ' mj-payment-filter-btn" data-filter="' + value + '">' + escapeHtml(label) + '</button>';
+                });
+                html += '</div>';
+            }
+
+            if (Array.isArray(data.payments) && data.payments.length > 0) {
                 html += '<ul style="list-style:none; padding:0;">';
                 data.payments.forEach(function(payment) {
                     html += '<li style="margin-bottom:10px; padding:10px; border:1px solid #ddd; border-radius:4px; position:relative;">' +
                         '<strong>Date:</strong> ' + escapeHtml(payment.date) + '<br>' +
                         '<strong>Montant:</strong> ' + escapeHtml(payment.amount) + ' €<br>' +
+                        (payment.context_label ? '<strong>Type:</strong> ' + escapeHtml(payment.context_label) + '<br>' : '') +
+                        (payment.event && payment.event.title ? '<strong>Événement:</strong> ' + escapeHtml(payment.event.title) + '<br>' : '') +
                         '<strong>Référence:</strong> ' + escapeHtml(payment.reference) + '<br>' +
                         '<strong>Statut:</strong> ' + escapeHtml(payment.status_label || payment.status || 'Inconnu') + '<br>' +
                         '<strong>Méthode:</strong> ' + escapeHtml(payment.method || '') +
@@ -170,15 +208,20 @@ jQuery(document).ready(function($) {
                 });
                 html += '</ul>';
             } else {
-                html += '<p>Aucun paiement trouvé pour ce membre.</p>';
+                html += '<p>Aucun paiement trouvé pour ce filtre.</p>';
             }
 
             $('#mj-qr-content').html(html);
             $('#mj-qr-modal').css('display', 'flex');
         }, 'json')
         .fail(function(jqXHR, textStatus, errorThrown) {
-            if (triggerButton) {
-                triggerButton.prop('disabled', false).text('💳 Historique');
+            if (triggerButton && triggerButton.length) {
+                if (triggerButton.hasClass('mj-payment-history-btn')) {
+                    var resetText = triggerButton.data('mjOriginalText') || '💳 Historique';
+                    triggerButton.prop('disabled', false).text(resetText);
+                } else if (triggerButton.hasClass('mj-payment-filter-btn')) {
+                    triggerButton.prop('disabled', false).removeClass('is-loading');
+                }
             }
             console.error('AJAX Error:', textStatus, errorThrown);
             alert('Erreur de communication avec le serveur: ' + textStatus);
@@ -189,6 +232,16 @@ jQuery(document).ready(function($) {
         e.preventDefault();
         var memberId = $(this).data('member-id');
         loadPaymentHistory(memberId, $(this));
+    });
+
+    $(document).on('click', '.mj-payment-filter-btn', function(e) {
+        e.preventDefault();
+        var memberId = $('#mj-qr-modal').attr('data-member-id');
+        if (!memberId) {
+            return;
+        }
+        var filter = $(this).data('filter') || 'all';
+        loadPaymentHistory(memberId, $(this), filter);
     });
 
     $(document).on('click', '.mj-delete-payment-btn', function(e) {
@@ -219,7 +272,8 @@ jQuery(document).ready(function($) {
             }
 
             // Reload history list
-            loadPaymentHistory(memberId);
+            var currentFilter = $('#mj-qr-modal').attr('data-active-filter') || 'all';
+            loadPaymentHistory(memberId, null, currentFilter);
         }, 'json').fail(function(jqXHR, textStatus, errorThrown) {
             console.error('AJAX Error:', textStatus, errorThrown);
             alert('Erreur de communication avec le serveur: ' + textStatus);

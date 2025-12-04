@@ -2,6 +2,7 @@
     --mj-member-login-primary: var(--e-global-color-primary, #0073aa);
     --mj-member-login-primary-hover: var(--e-global-color-primary-hover, #005f8d);
     --mj-member-login-text: #ffffff;
+    --mj-member-login-accent: var(--mj-member-login-primary);
     --mj-member-login-modal-bg: #ffffff;
     --mj-member-login-modal-text: #1f1f1f;
     --mj-member-login-backdrop: rgba(17, 24, 39, 0.55);
@@ -9,6 +10,42 @@
     display: inline-flex;
     align-items: center;
     gap: 0;
+}
+
+.mj-member-login-component--role-animateur {
+    --mj-member-login-primary: #2563eb;
+    --mj-member-login-primary-hover: #1d4ed8;
+    --mj-member-login-accent: #1d4ed8;
+}
+
+.mj-member-login-component--role-jeune {
+    --mj-member-login-primary: #ec4899;
+    --mj-member-login-primary-hover: #db2777;
+    --mj-member-login-accent: #db2777;
+}
+
+.mj-member-login-component--role-coordinateur {
+    --mj-member-login-primary: #22c55e;
+    --mj-member-login-primary-hover: #16a34a;
+    --mj-member-login-accent: #16a34a;
+}
+
+.mj-member-login-component--role-benevole {
+    --mj-member-login-primary: #f59e0b;
+    --mj-member-login-primary-hover: #d97706;
+    --mj-member-login-accent: #d97706;
+}
+
+.mj-member-login-component--role-tuteur {
+    --mj-member-login-primary: #8b5cf6;
+    --mj-member-login-primary-hover: #7c3aed;
+    --mj-member-login-accent: #7c3aed;
+}
+
+.mj-member-login-component--role-default {
+    --mj-member-login-primary: var(--e-global-color-primary, #0073aa);
+    --mj-member-login-primary-hover: var(--e-global-color-primary-hover, #005f8d);
+    --mj-member-login-accent: var(--mj-member-login-primary-hover);
 }
 
 .mj-member-login-component[data-preview="1"] .mj-member-login-component__preview-note {
@@ -56,7 +93,7 @@ body.mj-member-login-open {
     justify-content: center;
     flex-direction: row;
     gap: 0.5rem;
-    padding: 0.75rem 1.5rem;
+    padding: 0.75rem 0;
     border-radius: 999px;
     border: 1px solid var(--mj-member-login-primary);
     background-color: var(--mj-member-login-primary);
@@ -67,6 +104,123 @@ body.mj-member-login-open {
     cursor: pointer;
     transition: background-color 0.25s ease, border-color 0.25s ease, transform 0.2s ease;
     box-shadow: 0 10px 30px rgba(0, 115, 170, 0.18);
+}
+
+.mj-member-login-component__trigger-visual {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.18);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+    flex-shrink: 0;
+    overflow: hidden;
+    margin-right: 0.7rem;
+}
+.mj-member-login-component__trigger-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    overflow: hidden;
+    background: rgba(15, 23, 42, 0.18);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.mj-member-login-component__trigger-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.85rem;
+    height: 1.85rem;
+    border-radius: 50%;
+    overflow: hidden;
+    background: rgba(15, 23, 42, 0.18);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+
+.mj-member-login-component__trigger-avatar img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.mj-member-login-component__trigger-avatar-placeholder {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.85);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.mj-member-login-component__trigger-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    line-height: 1.1;
+}
+
+.mj-member-login-component__trigger-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.mj-member-login-component__trigger-meta {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.82);
+}
+
+.mj-member-login-component__trigger-role {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.22);
+    font-weight: 700;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.94);
+}
+
+.mj-member-login-component__trigger-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.94);
+}
+
+.mj-member-login-component__trigger-action-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.15em;
+    height: 1.15em;
+    font-size: 0.85rem;
+}
+
+.mj-member-login-component__trigger-action-icon svg,
+.mj-member-login-component__trigger-action-icon i {
+    width: 100%;
+    height: 100%;
 }
 
 .mj-member-login-component__trigger-icon {

@@ -1,5 +1,7 @@
 <?php
 
+namespace Mj\Member\Classes\Crud;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -595,3 +597,5 @@ class MjEvents_CRUD {
         return $supported;
     }
 }
+
+\class_alias(__NAMESPACE__ . '\\MjEvents_CRUD', 'MjEvents_CRUD');

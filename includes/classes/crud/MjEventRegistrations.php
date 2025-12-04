@@ -1,11 +1,15 @@
 <?php
 
+namespace Mj\Member\Classes\Crud;
+
+use DateTime;
+use Mj\Member\Classes\MjEventSchedule;
+use Mj\Member\Classes\MjMail;
+use WP_Error;
+
 if (!defined('ABSPATH')) {
     exit;
 }
-
-require_once plugin_dir_path(__FILE__) . 'MjMembers_CRUD.php';
-require_once plugin_dir_path(__FILE__) . 'MjEventAnimateurs.php';
 
 class MjEventRegistrations {
     /** @var array<string,mixed> */
@@ -595,6 +599,123 @@ class MjEventRegistrations {
     }
 
     /**
+     * @param object|array $registration
+     * @return array<string,mixed>
+     */
+    public static function build_occurrence_summary($registration) {
+        $summary = array(
+            'scope' => 'all',
+            'count' => 0,
+            'occurrences' => array(),
+        );
+
+        if (!$registration || !class_exists('MjEventAttendance')) {
+            return $summary;
+        }
+
+        $assignments = MjEventAttendance::get_registration_assignments($registration);
+        $scope = isset($assignments['mode']) ? sanitize_key((string) $assignments['mode']) : 'all';
+        if ($scope === '') {
+            $scope = 'all';
+        }
+
+        $event_id = 0;
+        if (is_object($registration) && isset($registration->event_id)) {
+            $event_id = (int) $registration->event_id;
+        } elseif (is_array($registration) && isset($registration['event_id'])) {
+            $event_id = (int) $registration['event_id'];
+        }
+
+        $occurrence_map = array();
+        if ($event_id > 0 && class_exists('MjEvents_CRUD') && class_exists('MjEventSchedule')) {
+            static $event_occurrence_cache = array();
+            if (isset($event_occurrence_cache[$event_id])) {
+                $occurrence_map = $event_occurrence_cache[$event_id];
+            } else {
+                $event_object = MjEvents_CRUD::find($event_id);
+                if ($event_object) {
+                    $occurrences = MjEventSchedule::get_occurrences($event_object, array(
+                        'max' => 300,
+                        'include_past' => true,
+                    ));
+                    if (!empty($occurrences)) {
+                        foreach ($occurrences as $occurrence_entry) {
+                            if (!is_array($occurrence_entry) || empty($occurrence_entry['start'])) {
+                                continue;
+                            }
+                            $normalized_start = MjEventAttendance::normalize_occurrence($occurrence_entry['start']);
+                            if ($normalized_start === '') {
+                                continue;
+                            }
+                            $label = isset($occurrence_entry['label']) ? sanitize_text_field((string) $occurrence_entry['label']) : self::format_occurrence_label($normalized_start);
+                            $occurrence_map[$normalized_start] = $label;
+                        }
+                    }
+                }
+                $event_occurrence_cache[$event_id] = $occurrence_map;
+            }
+        }
+
+        $occurrence_list = array();
+        if ($scope === 'custom' && !empty($assignments['occurrences']) && is_array($assignments['occurrences'])) {
+            $unique = array();
+            foreach ($assignments['occurrences'] as $occurrence_entry) {
+                $normalized = MjEventAttendance::normalize_occurrence($occurrence_entry);
+                if ($normalized === '') {
+                    continue;
+                }
+                $unique[$normalized] = true;
+            }
+            if (!empty($unique)) {
+                foreach (array_keys($unique) as $normalized) {
+                    $label = isset($occurrence_map[$normalized]) ? $occurrence_map[$normalized] : self::format_occurrence_label($normalized);
+                    $occurrence_list[] = array(
+                        'start' => $normalized,
+                        'label' => $label,
+                    );
+                }
+            }
+        } elseif ($scope === 'all' && !empty($occurrence_map)) {
+            foreach ($occurrence_map as $normalized => $label) {
+                $occurrence_list[] = array(
+                    'start' => $normalized,
+                    'label' => $label,
+                );
+            }
+        }
+
+        if (count($occurrence_list) > 50) {
+            $occurrence_list = array_slice($occurrence_list, 0, 50);
+        }
+
+        $summary['scope'] = $scope;
+        $summary['occurrences'] = $occurrence_list;
+        if ($scope === 'custom') {
+            $summary['count'] = count($occurrence_list);
+        } elseif ($scope === 'all') {
+            $summary['count'] = !empty($occurrence_map) ? count($occurrence_map) : count($occurrence_list);
+        }
+
+        return $summary;
+    }
+
+    /**
+     * @param string $value
+     * @return string
+     */
+    private static function format_occurrence_label($value) {
+        $timestamp = strtotime($value);
+        if (!$timestamp) {
+            return sanitize_text_field((string) $value);
+        }
+
+        $date_format = get_option('date_format', 'd/m/Y');
+        $time_format = get_option('time_format', 'H:i');
+
+        return wp_date($date_format . ' ' . $time_format, $timestamp);
+    }
+
+    /**
      * @param object $registration
      * @return array<string,mixed>
      */
@@ -630,6 +751,15 @@ class MjEventRegistrations {
         $labels = self::get_payment_status_labels();
         $status_label = isset($labels[$status]) ? $labels[$status] : $status;
 
+        $occurrence_summary = self::build_occurrence_summary($registration);
+        if (!is_array($occurrence_summary)) {
+            $occurrence_summary = array(
+                'scope' => 'all',
+                'count' => 0,
+                'occurrences' => array(),
+            );
+        }
+
         return array(
             'status' => $status,
             'status_label' => $status_label,
@@ -640,7 +770,38 @@ class MjEventRegistrations {
                 'id' => $recorded_by_id,
                 'name' => $recorded_by_name,
             ),
+            'occurrence_scope' => isset($occurrence_summary['scope']) ? sanitize_key((string) $occurrence_summary['scope']) : 'all',
+            'occurrence_count' => isset($occurrence_summary['count']) ? (int) $occurrence_summary['count'] : 0,
+            'occurrence_details' => self::sanitize_occurrence_details(isset($occurrence_summary['occurrences']) ? $occurrence_summary['occurrences'] : array()),
         );
+    }
+
+    /**
+     * @param array<int,array<string,string>> $occurrences
+     * @return array<int,array<string,string>>
+     */
+    private static function sanitize_occurrence_details($occurrences) {
+        if (!is_array($occurrences)) {
+            return array();
+        }
+
+        $sanitized = array();
+        foreach ($occurrences as $occurrence) {
+            if (!is_array($occurrence)) {
+                continue;
+            }
+            $start = isset($occurrence['start']) ? sanitize_text_field((string) $occurrence['start']) : '';
+            $label = isset($occurrence['label']) ? sanitize_text_field((string) $occurrence['label']) : '';
+            if ($start === '' && $label === '') {
+                continue;
+            }
+            $sanitized[] = array(
+                'start' => $start,
+                'label' => $label !== '' ? $label : self::format_occurrence_label($start),
+            );
+        }
+
+        return $sanitized;
     }
 
     /**
@@ -1355,3 +1516,5 @@ class MjEventRegistrations {
         return implode(', ', $items);
     }
 }
+
+\class_alias(__NAMESPACE__ . '\\MjEventRegistrations', 'MjEventRegistrations');

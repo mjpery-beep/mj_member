@@ -1,5 +1,7 @@
 <?php
 
+use Mj\Member\Core\Config;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -10,7 +12,9 @@ add_action('wp_ajax_mj_member_prepare_email_send', 'mj_member_prepare_email_send
 add_action('wp_ajax_mj_member_send_single_email', 'mj_member_send_single_email_callback');
 
 function mj_member_get_email_template_callback() {
-    if (!current_user_can(MJ_MEMBER_CAPABILITY)) {
+    $capability = Config::capability();
+
+    if (!current_user_can($capability)) {
         wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
     }
 
@@ -40,7 +44,9 @@ function mj_member_get_email_template_callback() {
 function mj_member_prepare_email_send_callback() {
     check_ajax_referer('mj_send_emails', 'nonce');
 
-    if (!current_user_can(MJ_MEMBER_CAPABILITY)) {
+    $capability = Config::capability();
+
+    if (!current_user_can($capability)) {
         wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
     }
 
@@ -106,7 +112,7 @@ function mj_member_prepare_email_send_callback() {
                 ));
                 break;
             case 'expired':
-                $expiration_days = apply_filters('mj_member_payment_expiration_days', MJ_MEMBER_PAYMENT_EXPIRATION_DAYS);
+                $expiration_days = apply_filters('mj_member_payment_expiration_days', Config::paymentExpirationDays());
                 $expiration_days = max(1, (int) $expiration_days);
                 $cutoff_timestamp = current_time('timestamp') - ($expiration_days * DAY_IN_SECONDS);
                 $cutoff_date      = gmdate('Y-m-d H:i:s', $cutoff_timestamp);
@@ -220,7 +226,9 @@ function mj_member_prepare_email_send_callback() {
 function mj_member_send_single_email_callback() {
     check_ajax_referer('mj_send_emails', 'nonce');
 
-    if (!current_user_can(MJ_MEMBER_CAPABILITY)) {
+    $capability = Config::capability();
+
+    if (!current_user_can($capability)) {
         wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
     }
 

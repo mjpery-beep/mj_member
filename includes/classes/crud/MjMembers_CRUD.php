@@ -1,4 +1,12 @@
-<?php 
+<?php
+
+namespace Mj\Member\Classes\Crud;
+
+use Mj\Member\Classes\MjTools;
+
+if (!defined('ABSPATH')) {
+    exit;
+}
 
 class MjMembers_CRUD extends MjTools {
 
@@ -967,3 +975,5 @@ class MjMembers_CRUD extends MjTools {
         return $data;
     }
 }
+
+\class_alias(__NAMESPACE__ . '\\MjMembers_CRUD', 'MjMembers_CRUD');

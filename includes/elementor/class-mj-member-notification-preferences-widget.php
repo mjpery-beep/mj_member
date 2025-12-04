@@ -6,6 +6,7 @@ if (!defined('ABSPATH')) {
 
 use Elementor\Controls_Manager;
 use Elementor\Widget_Base;
+use Mj\Member\Core\Config;
 
 class Mj_Member_Elementor_Notification_Preferences_Widget extends Widget_Base {
     public function get_name() {
@@ -205,14 +206,14 @@ class Mj_Member_Elementor_Notification_Preferences_Widget extends Widget_Base {
         );
 
         $style_handle = 'mj-member-notification-preferences';
-        $style_path = MJ_MEMBER_PATH . 'css/notification-preferences.css';
-        $style_version = file_exists($style_path) ? (string) filemtime($style_path) : MJ_MEMBER_VERSION;
-        wp_enqueue_style($style_handle, MJ_MEMBER_URL . 'css/notification-preferences.css', array(), $style_version);
+        $style_path = Config::path() . 'css/notification-preferences.css';
+        $style_version = file_exists($style_path) ? (string) filemtime($style_path) : Config::version();
+        wp_enqueue_style($style_handle, Config::url() . 'css/notification-preferences.css', array(), $style_version);
 
         $script_handle = 'mj-member-notification-preferences';
-        $script_path = MJ_MEMBER_PATH . 'js/notification-preferences.js';
-        $script_version = file_exists($script_path) ? (string) filemtime($script_path) : MJ_MEMBER_VERSION;
-        wp_enqueue_script($script_handle, MJ_MEMBER_URL . 'js/notification-preferences.js', array(), $script_version, true);
+        $script_path = Config::path() . 'js/notification-preferences.js';
+        $script_version = file_exists($script_path) ? (string) filemtime($script_path) : Config::version();
+        wp_enqueue_script($script_handle, Config::url() . 'js/notification-preferences.js', array(), $script_version, true);
 
         static $script_localized = false;
         if (!$script_localized) {

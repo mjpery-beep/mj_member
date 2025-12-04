@@ -174,6 +174,13 @@
             }
         });
 
+        var filterInputs = Array.prototype.slice.call(root.querySelectorAll('[data-calendar-filter]'));
+        var typeItems = Array.prototype.slice.call(root.querySelectorAll('[data-calendar-type-item]'));
+        var dayNodes = Array.prototype.slice.call(root.querySelectorAll('[data-calendar-day]'));
+        var countSingular = root.getAttribute('data-calendar-count-singular') || '%d';
+        var countPlural = root.getAttribute('data-calendar-count-plural') || '%d';
+        var countEmpty = root.getAttribute('data-calendar-count-empty') || '';
+
         var prev = root.querySelector('[data-calendar-nav="prev"]');
         var next = root.querySelector('[data-calendar-nav="next"]');
         var label = root.querySelector('[data-calendar-active-label]');
@@ -197,6 +204,78 @@
 
         var rangeSizing;
 
+        function updateDayStates() {
+            if (!dayNodes.length) {
+                return;
+            }
+            dayNodes.forEach(function(dayNode) {
+                var items = dayNode.querySelectorAll('[data-calendar-type-item]');
+                var visibleCount = 0;
+                Array.prototype.forEach.call(items, function(item) {
+                    if (!item.classList.contains('is-filtered-out')) {
+                        visibleCount += 1;
+                    }
+                });
+                if (visibleCount === 0) {
+                    dayNode.classList.add('is-filtered-empty');
+                } else {
+                    dayNode.classList.remove('is-filtered-empty');
+                }
+                var countNode = dayNode.querySelector('[data-calendar-day-count]');
+                if (countNode) {
+                    var label;
+                    if (visibleCount === 0) {
+                        label = countEmpty || '';
+                    } else if (visibleCount === 1) {
+                        label = countSingular.replace('%d', '1');
+                    } else {
+                        label = countPlural.replace('%d', String(visibleCount));
+                    }
+                    countNode.textContent = label;
+                }
+            });
+        }
+
+        function applyFilters(options) {
+            var schedule = true;
+            if (options && options.schedule === false) {
+                schedule = false;
+            }
+
+            if (!filterInputs.length) {
+                updateDayStates();
+                if (schedule && rangeSizing) {
+                    rangeSizing.schedule();
+                }
+                return;
+            }
+
+            var activeMap = {};
+            var hasChecked = false;
+            filterInputs.forEach(function(input) {
+                if (input.checked) {
+                    activeMap[input.value] = true;
+                    hasChecked = true;
+                }
+            });
+
+            typeItems.forEach(function(item) {
+                var typeKey = item.getAttribute('data-calendar-type') || '';
+                var isKnown = item.getAttribute('data-calendar-type-known') === '1';
+                if (!hasChecked || !isKnown || Object.prototype.hasOwnProperty.call(activeMap, typeKey)) {
+                    item.classList.remove('is-filtered-out');
+                } else {
+                    item.classList.add('is-filtered-out');
+                }
+            });
+
+            updateDayStates();
+
+            if (schedule && rangeSizing) {
+                rangeSizing.schedule();
+            }
+        }
+
         function sync() {
             months.forEach(function(month, idx) {
                 if (idx === activeIndex) {
@@ -217,6 +296,7 @@
             if (todayBtn) {
                 todayBtn.disabled = todayIndex === -1 || activeIndex === todayIndex;
             }
+            applyFilters({ schedule: false });
             if (rangeSizing) {
                 rangeSizing.schedule();
             }
@@ -249,6 +329,14 @@
             });
         }
 
+        if (filterInputs.length) {
+            filterInputs.forEach(function(input) {
+                input.addEventListener('change', function() {
+                    applyFilters();
+                });
+            });
+        }
+
         rangeSizing = createRangeSizing(root);
 
         sync();
@@ -256,6 +344,10 @@
         setupRangeHover(root);
         if (rangeSizing) {
             rangeSizing.schedule();
+        }
+
+        if (!filterInputs.length) {
+            updateDayStates();
         }
 
     }

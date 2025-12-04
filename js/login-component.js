@@ -145,4 +145,33 @@
     } else {
         bootstrapAutoModal();
     }
+
+    window.mjMemberOpenLoginModal = function (targetId) {
+        var modal = null;
+        var trigger = null;
+
+        if (typeof targetId === 'string' && targetId !== '') {
+            modal = document.getElementById(targetId);
+            if (modal) {
+                trigger = document.querySelector('[data-mj-login-trigger][data-target="' + targetId + '"]');
+            }
+        }
+
+        if (!modal) {
+            trigger = document.querySelector('[data-mj-login-trigger]');
+            if (trigger) {
+                var fallbackId = trigger.getAttribute('data-target');
+                if (fallbackId) {
+                    modal = document.getElementById(fallbackId);
+                }
+            }
+        }
+
+        if (!modal) {
+            return false;
+        }
+
+        openModal(modal, trigger || modal.querySelector('[data-mj-login-close]'));
+        return true;
+    };
 })();

@@ -1,0 +1,89 @@
+<?php
+
+namespace Mj\Member;
+
+use Mj\Member\Core\Config;
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+/**
+ * Centralise le chargement des modules fonctionnels du plugin.
+ */
+final class Bootstrap
+{
+    /**
+     * Liste des modules procéduraux à charger.
+     * Les chemins sont relatifs à la racine du plugin.
+     *
+     * @var string[]
+     */
+    private const MODULES = array(
+        'includes/security.php',
+        'includes/member_accounts.php',
+        'includes/dashboard.php',
+        'includes/events_public.php',
+        'includes/event_photos.php',
+        'includes/elementor/widgets-loader.php',
+        'includes/templates/elementor/login_component.php',
+        'includes/shortcode_inscription.php',
+        'includes/templates/elementor/shortcode_member_account.php',
+        'includes/event_closures_admin.php',
+        'includes/templates/elementor/animateur_account.php',
+        'includes/email_templates.php',
+        'includes/send_emails.php',
+        'includes/settings.php',
+        'includes/import_members.php',
+        'includes/cards_pdf_admin.php',
+        'includes/event_photos_admin.php',
+        'includes/contact_messages.php',
+        'includes/contact_messages_admin.php',
+        'includes/core/capabilities.php',
+        'includes/core/assets.php',
+        'includes/core/schema.php',
+        'includes/core/ajax/admin/members.php',
+        'includes/core/ajax/admin/payments.php',
+        'includes/core/ajax/admin/emails.php',
+    );
+
+    /** @var bool */
+    private static $loaded = false;
+
+    public static function init(): void
+    {
+        if (self::$loaded) {
+            return;
+        }
+
+        $modules = apply_filters('mj_member_bootstrap_modules', self::MODULES);
+
+        foreach ($modules as $relativePath) {
+            $resolved = self::resolvePath($relativePath);
+            if (!$resolved) {
+                continue;
+            }
+
+            require_once $resolved;
+        }
+
+        self::$loaded = true;
+    }
+
+    private static function resolvePath(string $relativePath): ?string
+    {
+        $clean = ltrim($relativePath, '/\\');
+        $pluginPath = Config::path();
+        $absolute = $pluginPath . $clean;
+
+        if (is_readable($absolute)) {
+            return $absolute;
+        }
+
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            trigger_error(sprintf('[mj-member] Module introuvable : %s', $absolute));
+        }
+
+        return null;
+    }
+}

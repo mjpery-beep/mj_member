@@ -1,5 +1,7 @@
 <?php
 
+use Mj\Member\Core\Config;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -455,7 +457,7 @@ if (!function_exists('mj_member_get_membership_status')) {
 
         $defaults = array(
             'now' => current_time('timestamp'),
-            'expiration_days' => (int) apply_filters('mj_member_payment_expiration_days', MJ_MEMBER_PAYMENT_EXPIRATION_DAYS, $member),
+            'expiration_days' => (int) apply_filters('mj_member_payment_expiration_days', Config::paymentExpirationDays(), $member),
             'expiring_threshold' => (int) apply_filters('mj_member_membership_expiring_threshold_days', 30, $member),
             'annual_fee' => (float) apply_filters('mj_member_membership_amount', (float) get_option('mj_annual_fee', '2.00'), $member),
         );
@@ -914,4 +916,290 @@ if (!function_exists('mj_member_ajax_update_notification_preferences')) {
     }
 
     add_action('wp_ajax_mj_member_update_notification_preferences', 'mj_member_ajax_update_notification_preferences');
+}
+
+if (!function_exists('mj_member_collect_member_registration_entries')) {
+    /**
+     * Alimente le flux "Mes réservations" pour la page Mon Compte.
+     *
+     * @param array<int,array<string,mixed>> $registrations
+     * @param int                             $member_id
+     * @param array<string,mixed>             $args
+     * @return array<int,array<string,mixed>>
+     */
+    function mj_member_collect_member_registration_entries($registrations, $member_id, $args = array()) {
+        $member_id = (int) $member_id;
+        if ($member_id <= 0) {
+            return is_array($registrations) ? $registrations : array();
+        }
+
+        if (!class_exists('MjEventRegistrations') || !function_exists('mj_member_get_event_registrations_table_name') || !function_exists('mj_member_get_events_table_name')) {
+            return is_array($registrations) ? $registrations : array();
+        }
+
+        if (class_exists('MjEventAttendance')) {
+            MjEventAttendance::get_table_name();
+        }
+
+        $result_entries = array();
+        $base_entries = is_array($registrations) ? $registrations : array();
+
+        $limit = isset($args['limit']) ? max(1, (int) $args['limit']) : 10;
+        $upcoming_only = !empty($args['upcoming_only']);
+
+        $status_aliases = array(
+            'pending' => MjEventRegistrations::STATUS_PENDING,
+            'en_attente' => MjEventRegistrations::STATUS_PENDING,
+            'confirmed' => MjEventRegistrations::STATUS_CONFIRMED,
+            'valide' => MjEventRegistrations::STATUS_CONFIRMED,
+            'cancelled' => MjEventRegistrations::STATUS_CANCELLED,
+            'annule' => MjEventRegistrations::STATUS_CANCELLED,
+            'waitlist' => MjEventRegistrations::STATUS_WAITLIST,
+            'liste_attente' => MjEventRegistrations::STATUS_WAITLIST,
+        );
+
+        $requested_statuses = array();
+        if (!empty($args['statuses']) && is_array($args['statuses'])) {
+            foreach ($args['statuses'] as $candidate) {
+                $key = sanitize_key((string) $candidate);
+                if ($key === '') {
+                    continue;
+                }
+                if (isset($status_aliases[$key])) {
+                    $requested_statuses[$status_aliases[$key]] = true;
+                } elseif (in_array($key, $status_aliases, true)) {
+                    $requested_statuses[$key] = true;
+                }
+            }
+        }
+
+        $registrations_table = mj_member_get_event_registrations_table_name();
+        $events_table = mj_member_get_events_table_name();
+        if ($registrations_table === '' || $events_table === '') {
+            return $base_entries;
+        }
+
+        if (function_exists('mj_member_table_exists')) {
+            if (!mj_member_table_exists($registrations_table) || !mj_member_table_exists($events_table)) {
+                return $base_entries;
+            }
+        }
+
+        $location_join = '';
+        $location_fields = array();
+        if (function_exists('mj_member_get_event_locations_table_name') && function_exists('mj_member_table_exists')) {
+            $locations_table = mj_member_get_event_locations_table_name();
+            if ($locations_table !== '' && mj_member_table_exists($locations_table)) {
+                $location_join = " LEFT JOIN {$locations_table} AS loc ON loc.id = events.location_id";
+                $location_fields[] = 'loc.name AS location_name';
+                $location_fields[] = 'loc.city AS location_city';
+            }
+        }
+
+        $select_fields = array(
+            'regs.id',
+            'regs.event_id',
+            'regs.member_id',
+            'regs.guardian_id',
+            'regs.statut',
+            'regs.notes',
+            'regs.created_at',
+            'regs.payment_status',
+            'regs.payment_method',
+            'regs.payment_recorded_at',
+            'events.title',
+            'events.slug',
+            'events.type',
+            'events.status AS event_status',
+            'events.date_debut',
+            'events.date_fin',
+            'events.schedule_mode',
+            'events.schedule_payload',
+            'events.recurrence_until',
+            'events.article_id',
+            'events.prix',
+        );
+
+        if (!empty($location_fields)) {
+            $select_fields = array_merge($select_fields, $location_fields);
+        }
+
+        $where_clauses = array('regs.member_id = %d');
+        $query_params = array($member_id);
+
+        if (!empty($requested_statuses)) {
+            $placeholders = implode(', ', array_fill(0, count($requested_statuses), '%s'));
+            $where_clauses[] = "regs.statut IN ({$placeholders})";
+            $query_params = array_merge($query_params, array_keys($requested_statuses));
+        }
+
+        $where_sql = 'WHERE ' . implode(' AND ', $where_clauses);
+        $fetch_limit = max($limit * 3, $limit + 5, 25);
+
+        global $wpdb;
+        $sql = sprintf(
+            'SELECT %s FROM %s AS regs INNER JOIN %s AS events ON events.id = regs.event_id%s %s ORDER BY regs.created_at DESC LIMIT %%d',
+            implode(', ', $select_fields),
+            $registrations_table,
+            $events_table,
+            $location_join,
+            $where_sql
+        );
+
+        $query_params[] = $fetch_limit;
+        array_unshift($query_params, $sql);
+        $prepared_query = call_user_func_array(array($wpdb, 'prepare'), $query_params);
+        $rows = $wpdb->get_results($prepared_query);
+        if (empty($rows)) {
+            return $base_entries;
+        }
+
+        $now = current_time('timestamp');
+        $status_labels = MjEventRegistrations::get_status_labels();
+        $payment_labels = MjEventRegistrations::get_payment_status_labels();
+        $type_labels = method_exists('MjEvents_CRUD', 'get_type_labels') ? MjEvents_CRUD::get_type_labels() : array();
+        $status_output_map = array(
+            MjEventRegistrations::STATUS_PENDING => 'pending',
+            MjEventRegistrations::STATUS_CONFIRMED => 'confirmed',
+            MjEventRegistrations::STATUS_CANCELLED => 'cancelled',
+            MjEventRegistrations::STATUS_WAITLIST => 'waitlist',
+        );
+
+        foreach ($rows as $row) {
+            if (count($result_entries) >= $limit) {
+                break;
+            }
+
+            $db_status = isset($row->statut) ? sanitize_key((string) $row->statut) : MjEventRegistrations::STATUS_PENDING;
+            if ($db_status === '') {
+                $db_status = MjEventRegistrations::STATUS_PENDING;
+            }
+
+            $output_status = isset($status_output_map[$db_status]) ? $status_output_map[$db_status] : 'pending';
+            $status_label = isset($status_labels[$db_status]) ? $status_labels[$db_status] : $db_status;
+
+            $start_raw = isset($row->date_debut) ? (string) $row->date_debut : '';
+            $end_raw = isset($row->date_fin) ? (string) $row->date_fin : '';
+            $start_ts = ($start_raw !== '' && $start_raw !== '0000-00-00 00:00:00') ? strtotime($start_raw) : 0;
+            $end_ts = ($end_raw !== '' && $end_raw !== '0000-00-00 00:00:00') ? strtotime($end_raw) : 0;
+
+            if ($upcoming_only) {
+                $has_future_slot = false;
+                if ($end_ts && $end_ts >= $now) {
+                    $has_future_slot = true;
+                } elseif ($start_ts && $start_ts >= $now) {
+                    $has_future_slot = true;
+                } elseif (class_exists('MjEventSchedule')) {
+                    $future_occurrences = MjEventSchedule::get_occurrences($row, array('max' => 1, 'include_past' => false));
+                    if (!empty($future_occurrences)) {
+                        $has_future_slot = true;
+                        if ($start_ts === 0 && isset($future_occurrences[0]['start'])) {
+                            $probe = strtotime((string) $future_occurrences[0]['start']);
+                            if ($probe) {
+                                $start_ts = $probe;
+                                $start_raw = date('Y-m-d H:i:s', $start_ts);
+                            }
+                        }
+                        if ($end_ts === 0 && isset($future_occurrences[0]['end'])) {
+                            $probe_end = strtotime((string) $future_occurrences[0]['end']);
+                            if ($probe_end) {
+                                $end_ts = $probe_end;
+                                $end_raw = date('Y-m-d H:i:s', $end_ts);
+                            }
+                        }
+                    }
+                }
+
+                if (!$has_future_slot) {
+                    continue;
+                }
+            }
+
+            $permalink = apply_filters('mj_member_event_permalink', '', $row);
+            $actions = array();
+            if ($permalink !== '') {
+                $actions[] = array(
+                    'label' => esc_html__('Voir l’événement', 'mj-member'),
+                    'url' => esc_url($permalink),
+                    'target' => '_self',
+                );
+            }
+
+            $type_value = isset($row->type) ? sanitize_key((string) $row->type) : '';
+            $type_label = isset($type_labels[$type_value]) ? $type_labels[$type_value] : $type_value;
+
+            $location_label = '';
+            if (!empty($row->location_name)) {
+                $location_label = sanitize_text_field((string) $row->location_name);
+                if (!empty($row->location_city)) {
+                    $location_label .= ' (' . sanitize_text_field((string) $row->location_city) . ')';
+                }
+            }
+
+            $payment_status_raw = isset($row->payment_status) ? sanitize_key((string) $row->payment_status) : 'unpaid';
+            if ($payment_status_raw === '') {
+                $payment_status_raw = 'unpaid';
+            }
+            $payment_status_label = isset($payment_labels[$payment_status_raw]) ? $payment_labels[$payment_status_raw] : $payment_status_raw;
+
+            $notes_segments = array();
+            if ($location_label !== '') {
+                $notes_segments[] = '<strong>' . esc_html__('Lieu', 'mj-member') . '</strong> : ' . esc_html($location_label);
+            }
+            if ($payment_status_label !== '') {
+                $notes_segments[] = '<strong>' . esc_html__('Paiement', 'mj-member') . '</strong> : ' . esc_html($payment_status_label);
+            }
+
+            if (method_exists('MjEventRegistrations', 'build_occurrence_summary')) {
+                $occurrence_summary = MjEventRegistrations::build_occurrence_summary($row);
+                if (!empty($occurrence_summary['occurrences']) && is_array($occurrence_summary['occurrences'])) {
+                    $occurrence_labels = array();
+                    foreach ($occurrence_summary['occurrences'] as $occurrence) {
+                        if (empty($occurrence['label'])) {
+                            continue;
+                        }
+                        $occurrence_labels[] = sanitize_text_field((string) $occurrence['label']);
+                    }
+                    if (!empty($occurrence_labels)) {
+                        $notes_segments[] = '<strong>' . esc_html__('Occurrences', 'mj-member') . '</strong> : ' . esc_html(implode(', ', $occurrence_labels));
+                    }
+                }
+            }
+
+            if (!empty($row->notes)) {
+                $notes_segments[] = '<strong>' . esc_html__('Note', 'mj-member') . '</strong> : ' . esc_html(wp_strip_all_tags((string) $row->notes));
+            }
+
+            $notes_html = '';
+            if (!empty($notes_segments)) {
+                $notes_html = '<p>' . implode('</p><p>', $notes_segments) . '</p>';
+            }
+
+            $result_entries[] = array(
+                'id' => isset($row->id) ? (int) $row->id : 0,
+                'title' => isset($row->title) ? sanitize_text_field((string) $row->title) : __('Événement MJ', 'mj-member'),
+                'status' => $output_status,
+                'status_label' => sanitize_text_field($status_label),
+                'type' => $type_label !== '' ? sanitize_text_field($type_label) : '',
+                'start_date' => $start_raw,
+                'end_date' => $end_raw,
+                'location' => $location_label,
+                'actions' => $actions,
+                'notes' => $notes_html,
+            );
+        }
+
+        if (empty($result_entries)) {
+            return $base_entries;
+        }
+
+        $combined = array_merge($base_entries, $result_entries);
+        if ($limit > 0 && count($combined) > $limit) {
+            $combined = array_slice($combined, 0, $limit);
+        }
+
+        return $combined;
+    }
+
+    add_filter('mj_member_member_registrations', 'mj_member_collect_member_registration_entries', 10, 3);
 }

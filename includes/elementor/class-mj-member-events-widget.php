@@ -103,111 +103,30 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         );
 
         $this->add_control(
-            'max_items',
+            'article_filter_mode',
             array(
-                'label' => __('Nombre maximum', 'mj-member'),
-                'type' => Controls_Manager::NUMBER,
-                'min' => 1,
-                'max' => 50,
-                'default' => 6,
-            )
-        );
-
-        $this->add_control(
-            'orderby',
-            array(
-                'label' => __('Trier par', 'mj-member'),
+                'label' => __('Article associé', 'mj-member'),
                 'type' => Controls_Manager::SELECT,
+                'default' => 'any',
                 'options' => array(
-                    'date_debut' => __('Date de début', 'mj-member'),
-                    'date_fin' => __('Date de fin', 'mj-member'),
-                    'created_at' => __('Date de création', 'mj-member'),
-                    'updated_at' => __('Dernière mise à jour', 'mj-member'),
+                    'any' => __('Tous les événements', 'mj-member'),
+                    'with_article' => __('Uniquement avec article', 'mj-member'),
+                    'without_article' => __('Sans article associé', 'mj-member'),
                 ),
-                'default' => 'date_debut',
             )
         );
 
+        $article_choices = function_exists('mj_member_get_event_article_choices') ? mj_member_get_event_article_choices() : array();
         $this->add_control(
-            'order',
+            'article_ids',
             array(
-                'label' => __('Ordre', 'mj-member'),
-                'type' => Controls_Manager::SELECT,
-                'options' => array(
-                    'DESC' => __('Décroissant', 'mj-member'),
-                    'ASC' => __('Croissant', 'mj-member'),
-                ),
-                'default' => 'DESC',
-            )
-        );
-
-        $this->add_control(
-            'layout',
-            array(
-                'label' => __('Disposition', 'mj-member'),
-                'type' => Controls_Manager::CHOOSE,
-                'options' => array(
-                    'list' => array(
-                        'title' => __('Liste', 'mj-member'),
-                        'icon' => 'eicon-menu-bar',
-                    ),
-                    'grid' => array(
-                        'title' => __('Grille', 'mj-member'),
-                        'icon' => 'eicon-gallery-grid',
-                    ),
-                ),
-                'default' => 'grid',
-                'toggle' => false,
-            )
-        );
-
-        $this->add_control(
-            'card_title_tag',
-            array(
-                'label' => __('Balise du titre', 'mj-member'),
-                'type' => Controls_Manager::SELECT,
-                'options' => array(
-                    'h2' => 'H2',
-                    'h3' => 'H3',
-                    'h4' => 'H4',
-                    'h5' => 'H5',
-                    'p' => __('Paragraphe', 'mj-member'),
-                ),
-                'default' => 'h4',
-                'render_type' => 'template',
-            )
-        );
-
-        $this->add_responsive_control(
-            'grid_columns',
-            array(
-                'label' => __('Colonnes (mode grille)', 'mj-member'),
-                'type' => Controls_Manager::SLIDER,
-                'range' => array(
-                    'px' => array('min' => 1, 'max' => 6),
-                ),
-                'selectors' => array(
-                    '{{WRAPPER}} .mj-member-events__grid.is-grid' => 'grid-template-columns: repeat({{SIZE}}, minmax(220px, 1fr));',
-                ),
-                'condition' => array('layout' => 'grid'),
-            )
-        );
-
-        $this->add_responsive_control(
-            'cards_gap',
-            array(
-                'label' => __('Espacement des cartes', 'mj-member'),
-                'type' => Controls_Manager::SLIDER,
-                'range' => array(
-                    'px' => array('min' => 0, 'max' => 64),
-                ),
-                'default' => array(
-                    'size' => 20,
-                    'unit' => 'px',
-                ),
-                'selectors' => array(
-                    '{{WRAPPER}} .mj-member-events__grid' => 'gap: {{SIZE}}{{UNIT}};',
-                ),
+                'label' => __('Limiter aux articles', 'mj-member'),
+                'type' => Controls_Manager::SELECT2,
+                'multiple' => true,
+                'label_block' => true,
+                'options' => $article_choices,
+                'description' => __('Sélectionnez un ou plusieurs articles liés aux événements.', 'mj-member'),
+                'condition' => array('article_filter_mode!' => 'without_article'),
             )
         );
 
@@ -222,6 +141,19 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                     'horizontal' => __('Carte horizontale', 'mj-member'),
                 ),
                 'default' => 'standard',
+            )
+        );
+
+        $this->add_control(
+            'wide_mode',
+            array(
+                'label' => __('Mode large (1 carte par ligne)', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'no',
+                'description' => __('Étend la carte avec une grande vignette et force une présentation sur une seule colonne.', 'mj-member'),
             )
         );
 
@@ -302,18 +234,6 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         );
 
         $this->add_control(
-            'show_map',
-            array(
-                'label' => __('Afficher la carte', 'mj-member'),
-                'type' => Controls_Manager::SWITCHER,
-                'label_on' => __('Oui', 'mj-member'),
-                'label_off' => __('Non', 'mj-member'),
-                'return_value' => 'yes',
-                'default' => 'yes',
-            )
-        );
-
-        $this->add_control(
             'price_display_mode',
             array(
                 'label' => __('Tarif', 'mj-member'),
@@ -385,55 +305,6 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
             )
         );
 
-        $this->add_control(
-            'show_cta',
-            array(
-                'label' => __("Afficher le bouton d'inscription", 'mj-member'),
-                'type' => Controls_Manager::SWITCHER,
-                'label_on' => __('Oui', 'mj-member'),
-                'label_off' => __('Non', 'mj-member'),
-                'return_value' => 'yes',
-                'default' => 'yes',
-            )
-        );
-
-        $this->add_control(
-            'cta_label',
-            array(
-                'label' => __('Texte du bouton', 'mj-member'),
-                'type' => Controls_Manager::TEXT,
-                'default' => __("S'inscrire", 'mj-member'),
-                'label_block' => true,
-                'condition' => array('show_cta' => 'yes'),
-            )
-        );
-
-        $this->add_control(
-            'cta_registered_label',
-            array(
-                'label' => __('Texte si déjà inscrit', 'mj-member'),
-                'type' => Controls_Manager::TEXT,
-                'default' => __('Déjà inscrit', 'mj-member'),
-                'label_block' => true,
-                'condition' => array('show_cta' => 'yes'),
-            )
-        );
-
-        $this->add_control(
-            'cta_skin',
-            array(
-                'label' => __('Style du bouton', 'mj-member'),
-                'type' => Controls_Manager::SELECT,
-                'options' => array(
-                    'solid' => __('Plein', 'mj-member'),
-                    'outline' => __('Contour', 'mj-member'),
-                    'text' => __('Texte', 'mj-member'),
-                ),
-                'default' => 'solid',
-                'condition' => array('show_cta' => 'yes'),
-            )
-        );
-
         $this->end_controls_section();
 
         $this->start_controls_section(
@@ -495,9 +366,20 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'widget_background',
+            array(
+                'label' => __('Fond du widget', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-events' => '--mj-events-surface: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
             'card_background',
             array(
-                'label' => __('Couleur de fond', 'mj-member'),
+                'label' => __('Couleur de fond des cartes', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'global' => array('default' => Global_Colors::COLOR_SECONDARY),
                 'selectors' => array(
@@ -638,6 +520,17 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
             )
         );
 
+        $this->add_control(
+            'content_color',
+            array(
+                'label' => __('Couleur du texte', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-events' => '--mj-events-text: {{VALUE}};',
+                ),
+            )
+        );
+
         $this->add_group_control(
             Group_Control_Typography::get_type(),
             array(
@@ -665,122 +558,45 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         $this->end_controls_section();
 
         $this->start_controls_section(
-            'section_style_button',
+            'section_style_media',
             array(
-                'label' => __('Bouton', 'mj-member'),
+                'label' => __('Visuel', 'mj-member'),
                 'tab' => Controls_Manager::TAB_STYLE,
             )
         );
 
-        $this->add_group_control(
-            Group_Control_Typography::get_type(),
-            array(
-                'name' => 'cta_typography',
-                'label' => __('Typographie du bouton', 'mj-member'),
-                'global' => array('default' => Global_Typography::TYPOGRAPHY_TEXT),
-                'selector' => '{{WRAPPER}} .mj-member-events__cta',
-            )
-        );
-
-        $this->add_control(
-            'cta_background_color',
-            array(
-                'label' => __('Fond du bouton', 'mj-member'),
-                'type' => Controls_Manager::COLOR,
-                'global' => array('default' => Global_Colors::COLOR_ACCENT),
-                'selectors' => array(
-                    '{{WRAPPER}} .mj-member-events' => '--mj-events-button-bg: {{VALUE}};',
-                ),
-            )
-        );
-
-        $this->add_control(
-            'cta_background_hover_color',
-            array(
-                'label' => __('Fond au survol', 'mj-member'),
-                'type' => Controls_Manager::COLOR,
-                'global' => array('default' => Global_Colors::COLOR_PRIMARY),
-                'selectors' => array(
-                    '{{WRAPPER}} .mj-member-events' => '--mj-events-button-hover: {{VALUE}};',
-                ),
-            )
-        );
-
-        $this->add_control(
-            'cta_border_color',
-            array(
-                'label' => __('Contour du bouton', 'mj-member'),
-                'type' => Controls_Manager::COLOR,
-                'global' => array('default' => Global_Colors::COLOR_TEXT),
-                'selectors' => array(
-                    '{{WRAPPER}} .mj-member-events' => '--mj-events-button-border: {{VALUE}};',
-                ),
-            )
-        );
-
-        $this->add_control(
-            'cta_text_color',
-            array(
-                'label' => __('Texte du bouton', 'mj-member'),
-                'type' => Controls_Manager::COLOR,
-                'global' => array('default' => Global_Colors::COLOR_TEXT),
-                'selectors' => array(
-                    '{{WRAPPER}} .mj-member-events' => '--mj-events-button-text: {{VALUE}};',
-                ),
-            )
-        );
-
         $this->add_responsive_control(
-            'cta_alignment',
+            'cover_min_height',
             array(
-                'label' => __('Alignement du bouton', 'mj-member'),
-                'type' => Controls_Manager::CHOOSE,
-                'options' => array(
-                    'flex-start' => array('title' => __('Gauche', 'mj-member'), 'icon' => 'eicon-text-align-left'),
-                    'center' => array('title' => __('Centre', 'mj-member'), 'icon' => 'eicon-text-align-center'),
-                    'flex-end' => array('title' => __('Droite', 'mj-member'), 'icon' => 'eicon-text-align-right'),
-                    'stretch' => array('title' => __('Largeur totale', 'mj-member'), 'icon' => 'eicon-text-align-justify'),
-                ),
-                'default' => 'flex-start',
-                'selectors' => array(
-                    '{{WRAPPER}} .mj-member-events__actions' => 'align-items: {{VALUE}};',
-                    '{{WRAPPER}} .mj-member-events__cta' => 'align-self: {{VALUE}};',
-                ),
-                'condition' => array('show_cta' => 'yes'),
-            )
-        );
-
-        $this->add_control(
-            'cta_full_width',
-            array(
-                'label' => __('Bouton pleine largeur', 'mj-member'),
-                'type' => Controls_Manager::SWITCHER,
-                'label_on' => __('Oui', 'mj-member'),
-                'label_off' => __('Non', 'mj-member'),
-                'return_value' => 'yes',
-                'default' => 'no',
-                'selectors' => array(
-                    '{{WRAPPER}} .mj-member-events__cta' => 'width: 100%;',
-                ),
-                'condition' => array('show_cta' => 'yes'),
-            )
-        );
-
-        $this->add_responsive_control(
-            'cta_radius',
-            array(
-                'label' => __('Arrondi du bouton', 'mj-member'),
+                'label' => __('Hauteur minimale', 'mj-member'),
                 'type' => Controls_Manager::SLIDER,
                 'range' => array(
-                    'px' => array('min' => 0, 'max' => 999),
+                    'px' => array('min' => 120, 'max' => 420),
                 ),
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-member-events' => '--mj-events-button-radius: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-member-events' => '--mj-events-cover-min: {{SIZE}}{{UNIT}};',
                 ),
+                'condition' => array('show_cover' => 'yes'),
+            )
+        );
+
+        $this->add_responsive_control(
+            'cover_radius',
+            array(
+                'label' => __('Arrondi de la vignette', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'range' => array(
+                    'px' => array('min' => 0, 'max' => 48),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-events' => '--mj-events-cover-radius: {{SIZE}}{{UNIT}};',
+                ),
+                'condition' => array('show_cover' => 'yes'),
             )
         );
 
         $this->end_controls_section();
+
     }
 
     protected function render() {
@@ -797,101 +613,67 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         $orderby = isset($settings['orderby']) ? $settings['orderby'] : 'date_debut';
         $order = isset($settings['order']) ? $settings['order'] : 'DESC';
         $include_past = isset($settings['include_past']) && $settings['include_past'] === 'yes';
+        $article_filter_mode = isset($settings['article_filter_mode']) ? sanitize_key($settings['article_filter_mode']) : 'any';
+        if (!in_array($article_filter_mode, array('any', 'with_article', 'without_article'), true)) {
+            $article_filter_mode = 'any';
+        }
 
-        $events = mj_member_get_public_events(
-            array(
-                'statuses' => $statuses,
-                'types' => $types,
-                'limit' => $limit,
-                'orderby' => $orderby,
-                'order' => $order,
-                'include_past' => $include_past,
-            )
+        $article_ids_setting = isset($settings['article_ids']) ? (array) $settings['article_ids'] : array();
+        $article_ids = array();
+        foreach ($article_ids_setting as $article_candidate) {
+            $article_candidate = (int) $article_candidate;
+            if ($article_candidate <= 0) {
+                continue;
+            }
+            $article_ids[$article_candidate] = $article_candidate;
+        }
+        $article_ids = array_values($article_ids);
+        if ($article_filter_mode === 'without_article') {
+            $article_ids = array();
+        }
+
+        $query_arguments = array(
+            'statuses' => $statuses,
+            'types' => $types,
+            'limit' => $limit,
+            'orderby' => $orderby,
+            'order' => $order,
+            'include_past' => $include_past,
         );
 
-        $now_timestamp = current_time('timestamp');
-        $is_user_logged_in = is_user_logged_in();
-        $current_member = ($is_user_logged_in && function_exists('mj_member_get_current_member')) ? mj_member_get_current_member() : null;
+        if (!empty($article_ids)) {
+            $query_arguments['article_ids'] = $article_ids;
+        }
 
-        $participant_options = array();
-        if ($current_member && !empty($current_member->id)) {
-            $member_name_parts = array();
-            if (!empty($current_member->first_name)) {
-                $member_name_parts[] = sanitize_text_field($current_member->first_name);
-            }
-            if (!empty($current_member->last_name)) {
-                $member_name_parts[] = sanitize_text_field($current_member->last_name);
-            }
+        $events = mj_member_get_public_events($query_arguments);
 
-            $member_display_name = trim(implode(' ', $member_name_parts));
-            if ($member_display_name === '' && !empty($current_member->nickname)) {
-                $member_display_name = sanitize_text_field($current_member->nickname);
-            }
-            if ($member_display_name === '') {
-                $member_display_name = sprintf(__('Membre #%d', 'mj-member'), (int) $current_member->id);
-            }
+        $wide_mode = isset($settings['wide_mode']) && $settings['wide_mode'] === 'yes';
 
-            $self_label = $member_display_name . ' (' . __('moi', 'mj-member') . ')';
-            $participant_options[] = array(
-                'id' => (int) $current_member->id,
-                'label' => $self_label,
-                'type' => isset($current_member->role) ? sanitize_key($current_member->role) : 'member',
-                'isSelf' => true,
+        if ($article_filter_mode !== 'any' && !empty($events)) {
+            $events = array_values(
+                array_filter(
+                    $events,
+                    static function ($event) use ($article_filter_mode) {
+                        if (!is_array($event)) {
+                            return false;
+                        }
+
+                        $has_article = !empty($event['article_id']) || !empty($event['article_permalink']);
+                        if ($article_filter_mode === 'with_article') {
+                            return $has_article;
+                        }
+
+                        return !$has_article;
+                    }
+                )
             );
         }
-
-        if ($current_member && function_exists('mj_member_can_manage_children') && function_exists('mj_member_get_guardian_children') && mj_member_can_manage_children($current_member)) {
-            $children = mj_member_get_guardian_children($current_member);
-            if (!empty($children) && is_array($children)) {
-                foreach ($children as $child) {
-                    if (!$child || !isset($child->id)) {
-                        continue;
-                    }
-
-                    $child_name_parts = array();
-                    if (!empty($child->first_name)) {
-                        $child_name_parts[] = sanitize_text_field($child->first_name);
-                    }
-                    if (!empty($child->last_name)) {
-                        $child_name_parts[] = sanitize_text_field($child->last_name);
-                    }
-
-                    $child_label = trim(implode(' ', $child_name_parts));
-                    if ($child_label === '' && !empty($child->nickname)) {
-                        $child_label = sanitize_text_field($child->nickname);
-                    }
-                    if ($child_label === '') {
-                        $child_label = sprintf(__('Jeune #%d', 'mj-member'), (int) $child->id);
-                    }
-
-                    $participant_options[] = array(
-                        'id' => (int) $child->id,
-                        'label' => $child_label,
-                        'type' => 'child',
-                        'isSelf' => false,
-                    );
-                }
-            }
-        }
-
-        if (!empty($participant_options)) {
-            $participant_options = array_values($participant_options);
-        }
-
-        $current_member_id = ($current_member && !empty($current_member->id)) ? (int) $current_member->id : 0;
-        $viewer_is_animateur = ($current_member_id > 0 && isset($current_member->role) && sanitize_key($current_member->role) === MjMembers_CRUD::ROLE_ANIMATEUR);
-        $registration_status_labels = array();
-        if (class_exists('MjEventRegistrations') && method_exists('MjEventRegistrations', 'get_status_labels')) {
-            $registration_status_labels = MjEventRegistrations::get_status_labels();
-        }
-        $animateur_tools_ready = class_exists('MjEventAnimateurs');
 
         $title = isset($settings['title']) ? $settings['title'] : '';
         $display_title = !isset($settings['display_title']) || $settings['display_title'] === 'yes';
         $empty_message = isset($settings['empty_message']) ? $settings['empty_message'] : __('Aucun événement disponible pour le moment.', 'mj-member');
         $show_description = isset($settings['show_description']) && $settings['show_description'] === 'yes';
         $show_location = isset($settings['show_location']) && $settings['show_location'] === 'yes';
-        $show_map = isset($settings['show_map']) && $settings['show_map'] === 'yes';
         $layout = isset($settings['layout']) ? $settings['layout'] : 'grid';
         $card_layout = isset($settings['card_layout']) ? $settings['card_layout'] : 'standard';
         $allowed_card_layouts = array('standard', 'compact', 'horizontal');
@@ -928,21 +710,6 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
 
         $price_prefix = isset($settings['price_prefix']) ? sanitize_text_field((string) $settings['price_prefix']) : __('Tarif :', 'mj-member');
 
-        $show_cta = !isset($settings['show_cta']) || $settings['show_cta'] === 'yes';
-        $cta_label = isset($settings['cta_label']) && $settings['cta_label'] !== '' ? sanitize_text_field((string) $settings['cta_label']) : __("S'inscrire", 'mj-member');
-        $cta_registered_label = isset($settings['cta_registered_label']) && $settings['cta_registered_label'] !== '' ? sanitize_text_field((string) $settings['cta_registered_label']) : __('Déjà inscrit', 'mj-member');
-        if ($cta_label === '') {
-            $cta_label = __("S'inscrire", 'mj-member');
-        }
-        if ($cta_registered_label === '') {
-            $cta_registered_label = __('Déjà inscrit', 'mj-member');
-        }
-        $cta_skin = isset($settings['cta_skin']) ? sanitize_key($settings['cta_skin']) : 'solid';
-        $allowed_cta_skins = array('solid', 'outline', 'text');
-        if (!in_array($cta_skin, $allowed_cta_skins, true)) {
-            $cta_skin = 'solid';
-        }
-
         $fallback_url = '';
         if (!empty($settings['fallback_image']['id'])) {
             $fallback_url = wp_get_attachment_image_url((int) $settings['fallback_image']['id'], 'large');
@@ -958,7 +725,12 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         }
 
         $instance_id = wp_unique_id('mj-member-events-');
-        echo '<div class="mj-member-events" data-mj-events-root="' . esc_attr($instance_id) . '">';
+        $root_classes = array('mj-member-events');
+        if ($wide_mode) {
+            $root_classes[] = 'is-wide';
+        }
+
+        echo '<div class="' . esc_attr(implode(' ', $root_classes)) . '" data-mj-events-root="' . esc_attr($instance_id) . '">';
         if ($display_title && $title !== '') {
             echo '<h3 class="mj-member-events__title">' . esc_html($title) . '</h3>';
         }
@@ -1018,12 +790,24 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
             $occurrence_items = isset($occurrence_preview['items']) && is_array($occurrence_preview['items'])
                 ? $occurrence_preview['items']
                 : array();
-            $occurrence_next = isset($occurrence_preview['next']) && is_array($occurrence_preview['next'])
-                ? $occurrence_preview['next']
-                : null;
             $occurrence_remaining = isset($occurrence_preview['remaining']) ? (int) $occurrence_preview['remaining'] : 0;
             $event_has_multiple_occurrences = !empty($occurrence_preview['has_multiple']);
-            $occurrence_next_label = ($occurrence_next && isset($occurrence_next['label'])) ? $occurrence_next['label'] : '';
+
+            $recurring_summary_raw = function_exists('mj_member_get_event_recurring_summary')
+                ? mj_member_get_event_recurring_summary($event)
+                : '';
+            $recurring_summary_text = '';
+            $recurring_summary_time = '';
+            if (is_array($recurring_summary_raw)) {
+                if (!empty($recurring_summary_raw['summary'])) {
+                    $recurring_summary_text = (string) $recurring_summary_raw['summary'];
+                }
+                if (!empty($recurring_summary_raw['time'])) {
+                    $recurring_summary_time = (string) $recurring_summary_raw['time'];
+                }
+            } elseif (is_string($recurring_summary_raw)) {
+                $recurring_summary_text = $recurring_summary_raw;
+            }
 
             $date_range = '';
             if (!$event_has_multiple_occurrences) {
@@ -1033,70 +817,6 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
             if ($permalink === '' && !empty($event['article_permalink'])) {
                 $permalink = esc_url($event['article_permalink']);
             }
-            $deadline_string = isset($event['deadline']) ? trim((string) $event['deadline']) : '';
-            $deadline_ts = ($deadline_string !== '' && $deadline_string !== '0000-00-00 00:00:00') ? strtotime($deadline_string) : false;
-            $start_ts = !empty($event['start_date']) ? strtotime($event['start_date']) : false;
-            $registration_open = true;
-            if ($deadline_ts && $deadline_ts < $now_timestamp) {
-                $registration_open = false;
-            }
-            if ($registration_open && $start_ts && $start_ts < $now_timestamp) {
-                $registration_open = false;
-            }
-
-            $allow_guardian_registration = !empty($event['allow_guardian_registration']);
-            $participants_source = $participant_options;
-            if (!$allow_guardian_registration && !empty($participant_options)) {
-                $participants_source = array();
-                foreach ($participant_options as $participant_option) {
-                    $option_type = isset($participant_option['type']) ? sanitize_key($participant_option['type']) : '';
-                    $is_self = !empty($participant_option['isSelf']);
-                    if ($is_self && $option_type === MjMembers_CRUD::ROLE_TUTEUR) {
-                        continue;
-                    }
-                    $participants_source[] = $participant_option;
-                }
-            }
-
-            $event_participants = array();
-            $registered_count = 0;
-            $available_count = 0;
-            if (!empty($participants_source)) {
-                foreach ($participants_source as $participant_option) {
-                    $participant_entry = $participant_option;
-                    $participant_entry['isRegistered'] = false;
-                    $participant_entry['registrationId'] = 0;
-                    $participant_entry['registrationStatus'] = '';
-                    $participant_entry['registrationCreatedAt'] = '';
-                    $participant_id = isset($participant_option['id']) ? (int) $participant_option['id'] : 0;
-
-                    if ($participant_id > 0 && class_exists('MjEventRegistrations')) {
-                        $existing_registration = MjEventRegistrations::get_existing((int) $event['id'], $participant_id);
-                        if ($existing_registration && (!isset($existing_registration->statut) || $existing_registration->statut !== MjEventRegistrations::STATUS_CANCELLED)) {
-                            $participant_entry['isRegistered'] = true;
-                            if (isset($existing_registration->id)) {
-                                $participant_entry['registrationId'] = (int) $existing_registration->id;
-                            }
-                            if (!empty($existing_registration->statut)) {
-                                $participant_entry['registrationStatus'] = sanitize_key($existing_registration->statut);
-                            }
-                            if (!empty($existing_registration->created_at)) {
-                                $participant_entry['registrationCreatedAt'] = sanitize_text_field($existing_registration->created_at);
-                            }
-                        }
-                    }
-
-                    if ($participant_entry['isRegistered']) {
-                        $registered_count++;
-                    } else {
-                        $available_count++;
-                    }
-
-                    $event_participants[] = $participant_entry;
-                }
-            }
-
-            $all_participants_registered = !empty($event_participants) && $registered_count === count($event_participants);
 
             $should_show_cover = $show_cover && $cover_url !== '' && $resolved_layout !== 'compact';
 
@@ -1121,8 +841,37 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
             if (!empty($location_type_slugs)) {
                 $article_attributes[] = 'data-location-types="' . esc_attr(implode(',', $location_type_slugs)) . '"';
             }
+            $article_id_value = isset($event['article_id']) ? (int) $event['article_id'] : 0;
+            if ($article_id_value > 0) {
+                $article_attributes[] = 'data-article-id="' . $article_id_value . '"';
+            }
+
+            $accent_color_raw = isset($event['accent_color']) ? (string) $event['accent_color'] : '';
+            $accent_color_value = '';
+            if ($accent_color_raw !== '') {
+                if (function_exists('mj_member_normalize_hex_color_value')) {
+                    $accent_color_value = mj_member_normalize_hex_color_value($accent_color_raw);
+                } else {
+                    $accent_candidate = sanitize_hex_color($accent_color_raw);
+                    if (is_string($accent_candidate) && $accent_candidate !== '') {
+                        $accent_color_value = strtoupper($accent_candidate);
+                    }
+                }
+            }
+            if ($accent_color_value !== '') {
+                $article_attributes[] = 'style="--mj-event-accent: ' . esc_attr($accent_color_value) . '"';
+            }
 
             echo '<article ' . implode(' ', $article_attributes) . '>';
+
+            $badge_label = '';
+            $badge_inline = '';
+            $badge_overlay = '';
+            if ($show_badge && $type_label !== '') {
+                $badge_label = esc_html($type_label);
+                $badge_inline = '<span class="mj-member-events__badge">' . $badge_label . '</span>';
+                $badge_overlay = '<span class="mj-member-events__badge is-overlay">' . $badge_label . '</span>';
+            }
 
             if ($should_show_cover) {
                 $cover_classes = array('mj-member-events__cover');
@@ -1136,14 +885,24 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 $cover_attr = implode(' ', array_map('sanitize_html_class', $cover_classes));
                 $image_alt = !empty($event['raw_location_name']) ? $event['raw_location_name'] : $event['title'];
                 echo '<div class="' . esc_attr($cover_attr) . '">';
-                echo '<img src="' . $cover_url . '" alt="' . esc_attr($image_alt) . '" loading="lazy" />';
+                if ($permalink) {
+                    echo '<a class="mj-member-events__cover-link" href="' . $permalink . '">';
+                    echo '<img src="' . $cover_url . '" alt="' . esc_attr($image_alt) . '" loading="lazy" />';
+                    echo '</a>';
+                } else {
+                    echo '<img src="' . $cover_url . '" alt="' . esc_attr($image_alt) . '" loading="lazy" />';
+                }
+                if ($badge_overlay !== '') {
+                    echo $badge_overlay;
+                    $badge_inline = '';
+                }
                 echo '</div>';
             }
 
             echo '<div class="mj-member-events__item-body">';
 
-            if ($show_badge && $type_label !== '') {
-                echo '<span class="mj-member-events__badge">' . esc_html($type_label) . '</span>';
+            if ($badge_inline !== '') {
+                echo $badge_inline;
             }
 
             $heading_tag = $card_title_tag === 'p' ? 'p' : $card_title_tag;
@@ -1159,61 +918,95 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
             if ($date_range !== '') {
                 $meta_parts[] = $date_range;
             }
-            if ($show_location && !empty($event['location'])) {
+            if (!$show_location && !empty($event['location'])) {
                 $meta_parts[] = $event['location'];
-            }
-            if ($price_display_mode !== 'hide' && isset($event['price'])) {
-                $price_value = (float) $event['price'];
-                $is_zero_price = abs($price_value) < 0.01;
-                if (!($price_display_mode === 'hide_zero' && $is_zero_price)) {
-                    $price_string = number_format_i18n($price_value, 2) . ' €';
-                    $prefix_trimmed = trim((string) $price_prefix);
-                    if ($prefix_trimmed !== '') {
-                        $price_string = $prefix_trimmed . ' ' . $price_string;
-                    }
-                    $meta_parts[] = $price_string;
-                }
             }
 
             if (!empty($meta_parts)) {
-                echo '<div class="mj-member-events__meta">' . esc_html(implode(' • ', $meta_parts)) . '</div>';
+                echo '<div class="mj-member-events__meta">';
+                foreach ($meta_parts as $meta_part) {
+                    echo '<span class="mj-member-events__meta-item">' . esc_html($meta_part) . '</span>';
+                }
+                echo '</div>';
             }
 
-            if ($event_has_multiple_occurrences && $occurrence_next_label !== '') {
-                $next_prefix = (!empty($occurrence_next['isToday'])) ? __("Aujourd'hui :", 'mj-member') : __('Prochaine occurrence :', 'mj-member');
-                echo '<p class="mj-member-events__occurrence-next">'
-                    . '<span class="mj-member-events__occurrence-prefix">' . esc_html($next_prefix) . '</span>'
-                    . '<span class="mj-member-events__occurrence-label">' . esc_html($occurrence_next_label) . '</span>'
-                    . '</p>';
-
-                $following_occurrences = array_slice($occurrence_items, 1);
-                if (!empty($following_occurrences) || $occurrence_remaining > 0) {
-                    echo '<ul class="mj-member-events__occurrences" aria-label="' . esc_attr__('Autres occurrences', 'mj-member') . '">';
-                    foreach ($following_occurrences as $following_occurrence) {
-                        if (!is_array($following_occurrence) || empty($following_occurrence['label'])) {
-                            continue;
-                        }
-                        $following_label = $following_occurrence['label'];
-                        $following_prefix = !empty($following_occurrence['isToday']) ? __("Aujourd'hui :", 'mj-member') : __('Ensuite :', 'mj-member');
-                        $following_classes = array('mj-member-events__occurrence');
-                        if (!empty($following_occurrence['isToday'])) {
-                            $following_classes[] = 'is-today';
-                        }
-                        echo '<li class="' . esc_attr(implode(' ', array_map('sanitize_html_class', $following_classes))) . '">'
-                            . '<span class="mj-member-events__occurrence-prefix">' . esc_html($following_prefix) . '</span>'
-                            . '<span class="mj-member-events__occurrence-label">' . esc_html($following_label) . '</span>'
-                            . '</li>';
-                    }
-
-                    if ($occurrence_remaining > 0) {
-                        $remaining_label = sprintf(_n('+ %d autre date', '+ %d autres dates', $occurrence_remaining, 'mj-member'), $occurrence_remaining);
-                        echo '<li class="mj-member-events__occurrence mj-member-events__occurrence--more">'
-                            . '<span class="mj-member-events__occurrence-label">' . esc_html($remaining_label) . '</span>'
-                            . '</li>';
-                    }
-
-                    echo '</ul>';
+            if ($recurring_summary_text !== '' || $recurring_summary_time !== '') {
+                echo '<div class="mj-member-events__recurring-summary">';
+                if ($recurring_summary_text !== '') {
+                    echo '<span class="mj-member-events__recurring-heading">' . esc_html($recurring_summary_text) . '</span>';
                 }
+                if ($recurring_summary_time !== '') {
+                    echo '<span class="mj-member-events__recurring-time">' . esc_html($recurring_summary_time) . '</span>';
+                }
+                echo '</div>';
+            }
+
+            $price_value = isset($event['price']) ? (float) $event['price'] : 0.0;
+            $price_positive = $price_value > 0;
+            $should_display_price = ($price_display_mode !== 'hide') && $price_positive;
+            if ($price_display_mode === 'hide_zero' && !$price_positive) {
+                $should_display_price = false;
+            }
+            if ($should_display_price) {
+                $price_amount = number_format_i18n($price_value, 2) . ' €';
+                $price_label = trim((string) $price_prefix);
+                if ($price_label === '') {
+                    $price_label = __('Tarif', 'mj-member');
+                }
+                echo '<div class="mj-member-events__price-chip">'
+                    . '<span class="mj-member-events__price-chip-label">' . esc_html($price_label) . '</span>'
+                    . '<span class="mj-member-events__price-chip-value">' . esc_html($price_amount) . '</span>'
+                    . '</div>';
+            }
+
+            $dates_display = array();
+            if (!empty($occurrence_items)) {
+                foreach ($occurrence_items as $index => $occurrence_item) {
+                    if ($index >= 3) {
+                        break;
+                    }
+                    if (!is_array($occurrence_item)) {
+                        continue;
+                    }
+
+                    $timestamp_candidate = isset($occurrence_item['timestamp']) ? (int) $occurrence_item['timestamp'] : 0;
+                    if ($timestamp_candidate <= 0 && !empty($occurrence_item['start'])) {
+                        $timestamp_candidate = strtotime((string) $occurrence_item['start']);
+                    }
+
+                    if ($timestamp_candidate > 0) {
+                        $dates_display[] = wp_date(get_option('date_format', 'd/m/Y'), $timestamp_candidate);
+                        continue;
+                    }
+
+                    if (!empty($occurrence_item['label'])) {
+                        $label_candidate = preg_replace('/\s+\d{1,2}(?:[:h]\d{2})?.*/u', '', (string) $occurrence_item['label']);
+                        $label_candidate = trim((string) $label_candidate);
+                        if ($label_candidate === '') {
+                            $label_candidate = (string) $occurrence_item['label'];
+                        }
+                        $dates_display[] = sanitize_text_field($label_candidate);
+                    }
+                }
+            }
+
+            $dates_display = array_values(array_unique(array_filter($dates_display, 'strlen')));
+            $occurrence_line = '';
+            if (!empty($dates_display)) {
+                $dates_label = implode(', ', $dates_display);
+                $total_known = count($occurrence_items) + max(0, $occurrence_remaining);
+                $remaining_count = max(0, $total_known - count($dates_display));
+                if ($remaining_count > 0) {
+                    $dates_label .= ' ' . sprintf(_n('+ %d autre date', '+ %d autres dates', $remaining_count, 'mj-member'), $remaining_count);
+                }
+                $occurrence_line = $dates_label;
+            }
+
+            if ($event_has_multiple_occurrences && $occurrence_line !== '') {
+                echo '<p class="mj-member-events__occurrence-next">'
+                    . '<span class="mj-member-events__occurrence-prefix">' . esc_html__('Prochaines dates :', 'mj-member') . '</span>'
+                    . '<span class="mj-member-events__occurrence-label">' . esc_html($occurrence_line) . '</span>'
+                    . '</p>';
             }
 
             $display_excerpt = $show_description && !empty($event['excerpt']);
@@ -1224,168 +1017,33 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 echo '<p class="mj-member-events__excerpt">' . esc_html($event['excerpt']) . '</p>';
             }
 
-            if ($permalink) {
-                echo '<a class="mj-member-events__detail-link" href="' . $permalink . '">' . esc_html__('Détail de l\'événement', 'mj-member') . '</a>';
+            $location_detail_notes = isset($event['location_description']) ? trim((string) $event['location_description']) : '';
+            $location_logo = isset($event['location_cover']) ? esc_url($event['location_cover']) : '';
+            $location_address = isset($event['location_address']) ? trim((string) $event['location_address']) : '';
+            $location_name = isset($event['raw_location_name']) ? trim((string) $event['raw_location_name']) : '';
+            if ($location_name === '' && !empty($event['location'])) {
+                $location_name = (string) $event['location'];
             }
 
-            $location_detail_notes = isset($event['location_description']) ? trim((string) $event['location_description']) : '';
-            $location_detail_cover = isset($event['location_cover']) ? esc_url($event['location_cover']) : '';
-            if ($show_location && ($location_detail_notes !== '' || $location_detail_cover !== '')) {
-                echo '<div class="mj-member-events__location-details">';
-                if ($location_detail_cover !== '') {
-                    $location_thumb_alt = $event['location'] !== '' ? $event['location'] : $event['title'];
-                    echo '<img class="mj-member-events__location-thumb" src="' . $location_detail_cover . '" alt="' . esc_attr($location_thumb_alt) . '" loading="lazy" />';
+            if ($show_location && ($location_logo !== '' || $location_name !== '' || $location_address !== '' || $location_detail_notes !== '')) {
+                echo '<div class="mj-member-events__location-card">';
+                if ($location_logo !== '') {
+                    $location_logo_alt = $location_name !== '' ? $location_name : $event['title'];
+                    echo '<img class="mj-member-events__location-logo" src="' . $location_logo . '" alt="' . esc_attr($location_logo_alt) . '" loading="lazy" />';
+                }
+
+                echo '<div class="mj-member-events__location-content">';
+                if ($location_name !== '') {
+                    echo '<p class="mj-member-events__location-name">' . esc_html($location_name) . '</p>';
+                }
+                if ($location_address !== '') {
+                    echo '<p class="mj-member-events__location-address">' . esc_html($location_address) . '</p>';
                 }
                 if ($location_detail_notes !== '') {
                     $location_notes_html = nl2br(esc_html($location_detail_notes));
                     echo '<p class="mj-member-events__location-note">' . $location_notes_html . '</p>';
                 }
                 echo '</div>';
-            }
-
-            $map_embed_src = !empty($event['location_map']) ? esc_url($event['location_map']) : '';
-            $map_link_url = !empty($event['location_map_link']) ? esc_url($event['location_map_link']) : '';
-            $map_address = !empty($event['location_address']) ? $event['location_address'] : '';
-            if ($show_map && $map_embed_src !== '') {
-                $map_title = $event['title'] !== ''
-                    ? sprintf(__('Localisation : %s', 'mj-member'), $event['title'])
-                    : __('Localisation de l\'événement', 'mj-member');
-                echo '<div class="mj-member-events__map">';
-                echo '<iframe src="' . $map_embed_src . '" loading="lazy" allowfullscreen title="' . esc_attr($map_title) . '" referrerpolicy="no-referrer-when-downgrade"></iframe>';
-                if ($map_address !== '') {
-                    echo '<p class="mj-member-events__map-address">' . esc_html($map_address) . '</p>';
-                }
-                if ($map_link_url !== '') {
-                    echo '<a class="mj-member-events__map-link" href="' . $map_link_url . '" target="_blank" rel="noopener">' . esc_html__('Ouvrir dans Google Maps', 'mj-member') . '</a>';
-                }
-                echo '</div>';
-            }
-
-            $animateur_registration_preview = array();
-            $show_registrations_block = false;
-            if ($viewer_is_animateur && $current_member_id > 0 && $animateur_tools_ready && class_exists('MjEventRegistrations')) {
-                $assigned_ids = MjEventAnimateurs::get_ids_by_event((int) $event['id']);
-                if (!empty($assigned_ids) && in_array($current_member_id, $assigned_ids, true)) {
-                    $registrations_raw = MjEventRegistrations::get_by_event((int) $event['id']);
-                    if (!empty($registrations_raw)) {
-                        foreach ($registrations_raw as $registration_row) {
-                            $status_key = isset($registration_row->statut) ? sanitize_key($registration_row->statut) : '';
-                            if ($status_key === MjEventRegistrations::STATUS_CANCELLED) {
-                                continue;
-                            }
-
-                            $name_parts = array();
-                            if (!empty($registration_row->first_name)) {
-                                $name_parts[] = sanitize_text_field($registration_row->first_name);
-                            }
-                            if (!empty($registration_row->last_name)) {
-                                $name_parts[] = sanitize_text_field($registration_row->last_name);
-                            }
-
-                            $participant_label = trim(implode(' ', $name_parts));
-                            if ($participant_label === '' && !empty($registration_row->member_id)) {
-                                $participant_label = sprintf(__('Membre #%d', 'mj-member'), (int) $registration_row->member_id);
-                            }
-
-                            $status_label = isset($registration_status_labels[$status_key]) ? $registration_status_labels[$status_key] : '';
-
-                            $animateur_registration_preview[] = array(
-                                'label' => $participant_label,
-                                'status' => $status_label,
-                            );
-                        }
-                    }
-
-                    $show_registrations_block = true;
-                }
-            }
-
-            if ($show_registrations_block) {
-                echo '<div class="mj-member-events__registrations">';
-                echo '<p class="mj-member-events__registrations-title">' . esc_html__('Participants inscrits', 'mj-member') . '</p>';
-                if (!empty($animateur_registration_preview)) {
-                    echo '<ul class="mj-member-events__registrations-list">';
-                    foreach ($animateur_registration_preview as $registration_entry) {
-                        $status_html = '';
-                        if (!empty($registration_entry['status'])) {
-                            $status_html = '<span class="mj-member-events__registrations-status">' . esc_html($registration_entry['status']) . '</span>';
-                        }
-                        echo '<li>' . esc_html($registration_entry['label']) . $status_html . '</li>';
-                    }
-                    echo '</ul>';
-                } else {
-                    echo '<p class="mj-member-events__registrations-empty">' . esc_html__('Aucune inscription pour le moment.', 'mj-member') . '</p>';
-                }
-                echo '</div>';
-            }
-
-            $should_render_actions = ($show_cta && $registration_open) || !$registration_open;
-            if ($should_render_actions) {
-                echo '<div class="mj-member-events__actions">';
-                if ($registration_open && $show_cta) {
-                    $button_classes = array('mj-member-events__cta', 'is-skin-' . $cta_skin);
-                    $button_attrs = array(
-                        'type' => 'button',
-                        'class' => implode(' ', array_map('sanitize_html_class', $button_classes)),
-                        'data-event-id' => (int) $event['id'],
-                        'data-cta-label' => $cta_label,
-                        'data-cta-registered-label' => $cta_registered_label,
-                    );
-
-                    if ($event['title'] !== '') {
-                        if ($cta_label === __("S'inscrire", 'mj-member')) {
-                            $button_attrs['aria-label'] = sprintf(__("S'inscrire à %s", 'mj-member'), $event['title']);
-                        } else {
-                            $button_attrs['aria-label'] = $cta_label . ' – ' . $event['title'];
-                        }
-                    } else {
-                        $button_attrs['aria-label'] = $cta_label;
-                    }
-
-                    if ($is_user_logged_in) {
-                        $registration_payload = array(
-                            'eventId' => (int) $event['id'],
-                            'eventTitle' => $event['title'],
-                            'participants' => $event_participants,
-                            'allRegistered' => $all_participants_registered,
-                            'hasParticipants' => !empty($event_participants),
-                            'hasAvailableParticipants' => ($available_count > 0),
-                            'noteMaxLength' => 400,
-                        );
-                        if ($deadline_ts) {
-                            $registration_payload['deadline'] = gmdate('c', $deadline_ts);
-                        }
-                        $registration_payload_json = wp_json_encode($registration_payload);
-                        if (!is_string($registration_payload_json)) {
-                            $registration_payload_json = wp_json_encode(
-                                array(
-                                    'eventId' => (int) $event['id'],
-                                    'participants' => array(),
-                                )
-                            );
-                        }
-                        if (!is_string($registration_payload_json)) {
-                            $registration_payload_json = '{}';
-                        }
-                        $button_attrs['data-registration'] = $registration_payload_json;
-                    } else {
-                        $button_attrs['data-requires-login'] = '1';
-                    }
-
-                    $attr_fragments = array();
-                    foreach ($button_attrs as $attr_key => $attr_value) {
-                        if (!is_scalar($attr_value)) {
-                            continue;
-                        }
-                        $attr_fragments[] = $attr_key . '="' . esc_attr((string) $attr_value) . '"';
-                    }
-
-                    echo '<button ' . implode(' ', $attr_fragments) . '>' . esc_html($cta_label) . '</button>';
-                    echo '<div class="mj-member-events__signup" hidden></div>';
-                    echo '<div class="mj-member-events__feedback" aria-live="polite"></div>';
-                } elseif (!$registration_open) {
-                    echo '<span class="mj-member-events__closed">' . esc_html__('Inscriptions clôturées', 'mj-member') . '</span>';
-                }
                 echo '</div>';
             }
 

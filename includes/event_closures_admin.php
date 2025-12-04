@@ -1,12 +1,16 @@
 <?php
 
+use Mj\Member\Core\Config;
+
 if (!defined('ABSPATH')) {
     exit;
 }
 
 if (!function_exists('mj_event_closures_page')) {
     function mj_event_closures_page() {
-        if (!current_user_can(MJ_MEMBER_CAPABILITY)) {
+        $capability = Config::capability();
+
+        if (!current_user_can($capability)) {
             wp_die(__('Accès refusé.', 'mj-member'));
         }
 

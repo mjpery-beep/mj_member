@@ -1,9 +1,10 @@
 <?php
 
+use Mj\Member\Core\Config;
+
 if (!defined('ABSPATH')) {
     exit;
 }
-
 
 if (!function_exists('mj_member_ajax_update_event_assignments')) {
     function mj_member_ajax_update_event_assignments() {
@@ -22,6 +23,15 @@ if (!function_exists('mj_member_ajax_update_event_assignments')) {
 
         $event_id = isset($_POST['event_id']) ? (int) $_POST['event_id'] : 0;
         $member_id = isset($_POST['member_id']) ? (int) $_POST['member_id'] : 0;
+        $payment_mode_raw = isset($_POST['payment_mode']) ? wp_unslash($_POST['payment_mode']) : '';
+        $payment_mode = $payment_mode_raw !== '' ? sanitize_key($payment_mode_raw) : '';
+        $payment_deferred = in_array($payment_mode, array('defer', 'email', 'delayed'), true);
+        $payment_mode_raw = isset($_POST['payment_mode']) ? wp_unslash($_POST['payment_mode']) : '';
+        $payment_mode = $payment_mode_raw !== '' ? sanitize_key($payment_mode_raw) : '';
+        $payment_deferred = in_array($payment_mode, array('defer', 'email', 'delayed'), true);
+        $payment_mode_raw = isset($_POST['payment_mode']) ? wp_unslash($_POST['payment_mode']) : '';
+        $payment_mode = $payment_mode_raw !== '' ? sanitize_key($payment_mode_raw) : '';
+        $payment_deferred = in_array($payment_mode, array('defer', 'email', 'delayed'), true);
         $registration_id = isset($_POST['registration_id']) ? (int) $_POST['registration_id'] : 0;
 
         if ($event_id <= 0 || $member_id <= 0) {
@@ -170,23 +180,28 @@ if (!function_exists('mj_member_ajax_update_event_assignments')) {
     add_action('wp_ajax_mj_member_update_event_assignments', 'mj_member_ajax_update_event_assignments');
     add_action('wp_ajax_nopriv_mj_member_update_event_assignments', 'mj_member_ajax_update_event_assignments');
 }
-if (!class_exists('MjEventAnimateurs') && file_exists(MJ_MEMBER_PATH . 'includes/classes/crud/MjEventAnimateurs.php')) {
-    require_once MJ_MEMBER_PATH . 'includes/classes/crud/MjEventAnimateurs.php';
-}
-
-if (!class_exists('MjEventLocations') && file_exists(MJ_MEMBER_PATH . 'includes/classes/crud/MjEventLocations.php')) {
-    require_once MJ_MEMBER_PATH . 'includes/classes/crud/MjEventLocations.php';
-}
-
 if (!function_exists('mj_member_register_events_widget_assets')) {
     function mj_member_register_events_widget_assets() {
-        $version = defined('MJ_MEMBER_VERSION') ? MJ_MEMBER_VERSION : '1.0.0';
+        $version = Config::version();
+        $baseUrl = Config::url();
+        $basePath = Config::path();
 
         wp_register_script(
             'mj-member-events-widget',
-            MJ_MEMBER_URL . 'js/events-widget.js',
+            $baseUrl . 'js/events-widget.js',
             array(),
             $version,
+            true
+        );
+
+        $toggle_path = $basePath . 'js/event-toggles.js';
+        $toggle_version = file_exists($toggle_path) ? filemtime($toggle_path) : $version;
+
+        wp_register_script(
+            'mj-member-event-toggles',
+            $baseUrl . 'js/event-toggles.js',
+            array(),
+            $toggle_version,
             true
         );
     }
@@ -201,99 +216,63 @@ if (!function_exists('mj_member_output_events_widget_styles')) {
         }
         $printed = true;
 
-        echo '<style>'
-            . '.mj-member-events{display:flex;flex-direction:column;gap:24px;--mj-events-title-color:#0f172a;--mj-events-card-bg:#ffffff;--mj-events-border:#e3e6ea;--mj-events-border-soft:#e2e8f0;--mj-events-card-title:#0f172a;--mj-events-meta:#4b5563;--mj-events-excerpt:#475569;--mj-events-accent:#2563eb;--mj-events-accent-contrast:#ffffff;--mj-events-radius:14px;--mj-events-button-bg:#2563eb;--mj-events-button-hover:#1d4ed8;--mj-events-button-text:#ffffff;--mj-events-button-border:#2563eb;--mj-events-button-radius:999px;--mj-events-surface-soft:#f8fafc;}'
-            . '.mj-member-events__title{margin:0;font-size:1.75rem;font-weight:700;color:var(--mj-events-title-color);}'
-            . '.mj-member-events__grid{display:grid;gap:20px;}'
-            . '.mj-member-events__grid.is-grid{grid-template-columns:repeat(auto-fit,minmax(240px,1fr));}'
-            . '.mj-member-events__grid.is-list{grid-template-columns:1fr;}'
-            . '.mj-member-events__item{border:1px solid var(--mj-events-border);border-radius:var(--mj-events-radius);overflow:hidden;background:var(--mj-events-card-bg);display:flex;flex-direction:column;transition:box-shadow 0.2s ease,transform 0.2s ease;}'
-            . '.mj-member-events__item.layout-horizontal{flex-direction:row;}'
-            . '.mj-member-events__item.layout-horizontal .mj-member-events__item-body{flex:1;}'
-            . '.mj-member-events__item.layout-compact{border-radius:calc(var(--mj-events-radius) - 2px);}'
-            . '.mj-member-events__item:hover{box-shadow:0 18px 40px rgba(15,23,42,0.12);transform:translateY(-2px);}'
-            . '.mj-member-events__cover{position:relative;padding-bottom:56%;overflow:hidden;background:var(--mj-events-surface-soft);}'
-            . '.mj-member-events__cover.ratio-4-3{padding-bottom:75%;}'
-            . '.mj-member-events__cover.ratio-1-1{padding-bottom:100%;}'
-            . '.mj-member-events__cover.ratio-auto{padding-bottom:0;min-height:200px;}'
-            . '.mj-member-events__cover.is-horizontal{flex:0 0 280px;padding-bottom:0;min-height:220px;}'
-            . '.mj-member-events__cover img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;}'
-            . '.mj-member-events__cover.is-horizontal img{position:static;height:100%;}'
-            . '.mj-member-events__item-body{display:flex;flex-direction:column;gap:12px;padding:20px;}'
-            . '.mj-member-events__item.layout-compact .mj-member-events__item-body{padding:16px;gap:8px;}'
-            . '.mj-member-events__item.layout-compact .mj-member-events__meta{font-size:0.85rem;}'
-            . '.mj-member-events__item-title{margin:0;font-size:1.1rem;font-weight:700;color:var(--mj-events-card-title);}'
-            . '.mj-member-events__item-title a{text-decoration:none;color:inherit;}'
-            . '.mj-member-events__item-title a:hover{color:var(--mj-events-accent);}'
-            . '.mj-member-events__meta{font-size:0.9rem;color:var(--mj-events-meta);display:flex;flex-wrap:wrap;gap:8px;}'
-            . '.mj-member-events__excerpt{margin:0;color:var(--mj-events-excerpt);font-size:0.95rem;line-height:1.5;}'
-            . '.mj-member-events__detail-link{display:inline-flex;align-items:center;gap:6px;font-weight:600;color:var(--mj-events-accent);text-decoration:none;font-size:0.9rem;}'
-            . '.mj-member-events__detail-link:hover,.mj-member-events__detail-link:focus{color:var(--mj-events-button-hover);text-decoration:underline;}'
-            . '.mj-member-events__badge{display:inline-flex;align-items:center;gap:6px;background:var(--mj-events-accent);color:var(--mj-events-accent-contrast);font-weight:600;border-radius:999px;padding:4px 10px;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em;}'
-            . '.mj-member-events__price{font-weight:700;color:var(--mj-events-card-title);}'
-            . '.mj-member-events__actions{margin-top:auto;display:flex;flex-direction:column;gap:12px;}'
-            . '.mj-member-events__cta{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--mj-events-button-bg);color:var(--mj-events-button-text);border:1px solid var(--mj-events-button-border);border-radius:var(--mj-events-button-radius);padding:10px 18px;font-weight:600;cursor:pointer;transition:background 0.2s ease,transform 0.2s ease,box-shadow 0.2s ease,color 0.2s ease,border-color 0.2s ease;}'
-            . '.mj-member-events__cta:hover{background:var(--mj-events-button-hover);transform:translateY(-1px);box-shadow:0 12px 32px rgba(37,99,235,0.25);}'
-            . '.mj-member-events__cta:disabled,.mj-member-events__cta[aria-disabled="true"]{opacity:0.6;cursor:not-allowed;transform:none;box-shadow:none;}'
-            . '.mj-member-events__cta.is-registered{background:#059669;border-color:#059669;}'
-            . '.mj-member-events__cta.is-skin-outline{background:transparent;color:var(--mj-events-button-bg);border-color:var(--mj-events-button-bg);box-shadow:none;}'
-            . '.mj-member-events__cta.is-skin-outline:hover{background:var(--mj-events-button-bg);color:var(--mj-events-button-text);}'
-            . '.mj-member-events__cta.is-skin-text{background:transparent;border-color:transparent;padding:0;color:var(--mj-events-button-bg);box-shadow:none;}'
-            . '.mj-member-events__cta.is-skin-text:hover{color:var(--mj-events-button-hover);box-shadow:none;transform:none;}'
-            . '.mj-member-events__signup{display:none;border:1px solid var(--mj-events-border-soft);border-radius:12px;padding:16px;background:var(--mj-events-surface-soft);}'
-            . '.mj-member-events__signup.is-open{display:block;}'
-            . '.mj-member-events__signup-title{margin:0 0 12px;font-size:0.95rem;font-weight:600;color:var(--mj-events-card-title);}'
-            . '.mj-member-events__signup-options{margin:0 0 16px;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px;}'
-            . '.mj-member-events__signup-option{margin:0;display:flex;align-items:center;gap:12px;}'
-            . '.mj-member-events__signup-label{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--mj-events-card-title);flex:1;}'
-            . '.mj-member-events__signup-radio{width:18px;height:18px;}'
-            . '.mj-member-events__signup-name{font-size:0.95rem;}'
-            . '.mj-member-events__signup-option.is-registered .mj-member-events__signup-label{opacity:0.65;}'
-            . '.mj-member-events__signup-controls{margin-left:auto;display:flex;align-items:center;gap:8px;}'
-            . '.mj-member-events__signup-toggle{background:none;border:1px solid var(--mj-events-border-soft);border-radius:999px;padding:6px 14px;font-size:0.85rem;font-weight:600;color:#b91c1c;cursor:pointer;transition:background 0.2s ease,color 0.2s ease;}'
-            . '.mj-member-events__signup-toggle:hover{background:rgba(185,28,28,0.08);color:#7f1d1d;}'
-            . '.mj-member-events__signup-toggle:disabled{opacity:0.6;cursor:not-allowed;}'
-            . '.mj-member-events__signup-status{font-size:0.8rem;color:#059669;font-weight:600;}'
-            . '.mj-member-events__signup-empty{margin:0 0 12px;font-size:0.9rem;color:var(--mj-events-meta);}'
-            . '.mj-member-events__signup-info{margin:0 0 12px;font-size:0.9rem;font-weight:600;color:var(--mj-events-card-title);}'
-            . '.mj-member-events__signup-note{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}'
-            . '.mj-member-events__signup-note label{font-size:0.9rem;font-weight:600;color:var(--mj-events-card-title);}'
-            . '.mj-member-events__signup-note textarea{min-height:80px;border:1px solid var(--mj-events-border-soft);border-radius:10px;padding:10px 12px;font-size:0.95rem;resize:vertical;background:#ffffff;}'
-            . '.mj-member-events__signup-note textarea:focus{outline:2px solid var(--mj-events-accent);outline-offset:2px;}'
-            . '.mj-member-events__signup-actions{display:flex;align-items:center;gap:12px;}'
-            . '.mj-member-events__signup-submit{display:inline-flex;align-items:center;gap:8px;background:#0f172a;color:#ffffff;border:none;border-radius:10px;padding:10px 18px;font-weight:600;cursor:pointer;transition:background 0.2s ease;}'
-            . '.mj-member-events__signup-submit:hover{background:#1e293b;}'
-            . '.mj-member-events__signup-submit:disabled{opacity:0.6;cursor:not-allowed;}'
-            . '.mj-member-events__signup-cancel{background:none;border:none;color:var(--mj-events-meta);font-weight:600;cursor:pointer;text-decoration:underline;padding:0;}'
-            . '.mj-member-events__signup-feedback{margin-top:12px;font-size:0.85rem;color:var(--mj-events-card-title);}'
-            . '.mj-member-events__signup-feedback.is-error{color:#b91c1c;}'
-            . '.mj-member-events__occurrence-next{margin:6px 0 0;font-size:0.92rem;font-weight:600;color:var(--mj-events-card-title);}'
-            . '.mj-member-events__occurrences{margin:6px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:0.88rem;color:var(--mj-events-meta);}'
-            . '.mj-member-events__occurrence{display:flex;align-items:flex-start;gap:8px;}'
-            . '.mj-member-events__occurrence-prefix{font-weight:600;color:var(--mj-events-card-title);}'
-            . '.mj-member-events__occurrence-label{flex:1;}'
-            . '.mj-member-events__occurrence.is-today .mj-member-events__occurrence-label{color:var(--mj-events-card-title);}'
-            . '.mj-member-events__occurrence--more{font-style:italic;}'
-            . '.mj-member-events__location-details{display:flex;gap:12px;align-items:flex-start;background:var(--mj-events-surface-soft);border-radius:12px;padding:12px 14px;color:var(--mj-events-card-title);}'
-            . '.mj-member-events__location-thumb{flex:0 0 56px;width:56px;height:56px;border-radius:12px;object-fit:cover;border:1px solid var(--mj-events-border-soft);}'
-            . '.mj-member-events__location-note{margin:0;font-size:0.9rem;line-height:1.5;color:var(--mj-events-meta);}'
-            . '.mj-member-events__map{margin-top:16px;border-radius:12px;overflow:hidden;background:var(--mj-events-surface-soft);box-shadow:0 6px 16px rgba(15,23,42,0.08);}'
-            . '.mj-member-events__map iframe{display:block;width:100%;height:220px;border:0;}'
-            . '.mj-member-events__map-address{margin:12px 16px 0;font-size:0.9rem;color:var(--mj-events-card-title);font-weight:500;}'
-            . '.mj-member-events__map-link{display:inline-block;margin:10px 16px 16px;font-size:0.85rem;font-weight:600;color:var(--mj-events-accent);text-decoration:none;}'
-            . '.mj-member-events__map-link:hover{text-decoration:underline;}'
-            . '.mj-member-events__registrations{margin-top:16px;padding:14px;border:1px solid var(--mj-events-border-soft);border-radius:12px;background:#eef2ff;color:var(--mj-events-card-title);}'
-            . '.mj-member-events__registrations-title{margin:0 0 8px;font-size:0.95rem;font-weight:600;color:#1e293b;}'
-            . '.mj-member-events__registrations-list{margin:0;padding-left:18px;list-style:disc;font-size:0.9rem;color:var(--mj-events-card-title);}'
-            . '.mj-member-events__registrations-list li{margin-bottom:4px;}'
-            . '.mj-member-events__registrations-status{font-size:0.75rem;font-weight:600;color:var(--mj-events-accent);margin-left:6px;text-transform:uppercase;}'
-            . '.mj-member-events__registrations-empty{margin:0;font-size:0.9rem;color:var(--mj-events-meta);}'
-            . '.mj-member-events__feedback{font-size:0.9rem;font-weight:600;color:#059669;}'
-            . '.mj-member-events__feedback.is-error{color:#b91c1c;}'
-            . '.mj-member-events__closed{font-size:0.95rem;font-weight:600;color:#ef4444;}'
-            . '.mj-member-events__empty{margin:0;font-size:0.95rem;color:#6b7280;}'
-            . '.mj-member-events__filtered-empty{margin:0;font-size:0.95rem;color:#6b7280;}'
-            . '</style>';
+        $css = <<<'CSS'
+    .mj-member-events{display:flex;flex-direction:column;gap:24px;color:var(--mj-events-text,#1f2937);background:var(--mj-events-surface,transparent);--mj-events-title-color:#0f172a;--mj-events-text:#1f2937;--mj-events-card-bg:#ffffff;--mj-events-border:#e2e8f0;--mj-events-border-soft:rgba(226,232,240,0.7);--mj-events-card-title:#0f172a;--mj-events-meta:#475569;--mj-events-excerpt:#475569;--mj-events-accent:#2563eb;--mj-events-accent-contrast:#ffffff;--mj-events-radius:18px;--mj-events-cover-min:220px;--mj-events-cover-radius:16px;--mj-events-surface-soft:rgba(248,250,252,0.92);--mj-events-grid-columns:3;--mj-events-wide-cover:320px;}
+    .mj-member-events.is-wide{--mj-events-grid-columns:1;--mj-events-cover-min:260px;}
+    .mj-member-events__title{margin:0;font-size:1.75rem;font-weight:700;color:var(--mj-events-title-color);}
+    .mj-member-events__grid{display:grid;gap:20px;}
+    .mj-member-events__grid.is-grid{grid-template-columns:repeat(var(--mj-events-grid-columns,3),minmax(0,1fr));}
+    .mj-member-events__grid.is-list{grid-template-columns:1fr;}
+    .mj-member-events__item{position:relative;display:flex;flex-direction:column;border:1px solid var(--mj-events-border);border-radius:var(--mj-events-radius);overflow:hidden;background:var(--mj-events-card-bg);transition:box-shadow 0.25s ease,transform 0.25s ease;}
+    .mj-member-events__item.layout-horizontal{flex-direction:row;}
+    .mj-member-events.is-wide .mj-member-events__item{flex-direction:row;min-height:280px;}
+    .mj-member-events__cover{position:relative;padding-bottom:56%;min-height:var(--mj-events-cover-min,220px);overflow:hidden;background:var(--mj-events-surface-soft);border-radius:var(--mj-events-cover-radius,var(--mj-events-radius)) var(--mj-events-cover-radius,var(--mj-events-radius)) 0 0;}
+    .mj-member-events__cover.ratio-4-3{padding-bottom:75%;}
+    .mj-member-events__cover.ratio-1-1{padding-bottom:100%;}
+    .mj-member-events__cover.ratio-auto{padding-bottom:0;min-height:var(--mj-events-cover-min,220px);}
+    .mj-member-events__cover.is-horizontal{flex:0 0 280px;padding-bottom:0;min-height:var(--mj-events-cover-min,220px);border-radius:var(--mj-events-cover-radius,var(--mj-events-radius)) 0 0 var(--mj-events-cover-radius,var(--mj-events-radius));}
+    .mj-member-events.is-wide .mj-member-events__grid{gap:28px;}
+    .mj-member-events.is-wide .mj-member-events__cover{flex:0 0 var(--mj-events-wide-cover,320px);padding-bottom:0;min-height:100%;border-radius:var(--mj-events-cover-radius,var(--mj-events-radius)) 0 0 var(--mj-events-cover-radius,var(--mj-events-radius));}
+    .mj-member-events__cover-link{position:absolute;inset:0;display:block;}
+    .mj-member-events__cover-link:focus-visible{outline:3px solid var(--mj-event-accent,var(--mj-events-accent));outline-offset:2px;border-radius:inherit;}
+    .mj-member-events__cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;}
+    .mj-member-events.is-wide .mj-member-events__cover img{position:static;height:100%;}
+    .mj-member-events__item.layout-horizontal .mj-member-events__cover img{position:static;}
+    .mj-member-events__item-body{position:relative;display:flex;flex-direction:column;gap:14px;padding:22px;}
+    .mj-member-events.is-wide .mj-member-events__item-body{padding:26px;gap:16px;}
+    .mj-member-events__item.layout-compact .mj-member-events__item-body{padding:18px;gap:10px;}
+    .mj-member-events__badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;background:var(--mj-event-accent,var(--mj-events-accent));color:var(--mj-events-accent-contrast);font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;}
+    .mj-member-events__badge.is-overlay{position:absolute;top:14px;right:14px;box-shadow:0 12px 28px rgba(15,23,42,0.18);pointer-events:none;}
+    .mj-member-events__item-title{margin:0;font-size:1.15rem;font-weight:700;color:var(--mj-events-card-title);}
+    .mj-member-events__item-title a{text-decoration:none;color:inherit;}
+    .mj-member-events__item-title a:hover{color:var(--mj-event-accent,var(--mj-events-accent));}
+    .mj-member-events__meta{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:0.95rem;color:var(--mj-events-meta);}
+    .mj-member-events__meta-item{display:inline-flex;align-items:center;gap:6px;}
+    .mj-member-events__recurring-summary{display:flex;flex-wrap:wrap;gap:6px 14px;margin:2px 0 0;font-size:0.92rem;color:var(--mj-events-meta);}
+    .mj-member-events__recurring-heading{font-weight:700;color:var(--mj-events-card-title);}
+    .mj-member-events__recurring-time{font-weight:500;color:var(--mj-events-meta);}
+    .mj-member-events__excerpt{margin:0;font-size:0.95rem;line-height:1.56;color:var(--mj-events-excerpt);}
+    .mj-member-events__price-chip{display:inline-flex;align-items:center;gap:8px;align-self:flex-start;padding:6px 12px;border-radius:999px;background:var(--mj-event-accent,var(--mj-events-accent));color:var(--mj-events-accent-contrast);font-size:0.9rem;font-weight:600;}
+    .mj-member-events__price-chip-label{opacity:0.85;}
+    .mj-member-events__location-card{display:flex;gap:14px;align-items:flex-start;padding:14px 16px;border:1px solid var(--mj-events-border-soft);border-radius:14px;background:var(--mj-events-surface-soft);}
+    .mj-member-events__location-logo{width:64px;height:64px;flex:0 0 64px;border-radius:14px;object-fit:cover;border:1px solid var(--mj-events-border-soft);}
+    .mj-member-events__location-content{display:flex;flex-direction:column;gap:4px;}
+    .mj-member-events__location-name{margin:0;font-weight:700;color:var(--mj-events-card-title);}
+    .mj-member-events__location-address{margin:0;font-size:0.9rem;color:var(--mj-events-meta);}
+    .mj-member-events__location-note{margin:4px 0 0;font-size:0.88rem;color:var(--mj-events-meta);line-height:1.45;}
+    .mj-member-events__occurrence-next{margin:6px 0 0;font-size:0.92rem;font-weight:600;color:var(--mj-events-card-title);}
+    .mj-member-events__occurrences{margin:6px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:0.88rem;color:var(--mj-events-meta);}
+    .mj-member-events__occurrence{display:flex;align-items:flex-start;gap:8px;}
+    .mj-member-events__occurrence-prefix{font-weight:600;color:var(--mj-events-card-title);}
+    .mj-member-events__occurrence-label{flex:1;}
+    .mj-member-events__occurrence.is-today .mj-member-events__occurrence-label{color:var(--mj-events-card-title);}
+    .mj-member-events__occurrence--more{font-style:italic;}
+    .mj-member-events__empty,.mj-member-events__filtered-empty{margin:0;font-size:0.95rem;color:#6b7280;}
+    .mj-member-events__warning{margin:0;font-size:0.95rem;color:#b91c1c;}
+    @media (max-width:780px){.mj-member-events__item.layout-horizontal{flex-direction:column;}.mj-member-events__cover.is-horizontal{width:100%;border-radius:var(--mj-events-cover-radius,var(--mj-events-radius)) var(--mj-events-cover-radius,var(--mj-events-radius)) 0 0;}.mj-member-events.is-wide .mj-member-events__cover{flex:1 1 auto;width:100%;min-height:var(--mj-events-cover-min,220px);}}
+    CSS;
+
+        echo '<style>' . $css . '</style>';
     }
 }
 
@@ -344,6 +323,48 @@ if (!function_exists('mj_member_ensure_events_widget_localized')) {
                     'occurrenceAvailableTitle' => __('Autres dates disponibles', 'mj-member'),
                     'occurrenceRegisteredEmpty' => __('Aucune réservation active.', 'mj-member'),
                     'occurrenceAvailableEmpty' => __('Toutes les dates sont déjà réservées.', 'mj-member'),
+                ),
+            )
+        );
+
+        $localized = true;
+    }
+}
+
+if (!function_exists('mj_member_ensure_event_toggles_localized')) {
+    function mj_member_ensure_event_toggles_localized() {
+        static $localized = false;
+        if ($localized) {
+            return;
+        }
+
+        $status_labels = array();
+        if (class_exists('MjEventRegistrations') && method_exists('MjEventRegistrations', 'get_status_labels')) {
+            $status_labels = MjEventRegistrations::get_status_labels();
+        }
+
+        wp_localize_script(
+            'mj-member-event-toggles',
+            'mjMemberEventToggles',
+            array(
+                'ajaxUrl' => esc_url_raw(admin_url('admin-ajax.php')),
+                'nonce' => wp_create_nonce('mj-member-event-register'),
+                'loginUrl' => esc_url_raw(wp_login_url()),
+                'statuses' => $status_labels,
+                'strings' => array(
+                    'loginRequired' => __('Connecte-toi pour gérer tes inscriptions.', 'mj-member'),
+                    'successRegistered' => __('Inscription enregistrée. Tu recevras un email avec le paiement.', 'mj-member'),
+                    'successUpdated' => __('Occurrences mises à jour.', 'mj-member'),
+                    'successUnregistered' => __('Inscription annulée.', 'mj-member'),
+                    'errorGeneric' => __('Une erreur est survenue. Merci de réessayer.', 'mj-member'),
+                    'errorOccurrenceRequired' => __('Merci de sélectionner au moins une occurrence.', 'mj-member'),
+                    'paymentEmailSent' => __('Un email contenant le lien de paiement arrive dans ta boîte mail.', 'mj-member'),
+                    'paymentEmailError' => __('Inscription envoyée mais nous n’avons pas pu préparer l’email de paiement. Contacte la MJ.', 'mj-member'),
+                    'occurrencePast' => __('Occurrence passée', 'mj-member'),
+                    'pendingState' => __('En attente de confirmation', 'mj-member'),
+                    'confirmedState' => __('Confirmée', 'mj-member'),
+                    'waitlistState' => __('Liste d’attente', 'mj-member'),
+                    'cancelledState' => __('Annulée', 'mj-member'),
                 ),
             )
         );
@@ -876,6 +897,7 @@ if (!function_exists('mj_member_get_public_events')) {
             'statuses' => array(MjEvents_CRUD::STATUS_ACTIVE),
             'types' => array(),
             'ids' => array(),
+            'article_ids' => array(),
             'limit' => 6,
             'order' => 'DESC',
             'orderby' => 'date_debut',
@@ -884,6 +906,8 @@ if (!function_exists('mj_member_get_public_events')) {
         );
 
         $args = wp_parse_args($args, $defaults);
+
+        $include_past_events = !empty($args['include_past']) && $args['include_past'] !== 'no' && $args['include_past'] !== '0';
 
         $statuses = array();
         if (!empty($args['statuses']) && is_array($args['statuses'])) {
@@ -918,6 +942,17 @@ if (!function_exists('mj_member_get_public_events')) {
                     continue;
                 }
                 $ids[$id_candidate] = $id_candidate;
+            }
+        }
+
+        $article_ids = array();
+        if (!empty($args['article_ids']) && is_array($args['article_ids'])) {
+            foreach ($args['article_ids'] as $article_candidate) {
+                $article_candidate = (int) $article_candidate;
+                if ($article_candidate <= 0) {
+                    continue;
+                }
+                $article_ids[$article_candidate] = $article_candidate;
             }
         }
 
@@ -1049,9 +1084,19 @@ if (!function_exists('mj_member_get_public_events')) {
             }
         }
 
+        if (!empty($article_ids)) {
+            $placeholders = implode(',', array_fill(0, count($article_ids), '%d'));
+            $where_fragments[] = "events.article_id IN ({$placeholders})";
+            foreach ($article_ids as $article_value) {
+                $where_params[] = $article_value;
+            }
+        }
+
         $now_value = isset($args['now']) ? sanitize_text_field($args['now']) : current_time('mysql');
-        if (!$args['include_past']) {
-            $where_fragments[] = 'events.date_fin >= %s';
+        if (!$include_past_events) {
+            $where_fragments[] = '(events.date_fin >= %s OR (events.schedule_mode = %s AND (events.recurrence_until IS NULL OR events.recurrence_until = "" OR events.recurrence_until = "0000-00-00 00:00:00" OR events.recurrence_until >= %s)))';
+            $where_params[] = $now_value;
+            $where_params[] = 'recurring';
             $where_params[] = $now_value;
         }
 
@@ -1135,6 +1180,33 @@ if (!function_exists('mj_member_get_public_events')) {
             }
 
             $recurrence_until = isset($row->recurrence_until) ? sanitize_text_field($row->recurrence_until) : '';
+
+            if (!$include_past_events && $schedule_mode === 'recurring' && class_exists('MjEventSchedule')) {
+                $date_start_raw = isset($row->date_debut) ? $row->date_debut : '';
+                $date_end_raw = isset($row->date_fin) ? $row->date_fin : '';
+
+                $occurrence_probe = array(
+                    'schedule_mode' => $schedule_mode,
+                    'schedule_payload' => $schedule_payload,
+                    'date_debut' => $date_start_raw,
+                    'date_fin' => $date_end_raw,
+                    'start_date' => $date_start_raw,
+                    'end_date' => $date_end_raw,
+                    'recurrence_until' => $recurrence_until,
+                );
+
+                $future_occurrences = MjEventSchedule::get_occurrences(
+                    $occurrence_probe,
+                    array(
+                        'max' => 1,
+                        'include_past' => false,
+                    )
+                );
+
+                if (empty($future_occurrences)) {
+                    continue;
+                }
+            }
 
             $permalink = apply_filters('mj_member_event_permalink', '', $row);
             $slug_value = '';
@@ -1320,6 +1392,304 @@ if (!function_exists('mj_member_get_public_events')) {
         }
 
         return $results;
+    }
+}
+
+if (!function_exists('mj_member_get_event_article_choices')) {
+    /**
+     * Retourne la liste des articles associés aux évènements.
+     *
+     * @return array<int,string>
+     */
+    function mj_member_get_event_article_choices() {
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+
+        $cache = array();
+
+        if (!function_exists('mj_member_get_events_table_name')) {
+            return $cache;
+        }
+
+        global $wpdb;
+        $events_table = mj_member_get_events_table_name();
+        if (!$events_table) {
+            return $cache;
+        }
+
+        $article_ids = $wpdb->get_col(
+            $wpdb->prepare(
+                "SELECT DISTINCT article_id FROM {$events_table} WHERE article_id IS NOT NULL AND article_id > 0 ORDER BY article_id DESC LIMIT %d",
+                200
+            )
+        );
+
+        if (empty($article_ids)) {
+            return $cache;
+        }
+
+        foreach ($article_ids as $article_id) {
+            $article_id = (int) $article_id;
+            if ($article_id <= 0) {
+                continue;
+            }
+
+            $post_object = get_post($article_id);
+            if (!$post_object) {
+                continue;
+            }
+
+            $status = get_post_status($post_object);
+            if (!$status || $status === 'trash') {
+                continue;
+            }
+
+            $title = get_the_title($post_object);
+            if (!is_string($title) || $title === '') {
+                $title = sprintf(__('Article #%d', 'mj-member'), $article_id);
+            }
+
+            $safe_title = sanitize_text_field($title);
+            $cache[$article_id] = sprintf(__('%s (#%d)', 'mj-member'), $safe_title, $article_id);
+        }
+
+        return $cache;
+    }
+}
+
+if (!function_exists('mj_member_get_event_weekday_labels')) {
+    /**
+     * @return array<string,string>
+     */
+    function mj_member_get_event_weekday_labels() {
+        return array(
+            'monday' => __('Lundi', 'mj-member'),
+            'tuesday' => __('Mardi', 'mj-member'),
+            'wednesday' => __('Mercredi', 'mj-member'),
+            'thursday' => __('Jeudi', 'mj-member'),
+            'friday' => __('Vendredi', 'mj-member'),
+            'saturday' => __('Samedi', 'mj-member'),
+            'sunday' => __('Dimanche', 'mj-member'),
+        );
+    }
+}
+
+if (!function_exists('mj_member_join_french_list')) {
+    /**
+     * @param array<int,string> $items
+     * @return string
+     */
+    function mj_member_join_french_list(array $items) {
+        $items = array_values(array_filter($items, static function ($value) {
+            return $value !== '';
+        }));
+        $count = count($items);
+        if ($count === 0) {
+            return '';
+        }
+        if ($count === 1) {
+            return $items[0];
+        }
+        if ($count === 2) {
+            return $items[0] . ' et ' . $items[1];
+        }
+
+        $last = array_pop($items);
+        return implode(', ', $items) . ' et ' . $last;
+    }
+}
+
+if (!function_exists('mj_member_format_recurring_time_label')) {
+    function mj_member_format_recurring_time_label($time_value) {
+        $time_value = trim((string) $time_value);
+        if ($time_value === '') {
+            return '';
+        }
+
+        $time_candidates = array('H:i:s', 'H:i');
+        $timezone = wp_timezone();
+        foreach ($time_candidates as $format) {
+            $date_object = DateTimeImmutable::createFromFormat($format, $time_value, $timezone);
+            if ($date_object instanceof DateTimeImmutable) {
+                return $date_object->format('H\hi');
+            }
+        }
+
+        $timestamp = strtotime($time_value);
+        if ($timestamp) {
+            $date_object = new DateTimeImmutable('@' . $timestamp);
+            $date_object = $date_object->setTimezone($timezone);
+            return $date_object->format('H\hi');
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('mj_member_get_event_recurring_summary')) {
+    /**
+     * Génère un résumé textuel pour une récurrence d'évènement.
+     *
+     * @param array<string,mixed>|object $event
+     * @return string
+     */
+    function mj_member_get_event_recurring_summary($event) {
+        if (is_array($event)) {
+            $event = (object) $event;
+        }
+
+        if (!is_object($event)) {
+            return '';
+        }
+
+        $mode = isset($event->schedule_mode) ? sanitize_key($event->schedule_mode) : '';
+        if ($mode !== 'recurring') {
+            return '';
+        }
+
+        $payload = array();
+        if (isset($event->schedule_payload)) {
+            if (is_array($event->schedule_payload)) {
+                $payload = $event->schedule_payload;
+            } elseif (is_string($event->schedule_payload) && $event->schedule_payload !== '') {
+                $decoded = json_decode($event->schedule_payload, true);
+                if (is_array($decoded)) {
+                    $payload = $decoded;
+                }
+            }
+        }
+
+        $frequency = isset($payload['frequency']) ? sanitize_key($payload['frequency']) : 'weekly';
+        if (!in_array($frequency, array('weekly', 'monthly'), true)) {
+            $frequency = 'weekly';
+        }
+
+        $interval = isset($payload['interval']) ? (int) $payload['interval'] : 1;
+        if ($interval <= 0) {
+            $interval = 1;
+        }
+
+        $start_time_label = '';
+        if (!empty($payload['start_time'])) {
+            $start_time_label = mj_member_format_recurring_time_label($payload['start_time']);
+        }
+        if ($start_time_label === '' && !empty($event->start_date)) {
+            $start_time_label = mj_member_format_recurring_time_label(substr($event->start_date, 11, 5));
+        }
+
+        $end_time_label = '';
+        if (!empty($payload['end_time'])) {
+            $end_time_label = mj_member_format_recurring_time_label($payload['end_time']);
+        }
+        if ($end_time_label === '' && !empty($event->end_date)) {
+            $end_time_label = mj_member_format_recurring_time_label(substr($event->end_date, 11, 5));
+        }
+
+        $time_segment = '';
+        if ($start_time_label !== '' && $end_time_label !== '') {
+            $time_segment = sprintf(__('de %1$s à %2$s', 'mj-member'), $start_time_label, $end_time_label);
+        } elseif ($start_time_label !== '') {
+            $time_segment = sprintf(__('à %s', 'mj-member'), $start_time_label);
+        } elseif ($end_time_label !== '') {
+            $time_segment = sprintf(__('jusqu\'à %s', 'mj-member'), $end_time_label);
+        }
+
+        $weekday_labels = mj_member_get_event_weekday_labels();
+        $weekday_numbers = array(1 => 'monday', 2 => 'tuesday', 3 => 'wednesday', 4 => 'thursday', 5 => 'friday', 6 => 'saturday', 7 => 'sunday');
+        $weekday_values = array();
+
+        if (!empty($payload['weekdays']) && is_array($payload['weekdays'])) {
+            foreach ($payload['weekdays'] as $weekday_candidate) {
+                $weekday_candidate = sanitize_key($weekday_candidate);
+                if (isset($weekday_labels[$weekday_candidate])) {
+                    $weekday_values[$weekday_candidate] = $weekday_candidate;
+                }
+            }
+        }
+
+        if (empty($weekday_values) && !empty($event->start_date)) {
+            $timestamp = strtotime($event->start_date);
+            if ($timestamp) {
+                $weekday_number = (int) wp_date('N', $timestamp);
+                if (isset($weekday_numbers[$weekday_number])) {
+                    $weekday_values[$weekday_numbers[$weekday_number]] = $weekday_numbers[$weekday_number];
+                }
+            }
+        }
+
+        $weekday_values = array_values($weekday_values);
+
+        $base_text = '';
+        if ($frequency === 'weekly') {
+            if (empty($weekday_values)) {
+                return '';
+            }
+
+            $weekday_words = array();
+            $weekday_plural_words = array();
+            foreach ($weekday_values as $weekday_key) {
+                $label = isset($weekday_labels[$weekday_key]) ? $weekday_labels[$weekday_key] : $weekday_key;
+                $word = function_exists('mb_strtolower') ? mb_strtolower($label, 'UTF-8') : strtolower($label);
+                $weekday_words[] = $word;
+                $plural = $word;
+                if (substr($plural, -1) !== 's') {
+                    $plural .= 's';
+                }
+                $weekday_plural_words[] = $plural;
+            }
+
+            if ($interval === 1) {
+                $base_text = sprintf(__('Tous les %s', 'mj-member'), mj_member_join_french_list($weekday_plural_words));
+            } else {
+                $base_text = sprintf(_n('Toutes les %d semaine', 'Toutes les %d semaines', $interval, 'mj-member'), $interval);
+                $list_label = count($weekday_values) > 1
+                    ? sprintf(__('les %s', 'mj-member'), mj_member_join_french_list($weekday_plural_words))
+                    : sprintf(__('le %s', 'mj-member'), $weekday_words[0]);
+                $base_text .= ', ' . $list_label;
+            }
+        } else {
+            $ordinal_map = array(
+                'first' => __('1er', 'mj-member'),
+                'second' => __('2e', 'mj-member'),
+                'third' => __('3e', 'mj-member'),
+                'fourth' => __('4e', 'mj-member'),
+                'last' => __('Dernier', 'mj-member'),
+            );
+
+            $ordinal_key = isset($payload['ordinal']) ? sanitize_key($payload['ordinal']) : 'first';
+            if (!isset($ordinal_map[$ordinal_key])) {
+                $ordinal_key = 'first';
+            }
+            $ordinal_label = $ordinal_map[$ordinal_key];
+
+            $weekday_key = isset($payload['weekday']) ? sanitize_key($payload['weekday']) : '';
+            if (!isset($weekday_labels[$weekday_key])) {
+                $weekday_key = !empty($weekday_values) ? $weekday_values[0] : 'saturday';
+            }
+
+            $weekday_label = isset($weekday_labels[$weekday_key]) ? $weekday_labels[$weekday_key] : $weekday_key;
+            $weekday_word = function_exists('mb_strtolower') ? mb_strtolower($weekday_label, 'UTF-8') : strtolower($weekday_label);
+            $ordinal_word = function_exists('mb_strtolower') ? mb_strtolower($ordinal_label, 'UTF-8') : strtolower($ordinal_label);
+
+            if ($interval === 1) {
+                $base_text = sprintf(__('Chaque %1$s %2$s du mois', 'mj-member'), $ordinal_word, $weekday_word);
+            } else {
+                $base_text = sprintf(_n('Tous les %d mois', 'Tous les %d mois', $interval, 'mj-member'), $interval);
+                $base_text .= ', ' . sprintf(__('le %1$s %2$s', 'mj-member'), $ordinal_word, $weekday_word);
+            }
+        }
+
+        if ($base_text === '') {
+            return '';
+        }
+
+        if ($time_segment !== '') {
+            $base_text .= ' ' . $time_segment;
+        }
+
+        return trim($base_text);
     }
 }
 
@@ -1919,10 +2289,77 @@ if (!function_exists('mj_member_event_template_include')) {
             return $theme_template;
         }
 
-        return MJ_MEMBER_PATH . 'templates/event-single.php';
+        return Config::path() . 'templates/event-single.php';
     }
 
     add_filter('template_include', 'mj_member_event_template_include', 99);
+}
+
+if (!function_exists('mj_member_event_admin_bar_edit_link')) {
+    function mj_member_event_admin_bar_edit_link($wp_admin_bar) {
+        if (is_admin() || !is_admin_bar_showing() || !is_user_logged_in()) {
+            return;
+        }
+
+        if (!current_user_can(Config::capability())) {
+            return;
+        }
+
+        $context = isset($GLOBALS['mj_member_event_context']) && is_array($GLOBALS['mj_member_event_context'])
+            ? $GLOBALS['mj_member_event_context']
+            : null;
+
+        if (!$context) {
+            $slug = get_query_var('mj_event_slug');
+            if ($slug !== '' && $slug !== null) {
+                $context = mj_member_prepare_event_page_context($slug);
+            }
+        }
+
+        if (!$context || !is_array($context)) {
+            return;
+        }
+
+        $event = isset($context['event']) && is_array($context['event']) ? $context['event'] : array();
+        $event_id = isset($event['id']) ? (int) $event['id'] : 0;
+
+        if ($event_id <= 0 && isset($context['record']) && is_object($context['record']) && isset($context['record']->id)) {
+            $event_id = (int) $context['record']->id;
+        }
+
+        if ($event_id <= 0) {
+            return;
+        }
+
+        $edit_url = add_query_arg(
+            array(
+                'page' => 'mj_events',
+                'action' => 'edit',
+                'event' => $event_id,
+            ),
+            admin_url('admin.php')
+        );
+
+        $event_title = isset($event['title']) ? wp_strip_all_tags($event['title']) : '';
+        $link_label = $event_title !== ''
+            ? sprintf(__('Modifier « %s »', 'mj-member'), $event_title)
+            : __('Modifier cet événement', 'mj-member');
+
+        $wp_admin_bar->add_node(
+            array(
+                'id' => 'mj-member-edit-event',
+                'parent' => false,
+                'title' => esc_html($link_label),
+                'href' => esc_url($edit_url),
+                'meta' => array(
+                    'class' => 'mj-member-edit-event',
+                    'title' => esc_html__("Ouvrir l'édition de cet événement dans le tableau de bord", 'mj-member'),
+                ),
+            )
+        );
+    }
+
+    add_action('admin_bar_menu', 'mj_member_event_admin_bar_edit_link', 90);
 }
 
 if (!function_exists('mj_member_ajax_register_event')) {
@@ -2135,6 +2572,17 @@ if (!function_exists('mj_member_ajax_register_event')) {
         $payment_required = !$is_waitlist && $event_price > 0;
         $payment_payload = null;
         $payment_error = false;
+        $payment_email_sent = false;
+        $payment_email_error = false;
+        $payment_payload_response = null;
+
+        $occurrence_mode = !empty($occurrence_selection) ? 'custom' : 'all';
+        $occurrence_count = ($occurrence_mode === 'custom') ? count($occurrence_selection) : 1;
+        if ($occurrence_count <= 0) {
+            $occurrence_count = 1;
+            $occurrence_mode = 'all';
+        }
+        $occurrence_list = !empty($occurrence_selection) ? array_values($occurrence_selection) : array();
 
         if ($payment_required) {
             if (class_exists('MjPayments')) {
@@ -2147,6 +2595,9 @@ if (!function_exists('mj_member_ajax_register_event')) {
                         'registration_id' => (int) $result,
                         'payer_id' => (!empty($current_member->id) ? (int) $current_member->id : 0),
                         'event' => $event,
+                        'occurrence_mode' => $occurrence_mode,
+                        'occurrence_count' => $occurrence_count,
+                        'occurrence_list' => $occurrence_list,
                     )
                 );
 
@@ -2156,6 +2607,96 @@ if (!function_exists('mj_member_ajax_register_event')) {
                 }
             } else {
                 $payment_error = true;
+            }
+
+            if ($payment_payload && !$payment_error) {
+                if ($payment_deferred) {
+                    $payment_payload_response = null;
+
+                    if (function_exists('mj_member_get_event_registrations_table_name')) {
+                        global $wpdb;
+                        $registrations_table = mj_member_get_event_registrations_table_name();
+                        $wpdb->update(
+                            $registrations_table,
+                            array(
+                                'payment_status' => 'unpaid',
+                                'payment_method' => 'stripe_email',
+                            ),
+                            array('id' => (int) $result),
+                            array('%s', '%s'),
+                            array('%d')
+                        );
+                    }
+
+                    if (class_exists('MjMail')) {
+                        $amount_raw = isset($payment_payload['amount_raw']) ? (float) $payment_payload['amount_raw'] : ($event_price * max(1, $occurrence_count));
+                        $amount_label = isset($payment_payload['amount_label']) && $payment_payload['amount_label'] !== ''
+                            ? $payment_payload['amount_label']
+                            : number_format_i18n($amount_raw, 2);
+
+                        $occurrence_lines = '';
+                        if (!empty($occurrence_list)) {
+                            $occurrence_lines = '<p>' . esc_html__('Occurrences sélectionnées :', 'mj-member') . '</p><ul>';
+                            foreach ($occurrence_list as $occurrence_value) {
+                                $label = $occurrence_value;
+                                $timestamp = strtotime($occurrence_value);
+                                if ($timestamp) {
+                                    $label = wp_date(get_option('date_format', 'd/m/Y') . ' ' . get_option('time_format', 'H:i'), $timestamp);
+                                }
+                                $occurrence_lines .= '<li>' . esc_html($label) . '</li>';
+                            }
+                            $occurrence_lines .= '</ul>';
+                        }
+
+                        $payment_link = $payment_payload['checkout_url'];
+                        $payment_body = '<p>' . esc_html__('Ton inscription est bien enregistrée.', 'mj-member') . '</p>';
+                        $payment_body .= '<p>' . sprintf(
+                            esc_html__('Pour finaliser ta participation à « %s », règle le montant de %s € grâce au bouton ci-dessous :', 'mj-member'),
+                            esc_html($event->title),
+                            esc_html($amount_label)
+                        ) . '</p>';
+                        $payment_body .= '<p><a href="' . esc_url($payment_link) . '" target="_blank" rel="noopener" class="mj-button">' . esc_html__('Payer en ligne', 'mj-member') . '</a></p>';
+                        $payment_body .= '<p>' . esc_html__('Si le bouton ne s’ouvre pas, copie ce lien dans ton navigateur :', 'mj-member') . '<br><a href="' . esc_url($payment_link) . '" target="_blank" rel="noopener">' . esc_html($payment_link) . '</a></p>';
+                        if ($occurrence_lines !== '') {
+                            $payment_body .= $occurrence_lines;
+                        }
+                        $payment_body .= '<p>' . esc_html__('Tu peux aussi régler en espèces auprès d’un animateur à l’accueil.', 'mj-member') . '</p>';
+
+                        $mail_context = array(
+                            'payment_link' => $payment_link,
+                            'payment_qr_url' => isset($payment_payload['qr_url']) ? $payment_payload['qr_url'] : '',
+                            'payment_amount' => $amount_raw,
+                            'include_guardian' => true,
+                            'event' => $event,
+                            'registration_id' => (int) $result,
+                            'occurrences' => $occurrence_list,
+                        );
+
+                        $payment_subject = sprintf(
+                            esc_html__('Paiement pour %s', 'mj-member'),
+                            esc_html($event->title)
+                        );
+
+                        $payment_email_sent = MjMail::send_custom_email(
+                            $participant,
+                            $payment_subject,
+                            $payment_body,
+                            array('context' => $mail_context)
+                        );
+
+                        if (!$payment_email_sent) {
+                            $payment_email_error = true;
+                        }
+                    } else {
+                        $payment_email_error = true;
+                    }
+
+                    if ($payment_email_error) {
+                        error_log(sprintf('MJ Member: echec envoi email paiement pour event #%d inscription #%d', (int) $event_id, (int) $result));
+                    }
+                } else {
+                    $payment_payload_response = $payment_payload;
+                }
             }
         }
 
@@ -2167,7 +2708,15 @@ if (!function_exists('mj_member_ajax_register_event')) {
         if ($is_waitlist) {
             $success_message = __('Inscription enregistrée sur liste d\'attente. Nous vous informerons dès qu\'une place se libère.', 'mj-member');
         } elseif ($payment_required && !$payment_error) {
-            $success_message = __('Inscription enregistrée ! Merci de finaliser le paiement sécurisé.', 'mj-member');
+            if ($payment_deferred) {
+                if ($payment_email_error) {
+                    $success_message = __('Inscription enregistrée, mais l\'envoi de l\'email de paiement a échoué. Merci de contacter l\'équipe MJ.', 'mj-member');
+                } else {
+                    $success_message = __('Inscription enregistrée ! Tu recevras un email avec le lien de paiement très bientôt.', 'mj-member');
+                }
+            } else {
+                $success_message = __('Inscription enregistrée ! Merci de finaliser le paiement sécurisé.', 'mj-member');
+            }
         } elseif ($payment_required && $payment_error) {
             $success_message = __('Inscription enregistrée, mais la création du paiement a échoué. Merci de contacter l\'équipe MJ pour finaliser le règlement.', 'mj-member');
         }
@@ -2194,13 +2743,22 @@ if (!function_exists('mj_member_ajax_register_event')) {
             'is_waitlist' => $is_waitlist,
             'payment_required' => $payment_required,
             'payment_error' => $payment_error,
+            'payment_mode' => $payment_mode,
+            'payment_deferred' => $payment_deferred,
+            'payment_email_sent' => $payment_email_sent,
+            'payment_email_error' => $payment_email_error,
         );
 
-        if ($payment_payload) {
+        if ($payment_payload_response) {
+            $amount_value = isset($payment_payload_response['amount_label']) && $payment_payload_response['amount_label'] !== ''
+                ? $payment_payload_response['amount_label']
+                : (isset($payment_payload_response['amount']) ? $payment_payload_response['amount'] : '');
             $response['payment'] = array(
-                'checkout_url' => $payment_payload['checkout_url'],
-                'qr_url' => isset($payment_payload['qr_url']) ? $payment_payload['qr_url'] : '',
-                'amount' => isset($payment_payload['amount']) ? $payment_payload['amount'] : '',
+                'checkout_url' => $payment_payload_response['checkout_url'],
+                'qr_url' => isset($payment_payload_response['qr_url']) ? $payment_payload_response['qr_url'] : '',
+                'amount' => $amount_value,
+                'occurrence_mode' => $occurrence_mode,
+                'occurrence_count' => $occurrence_count,
             );
         }
 

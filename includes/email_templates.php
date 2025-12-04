@@ -1,16 +1,27 @@
 <?php
+
+use Mj\Member\Core\Config;
+
 // Admin page for email templates
 function mj_email_templates_page() {
+    $capability = Config::capability();
+
+    if (!current_user_can($capability)) {
+        wp_die(esc_html__('Accès refusé.', 'mj-member'));
+    }
+
     global $wpdb;
     $table = $wpdb->prefix . 'mj_email_templates';
 
     // Handle save
     if (isset($_POST['mj_save_template']) && check_admin_referer('mj_save_template_nonce')) {
-        $id = isset($_POST['template_id']) ? intval($_POST['template_id']) : 0;
-        $slug = isset($_POST['template_slug']) ? sanitize_title(wp_unslash($_POST['template_slug'])) : '';
-        $subject = isset($_POST['template_subject']) ? sanitize_text_field(wp_unslash($_POST['template_subject'])) : '';
-        $content = isset($_POST['template_content']) ? wp_kses_post(wp_unslash($_POST['template_content'])) : '';
-        $sms_raw = isset($_POST['template_sms_content']) ? wp_unslash($_POST['template_sms_content']) : '';
+        $post_data = wp_unslash($_POST);
+
+        $id = isset($post_data['template_id']) ? (int) $post_data['template_id'] : 0;
+        $slug = isset($post_data['template_slug']) ? sanitize_title($post_data['template_slug']) : '';
+        $subject = isset($post_data['template_subject']) ? sanitize_text_field($post_data['template_subject']) : '';
+        $content = isset($post_data['template_content']) ? wp_kses_post($post_data['template_content']) : '';
+        $sms_raw = isset($post_data['template_sms_content']) ? $post_data['template_sms_content'] : '';
         $sms_content = is_string($sms_raw) ? sanitize_textarea_field($sms_raw) : '';
 
         if ($id > 0) {
@@ -45,8 +56,13 @@ function mj_email_templates_page() {
 
     // Handle delete
     if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])) {
-        if (!wp_verify_nonce($_GET['_wpnonce'], 'mj_delete_template')) wp_die('Nonce invalide');
-        $wpdb->delete($table, array('id' => intval($_GET['id'])), array('%d'));
+        $get_action = sanitize_key($_GET['action']);
+        $template_id = intval($_GET['id']);
+        $nonce_value = isset($_GET['_wpnonce']) ? sanitize_text_field(wp_unslash($_GET['_wpnonce'])) : '';
+        if ($get_action !== 'delete' || !$nonce_value || !wp_verify_nonce($nonce_value, 'mj_delete_template')) {
+            wp_die(esc_html__('Nonce invalide.', 'mj-member'));
+        }
+        $wpdb->delete($table, array('id' => $template_id), array('%d'));
         echo '<div class="notice notice-success"><p>Template supprimé</p></div>';
     }
 
@@ -56,7 +72,8 @@ function mj_email_templates_page() {
     $template = null;
     if (isset($_GET['action']) && $_GET['action'] === 'edit' && isset($_GET['id'])) {
         $editing = true;
-        $template = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d", intval($_GET['id'])));
+        $template_id = intval($_GET['id']);
+        $template = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d", $template_id));
     } elseif (isset($_GET['action']) && $_GET['action'] === 'add') {
         $adding = true;
     }

@@ -1,5 +1,10 @@
 <?php
 
+namespace Mj\Member\Classes;
+
+use DateTime;
+use DateTimeInterface;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -561,3 +566,5 @@ class MjEventSchedule {
         return $date ? $date->getTimestamp() : null;
     }
 }
+
+\class_alias(__NAMESPACE__ . '\\MjEventSchedule', 'MjEventSchedule');

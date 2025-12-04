@@ -1,11 +1,17 @@
 <?php
 
-if (!class_exists('WP_List_Table')) {
-    require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
+namespace Mj\Member\Classes\Table;
+
+use Mj\Member\Classes\MjTools;
+use Mj\Member\Core\Config;
+use WP_List_Table;
+
+if (!defined('ABSPATH')) {
+    exit;
 }
 
-if (!class_exists('MjTools')) {
-    require_once dirname(__DIR__) . '/MjTools.php';
+if (!class_exists('\\WP_List_Table')) {
+    require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
 }
 
 class MjEvents_List_Table extends WP_List_Table {
@@ -528,7 +534,9 @@ class MjEvents_List_Table extends WP_List_Table {
             return;
         }
 
-        if (!current_user_can(MJ_MEMBER_CAPABILITY)) {
+        $capability = Config::capability();
+
+        if (!current_user_can($capability)) {
             $this->redirect_with_message('Action non autorisée.', 'error');
         }
 

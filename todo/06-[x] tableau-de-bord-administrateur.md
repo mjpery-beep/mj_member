@@ -12,4 +12,4 @@
 - [x] Dans le tableau de bord, ajouter statistiques des événements (inscriptions, annulations, liste des événements complets).
 - [x] Dans le tableau de bord, supprime la "présentation de la mj"
 - [x] Ajouter un widget affichant les 5 derniers membres inscrits avec leur statut (actif/inactif) et date d'inscription.
-- [ ] Met les Événements à venir dans un panel séparer, le panel doit être plus large, le tableau plus estéthique et lisible.
+- [x] Met les "Événements à venir" dans un panel séparé, le panel doit être plus large, le tableau plus estéthique et lisible.

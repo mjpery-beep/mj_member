@@ -1,6 +1,12 @@
 <?php
 
-/* 
+namespace Mj\Member\Classes;
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+/*
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Scripting/EmptyPHP.php to edit this template
  */
@@ -1229,3 +1235,5 @@ class MjMail extends MjTools {
 
 // Initialize SMTP hook
 MjMail::init_smtp();
+
+\class_alias(__NAMESPACE__ . '\\MjMail', 'MjMail');

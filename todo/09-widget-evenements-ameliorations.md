@@ -12,12 +12,16 @@
 - [x] La largeur des colones du calendrier doit être égale, seule la hauter des colones peut varier en fonction du nombre d'événements. 
 - [x] Le texte des événements doit être plus petit pour éviter la surcharge visuelle.
 - [x] Les stages et autre évenement sur plusieurs jours doivent être affichés en bandeau horizontal continu sur les jours concernés.
-- [ ] Permettre la sélection et le filtrage par type d’événement (stage, sortie, soirée, atelier, etc.) 
-- [ ] Prévoir les variantes responsive (≤768px) : pile verticale des actions, navigation compacte, affichage des événements en liste déroulante.
+- [x] Ajouter les jour de fermeture dans le widget calendrier - table closure (ex: MJ fermée le lundi) 
+- [x] Permettre la sélection et le filtrage par type d’événement (case à coché) 
+        Type : stage, sortie, soirée, atelier, fermeture   
+- [x] Prévoir les variantes responsive (≤768px) : pile verticale des actions, navigation compacte, affichage des événements en liste déroulante.
 
 ## 9.4 Module Event admin + Widget Calendrier
 - [x] Ajouter une palette pastel (color picker admin) sur chaque évenement. Les type d'évenemenet ont une couleur prédéfinie qui peux être surclassé pour définir la couleur de chaque événement et l’afficher dans le widget calendrier. 
 - [x] Prévoir une synchronisation officielle des événements MJ vers un Google Agenda (configurable dans les settings du module) pour partager automatiquement le planning.
+- [x] Le widget calendrier ne fonctionne pas sur tablette et sur mobile. Prévoir les variantes responsive (≤768px) : pile verticale des actions, navigation compacte, affichage des événements en liste déroulante.
+
 
 ## 9.5 Page event avec URL Événement Dédiée 
 - [x] Fournir une URL propre par événement (`/date/slug`) menant vers une page dédiée affichant titre, dates, description, prix, lieu (avec carte), lien vers l'article, limites d’âge et bouton d’inscription. (si tu vois d'autre information a afficher n'hesite pas)

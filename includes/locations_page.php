@@ -1,10 +1,14 @@
 <?php
 
+use Mj\Member\Core\Config;
+
 if (!defined('ABSPATH')) {
     exit;
 }
 
-if (!current_user_can(MJ_MEMBER_CAPABILITY)) {
+$capability = Config::capability();
+
+if (!current_user_can($capability)) {
     wp_die('Acces refuse');
 }
 
@@ -89,11 +93,13 @@ $locations = MjEventLocations::get_all();
 
 if ($action === 'add' || $action === 'edit') {
     wp_enqueue_media();
+    $script_path = Config::path() . 'includes/js/admin-locations.js';
+    $script_version = file_exists($script_path) ? (string) filemtime($script_path) : Config::version();
     wp_enqueue_script(
         'mj-admin-locations',
-        MJ_MEMBER_URL . 'includes/js/admin-locations.js',
+        Config::url() . 'includes/js/admin-locations.js',
         array('jquery'),
-        MJ_MEMBER_VERSION,
+        $script_version,
         true
     );
 }

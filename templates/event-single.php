@@ -144,6 +144,10 @@ $registration_deadline_label = $registration['deadline_label'] !== '' ? $registr
 $registration_total_count = isset($registration['total_count']) ? (int) $registration['total_count'] : (is_array($registration['participants']) ? count($registration['participants']) : 0);
 $registration_registered_count = isset($registration['registered_count']) ? (int) $registration['registered_count'] : 0;
 $registration_available_count = isset($registration['available_count']) ? (int) $registration['available_count'] : 0;
+$event_capacity_total = isset($event['capacity_total']) ? (int) $event['capacity_total'] : 0;
+if ($event_capacity_total <= 0 && isset($context['record']) && is_object($context['record']) && isset($context['record']->capacity_total)) {
+    $event_capacity_total = (int) $context['record']->capacity_total;
+}
 $registration_price_candidate = $registration_price_label !== '' ? $registration_price_label : $price_label;
 if ($registration_price_candidate === '' && $registration_price_amount > 0) {
     $registration_price_candidate = sprintf(__('%s €', 'mj-member'), number_format_i18n($registration_price_amount, 2));
@@ -532,6 +536,200 @@ if ($description_html !== '' && $excerpt_html !== '') {
     }
 }
 
+$registration_participants = isset($registration['participants']) && is_array($registration['participants']) ? $registration['participants'] : array();
+$registration_status_labels = (class_exists('MjEventRegistrations') && method_exists('MjEventRegistrations', 'get_status_labels'))
+    ? MjEventRegistrations::get_status_labels()
+    : array();
+$registration_occurrence_catalog = array();
+if (!empty($registration['occurrences']) && is_array($registration['occurrences'])) {
+    foreach ($registration['occurrences'] as $occurrence_entry) {
+        if (!is_array($occurrence_entry)) {
+            continue;
+        }
+
+        $start_value = isset($occurrence_entry['start']) ? (string) $occurrence_entry['start'] : '';
+        if ($start_value === '') {
+            continue;
+        }
+
+        $normalized_start = class_exists('MjEventAttendance')
+            ? MjEventAttendance::normalize_occurrence($start_value)
+            : $start_value;
+        if ($normalized_start === '') {
+            continue;
+        }
+
+        $timestamp_value = isset($occurrence_entry['timestamp']) ? (int) $occurrence_entry['timestamp'] : 0;
+        if ($timestamp_value <= 0) {
+            $timestamp_candidate = strtotime($start_value);
+            if ($timestamp_candidate) {
+                $timestamp_value = $timestamp_candidate;
+            }
+        }
+
+        $label_value = isset($occurrence_entry['label']) ? (string) $occurrence_entry['label'] : '';
+        if ($label_value === '') {
+            if ($timestamp_value > 0) {
+                $label_value = wp_date(
+                    get_option('date_format', 'd/m/Y') . ' ' . get_option('time_format', 'H:i'),
+                    $timestamp_value
+                );
+            } else {
+                $label_value = $normalized_start;
+            }
+        }
+
+        $registration_occurrence_catalog[$normalized_start] = array(
+            'label' => sanitize_text_field($label_value),
+            'timestamp' => $timestamp_value,
+        );
+    }
+}
+
+$registration_reservations = array();
+if (!empty($registration_participants)) {
+    foreach ($registration_participants as $participant_entry) {
+        if (!is_array($participant_entry)) {
+            continue;
+        }
+
+        if (empty($participant_entry['isRegistered'])) {
+            continue;
+        }
+
+        $participant_label = isset($participant_entry['label']) ? sanitize_text_field($participant_entry['label']) : '';
+        if ($participant_label === '') {
+            $participant_id = isset($participant_entry['id']) ? (int) $participant_entry['id'] : 0;
+            $participant_label = $participant_id > 0
+                ? sprintf(__('Participant #%d', 'mj-member'), $participant_id)
+                : __('Participant', 'mj-member');
+        }
+
+        $status_key = isset($participant_entry['registrationStatus']) ? sanitize_key($participant_entry['registrationStatus']) : '';
+        $status_label = ($status_key !== '' && isset($registration_status_labels[$status_key])) ? $registration_status_labels[$status_key] : '';
+        if ($status_label === '' && $status_key !== '') {
+            $status_label = ucwords(str_replace('_', ' ', $status_key));
+        }
+
+        $status_class = $status_key !== '' ? 'is-status-' . sanitize_html_class($status_key) : '';
+
+        $created_label = '';
+        if (!empty($participant_entry['registrationCreatedAt'])) {
+            $created_timestamp = strtotime((string) $participant_entry['registrationCreatedAt']);
+            if ($created_timestamp) {
+                $created_label = wp_date(
+                    get_option('date_format', 'd/m/Y') . ' ' . get_option('time_format', 'H:i'),
+                    $created_timestamp
+                );
+            } else {
+                $created_label = sanitize_text_field((string) $participant_entry['registrationCreatedAt']);
+            }
+        }
+
+        $occurrence_texts = array();
+        $assignments = isset($participant_entry['occurrenceAssignments']) && is_array($participant_entry['occurrenceAssignments'])
+            ? $participant_entry['occurrenceAssignments']
+            : array();
+        $assignments_mode = isset($assignments['mode']) ? sanitize_key($assignments['mode']) : 'all';
+        $assigned_values = isset($assignments['occurrences']) && is_array($assignments['occurrences']) ? $assignments['occurrences'] : array();
+
+        if ($assignments_mode === 'custom' && !empty($assigned_values)) {
+            foreach ($assigned_values as $assigned_value) {
+                $normalized_value = class_exists('MjEventAttendance')
+                    ? MjEventAttendance::normalize_occurrence($assigned_value)
+                    : (string) $assigned_value;
+                if ($normalized_value === '') {
+                    continue;
+                }
+
+                if (isset($registration_occurrence_catalog[$normalized_value])) {
+                    $occurrence_texts[] = $registration_occurrence_catalog[$normalized_value]['label'];
+                    continue;
+                }
+
+                $fallback_label = $normalized_value;
+                $timestamp_candidate = strtotime($normalized_value);
+                if ($timestamp_candidate) {
+                    $fallback_label = wp_date(
+                        get_option('date_format', 'd/m/Y') . ' ' . get_option('time_format', 'H:i'),
+                        $timestamp_candidate
+                    );
+                }
+                $occurrence_texts[] = sanitize_text_field($fallback_label);
+            }
+        }
+
+        if (empty($occurrence_texts)) {
+            if ($assignments_mode === 'custom') {
+                $occurrence_texts[] = __('Occurrences à confirmer', 'mj-member');
+            } else {
+                $occurrence_texts[] = __('Toutes les occurrences', 'mj-member');
+            }
+        } else {
+            $occurrence_texts = array_values(array_unique(array_map('sanitize_text_field', $occurrence_texts)));
+        }
+
+        $registration_reservations[] = array(
+            'name' => $participant_label,
+            'status_key' => $status_key,
+            'status_label' => $status_label,
+            'status_class' => $status_class,
+            'created_label' => $created_label,
+            'occurrences' => $occurrence_texts,
+        );
+    }
+}
+$registration_has_reservations = !empty($registration_reservations);
+
+$photo_context = isset($context['photos']) && is_array($context['photos']) ? $context['photos'] : array();
+$photo_items = isset($photo_context['items']) && is_array($photo_context['items']) ? $photo_context['items'] : array();
+$photo_has_items = !empty($photo_items);
+$photo_can_upload = !empty($photo_context['can_upload']);
+$photo_upload_limit = isset($photo_context['upload_limit']) ? (int) $photo_context['upload_limit'] : 3;
+$photo_member_uploaded = isset($photo_context['member_uploaded']) ? (int) $photo_context['member_uploaded'] : 0;
+$photo_member_remaining = isset($photo_context['member_remaining']) ? (int) $photo_context['member_remaining'] : max(0, $photo_upload_limit - $photo_member_uploaded);
+$photo_reason = isset($photo_context['reason']) ? (string) $photo_context['reason'] : '';
+$photo_notice_key = isset($_GET['mj_event_photo']) ? sanitize_key((string) $_GET['mj_event_photo']) : '';
+$photo_notice_map = array(
+    'success' => array(
+        'message' => __('Merci ! Ta photo est en attente de validation.', 'mj-member'),
+        'type' => 'success',
+    ),
+    'limit' => array(
+        'message' => __('Tu as déjà atteint la limite de photos pour cet événement.', 'mj-member'),
+        'type' => 'warning',
+    ),
+    'not_registered' => array(
+        'message' => __('Seuls les participants confirmés peuvent ajouter des photos.', 'mj-member'),
+        'type' => 'warning',
+    ),
+    'nonce' => array(
+        'message' => __('La vérification de sécurité a échoué.', 'mj-member'),
+        'type' => 'error',
+    ),
+    'upload_error' => array(
+        'message' => __('Impossible de téléverser cette photo. Merci de réessayer.', 'mj-member'),
+        'type' => 'error',
+    ),
+    'type' => array(
+        'message' => __('Format d’image non autorisé. Utilise JPG, PNG, GIF ou WEBP.', 'mj-member'),
+        'type' => 'error',
+    ),
+    'store' => array(
+        'message' => __('Erreur lors de l’enregistrement de la photo.', 'mj-member'),
+        'type' => 'error',
+    ),
+    'invalid' => array(
+        'message' => __('Requête invalide. Merci de réessayer.', 'mj-member'),
+        'type' => 'error',
+    ),
+    'login' => array(
+        'message' => __('Connecte-toi pour partager tes photos.', 'mj-member'),
+        'type' => 'warning',
+    ),
+);
+$photo_notice = ($photo_notice_key !== '' && isset($photo_notice_map[$photo_notice_key])) ? $photo_notice_map[$photo_notice_key] : null;
+
 if ($registration_needs_script) {
     wp_enqueue_script('mj-member-events-widget');
     if (function_exists('mj_member_ensure_events_widget_localized')) {
@@ -549,7 +747,8 @@ if ($occurrence_schedule_summary !== '') {
 }
 if ($registration_payload_json !== '') {
     $registration_button_attributes['data-registration'] = $registration_payload_json;
-} elseif ($registration_requires_login) {
+}
+if ($registration_requires_login) {
     $registration_button_attributes['data-requires-login'] = '1';
 }
 $registration_button_attr_string = mj_member_event_build_attr_string($registration_button_attributes);
@@ -559,11 +758,17 @@ get_header();
 if ($registration_has_interactive && function_exists('mj_member_output_events_widget_styles')) {
     mj_member_output_events_widget_styles();
 }
+
+if (!is_user_logged_in() && function_exists('mj_member_render_login_modal_component')) {
+    echo '<div class="mj-member-event-single__login-helper">' . mj_member_render_login_modal_component(array(
+        'extra_class' => 'mj-member-event-single__login-modal'
+    )) . '</div>';
+}
 ?>
 
 <style>
 .mj-member-event-single{--mj-event-accent: <?php echo esc_attr($accent); ?>;--mj-event-contrast: <?php echo esc_attr($contrast); ?>;--mj-event-surface: <?php echo esc_attr($surface); ?>;--mj-event-border: <?php echo esc_attr($border); ?>;--mj-event-highlight: <?php echo esc_attr($highlight); ?>;display:flex;flex-direction:column;gap:40px;padding:40px 0;background:#f8fafc;}
-.mj-member-event-single__wrapper{width:min(1100px,90vw);margin:0 auto;display:flex;flex-direction:column;gap:36px;}
+.mj-member-event-single__wrapper{width:min(1300px,90vw);margin:0 auto;display:flex;flex-direction:column;gap:36px;}
 .mj-member-event-single__hero{background:var(--mj-event-accent);color:var(--mj-event-contrast);border-radius:18px;padding:36px 44px;position:relative;overflow:hidden;display:flex;flex-direction:column;gap:20px;}
 .mj-member-event-single__hero::after{content:'';position:absolute;inset:auto -80px -140px auto;width:280px;height:280px;border-radius:50%;background:rgba(255,255,255,0.12);}
 .mj-member-event-single__badges{display:flex;flex-wrap:wrap;gap:10px;z-index:1;}
@@ -585,9 +790,27 @@ if ($registration_has_interactive && function_exists('mj_member_output_events_wi
 .mj-member-event-single__card h2{margin-top:0;font-size:1.4rem;font-weight:700;color:#0f172a;}
 
 .mj-member-event-single__description{display:flex;flex-direction:column;gap:18px;font-size:1rem;line-height:1.65;color:#1f2937;}
-.mj-member-event-single__excerpt{padding:14px 18px;border-left:4px solid var(--mj-event-accent);background:var(--mj-event-highlight);border-radius:12px;color:#1f2937;font-size:0.98rem;}
-
+.mj-member-event-single__description-resource{margin:0;font-size:.9rem;color:#4b5563;}
+.mj-member-event-single__description-resource a{display:inline-flex;align-items:center;gap:6px;color:inherit;text-decoration:none;border-bottom:1px dotted currentColor;}
+.mj-member-event-single__description-resource a:hover,.mj-member-event-single__description-resource a:focus{color:#111827;text-decoration:none;}
+.mj-member-event-single__description-resource-icon{font-size:.95rem;}
+.mj-member-event-single__login-helper{position:relative;width:0;height:0;overflow:visible;}
+.mj-member-event-single__login-helper .mj-member-login-component__trigger{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0,0,0,0);clip-path:inset(50%);white-space:nowrap;}
 .mj-member-event-single__registration{display:flex;flex-direction:column;gap:18px;}
+.mj-member-event-single__reservations{display:flex;flex-direction:column;gap:18px;}
+.mj-member-event-single__reservations h2{margin:0;font-size:1.35rem;font-weight:700;color:#0f172a;}
+.mj-member-event-single__reservations-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:14px;}
+.mj-member-event-single__reservation{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border-radius:14px;background:var(--mj-event-surface);border:1px solid var(--mj-event-border);}
+.mj-member-event-single__reservation-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;}
+.mj-member-event-single__reservation-title{margin:0;font-size:1.02rem;font-weight:600;color:#0f172a;}
+.mj-member-event-single__reservation-status{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;font-size:0.8rem;font-weight:600;background:var(--mj-event-highlight);color:var(--mj-event-accent);}
+.mj-member-event-single__reservation-status.is-status-valide{background:rgba(16,185,129,0.15);color:#047857;}
+.mj-member-event-single__reservation-status.is-status-en_attente{background:rgba(59,130,246,0.18);color:#1d4ed8;}
+.mj-member-event-single__reservation-status.is-status-liste_attente{background:rgba(245,158,11,0.18);color:#b45309;}
+.mj-member-event-single__reservation-status.is-status-annule{background:rgba(248,113,113,0.18);color:#b91c1c;}
+.mj-member-event-single__reservation-meta{margin:0;font-size:0.88rem;color:#475569;}
+.mj-member-event-single__reservation-occurrences{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:8px;}
+.mj-member-event-single__reservation-occurrence{padding:4px 10px;border-radius:999px;background:rgba(15,23,42,0.08);color:#475569;font-size:0.8rem;font-weight:600;}
 .mj-member-event-single__registration-header{display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .mj-member-event-single__registration-title{margin:0;font-size:1.4rem;font-weight:700;color:#0f172a;}
 .mj-member-event-single__registration-status{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-weight:600;font-size:0.86rem;}
@@ -595,9 +818,12 @@ if ($registration_has_interactive && function_exists('mj_member_output_events_wi
 .mj-member-event-single__registration-status.is-closed{background:rgba(239,68,68,0.15);color:#b91c1c;}
 
 .mj-member-event-single__registration-actions{display:flex;flex-direction:column;gap:14px;}
-.mj-member-event-single__registration-actions .mj-member-events__cta{padding:12px 26px;border-radius:12px;background:var(--mj-event-contrast);color:var(--mj-event-accent);border-color:var(--mj-event-contrast);font-weight:700;transition:background 0.2s ease,color 0.2s ease,box-shadow 0.2s ease;}
-.mj-member-event-single__registration-actions .mj-member-events__cta:hover{background:rgba(255,255,255,0.92);color:var(--mj-event-accent);box-shadow:0 12px 32px rgba(15,23,42,0.18);}
-.mj-member-event-single__registration-actions .mj-member-events__cta.is-registered{background:rgba(15,23,42,0.85);border-color:rgba(15,23,42,0.85);color:#ffffff;}
+.mj-member-event-single__registration-actions .mj-member-events__cta{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:14px 32px;border-radius:999px;background:var(--mj-event-accent);color:var(--mj-event-contrast);border:1px solid transparent;font-weight:700;font-size:1.05rem;letter-spacing:0.01em;box-shadow:0 16px 40px rgba(15,23,42,0.18);transition:transform 0.18s ease,box-shadow 0.18s ease,background 0.18s ease,color 0.18s ease,border-color 0.18s ease;cursor:pointer;}
+.mj-member-event-single__registration-actions .mj-member-events__cta:hover{transform:translateY(-1px);box-shadow:0 18px 48px rgba(15,23,42,0.22);background:rgba(15,23,42,0.92);border-color:rgba(15,23,42,0.05);color:#ffffff;}
+.mj-member-event-single__registration-actions .mj-member-events__cta:focus-visible{outline:none;box-shadow:0 0 0 4px rgba(37,99,235,0.2),0 14px 36px rgba(15,23,42,0.24);}
+.mj-member-event-single__registration-actions .mj-member-events__cta:disabled{cursor:not-allowed;opacity:0.7;transform:none;box-shadow:none;}
+.mj-member-event-single__registration-actions .mj-member-events__cta.is-registered{background:rgba(15,23,42,0.85);color:#ffffff;border-color:rgba(15,23,42,0.1);box-shadow:0 12px 30px rgba(15,23,42,0.2);}
+.mj-member-event-single__registration-actions .mj-member-events__cta.is-registered:hover{background:rgba(15,23,42,0.9);color:#ffffff;}
 .mj-member-event-single__registration-actions .mj-member-events__signup{background:rgba(15,23,42,0.04);border-color:rgba(15,23,42,0.12);color:#0f172a;box-shadow:none;}
 .mj-member-event-single__registration-actions .mj-member-events__signup-title{color:#0f172a;}
 .mj-member-event-single__registration-actions .mj-member-events__signup-toggle{border-color:rgba(15,23,42,0.15);color:#b91c1c;}
@@ -606,39 +832,23 @@ if ($registration_has_interactive && function_exists('mj_member_output_events_wi
 .mj-member-event-single__registration-price{margin:0;font-size:0.9rem;color:#0f172a;font-weight:600;display:flex;align-items:center;gap:8px;}
 .mj-member-event-single__registration-price-label{font-size:0.75rem;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.05em;}
 .mj-member-event-single__registration-price-value{font-size:1.05rem;font-weight:700;color:#0f172a;}
-.mj-member-event-single__registration-occurrences{display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:14px;background:var(--mj-event-surface);border:1px solid var(--mj-event-border);}
-.mj-member-event-single__registration-occurrences-title{margin:0;font-size:0.82rem;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.05em;}
-.mj-member-event-single__registration-occurrences-summary{margin:0;font-size:0.95rem;color:#1f2937;}
-.mj-member-event-single__registration-occurrences .mj-member-event-single__occurrences{margin:4px 0 0;}
-.mj-member-events__signup-occurrences{display:flex;flex-direction:column;gap:14px;margin-bottom:16px;padding:18px;border:1px solid var(--mj-event-border);border-radius:16px;background:var(--mj-event-surface);}
-.mj-member-events__signup-occurrences legend{margin:0;font-size:0.95rem;font-weight:700;color:#0f172a;}
-.mj-member-events__signup-occurrence-summary{margin:4px 0 4px;font-size:0.92rem;color:#475569;}
-.mj-member-events__signup-occurrence-columns{display:flex;flex-direction:column;gap:14px;}
-@media(min-width:720px){.mj-member-events__signup-occurrence-columns{flex-direction:row;align-items:stretch;}}
-.mj-member-events__signup-occurrence-section{flex:1;display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,0.65);border:1px solid rgba(15,23,42,0.08);}
-.mj-member-events__signup-occurrence-section.is-empty{background:rgba(241,245,249,0.55);}
-.mj-member-events__signup-occurrence-heading{margin:0;font-size:0.82rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#475569;}
+
+.mj-member-events__signup-occurrences{display:flex;flex-direction:column;gap:12px;margin-bottom:16px;padding:16px;border:1px solid var(--mj-event-border);border-radius:14px;background:var(--mj-event-surface);}
+.mj-member-events__signup-occurrences legend{margin:0;font-size:0.95rem;font-weight:600;color:#0f172a;}
 .mj-member-events__signup-occurrence-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px;}
-.mj-member-events__signup-occurrence-item{margin:0;display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:12px;border:1px solid rgba(15,23,42,0.08);background:#ffffff;box-shadow:0 6px 14px rgba(15,23,42,0.04);transition:transform 0.15s ease,box-shadow 0.15s ease;}
-.mj-member-events__signup-occurrence-item.is-assigned{border-color:rgba(37,99,235,0.25);background:rgba(59,130,246,0.1);box-shadow:0 8px 20px rgba(37,99,235,0.16);}
-.mj-member-events__signup-occurrence-item.is-assigned .mj-member-events__signup-occurrence-label{color:#0f172a;font-weight:600;}
-.mj-member-events__signup-occurrence-item.is-assigned .mj-member-events__signup-occurrence-toggle{border-color:rgba(37,99,235,0.35);color:#1d4ed8;}
-.mj-member-events__signup-occurrence-item.is-assigned .mj-member-events__signup-occurrence-toggle:hover{background:rgba(37,99,235,0.12);color:#1d4ed8;}
-.mj-member-events__signup-occurrence-item.is-available:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(15,23,42,0.08);}
-.mj-member-events__signup-occurrence-label{display:flex;align-items:center;gap:10px;font-size:0.9rem;color:#1f2937;}
-.mj-member-events__signup-occurrence-label.is-disabled{color:#64748b;}
-.mj-member-events__signup-occurrence-label input[type="checkbox"]{width:18px;height:18px;border-radius:6px;border:1px solid var(--mj-event-border);box-shadow:0 0 0 1px rgba(15,23,42,0.08) inset;}
-.mj-member-events__signup-occurrence-label input[type="checkbox"][hidden]{display:none;}
-.mj-member-events__signup-occurrence-label input[type="checkbox"]:disabled{opacity:0.45;}
-.mj-member-events__signup-occurrence-badge{padding:2px 8px;border-radius:999px;background:rgba(15,23,42,0.08);color:#475569;font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;}
-.mj-member-events__signup-occurrence-empty{display:none;margin:0;font-size:0.85rem;color:#64748b;}
-.mj-member-events__signup-occurrence-section.is-empty .mj-member-events__signup-occurrence-empty{display:block;}
-.mj-member-events__signup-occurrence-actions{display:flex;align-items:center;gap:10px;margin:0;}
+.mj-member-events__signup-occurrence-item{margin:0;}
+.mj-member-events__signup-occurrence-label{display:flex;align-items:center;gap:10px;font-size:0.92rem;color:#1f2937;}
+.mj-member-events__signup-occurrence-label input[type="checkbox"]{width:18px;height:18px;border-radius:4px;border:1px solid var(--mj-event-border);}
+.mj-member-events__signup-occurrence-label input[type="checkbox"]:disabled{opacity:0.5;}
+.mj-member-events__signup-occurrence-badge{padding:2px 8px;border-radius:999px;background:rgba(15,23,42,0.08);color:#475569;font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;}
+.mj-member-events__signup-occurrence-summary{margin:4px 0 8px;font-size:0.9rem;color:#475569;}
+.mj-member-events__signup-occurrence-help{margin:0;font-size:0.85rem;color:#475569;}
+.mj-member-events__signup-occurrence-empty{margin:0;font-size:0.9rem;color:#475569;}
+.mj-member-events__signup-occurrence-actions{margin-top:6px;}
 .mj-member-events__signup-occurrence-actions[hidden]{display:none;}
-.mj-member-events__signup-occurrence-toggle{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:10px;border:1px solid var(--mj-event-border);background:rgba(255,255,255,0.9);color:#0f172a;font-size:0.83rem;font-weight:600;cursor:pointer;transition:background 0.2s ease,color 0.2s ease,border-color 0.2s ease;}
+.mj-member-events__signup-occurrence-toggle{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:10px;border:1px solid var(--mj-event-border);background:transparent;color:#0f172a;font-size:0.85rem;font-weight:600;cursor:pointer;transition:background 0.2s ease,color 0.2s ease;}
 .mj-member-events__signup-occurrence-toggle:hover{background:var(--mj-event-accent);color:var(--mj-event-contrast);}
 .mj-member-events__signup-occurrence-toggle[hidden]{display:none;}
-.mj-member-events__signup-occurrence-help{margin:2px 0 0;font-size:0.82rem;color:#475569;}
 
 .mj-member-event-single__article-link{display:flex;flex-direction:column;gap:12px;}
 .mj-member-event-single__article-link a{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:12px;border:1px solid var(--mj-event-border);color:var(--mj-event-accent);font-weight:600;text-decoration:none;transition:border-color 0.2s ease,background 0.2s ease;}
@@ -652,6 +862,27 @@ if ($registration_has_interactive && function_exists('mj_member_output_events_wi
 .mj-member-event-single__registration-meta{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px;font-size:0.95rem;color:#1f2937;}
 .mj-member-event-single__registration-meta li{display:flex;flex-direction:column;gap:4px;}
 .mj-member-event-single__registration-meta strong{font-weight:600;color:#0f172a;margin:0;}
+
+.mj-member-event-single__photos{display:flex;flex-direction:column;gap:18px;}
+.mj-member-event-single__photos h2{margin:0;font-size:1.35rem;font-weight:700;color:#0f172a;}
+.mj-member-event-single__photo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;}
+.mj-member-event-single__photo{position:relative;border-radius:14px;overflow:hidden;background:#0f172a10;border:1px solid var(--mj-event-border);display:flex;align-items:center;justify-content:center;min-height:160px;}
+.mj-member-event-single__photo img{width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.25s ease;}
+.mj-member-event-single__photo a{display:flex;width:100%;height:100%;}
+.mj-member-event-single__photo:hover img{transform:scale(1.02);}
+.mj-member-event-single__photo-caption{margin:6px 0 0;font-size:0.85rem;color:#475569;}
+.mj-member-event-single__photo-empty{margin:0;font-size:0.95rem;color:#475569;}
+.mj-member-event-single__photo-upload{display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:14px;border:1px dashed var(--mj-event-border);background:rgba(15,23,42,0.04);}
+.mj-member-event-single__photo-upload label{font-weight:600;color:#0f172a;}
+.mj-member-event-single__photo-upload input[type="file"]{background:#fff;padding:10px;border-radius:10px;border:1px solid var(--mj-event-border);}
+.mj-member-event-single__photo-upload textarea{width:100%;min-height:70px;padding:10px;border-radius:10px;border:1px solid var(--mj-event-border);resize:vertical;}
+.mj-member-event-single__photo-upload button{align-self:flex-start;padding:10px 22px;border-radius:999px;border:1px solid var(--mj-event-accent);background:var(--mj-event-accent);color:var(--mj-event-contrast);font-weight:600;cursor:pointer;transition:background 0.2s ease,transform 0.2s ease;}
+.mj-member-event-single__photo-upload button:hover{background:#0f172a;transform:translateY(-1px);}
+.mj-member-event-single__photo-note{margin:0;font-size:0.85rem;color:#475569;}
+.mj-member-event-single__photo-notice{margin:0;padding:12px 16px;border-radius:12px;font-size:0.92rem;}
+.mj-member-event-single__photo-notice.is-success{background:rgba(16,185,129,0.12);color:#047857;border:1px solid rgba(16,185,129,0.3);}
+.mj-member-event-single__photo-notice.is-warning{background:rgba(250,204,21,0.2);color:#92400e;border:1px solid rgba(250,204,21,0.4);}
+.mj-member-event-single__photo-notice.is-error{background:rgba(248,113,113,0.18);color:#b91c1c;border:1px solid rgba(248,113,113,0.35);}
 
 .mj-member-event-single__details{display:flex;flex-direction:column;gap:16px;}
 .mj-member-event-single__detail{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border-radius:14px;background:var(--mj-event-surface);border:1px solid var(--mj-event-border);}
@@ -726,15 +957,245 @@ if ($registration_has_interactive && function_exists('mj_member_output_events_wi
         <section class="mj-member-event-single__body">
             <div class="mj-member-event-single__main">
                 <article class="mj-member-event-single__card mj-member-event-single__description">
-                    <?php if ($excerpt_html !== '') : ?>
-                    <div class="mj-member-event-single__excerpt"><?php echo wp_kses_post($excerpt_html); ?></div>
-                    <?php endif; ?>
                     <?php if ($description_html !== '') : ?>
                     <?php echo wp_kses_post($description_html); ?>
                     <?php else : ?>
                     <p><?php echo esc_html__('Les informations detaillees seront bientot disponibles.', 'mj-member'); ?></p>
                     <?php endif; ?>
+                    <?php if ($article_permalink !== '') : ?>
+                    <p class="mj-member-event-single__description-resource">
+                        <a href="<?php echo esc_url($article_permalink); ?>" target="_blank" rel="noopener">
+                            <span class="mj-member-event-single__description-resource-icon" aria-hidden="true">&#128193;</span>
+                            <span><?php echo esc_html__('Dossier pédagogique', 'mj-member'); ?></span>
+                        </a>
+                    </p>
+                    <?php endif; ?>
                 </article>
+
+                <?php if ($registration_has_reservations) : ?>
+                <section class="mj-member-event-single__card mj-member-event-single__reservations">
+                    <h2><?php echo esc_html__('Mes réservations', 'mj-member'); ?></h2>
+                    <ul class="mj-member-event-single__reservations-list">
+                        <?php foreach ($registration_reservations as $reservation_entry) : ?>
+                        <li class="mj-member-event-single__reservation">
+                            <div class="mj-member-event-single__reservation-header">
+                                <p class="mj-member-event-single__reservation-title"><?php echo esc_html($reservation_entry['name']); ?></p>
+                                <?php if (!empty($reservation_entry['status_label'])) : ?>
+                                <span class="mj-member-event-single__reservation-status<?php echo $reservation_entry['status_class'] !== '' ? ' ' . esc_attr($reservation_entry['status_class']) : ''; ?>"><?php echo esc_html($reservation_entry['status_label']); ?></span>
+                                <?php endif; ?>
+                            </div>
+                            <?php if (!empty($reservation_entry['created_label'])) : ?>
+                            <p class="mj-member-event-single__reservation-meta"><?php printf(
+                                esc_html__('Réservé le %s', 'mj-member'),
+                                esc_html($reservation_entry['created_label'])
+                            ); ?></p>
+                            <?php endif; ?>
+                            <?php if (!empty($reservation_entry['occurrences'])) : ?>
+                            <ul class="mj-member-event-single__reservation-occurrences">
+                                <?php foreach ($reservation_entry['occurrences'] as $occurrence_label) : ?>
+                                <li class="mj-member-event-single__reservation-occurrence"><?php echo esc_html($occurrence_label); ?></li>
+                                <?php endforeach; ?>
+                            </ul>
+                            <?php endif; ?>
+                        </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </section>
+                <?php endif; ?>
+
+                <?php if ($location_has_card) : ?>
+                <section class="mj-member-event-single__card mj-member-event-single__location">
+                    <h2><?php echo esc_html__('Lieu', 'mj-member'); ?></h2>
+                    <?php if ($location_display_cover !== '') : ?>
+                    <div class="mj-member-event-single__location-header">
+                        <span class="mj-member-event-single__location-cover">
+                            <img src="<?php echo esc_url($location_display_cover); ?>" alt="<?php echo esc_attr($location_display_title !== '' ? $location_display_title : __('Lieu de l\'evenement', 'mj-member')); ?>" loading="lazy" />
+                        </span>
+                        <div>
+                            <?php if ($location_display_title !== '') : ?>
+                            <p class="mj-member-event-single__location-title"><?php echo esc_html($location_display_title); ?></p>
+                            <?php endif; ?>
+                            <?php if ($location_address_display !== '') : ?>
+                            <p class="mj-member-event-single__location-address"><?php echo esc_html($location_address_display); ?></p>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <?php elseif ($location_display_title !== '' || $location_address_display !== '') : ?>
+                    <div class="mj-member-event-single__location-header" style="gap:8px;">
+                        <div>
+                            <?php if ($location_display_title !== '') : ?>
+                            <p class="mj-member-event-single__location-title"><?php echo esc_html($location_display_title); ?></p>
+                            <?php endif; ?>
+                            <?php if ($location_address_display !== '') : ?>
+                            <p class="mj-member-event-single__location-address"><?php echo esc_html($location_address_display); ?></p>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($location_types)) : ?>
+                    <div class="mj-member-event-single__location-types">
+                        <?php foreach ($location_types as $location_type_label) : ?>
+                        <span class="mj-member-event-single__location-type"><?php echo esc_html($location_type_label); ?></span>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if ($location_description_html !== '') : ?>
+                    <p class="mj-member-event-single__location-notes"><?php echo $location_description_html; ?></p>
+                    <?php endif; ?>
+                    <?php if ($location_notes_html !== '') : ?>
+                    <p class="mj-member-event-single__location-notes"><?php echo $location_notes_html; ?></p>
+                    <?php endif; ?>
+
+                    <?php if ($location_display_map !== '') : ?>
+                    <div class="mj-member-event-single__location-map">
+                        <iframe src="<?php echo esc_url($location_display_map); ?>" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
+                        <?php if ($location_display_map_link !== '') : ?>
+                        <div class="mj-member-event-single__location-map-actions">
+                            <a class="mj-member-event-single__location-map-link" href="<?php echo esc_url($location_display_map_link); ?>" target="_blank" rel="noopener"><?php echo esc_html__('Ouvrir dans Google Maps', 'mj-member'); ?></a>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                    <?php endif; ?>
+                </section>
+                <?php endif; ?>
+
+                    <?php if ($photo_notice || $photo_has_items || $photo_can_upload) : ?>
+                    <section class="mj-member-event-single__card mj-member-event-single__photos">
+                        <h2><?php echo esc_html__('Souvenirs partagés', 'mj-member'); ?></h2>
+
+                        <?php if ($photo_notice) :
+                            $notice_type = isset($photo_notice['type']) ? sanitize_html_class((string) $photo_notice['type']) : 'info';
+                        ?>
+                        <p class="mj-member-event-single__photo-notice is-<?php echo esc_attr($notice_type); ?>"><?php echo esc_html($photo_notice['message']); ?></p>
+                        <?php endif; ?>
+
+                        <?php if ($photo_has_items) : ?>
+                        <div class="mj-member-event-single__photo-grid">
+                            <?php foreach ($photo_items as $photo_entry) :
+                                $photo_url = isset($photo_entry['url']) ? $photo_entry['url'] : '';
+                                $photo_thumb = isset($photo_entry['thumb']) && $photo_entry['thumb'] !== '' ? $photo_entry['thumb'] : $photo_url;
+                                $photo_caption = isset($photo_entry['caption']) ? $photo_entry['caption'] : '';
+                                if ($photo_thumb === '') {
+                                    continue;
+                                }
+                            ?>
+                            <figure>
+                                <div class="mj-member-event-single__photo">
+                                    <?php if ($photo_url !== '') : ?>
+                                    <a href="<?php echo esc_url($photo_url); ?>" target="_blank" rel="noopener">
+                                        <img src="<?php echo esc_url($photo_thumb); ?>" alt="<?php echo esc_attr($title); ?>" loading="lazy" />
+                                    </a>
+                                    <?php else : ?>
+                                    <img src="<?php echo esc_url($photo_thumb); ?>" alt="<?php echo esc_attr($title); ?>" loading="lazy" />
+                                    <?php endif; ?>
+                                </div>
+                                <?php if ($photo_caption !== '') : ?>
+                                <figcaption class="mj-member-event-single__photo-caption"><?php echo esc_html($photo_caption); ?></figcaption>
+                                <?php endif; ?>
+                            </figure>
+                            <?php endforeach; ?>
+                        </div>
+                        <?php else : ?>
+                        <p class="mj-member-event-single__photo-empty"><?php echo esc_html__('Aucune photo validée pour l’instant. Partage les tiennes !', 'mj-member'); ?></p>
+                        <?php endif; ?>
+
+                        <?php if ($photo_can_upload) :
+                            $photo_redirect = function_exists('mj_member_get_current_url') ? mj_member_get_current_url() : get_permalink();
+                            $photo_redirect = esc_url($photo_redirect);
+                        ?>
+                        <form class="mj-member-event-single__photo-upload" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" method="post" enctype="multipart/form-data">
+                            <?php wp_nonce_field('mj-member-event-photo', 'mj_event_photo_nonce'); ?>
+                            <input type="hidden" name="action" value="mj_member_submit_event_photo" />
+                            <input type="hidden" name="event_id" value="<?php echo esc_attr((int) $event['id']); ?>" />
+                            <input type="hidden" name="redirect_to" value="<?php echo esc_attr($photo_redirect); ?>" />
+
+                            <label for="mj-member-event-photo-file"><?php echo esc_html__('Ajoute ta photo', 'mj-member'); ?></label>
+                            <input id="mj-member-event-photo-file" type="file" name="event_photo_file" accept="image/*" required />
+
+                            <label for="mj-member-event-photo-caption"><?php echo esc_html__('Décris ton souvenir (optionnel)', 'mj-member'); ?></label>
+                            <textarea id="mj-member-event-photo-caption" name="photo_caption" maxlength="180" placeholder="<?php echo esc_attr__('Exemple : Soirée jeu du vendredi !', 'mj-member'); ?>"></textarea>
+
+                            <p class="mj-member-event-single__photo-note"><?php echo esc_html(sprintf(_n('Il te reste %d envoi pour cet événement.', 'Il te reste %d envois pour cet événement.', $photo_member_remaining, 'mj-member'), $photo_member_remaining)); ?></p>
+
+                            <button type="submit"><?php echo esc_html__('Envoyer ma photo', 'mj-member'); ?></button>
+                        </form>
+                        <?php elseif ($photo_reason !== '') : ?>
+                        <p class="mj-member-event-single__photo-empty"><?php echo esc_html($photo_reason); ?></p>
+                        <?php endif; ?>
+                    </section>
+                    <?php endif; ?>
+            </div>
+
+            <aside class="mj-member-event-single__sidebar">
+                <section class="mj-member-event-single__card mj-member-event-single__registration">
+                    <div class="mj-member-event-single__registration-header">
+                        <h2 class="mj-member-event-single__registration-title"><?php echo esc_html__('Inscriptions', 'mj-member'); ?></h2>
+                        <span class="mj-member-event-single__registration-status <?php echo $registration_is_open ? 'is-open' : 'is-closed'; ?>"><?php echo $registration_is_open ? esc_html__('Ouvertes', 'mj-member') : esc_html__('Clôturées', 'mj-member'); ?></span>
+                    </div>
+                    <?php if ($registration_show_price) : ?>
+                    <p class="mj-member-event-single__registration-price">
+                        <span class="mj-member-event-single__registration-price-label"><?php echo esc_html__('Tarif', 'mj-member'); ?></span>
+                        <span class="mj-member-event-single__registration-price-value"><?php echo esc_html($registration_price_candidate); ?></span>
+                    </p>
+                    <?php endif; ?>
+                    <div class="mj-member-event-single__registration-actions">
+                        <?php if ($registration_has_interactive) : ?>
+                        <div class="mj-member-event-single__registration-interactive mj-member-events__item">
+                            <button type="button" class="mj-member-events__cta is-skin-solid"<?php echo $registration_button_attr_string; ?>><?php echo esc_html($registration_cta_label); ?></button>
+                            <?php if ($registration_all_registered && $registration_has_participants) : ?>
+                            <p class="mj-member-event-single__registration-note"><?php echo esc_html__('Tous vos profils disponibles sont deja inscrits pour cet evenement.', 'mj-member'); ?></p>
+                            <?php elseif ($registration_requires_login) : ?>
+                            <p class="mj-member-event-single__registration-note"><?php echo esc_html__('Connecte-toi pour continuer.', 'mj-member'); ?></p>
+                            <?php endif; ?>
+                            <div class="mj-member-events__signup" hidden></div>
+                            <div class="mj-member-events__feedback" aria-live="polite"></div>
+                            <?php if ($registration_url !== '') : ?>
+                            <noscript>
+                                <div class="mj-member-event-single__registration-links">
+                                    <a class="mj-member-event-single__registration-link" href="<?php echo esc_url($registration_url); ?>"><?php echo esc_html($registration_cta_label); ?></a>
+                                </div>
+                            </noscript>
+                            <?php endif; ?>
+                        </div>
+                        <?php else : ?>
+                        <div class="mj-member-event-single__registration-static">
+                            <?php if ($registration_is_open && $registration_url !== '') : ?>
+                            <div class="mj-member-event-single__registration-links">
+                                <a class="mj-member-event-single__registration-link" href="<?php echo esc_url($registration_url); ?>"><?php echo esc_html($registration_cta_label); ?></a>
+                            </div>
+                            <?php elseif (!$registration_is_open) : ?>
+                            <p class="mj-member-event-single__registration-note"><?php echo esc_html__('Les inscriptions sont cloturees pour cet evenement.', 'mj-member'); ?></p>
+                            <?php endif; ?>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+
+                    <?php if ($event_capacity_total > 0) : ?>
+                    <ul class="mj-member-event-single__registration-meta">
+                        <li>
+                            <strong><?php echo esc_html__('Places max', 'mj-member'); ?></strong>
+                            <span><?php echo esc_html(sprintf(_n('%d place', '%d places', $event_capacity_total, 'mj-member'), $event_capacity_total)); ?></span>
+                        </li>
+                    </ul>
+                    <?php endif; ?>
+                </section>
+
+                <section class="mj-member-event-single__card mj-member-event-single__details">
+                    <?php if ($deadline_label !== '') : ?>
+                    <div class="mj-member-event-single__detail">
+                        <span class="mj-member-event-single__detail-label"><?php echo esc_html__("Inscriptions jusqu'au", 'mj-member'); ?></span>
+                        <span class="mj-member-event-single__detail-value"><?php echo esc_html($deadline_label); ?></span>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($age_label !== '') : ?>
+                    <div class="mj-member-event-single__detail">
+                        <span class="mj-member-event-single__detail-label"><?php echo esc_html__('Public', 'mj-member'); ?></span>
+                        <span class="mj-member-event-single__detail-value"><?php echo esc_html($age_label); ?></span>
+                    </div>
+                    <?php endif; ?>
+                </section>
 
                 <?php if ($animateurs_count > 0) : ?>
                 <section class="mj-member-event-single__card mj-member-event-single__animateurs">
@@ -798,242 +1259,6 @@ if ($registration_has_interactive && function_exists('mj_member_output_events_wi
                     </div>
                 </section>
                 <?php endif; ?>
-                <?php if ($location_has_card) : ?>
-                <section class="mj-member-event-single__card mj-member-event-single__location">
-                    <h2><?php echo esc_html__('Lieu', 'mj-member'); ?></h2>
-                    <?php if ($location_display_cover !== '') : ?>
-                    <div class="mj-member-event-single__location-header">
-                        <span class="mj-member-event-single__location-cover">
-                            <img src="<?php echo esc_url($location_display_cover); ?>" alt="<?php echo esc_attr($location_display_title !== '' ? $location_display_title : __('Lieu de l\'evenement', 'mj-member')); ?>" loading="lazy" />
-                        </span>
-                        <div>
-                            <?php if ($location_display_title !== '') : ?>
-                            <p class="mj-member-event-single__location-title"><?php echo esc_html($location_display_title); ?></p>
-                            <?php endif; ?>
-                            <?php if ($location_address_display !== '') : ?>
-                            <p class="mj-member-event-single__location-address"><?php echo esc_html($location_address_display); ?></p>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                    <?php elseif ($location_display_title !== '' || $location_address_display !== '') : ?>
-                    <div class="mj-member-event-single__location-header" style="gap:8px;">
-                        <div>
-                            <?php if ($location_display_title !== '') : ?>
-                            <p class="mj-member-event-single__location-title"><?php echo esc_html($location_display_title); ?></p>
-                            <?php endif; ?>
-                            <?php if ($location_address_display !== '') : ?>
-                            <p class="mj-member-event-single__location-address"><?php echo esc_html($location_address_display); ?></p>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-
-                    <?php if (!empty($location_types)) : ?>
-                    <div class="mj-member-event-single__location-types">
-                        <?php foreach ($location_types as $location_type_label) : ?>
-                        <span class="mj-member-event-single__location-type"><?php echo esc_html($location_type_label); ?></span>
-                        <?php endforeach; ?>
-                    </div>
-                    <?php endif; ?>
-
-                    <?php if ($location_description_html !== '') : ?>
-                    <p class="mj-member-event-single__location-notes"><?php echo $location_description_html; ?></p>
-                    <?php endif; ?>
-                    <?php if ($location_notes_html !== '') : ?>
-                    <p class="mj-member-event-single__location-notes"><?php echo $location_notes_html; ?></p>
-                    <?php endif; ?>
-
-                    <?php if ($location_display_map !== '') : ?>
-                    <div class="mj-member-event-single__location-map">
-                        <iframe src="<?php echo esc_url($location_display_map); ?>" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
-                        <?php if ($location_display_map_link !== '') : ?>
-                        <div class="mj-member-event-single__location-map-actions">
-                            <a class="mj-member-event-single__location-map-link" href="<?php echo esc_url($location_display_map_link); ?>" target="_blank" rel="noopener"><?php echo esc_html__('Ouvrir dans Google Maps', 'mj-member'); ?></a>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                    <?php endif; ?>
-                </section>
-                <?php endif; ?>
-                <?php if ($article_permalink !== '') : ?>
-                <section class="mj-member-event-single__card mj-member-event-single__article-link">
-                    <a href="<?php echo esc_url($article_permalink); ?>" target="_blank" rel="noopener">
-                        <?php echo esc_html__("Voir l'article associe", 'mj-member'); ?>
-                    </a>
-                </section>
-                <?php endif; ?>
-            </div>
-
-            <aside class="mj-member-event-single__sidebar">
-                <section class="mj-member-event-single__card mj-member-event-single__registration">
-                    <div class="mj-member-event-single__registration-header">
-                        <h2 class="mj-member-event-single__registration-title"><?php echo esc_html__('Inscriptions', 'mj-member'); ?></h2>
-                        <span class="mj-member-event-single__registration-status <?php echo $registration_is_open ? 'is-open' : 'is-closed'; ?>"><?php echo $registration_is_open ? esc_html__('Ouvertes', 'mj-member') : esc_html__('Clôturées', 'mj-member'); ?></span>
-                    </div>
-                    <?php if ($registration_show_price) : ?>
-                    <p class="mj-member-event-single__registration-price">
-                        <span class="mj-member-event-single__registration-price-label"><?php echo esc_html__('Tarif', 'mj-member'); ?></span>
-                        <span class="mj-member-event-single__registration-price-value"><?php echo esc_html($registration_price_candidate); ?></span>
-                    </p>
-                    <?php endif; ?>
-                    <div class="mj-member-event-single__registration-actions">
-                        <?php if ($registration_has_interactive) : ?>
-                        <div class="mj-member-event-single__registration-interactive mj-member-events__item">
-                            <button type="button" class="mj-member-events__cta is-skin-solid"<?php echo $registration_button_attr_string; ?>><?php echo esc_html($registration_cta_label); ?></button>
-                            <?php if ($registration_all_registered && $registration_has_participants) : ?>
-                            <p class="mj-member-event-single__registration-note"><?php echo esc_html__('Tous vos profils disponibles sont deja inscrits pour cet evenement.', 'mj-member'); ?></p>
-                            <?php elseif ($registration_requires_login) : ?>
-                            <p class="mj-member-event-single__registration-note"><?php echo esc_html__('Connecte-toi pour continuer.', 'mj-member'); ?></p>
-                            <?php endif; ?>
-                            <div class="mj-member-events__signup" hidden></div>
-                            <div class="mj-member-events__feedback" aria-live="polite"></div>
-                            <?php if ($registration_url !== '') : ?>
-                            <noscript>
-                                <div class="mj-member-event-single__registration-links">
-                                    <a class="mj-member-event-single__registration-link" href="<?php echo esc_url($registration_url); ?>"><?php echo esc_html($registration_cta_label); ?></a>
-                                </div>
-                            </noscript>
-                            <?php endif; ?>
-                        </div>
-                        <?php else : ?>
-                        <div class="mj-member-event-single__registration-static">
-                            <?php if ($registration_is_open && $registration_url !== '') : ?>
-                            <div class="mj-member-event-single__registration-links">
-                                <a class="mj-member-event-single__registration-link" href="<?php echo esc_url($registration_url); ?>"><?php echo esc_html($registration_cta_label); ?></a>
-                            </div>
-                            <?php elseif (!$registration_is_open) : ?>
-                            <p class="mj-member-event-single__registration-note"><?php echo esc_html__('Les inscriptions sont cloturees pour cet evenement.', 'mj-member'); ?></p>
-                            <?php endif; ?>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                    <?php if ($event_has_multiple_occurrences && !empty($occurrence_items)) : ?>
-                    <div class="mj-member-event-single__registration-occurrences">
-                        <p class="mj-member-event-single__registration-occurrences-title"><?php echo esc_html__('Occurrences à venir', 'mj-member'); ?></p>
-                        <?php if ($occurrence_schedule_summary !== '') : ?>
-                        <p class="mj-member-event-single__registration-occurrences-summary"><?php echo esc_html($occurrence_schedule_summary); ?></p>
-                        <?php endif; ?>
-                        <ul class="mj-member-event-single__occurrences">
-                            <?php foreach ($occurrence_items as $index => $occurrence_item) :
-                                if (!is_array($occurrence_item)) {
-                                    continue;
-                                }
-                                $is_occurrence_today = !empty($occurrence_item['isToday']);
-                                $occurrence_prefix = $index === 0
-                                    ? ($is_occurrence_today ? __("Aujourd'hui :", 'mj-member') : __('Prochaine :', 'mj-member'))
-                                    : ($is_occurrence_today ? __("Aujourd'hui :", 'mj-member') : __('Ensuite :', 'mj-member'));
-                                $occurrence_classes = array('mj-member-event-single__occurrence');
-                                if ($is_occurrence_today) {
-                                    $occurrence_classes[] = 'is-today';
-                                }
-                                $occurrence_timestamp = isset($occurrence_item['timestamp']) ? (int) $occurrence_item['timestamp'] : 0;
-                                $occurrence_label_display = isset($occurrence_item['label']) ? $occurrence_item['label'] : '';
-                                if ($occurrence_timestamp > 0) {
-                                    $weekday_label = wp_date('l', $occurrence_timestamp);
-                                    $date_label = wp_date(get_option('date_format', 'd/m/Y'), $occurrence_timestamp);
-                                    $occurrence_label_display = trim($weekday_label . ' ' . $date_label);
-                                }
-                                if ($occurrence_label_display === '') {
-                                    $occurrence_label_display = isset($occurrence_item['start']) ? $occurrence_item['start'] : '';
-                                }
-                                if ($occurrence_label_display !== '') {
-                                    if (function_exists('mb_substr') && function_exists('mb_strtoupper')) {
-                                        $first_char = mb_substr($occurrence_label_display, 0, 1, 'UTF-8');
-                                        $remaining_chars = mb_substr($occurrence_label_display, 1, null, 'UTF-8');
-                                        $occurrence_label_display = mb_strtoupper($first_char, 'UTF-8') . $remaining_chars;
-                                    } else {
-                                        $occurrence_label_display = ucfirst($occurrence_label_display);
-                                    }
-                                }
-                                if (!$occurrence_display_time) {
-                                    $occurrence_label_display = preg_replace('/\s+(\d{1,2}[:h]\d{2})$/', '', $occurrence_label_display);
-                                }
-                                $occurrence_time_display = '';
-                                if ($occurrence_display_time) {
-                                    if ($occurrence_timestamp > 0) {
-                                        $occurrence_time_display = wp_date(get_option('time_format', 'H:i'), $occurrence_timestamp);
-                                    } else {
-                                        $start_candidate = isset($occurrence_item['start']) ? (string) $occurrence_item['start'] : '';
-                                        if ($start_candidate !== '' && preg_match('/(\d{1,2})[:h](\d{2})/', $start_candidate, $time_matches)) {
-                                            $hour = str_pad((string) $time_matches[1], 2, '0', STR_PAD_LEFT);
-                                            $occurrence_time_display = $hour . ':' . $time_matches[2];
-                                        }
-                                    }
-                                }
-                            ?>
-                            <li class="<?php echo esc_attr(implode(' ', array_map('sanitize_html_class', $occurrence_classes))); ?>">
-                                <span class="mj-member-event-single__occurrence-prefix"><?php echo esc_html($occurrence_prefix); ?></span>
-                                <span class="mj-member-event-single__occurrence-label">
-                                    <?php echo esc_html(trim($occurrence_label_display)); ?>
-                                    <?php if ($occurrence_display_time && $occurrence_time_display !== '') : ?>
-                                    <span class="mj-member-event-single__occurrence-time">· <?php echo esc_html($occurrence_time_display); ?></span>
-                                    <?php endif; ?>
-                                </span>
-                            </li>
-                            <?php endforeach; ?>
-                            <?php if ($occurrence_remaining > 0) : ?>
-                            <li class="mj-member-event-single__occurrence mj-member-event-single__occurrence--more">
-                                <span class="mj-member-event-single__occurrence-label"><?php echo esc_html(sprintf(_n('+ %d autre date', '+ %d autres dates', $occurrence_remaining, 'mj-member'), $occurrence_remaining)); ?></span>
-                            </li>
-                            <?php endif; ?>
-                        </ul>
-                    </div>
-                    <?php endif; ?>
-                    <ul class="mj-member-event-single__registration-meta">
-                        <?php if ($registration_deadline_label !== '') : ?>
-                        <li>
-                            <strong><?php echo esc_html__("Clôture des inscriptions", 'mj-member'); ?></strong>
-                            <span><?php echo esc_html($registration_deadline_label); ?></span>
-                        </li>
-                        <?php endif; ?>
-                        <?php if ($registration_has_participants) : ?>
-                        <li>
-                            <strong><?php echo esc_html__('Profils déjà inscrits', 'mj-member'); ?></strong>
-                            <span><?php echo esc_html(sprintf(_n('%d participant confirmé', '%d participants confirmés', $registration_registered_count, 'mj-member'), $registration_registered_count)); ?></span>
-                        </li>
-                        <?php if ($registration_available_count > 0) : ?>
-                        <li>
-                            <strong><?php echo esc_html__('Profils disponibles', 'mj-member'); ?></strong>
-                            <span><?php echo esc_html(sprintf(_n('%d profil à inscrire', '%d profils à inscrire', $registration_available_count, 'mj-member'), $registration_available_count)); ?></span>
-                        </li>
-                        <?php endif; ?>
-                        <?php endif; ?>
-                        <?php if ($registration_total_count > 0) : ?>
-                        <li>
-                            <strong><?php echo esc_html__('Profils gérés', 'mj-member'); ?></strong>
-                            <span><?php echo esc_html(sprintf(_n('%d profil lié', '%d profils liés', $registration_total_count, 'mj-member'), $registration_total_count)); ?></span>
-                        </li>
-                        <?php endif; ?>
-                        <li>
-                            <strong><?php echo esc_html__('Paiement', 'mj-member'); ?></strong>
-                            <span>
-                                <?php if ($registration_payment_required) : ?>
-                                    <?php echo esc_html__('Paiement sécurisé requis après validation.', 'mj-member'); ?>
-                                    <?php if ($registration_price_amount > 0) : ?>
-                                    <?php echo esc_html(sprintf(__('Montant : %s €', 'mj-member'), number_format_i18n($registration_price_amount, 2))); ?>
-                                    <?php endif; ?>
-                                <?php else : ?>
-                                    <?php echo esc_html__('Gratuit', 'mj-member'); ?>
-                                <?php endif; ?>
-                            </span>
-                        </li>
-                    </ul>
-                </section>
-
-                <section class="mj-member-event-single__card mj-member-event-single__details">
-                    <?php if ($deadline_label !== '') : ?>
-                    <div class="mj-member-event-single__detail">
-                        <span class="mj-member-event-single__detail-label"><?php echo esc_html__("Inscriptions jusqu'au", 'mj-member'); ?></span>
-                        <span class="mj-member-event-single__detail-value"><?php echo esc_html($deadline_label); ?></span>
-                    </div>
-                    <?php endif; ?>
-                    <?php if ($age_label !== '') : ?>
-                    <div class="mj-member-event-single__detail">
-                        <span class="mj-member-event-single__detail-label"><?php echo esc_html__('Public', 'mj-member'); ?></span>
-                        <span class="mj-member-event-single__detail-value"><?php echo esc_html($age_label); ?></span>
-                    </div>
-                    <?php endif; ?>
-                </section>
 
             </aside>
         </section>

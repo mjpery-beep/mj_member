@@ -1,5 +1,7 @@
 <?php
 
+use Mj\Member\Core\Config;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -14,11 +16,16 @@ function mj_member_ensure_capabilities()
     }
 
     $roles = apply_filters('mj_member_capability_roles', array('administrator', 'editor'));
+    $capability = Config::capability();
+    $contactCapability = Config::contactCapability();
 
     foreach ($roles as $role_name) {
         $role = get_role($role_name);
-        if ($role && !$role->has_cap(MJ_MEMBER_CAPABILITY)) {
-            $role->add_cap(MJ_MEMBER_CAPABILITY);
+        if ($role && !$role->has_cap($capability)) {
+            $role->add_cap($capability);
+        }
+        if ($contactCapability !== '' && $role && !$role->has_cap($contactCapability)) {
+            $role->add_cap($contactCapability);
         }
     }
 }
@@ -34,11 +41,16 @@ function mj_member_remove_capabilities()
     }
 
     $roles = apply_filters('mj_member_capability_roles', array('administrator', 'editor'));
+    $capability = Config::capability();
+    $contactCapability = Config::contactCapability();
 
     foreach ($roles as $role_name) {
         $role = get_role($role_name);
-        if ($role && $role->has_cap(MJ_MEMBER_CAPABILITY)) {
-            $role->remove_cap(MJ_MEMBER_CAPABILITY);
+        if ($role && $role->has_cap($capability)) {
+            $role->remove_cap($capability);
+        }
+        if ($contactCapability !== '' && $role && $role->has_cap($contactCapability)) {
+            $role->remove_cap($contactCapability);
         }
     }
 }
@@ -58,7 +70,10 @@ function mj_member_restrict_dashboard_access()
         return;
     }
 
-    $allowed = user_can($user, 'manage_options') || user_can($user, MJ_MEMBER_CAPABILITY);
+    $capability = Config::capability();
+    $contactCapability = Config::contactCapability();
+
+    $allowed = user_can($user, 'manage_options') || user_can($user, $capability) || ($contactCapability !== '' && user_can($user, $contactCapability));
     $allowed = apply_filters('mj_member_allow_dashboard_access', $allowed, $user);
 
     if ($allowed) {
@@ -92,7 +107,10 @@ function mj_member_hide_admin_bar_for_members()
         return;
     }
 
-    if (user_can($user, 'manage_options') || user_can($user, MJ_MEMBER_CAPABILITY)) {
+    $capability = Config::capability();
+    $contactCapability = Config::contactCapability();
+
+    if (user_can($user, 'manage_options') || user_can($user, $capability) || ($contactCapability !== '' && user_can($user, $contactCapability))) {
         return;
     }
 

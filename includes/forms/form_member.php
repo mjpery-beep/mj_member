@@ -46,13 +46,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
         $requires_payment = 1;
     }
 
-    $min_password_length = (int) apply_filters('mj_member_min_password_length', 8);
-    $account_login_raw = isset($_POST['member_account_login']) ? sanitize_text_field($_POST['member_account_login']) : '';
-    $account_login_clean = $account_login_raw !== '' ? sanitize_user($account_login_raw, true) : '';
-    $account_password = isset($_POST['member_account_password']) ? (string) wp_unslash($_POST['member_account_password']) : '';
-    $account_password_confirm = isset($_POST['member_account_password_confirm']) ? (string) wp_unslash($_POST['member_account_password_confirm']) : '';
-    $account_credentials_provided = ($account_login_raw !== '' || $account_password !== '' || $account_password_confirm !== '');
-
     $input_data = array(
         'member_role' => $current_role,
         'member_last_name' => isset($_POST['member_last_name']) ? sanitize_text_field($_POST['member_last_name']) : '',
@@ -80,7 +73,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
         'guardian_address' => isset($_POST['guardian_address']) ? sanitize_text_field($_POST['guardian_address']) : '',
         'guardian_city' => isset($_POST['guardian_city']) ? sanitize_text_field($_POST['guardian_city']) : '',
         'guardian_postal' => isset($_POST['guardian_postal']) ? sanitize_text_field($_POST['guardian_postal']) : '',
-        'member_account_login' => $account_login_raw,
     );
 
     if (!in_array($input_data['guardian_mode'], array('existing', 'new'), true)) {
@@ -137,37 +129,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
             } elseif (!is_email($input_data['guardian_email'])) {
                 $validation_errors[] = "L'email du tuteur n'est pas valide.";
             }
-        }
-    }
-
-    $existing_wp_user_id = ($member && !empty($member->wp_user_id)) ? (int) $member->wp_user_id : 0;
-
-    if ($account_credentials_provided) {
-        if ($account_login_raw === '' && !$existing_wp_user_id) {
-            $validation_errors[] = "Indiquez un identifiant de connexion pour créer le compte utilisateur.";
-        }
-
-        if ($account_login_raw !== '' && $account_login_clean === '') {
-            $validation_errors[] = "L'identifiant saisi contient des caractères non autorisés.";
-        }
-
-        if ($account_login_clean !== '') {
-            $conflict_user_id = username_exists($account_login_clean);
-            if ($conflict_user_id && (!$existing_wp_user_id || (int) $conflict_user_id !== $existing_wp_user_id)) {
-                $validation_errors[] = "Cet identifiant est déjà utilisé par un autre compte.";
-            }
-        }
-
-        if ($account_password === '') {
-            $validation_errors[] = 'Saisissez un mot de passe pour le compte utilisateur.';
-        }
-
-        if ($account_password !== $account_password_confirm) {
-            $validation_errors[] = 'La confirmation du mot de passe ne correspond pas.';
-        }
-
-        if ($account_password !== '' && strlen($account_password) < $min_password_length) {
-            $validation_errors[] = sprintf('Le mot de passe doit contenir au moins %d caractères.', $min_password_length);
         }
     }
 
@@ -236,33 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
                 $current_role = $member ? $member->role : $current_role;
                 $action = 'edit';
                 $id = $result;
-                $account_notice = '';
-                if ($account_credentials_provided && $member) {
-                    $login_to_use = ($account_login_clean !== '') ? $account_login_clean : '';
-                    if ($login_to_use === '' && !empty($member->wp_user_id)) {
-                        $existing_user = get_user_by('id', (int) $member->wp_user_id);
-                        if ($existing_user) {
-                            $login_to_use = $existing_user->user_login;
-                        }
-                    }
-
-                    $account_result = mj_member_sync_member_user_account($member, array(
-                        'role' => 'subscriber',
-                        'send_notification' => false,
-                        'user_login' => $login_to_use,
-                        'user_pass' => $account_password,
-                        'return_error' => true,
-                    ));
-
-                    if (is_wp_error($account_result)) {
-                        $account_notice = $account_result->get_error_message();
-                    }
-                }
-
                 echo '<div class="notice notice-success is-dismissible"><p>Membre ajouté avec succès.</p></div>';
-                if ($account_notice !== '') {
-                    echo '<div class="notice notice-error is-dismissible"><p>' . esc_html($account_notice) . '</p></div>';
-                }
             } else {
                 echo '<div class="notice notice-error is-dismissible"><p>Erreur lors de l\'ajout du membre.</p></div>';
             }
@@ -271,33 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
             if ($update_result !== false) {
                 $member = MjMembers_CRUD::getById($id);
                 $current_role = $member ? $member->role : $current_role;
-                $account_notice = '';
-                if ($account_credentials_provided && $member) {
-                    $login_to_use = ($account_login_clean !== '') ? $account_login_clean : '';
-                    if ($login_to_use === '' && !empty($member->wp_user_id)) {
-                        $existing_user = get_user_by('id', (int) $member->wp_user_id);
-                        if ($existing_user) {
-                            $login_to_use = $existing_user->user_login;
-                        }
-                    }
-
-                    $account_result = mj_member_sync_member_user_account($member, array(
-                        'role' => 'subscriber',
-                        'send_notification' => false,
-                        'user_login' => $login_to_use,
-                        'user_pass' => $account_password,
-                        'return_error' => true,
-                    ));
-
-                    if (is_wp_error($account_result)) {
-                        $account_notice = $account_result->get_error_message();
-                    }
-                }
-
                 echo '<div class="notice notice-success is-dismissible"><p>Membre mis à jour avec succès.</p></div>';
-                if ($account_notice !== '') {
-                    echo '<div class="notice notice-error is-dismissible"><p>' . esc_html($account_notice) . '</p></div>';
-                }
             } else {
                 echo '<div class="notice notice-error is-dismissible"><p>Erreur lors de la mise à jour du membre.</p></div>';
             }
@@ -360,15 +269,7 @@ $form_defaults = array(
     'guardian_address' => $guardian ? $guardian->address : '',
     'guardian_city' => $guardian ? $guardian->city : '',
     'guardian_postal' => $guardian ? $guardian->postal_code : '',
-    'member_account_login' => '',
 );
-
-if ($member && !empty($member->wp_user_id)) {
-    $existing_user = get_user_by('id', (int) $member->wp_user_id);
-    if ($existing_user) {
-        $form_defaults['member_account_login'] = $existing_user->user_login;
-    }
-}
 
 if ($has_validation_errors) {
     $form_values = array_merge($form_defaults, $form_values);
@@ -593,39 +494,6 @@ $member_email_required = ($form_values['member_role'] !== MjMembers_CRUD::ROLE_J
                     <th><label for="guardian_postal">Code postal du tuteur</label></th>
                     <td>
                         <input type="text" id="guardian_postal" name="guardian_postal" value="<?php echo esc_attr($form_values['guardian_postal']); ?>" class="regular-text" />
-                    </td>
-                </tr>
-            </table>
-        </div>
-
-        <div class="mj-form-section">
-            <h3>Accès en ligne</h3>
-
-            <table class="form-table">
-                <tr>
-                    <th><label for="member_account_login">Identifiant WordPress</label></th>
-                    <td>
-                        <input type="text" id="member_account_login" name="member_account_login" value="<?php echo esc_attr($form_values['member_account_login']); ?>" class="regular-text" autocomplete="username" />
-                        <p class="description">Laissez vide pour conserver l’identifiant actuel.</p>
-                        <?php if ($member && !empty($member->wp_user_id)) :
-                            $linked_user = get_user_by('id', (int) $member->wp_user_id);
-                            if ($linked_user) : ?>
-                                <p class="description">Identifiant actuel : <code><?php echo esc_html($linked_user->user_login); ?></code></p>
-                            <?php endif;
-                        endif; ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="member_account_password">Nouveau mot de passe</label></th>
-                    <td>
-                        <input type="password" id="member_account_password" name="member_account_password" class="regular-text" autocomplete="new-password" />
-                        <p class="description">Minimum <?php echo (int) apply_filters('mj_member_min_password_length', 8); ?> caractères.</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="member_account_password_confirm">Confirmer le mot de passe</label></th>
-                    <td>
-                        <input type="password" id="member_account_password_confirm" name="member_account_password_confirm" class="regular-text" autocomplete="new-password" />
                     </td>
                 </tr>
             </table>

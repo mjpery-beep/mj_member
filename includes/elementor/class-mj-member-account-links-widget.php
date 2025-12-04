@@ -509,6 +509,7 @@ class Mj_Member_Elementor_Account_Links_Widget extends Widget_Base {
         $args = array(
             'context' => 'elementor_account_links_widget',
             'widget_id' => $this->get_id(),
+            'preview_mode' => $preview_mode,
         );
 
         $links = mj_member_login_component_get_account_links($account_base, $args);

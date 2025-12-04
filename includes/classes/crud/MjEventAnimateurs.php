@@ -1,10 +1,10 @@
 <?php
 
+namespace Mj\Member\Classes\Crud;
+
 if (!defined('ABSPATH')) {
     exit;
 }
-
-require_once plugin_dir_path(__FILE__) . 'MjMembers_CRUD.php';
 
 class MjEventAnimateurs {
     const TABLE = 'mj_event_animateurs';
@@ -426,3 +426,5 @@ class MjEventAnimateurs {
         }
     }
 }
+
+class_alias(__NAMESPACE__ . '\\MjEventAnimateurs', 'MjEventAnimateurs');

@@ -1,34 +1,46 @@
 <?php
 
+use Mj\Member\Core\Config;
+
 if (!defined('ABSPATH')) {
     exit;
 }
 
 if (!function_exists('mj_member_register_login_component_assets')) {
     function mj_member_register_login_component_assets() {
-        $version = defined('MJ_MEMBER_VERSION') ? MJ_MEMBER_VERSION : '1.0.0';
+        $version = Config::version();
+        $baseUrl = Config::url();
+        $basePath = Config::path();
+
+        $stylePath = $basePath . 'css/login-component.css';
+        $scriptPath = $basePath . 'js/login-component.js';
+        $blockScriptPath = $basePath . 'js/block-login-button.js';
+
+        $styleVersion = file_exists($stylePath) ? (string) filemtime($stylePath) : $version;
+        $scriptVersion = file_exists($scriptPath) ? (string) filemtime($scriptPath) : $version;
+        $blockScriptVersion = file_exists($blockScriptPath) ? (string) filemtime($blockScriptPath) : $version;
 
         wp_register_style(
             'mj-member-login-component',
-            MJ_MEMBER_URL . 'css/login-component.css',
+            $baseUrl . 'css/login-component.css',
             array(),
-            $version
+            $styleVersion
         );
 
         wp_register_script(
             'mj-member-login-component',
-            MJ_MEMBER_URL . 'js/login-component.js',
+            $baseUrl . 'js/login-component.js',
             array(),
-            $version,
+            $scriptVersion,
             true
         );
 
         if (function_exists('register_block_type')) {
             wp_register_script(
                 'mj-member-login-block-editor',
-                MJ_MEMBER_URL . 'js/block-login-button.js',
+                $baseUrl . 'js/block-login-button.js',
                 array('wp-blocks', 'wp-element', 'wp-components', 'wp-block-editor', 'wp-i18n'),
-                $version,
+                $blockScriptVersion,
                 true
             );
 
@@ -237,6 +249,7 @@ if (!function_exists('mj_member_login_component_get_default_link_settings')) {
         $default_account_section = array(
             'section' => 'profile',
         );
+        $contact_capability = Config::contactCapability() ?: 'mj_manage_contact_messages';
 
         $default_links = array(
             'profile' => array(
@@ -289,6 +302,17 @@ if (!function_exists('mj_member_login_component_get_default_link_settings')) {
                 'editable_label' => true,
                 'type' => 'standard',
             ),
+            'contact_messages' => array(
+                'label' => __('Messages', 'mj-member'),
+                'slug' => 'messages',
+                'query' => array('section' => 'contact_messages'),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'all',
+                'editable_label' => true,
+                'type' => 'standard',
+                'requires_capability' => $contact_capability,
+            ),
             'logout' => array(
                 'label' => __('Déconnexion', 'mj-member'),
                 'slug' => '',
@@ -334,6 +358,55 @@ if (!function_exists('mj_member_login_component_get_account_link_settings')) {
     }
 }
 
+if (!function_exists('mj_member_login_component_get_unread_contact_message_count')) {
+    /**
+     * Retourne le nombre de messages de contact non lus pour un utilisateur.
+     *
+     * @param int   $user_id
+     * @param array $overrides
+     *
+     * @return int
+     */
+    function mj_member_login_component_get_unread_contact_message_count($user_id = 0, array $overrides = array()) {
+        if (!class_exists('MjContactMessages')) {
+            return 0;
+        }
+
+        $user_id = (int) $user_id;
+        if ($user_id <= 0) {
+            $user_id = get_current_user_id();
+        }
+
+        if ($user_id <= 0) {
+            return 0;
+        }
+
+        $args = wp_parse_args($overrides, array(
+            'include_all_targets' => true,
+            'extra_targets' => array(),
+            'skip_capability_check' => false,
+        ));
+
+        $contact_capability = Config::contactCapability();
+        if (!$args['skip_capability_check'] && $contact_capability !== '') {
+            if (!user_can($user_id, $contact_capability)) {
+                return 0;
+            }
+        }
+
+        $count = (int) MjContactMessages::count_unread_for_user($user_id, $args);
+
+        /**
+         * Filtre le décompte des messages non lus affiché dans les liens de compte.
+         *
+         * @param int   $count   Nombre de messages non lus.
+         * @param int   $user_id Identifiant utilisateur ciblé.
+         * @param array $args    Arguments supplémentaires passés à la requête.
+         */
+        return (int) apply_filters('mj_member_account_links_unread_total', $count, $user_id, $args);
+    }
+}
+
 if (!function_exists('mj_member_login_component_get_account_links')) {
     function mj_member_login_component_get_account_links($account_base, $args) {
         $account_base = esc_url_raw($account_base);
@@ -351,6 +424,11 @@ if (!function_exists('mj_member_login_component_get_account_links')) {
             $current_member = mj_member_get_current_member();
         }
 
+        $current_member_id = 0;
+        if ($current_member && isset($current_member->id)) {
+            $current_member_id = (int) $current_member->id;
+        }
+
         if ($current_member && isset($current_member->role)) {
             $member_role = sanitize_key((string) $current_member->role);
             $animateur_role = 'animateur';
@@ -361,13 +439,75 @@ if (!function_exists('mj_member_login_component_get_account_links')) {
             $is_animateur = ($member_role === $animateur_role);
         }
 
+        $current_user_email = ($current_user instanceof WP_User && !empty($current_user->user_email))
+            ? sanitize_email($current_user->user_email)
+            : '';
+        $allow_contact_owner_view = $current_member_id > 0 || $current_user_email !== '';
+
         $configured_links = mj_member_login_component_get_account_link_settings();
+        $preview_mode = !empty($args['preview_mode']);
+        if (!$preview_mode && function_exists('mj_member_login_component_is_preview_mode')) {
+            $preview_mode = mj_member_login_component_is_preview_mode();
+        }
+
+        $contact_capability = Config::contactCapability();
+        $unread_contact_count = array_key_exists('unread_contact_count', $args) ? (int) $args['unread_contact_count'] : null;
+
+        if ($unread_contact_count === null) {
+            if ($current_user instanceof WP_User) {
+                $user_has_capability = ($contact_capability === '' || current_user_can($contact_capability));
+                $should_allow_owner_count = $allow_contact_owner_view && !$user_has_capability && $contact_capability !== '';
+
+                if ($user_has_capability || $preview_mode || $should_allow_owner_count) {
+                    if (function_exists('mj_member_login_component_get_unread_contact_message_count')) {
+                        $helper_args = array();
+
+                        if ($preview_mode || $should_allow_owner_count) {
+                            $helper_args['skip_capability_check'] = true;
+                        }
+
+                        if ($should_allow_owner_count) {
+                            if ($current_member_id > 0) {
+                                $helper_args['member_id'] = $current_member_id;
+                            }
+
+                            if ($current_user_email !== '') {
+                                $helper_args['sender_email'] = $current_user_email;
+                            }
+                        }
+
+                        $unread_contact_count = mj_member_login_component_get_unread_contact_message_count($current_user->ID, $helper_args);
+                    } else {
+                        $unread_contact_count = 0;
+                    }
+                } else {
+                    $unread_contact_count = 0;
+                }
+            } elseif ($preview_mode) {
+                $unread_contact_count = (int) apply_filters('mj_member_contact_messages_preview_unread_total', 2, $args);
+            } else {
+                $unread_contact_count = 0;
+            }
+        }
+
+        $unread_contact_count = max(0, (int) $unread_contact_count);
+
         $links = array();
 
         foreach ($configured_links as $key => $config) {
             $enabled = isset($config['enabled']) ? (bool) $config['enabled'] : true;
             if (!$enabled) {
                 continue;
+            }
+
+            $required_capability = isset($config['requires_capability']) ? (string) $config['requires_capability'] : '';
+            if ($required_capability !== '') {
+                $has_capability = current_user_can($required_capability);
+                $owner_override = ($key === 'contact_messages' && $allow_contact_owner_view);
+
+                if (!$preview_mode && !$has_capability && !$owner_override) {
+                    continue;
+                }
             }
 
             $visibility = isset($config['visibility']) ? $config['visibility'] : 'all';
@@ -382,12 +522,15 @@ if (!function_exists('mj_member_login_component_get_account_links')) {
 
             $type = isset($config['type']) ? $config['type'] : 'standard';
 
+            $badge = 0;
+
             if ($type === 'logout') {
                 $links[] = array(
                     'key' => sanitize_key($key),
                     'label' => $label,
                     'url' => esc_url_raw(wp_logout_url($logout_redirect)),
                     'is_logout' => true,
+                    'badge' => 0,
                 );
                 continue;
             }
@@ -426,11 +569,23 @@ if (!function_exists('mj_member_login_component_get_account_links')) {
                 $url = mj_member_login_component_resolve_account_link($slug, $account_base, $normalized_query);
             }
 
+            if ($key === 'contact_messages') {
+                $badge = $unread_contact_count;
+                if ($badge > 0) {
+                    $base_label = trim(preg_replace('/\s*\(\d+\)\s*$/', '', $label));
+                    if ($base_label === '') {
+                        $base_label = $label;
+                    }
+                    $label = sprintf('%s (%d)', $base_label, $badge);
+                }
+            }
+
             $links[] = array(
                 'key' => sanitize_key($key),
                 'label' => $label,
                 'url' => $url,
                 'is_logout' => false,
+                'badge' => $badge,
             );
         }
 
@@ -446,6 +601,7 @@ if (!function_exists('mj_member_login_component_get_account_links')) {
                 'label' => wp_strip_all_tags($link['label']),
                 'url' => esc_url($link['url']),
                 'is_logout' => !empty($link['is_logout']),
+                'badge' => isset($link['badge']) ? (int) $link['badge'] : 0,
             );
         }
 
@@ -455,6 +611,7 @@ if (!function_exists('mj_member_login_component_get_account_links')) {
                 'label' => __('Mon compte', 'mj-member'),
                 'url' => esc_url($account_base),
                 'is_logout' => false,
+                'badge' => 0,
             );
         }
 
@@ -617,9 +774,15 @@ if (!function_exists('mj_member_render_login_modal_component')) {
         $preview_mode = mj_member_login_component_is_preview_mode();
         $is_logged_in = is_user_logged_in() && !$preview_mode;
 
+        $contact_capability = Config::contactCapability();
+        $unread_contact_count = 0;
+        $account_button_label = $args['button_label_logged_in'] !== '' ? $args['button_label_logged_in'] : $defaults['button_label_logged_in'];
+
         $current_user = null;
         $member = null;
         $member_display_name = '';
+        $member_role_key = '';
+        $member_role_label = '';
         $member_avatar = array(
             'url' => '',
             'id' => 0,
@@ -631,8 +794,52 @@ if (!function_exists('mj_member_render_login_modal_component')) {
             if ($current_user instanceof WP_User && function_exists('mj_member_get_member_for_user')) {
                 $member = mj_member_get_member_for_user($current_user->ID);
             }
+
+            if ($current_user instanceof WP_User) {
+                $should_check_messages = ($contact_capability === '' || current_user_can($contact_capability));
+                if ($should_check_messages && function_exists('mj_member_login_component_get_unread_contact_message_count')) {
+                    $unread_contact_count = (int) mj_member_login_component_get_unread_contact_message_count($current_user->ID);
+                }
+            }
+
+            if ($member && property_exists($member, 'role')) {
+                $member_role_key = sanitize_key((string) $member->role);
+            }
+
+            if ($member_role_key === '' && $current_user instanceof WP_User) {
+                $primary_role = is_array($current_user->roles) && !empty($current_user->roles) ? (string) $current_user->roles[0] : '';
+                if ($primary_role !== '') {
+                    $member_role_key = sanitize_key($primary_role);
+                }
+            }
+
+            if ($member_role_key !== '') {
+                $component_classes[] = 'mj-member-login-component--role-' . sanitize_html_class($member_role_key);
+            } else {
+                $component_classes[] = 'mj-member-login-component--role-default';
+            }
+
+            if (class_exists('MjMembers_CRUD')) {
+                $role_labels = MjMembers_CRUD::getRoleLabels();
+                if (is_array($role_labels) && $member_role_key !== '' && isset($role_labels[$member_role_key])) {
+                    $member_role_label = sanitize_text_field($role_labels[$member_role_key]);
+                }
+            }
+
             $member_display_name = mj_member_login_component_get_member_display_name($current_user, $member);
             $member_avatar = mj_member_login_component_get_member_avatar($current_user, $member);
+        }
+
+        if ($preview_mode && !$is_logged_in) {
+            $unread_contact_count = (int) apply_filters('mj_member_contact_messages_preview_unread_total', 2, array('context' => 'login_component'));
+        }
+
+        if ($unread_contact_count > 0) {
+            $base_label = trim(preg_replace('/\s*\(\d+\)\s*$/', '', $account_button_label));
+            if ($base_label === '') {
+                $base_label = $account_button_label;
+            }
+            $account_button_label = sprintf('%s (%d)', $base_label, $unread_contact_count);
         }
 
         static $instance_counter = 0;
@@ -687,7 +894,10 @@ if (!function_exists('mj_member_render_login_modal_component')) {
         }
 
         if ($is_logged_in) {
-            $account_links = mj_member_login_component_get_account_links($redirect_url, $args);
+            $link_args = $args;
+            $link_args['unread_contact_count'] = $unread_contact_count;
+            $link_args['preview_mode'] = $preview_mode;
+            $account_links = mj_member_login_component_get_account_links($redirect_url, $link_args);
         }
         
 
@@ -747,6 +957,9 @@ if (!function_exists('mj_member_render_login_modal_component')) {
         if ($button_icon_html !== '') {
             $trigger_classes[] = 'mj-member-login-component__trigger--has-icon';
         }
+        if ($is_logged_in) {
+            $trigger_classes[] = 'mj-member-login-component__trigger--account';
+        }
 
         $modal_classes = array('mj-member-login-component__modal');
         $modal_should_open = !$is_logged_in && !empty($errors);
@@ -754,15 +967,67 @@ if (!function_exists('mj_member_render_login_modal_component')) {
             $modal_classes[] = 'is-active';
         }
 
+        $wrapper_attributes = ' data-mj-member-login';
+        if ($preview_mode) {
+            $wrapper_attributes .= ' data-preview="1"';
+        }
+        if ($is_logged_in && $member_role_key !== '') {
+            $wrapper_attributes .= ' data-member-role="' . esc_attr($member_role_key) . '"';
+        }
+
+        $member_initials = '';
+        if ($is_logged_in && $member_avatar['url'] === '' && $member_display_name !== '') {
+            $words = preg_split('/\s+/', $member_display_name);
+            if (is_array($words) && !empty($words)) {
+                $first = isset($words[0]) ? $words[0] : '';
+                $second = isset($words[1]) ? $words[1] : '';
+                $initials = '';
+                if ($first !== '') {
+                    $initials .= function_exists('mb_substr') ? mb_substr($first, 0, 1) : substr($first, 0, 1);
+                }
+                if ($second !== '') {
+                    $initials .= function_exists('mb_substr') ? mb_substr($second, 0, 1) : substr($second, 0, 1);
+                }
+                if ($initials === '' && $first !== '') {
+                    $initials = function_exists('mb_substr') ? mb_substr($first, 0, 1) : substr($first, 0, 1);
+                }
+                $member_initials = strtoupper($initials);
+            }
+        }
+
         ob_start();
         ?>
-        <div class="<?php echo esc_attr(implode(' ', $component_classes)); ?>" data-mj-member-login<?php echo $preview_mode ? ' data-preview="1"' : ''; ?>>
+        <div class="<?php echo esc_attr(implode(' ', $component_classes)); ?>"<?php echo $wrapper_attributes; ?>>
             <?php if ($is_logged_in) : ?>
-                <a class="<?php echo esc_attr(implode(' ', $trigger_classes)); ?>" href="<?php echo esc_url($redirect_url); ?>">
-                    <?php if ($button_icon_html !== '') : ?>
-                        <span class="mj-member-login-component__trigger-icon" aria-hidden="true"><?php echo $button_icon_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
-                    <?php endif; ?>
-                    <span class="mj-member-login-component__trigger-label"><?php echo esc_html($button_label); ?></span>
+                <?php
+                $logged_in_label = $member_display_name !== ''
+                    ? $member_display_name
+                    : __('Profil membre', 'mj-member');
+                $logged_in_aria = $member_display_name !== ''
+                    ? sprintf(__('Accéder au profil de %s', 'mj-member'), $member_display_name)
+                    : __('Accéder à votre profil membre', 'mj-member');
+                if ($unread_contact_count > 0) {
+                    $logged_in_aria .= ' ' . sprintf(_n('Vous avez %d message non lu.', 'Vous avez %d messages non lus.', $unread_contact_count, 'mj-member'), $unread_contact_count);
+                }
+                ?>
+                <a class="<?php echo esc_attr(implode(' ', $trigger_classes)); ?>" href="<?php echo esc_url($redirect_url); ?>" aria-label="<?php echo esc_attr($logged_in_aria); ?>">
+                    <span class="mj-member-login-component__trigger-visual" aria-hidden="true">
+                        <span class="mj-member-login-component__trigger-avatar">
+                            <?php if ($member_avatar['url'] !== '') : ?>
+                                <img src="<?php echo esc_url($member_avatar['url']); ?>" alt="<?php echo esc_attr($member_avatar_alt); ?>" loading="lazy" />
+                            <?php elseif ($member_initials !== '') : ?>
+                                <span class="mj-member-login-component__trigger-avatar-placeholder"><?php echo esc_html($member_initials); ?></span>
+                            <?php else : ?>
+                                <span class="mj-member-login-component__trigger-avatar-placeholder" aria-hidden="true">?</span>
+                            <?php endif; ?>
+                        </span>
+                    </span>
+                    <span class="mj-member-login-component__trigger-info">
+                        <span class="mj-member-login-component__trigger-label"><?php echo esc_html($account_button_label); ?></span>
+                        <?php if ($logged_in_label !== '') : ?>
+                            <span class="mj-member-login-component__trigger-name"><?php echo esc_html($logged_in_label); ?></span>
+                        <?php endif; ?>
+                    </span>
                 </a>
             <?php else : ?>
                 <button type="button" class="<?php echo esc_attr(implode(' ', $trigger_classes)); ?>" data-mj-login-trigger data-target="<?php echo esc_attr($modal_id); ?>">
@@ -899,119 +1164,21 @@ if (!function_exists('mj_member_register_elementor_login_widget')) {
             return;
         }
 
-        require_once MJ_MEMBER_PATH . 'includes/elementor/class-mj-member-login-widget.php';
-        if (!class_exists('Mj_Member_Elementor_Profile_Widget', false)) {
-            $profile_widget = MJ_MEMBER_PATH . 'includes/elementor/class-mj-member-profile-widget.php';
-            if (file_exists($profile_widget)) {
-                require_once $profile_widget;
+        if (!function_exists('mj_member_get_elementor_widgets_map') || !function_exists('mj_member_load_elementor_widgets')) {
+            return;
+        }
+
+        $widgets_map = mj_member_get_elementor_widgets_map();
+        $loaded_widgets = mj_member_load_elementor_widgets($widgets_map);
+
+        foreach ($widgets_map as $class_name => $relative_path) {
+            if (empty($loaded_widgets[$class_name]) || !class_exists($class_name, false)) {
+                continue;
             }
-        }
 
-        if (!class_exists('Mj_Member_Elementor_Account_Links_Widget', false)) {
-            $account_links_widget = MJ_MEMBER_PATH . 'includes/elementor/class-mj-member-account-links-widget.php';
-            if (file_exists($account_links_widget)) {
-                require_once $account_links_widget;
+            if (is_subclass_of($class_name, 'Elementor\\Widget_Base')) {
+                $widgets_manager->register(new $class_name());
             }
-        }
-
-        if (!class_exists('Mj_Member_Elementor_Subscription_Widget', false)) {
-            $subscription_widget = MJ_MEMBER_PATH . 'includes/elementor/class-mj-member-subscription-widget.php';
-            if (file_exists($subscription_widget)) {
-                require_once $subscription_widget;
-            }
-        }
-
-        if (!class_exists('Mj_Member_Elementor_Registrations_Widget', false)) {
-            $registrations_widget = MJ_MEMBER_PATH . 'includes/elementor/class-mj-member-registrations-widget.php';
-            if (file_exists($registrations_widget)) {
-                require_once $registrations_widget;
-            }
-        }
-
-        if (!class_exists('Mj_Member_Elementor_Events_Widget', false)) {
-            $events_widget = MJ_MEMBER_PATH . 'includes/elementor/class-mj-member-events-widget.php';
-            if (file_exists($events_widget)) {
-                require_once $events_widget;
-            }
-        }
-
-        if (!class_exists('Mj_Member_Elementor_Events_Calendar_Widget', false)) {
-            $events_calendar_widget = MJ_MEMBER_PATH . 'includes/elementor/class-mj-member-events-calendar-widget.php';
-            if (file_exists($events_calendar_widget)) {
-                require_once $events_calendar_widget;
-            }
-        }
-
-        if (!class_exists('Mj_Member_Elementor_Locations_Widget', false)) {
-            $locations_widget = MJ_MEMBER_PATH . 'includes/elementor/class-mj-member-locations-widget.php';
-            if (file_exists($locations_widget)) {
-                require_once $locations_widget;
-            }
-        }
-
-        if (!class_exists('Mj_Member_Elementor_Animateur_Widget', false)) {
-            $animateur_widget = MJ_MEMBER_PATH . 'includes/elementor/class-mj-member-animateur-widget.php';
-            if (file_exists($animateur_widget)) {
-                require_once $animateur_widget;
-            }
-        }
-
-        if (!class_exists('Mj_Member_Elementor_Notification_Preferences_Widget', false)) {
-            $notification_preferences_widget = MJ_MEMBER_PATH . 'includes/elementor/class-mj-member-notification-preferences-widget.php';
-            if (file_exists($notification_preferences_widget)) {
-                require_once $notification_preferences_widget;
-            }
-        }
-
-        if (!class_exists('Mj_Member_Elementor_Payment_Success_Widget', false)) {
-            $payment_success_widget = MJ_MEMBER_PATH . 'includes/elementor/class-mj-member-payment-success-widget.php';
-            if (file_exists($payment_success_widget)) {
-                require_once $payment_success_widget;
-            }
-        }
-
-        if (class_exists('Mj_Member_Elementor_Login_Widget')) {
-            $widgets_manager->register(new \Mj_Member_Elementor_Login_Widget());
-        }
-
-        if (class_exists('Mj_Member_Elementor_Profile_Widget')) {
-            $widgets_manager->register(new \Mj_Member_Elementor_Profile_Widget());
-        }
-
-        if (class_exists('Mj_Member_Elementor_Account_Links_Widget')) {
-            $widgets_manager->register(new \Mj_Member_Elementor_Account_Links_Widget());
-        }
-
-        if (class_exists('Mj_Member_Elementor_Subscription_Widget')) {
-            $widgets_manager->register(new \Mj_Member_Elementor_Subscription_Widget());
-        }
-
-        if (class_exists('Mj_Member_Elementor_Registrations_Widget')) {
-            $widgets_manager->register(new \Mj_Member_Elementor_Registrations_Widget());
-        }
-
-        if (class_exists('Mj_Member_Elementor_Events_Widget')) {
-            $widgets_manager->register(new \Mj_Member_Elementor_Events_Widget());
-        }
-
-        if (class_exists('Mj_Member_Elementor_Events_Calendar_Widget')) {
-            $widgets_manager->register(new \Mj_Member_Elementor_Events_Calendar_Widget());
-        }
-
-        if (class_exists('Mj_Member_Elementor_Locations_Widget')) {
-            $widgets_manager->register(new \Mj_Member_Elementor_Locations_Widget());
-        }
-
-        if (class_exists('Mj_Member_Elementor_Animateur_Widget')) {
-            $widgets_manager->register(new \Mj_Member_Elementor_Animateur_Widget());
-        }
-
-        if (class_exists('Mj_Member_Elementor_Notification_Preferences_Widget')) {
-            $widgets_manager->register(new \Mj_Member_Elementor_Notification_Preferences_Widget());
-        }
-
-        if (class_exists('Mj_Member_Elementor_Payment_Success_Widget')) {
-            $widgets_manager->register(new \Mj_Member_Elementor_Payment_Success_Widget());
         }
     }
 }

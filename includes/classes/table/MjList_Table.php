@@ -1,9 +1,17 @@
-<?php 
+<?php
 
-if (!class_exists('WP_List_Table')) {
-    require_once(ABSPATH . 'wp-admin/includes/class-wp-list-table.php');
+namespace Mj\Member\Classes\Table;
+
+use Mj\Member\Classes\MjTools;
+use WP_List_Table;
+
+if (!defined('ABSPATH')) {
+    exit;
 }
 
+if (!class_exists('\\WP_List_Table')) {
+    require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
+}
 
 class MjList_Table extends WP_List_Table{
     private static $_message = array();

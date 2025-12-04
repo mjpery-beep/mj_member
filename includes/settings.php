@@ -1,4 +1,7 @@
 <?php
+
+use Mj\Member\Core\Config;
+
 // Admin settings page for plugin
 function mj_settings_page() {
     if (function_exists('wp_enqueue_media')) {
@@ -541,6 +544,7 @@ function mj_settings_page() {
                                 $default_label = isset($account_link_defaults[$link_key]['label']) ? $account_link_defaults[$link_key]['label'] : (isset($link_config['label']) ? $link_config['label'] : ucfirst($link_key));
                                 $is_logout = isset($link_config['type']) && $link_config['type'] === 'logout';
                                 $is_for_animateur = isset($link_config['visibility']) && $link_config['visibility'] === 'animateur';
+                                $requires_capability = isset($link_config['requires_capability']) ? (string) $link_config['requires_capability'] : '';
                                 $editable_label = !empty($link_config['editable_label']);
                                 $current_label = isset($link_config['label']) ? $link_config['label'] : $default_label;
                                 $page_id_value = isset($link_config['page_id']) ? (int) $link_config['page_id'] : 0;
@@ -589,6 +593,21 @@ function mj_settings_page() {
                                 </p>
                                 <?php if ($is_for_animateur) : ?>
                                     <p style="margin:0 0 8px 0; color:#0f766e; font-size:13px;">Visible uniquement pour les membres ayant le rôle d'animateur.</p>
+                                <?php endif; ?>
+                                <?php if ($requires_capability) : ?>
+                                    <p style="margin:0 0 8px 0; color:#312e81; font-size:13px;">
+                                        <?php
+                                        $contact_cap = Config::contactCapability() ?: 'mj_manage_contact_messages';
+                                        if ($requires_capability === $contact_cap) {
+                                            esc_html_e('Visible pour les responsables des messages et les membres disposant de conversations.', 'mj-member');
+                                        } else {
+                                            printf(
+                                                esc_html__('Visible uniquement pour les utilisateurs disposant de la capacité %s.', 'mj-member'),
+                                                esc_html($requires_capability)
+                                            );
+                                        }
+                                        ?>
+                                    </p>
                                 <?php endif; ?>
                                 <?php if ($is_logout) : ?>
                                     <p style="margin:0; color:#6b7280; font-size:13px;">La déconnexion redirige vers l'accueil après fermeture de session.</p>

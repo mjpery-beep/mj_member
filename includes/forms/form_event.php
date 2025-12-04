@@ -1,20 +1,26 @@
 <?php
 
+use Mj\Member\Core\Config;
+
 if (!defined('ABSPATH')) {
     exit;
 }
 
-if (!current_user_can(MJ_MEMBER_CAPABILITY)) {
+if (!current_user_can(Config::capability())) {
     wp_die('Acces refuse');
 }
 
-require_once MJ_MEMBER_PATH . 'includes/classes/crud/MjEvents_CRUD.php';
-require_once MJ_MEMBER_PATH . 'includes/classes/crud/MjMembers_CRUD.php';
-require_once MJ_MEMBER_PATH . 'includes/classes/crud/MjEventAnimateurs.php';
-require_once MJ_MEMBER_PATH . 'includes/classes/crud/MjEventRegistrations.php';
-require_once MJ_MEMBER_PATH . 'includes/classes/crud/MjEventLocations.php';
-require_once MJ_MEMBER_PATH . 'includes/classes/crud/MjEventAttendance.php';
-require_once MJ_MEMBER_PATH . 'includes/classes/MjEventSchedule.php';
+$basePath = Config::path();
+$baseUrl = Config::url();
+$pluginVersion = Config::version();
+
+require_once $basePath . 'includes/classes/crud/MjEvents_CRUD.php';
+require_once $basePath . 'includes/classes/crud/MjMembers_CRUD.php';
+require_once $basePath . 'includes/classes/crud/MjEventAnimateurs.php';
+require_once $basePath . 'includes/classes/crud/MjEventRegistrations.php';
+require_once $basePath . 'includes/classes/crud/MjEventLocations.php';
+require_once $basePath . 'includes/classes/crud/MjEventAttendance.php';
+require_once $basePath . 'includes/classes/MjEventSchedule.php';
 
 if (!function_exists('mj_member_parse_event_datetime')) {
     function mj_member_parse_event_datetime($value) {
@@ -308,16 +314,16 @@ if (function_exists('wp_enqueue_editor')) {
 wp_enqueue_style('wp-color-picker');
 wp_enqueue_style(
     'mj-admin-events',
-    MJ_MEMBER_URL . 'includes/css/admin-events.css',
+    $baseUrl . 'includes/css/admin-events.css',
     array(),
-    MJ_MEMBER_VERSION
+    $pluginVersion
 );
 wp_enqueue_script('wp-color-picker');
 wp_enqueue_script(
     'mj-admin-events',
-    MJ_MEMBER_URL . 'includes/js/admin-events.js',
+    $baseUrl . 'includes/js/admin-events.js',
     array('jquery', 'wp-color-picker'),
-    MJ_MEMBER_VERSION,
+    $pluginVersion,
     true
 );
 $type_color_palette = method_exists('MjEvents_CRUD', 'get_type_colors') ? MjEvents_CRUD::get_type_colors() : array();
@@ -1063,7 +1069,7 @@ if ($action === 'edit' && $event_id > 0 && $event) {
     $event_type_key = isset($event->type) ? sanitize_key((string) $event->type) : $event_type_key;
 
     if (!function_exists('mj_member_prepare_animateur_event_data')) {
-        require_once MJ_MEMBER_PATH . 'includes/templates/elementor/animateur_account.php';
+        require_once $basePath . 'includes/templates/elementor/animateur_account.php';
     }
 
     $admin_event_snapshot = mj_member_prepare_animateur_event_data(

@@ -1,11 +1,15 @@
 <?php
 
+use Mj\Member\Core\Config;
+
 if (!defined('ABSPATH')) {
     exit;
 }
 
 function mj_member_import_members_page() {
-    if (!current_user_can(MJ_MEMBER_CAPABILITY)) {
+    $capability = Config::capability();
+
+    if (!current_user_can($capability)) {
         wp_die(__('Vous n\'avez pas les droits suffisants pour importer des membres.', 'mj-member'));
     }
 

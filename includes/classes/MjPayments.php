@@ -1,4 +1,11 @@
 <?php
+
+namespace Mj\Member\Classes;
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
 class MjPayments extends MjTools {
 
     /**
@@ -27,6 +34,39 @@ class MjPayments extends MjTools {
         $event_id = isset($options['event_id']) ? (int) $options['event_id'] : 0;
         $registration_id = isset($options['registration_id']) ? (int) $options['registration_id'] : 0;
         $payer_id = isset($options['payer_id']) ? (int) $options['payer_id'] : 0;
+
+        $occurrence_mode = isset($options['occurrence_mode']) ? sanitize_key($options['occurrence_mode']) : '';
+        $occurrence_count = isset($options['occurrence_count']) ? (int) $options['occurrence_count'] : 1;
+        if ($occurrence_count <= 0) {
+            $occurrence_count = 1;
+        }
+
+        $occurrence_list = array();
+        if (!empty($options['occurrence_list']) && is_array($options['occurrence_list'])) {
+            foreach ($options['occurrence_list'] as $occurrence_entry) {
+                $normalized = '';
+                if (class_exists('MjEventAttendance')) {
+                    $normalized = MjEventAttendance::normalize_occurrence($occurrence_entry);
+                }
+                if ($normalized === '' && !is_scalar($occurrence_entry)) {
+                    continue;
+                }
+                if ($normalized === '') {
+                    $normalized = sanitize_text_field((string) $occurrence_entry);
+                }
+                if ($normalized === '') {
+                    continue;
+                }
+                $occurrence_list[$normalized] = $normalized;
+            }
+            if (!empty($occurrence_list)) {
+                $occurrence_list = array_values($occurrence_list);
+            }
+        }
+
+        if ($occurrence_mode === '') {
+            $occurrence_mode = (!empty($occurrence_list) || $occurrence_count > 1) ? 'custom' : 'all';
+        }
 
         $event = null;
         if ($context_type === 'event') {
@@ -62,13 +102,27 @@ class MjPayments extends MjTools {
             }
         }
 
+        $metadata['occurrence_mode'] = $occurrence_mode;
+        $metadata['occurrence_count'] = $occurrence_count;
+        if (!empty($occurrence_list)) {
+            $metadata['occurrence_list'] = implode(',', $occurrence_list);
+        }
+
+        $total_amount = round($amount * $occurrence_count, 2);
+        if ($total_amount <= 0) {
+            $total_amount = round($amount, 2);
+        }
+        if ($total_amount <= 0) {
+            $total_amount = 0.01;
+        }
+
         $table = $wpdb->prefix . 'mj_payments';
         $token = wp_generate_password(24, false, false);
         $now = current_time('mysql');
 
         $checkout_session = self::create_checkout_session(
             $member,
-            $amount,
+            $total_amount,
             array(
                 'product_name' => $product_name,
                 'product_description' => $product_description,
@@ -95,7 +149,7 @@ class MjPayments extends MjTools {
                 'payer_id' => $payer_id > 0 ? $payer_id : 0,
                 'event_id' => $event_id > 0 ? $event_id : 0,
                 'registration_id' => $registration_id > 0 ? $registration_id : 0,
-                'amount' => number_format((float) $amount, 2, '.', ''),
+                'amount' => number_format((float) $total_amount, 2, '.', ''),
                 'status' => 'pending',
                 'token' => $token,
                 'external_ref' => $checkout_session['id'],
@@ -118,7 +172,12 @@ class MjPayments extends MjTools {
             'stripe_session_id' => $checkout_session['id'],
             'checkout_url' => $checkout_session['url'],
             'qr_url' => $qr_url,
-            'amount' => number_format((float) $amount, 2),
+            'amount' => number_format((float) $total_amount, 2),
+            'amount_label' => number_format_i18n((float) $total_amount, 2),
+            'amount_raw' => (float) $total_amount,
+            'occurrence_mode' => $occurrence_mode,
+            'occurrence_count' => $occurrence_count,
+            'occurrence_list' => $occurrence_list,
         );
     }
 
@@ -906,4 +965,6 @@ class MjPayments extends MjTools {
 }
 
 MjPayments::bootstrap();
+
+\class_alias(__NAMESPACE__ . '\\MjPayments', 'MjPayments');
 

@@ -1,18 +1,23 @@
 <?php
 
+use Mj\Member\Core\Config;
+
 if (!defined('ABSPATH')) {
     exit;
 }
 
 function mj_custom_admin_styles($hook)
 {
-    wp_enqueue_style('custom-styles', MJ_MEMBER_URL . 'css/styles.css');
+    $baseUrl = Config::url();
+    $basePath = Config::path();
 
-    $inline_edit_path = MJ_MEMBER_PATH . 'js/inline-edit.js';
+    wp_enqueue_style('custom-styles', $baseUrl . 'css/styles.css');
+
+    $inline_edit_path = $basePath . 'js/inline-edit.js';
     $inline_edit_version = file_exists($inline_edit_path) ? filemtime($inline_edit_path) : '1.0.0';
-    wp_enqueue_script('mj-inline-edit', MJ_MEMBER_URL . 'js/inline-edit.js', array('jquery'), $inline_edit_version, true);
+    wp_enqueue_script('mj-inline-edit', $baseUrl . 'js/inline-edit.js', array('jquery'), $inline_edit_version, true);
     wp_enqueue_media();
-    wp_enqueue_script('mj-photo-upload', MJ_MEMBER_URL . 'js/photo-upload.js', array('jquery'), '1.0.0', true);
+    wp_enqueue_script('mj-photo-upload', $baseUrl . 'js/photo-upload.js', array('jquery'), '1.0.0', true);
     wp_localize_script('mj-inline-edit', 'mjMembers', array(
         'ajaxurl' => admin_url('admin-ajax.php'),
         'nonce' => wp_create_nonce('mj_inline_edit_nonce'),
@@ -36,17 +41,17 @@ function mj_custom_admin_styles($hook)
         'nonce' => wp_create_nonce('mj_photo_upload_nonce')
     ));
 
-    $payments_js_path = MJ_MEMBER_PATH . 'includes/js/admin-payments.js';
+    $payments_js_path = $basePath . 'includes/js/admin-payments.js';
     $payments_js_version = file_exists($payments_js_path) ? filemtime($payments_js_path) : '1.0.1';
-    wp_enqueue_script('mj-admin-payments', MJ_MEMBER_URL . 'includes/js/admin-payments.js', array('jquery'), $payments_js_version, true);
+    wp_enqueue_script('mj-admin-payments', $baseUrl . 'includes/js/admin-payments.js', array('jquery'), $payments_js_version, true);
     wp_localize_script('mj-admin-payments', 'mjPayments', array(
         'ajaxurl' => admin_url('admin-ajax.php'),
         'nonce' => wp_create_nonce('mj_admin_payments_nonce')
     ));
 
-    $user_link_js_path = MJ_MEMBER_PATH . 'js/member-user-link.js';
-    $user_link_js_version = file_exists($user_link_js_path) ? filemtime($user_link_js_path) : MJ_MEMBER_VERSION;
-    wp_enqueue_script('mj-member-user-link', MJ_MEMBER_URL . 'js/member-user-link.js', array('jquery'), $user_link_js_version, true);
+    $user_link_js_path = $basePath . 'js/member-user-link.js';
+    $user_link_js_version = file_exists($user_link_js_path) ? filemtime($user_link_js_path) : Config::version();
+    wp_enqueue_script('mj-member-user-link', $baseUrl . 'js/member-user-link.js', array('jquery'), $user_link_js_version, true);
 
     $editable_roles = function_exists('get_editable_roles') ? get_editable_roles() : array();
     $roles_for_modal = array();
@@ -87,13 +92,13 @@ function mj_custom_admin_styles($hook)
     if (is_string($hook) && strpos($hook, 'mj_send_emails') !== false) {
         wp_enqueue_editor();
 
-        $send_emails_css_path = MJ_MEMBER_PATH . 'css/admin-send-emails.css';
-        $send_emails_css_version = file_exists($send_emails_css_path) ? filemtime($send_emails_css_path) : MJ_MEMBER_VERSION;
-        wp_enqueue_style('mj-member-admin-send-emails', MJ_MEMBER_URL . 'css/admin-send-emails.css', array(), $send_emails_css_version);
+        $send_emails_css_path = $basePath . 'css/admin-send-emails.css';
+        $send_emails_css_version = file_exists($send_emails_css_path) ? filemtime($send_emails_css_path) : Config::version();
+        wp_enqueue_style('mj-member-admin-send-emails', $baseUrl . 'css/admin-send-emails.css', array(), $send_emails_css_version);
 
-        $send_emails_js_path = MJ_MEMBER_PATH . 'js/admin-send-emails.js';
-        $send_emails_js_version = file_exists($send_emails_js_path) ? filemtime($send_emails_js_path) : MJ_MEMBER_VERSION;
-        wp_enqueue_script('mj-member-admin-send-emails', MJ_MEMBER_URL . 'js/admin-send-emails.js', array('jquery'), $send_emails_js_version, true);
+        $send_emails_js_path = $basePath . 'js/admin-send-emails.js';
+        $send_emails_js_version = file_exists($send_emails_js_path) ? filemtime($send_emails_js_path) : Config::version();
+        wp_enqueue_script('mj-member-admin-send-emails', $baseUrl . 'js/admin-send-emails.js', array('jquery'), $send_emails_js_version, true);
 
         wp_localize_script('mj-member-admin-send-emails', 'mjSendEmails', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
@@ -127,3 +132,59 @@ function mj_custom_admin_styles($hook)
     }
 }
 add_action('admin_enqueue_scripts', 'mj_custom_admin_styles');
+
+if (!function_exists('mj_member_register_public_assets')) {
+    function mj_member_register_public_assets() {
+        $version = Config::version();
+        $basePath = Config::path();
+        $baseUrl = Config::url();
+
+        $contact_form_path = $basePath . 'js/contact-form.js';
+        $contact_form_version = file_exists($contact_form_path) ? (string) filemtime($contact_form_path) : $version;
+
+        $components_style_path = $basePath . 'css/styles.css';
+        $components_style_version = file_exists($components_style_path) ? (string) filemtime($components_style_path) : $version;
+
+        wp_register_style(
+            'mj-member-components',
+            $baseUrl . 'css/styles.css',
+            array(),
+            $components_style_version
+        );
+
+        wp_register_script(
+            'mj-member-contact-form',
+            $baseUrl . 'js/contact-form.js',
+            array('jquery'),
+            $contact_form_version,
+            true
+        );
+
+        $contact_messages_js_path = $basePath . 'js/contact-messages.js';
+        $contact_messages_version = file_exists($contact_messages_js_path) ? (string) filemtime($contact_messages_js_path) : $version;
+
+        wp_register_script(
+            'mj-member-contact-messages',
+            $baseUrl . 'js/contact-messages.js',
+            array('jquery'),
+            $contact_messages_version,
+            true
+        );
+
+        wp_localize_script('mj-member-contact-messages', 'mjMemberContactMessages', array(
+            'i18n' => array(
+                'required' => __('Merci de saisir un message.', 'mj-member'),
+                'genericError' => __('Une erreur est survenue. Merci de réessayer.', 'mj-member'),
+                'success' => __('Votre réponse a bien été envoyée.', 'mj-member'),
+                'sending' => __('Envoi…', 'mj-member'),
+                'submit' => __('Envoyer', 'mj-member'),
+                'configError' => __('Configuration invalide pour la réponse rapide.', 'mj-member'),
+                'ownerHeading' => __('Votre réponse', 'mj-member'),
+                'teamHeading' => __('Réponse de l’équipe MJ', 'mj-member'),
+                'badgeUnread' => __('Non lu', 'mj-member'),
+            ),
+        ));
+    }
+
+    add_action('init', 'mj_member_register_public_assets', 8);
+}

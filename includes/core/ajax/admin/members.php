@@ -1,5 +1,7 @@
 <?php
 
+use Mj\Member\Core\Config;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -14,7 +16,9 @@ function mj_link_member_user_callback() {
         wp_send_json_error(array('message' => __('Vérification de sécurité échouée.', 'mj-member')), 403);
     }
 
-    if (!current_user_can(MJ_MEMBER_CAPABILITY) || (!current_user_can('create_users') && !current_user_can('promote_users'))) {
+    $capability = Config::capability();
+
+    if (!current_user_can($capability) || (!current_user_can('create_users') && !current_user_can('promote_users'))) {
         wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
     }
 
@@ -231,7 +235,9 @@ function mj_inline_edit_member_callback() {
         wp_send_json_error(array('message' => 'Vérification de sécurité échouée'));
     }
 
-    if (!current_user_can(MJ_MEMBER_CAPABILITY)) {
+    $capability = Config::capability();
+
+    if (!current_user_can($capability)) {
         wp_send_json_error(array('message' => 'Accès non autorisé'));
     }
 
@@ -374,7 +380,9 @@ function mj_upload_member_photo_callback() {
         wp_send_json_error(array('message' => 'Vérification de sécurité échouée'));
     }
 
-    if (!current_user_can(MJ_MEMBER_CAPABILITY)) {
+    $capability = Config::capability();
+
+    if (!current_user_can($capability)) {
         wp_send_json_error(array('message' => 'Accès non autorisé'));
     }
 

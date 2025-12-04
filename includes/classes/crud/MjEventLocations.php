@@ -1,5 +1,9 @@
 <?php
 
+namespace Mj\Member\Classes\Crud;
+
+use WP_Error;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -550,3 +554,5 @@ class MjEventLocations {
         }
     }
 }
+
+class_alias(__NAMESPACE__ . '\\MjEventLocations', 'MjEventLocations');

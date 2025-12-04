@@ -1,6 +1,10 @@
 <?php
 
-require_once plugin_dir_path(__FILE__) . 'classes/table/MjMembers_List_Table.php';
+use Mj\Member\Classes\Table\MjMembers_List_Table;
+
+if (!defined('ABSPATH')) {
+    exit;
+}
 
 $table = new MjMembers_List_Table();
 

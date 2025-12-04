@@ -1,6 +1,10 @@
 <?php
 
-require_once plugin_dir_path(__FILE__) . 'classes/table/MjEvents_List_Table.php';
+use Mj\Member\Classes\Table\MjEvents_List_Table;
+
+if (!defined('ABSPATH')) {
+    exit;
+}
 
 $table = new MjEvents_List_Table();
 $table->process_table_actions();

@@ -1,5 +1,13 @@
 <?php
 
+namespace Mj\Member\Classes;
+
+use WP_Error;
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
 class MjSms extends MjTools {
     public static function is_test_mode_enabled() {
         return get_option('mj_sms_test_mode', '0') === '1';
@@ -268,13 +276,6 @@ class MjSms extends MjTools {
             }
 
             if (!class_exists('MjSmsTwilio')) {
-                $twilio_path = __DIR__ . '/sms/MjSmsTwilio.php';
-                if (file_exists($twilio_path)) {
-                    require_once $twilio_path;
-                }
-            }
-
-            if (!class_exists('MjSmsTwilio')) {
                 return new WP_Error('mj_sms_missing_twilio_client', __('Le client Twilio est introuvable.', 'mj-member'));
             }
 
@@ -395,3 +396,5 @@ class MjSms extends MjTools {
 }
 
 add_filter('mj_member_sms_send', array('MjSms', 'filter_default_gateway'), 10, 5);
+
+\class_alias(__NAMESPACE__ . '\\MjSms', 'MjSms');

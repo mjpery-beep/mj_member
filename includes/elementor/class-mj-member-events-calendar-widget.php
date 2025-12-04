@@ -9,6 +9,7 @@ use Elementor\Core\Kits\Documents\Tabs\Global_Colors;
 use Elementor\Core\Kits\Documents\Tabs\Global_Typography;
 use Elementor\Group_Control_Typography;
 use Elementor\Widget_Base;
+use Mj\Member\Core\Config;
 
 class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
     public function get_name() {
@@ -127,7 +128,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 'label_on' => __('Oui', 'mj-member'),
                 'label_off' => __('Non', 'mj-member'),
                 'return_value' => 'yes',
-                'default' => 'no',
+                'default' => 'yes',
             )
         );
 
@@ -197,15 +198,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 'name' => 'calendar_event_meta_typography',
                 'label' => __('Métadonnées', 'mj-member'),
                 'selector' => '{{WRAPPER}} .mj-member-events-calendar__event-meta',
-            )
-        );
-
-        $this->add_group_control(
-            Group_Control_Typography::get_type(),
-            array(
-                'name' => 'calendar_modal_typography',
-                'label' => __('Fenêtre modale', 'mj-member'),
-                'selector' => '{{WRAPPER}} .mj-member-events-modal',
             )
         );
 
@@ -357,9 +349,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         }
 
         $type_labels_map = method_exists('MjEvents_CRUD', 'get_type_labels') ? MjEvents_CRUD::get_type_labels() : array();
+        $available_type_filters = array();
 
         $next_event_pointer = null;
-        $modal_events = array();
 
         $create_datetime = static function ($value) use ($timezone) {
             $value = is_string($value) ? trim($value) : '';
@@ -438,7 +430,16 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             $map_link = !empty($event['location_map_link']) ? esc_url($event['location_map_link']) : '';
 
             $type_key = isset($event['type']) ? sanitize_key($event['type']) : '';
-            $type_label = isset($type_labels_map[$type_key]) ? $type_labels_map[$type_key] : ($type_key !== '' ? ucfirst($type_key) : '');
+            $type_label = isset($type_labels_map[$type_key]) ? $type_labels_map[$type_key] : '';
+            if ($type_label === '' && $type_key !== '') {
+                $type_label = ucfirst($type_key);
+            }
+            $event_type_key = $type_key !== '' ? $type_key : 'misc';
+            if ($type_key !== '') {
+                $available_type_filters[$type_key] = array(
+                    'label' => $type_label !== '' ? $type_label : ucfirst($type_key),
+                );
+            }
 
             $event_accent_color = isset($event['accent_color']) ? self::normalize_hex_color_value($event['accent_color']) : '';
             $palette = self::build_event_palette($event_accent_color, $type_key, $type_colors_map);
@@ -551,6 +552,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                     'time' => $is_head ? __('Toute la journée', 'mj-member') : '',
                                     'cover' => $is_head ? $cover_thumb : '',
                                     'type_label' => $is_head ? $type_label : '',
+                                    'type_key' => $event_type_key,
                                     'start_ts' => $day_iterator->getTimestamp(),
                                     'is_multi' => true,
                                     'is_multi_head' => $is_head,
@@ -571,6 +573,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             'event_key' => $multi_event_key,
                             'title' => $title,
                             'type_label' => $type_label,
+                            'type_key' => $event_type_key,
                             'start_day' => $segment_start_day_key,
                             'end_day' => $segment_end_day_key,
                             'start_ts' => $event_start_dt ? $event_start_dt->getTimestamp() : $clamped_start_day_dt->getTimestamp(),
@@ -582,32 +585,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         $has_any_event = true;
 
                         $segment_cursor = $month_end_dt->modify('+1 day')->setTime(0, 0, 0);
-                    }
-
-                    if (!isset($modal_events[$multi_event_key])) {
-                        $date_label = function_exists('mj_member_format_event_datetime_range')
-                            ? wp_strip_all_tags(mj_member_format_event_datetime_range($event_start_raw, $event_end_raw))
-                            : wp_date(get_option('date_format', 'd/m/Y'), $event_start_dt ? $event_start_dt->getTimestamp() : $clamped_start_day_dt->getTimestamp(), $timezone);
-
-                        $modal_events[$multi_event_key] = array(
-                            'id' => $multi_event_key,
-                            'title' => $title,
-                            'date' => $date_label,
-                            'time' => $event_start_dt ? wp_date(get_option('time_format', 'H:i'), $event_start_dt->getTimestamp(), $timezone) : '',
-                            'permalink' => $permalink,
-                            'cover' => $cover_modal,
-                            'location' => $location_label,
-                            'address' => $address_label,
-                            'location_description' => $location_notes,
-                            'map' => $map_embed,
-                            'map_link' => $map_link,
-                            'description' => $description_html,
-                            'price_label' => $price_label,
-                            'type_label' => $type_label,
-                            'palette' => $palette,
-                            'accent_color' => isset($palette['base']) ? $palette['base'] : '',
-                            'accent_contrast' => isset($palette['contrast']) ? $palette['contrast'] : '',
-                        );
                     }
 
                     $pointer_ts = $clamped_start_day_dt->getTimestamp();
@@ -670,6 +647,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     'time' => $time_label,
                     'cover' => $cover_thumb,
                     'type_label' => $type_label,
+                    'type_key' => $event_type_key,
                     'start_ts' => $start_ts,
                     'palette' => $palette,
                     'permalink' => $permalink,
@@ -677,32 +655,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 );
 
                 $has_any_event = true;
-
-                if (!isset($modal_events[$occurrence_key])) {
-                    $date_label = function_exists('mj_member_format_event_datetime_range')
-                        ? wp_strip_all_tags(mj_member_format_event_datetime_range($occurrence_start_raw, $occurrence_end_raw))
-                        : wp_date(get_option('date_format', 'd/m/Y H:i'), $start_ts, $timezone);
-
-                    $modal_events[$occurrence_key] = array(
-                        'id' => $occurrence_key,
-                        'title' => $title,
-                        'date' => $date_label,
-                        'time' => $time_label,
-                        'permalink' => $permalink,
-                        'cover' => $cover_modal,
-                        'location' => $location_label,
-                        'address' => $address_label,
-                        'location_description' => $location_notes,
-                        'map' => $map_embed,
-                        'map_link' => $map_link,
-                        'description' => $description_html,
-                        'price_label' => $price_label,
-                        'type_label' => $type_label,
-                        'palette' => $palette,
-                        'accent_color' => isset($palette['base']) ? $palette['base'] : '',
-                        'accent_contrast' => isset($palette['contrast']) ? $palette['contrast'] : '',
-                    );
-                }
 
                 if ($highlight_next && $start_ts >= $now_ts) {
                     if ($next_event_pointer === null || $start_ts < $next_event_pointer['start_ts']) {
@@ -717,6 +669,66 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             }
         }
 
+        if ($highlight_closure_days && !empty($closure_dates)) {
+            foreach ($closure_dates as $closure_date => $closure_details) {
+                $month_key = substr($closure_date, 0, 7);
+                if (!isset($months[$month_key])) {
+                    continue;
+                }
+
+                $ensure_day_bucket($months, $month_key, $closure_date);
+
+                $description = '';
+                if (is_array($closure_details) && !empty($closure_details['description'])) {
+                    $description = sanitize_text_field((string) $closure_details['description']);
+                }
+
+                $closure_title = __('MJ fermée', 'mj-member');
+                $closure_time_label = $description !== '' ? $description : '';
+                $closure_event_id = 'closure:' . $closure_date;
+                $closure_palette = self::build_closure_palette();
+                $closure_timestamp = strtotime($closure_date . ' 00:00:00');
+                if ($closure_timestamp === false) {
+                    $closure_timestamp = current_time('timestamp');
+                }
+
+                $event_list_reference = &$months[$month_key]['days'][$closure_date]['events'];
+                $exists_already = false;
+                foreach ($event_list_reference as $existing_entry) {
+                    if (isset($existing_entry['id']) && $existing_entry['id'] === $closure_event_id) {
+                        $exists_already = true;
+                        break;
+                    }
+                }
+
+                if (!$exists_already) {
+                    $event_list_reference[] = array(
+                        'id' => $closure_event_id,
+                        'title' => $closure_title,
+                        'time' => $closure_time_label,
+                        'cover' => '',
+                        'type_label' => __('Fermeture', 'mj-member'),
+                        'type_key' => 'closure',
+                        'start_ts' => $closure_timestamp,
+                        'is_closure' => true,
+                        'palette' => $closure_palette,
+                        'permalink' => '',
+                        'accent_color' => isset($closure_palette['base']) ? $closure_palette['base'] : '',
+                    );
+                }
+                unset($event_list_reference);
+
+                $months[$month_key]['days'][$closure_date]['is_closure'] = true;
+                $has_any_event = true;
+            }
+
+            if (!isset($available_type_filters['closure'])) {
+                $available_type_filters['closure'] = array(
+                    'label' => __('Fermeture', 'mj-member'),
+                );
+            }
+        }
+
         if ($next_event_pointer !== null && isset($months[$next_event_pointer['month_key']])) {
             $months[$next_event_pointer['month_key']]['has_next_event'] = true;
         }
@@ -726,7 +738,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         if (!$styles_printed) {
             $styles_printed = true;
             echo '<style>'
-                . '.mj-member-events-calendar{display:flex;flex-direction:column;gap:20px;--mj-events-calendar-nav-bg:#0f172a;--mj-events-calendar-nav-text:#ffffff;--mj-events-calendar-accent:#2563eb;--mj-events-calendar-surface:#ffffff;--mj-events-calendar-border:#e2e8f0;--mj-events-calendar-event-bg:#f8fafc;--mj-events-calendar-event-text:#1f2937;--mj-events-calendar-event-time:#475569;--mj-events-calendar-modal-bg:rgba(15,23,42,0.72);--mj-events-calendar-radius:14px;--mj-events-calendar-cta-text:#ffffff;}'
+                . '.mj-member-events-calendar{display:flex;flex-direction:column;gap:20px;--mj-events-calendar-nav-bg:#0f172a;--mj-events-calendar-nav-text:#ffffff;--mj-events-calendar-accent:#2563eb;--mj-events-calendar-surface:#ffffff;--mj-events-calendar-border:#e2e8f0;--mj-events-calendar-event-bg:#f8fafc;--mj-events-calendar-event-text:#1f2937;--mj-events-calendar-event-time:#475569;--mj-events-calendar-radius:14px;}'
                 . '.mj-member-events-calendar__title{margin:0;font-size:1.6rem;font-weight:700;color:var(--mj-events-calendar-nav-bg);}'
                 . '.mj-member-events-calendar__toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--mj-events-calendar-surface);border:1px solid var(--mj-events-calendar-border);border-radius:calc(var(--mj-events-calendar-radius));padding:16px;box-shadow:0 12px 28px rgba(15,23,42,0.06);}'
                 . '.mj-member-events-calendar button:hover,.mj-member-events-calendar button:focus{background:inherit;color:inherit;text-decoration:none;}'
@@ -737,6 +749,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 . '.mj-member-events-calendar__nav-button:disabled{opacity:0.45;cursor:not-allowed;background:rgba(255,255,255,0.12);transform:none;}'
                 . '.mj-member-events-calendar__month-chip{display:inline-flex;align-items:center;gap:10px;background:#ffffff;color:var(--mj-events-calendar-nav-bg);border-radius:999px;padding:6px 16px;font-weight:600;font-size:0.95rem;min-width:140px;justify-content:center;}'
                 . '.mj-member-events-calendar__toolbar-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}'
+                . '.mj-member-events-calendar__filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}'
+                . '.mj-member-events-calendar__filter{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:#f1f5f9;color:var(--mj-events-calendar-nav-bg);font-size:0.78rem;font-weight:600;}'
+                . '.mj-member-events-calendar__filter input{margin:0;}'
                 . '.mj-member-events-calendar__today-button{display:inline-flex;align-items:center;justify-content:center;padding:9px 22px;border-radius:12px;border:1px solid var(--mj-events-calendar-border);background:#ffffff;color:var(--mj-events-calendar-nav-bg);font-weight:600;cursor:pointer;transition:background 0.2s ease,box-shadow 0.2s ease;}'
                 . '.mj-member-events-calendar__today-button:hover,.mj-member-events-calendar__today-button:focus{background:#f8fafc;box-shadow:0 4px 12px rgba(15,23,42,0.08);}'
                 . '.mj-member-events-calendar__today-button:disabled{opacity:0.6;cursor:not-allowed;box-shadow:none;}'
@@ -746,7 +761,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 . '.mj-member-events-calendar__month.is-next-event .mj-member-events-calendar__month-heading{color:var(--mj-events-calendar-accent);}'
                 . '.mj-member-events-calendar__month-heading{margin:0;font-size:1.2rem;font-weight:700;color:var(--mj-events-calendar-nav-bg);}'
                 . '.mj-member-events-calendar__grid-wrapper{overflow:auto;border-radius:calc(var(--mj-events-calendar-radius));box-shadow:0 10px 26px rgba(15,23,42,0.1);}'
-                . '.mj-member-events-calendar__weekday-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));background:#f1f5f9;color:var(--mj-events-calendar-nav-bg);font-weight:600;text-transform:uppercase;font-size:0.75rem;letter-spacing:0.06em;border:1px solid var(--mj-events-calendar-border);border-bottom:none;border-radius:15px 15px 0 0px;overflow:hidden;}'
+                . '.mj-member-events-calendar__weekday-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));background:#f1f5f9;color:var(--mj-events-calendar-nav-bg);font-weight:600;text-transform:uppercase;font-size:0.75rem;letter-spacing:0.06em;border:1px solid var(--mj-events-calendar-border);border-bottom:none;border-radius:15px 15px 0 0;overflow:hidden;}'
                 . '.mj-member-events-calendar__weekday{padding:12px;border-right:1px solid var(--mj-events-calendar-border);text-align:center;}'
                 . '.mj-member-events-calendar__weekday:last-child{border-right:none;}'
                 . '.mj-member-events-calendar__weeks{display:flex;flex-direction:column;background:var(--mj-events-calendar-surface);border:1px solid var(--mj-events-calendar-border);border-top:none;border-radius:0 0 calc(var(--mj-events-calendar-radius)) calc(var(--mj-events-calendar-radius));overflow:hidden;min-width:640px;}'
@@ -761,6 +776,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 . '.mj-member-events-calendar__day.has-events{background:#f4f7fe;}'
                 . '.mj-member-events-calendar__day-number{font-size:0.95rem;font-weight:700;color:var(--mj-events-calendar-nav-bg);}'
                 . '.mj-member-events-calendar__day.is-today{background:#edf3fd;}'
+                . '.mj-member-events-calendar__day.is-closure{background:#fff7f7;}'
+                . '.mj-member-events-calendar__day.is-closure .mj-member-events-calendar__day-number{color:#b91c1c;}'
+                . '.mj-member-events-calendar__day.is-filtered-empty{opacity:0.65;}'
                 . '.mj-member-events-calendar__events{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}'
                 . '.mj-member-events-calendar__event{background:var(--mj-event-surface,var(--mj-events-calendar-event-bg));border-radius:12px;padding:0;display:flex;flex-direction:column;gap:6px;border:1px solid var(--mj-event-border,transparent);transition:background 0.2s ease,border-color 0.2s ease,box-shadow 0.2s ease;}'
                 . '.mj-member-events-calendar__event.is-next{border-color:var(--mj-event-accent,var(--mj-events-calendar-accent));background:var(--mj-event-highlight,#e5ecfd);}'
@@ -776,22 +794,43 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 . '.mj-member-events-calendar__event.is-multi:not(.is-multi-head) .mj-member-events-calendar__event-trigger{justify-content:center;}'
                 . '.mj-member-events-calendar__event-thumb{width:60px;height:60px;border-radius:10px;overflow:hidden;flex-shrink:0;background:var(--mj-event-thumb-bg,#e2e8f0);}'
                 . '.mj-member-events-calendar__event-thumb img{display:block;width:100%;height:100%;object-fit:cover;}'
-                . '.mj-member-events-calendar__event-copy{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;}'
+                . '.page-content .mj-member-events-calendar__event-copy{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;line-height:15px;text-decoration:none;}'
+                . '.mj-member-events-calendar__event-trigger{transition:transform 0.2s ease;text-decoration:none;}'
+                . '.mj-member-events-calendar__event-trigger:hover{transform:translateY(-1px);}'
                 . '.mj-member-events-calendar__event-title{font-size:0.82rem;font-weight:600;color:var(--mj-events-calendar-event-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}'
                 . '.mj-member-events-calendar__event-meta{display:flex;align-items:center;gap:6px;font-size:0.7rem;color:var(--mj-events-calendar-event-time);}'
                 . '.mj-member-events-calendar__event-continuation{display:block;width:100%;height:100%;min-height:12px;border-radius:999px;background:none;border:0;}'
                 . '.mj-member-events-calendar__event-type{display:inline-flex;align-items:center;gap:4px;font-size:0.66rem;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--mj-event-pill-bg,#d8e3fb);color:var(--mj-event-pill-text,var(--mj-events-calendar-accent));text-transform:uppercase;letter-spacing:0.05em;width:fit-content;}'
                 . '.mj-member-events-calendar__event.is-range-hover{background:var(--mj-event-range-bg,#c2d3f9);border-color:var(--mj-event-accent,var(--mj-events-calendar-accent));box-shadow:0 0 0 2px var(--mj-event-pill-bg,#d8e3fb);}'
                 . '.mj-member-events-calendar__multi-event.is-range-hover{transform:translateY(-1px);}'
+                . '.mj-member-events-calendar__event[data-calendar-type="closure"]{background:#fee2e2;border-color:#fecaca;}'
+                . '.mj-member-events-calendar__event[data-calendar-type="closure"] .mj-member-events-calendar__event-type{background:#ffe4e6;color:#be123c;}'
+                . '.mj-member-events-calendar__event.is-filtered-out{display:none!important;}'
                 . '.mj-member-events-calendar__empty{margin:0;font-size:0.95rem;color:#475569;}'
-                . '@media (max-width:782px){.mj-member-events-calendar__toolbar{flex-direction:column;align-items:stretch;gap:14px;}.mj-member-events-calendar__toolbar-left{justify-content:space-between;gap:12px;}.mj-member-events-calendar__nav-group{flex:1;justify-content:space-between;}.mj-member-events-calendar__toolbar-actions{width:100%;}.mj-member-events-calendar__today-button{width:100%;}.mj-member-events-calendar__weeks{min-width:520px;}}'
+                . '.mj-member-events-calendar__mobile-list{display:none;flex-direction:column;gap:12px;}'
+                . '.mj-member-events-calendar__mobile-day{border:1px solid var(--mj-events-calendar-border);border-radius:12px;background:#ffffff;overflow:hidden;}'
+                . '.mj-member-events-calendar__mobile-day.is-filtered-empty{display:none;}'
+                . '.mj-member-events-calendar__mobile-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;font-weight:600;color:var(--mj-events-calendar-nav-bg);cursor:pointer;}'
+                . '.mj-member-events-calendar__mobile-summary::-webkit-details-marker{display:none;}'
+                . '.mj-member-events-calendar__mobile-day[open] .mj-member-events-calendar__mobile-summary{background:#edf2ff;}'
+                . '.mj-member-events-calendar__mobile-count{font-size:0.75rem;color:var(--mj-events-calendar-event-time);font-weight:500;}'
+                . '.mj-member-events-calendar__mobile-events{list-style:none;margin:0;padding:0 16px 16px;display:flex;flex-direction:column;gap:8px;}'
+                . '.mj-member-events-calendar__mobile-event{background:var(--mj-event-surface,#f8fafc);border-radius:12px;padding:10px 12px;border:1px solid var(--mj-event-border,transparent);display:flex;flex-direction:column;gap:4px;}'
+                . '.mj-member-events-calendar__mobile-event.is-filtered-out{display:none!important;}'
+                . '.mj-member-events-calendar__mobile-pill{display:inline-flex;align-items:center;gap:4px;font-size:0.66rem;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--mj-event-pill-bg,#d8e3fb);color:var(--mj-event-pill-text,var(--mj-events-calendar-accent));text-transform:uppercase;letter-spacing:0.05em;width:fit-content;}'
+                . '.mj-member-events-calendar__mobile-title{font-size:0.9rem;font-weight:600;color:var(--mj-events-calendar-event-text);}'
+                . '.mj-member-events-calendar__mobile-meta{font-size:0.8rem;color:var(--mj-events-calendar-event-time);}'
+                . '.mj-member-events-calendar__mobile-event[data-calendar-type="closure"]{background:#fee2e2;border-color:#fecaca;}'
+                . '.mj-member-events-calendar__mobile-event[data-calendar-type="closure"] .mj-member-events-calendar__mobile-pill{background:#ffe4e6;color:#be123c;}'
+                . '@media (max-width:900px){.mj-member-events-calendar__event-thumb{display:none;}}
+@media (max-width:640px){.mj-member-events-calendar__toolbar{flex-direction:column;align-items:stretch;gap:14px;}.mj-member-events-calendar__toolbar-left{width:100%;justify-content:space-between;gap:12px;}.mj-member-events-calendar__nav-group{width:100%;justify-content:space-between;padding:6px 12px;}.mj-member-events-calendar__nav-button{width:32px;height:32px;}.mj-member-events-calendar__toolbar-actions{width:100%;flex-direction:column;align-items:stretch;gap:12px;}.mj-member-events-calendar__filters{width:100%;flex-direction:column;align-items:stretch;}.mj-member-events-calendar__filter{width:100%;justify-content:flex-start;}.mj-member-events-calendar__today-button{width:100%;}.mj-member-events-calendar__grid-wrapper{display:none;}.mj-member-events-calendar__mobile-list{display:flex;}}'
                 . '</style>';
         }
 
             $script_handle = 'mj-member-events-calendar';
-            $script_path = MJ_MEMBER_PATH . 'js/elementor/events-calendar.js';
-            $script_url = MJ_MEMBER_URL . 'js/elementor/events-calendar.js';
-            $script_version = file_exists($script_path) ? filemtime($script_path) : (defined('MJ_MEMBER_VERSION') ? MJ_MEMBER_VERSION : '1.0.0');
+            $script_path = Config::path() . 'js/elementor/events-calendar.js';
+            $script_url = Config::url() . 'js/elementor/events-calendar.js';
+            $script_version = file_exists($script_path) ? filemtime($script_path) : Config::version();
             wp_enqueue_script($script_handle, $script_url, array(), $script_version, true);
 
         $preferred_index = -1;
@@ -799,8 +838,22 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $has_multiple_months = count($month_keys) > 1;
         $today_month_key = wp_date('Y-m', $now_ts, $timezone);
         $initial_month_label = (!empty($month_keys) && isset($months[$month_keys[0]]) && isset($months[$month_keys[0]]['label'])) ? $months[$month_keys[0]]['label'] : '';
+        $count_singular_label = __('%d événement', 'mj-member');
+        $count_plural_label = __('%d événements', 'mj-member');
+        $count_empty_label = __('Aucun événement', 'mj-member');
+        $sorted_filters = $available_type_filters;
+        if (!empty($sorted_filters)) {
+            uasort(
+                $sorted_filters,
+                static function ($a, $b) {
+                    $label_a = isset($a['label']) ? (string) $a['label'] : '';
+                    $label_b = isset($b['label']) ? (string) $b['label'] : '';
+                    return strcasecmp($label_a, $label_b);
+                }
+            );
+        }
 
-        echo '<div class="mj-member-events-calendar" id="' . esc_attr($instance_id) . '" data-calendar-preferred="0" data-calendar-today="' . esc_attr($today_month_key) . '">';
+        echo '<div class="mj-member-events-calendar" id="' . esc_attr($instance_id) . '" data-calendar-preferred="0" data-calendar-today="' . esc_attr($today_month_key) . '" data-calendar-count-singular="' . esc_attr($count_singular_label) . '" data-calendar-count-plural="' . esc_attr($count_plural_label) . '" data-calendar-count-empty="' . esc_attr($count_empty_label) . '">';
 
         if (!empty($settings['title'])) {
             echo '<h3 class="mj-member-events-calendar__title">' . esc_html($settings['title']) . '</h3>';
@@ -815,6 +868,17 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         echo '</div>';
         echo '</div>';
         echo '<div class="mj-member-events-calendar__toolbar-actions">';
+        if (!empty($sorted_filters)) {
+            echo '<div class="mj-member-events-calendar__filters" role="group" aria-label="' . esc_attr__('Filtrer par type d’événement', 'mj-member') . '">';
+            foreach ($sorted_filters as $filter_key => $filter_meta) {
+                $filter_label = isset($filter_meta['label']) && $filter_meta['label'] !== '' ? (string) $filter_meta['label'] : ucfirst((string) $filter_key);
+                echo '<label class="mj-member-events-calendar__filter">';
+                echo '<input type="checkbox" value="' . esc_attr($filter_key) . '" data-calendar-filter checked />';
+                echo '<span>' . esc_html($filter_label) . '</span>';
+                echo '</label>';
+            }
+            echo '</div>';
+        }
         echo '<button type="button" class="mj-member-events-calendar__today-button" data-calendar-action="today">' . esc_html__('Aujourd\'hui', 'mj-member') . '</button>';
         echo '</div>';
         echo '</div>';
@@ -863,6 +927,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             $day_number = 1;
             $day_positions = array();
             $month_prefix = wp_date('Y-m', $month_data['timestamp'], $timezone);
+            $day_list_entries = array();
 
             for ($cell = 0; $cell < $cell_count; $cell++) {
                 if ($weekday_pointer === 0) {
@@ -891,11 +956,19 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         'day_key' => $day_key,
                         'events' => $events_for_day,
                         'has_multi' => $has_multi,
+                        'is_closure' => !empty($month_data['days'][$day_key]['is_closure']),
                     );
 
                     $day_positions[$day_key] = array(
                         'week' => $week_index_pointer,
                         'col' => $weekday_pointer,
+                    );
+
+                    $day_list_entries[] = array(
+                        'day_number' => $day_number,
+                        'day_key' => $day_key,
+                        'events' => $events_for_day,
+                        'is_closure' => !empty($month_data['days'][$day_key]['is_closure']),
                     );
 
                     $day_number++;
@@ -1033,9 +1106,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     if ($next_event_pointer && $next_event_pointer['day_key'] === $day_key && $month_data['has_next_event']) {
                         $day_classes[] = 'is-next';
                     }
+                    if (!empty($cell_entry['is_closure'])) {
+                        $day_classes[] = 'is-closure';
+                    }
+                    $day_data_attr = ' data-calendar-day="' . esc_attr($day_key) . '"';
 
                     echo '<div class="mj-member-events-calendar__day-cell">';
-                    echo '<div class="' . esc_attr(implode(' ', $day_classes)) . '">';
+                    echo '<div class="' . esc_attr(implode(' ', $day_classes)) . '"' . $day_data_attr . '>';
                     echo '<span class="mj-member-events-calendar__day-number">' . esc_html($cell_entry['day_number']) . '</span>';
 
                     if (!empty($events_for_day)) {
@@ -1061,6 +1138,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                     $event_classes[] = 'is-multi-middle';
                                 }
                             }
+                            if (!empty($event_entry['is_closure'])) {
+                                $event_classes[] = 'is-closure';
+                            }
                             if ($next_event_pointer && $next_event_pointer['event_key'] === $event_entry['id']) {
                                 $event_classes[] = 'is-next';
                             }
@@ -1069,7 +1149,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             $style_attribute = self::build_event_style_attribute($event_entry);
                             $event_permalink = isset($event_entry['permalink']) ? (string) $event_entry['permalink'] : '';
                             $event_href = $event_permalink !== '' ? $event_permalink : '#';
-                            echo '<li class="' . esc_attr(implode(' ', $event_classes)) . '"' . $style_attribute . '>';
+                            $event_type_key = isset($event_entry['type_key']) ? sanitize_key((string) $event_entry['type_key']) : '';
+                            if ($event_type_key === '') {
+                                $event_type_key = 'misc';
+                            }
+                            $is_known_type = isset($available_type_filters[$event_type_key]) || $event_type_key === 'closure';
+                            $type_attributes = ' data-calendar-type-item="1" data-calendar-type="' . esc_attr($event_type_key) . '" data-calendar-type-known="' . ($is_known_type ? '1' : '0') . '"';
+                            echo '<li class="' . esc_attr(implode(' ', $event_classes)) . '"' . $style_attribute . $type_attributes . '>';
                             echo '<a class="mj-member-events-calendar__event-trigger" href="' . esc_url($event_href) . '"' . ($event_is_multi ? ' data-calendar-range="' . esc_attr($event_range_key) . '"' : '') . '>';
                             if (!$event_is_multi || $event_is_multi_head) {
                                 if (!empty($event_entry['cover'])) {
@@ -1090,6 +1176,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             if ($event_is_multi && !$event_is_multi_head) {
                                 echo '<span class="screen-reader-text">' . esc_html(sprintf(__('Suite de %s', 'mj-member'), $event_entry['title'])) . '</span>';
                             }
+
                             echo '</a>';
                             echo '</li>';
                         }
@@ -1106,6 +1193,78 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
             echo '</div>';
             echo '</div>';
+
+            if (!empty($day_list_entries)) {
+                echo '<div class="mj-member-events-calendar__mobile-list" data-calendar-mobile>';
+                foreach ($day_list_entries as $day_entry) {
+                    $day_key = isset($day_entry['day_key']) ? (string) $day_entry['day_key'] : '';
+                    $mobile_events = isset($day_entry['events']) && is_array($day_entry['events']) ? $day_entry['events'] : array();
+                    if (empty($mobile_events)) {
+                        continue;
+                    }
+
+                    usort(
+                        $mobile_events,
+                        static function ($a, $b) {
+                            return (int) (isset($a['start_ts']) ? $a['start_ts'] : 0) <=> (int) (isset($b['start_ts']) ? $b['start_ts'] : 0);
+                        }
+                    );
+
+                    $mobile_day_classes = array('mj-member-events-calendar__mobile-day');
+                    if (!empty($day_entry['is_closure'])) {
+                        $mobile_day_classes[] = 'is-closure';
+                    }
+                    if ($day_key === wp_date('Y-m-d', $now_ts, $timezone)) {
+                        $mobile_day_classes[] = 'is-today';
+                    }
+
+                    $day_timestamp = strtotime($day_key . ' 00:00:00');
+                    if ($day_timestamp === false) {
+                        $day_timestamp = $now_ts;
+                    }
+                    $day_label = wp_date('l j F', $day_timestamp, $timezone);
+                    $events_count = count($mobile_events);
+                    $count_label = sprintf(_n('%d événement', '%d événements', $events_count, 'mj-member'), $events_count);
+
+                    echo '<details class="' . esc_attr(implode(' ', $mobile_day_classes)) . '" data-calendar-day="' . esc_attr($day_key) . '">';
+                    echo '<summary class="mj-member-events-calendar__mobile-summary">';
+                    echo '<span>' . esc_html($day_label) . '</span>';
+                    echo '<span class="mj-member-events-calendar__mobile-count" data-calendar-day-count>' . esc_html($count_label) . '</span>';
+                    echo '</summary>';
+
+                    echo '<ul class="mj-member-events-calendar__mobile-events">';
+                    foreach ($mobile_events as $mobile_event) {
+                        if (!is_array($mobile_event) || !isset($mobile_event['id'])) {
+                            continue;
+                        }
+
+                        $event_type_key = isset($mobile_event['type_key']) ? sanitize_key((string) $mobile_event['type_key']) : '';
+                        if ($event_type_key === '') {
+                            $event_type_key = 'misc';
+                        }
+                        $is_known_type = isset($available_type_filters[$event_type_key]) || $event_type_key === 'closure';
+                        $mobile_classes = array('mj-member-events-calendar__mobile-event');
+                        if (!empty($mobile_event['is_closure'])) {
+                            $mobile_classes[] = 'is-closure';
+                        }
+                        $mobile_style = self::build_event_style_attribute($mobile_event);
+                        echo '<li class="' . esc_attr(implode(' ', $mobile_classes)) . '"' . $mobile_style . ' data-calendar-type-item="1" data-calendar-type="' . esc_attr($event_type_key) . '" data-calendar-type-known="' . ($is_known_type ? '1' : '0') . '">';
+                        if (!empty($mobile_event['type_label'])) {
+                            echo '<span class="mj-member-events-calendar__mobile-pill">' . esc_html($mobile_event['type_label']) . '</span>';
+                        }
+                        echo '<span class="mj-member-events-calendar__mobile-title">' . esc_html($mobile_event['title']) . '</span>';
+                        if (!empty($mobile_event['time'])) {
+                            echo '<span class="mj-member-events-calendar__mobile-meta">' . esc_html($mobile_event['time']) . '</span>';
+                        }
+                        echo '</li>';
+                    }
+                    echo '</ul>';
+
+                    echo '</details>';
+                }
+                echo '</div>';
+            }
+
             echo '</section>';
 
             $month_index++;
@@ -1117,30 +1276,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '<p class="mj-member-events-calendar__empty">' . esc_html($empty_message) . '</p>';
         }
 
-        echo '<div class="mj-member-events-calendar__modal" data-calendar-modal hidden>';
-        echo '<div class="mj-member-events-calendar__modal-backdrop" data-calendar-dismiss></div>';
-        echo '<div class="mj-member-events-calendar__modal-dialog" role="dialog" aria-modal="true" aria-labelledby="' . esc_attr($instance_id) . '-modal-title">';
-        echo '<button type="button" class="mj-member-events-calendar__modal-close" data-calendar-dismiss aria-label="' . esc_attr__('Fermer', 'mj-member') . '">&times;</button>';
-        echo '<div class="mj-member-events-calendar__modal-body">';
-        echo '<div class="mj-member-events-calendar__modal-cover" data-calendar-modal-cover></div>';
-        echo '<div class="mj-member-events-calendar__modal-content">';
-        echo '<h4 id="' . esc_attr($instance_id) . '-modal-title" data-calendar-modal-title></h4>';
-        echo '<p class="mj-member-events-calendar__modal-date" data-calendar-modal-date></p>';
-        echo '<p class="mj-member-events-calendar__modal-meta" data-calendar-modal-meta></p>';
-        echo '<p class="mj-member-events-calendar__modal-price" data-calendar-modal-price></p>';
-        echo '<div class="mj-member-events-calendar__modal-description" data-calendar-modal-description></div>';
-        echo '<p class="mj-member-events-calendar__modal-notes" data-calendar-modal-notes></p>';
-        echo '<div class="mj-member-events-calendar__modal-map" data-calendar-modal-map></div>';
-        echo '<a class="mj-member-events-calendar__modal-map-link" data-calendar-modal-map-link target="_blank" rel="noopener">' . esc_html__('Ouvrir dans Google Maps', 'mj-member') . '</a>';
-        echo '<div class="mj-member-events-calendar__modal-actions">';
-        echo '<a class="mj-member-events-calendar__modal-cta" data-calendar-modal-link target="_blank" rel="noopener">' . esc_html__('S\'inscrire', 'mj-member') . '</a>';
-        echo '<button type="button" class="mj-member-events-calendar__modal-secondary" data-calendar-dismiss>' . esc_html__('Fermer', 'mj-member') . '</button>';
-        echo '</div>';
-        echo '</div>';
-        echo '</div>';
-        echo '</div>';
-        echo '</div>';
-
         echo '</div>';
 
         $preferred_index = ($preferred_index >= 0) ? $preferred_index : 0;
@@ -1148,9 +1283,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $instance_config = array(
             'preferredIndex' => $preferred_index,
             'todayMonth' => $today_month_key,
-            'translations' => array(
-                'noDescription' => __('Description disponible prochainement.', 'mj-member'),
-            ),
         );
 
 
@@ -1205,6 +1337,15 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             'range_bg' => self::mix_hex_colors($accent, '#FFFFFF', 0.75),
             'range_border' => self::mix_hex_colors($accent, '#FFFFFF', 0.55),
         );
+    }
+
+    /**
+     * Palette dédiée aux jours de fermeture.
+     *
+     * @return array<string,string>
+     */
+    private static function build_closure_palette() {
+        return self::build_event_palette('#EF4444', 'closure', array('closure' => '#EF4444'));
     }
 
     /**

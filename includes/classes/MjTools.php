@@ -1,8 +1,14 @@
-<?php 
+<?php
 
+namespace Mj\Member\Classes;
 
-class MjTools {
-    
+use WP_Session_Tokens;
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+class MjTools {   
     
     
     // Démarrer la session
@@ -36,7 +42,7 @@ class MjTools {
         self::start_session();
         $user_id = get_current_user_id();
         if ($user_id) {
-            $token = WP_Session_Tokens::get_instance( $user_id );
+            $token = WP_Session_Tokens::get_instance($user_id);
             $token->destroy($cle);
         }
     }
@@ -85,3 +91,5 @@ class MjTools {
         return self::getWpdb()->prefix . $name; 
     }
 }
+
+\class_alias(__NAMESPACE__ . '\\MjTools', 'MjTools');
