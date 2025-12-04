@@ -2,6 +2,7 @@
 
 namespace Mj\Member\Admin\Page;
 
+use Mj\Member\Admin\RequestGuard;
 use Mj\Member\Core\Config;
 
 if (!defined('ABSPATH')) {
@@ -17,9 +18,7 @@ final class EventsPage
 
     public static function render(): void
     {
-        if (!current_user_can(Config::capability())) {
-            wp_die(esc_html__('Accès refusé.', 'mj-member'));
-        }
+        RequestGuard::ensureCapabilityOrDie(Config::capability());
         ?>
         <div class="wrap">
             <h1><?php esc_html_e('Gestion des événements & stages', 'mj-member'); ?></h1>

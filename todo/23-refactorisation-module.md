@@ -8,8 +8,8 @@
 
 ## 23.2 Modularisation du back-office
 - [x] Convertir les fonctions globales d’administration (`mj_members_page`, `mj_events_page`, etc.) en classes dédiées (ex: `Admin\MembersPage`) avec un point d’entrée unique pour les hooks `add_menu_page` / `add_submenu_page`.
-- [ ] Séparer les traitements d’action (`mj_member_handle_members_actions`, `mj_member_handle_locations_actions`) dans des services orientés cas d’usage pour réduire la taille de `mj-member.php` et permettre des tests unitaires ciblés.
-- [ ] Centraliser la logique de vérification des capacités et des nonces dans un helper unique (`Admin\RequestGuard`) et l’utiliser dans tous les handlers admin.
+	- [x] Séparer les traitements d’action (`mj_member_handle_members_actions`, `mj_member_handle_locations_actions`) dans des services orientés cas d’usage pour réduire la taille de `mj-member.php` et permettre des tests unitaires ciblés.
+- [x] Centraliser la logique de vérification des capacités et des nonces dans un helper unique (`Admin\RequestGuard`) et l’utiliser dans tous les handlers admin.
 
 ## 23.3 Rationalisation des classes CRUD
 - [ ] Uniformiser l’API des classes CRUD (`includes/classes/crud/`) en introduisant une interface commune pour les opérations `get_all`, `count`, `create`, `update`, `delete` avec gestion systématique des `WP_Error`.
