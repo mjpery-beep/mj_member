@@ -11,13 +11,13 @@ $pluginBasePath = Config::path();
 if (!function_exists('mj_member_register_animateur_account_assets')) {
     function mj_member_register_animateur_account_assets() {
         $version = Config::version();
-        $script_path = Config::path() . 'js/animateur-account.js';
+        $script_path = Config::path() . 'js/dist/animateur-account.js';
         $script_version = file_exists($script_path) ? (string) filemtime($script_path) : $version;
 
         wp_register_script(
             'mj-member-animateur-account',
-            Config::url() . 'js/animateur-account.js',
-            array('jquery'),
+            Config::url() . 'js/dist/animateur-account.js',
+            array(), // No jQuery dependency - Preact is standalone
             $script_version,
             true
         );
