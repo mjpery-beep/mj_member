@@ -12,6 +12,8 @@ use Elementor\Widget_Base;
 use Mj\Member\Core\Config;
 
 class Mj_Member_Elementor_Contact_Form_Widget extends Widget_Base {
+    use Mj_Member_Elementor_Widget_Visibility;
+
     public function get_name() {
         return 'mj-member-contact-form';
     }
@@ -84,6 +86,8 @@ class Mj_Member_Elementor_Contact_Form_Widget extends Widget_Base {
         ));
 
         $this->end_controls_section();
+
+        $this->register_visibility_controls();
 
         $this->start_controls_section('section_style_container', array(
             'label' => __('Conteneur', 'mj-member'),
@@ -488,6 +492,7 @@ class Mj_Member_Elementor_Contact_Form_Widget extends Widget_Base {
 
     protected function render() {
         $settings = $this->get_settings_for_display();
+        $this->apply_visibility_to_wrapper($settings, 'mj-contact-form');
         $title = isset($settings['title']) ? $settings['title'] : '';
         $description = isset($settings['description']) ? $settings['description'] : '';
         $success_message = isset($settings['success_message']) ? $settings['success_message'] : __('Merci ! Votre message a bien été envoyé.', 'mj-member');
@@ -561,8 +566,8 @@ class Mj_Member_Elementor_Contact_Form_Widget extends Widget_Base {
         );
 
         $role_labels = array();
-        if (class_exists('MjMembers_CRUD')) {
-            $role_labels = MjMembers_CRUD::getRoleLabels();
+        if (class_exists('MjMembers')) {
+            $role_labels = MjMembers::getRoleLabels();
         }
 
         if (isset($current_member) && is_object($current_member)) {

@@ -1,6 +1,8 @@
 <?php
 
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\MjMail;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -97,7 +99,7 @@ function mj_member_prepare_email_send_callback() {
     }
 
     if ($selected_member_id > 0) {
-        $member = MjMembers_CRUD::getById($selected_member_id);
+        $member = MjMembers::getById($selected_member_id);
         if (!$member) {
             wp_send_json_error(array('message' => __('Impossible de trouver le membre sélectionné.', 'mj-member')));
         }
@@ -145,8 +147,8 @@ function mj_member_prepare_email_send_callback() {
         $phones = $send_sms ? mj_member_collect_sms_targets($member) : array();
 
         $newsletter_allowed = true;
-        if ($send_email && property_exists($member, 'newsletter_opt_in')) {
-            $newsletter_allowed = (int) $member->newsletter_opt_in === 1;
+        if ($send_email && MjMembers::hasField($member, 'newsletter_opt_in')) {
+            $newsletter_allowed = (int) MjMembers::getField($member, 'newsletter_opt_in', 0) === 1;
         }
 
         $sms_allowed = true;
@@ -258,7 +260,7 @@ function mj_member_send_single_email_callback() {
         wp_send_json_error(array('message' => __('Le contenu du SMS est requis.', 'mj-member')));
     }
 
-    $member = MjMembers_CRUD::getById($member_id);
+    $member = MjMembers::getById($member_id);
     if (!$member) {
         wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
     }
@@ -305,7 +307,8 @@ function mj_member_send_single_email_callback() {
     $context_request = array('request' => array('template_id' => $template_identifier, 'member_id' => $member_id));
 
     if ($send_email) {
-        $newsletter_allowed = !property_exists($member, 'newsletter_opt_in') || (int) $member->newsletter_opt_in === 1;
+        $newsletter_raw = MjMembers::hasField($member, 'newsletter_opt_in') ? MjMembers::getField($member, 'newsletter_opt_in', 0) : null;
+        $newsletter_allowed = ($newsletter_raw === null) ? true : ((int) $newsletter_raw === 1);
 
         if (!$newsletter_allowed) {
             $email_result['status'] = 'skipped';
@@ -465,7 +468,8 @@ function mj_member_send_single_email_callback() {
     }
 
     if ($send_sms) {
-        $sms_allowed = !property_exists($member, 'sms_opt_in') || (int) $member->sms_opt_in === 1;
+        $sms_raw = MjMembers::hasField($member, 'sms_opt_in') ? MjMembers::getField($member, 'sms_opt_in', 0) : null;
+        $sms_allowed = ($sms_raw === null) ? true : ((int) $sms_raw === 1);
         if (!$sms_allowed) {
             $sms_result['status'] = 'skipped';
             $sms_result['message'] = __('SMS ignoré : consentement SMS retiré.', 'mj-member');

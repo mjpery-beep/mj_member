@@ -1,14 +1,49 @@
 (function(){
-    function ready(fn) {
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', fn);
-        } else {
-            fn();
-        }
-    }
+    'use strict';
+
+    var Utils = window.MjMemberUtils || {};
+    var domReady = typeof Utils.domReady === 'function'
+        ? Utils.domReady
+        : function (callback) {
+            if (typeof callback !== 'function') {
+                return;
+            }
+
+            if (typeof document === 'undefined') {
+                callback();
+                return;
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', callback);
+            } else {
+                callback();
+            }
+        };
+    var toArray = typeof Utils.toArray === 'function'
+        ? Utils.toArray
+        : function (collection) {
+            if (!collection) {
+                return [];
+            }
+
+            if (Array.isArray(collection)) {
+                return collection.slice();
+            }
+
+            try {
+                return Array.prototype.slice.call(collection);
+            } catch (error) {
+                var fallback = [];
+                for (var idx = 0; idx < collection.length; idx += 1) {
+                    fallback.push(collection[idx]);
+                }
+                return fallback;
+            }
+        };
 
     function setupRangeHover(root) {
-        var rangeElements = Array.prototype.slice.call(root.querySelectorAll('[data-calendar-range]'));
+        var rangeElements = toArray(root.querySelectorAll('[data-calendar-range]'));
         if (!rangeElements.length) {
             return;
         }
@@ -59,7 +94,7 @@
         function applySizing() {
             rafId = null;
 
-            var rangeElements = Array.prototype.slice.call(root.querySelectorAll('[data-calendar-range]'));
+            var rangeElements = toArray(root.querySelectorAll('[data-calendar-range]'));
             if (!rangeElements.length) {
                 return;
             }
@@ -161,7 +196,7 @@
             return;
         }
 
-        var months = Array.prototype.slice.call(root.querySelectorAll('[data-calendar-month]'));
+        var months = toArray(root.querySelectorAll('[data-calendar-month]'));
         if (!months.length) {
             return;
         }
@@ -174,9 +209,9 @@
             }
         });
 
-        var filterInputs = Array.prototype.slice.call(root.querySelectorAll('[data-calendar-filter]'));
-        var typeItems = Array.prototype.slice.call(root.querySelectorAll('[data-calendar-type-item]'));
-        var dayNodes = Array.prototype.slice.call(root.querySelectorAll('[data-calendar-day]'));
+        var filterInputs = toArray(root.querySelectorAll('[data-calendar-filter]'));
+        var typeItems = toArray(root.querySelectorAll('[data-calendar-type-item]'));
+        var dayNodes = toArray(root.querySelectorAll('[data-calendar-day]'));
         var countSingular = root.getAttribute('data-calendar-count-singular') || '%d';
         var countPlural = root.getAttribute('data-calendar-count-plural') || '%d';
         var countEmpty = root.getAttribute('data-calendar-count-empty') || '';
@@ -211,7 +246,7 @@
             dayNodes.forEach(function(dayNode) {
                 var items = dayNode.querySelectorAll('[data-calendar-type-item]');
                 var visibleCount = 0;
-                Array.prototype.forEach.call(items, function(item) {
+                toArray(items).forEach(function(item) {
                     if (!item.classList.contains('is-filtered-out')) {
                         visibleCount += 1;
                     }
@@ -372,5 +407,5 @@
         }
     }
 
-    ready(drainQueue);
+    domReady(drainQueue);
 })();

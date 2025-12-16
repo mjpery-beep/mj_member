@@ -71,7 +71,7 @@ class MjEventAnimateurs {
             return array();
         }
 
-        $table = MjMembers_CRUD::getTableName(MjMembers_CRUD::TABLE_NAME);
+        $table = MjMembers::getTableName(MjMembers::TABLE_NAME);
         global $wpdb;
 
         $placeholders = implode(',', array_fill(0, count($ids), '%d'));
@@ -105,7 +105,7 @@ class MjEventAnimateurs {
         self::ensure_schema();
 
         $event_ids = array();
-        $member_row = MjMembers_CRUD::getById($animateur_id);
+        $member_row = MjMembers::getById($animateur_id);
         $wp_user_id = ($member_row && isset($member_row->wp_user_id)) ? (int) $member_row->wp_user_id : 0;
 
         if (self::is_ready()) {
@@ -273,13 +273,13 @@ class MjEventAnimateurs {
             return true;
         }
 
-        $member_row = MjMembers_CRUD::getById($member_id);
+        $member_row = MjMembers::getById($member_id);
         $wp_user_id = ($member_row && isset($member_row->wp_user_id)) ? (int) $member_row->wp_user_id : 0;
         if ($wp_user_id > 0 && !empty($assigned_ids) && in_array($wp_user_id, $assigned_ids, true)) {
             return true;
         }
 
-        $event = MjEvents_CRUD::find($event_id);
+        $event = MjEvents::find($event_id);
         if ($event && isset($event->animateur_id) && (int) $event->animateur_id === $member_id) {
             return true;
         }

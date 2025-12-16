@@ -98,12 +98,12 @@ if (!function_exists('mj_member_generate_unique_username')) {
 
 if (!function_exists('mj_member_sync_member_user_account')) {
     function mj_member_sync_member_user_account($member, array $args = array()) {
-        if (!class_exists('MjMembers_CRUD')) {
+        if (!class_exists('MjMembers')) {
             return null;
         }
 
         if (is_numeric($member)) {
-            $member = MjMembers_CRUD::getById((int) $member);
+            $member = MjMembers::getById((int) $member);
         }
 
         if (!$member || !is_object($member)) {
@@ -196,7 +196,10 @@ if (!function_exists('mj_member_sync_member_user_account')) {
                 }
             }
 
-            MjMembers_CRUD::update($member->id, array('wp_user_id' => $existing_by_email->ID));
+            $link_result = MjMembers::update($member->id, array('wp_user_id' => $existing_by_email->ID));
+            if (is_wp_error($link_result)) {
+                return $should_return_error ? $link_result : null;
+            }
             return (int) $existing_by_email->ID;
         }
 
@@ -223,7 +226,10 @@ if (!function_exists('mj_member_sync_member_user_account')) {
             return $should_return_error ? $user_id : null;
         }
 
-        MjMembers_CRUD::update($member->id, array('wp_user_id' => $user_id));
+        $creation_link = MjMembers::update($member->id, array('wp_user_id' => $user_id));
+        if (is_wp_error($creation_link)) {
+            return $should_return_error ? $creation_link : null;
+        }
 
         $send_notification = apply_filters('mj_member_send_new_user_notification', (bool) $args['send_notification'], $member, $user_id);
         if ($send_notification && function_exists('wp_send_new_user_notifications')) {
@@ -236,7 +242,7 @@ if (!function_exists('mj_member_sync_member_user_account')) {
 
 if (!function_exists('mj_member_get_member_for_user')) {
     function mj_member_get_member_for_user($user_id) {
-        if (!class_exists('MjMembers_CRUD')) {
+        if (!class_exists('MjMembers')) {
             return null;
         }
 
@@ -245,7 +251,7 @@ if (!function_exists('mj_member_get_member_for_user')) {
             return null;
         }
 
-        $member = MjMembers_CRUD::getByWpUserId($user_id);
+        $member = MjMembers::getByWpUserId($user_id);
         if ($member) {
             return $member;
         }
@@ -255,10 +261,12 @@ if (!function_exists('mj_member_get_member_for_user')) {
             return null;
         }
 
-        $fallback = MjMembers_CRUD::getByEmail($user->user_email);
+        $fallback = MjMembers::getByEmail($user->user_email);
         if ($fallback && empty($fallback->wp_user_id)) {
-            MjMembers_CRUD::update($fallback->id, array('wp_user_id' => $user_id));
-            $fallback->wp_user_id = $user_id;
+            $link = MjMembers::update($fallback->id, array('wp_user_id' => $user_id));
+            if (!is_wp_error($link)) {
+                $fallback->wp_user_id = $user_id;
+            }
         }
 
         return $fallback;
@@ -283,10 +291,53 @@ if (!function_exists('mj_member_get_current_member')) {
 if (!function_exists('mj_member_can_manage_children')) {
     function mj_member_can_manage_children($member) {
         if (!$member) {
-            return false;
+            /**
+             * Permet de filtrer la capacité à gérer des jeunes associés.
+             */
+            return (bool) apply_filters('mj_member_can_manage_children', false, $member);
         }
 
-        return isset($member->role) && $member->role === MjMembers_CRUD::ROLE_TUTEUR;
+        $role = '';
+        $member_id = 0;
+
+        if (is_object($member)) {
+            if (isset($member->role)) {
+                $role = sanitize_key((string) $member->role);
+            }
+            if (isset($member->id)) {
+                $member_id = (int) $member->id;
+            }
+        } elseif (is_array($member)) {
+            if (isset($member['role'])) {
+                $role = sanitize_key((string) $member['role']);
+            }
+            if (isset($member['id'])) {
+                $member_id = (int) $member['id'];
+            }
+        }
+
+        $can_manage = ($role === MjMembers::ROLE_TUTEUR);
+
+        if (!$can_manage && $member_id > 0 && class_exists('MjMembers')) {
+            static $guardian_children_presence = array();
+
+            if (!array_key_exists($member_id, $guardian_children_presence)) {
+                $children = MjMembers::getChildrenForGuardian($member_id);
+                $guardian_children_presence[$member_id] = !empty($children);
+            }
+
+            if (!empty($guardian_children_presence[$member_id])) {
+                $can_manage = true;
+            }
+        }
+
+        /**
+         * Filtre permettant de personnaliser la capacité d'un membre à gérer des jeunes associés.
+         *
+         * @param bool               $can_manage Indique si le membre peut gérer des jeunes.
+         * @param object|array<mixed> $member     Données du membre courant.
+         */
+        return (bool) apply_filters('mj_member_can_manage_children', $can_manage, $member);
     }
 }
 
@@ -296,7 +347,7 @@ if (!function_exists('mj_member_get_guardian_children')) {
             return array();
         }
 
-        return MjMembers_CRUD::getChildrenForGuardian((int) $member->id);
+        return MjMembers::getChildrenForGuardian((int) $member->id);
     }
 }
 
@@ -374,7 +425,7 @@ if (!function_exists('mj_member_get_guardian_children_statuses')) {
 
 if (!function_exists('mj_member_get_payment_timeline')) {
     function mj_member_get_payment_timeline($member_id, $limit = 10) {
-        if (!class_exists('MjMembers_CRUD')) {
+        if (!class_exists('MjMembers')) {
             return array();
         }
 
@@ -385,7 +436,7 @@ if (!function_exists('mj_member_get_payment_timeline')) {
 
         $limit = max(1, (int) $limit);
 
-        $wpdb = MjMembers_CRUD::getWpdb();
+        $wpdb = MjMembers::getWpdb();
         $history_table = $wpdb->prefix . 'mj_payment_history';
         $payments_table = $wpdb->prefix . 'mj_payments';
 
@@ -471,7 +522,7 @@ if (!function_exists('mj_member_get_membership_status')) {
 
         $status = 'not_required';
         $status_label = __('Cotisation non requise', 'mj-member');
-        $description = __('Vous n’avez pas de cotisation à régler pour le moment.', 'mj-member');
+        $description = '';
         $last_payment_display = '';
         $expires_display = '';
         $days_remaining = null;
@@ -807,7 +858,7 @@ if (!function_exists('mj_member_ajax_update_child_profile')) {
             'birth_date' => 'sanitize_text_field',
         );
 
-        if (class_exists('MjMembers_CRUD') && MjMembers_CRUD::hasColumn('notes')) {
+        if (class_exists('MjMembers') && MjMembers::hasColumn('notes')) {
             $field_callbacks['notes'] = 'sanitize_textarea_field';
         }
 
@@ -837,9 +888,9 @@ if (!function_exists('mj_member_ajax_update_child_profile')) {
             $updates['email'] = '';
         }
 
-        $result = MjMembers_CRUD::update($child_id, $updates);
-        if ($result === false) {
-            wp_send_json_error(array('message' => __('Impossible de mettre à jour ce jeune pour le moment.', 'mj-member')), 500);
+        $result = MjMembers::update($child_id, $updates);
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()), 500);
         }
 
         $refreshed_child = null;
@@ -894,7 +945,7 @@ if (!function_exists('mj_member_ajax_update_notification_preferences')) {
             wp_send_json_error(array('message' => __('Votre profil MJ est introuvable.', 'mj-member')), 404);
         }
 
-        $updated = MjMembers_CRUD::updateNotificationPreferences($member->id, $preferences_data);
+        $updated = MjMembers::updateNotificationPreferences($member->id, $preferences_data);
         if ($updated === false) {
             wp_send_json_error(array('message' => __('Impossible d’enregistrer vos préférences pour le moment.', 'mj-member')), 500);
         }
@@ -1057,7 +1108,7 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
         $now = current_time('timestamp');
         $status_labels = MjEventRegistrations::get_status_labels();
         $payment_labels = MjEventRegistrations::get_payment_status_labels();
-        $type_labels = method_exists('MjEvents_CRUD', 'get_type_labels') ? MjEvents_CRUD::get_type_labels() : array();
+        $type_labels = method_exists('MjMembers', 'get_type_labels') ? MjMembers::get_type_labels() : array();
         $status_output_map = array(
             MjEventRegistrations::STATUS_PENDING => 'pending',
             MjEventRegistrations::STATUS_CONFIRMED => 'confirmed',
@@ -1202,4 +1253,332 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
     }
 
     add_filter('mj_member_member_registrations', 'mj_member_collect_member_registration_entries', 10, 3);
+}
+
+// --- Gestion des liens QR des cartes de visite ---
+
+if (!isset($GLOBALS['mj_member_card_claim_state']) || !is_array($GLOBALS['mj_member_card_claim_state'])) {
+    $GLOBALS['mj_member_card_claim_state'] = array();
+}
+
+if (!function_exists('mj_member_get_card_claim_base_url')) {
+    function mj_member_get_card_claim_base_url() {
+        $registration_url = '';
+
+        if (function_exists('mj_member_login_component_get_registration_url')) {
+            $registration_url = mj_member_login_component_get_registration_url();
+        } else {
+            $page_id = (int) get_option('mj_login_registration_page', 0);
+            if ($page_id > 0) {
+                $permalink = get_permalink($page_id);
+                if (!empty($permalink)) {
+                    $registration_url = $permalink;
+                }
+            }
+
+            if ($registration_url === '') {
+                $default_slug = ltrim(apply_filters('mj_member_login_registration_default_slug', 'inscription'), '/');
+                $registration_url = home_url('/' . $default_slug);
+            }
+        }
+
+        if ($registration_url === '') {
+            $registration_url = home_url('/mon-compte/');
+        }
+
+        $default = $registration_url;
+        $filtered = apply_filters('mj_member_card_claim_base_url', $default);
+
+        $final_url = $filtered !== '' ? $filtered : $default;
+
+        return esc_url_raw($final_url);
+    }
+}
+
+if (!function_exists('mj_member_sanitize_card_key')) {
+    function mj_member_sanitize_card_key($value) {
+        if (!is_string($value)) {
+            if (is_scalar($value)) {
+                $value = (string) $value;
+            } else {
+                return '';
+            }
+        }
+
+        $value = strtolower(sanitize_text_field(wp_unslash($value)));
+        if ($value === '') {
+            return '';
+        }
+
+        $value = preg_replace('/[^a-z0-9]/', '', $value);
+        if (!is_string($value)) {
+            return '';
+        }
+
+        return substr($value, 0, 64);
+    }
+}
+
+if (!function_exists('mj_member_get_card_claim_state')) {
+    function mj_member_get_card_claim_state() {
+        return is_array($GLOBALS['mj_member_card_claim_state']) ? $GLOBALS['mj_member_card_claim_state'] : array();
+    }
+}
+
+if (!function_exists('mj_member_set_card_claim_state')) {
+    function mj_member_set_card_claim_state($state) {
+        if (!is_array($state)) {
+            $state = array();
+        }
+        $GLOBALS['mj_member_card_claim_state'] = $state;
+    }
+}
+
+if (!function_exists('mj_member_get_card_key_from_request')) {
+    function mj_member_get_card_key_from_request() {
+        $key = '';
+        if (isset($_POST['mj_card_key'])) {
+            $key = mj_member_sanitize_card_key($_POST['mj_card_key']);
+        } elseif (isset($_GET['mj_card'])) {
+            $key = mj_member_sanitize_card_key($_GET['mj_card']);
+        }
+
+        return $key;
+    }
+}
+
+if (!function_exists('mj_member_is_card_claim_request')) {
+    function mj_member_is_card_claim_request() {
+        if (is_admin()) {
+            return false;
+        }
+
+        if (defined('REST_REQUEST') && REST_REQUEST) {
+            return false;
+        }
+
+        if ('cli' === PHP_SAPI) {
+            return false;
+        }
+
+        $key = mj_member_get_card_key_from_request();
+        return $key !== '';
+    }
+}
+
+if (!function_exists('mj_member_get_member_by_card_key')) {
+    function mj_member_get_member_by_card_key($key) {
+        if (!class_exists('MjMembers')) {
+            return null;
+        }
+
+        return MjMembers::getByCardAccessKey($key);
+    }
+}
+
+if (!function_exists('mj_member_get_card_login_url')) {
+    function mj_member_get_card_login_url($member, $card_key = '') {
+        $redirect = function_exists('mj_member_get_account_redirect')
+            ? mj_member_get_account_redirect()
+            : home_url('/mon-compte/');
+
+        $login_url = wp_login_url($redirect);
+
+        return apply_filters('mj_member_card_claim_login_url', $login_url, $member, $card_key);
+    }
+}
+
+if (!function_exists('mj_member_get_card_claim_url')) {
+    function mj_member_get_card_claim_url($member_id) {
+        $member_id = (int) $member_id;
+        if ($member_id <= 0 || !class_exists('MjMembers')) {
+            return '';
+        }
+
+        $key = MjMembers::ensureCardAccessKey($member_id);
+        if ($key === '') {
+            return '';
+        }
+
+        $base = mj_member_get_card_claim_base_url();
+        $url = add_query_arg('mj_card', rawurlencode($key), $base);
+
+        return apply_filters('mj_member_card_claim_url', $url, $member_id, $key);
+    }
+}
+
+if (!function_exists('mj_member_maybe_process_card_claim_form')) {
+    function mj_member_maybe_process_card_claim_form() {
+        if (!mj_member_is_card_claim_request()) {
+            return;
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            return;
+        }
+
+        $state = array(
+            'errors' => array(),
+            'values' => array(),
+        );
+
+        $nonce = isset($_POST['mj_member_card_claim_nonce'])
+            ? sanitize_text_field(wp_unslash($_POST['mj_member_card_claim_nonce']))
+            : '';
+
+        if (!wp_verify_nonce($nonce, 'mj_member_card_claim')) {
+            $state['errors'][] = __('La vérification de sécurité a échoué. Merci de réessayer.', 'mj-member');
+            mj_member_set_card_claim_state($state);
+            return;
+        }
+
+        $key = mj_member_get_card_key_from_request();
+        if ($key === '') {
+            $state['errors'][] = __('Ce lien n’est plus valide.', 'mj-member');
+            mj_member_set_card_claim_state($state);
+            return;
+        }
+
+        $member = mj_member_get_member_by_card_key($key);
+        if (!$member) {
+            $state['errors'][] = __('Nous ne retrouvons pas ce membre. Contactez l’équipe MJ pour obtenir une nouvelle carte.', 'mj-member');
+            mj_member_set_card_claim_state($state);
+            return;
+        }
+
+        if (!empty($member->wp_user_id)) {
+            $login_url = mj_member_get_card_login_url($member, $key);
+            wp_safe_redirect($login_url);
+            exit;
+        }
+
+        $email = isset($_POST['mj_card_email']) ? sanitize_email(wp_unslash($_POST['mj_card_email'])) : '';
+        $phone = isset($_POST['mj_card_phone']) ? sanitize_text_field(wp_unslash($_POST['mj_card_phone'])) : '';
+        $password = isset($_POST['mj_card_password']) ? (string) wp_unslash($_POST['mj_card_password']) : '';
+        $password_confirm = isset($_POST['mj_card_password_confirm']) ? (string) wp_unslash($_POST['mj_card_password_confirm']) : '';
+
+        if ($email === '' && !empty($member->email)) {
+            $email = sanitize_email((string) $member->email);
+        }
+
+        if ($email === '' || !is_email($email)) {
+            $state['errors'][] = __('Merci de renseigner une adresse email valide. Elle servira d’identifiant.', 'mj-member');
+        }
+
+        $min_length = (int) apply_filters('mj_member_min_password_length', 8, $member);
+        if ($password === '' || strlen($password) < $min_length) {
+            $state['errors'][] = sprintf(
+                __('Le mot de passe doit contenir au moins %d caractères.', 'mj-member'),
+                $min_length
+            );
+        }
+
+        if ($password !== $password_confirm) {
+            $state['errors'][] = __('Les mots de passe ne correspondent pas.', 'mj-member');
+        }
+
+        $state['values'] = array(
+            'email' => $email,
+            'phone' => $phone,
+        );
+
+        if (!empty($state['errors'])) {
+            mj_member_set_card_claim_state($state);
+            return;
+        }
+
+        $updates = array('email' => $email);
+        if ($phone !== '') {
+            $updates['phone'] = $phone;
+        }
+
+        $update_result = MjMembers::update($member->id, $updates);
+        if (is_wp_error($update_result)) {
+            $state['errors'][] = $update_result->get_error_message();
+            mj_member_set_card_claim_state($state);
+            return;
+        }
+
+        $sync_result = mj_member_sync_member_user_account($member->id, array(
+            'user_pass' => $password,
+            'send_notification' => false,
+            'return_error' => true,
+            'min_password_length' => $min_length,
+        ));
+
+        if (is_wp_error($sync_result)) {
+            $state['errors'][] = $sync_result->get_error_message();
+            mj_member_set_card_claim_state($state);
+            return;
+        }
+
+        $user_id = (int) $sync_result;
+        if ($user_id > 0) {
+            $user = get_user_by('id', $user_id);
+            if ($user && !is_wp_error($user)) {
+                wp_set_current_user($user_id, $user->user_login);
+                wp_set_auth_cookie($user_id, false);
+                do_action('wp_login', $user->user_login, $user);
+            }
+        }
+
+        $redirect = function_exists('mj_member_get_account_redirect')
+            ? mj_member_get_account_redirect()
+            : home_url('/mon-compte/');
+
+        $redirect = apply_filters('mj_member_card_claim_redirect', $redirect, $member, $user_id);
+
+        wp_safe_redirect($redirect);
+        exit;
+    }
+
+    add_action('init', 'mj_member_maybe_process_card_claim_form');
+}
+
+if (!function_exists('mj_member_maybe_override_card_template')) {
+    function mj_member_maybe_override_card_template($template) {
+        if (!mj_member_is_card_claim_request()) {
+            return $template;
+        }
+
+        $key = mj_member_get_card_key_from_request();
+        if ($key === '') {
+            return $template;
+        }
+
+        $member = mj_member_get_member_by_card_key($key);
+
+        if ($member && !empty($member->wp_user_id)) {
+            $login_url = mj_member_get_card_login_url($member, $key);
+            wp_safe_redirect($login_url);
+            exit;
+        }
+
+        $state = mj_member_get_card_claim_state();
+        if (!$member) {
+            $message = __('Ce lien n’est plus valide ou a déjà été utilisé.', 'mj-member');
+            if (empty($state['errors']) || !in_array($message, $state['errors'], true)) {
+                $state['errors'][] = $message;
+            }
+        }
+
+        mj_member_set_card_claim_state($state);
+
+        $template_path = \Mj\Member\Core\Config::path() . 'includes/templates/card_claim.php';
+        if (!file_exists($template_path)) {
+            return $template;
+        }
+
+        global $mj_member_card_claim_context;
+        $mj_member_card_claim_context = array(
+            'member' => $member,
+            'card_key' => $key,
+            'state' => mj_member_get_card_claim_state(),
+            'base_url' => mj_member_get_card_claim_base_url(),
+        );
+
+        return $template_path;
+    }
+
+    add_filter('template_include', 'mj_member_maybe_override_card_template', 80);
 }

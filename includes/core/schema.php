@@ -72,6 +72,29 @@ function mj_member_get_event_registrations_table_name() {
     return $cached;
 }
 
+function mj_member_get_event_occurrences_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_event_occurrences',
+        $wpdb->prefix . 'event_occurrences',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
 function mj_member_get_event_locations_table_name() {
     static $cached = null;
     if ($cached !== null) {
@@ -119,8 +142,181 @@ function mj_member_get_event_animateurs_table_name() {
     return $cached;
 }
 
+function mj_member_get_event_volunteers_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_event_volunteers',
+        $wpdb->prefix . 'event_volunteers',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
 function mj_member_get_event_attendance_table_name() {
     return mj_member_get_event_registrations_table_name();
+}
+
+function mj_member_get_hours_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_member_hours';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
+function mj_member_get_todo_projects_table_name() {
+    static $cached = null;
+    if ($cached !== null && mj_member_table_exists($cached)) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $primary = $wpdb->prefix . 'mj_projects';
+    $legacy = $wpdb->prefix . 'mj_todo_projects';
+
+    if (mj_member_table_exists($primary)) {
+        $cached = $primary;
+        return $cached;
+    }
+
+    if (mj_member_table_exists($legacy)) {
+        $cached = $legacy;
+        return $cached;
+    }
+
+    $cached = $primary;
+    return $cached;
+}
+
+function mj_member_get_todos_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_todos';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
+function mj_member_get_todo_assignments_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_todo_assignments';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
+function mj_member_get_todo_notes_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_todo_notes';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
+function mj_member_get_todo_media_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_todo_media';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
+function mj_member_get_ideas_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_ideas';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
+function mj_member_get_idea_votes_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_idea_votes';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
 }
 
 function mj_member_ensure_auxiliary_tables() {
@@ -224,6 +420,27 @@ function mj_member_ensure_auxiliary_tables() {
         $wpdb->query("ALTER TABLE $payments_hist_table ADD COLUMN payer_id mediumint(9) DEFAULT NULL AFTER member_id");
         $wpdb->query("ALTER TABLE $payments_hist_table ADD KEY payer_idx (payer_id)");
     }
+
+    $hours_table = mj_member_get_hours_table_name();
+    $sql_hours = "CREATE TABLE IF NOT EXISTS $hours_table (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        member_id bigint(20) unsigned NOT NULL,
+        recorded_by bigint(20) unsigned NOT NULL DEFAULT 0,
+        task_key varchar(120) DEFAULT NULL,
+        task_label varchar(191) NOT NULL,
+        activity_date date NOT NULL,
+        start_time time DEFAULT NULL,
+        end_time time DEFAULT NULL,
+        duration_minutes int unsigned NOT NULL DEFAULT 0,
+        notes text DEFAULT NULL,
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY member_date_idx (member_id, activity_date),
+        KEY recorded_by_idx (recorded_by),
+        KEY task_key_idx (task_key)
+    ) $charset_collate;";
+    dbDelta($sql_hours);
 
     $email_logs_table = $wpdb->prefix . 'mj_email_logs';
     $sql_email_logs = "CREATE TABLE IF NOT EXISTS $email_logs_table (
@@ -408,7 +625,7 @@ function mj_member_run_schema_upgrade() {
     $stored_version = get_option('mj_member_schema_version', '1.0.0');
     $table_name = $wpdb->prefix . 'mj_members';
 
-    $critical_columns = array('description_courte', 'description_longue', 'wp_user_id');
+    $critical_columns = array('description_courte', 'description_longue', 'wp_user_id', 'card_access_key');
     $missing_columns = array();
 
     foreach ($critical_columns as $column) {
@@ -429,7 +646,10 @@ function mj_member_run_schema_upgrade() {
             'capacity_waitlist',
             'capacity_notify_threshold',
             'capacity_notified',
-            'slug'
+            'slug',
+            'requires_validation',
+            'free_participation',
+            'registration_payload'
         );
 
         foreach ($event_critical_columns as $column) {
@@ -439,12 +659,60 @@ function mj_member_run_schema_upgrade() {
         }
     }
 
+    $todo_projects_table = function_exists('mj_member_get_todo_projects_table_name')
+        ? mj_member_get_todo_projects_table_name()
+        : $wpdb->prefix . 'mj_projects';
+    $todos_table = function_exists('mj_member_get_todos_table_name')
+        ? mj_member_get_todos_table_name()
+        : $wpdb->prefix . 'mj_todos';
+    $todo_assignments_table = function_exists('mj_member_get_todo_assignments_table_name')
+        ? mj_member_get_todo_assignments_table_name()
+        : $wpdb->prefix . 'mj_todo_assignments';
+    $todo_notes_table = function_exists('mj_member_get_todo_notes_table_name')
+        ? mj_member_get_todo_notes_table_name()
+        : $wpdb->prefix . 'mj_todo_notes';
+    $todo_media_table = function_exists('mj_member_get_todo_media_table_name')
+        ? mj_member_get_todo_media_table_name()
+        : $wpdb->prefix . 'mj_todo_media';
+    $ideas_table = function_exists('mj_member_get_ideas_table_name')
+        ? mj_member_get_ideas_table_name()
+        : $wpdb->prefix . 'mj_ideas';
+    $idea_votes_table = function_exists('mj_member_get_idea_votes_table_name')
+        ? mj_member_get_idea_votes_table_name()
+        : $wpdb->prefix . 'mj_idea_votes';
+
+    $missing_todo_tables = array();
+    if (!mj_member_table_exists($todo_projects_table)) {
+        $missing_todo_tables[] = $todo_projects_table;
+    }
+    if (!mj_member_table_exists($todos_table)) {
+        $missing_todo_tables[] = $todos_table;
+    }
+    if (!mj_member_table_exists($todo_assignments_table)) {
+        $missing_todo_tables[] = $todo_assignments_table;
+    }
+    if (!mj_member_table_exists($todo_notes_table)) {
+        $missing_todo_tables[] = $todo_notes_table;
+    }
+    if (!mj_member_table_exists($todo_media_table)) {
+        $missing_todo_tables[] = $todo_media_table;
+    }
+    $missing_idea_tables = array();
+    if (!mj_member_table_exists($ideas_table)) {
+        $missing_idea_tables[] = $ideas_table;
+    }
+    if (!mj_member_table_exists($idea_votes_table)) {
+        $missing_idea_tables[] = $idea_votes_table;
+    }
+
     $schema_needs_upgrade = version_compare($stored_version, Config::schemaVersion(), '<')
         || !empty($missing_columns)
-        || !empty($missing_event_columns);
+        || !empty($missing_event_columns)
+        || !empty($missing_todo_tables)
+        || !empty($missing_idea_tables);
     
  
-
+    
     if (!$schema_needs_upgrade) {
         $running = false;
         return;
@@ -469,6 +737,26 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_12($wpdb);
     mj_member_upgrade_to_2_13($wpdb);
     mj_member_upgrade_to_2_14($wpdb);
+    mj_member_upgrade_to_2_15($wpdb);
+    mj_member_upgrade_to_2_16($wpdb);
+    mj_member_upgrade_to_2_17($wpdb);
+    mj_member_upgrade_to_2_18($wpdb);
+    mj_member_upgrade_to_2_20($wpdb);
+    mj_member_upgrade_to_2_21($wpdb);
+    mj_member_upgrade_to_2_22($wpdb);
+    mj_member_upgrade_to_2_23($wpdb);
+    mj_member_upgrade_to_2_24($wpdb);
+    mj_member_upgrade_to_2_25($wpdb);
+    mj_member_upgrade_to_2_26($wpdb);
+    mj_member_upgrade_to_2_27($wpdb);
+    mj_member_upgrade_to_2_28($wpdb);
+    mj_member_upgrade_to_2_29($wpdb);
+    mj_member_upgrade_to_2_30($wpdb);
+    mj_member_upgrade_to_2_31($wpdb);
+    mj_member_upgrade_to_2_32($wpdb);
+    mj_member_upgrade_to_2_33($wpdb);
+    mj_member_upgrade_to_2_34($wpdb);
+    
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -481,8 +769,8 @@ function mj_member_run_schema_upgrade() {
         }
     }
 
-    if (class_exists('MjMembers_CRUD')) {
-        MjMembers_CRUD::resetColumnCache();
+    if (class_exists('MjMembers')) {
+        MjMembers::resetColumnCache();
     }
 
     update_option('mj_member_schema_version', Config::schemaVersion());
@@ -661,7 +949,7 @@ function mj_member_migrate_legacy_members($table_name) {
                         'last_name' => sanitize_text_field($row['tutor_nom']),
                         'email' => sanitize_email($row['tutor_email']),
                         'phone' => sanitize_text_field($row['tutor_phone']),
-                        'role' => MjMembers_CRUD::ROLE_TUTEUR,
+                        'role' => MjMembers::ROLE_TUTEUR,
                         'status' => 'active',
                         'requires_payment' => 0,
                         'is_autonomous' => 1,
@@ -820,15 +1108,15 @@ function mj_member_seed_events_from_csv($wpdb) {
     }
 
     $status_map = array(
-        'STATUS_ACTIF' => MjEvents_CRUD::STATUS_ACTIVE,
-        'STATUS_BROUILLON' => MjEvents_CRUD::STATUS_DRAFT,
-        'STATUS_PASSE' => MjEvents_CRUD::STATUS_PAST,
+        'STATUS_ACTIF' => MjMembers::STATUS_ACTIVE,
+        'STATUS_BROUILLON' => MjMembers::STATUS_DRAFT,
+        'STATUS_PASSE' => MjMembers::STATUS_PAST,
     );
 
     $type_map = array(
-        'TYPE_STAGE' => MjEvents_CRUD::TYPE_STAGE,
-        'TYPE_SOIREE' => MjEvents_CRUD::TYPE_SOIREE,
-        'TYPE_SORTIE' => MjEvents_CRUD::TYPE_SORTIE,
+        'TYPE_STAGE' => MjMembers::TYPE_STAGE,
+        'TYPE_SOIREE' => MjMembers::TYPE_SOIREE,
+        'TYPE_SORTIE' => MjMembers::TYPE_SORTIE,
     );
 
     $normalize_datetime = static function ($value) {
@@ -857,10 +1145,10 @@ function mj_member_seed_events_from_csv($wpdb) {
         }
 
         $status_key = isset($header_map['status']) ? strtoupper(trim((string) $row[$header_map['status']])) : '';
-        $status = isset($status_map[$status_key]) ? $status_map[$status_key] : MjEvents_CRUD::STATUS_DRAFT;
+        $status = isset($status_map[$status_key]) ? $status_map[$status_key] : MjMembers::STATUS_DRAFT;
 
         $type_key = isset($header_map['type']) ? strtoupper(trim((string) $row[$header_map['type']])) : '';
-        $type = isset($type_map[$type_key]) ? $type_map[$type_key] : MjEvents_CRUD::TYPE_STAGE;
+        $type = isset($type_map[$type_key]) ? $type_map[$type_key] : MjMembers::TYPE_STAGE;
 
         $description_raw = isset($header_map['description']) ? (string) $row[$header_map['description']] : '';
         $description = $description_raw !== '' ? wp_kses_post($description_raw) : '';
@@ -965,8 +1253,8 @@ function mj_member_seed_events_from_csv($wpdb) {
         $updated_at_raw = isset($header_map['updated_at']) ? trim((string) $row[$header_map['updated_at']]) : '';
         $updated_at = $normalize_datetime($updated_at_raw);
 
-        $event_id = MjEvents_CRUD::create($event_data);
-        if (!$event_id) {
+        $event_id = MjMembers::create($event_data);
+        if (is_wp_error($event_id) || !$event_id) {
             continue;
         }
 
@@ -1032,11 +1320,15 @@ function mj_member_upgrade_to_2_2($wpdb) {
         date_fin_inscription datetime DEFAULT NULL,
         prix decimal(10,2) NOT NULL DEFAULT 0.00,
         allow_guardian_registration tinyint(1) NOT NULL DEFAULT 0,
+        requires_validation tinyint(1) NOT NULL DEFAULT 1,
+        free_participation tinyint(1) NOT NULL DEFAULT 0,
+        registration_payload longtext DEFAULT NULL,
         location_id bigint(20) unsigned DEFAULT NULL,
         animateur_id bigint(20) unsigned DEFAULT NULL,
         article_id bigint(20) unsigned DEFAULT NULL,
         schedule_mode varchar(20) NOT NULL DEFAULT 'fixed',
         schedule_payload longtext DEFAULT NULL,
+        occurrence_selection_mode varchar(20) NOT NULL DEFAULT 'member_choice',
         recurrence_until datetime DEFAULT NULL,
         capacity_total int unsigned NOT NULL DEFAULT 0,
         capacity_waitlist int unsigned NOT NULL DEFAULT 0,
@@ -1182,6 +1474,585 @@ function mj_member_upgrade_to_2_4($wpdb) {
     $wpdb->query($sql);
 }
 
+function mj_member_upgrade_to_2_23($wpdb) {
+    $events_table = mj_member_get_events_table_name();
+
+    if (!mj_member_table_exists($events_table)) {
+        return;
+    }
+
+    if (mj_member_column_exists($events_table, 'requires_validation')) {
+        return;
+    }
+
+    $after_column = 'allow_guardian_registration';
+    if (!mj_member_column_exists($events_table, $after_column)) {
+        if (mj_member_column_exists($events_table, 'prix')) {
+            $after_column = 'prix';
+        } elseif (mj_member_column_exists($events_table, 'date_fin_inscription')) {
+            $after_column = 'date_fin_inscription';
+        } else {
+            $after_column = '';
+        }
+    }
+
+    $after_clause = '';
+    if ($after_column !== '' && mj_member_column_exists($events_table, $after_column)) {
+        $after_clause = ' AFTER ' . $after_column;
+    }
+
+    $wpdb->query("ALTER TABLE {$events_table} ADD COLUMN requires_validation tinyint(1) NOT NULL DEFAULT 1{$after_clause}");
+    $wpdb->query("UPDATE {$events_table} SET requires_validation = 1 WHERE requires_validation IS NULL");
+}
+
+function mj_member_upgrade_to_2_24($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $projects_table = mj_member_get_todo_projects_table_name();
+    $todos_table = mj_member_get_todos_table_name();
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql_projects = "CREATE TABLE {$projects_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        title varchar(190) NOT NULL DEFAULT '',
+        slug varchar(190) NOT NULL DEFAULT '',
+        description text DEFAULT NULL,
+        color varchar(20) DEFAULT NULL,
+        created_by bigint(20) unsigned NOT NULL DEFAULT 0,
+        updated_by bigint(20) unsigned DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        UNIQUE KEY slug (slug),
+        KEY created_by_idx (created_by)
+    ) {$charset_collate};";
+
+    dbDelta($sql_projects);
+
+    $sql_todos = "CREATE TABLE {$todos_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        project_id bigint(20) unsigned DEFAULT NULL,
+        title varchar(190) NOT NULL DEFAULT '',
+        description text DEFAULT NULL,
+        status varchar(20) NOT NULL DEFAULT 'open',
+        due_date date DEFAULT NULL,
+        assigned_member_id bigint(20) unsigned DEFAULT NULL,
+        assigned_by bigint(20) unsigned DEFAULT NULL,
+        created_by bigint(20) unsigned NOT NULL DEFAULT 0,
+        completed_at datetime DEFAULT NULL,
+        completed_by bigint(20) unsigned DEFAULT NULL,
+        position int unsigned NOT NULL DEFAULT 0,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY project_idx (project_id),
+        KEY status_idx (status),
+        KEY assigned_member_idx (assigned_member_id),
+        KEY due_date_idx (due_date),
+        KEY status_member_idx (status, assigned_member_id)
+    ) {$charset_collate};";
+
+    dbDelta($sql_todos);
+}
+
+function mj_member_upgrade_to_2_25($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $assignments_table = mj_member_get_todo_assignments_table_name();
+    $todos_table = mj_member_get_todos_table_name();
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql_assignments = "CREATE TABLE {$assignments_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        todo_id bigint(20) unsigned NOT NULL,
+        member_id bigint(20) unsigned NOT NULL,
+        assigned_by bigint(20) unsigned DEFAULT NULL,
+        assigned_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        UNIQUE KEY uniq_todo_member (todo_id, member_id),
+        KEY idx_member (member_id),
+        KEY idx_todo (todo_id)
+    ) {$charset_collate};";
+
+    dbDelta($sql_assignments);
+
+    if (!mj_member_table_exists($assignments_table) || !mj_member_table_exists($todos_table)) {
+        return;
+    }
+
+    $existing = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$assignments_table}");
+    if ($existing > 0) {
+        return;
+    }
+
+    $rows = $wpdb->get_results("SELECT id, assigned_member_id, assigned_by, created_by FROM {$todos_table} WHERE assigned_member_id IS NOT NULL AND assigned_member_id > 0", ARRAY_A);
+    if (empty($rows)) {
+        return;
+    }
+
+    foreach ($rows as $row) {
+        $todo_id = (int) ($row['id'] ?? 0);
+        $member_id = (int) ($row['assigned_member_id'] ?? 0);
+        if ($todo_id <= 0 || $member_id <= 0) {
+            continue;
+        }
+
+        $assigned_by = isset($row['assigned_by']) ? (int) $row['assigned_by'] : 0;
+        if ($assigned_by <= 0 && isset($row['created_by'])) {
+            $assigned_by = (int) $row['created_by'];
+        }
+
+        $wpdb->query($wpdb->prepare(
+            "INSERT IGNORE INTO {$assignments_table} (todo_id, member_id, assigned_by, assigned_at) VALUES (%d, %d, %d, %s)",
+            $todo_id,
+            $member_id,
+            $assigned_by,
+            current_time('mysql')
+        ));
+    }
+}
+
+function mj_member_upgrade_to_2_26($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $ideas_table = mj_member_get_ideas_table_name();
+    $votes_table = mj_member_get_idea_votes_table_name();
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql_ideas = "CREATE TABLE {$ideas_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        member_id bigint(20) unsigned NOT NULL,
+        title varchar(180) NOT NULL DEFAULT '',
+        content text NOT NULL,
+        status varchar(20) NOT NULL DEFAULT 'published',
+        vote_count int unsigned NOT NULL DEFAULT 0,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY member_idx (member_id),
+        KEY status_idx (status),
+        KEY vote_count_idx (vote_count),
+        KEY created_idx (created_at)
+    ) {$charset_collate};";
+
+    $sql_votes = "CREATE TABLE {$votes_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        idea_id bigint(20) unsigned NOT NULL,
+        member_id bigint(20) unsigned NOT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        UNIQUE KEY uniq_vote (idea_id, member_id),
+        KEY idea_idx (idea_id),
+        KEY member_idx (member_id)
+    ) {$charset_collate};";
+
+    dbDelta($sql_ideas);
+    dbDelta($sql_votes);
+
+    if (mj_member_table_exists($ideas_table) && mj_member_table_exists($votes_table)) {
+        $wpdb->query("UPDATE {$ideas_table} AS i SET vote_count = (
+            SELECT COUNT(*) FROM {$votes_table} AS v WHERE v.idea_id = i.id
+        )");
+    }
+}
+
+function mj_member_upgrade_to_2_27($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $notes_table = mj_member_get_todo_notes_table_name();
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql_notes = "CREATE TABLE {$notes_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        todo_id bigint(20) unsigned NOT NULL,
+        member_id bigint(20) unsigned NOT NULL,
+        wp_user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+        content text NOT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY todo_idx (todo_id),
+        KEY member_idx (member_id)
+    ) {$charset_collate};";
+
+    dbDelta($sql_notes);
+}
+
+function mj_member_upgrade_to_2_28($wpdb) {
+    $hours_table = mj_member_get_hours_table_name();
+    if (!$hours_table || !mj_member_table_exists($hours_table)) {
+        return;
+    }
+
+    $projects_table = mj_member_get_todo_projects_table_name();
+    if (!$projects_table || !mj_member_table_exists($projects_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($hours_table, 'project_id')) {
+        $wpdb->query("ALTER TABLE {$hours_table} ADD COLUMN project_id bigint(20) unsigned DEFAULT NULL AFTER notes");
+        if (!mj_member_index_exists($hours_table, 'idx_project_id')) {
+            $wpdb->query("ALTER TABLE {$hours_table} ADD KEY idx_project_id (project_id)");
+        }
+    } elseif (!mj_member_index_exists($hours_table, 'idx_project_id')) {
+        $wpdb->query("ALTER TABLE {$hours_table} ADD KEY idx_project_id (project_id)");
+    }
+
+    $needs_migration = (int) $wpdb->get_var(
+        "SELECT COUNT(*) FROM {$hours_table} WHERE (project_id IS NULL OR project_id = 0) AND notes IS NOT NULL AND notes <> ''"
+    );
+
+    if ($needs_migration <= 0) {
+        return;
+    }
+
+    $existing_projects = $wpdb->get_results(
+        "SELECT id, title, slug FROM {$projects_table}",
+        ARRAY_A
+    );
+
+    $project_map = array();
+    $project_titles = array();
+
+    $normalize_key = static function ($value): string {
+        $value = is_string($value) ? trim($value) : '';
+        if ($value === '') {
+            return '';
+        }
+
+        $slug = sanitize_title($value);
+        if ($slug !== '') {
+            return $slug;
+        }
+
+        $sanitized = sanitize_text_field($value);
+        return $sanitized !== '' ? strtolower($sanitized) : '';
+    };
+
+    foreach ((array) $existing_projects as $project_row) {
+        $project_id = isset($project_row['id']) ? (int) $project_row['id'] : 0;
+        if ($project_id <= 0) {
+            continue;
+        }
+
+        $title = isset($project_row['title']) ? sanitize_text_field((string) $project_row['title']) : '';
+        $slug = isset($project_row['slug']) ? sanitize_text_field((string) $project_row['slug']) : '';
+
+        $project_titles[$project_id] = $title;
+
+        $keys = array();
+        $title_key = $normalize_key($title);
+        if ($title_key !== '') {
+            $keys[] = $title_key;
+        }
+        $slug_key = $normalize_key($slug);
+        if ($slug_key !== '' && $slug_key !== $title_key) {
+            $keys[] = $slug_key;
+        }
+
+        $fallback_source = $title !== '' ? $title : ('project-' . $project_id);
+        $fallback_key = 'hash:' . md5($fallback_source);
+        if ($fallback_key !== '' && !in_array($fallback_key, $keys, true)) {
+            $keys[] = $fallback_key;
+        }
+
+        $keys = array_filter(array_unique($keys));
+
+        foreach ($keys as $key) {
+            if (!isset($project_map[$key])) {
+                $project_map[$key] = $project_id;
+            }
+        }
+    }
+
+    $raw_labels = $wpdb->get_results(
+        "SELECT DISTINCT notes FROM {$hours_table} WHERE (project_id IS NULL OR project_id = 0) AND notes IS NOT NULL AND notes <> ''",
+        ARRAY_A
+    );
+
+    if (empty($raw_labels)) {
+        return;
+    }
+
+    $default_color = '#2563eb';
+    $now = current_time('mysql');
+
+    foreach ($raw_labels as $label_row) {
+        $raw_label = isset($label_row['notes']) ? (string) $label_row['notes'] : '';
+        $candidate = trim($raw_label);
+        if ($candidate === '') {
+            continue;
+        }
+
+        $keys = array();
+        $title_key = $normalize_key($candidate);
+        if ($title_key !== '') {
+            $keys[] = $title_key;
+        }
+        $label_key = $normalize_key(sanitize_text_field($candidate));
+        if ($label_key !== '' && $label_key !== $title_key) {
+            $keys[] = $label_key;
+        }
+
+        $fallback_key = 'hash:' . md5($candidate);
+        if ($fallback_key !== '' && !in_array($fallback_key, $keys, true)) {
+            $keys[] = $fallback_key;
+        }
+
+        $keys = array_filter(array_unique($keys));
+
+        $project_id = 0;
+        foreach ($keys as $key) {
+            if (isset($project_map[$key])) {
+                $project_id = (int) $project_map[$key];
+                break;
+            }
+        }
+
+        if ($project_id <= 0) {
+            $base_slug = $title_key !== '' ? $title_key : sanitize_title(__('dossier', 'mj-member'));
+            if ($base_slug === '') {
+                $base_slug = 'dossier';
+            }
+
+            $slug = $base_slug;
+            $suffix = 2;
+            while ($wpdb->get_var($wpdb->prepare("SELECT id FROM {$projects_table} WHERE slug = %s LIMIT 1", $slug))) {
+                $slug = $base_slug . '-' . $suffix;
+                $suffix++;
+            }
+
+            $sanitized_title = sanitize_text_field($candidate);
+            $inserted = $wpdb->insert(
+                $projects_table,
+                array(
+                    'title' => $sanitized_title,
+                    'slug' => $slug,
+                    'color' => $default_color,
+                    'created_by' => 0,
+                    'updated_by' => 0,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ),
+                array('%s', '%s', '%s', '%d', '%d', '%s', '%s')
+            );
+
+            if ($inserted === false) {
+                continue;
+            }
+
+            $project_id = (int) $wpdb->insert_id;
+            if ($project_id <= 0) {
+                continue;
+            }
+
+            $project_titles[$project_id] = $sanitized_title;
+
+            foreach ($keys as $key) {
+                if ($key !== '') {
+                    $project_map[$key] = $project_id;
+                }
+            }
+        }
+
+        if ($project_id <= 0) {
+            continue;
+        }
+
+        $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE {$hours_table} SET project_id = %d WHERE (project_id IS NULL OR project_id = 0) AND notes = %s",
+                $project_id,
+                $raw_label
+            )
+        );
+    }
+
+    foreach ($project_titles as $project_id => $title) {
+        $project_id = (int) $project_id;
+        $title = is_string($title) ? trim($title) : '';
+        if ($project_id <= 0 || $title === '') {
+            continue;
+        }
+
+        $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE {$hours_table} SET notes = %s WHERE project_id = %d",
+                $title,
+                $project_id
+            )
+        );
+    }
+}
+
+function mj_member_upgrade_to_2_29($wpdb) {
+    $legacy_table = $wpdb->prefix . 'mj_todo_projects';
+    $target_table = $wpdb->prefix . 'mj_projects';
+
+    if (mj_member_table_exists($target_table)) {
+        return;
+    }
+
+    if (!mj_member_table_exists($legacy_table)) {
+        return;
+    }
+
+    $legacy_name = str_replace('`', '', $legacy_table);
+    $target_name = str_replace('`', '', $target_table);
+
+    $wpdb->query(sprintf('ALTER TABLE `%s` RENAME TO `%s`', esc_sql($legacy_name), esc_sql($target_name)));
+}
+
+function mj_member_upgrade_to_2_30($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $table = mj_member_get_event_occurrences_table_name();
+    if ($table === '') {
+        return;
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+    $sql = "CREATE TABLE {$table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        event_id bigint(20) unsigned NOT NULL,
+        start_at datetime NOT NULL,
+        end_at datetime NOT NULL,
+        source varchar(20) NOT NULL DEFAULT 'generated',
+        meta longtext DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_event_start (event_id, start_at),
+        KEY idx_event_source (event_id, source)
+    ) {$charset_collate};";
+
+    dbDelta($sql);
+}
+
+function mj_member_upgrade_to_2_31($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $table = mj_member_get_todo_media_table_name();
+    if ($table === '') {
+        return;
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+    $sql = "CREATE TABLE {$table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        todo_id bigint(20) unsigned NOT NULL,
+        attachment_id bigint(20) unsigned NOT NULL,
+        member_id bigint(20) unsigned DEFAULT NULL,
+        wp_user_id bigint(20) unsigned DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        UNIQUE KEY uniq_todo_attachment (todo_id, attachment_id),
+        KEY idx_todo (todo_id),
+        KEY idx_attachment (attachment_id),
+        KEY idx_member (member_id)
+    ) {$charset_collate};";
+
+    dbDelta($sql);
+}
+
+function mj_member_upgrade_to_2_32($wpdb) {
+    $events_table = mj_member_get_events_table_name();
+
+    if (!$events_table || !mj_member_table_exists($events_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($events_table, 'occurrence_selection_mode')) {
+        $wpdb->query("ALTER TABLE {$events_table} ADD COLUMN occurrence_selection_mode varchar(20) NOT NULL DEFAULT 'member_choice' AFTER schedule_payload");
+    }
+
+    $wpdb->query("UPDATE {$events_table} SET occurrence_selection_mode = 'member_choice' WHERE occurrence_selection_mode IS NULL OR occurrence_selection_mode = ''");
+}
+
+function mj_member_upgrade_to_2_33($wpdb) {
+    $events_table = mj_member_get_events_table_name();
+
+    if (!$events_table || !mj_member_table_exists($events_table)) {
+        return;
+    }
+
+    $has_free_participation = mj_member_column_exists($events_table, 'free_participation');
+
+    if (!$has_free_participation && !mj_member_column_exists($events_table, 'registration_mode')) {
+        $wpdb->query("ALTER TABLE {$events_table} ADD COLUMN registration_mode varchar(40) NOT NULL DEFAULT 'participant' AFTER requires_validation");
+    }
+
+    $after_column = 'requires_validation';
+    if ($has_free_participation) {
+        $after_column = 'free_participation';
+    } elseif (mj_member_column_exists($events_table, 'registration_mode')) {
+        $after_column = 'registration_mode';
+    }
+
+    if (!mj_member_column_exists($events_table, 'registration_payload')) {
+        $wpdb->query("ALTER TABLE {$events_table} ADD COLUMN registration_payload longtext DEFAULT NULL AFTER {$after_column}");
+    }
+
+    if (!$has_free_participation && mj_member_column_exists($events_table, 'registration_mode')) {
+        $wpdb->query("UPDATE {$events_table} SET registration_mode = 'participant' WHERE registration_mode IS NULL OR registration_mode = ''");
+    }
+}
+
+function mj_member_upgrade_to_2_34($wpdb) {
+    $events_table = mj_member_get_events_table_name();
+
+    if (!$events_table || !mj_member_table_exists($events_table)) {
+        return;
+    }
+
+    $has_free_participation = mj_member_column_exists($events_table, 'free_participation');
+    $has_registration_mode = mj_member_column_exists($events_table, 'registration_mode');
+
+    if (!$has_free_participation) {
+        $after_column = 'requires_validation';
+        if ($has_registration_mode) {
+            $after_column = 'registration_mode';
+        }
+
+        $wpdb->query("ALTER TABLE {$events_table} ADD COLUMN free_participation tinyint(1) NOT NULL DEFAULT 0 AFTER {$after_column}");
+        $has_free_participation = mj_member_column_exists($events_table, 'free_participation');
+    }
+
+    if ($has_free_participation && $has_registration_mode) {
+        $default_free_registration_modes = array('attendance', 'attendance_free', 'free_participation', 'free', 'open_access', 'no_registration', 'optional', 'none', 'libre', 'presence');
+        $placeholders = implode(',', array_fill(0, count($default_free_registration_modes), '%s'));
+        if ($placeholders !== '') {
+            $query_args = $default_free_registration_modes;
+            array_unshift($query_args, "UPDATE {$events_table} SET free_participation = 1 WHERE registration_mode IN ({$placeholders})");
+            $prepared = call_user_func_array(array($wpdb, 'prepare'), $query_args);
+            if ($prepared !== false && $prepared !== null) {
+                $wpdb->query($prepared);
+            }
+        }
+    }
+
+    if ($has_free_participation) {
+        $wpdb->query("UPDATE {$events_table} SET free_participation = 0 WHERE free_participation IS NULL");
+    }
+
+    if ($has_registration_mode) {
+        $wpdb->query("ALTER TABLE {$events_table} DROP COLUMN registration_mode");
+    }
+}
+
 function mj_member_upgrade_to_2_5($wpdb) {
     $members_table = $wpdb->prefix . 'mj_members';
     $templates_table = $wpdb->prefix . 'mj_email_templates';
@@ -1247,12 +2118,15 @@ function mj_member_upgrade_to_2_6($wpdb) {
     $closures_table = $wpdb->prefix . 'mj_event_closures';
     $sql_closures = "CREATE TABLE {$closures_table} (
         id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-        closure_date date NOT NULL,
+        start_date date NOT NULL,
+        end_date date NOT NULL,
         description varchar(190) DEFAULT '',
         created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY  (id),
-        UNIQUE KEY uniq_closure_date (closure_date)
+        UNIQUE KEY idx_closure_range (start_date, end_date),
+        KEY idx_closure_start (start_date),
+        KEY idx_closure_end (end_date)
     ) {$charset_collate};";
     dbDelta($sql_closures);
 
@@ -1341,7 +2215,7 @@ function mj_member_upgrade_to_2_11($wpdb) {
         $wpdb->query("ALTER TABLE {$events_table} ADD UNIQUE KEY idx_slug (slug)");
     }
 
-    if (!class_exists('MjEvents_CRUD')) {
+    if (!class_exists('MjMembers')) {
         return;
     }
 
@@ -1361,7 +2235,7 @@ function mj_member_upgrade_to_2_11($wpdb) {
             $base = (string) $row->title;
         }
 
-        MjEvents_CRUD::sync_slug((int) $row->id, $base);
+        MjMembers::sync_slug((int) $row->id, $base);
     }
 }
 
@@ -1447,6 +2321,153 @@ function mj_member_upgrade_to_2_14($wpdb) {
     }
 }
 
+function mj_member_upgrade_to_2_15($wpdb) {
+    $table = $wpdb->prefix . 'mj_members';
+
+    if (!mj_member_table_exists($table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($table, 'card_access_key')) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN card_access_key varchar(64) DEFAULT NULL AFTER notification_preferences");
+    }
+
+    if (!mj_member_index_exists($table, 'idx_card_key')) {
+        $wpdb->query("ALTER TABLE {$table} ADD UNIQUE KEY idx_card_key (card_access_key)");
+    }
+}
+
+function mj_member_upgrade_to_2_16($wpdb) {
+    $table = $wpdb->prefix . 'mj_members';
+
+    if (!mj_member_table_exists($table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($table, 'anonymized_at')) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN anonymized_at datetime DEFAULT NULL AFTER joined_date");
+    }
+}
+
+function mj_member_upgrade_to_2_17($wpdb) {
+    $table = $wpdb->prefix . 'mj_members';
+
+    if (!mj_member_table_exists($table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($table, 'is_volunteer')) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN is_volunteer tinyint(1) NOT NULL DEFAULT 0 AFTER is_autonomous");
+    }
+
+    $wpdb->query("UPDATE {$table} SET is_volunteer = 1 WHERE role = 'benevole'");
+    $wpdb->query("UPDATE {$table} SET role = 'jeune' WHERE role = 'benevole'");
+}
+
+function mj_member_upgrade_to_2_18($wpdb) {
+    $table = mj_member_get_hours_table_name();
+
+    if (!mj_member_table_exists($table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($table, 'start_time')) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN start_time time DEFAULT NULL AFTER activity_date");
+    }
+
+    if (!mj_member_column_exists($table, 'end_time')) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN end_time time DEFAULT NULL AFTER start_time");
+    }
+}
+
+function mj_member_upgrade_to_2_20($wpdb) {
+    $table = $wpdb->prefix . 'mj_event_closures';
+
+    if (!mj_member_table_exists($table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($table, 'start_date') && mj_member_column_exists($table, 'closure_date')) {
+        $wpdb->query("ALTER TABLE {$table} CHANGE COLUMN closure_date start_date date NOT NULL");
+    } elseif (!mj_member_column_exists($table, 'start_date')) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN start_date date NOT NULL AFTER id");
+    }
+
+    if (!mj_member_column_exists($table, 'end_date')) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN end_date date NOT NULL AFTER start_date");
+        $wpdb->query("UPDATE {$table} SET end_date = start_date WHERE end_date IS NULL OR end_date = '0000-00-00'");
+    }
+
+    if (mj_member_index_exists($table, 'uniq_closure_date')) {
+        $wpdb->query("ALTER TABLE {$table} DROP INDEX uniq_closure_date");
+    }
+
+    if (!mj_member_index_exists($table, 'idx_closure_range')) {
+        $wpdb->query("ALTER TABLE {$table} ADD UNIQUE KEY idx_closure_range (start_date, end_date)");
+    }
+
+    if (!mj_member_index_exists($table, 'idx_closure_start')) {
+        $wpdb->query("ALTER TABLE {$table} ADD KEY idx_closure_start (start_date)");
+    }
+
+    if (!mj_member_index_exists($table, 'idx_closure_end')) {
+        $wpdb->query("ALTER TABLE {$table} ADD KEY idx_closure_end (end_date)");
+    }
+}
+
+function mj_member_upgrade_to_2_21($wpdb) {
+    $table = $wpdb->prefix . 'mj_event_volunteers';
+
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    if (function_exists('dbDelta')) {
+        $charset_collate = $wpdb->get_charset_collate();
+        $sql = "CREATE TABLE {$table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            event_id bigint(20) unsigned NOT NULL,
+            volunteer_id bigint(20) unsigned NOT NULL,
+            created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY  (id),
+            UNIQUE KEY uniq_event_volunteer (event_id, volunteer_id),
+            KEY idx_event (event_id),
+            KEY idx_volunteer (volunteer_id)
+        ) {$charset_collate};";
+        dbDelta($sql);
+    }
+}
+
+function mj_member_upgrade_to_2_22($wpdb) {
+    $members_table = $wpdb->prefix . 'mj_members';
+    
+    if (!mj_member_table_exists($members_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($members_table, 'nickname')) {
+        $after_clause = '';
+        if (mj_member_column_exists($members_table, 'first_name')) {
+            $after_clause = ' AFTER first_name';
+        }
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN nickname varchar(100) DEFAULT NULL{$after_clause}");
+    }
+
+    if (!mj_member_column_exists($members_table, 'whatsapp_opt_in')) {
+        $after_clause = '';
+        if (mj_member_column_exists($members_table, 'sms_opt_in')) {
+            $after_clause = ' AFTER sms_opt_in';
+        } elseif (mj_member_column_exists($members_table, 'newsletter_opt_in')) {
+            $after_clause = ' AFTER newsletter_opt_in';
+        } elseif (mj_member_column_exists($members_table, 'photo_usage_consent')) {
+            $after_clause = ' AFTER photo_usage_consent';
+        }
+
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN whatsapp_opt_in tinyint(1) NOT NULL DEFAULT 1{$after_clause}");
+        $wpdb->query("UPDATE {$members_table} SET whatsapp_opt_in = 1 WHERE whatsapp_opt_in IS NULL");
+    }
+}
+
 function mj_install()
 {
     mj_member_ensure_capabilities();
@@ -1460,6 +2481,7 @@ function mj_install()
     $sql = "CREATE TABLE IF NOT EXISTS $table_name (
         id mediumint(9) NOT NULL AUTO_INCREMENT,
         first_name varchar(100) NOT NULL,
+        nickname varchar(100) DEFAULT NULL,
         last_name varchar(100) NOT NULL,
         email varchar(150) NOT NULL,
         phone varchar(30) DEFAULT NULL,
@@ -1467,6 +2489,7 @@ function mj_install()
         role varchar(20) NOT NULL DEFAULT 'jeune',
         guardian_id mediumint(9) DEFAULT NULL,
         is_autonomous tinyint(1) NOT NULL DEFAULT 0,
+        is_volunteer tinyint(1) NOT NULL DEFAULT 0,
         requires_payment tinyint(1) NOT NULL DEFAULT 1,
         address varchar(250) DEFAULT NULL,
         city varchar(120) DEFAULT NULL,
@@ -1482,13 +2505,17 @@ function mj_install()
         photo_usage_consent tinyint(1) DEFAULT 0,
         newsletter_opt_in tinyint(1) NOT NULL DEFAULT 1,
         sms_opt_in tinyint(1) NOT NULL DEFAULT 1,
+        whatsapp_opt_in tinyint(1) NOT NULL DEFAULT 1,
         notification_preferences longtext DEFAULT NULL,
+        card_access_key varchar(64) DEFAULT NULL,
         joined_date datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        anonymized_at datetime DEFAULT NULL,
         PRIMARY KEY  (id),
         KEY idx_role (role),
         KEY idx_guardian (guardian_id),
         KEY idx_email (email),
-        KEY idx_wp_user (wp_user_id)
+        KEY idx_wp_user (wp_user_id),
+        UNIQUE KEY idx_card_key (card_access_key)
     ) $charset_collate;";
 
     $sql_payments = "CREATE TABLE IF NOT EXISTS $payments_table (
@@ -1580,8 +2607,9 @@ function mj_install_test_data($table_name) {
         'date_inscription' => $now,
         'newsletter_opt_in' => 1,
         'sms_opt_in' => 1,
+        'whatsapp_opt_in' => 1,
         'joined_date' => $now
-    ), array('%s','%s','%s','%s','%s','%s','%d','%d','%s','%s','%s','%s','%d','%d','%s'));
+    ), array('%s','%s','%s','%s','%s','%s','%d','%d','%s','%s','%s','%s','%d','%d','%d','%s'));
 
     $guardian_id = intval($wpdb->insert_id);
 
@@ -1600,13 +2628,18 @@ function mj_install_test_data($table_name) {
         'date_inscription' => $now,
         'newsletter_opt_in' => 1,
         'sms_opt_in' => 1,
+        'whatsapp_opt_in' => 1,
         'joined_date' => $now
-    ), array('%s','%s','%s','%s','%s','%s','%d','%d','%d','%s','%s','%s','%d','%d','%s'));
+    ), array('%s','%s','%s','%s','%s','%s','%d','%d','%d','%s','%s','%s','%d','%d','%d','%s'));
 }
 
 function mj_uninstall()
 {
     mj_member_remove_capabilities();
+
+    if (function_exists('mj_member_clear_data_retention_schedule')) {
+        mj_member_clear_data_retention_schedule();
+    }
 
     global $wpdb;
     $table_name = $wpdb->prefix . 'mj_members';

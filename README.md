@@ -64,6 +64,13 @@ MJ Member est un module WordPress conçu pour centraliser la gestion des adhére
 
 Pour toute question ou problème, veuillez contacter l'équipe de développement.
 
+### Widget « Prochains événements »
+- Dans Elementor, ajoutez le widget **Prochains événements MJ** pour afficher les prochains stages/sorties.
+- Choisissez la disposition adaptée (liste, grille ou slider) et le nombre d’événements à remonter.
+- Servez-vous des contrôles pour filtrer par type, ajuster le tri et activer le bouton « Voir plus » vers la page agenda.
+- L’aperçu Elementor embarque des données factices si aucun événement n’est planifié, ce qui facilite la mise en page.
+- Le widget réutilise les styles MJ et le script `mj-member-upcoming-events.js` ; assurez-vous que les assets du plugin sont chargés sur la page.
+
 ## Licence
 
 Tous droits réservés © 2025

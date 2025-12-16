@@ -4,7 +4,7 @@ namespace Mj\Member\Classes;
 
 use Exception;
 use FPDF;
-use Mj\Member\Classes\Crud\MjMembers_CRUD;
+use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Core\Config;
 
 if (!defined('ABSPATH')) {
@@ -33,7 +33,7 @@ class MjMemberBusinessCards
      */
     public static function collect_members($selection_mode, $args = array())
     {
-        if (!class_exists(MjMembers_CRUD::class)) {
+        if (!class_exists(MjMembers::class)) {
             return array();
         }
 
@@ -64,8 +64,8 @@ class MjMemberBusinessCards
             }
         }
 
-        $role_labels = method_exists(MjMembers_CRUD::class, 'getRoleLabels') ? MjMembers_CRUD::getRoleLabels() : array();
-        $active_status = defined(MjMembers_CRUD::class . '::STATUS_ACTIVE') ? MjMembers_CRUD::STATUS_ACTIVE : 'active';
+        $role_labels = method_exists(MjMembers::class, 'getRoleLabels') ? MjMembers::getRoleLabels() : array();
+        $active_status = defined(MjMembers::class . '::STATUS_ACTIVE') ? MjMembers::STATUS_ACTIVE : 'active';
 
         $members_map = array();
         $append_member = static function ($member) use (&$members_map, $include_inactive, $role_labels, $active_status) {
@@ -123,7 +123,7 @@ class MjMemberBusinessCards
         switch ($selection_mode) {
             case 'role':
                 if (empty($roles)) {
-                    $results = MjMembers_CRUD::getAll(0, 0, 'last_name', 'ASC');
+                    $results = MjMembers::getAll(0, 0, 'last_name', 'ASC');
                     if ($results) {
                         foreach ($results as $entry) {
                             if (empty($entry->role) || !isset($roles[$entry->role])) {
@@ -134,7 +134,7 @@ class MjMemberBusinessCards
                     }
                 } else {
                     foreach ($roles as $role_key) {
-                        $results = MjMembers_CRUD::getAll(0, 0, 'last_name', 'ASC', '', array('role' => $role_key));
+                        $results = MjMembers::getAll(0, 0, 'last_name', 'ASC', '', array('role' => $role_key));
                         if ($results) {
                             foreach ($results as $entry) {
                                 $append_member($entry);
@@ -147,7 +147,7 @@ class MjMemberBusinessCards
             case 'custom':
                 if (!empty($member_ids)) {
                     foreach ($member_ids as $member_id) {
-                        $member = MjMembers_CRUD::getById($member_id);
+                        $member = MjMembers::getById($member_id);
                         if ($member) {
                             $append_member($member);
                         }
@@ -157,7 +157,7 @@ class MjMemberBusinessCards
 
             case 'all':
             default:
-                $results = MjMembers_CRUD::getAll(0, 0, 'last_name', 'ASC');
+                $results = MjMembers::getAll(0, 0, 'last_name', 'ASC');
                 if ($results) {
                     foreach ($results as $entry) {
                         $append_member($entry);
@@ -205,17 +205,17 @@ class MjMemberBusinessCards
 
         $defaults = array(
             'background_color' => '#ffffff',
-            'accent_color' => '#2563eb',
-            'text_color' => '#1f2937',
+            'background_image_path' => '',
+            'background_back_image_path' => '',
+            'text_color' => '#ffffff',
             'font_family' => 'Helvetica',
             'logo_path' => '',
+            'double_sided' => false,
         );
         $options = array_merge($defaults, is_array($options) ? $options : array());
 
         $background_rgb = self::parse_color($options['background_color'], array(255, 255, 255));
-        $accent_rgb = self::parse_color($options['accent_color'], array(37, 99, 235));
-        $text_rgb = self::parse_color($options['text_color'], array(31, 41, 55));
-        $border_rgb = self::mix_color($accent_rgb, array(0, 0, 0), 0.35);
+        $text_rgb = self::parse_color($options['text_color'], array(255, 255, 255));
 
         $allowed_fonts = array('Helvetica', 'Arial', 'Courier', 'Times');
         $font_family = in_array($options['font_family'], $allowed_fonts, true) ? $options['font_family'] : 'Helvetica';
@@ -224,6 +224,18 @@ class MjMemberBusinessCards
         if ($logo_path !== '' && !file_exists($logo_path)) {
             $logo_path = '';
         }
+
+        $background_image_path = is_string($options['background_image_path']) ? trim($options['background_image_path']) : '';
+        if ($background_image_path !== '' && !file_exists($background_image_path)) {
+            $background_image_path = '';
+        }
+
+        $background_back_image_path = is_string($options['background_back_image_path']) ? trim($options['background_back_image_path']) : '';
+        if ($background_back_image_path !== '' && !file_exists($background_back_image_path)) {
+            $background_back_image_path = '';
+        }
+
+        $double_sided = !empty($options['double_sided']);
 
         try {
             $pdf = new FPDF('P', 'mm', 'A4');
@@ -239,35 +251,60 @@ class MjMemberBusinessCards
         $pdf->SetAutoPageBreak(false);
         $pdf->SetCompression(true);
 
-        $cards_per_page = self::CARD_COLUMNS * self::CARD_ROWS;
-        $index = 0;
+        list($prepared_entries, $temporary_files) = self::prepare_entries_with_qr($entries);
 
-        foreach ($entries as $entry) {
-            if ($index % $cards_per_page === 0) {
-                $pdf->AddPage();
+        $cards_per_page = self::CARD_COLUMNS * self::CARD_ROWS;
+        $pages = array_chunk($prepared_entries, $cards_per_page);
+
+        foreach ($pages as $page_entries) {
+            $pdf->AddPage();
+
+            foreach ($page_entries as $position => $entry) {
+                $row = (int) floor($position / self::CARD_COLUMNS);
+                $column = $position % self::CARD_COLUMNS;
+
+                $origin_x = self::CARD_MARGIN_LEFT_MM + ($column * (self::CARD_WIDTH_MM + self::CARD_GAP_X_MM));
+                $origin_y = self::CARD_MARGIN_TOP_MM + ($row * (self::CARD_HEIGHT_MM + self::CARD_GAP_Y_MM));
+
+                self::render_card($pdf, $entry, $origin_x, $origin_y, array(
+                    'font_family' => $font_family,
+                    'background_rgb' => $background_rgb,
+                    'background_image_path' => $background_image_path,
+                    'text_rgb' => $text_rgb,
+                    'logo_path' => $logo_path,
+                ));
             }
 
-            $position = $index % $cards_per_page;
-            $row = (int) floor($position / self::CARD_COLUMNS);
-            $column = $position % self::CARD_COLUMNS;
+            if ($double_sided) {
+                $pdf->AddPage();
+                $verso_background_path = $background_back_image_path !== '' ? $background_back_image_path : $background_image_path;
 
-            $origin_x = self::CARD_MARGIN_LEFT_MM + ($column * (self::CARD_WIDTH_MM + self::CARD_GAP_X_MM));
-            $origin_y = self::CARD_MARGIN_TOP_MM + ($row * (self::CARD_HEIGHT_MM + self::CARD_GAP_Y_MM));
+                foreach ($page_entries as $position => $entry) {
+                    $row = (int) floor($position / self::CARD_COLUMNS);
+                    $column = $position % self::CARD_COLUMNS;
+                    $mirrored_column = (self::CARD_COLUMNS - 1) - $column;
 
-            self::render_card($pdf, $entry, $origin_x, $origin_y, array(
-                'font_family' => $font_family,
-                'background_rgb' => $background_rgb,
-                'accent_rgb' => $accent_rgb,
-                'text_rgb' => $text_rgb,
-                'border_rgb' => $border_rgb,
-                'logo_path' => $logo_path,
-            ));
+                    $origin_x = self::CARD_MARGIN_LEFT_MM + ($mirrored_column * (self::CARD_WIDTH_MM + self::CARD_GAP_X_MM));
+                    $origin_y = self::CARD_MARGIN_TOP_MM + ($row * (self::CARD_HEIGHT_MM + self::CARD_GAP_Y_MM));
 
-            $index++;
+                    self::render_card_back($pdf, $origin_x, $origin_y, array(
+                        'background_rgb' => $background_rgb,
+                        'background_image_path' => $verso_background_path,
+                    ));
+                }
+            }
         }
 
         $filename = 'cartes-mj-member-' . gmdate('Ymd-His') . '.pdf';
         $content = $pdf->Output('S');
+
+        if (!empty($temporary_files)) {
+            foreach ($temporary_files as $temp_path) {
+                if (is_string($temp_path) && $temp_path !== '' && file_exists($temp_path)) {
+                    @unlink($temp_path);
+                }
+            }
+        }
 
         return array(
             'filename' => $filename,
@@ -290,23 +327,23 @@ class MjMemberBusinessCards
     {
         $font_family = $options['font_family'];
         $background_rgb = $options['background_rgb'];
-        $accent_rgb = $options['accent_rgb'];
+        $background_image_path = isset($options['background_image_path']) ? (string) $options['background_image_path'] : '';
         $text_rgb = $options['text_rgb'];
-        $border_rgb = $options['border_rgb'];
         $logo_path = $options['logo_path'];
 
         $card_width = self::CARD_WIDTH_MM;
         $card_height = self::CARD_HEIGHT_MM;
 
-        $pdf->SetDrawColor($border_rgb[0], $border_rgb[1], $border_rgb[2]);
-        $pdf->SetLineWidth(0.4);
-        $pdf->Rect($origin_x, $origin_y, $card_width, $card_height, 'D');
-
         $pdf->SetFillColor($background_rgb[0], $background_rgb[1], $background_rgb[2]);
         $pdf->Rect($origin_x, $origin_y, $card_width, $card_height, 'F');
 
-        $pdf->SetFillColor($accent_rgb[0], $accent_rgb[1], $accent_rgb[2]);
-        $pdf->Rect($origin_x, $origin_y, $card_width, self::ACCENT_HEIGHT_MM, 'F');
+        if ($background_image_path !== '') {
+            try {
+                $pdf->Image($background_image_path, $origin_x, $origin_y, $card_width, $card_height);
+            } catch (Exception $exception) {
+                // Ignore background image errors to avoid breaking the PDF.
+            }
+        }
 
         if ($logo_path !== '') {
             try {
@@ -320,26 +357,236 @@ class MjMemberBusinessCards
             }
         }
 
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetFont($font_family, 'B', 13);
+        $pdf->SetTextColor($text_rgb[0], $text_rgb[1], $text_rgb[2]);
+        $pdf->SetFont($font_family, 'B', 11);
         $pdf->SetXY($origin_x + 6.0, $origin_y + 8.0);
-        $pdf->Cell($card_width - 12.0, 4.5, self::to_pdf_text(self::uppercase($entry['full_name'] ?? '')), 0, 2, 'L');
+        $pdf->Cell($card_width - 12.0, 3.5, self::to_pdf_text(self::uppercase($entry['full_name'] ?? '')), 0, 2, 'L');
 
         $pdf->SetFont($font_family, '', 9);
-        $pdf->SetXY($origin_x + 6.0, $origin_y + 14.0);
-        $pdf->Cell($card_width - 12.0, 4.0, self::to_pdf_text($entry['role_label'] ?? ''), 0, 2, 'L');
+        $pdf->SetXY($origin_x + 6.0, $origin_y + 12.0);
+        $pdf->Cell($card_width - 12.0, 3.5, self::to_pdf_text($entry['role_label'] ?? ''), 0, 2, 'L');
 
         $pdf->SetTextColor($text_rgb[0], $text_rgb[1], $text_rgb[2]);
-        $pdf->SetFont($font_family, '', 10);
-        $pdf->SetXY($origin_x + 6.0, $origin_y + 26.0);
-        $membership_line = sprintf(__('Adhésion : %s', 'mj-member'), $entry['membership_label'] ?? '');
-        $pdf->Cell($card_width - 12.0, 5.0, self::to_pdf_text($membership_line), 0, 2, 'L');
+        $pdf->SetFont($font_family, '', 7);
+        $pdf->SetXY($origin_x + 6.0, $origin_y + 16.0);
+        $membership_value = $entry['membership_label'] ?? '';
+        $pdf->Cell($card_width - 12.0, 3.0, self::to_pdf_text($membership_value), 0, 2, 'L');
 
-        $identifier_line = sprintf(__('Identifiant : #%d', 'mj-member'), isset($entry['id']) ? (int) $entry['id'] : 0);
-        $pdf->SetFont($font_family, '', 9);
-        $pdf->SetTextColor($border_rgb[0], $border_rgb[1], $border_rgb[2]);
-        $pdf->SetXY($origin_x + 6.0, $origin_y + 34.0);
-        $pdf->Cell($card_width - 12.0, 4.5, self::to_pdf_text($identifier_line), 0, 2, 'L');
+        $qr_image = isset($entry['card_qr_image_path']) ? (string) $entry['card_qr_image_path'] : '';
+        if ($qr_image !== '' && file_exists($qr_image)) {
+            $qr_size = 20.0;
+            $qr_margin = 4.0;
+            $qr_x = $origin_x + $card_width - $qr_size - $qr_margin;
+            $qr_y = $origin_y + self::ACCENT_HEIGHT_MM + 6.0;
+
+            try {
+                $pdf->Image($qr_image, $qr_x, $qr_y, $qr_size, $qr_size);
+            } catch (Exception $exception) {
+                // Ignorer les erreurs de rendu du QR code pour ne pas interrompre la génération du PDF.
+            }
+        }
+    }
+
+    /**
+     * Render the back side of a business card.
+     *
+     * @param FPDF $pdf
+     * @param float $origin_x
+     * @param float $origin_y
+     * @param array $options
+     *
+     * @return void
+     */
+    protected static function render_card_back(FPDF $pdf, $origin_x, $origin_y, array $options)
+    {
+        $background_rgb = $options['background_rgb'];
+        $background_image_path = isset($options['background_image_path']) ? (string) $options['background_image_path'] : '';
+
+        $card_width = self::CARD_WIDTH_MM;
+        $card_height = self::CARD_HEIGHT_MM;
+
+        $pdf->SetFillColor($background_rgb[0], $background_rgb[1], $background_rgb[2]);
+        $pdf->Rect($origin_x, $origin_y, $card_width, $card_height, 'F');
+
+        if ($background_image_path !== '') {
+            try {
+                $pdf->Image($background_image_path, $origin_x, $origin_y, $card_width, $card_height);
+            } catch (Exception $exception) {
+                // Ignorer les erreurs de rendu du verso pour éviter d'interrompre la génération.
+            }
+        }
+    }
+
+    /**
+     * Prépare les données d'impression en y associant les QR codes temporaires.
+     *
+     * @param array<int,array<string,mixed>> $entries
+     *
+     * @return array{0:array<int,array<string,mixed>>,1:array<int,string>}
+     */
+    protected static function prepare_entries_with_qr(array $entries)
+    {
+        if (empty($entries)) {
+            return array(array(), array());
+        }
+
+        $prepared = array();
+        $temporary_files = array();
+
+        foreach ($entries as $entry) {
+            $member_id = isset($entry['id']) ? (int) $entry['id'] : 0;
+            if ($member_id > 0) {
+                $qr_payload = self::generate_member_qr_payload($member_id);
+                if (!empty($qr_payload['url'])) {
+                    $entry['card_qr_url'] = $qr_payload['url'];
+                }
+                if (!empty($qr_payload['path'])) {
+                    $entry['card_qr_image_path'] = $qr_payload['path'];
+                    if (!empty($qr_payload['temporary'])) {
+                        $temporary_files[] = $qr_payload['path'];
+                    }
+                }
+            }
+
+            $prepared[] = $entry;
+        }
+
+        return array($prepared, $temporary_files);
+    }
+
+    /**
+     * Construit le payload QR pour un membre (URL + chemin image).
+     *
+     * @param int $member_id
+     *
+     * @return array{url?:string,path?:string,temporary?:bool}
+     */
+    protected static function generate_member_qr_payload($member_id)
+    {
+        $member_id = (int) $member_id;
+        if ($member_id <= 0 || !class_exists(MjMembers::class)) {
+            return array();
+        }
+
+        $key = MjMembers::ensureCardAccessKey($member_id);
+        if ($key === '') {
+            return array();
+        }
+
+        $base_url = function_exists('mj_member_get_card_claim_base_url')
+            ? \mj_member_get_card_claim_base_url()
+            : home_url('/mon-compte/');
+
+        $claim_url = add_query_arg('mj_card', rawurlencode($key), $base_url);
+
+        $image_payload = self::download_qr_image($claim_url, $member_id, $key);
+
+        return array(
+            'url' => $claim_url,
+            'path' => isset($image_payload['path']) ? $image_payload['path'] : '',
+            'temporary' => !empty($image_payload['temporary']),
+        );
+    }
+
+    /**
+     * Télécharge (ou met en cache) l'image du QR code pour la carte.
+     *
+     * @param string $claim_url
+     * @param int    $member_id
+     * @param string $key
+     *
+     * @return array{path?:string,temporary?:bool}
+     */
+    protected static function download_qr_image($claim_url, $member_id, $key)
+    {
+        $member_id = (int) $member_id;
+        $key = (string) $key;
+
+        $uploads = wp_get_upload_dir();
+        $body = '';
+
+        if (!empty($uploads['basedir'])) {
+            $target_dir = trailingslashit($uploads['basedir']) . 'mj-member/qr';
+            if (wp_mkdir_p($target_dir)) {
+                $hash = substr(md5($key), 0, 12);
+                $filename = sprintf('card-qr-%d-%s.png', $member_id, $hash);
+                $path = trailingslashit($target_dir) . $filename;
+
+                if (file_exists($path) && filesize($path) > 0) {
+                    return array('path' => $path, 'temporary' => false);
+                }
+
+                $body = self::fetch_qr_image_contents($claim_url);
+                if ($body === '') {
+                    return array();
+                }
+
+                if (@file_put_contents($path, $body) !== false) {
+                    return array('path' => $path, 'temporary' => false);
+                }
+            }
+        }
+
+        if ($body === '') {
+            $body = self::fetch_qr_image_contents($claim_url);
+            if ($body === '') {
+                return array();
+            }
+        }
+
+        $temp_path = wp_tempnam('mj-card-qr');
+        if (!$temp_path) {
+            return array();
+        }
+
+        if (@file_put_contents($temp_path, $body) === false) {
+            return array();
+        }
+
+        return array('path' => $temp_path, 'temporary' => true);
+    }
+
+    /**
+     * Récupère le contenu binaire du QR code via le service défini.
+     *
+     * @param string $claim_url
+     *
+     * @return string
+     */
+    protected static function fetch_qr_image_contents($claim_url)
+    {
+        $service_url = self::build_qr_service_url($claim_url);
+        $response = wp_remote_get($service_url, array(
+            'timeout' => 15,
+            'headers' => array('Accept' => 'image/png'),
+        ));
+
+        if (is_wp_error($response)) {
+            return '';
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        if ((int) $code !== 200) {
+            return '';
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        return is_string($body) ? $body : '';
+    }
+
+    /**
+     * Construis l'URL du service de génération de QR code.
+     *
+     * @param string $claim_url
+     *
+     * @return string
+     */
+    protected static function build_qr_service_url($claim_url)
+    {
+        $encoded = rawurlencode($claim_url);
+        $service = apply_filters('mj_member_card_qr_service_url', "https://api.qrserver.com/v1/create-qr-code/?size=320x320&data={$encoded}&format=png&ecc=M&margin=0", $claim_url);
+
+        return esc_url_raw($service);
     }
 
     /**
@@ -375,30 +622,6 @@ class MjMemberBusinessCards
             hexdec(substr($hex, 2, 2)),
             hexdec(substr($hex, 4, 2)),
         );
-    }
-
-    /**
-     * Mix two RGB colors.
-     *
-     * @param array<int,int> $color
-     * @param array<int,int> $with
-     * @param float           $ratio
-     *
-     * @return array{0:int,1:int,2:int}
-     */
-    protected static function mix_color($color, $with, $ratio)
-    {
-        $ratio = max(0.0, min(1.0, (float) $ratio));
-        $inverse = 1.0 - $ratio;
-
-        $result = array();
-        for ($index = 0; $index < 3; $index++) {
-            $base = isset($color[$index]) ? (int) $color[$index] : 0;
-            $blend = isset($with[$index]) ? (int) $with[$index] : 0;
-            $result[$index] = (int) max(0, min(255, round(($base * $inverse) + ($blend * $ratio))));
-        }
-
-        return array($result[0], $result[1], $result[2]);
     }
 
     /**

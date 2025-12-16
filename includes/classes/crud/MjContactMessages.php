@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class MjContactMessages {
+class MjContactMessages implements CrudRepositoryInterface {
     const STATUS_NEW = 'nouveau';
     const STATUS_IN_PROGRESS = 'en_cours';
     const STATUS_RESOLVED = 'resolu';
@@ -71,10 +71,21 @@ class MjContactMessages {
     }
 
     /**
+     * @param array<string,mixed> $args
+     * @return array<int,object>
+     */
+    public static function get_all(array $args = array()) {
+        return self::query($args);
+    }
+
+    /**
      * @param array<string,mixed> $data
      * @return int|WP_Error
      */
-    public static function create(array $data) {
+    public static function create($data) {
+        if (!is_array($data)) {
+            return new WP_Error('mj_contact_message_invalid_payload', __('Format de données invalide.', 'mj-member'));
+        }
         global $wpdb;
         $table = self::get_table_name();
 
@@ -163,10 +174,13 @@ class MjContactMessages {
 
     /**
      * @param int $message_id
-     * @param array<string,mixed> $data
-     * @return bool|WP_Error
+    * @param array<string,mixed> $data
+    * @return true|WP_Error
      */
-    public static function update($message_id, array $data) {
+    public static function update($message_id, $data) {
+        if (!is_array($data)) {
+            return new WP_Error('mj_contact_message_invalid_payload', __('Format de données invalide.', 'mj-member'));
+        }
         global $wpdb;
         $table = self::get_table_name();
         $message_id = (int) $message_id;
@@ -538,55 +552,65 @@ class MjContactMessages {
         $conditions = array();
         $params = array();
 
-        if ($member_id > 0 || $sender_email !== '') {
-            if ($member_id > 0) {
-                $conditions[] = '(meta IS NOT NULL AND meta LIKE %s)';
-                $params[] = '%' . $wpdb->esc_like('"member_id":"' . $member_id . '"') . '%';
-            }
+        $owner_clauses = array();
+        $owner_params = array();
 
-            if ($sender_email !== '') {
-                $conditions[] = 'sender_email = %s';
-                $params[] = $sender_email;
-            }
+        if ($member_id > 0) {
+            $owner_clauses[] = '(meta IS NOT NULL AND meta LIKE %s)';
+            $owner_params[] = '%' . $wpdb->esc_like('"member_id":"' . $member_id . '"') . '%';
+        }
 
-            if (empty($conditions)) {
-                return 0;
-            }
-        } else {
-            $conditions[] = 'assigned_to = %d';
-            $params[] = $user_id;
+        if ($sender_email !== '') {
+            $owner_clauses[] = 'sender_email = %s';
+            $owner_params[] = $sender_email;
+        }
 
-            if (!empty($args['include_all_targets'])) {
-                $conditions[] = 'target_type = %s';
-                $params[] = self::TARGET_ALL;
-            }
+        if (!empty($owner_clauses)) {
+            $conditions[] = '(' . implode(' OR ', $owner_clauses) . ')';
+            $params = array_merge($params, $owner_params);
+        }
 
-            if (!empty($args['extra_targets']) && is_array($args['extra_targets'])) {
-                foreach ($args['extra_targets'] as $target_spec) {
-                    if (!is_array($target_spec)) {
-                        continue;
-                    }
+        $assignment_clauses = array();
+        $assignment_params = array();
 
-                    $target_type = isset($target_spec['type']) ? sanitize_key($target_spec['type']) : '';
-                    if ($target_type === '') {
-                        continue;
-                    }
+        $assignment_clauses[] = 'assigned_to = %d';
+        $assignment_params[] = $user_id;
 
-                    if (array_key_exists('reference', $target_spec)) {
-                        $reference = (int) $target_spec['reference'];
-                        $conditions[] = '(target_type = %s AND target_reference = %d)';
-                        $params[] = $target_type;
-                        $params[] = $reference;
-                    } else {
-                        $conditions[] = 'target_type = %s';
-                        $params[] = $target_type;
-                    }
+        if (!empty($args['include_all_targets'])) {
+            $assignment_clauses[] = 'target_type = %s';
+            $assignment_params[] = self::TARGET_ALL;
+        }
+
+        if (!empty($args['extra_targets']) && is_array($args['extra_targets'])) {
+            foreach ($args['extra_targets'] as $target_spec) {
+                if (!is_array($target_spec)) {
+                    continue;
+                }
+
+                $target_type = isset($target_spec['type']) ? sanitize_key($target_spec['type']) : '';
+                if ($target_type === '') {
+                    continue;
+                }
+
+                if (array_key_exists('reference', $target_spec)) {
+                    $reference = (int) $target_spec['reference'];
+                    $assignment_clauses[] = '(target_type = %s AND target_reference = %d)';
+                    $assignment_params[] = $target_type;
+                    $assignment_params[] = $reference;
+                } else {
+                    $assignment_clauses[] = 'target_type = %s';
+                    $assignment_params[] = $target_type;
                 }
             }
+        }
 
-            if (empty($conditions)) {
-                return 0;
-            }
+        if (!empty($assignment_clauses)) {
+            $conditions[] = '(' . implode(' OR ', $assignment_clauses) . ')';
+            $params = array_merge($params, $assignment_params);
+        }
+
+        if (empty($conditions)) {
+            return 0;
         }
 
         $where = 'is_read = 0 AND (' . implode(' OR ', $conditions) . ')';
@@ -620,25 +644,29 @@ class MjContactMessages {
 
     /**
      * @param int $message_id
-     * @return bool
+     * @return true|WP_Error
      */
     public static function delete($message_id) {
         global $wpdb;
         $table = self::get_table_name();
         $message_id = (int) $message_id;
         if ($message_id <= 0) {
-            return false;
+            return new WP_Error('mj_contact_message_invalid_id', __('Identifiant message invalide.', 'mj-member'));
         }
 
         $result = $wpdb->delete($table, array('id' => $message_id), array('%d'));
-        return ($result !== false);
+        if ($result === false) {
+            return new WP_Error('mj_contact_message_delete_failed', __('Suppression impossible.', 'mj-member'));
+        }
+
+        return true;
     }
 
     /**
      * @param int $message_id
      * @param string $action
      * @param array<string,mixed> $context
-     * @return bool
+    * @return true|WP_Error
      */
     public static function record_activity($message_id, $action, array $context = array()) {
         $message = self::get($message_id);

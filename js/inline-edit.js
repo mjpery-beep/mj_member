@@ -3,11 +3,14 @@ jQuery(document).ready(function($) {
     const roleLabels = typeof mjMembers.roleLabels === 'object' && mjMembers.roleLabels !== null ? mjMembers.roleLabels : {};
     const statusLabels = typeof mjMembers.statusLabels === 'object' && mjMembers.statusLabels !== null ? mjMembers.statusLabels : { active: 'Actif', inactive: 'Inactif' };
     const photoConsentLabels = typeof mjMembers.photoConsentLabels === 'object' && mjMembers.photoConsentLabels !== null ? mjMembers.photoConsentLabels : { 1: 'Accepté', 0: 'Refusé' };
+    const volunteerLabels = typeof mjMembers.volunteerLabels === 'object' && mjMembers.volunteerLabels !== null ? mjMembers.volunteerLabels : { yes: 'Bénévole', no: 'Non bénévole' };
     const labels = typeof mjMembers.labels === 'object' && mjMembers.labels !== null ? mjMembers.labels : {};
-
-    function escapeHtml(value) {
-        return $('<div>').text(value == null ? '' : value).html();
-    }
+    const utils = window.MjMemberUtils || {};
+    const escapeHtml = typeof utils.escapeHtml === 'function'
+        ? utils.escapeHtml
+        : function(value) {
+            return $('<div>').text(value == null ? '' : value).html();
+        };
 
     function normalizeValue(value) {
         return value == null ? '' : String(value);
@@ -73,6 +76,75 @@ jQuery(document).ready(function($) {
         }
     }
 
+    function clearFieldMessage($cell) {
+        const memberId = normalizeValue($cell.data('member-id'));
+        const fieldName = normalizeValue($cell.data('field-name'));
+
+        if (memberId === '' || fieldName === '') {
+            return;
+        }
+
+        const selector = '.mj-inline-feedback';
+        const filterMatches = function() {
+            const siblingMemberId = normalizeValue($(this).attr('data-member-id'));
+            const siblingFieldName = normalizeValue($(this).attr('data-field-name'));
+            return siblingMemberId === memberId && siblingFieldName === fieldName;
+        };
+
+        $cell.siblings(selector).filter(filterMatches).remove();
+
+        const $parent = $cell.parent();
+        if ($parent.length) {
+            $parent.children(selector).filter(filterMatches).remove();
+        }
+
+        const $td = $cell.closest('td');
+        if ($td.length) {
+            $td.children(selector).filter(filterMatches).remove();
+        }
+    }
+
+    function showFieldMessage($cell, message, type) {
+        if (!message) {
+            return;
+        }
+
+        const memberId = normalizeValue($cell.data('member-id'));
+        const fieldName = normalizeValue($cell.data('field-name'));
+
+        if (memberId === '' || fieldName === '') {
+            return;
+        }
+
+        clearFieldMessage($cell);
+
+        const $feedback = $('<div>')
+            .addClass('mj-inline-feedback')
+            .attr('data-member-id', memberId)
+            .attr('data-field-name', fieldName)
+            .text(message);
+
+        if (type === 'error') {
+            $feedback.addClass('mj-inline-feedback--error');
+        } else if (type === 'success') {
+            $feedback.addClass('mj-inline-feedback--success');
+        }
+
+        const $parent = $cell.parent();
+        if ($parent.length && $parent[0] !== $cell[0]) {
+            $feedback.insertBefore($cell);
+            return;
+        }
+
+        const $td = $cell.closest('td');
+        if ($td.length && $td[0] !== $cell[0]) {
+            $feedback.insertBefore($cell);
+            return;
+        }
+
+        $cell.before($feedback);
+    }
+
     function formatRoleBadge(role) {
         const key = normalizeValue(role);
         const label = roleLabels[key] || key;
@@ -95,6 +167,15 @@ jQuery(document).ready(function($) {
         return '<span class="badge" style="background-color:' + background + ';color:#fff;padding:3px 8px;border-radius:12px;font-size:12px;display:inline-block;">' + escapeHtml(label) + '</span>';
     }
 
+    function formatVolunteerBadge(value) {
+        const normalized = normalizeValue(value).toLowerCase();
+        const isVolunteer = !(normalized === '' || normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'non');
+        const label = isVolunteer ? (volunteerLabels.yes || 'Bénévole') : (volunteerLabels.no || 'Non bénévole');
+        const background = isVolunteer ? '#fef3c7' : '#e2e8f0';
+        const color = isVolunteer ? '#92400e' : '#64748b';
+        return '<span class="badge" style="background-color:' + background + ';color:' + color + ';padding:3px 8px;border-radius:12px;font-size:12px;display:inline-block;">' + escapeHtml(label) + '</span>';
+    }
+
     function formatEmailLink(email) {
         const clean = normalizeValue(email);
         if (clean === '') {
@@ -113,6 +194,8 @@ jQuery(document).ready(function($) {
                 return formatRoleBadge(normalized);
             case 'photo_usage_consent':
                 return formatPhotoConsentBadge(normalized);
+            case 'is_volunteer':
+                return formatVolunteerBadge(normalized);
             case 'email':
                 return formatEmailLink(normalized);
             case 'date_last_payement':
@@ -156,42 +239,70 @@ jQuery(document).ready(function($) {
 
     function buildSelect(fieldName, memberId, initialValue) {
         const value = normalizeValue(initialValue);
-        let options = '';
+        let choices = [];
 
         if (fieldName === 'status') {
-            ['active', 'inactive'].forEach(function(key) {
-                const label = statusLabels[key] || key;
-                const selected = key === value ? ' selected' : '';
-                options += '<option value="' + escapeHtml(key) + '"' + selected + '>' + escapeHtml(label) + '</option>';
+            choices = ['active', 'inactive'].map(function(key) {
+                return {
+                    value: key,
+                    label: statusLabels[key] || key,
+                };
             });
         } else if (fieldName === 'role') {
             const roles = allowedRoles.length ? allowedRoles : Object.keys(roleLabels);
-            roles.forEach(function(roleKey) {
-                const normalizedKey = normalizeValue(roleKey);
-                if (normalizedKey === '') {
-                    return;
-                }
-                const label = roleLabels[normalizedKey] || normalizedKey;
-                const selected = normalizedKey === value ? ' selected' : '';
-                options += '<option value="' + escapeHtml(normalizedKey) + '"' + selected + '>' + escapeHtml(label) + '</option>';
-            });
+            choices = roles
+                .map(function(roleKey) {
+                    const normalizedKey = normalizeValue(roleKey);
+                    if (normalizedKey === '') {
+                        return null;
+                    }
+                    return {
+                        value: normalizedKey,
+                        label: roleLabels[normalizedKey] || normalizedKey,
+                    };
+                })
+                .filter(Boolean);
         } else if (fieldName === 'photo_usage_consent') {
-            [['1', photoConsentLabels['1'] || 'Accepté'], ['0', photoConsentLabels['0'] || 'Refusé']].forEach(function(pair) {
-                const selected = pair[0] === value ? ' selected' : '';
-                options += '<option value="' + escapeHtml(pair[0]) + '"' + selected + '>' + escapeHtml(pair[1]) + '</option>';
+            choices = [
+                { value: '1', label: photoConsentLabels['1'] || 'Accepté' },
+                { value: '0', label: photoConsentLabels['0'] || 'Refusé' },
+            ];
+        } else if (fieldName === 'is_volunteer') {
+            choices = [
+                { value: '1', label: volunteerLabels.yes || 'Bénévole' },
+                { value: '0', label: volunteerLabels.no || 'Non bénévole' },
+            ];
+        }
+
+        if (choices.length > 0) {
+            const cancelLabel = getLabel('cancel', 'Annuler');
+            let buttons = '';
+            choices.forEach(function(choice) {
+                const optionValue = normalizeValue(choice.value);
+                const isActive = optionValue === value;
+                const activeClass = isActive ? ' mj-inline-choice__btn--active' : '';
+                buttons += '<button type="button" class="mj-inline-choice__btn' + activeClass + '" data-value="' + escapeHtml(optionValue) + '" aria-pressed="' + (isActive ? 'true' : 'false') + '">' + escapeHtml(choice.label) + '</button>';
             });
+
+            const memberIdAttr = escapeHtml(memberId);
+            const fieldNameAttr = escapeHtml(fieldName);
+
+            return ''
+                + '<div class="mj-inline-choice" data-member-id="' + memberIdAttr + '" data-field-name="' + fieldNameAttr + '">' 
+                + '<input type="hidden" class="mj-inline-choice__input" data-member-id="' + memberIdAttr + '" data-field-name="' + fieldNameAttr + '" value="' + escapeHtml(value) + '">' 
+                + '<div class="mj-inline-choice__grid">' + buttons + '</div>' 
+                + '<button type="button" class="mj-inline-choice__cancel" aria-label="' + escapeHtml(cancelLabel) + '">' + escapeHtml(cancelLabel) + '</button>' 
+                + '</div>';
         }
 
-        if (options === '') {
-            options = '<option value="' + escapeHtml(value) + '" selected>' + escapeHtml(value) + '</option>';
-        }
-
-        return '<select class="mj-inline-input" data-member-id="' + escapeHtml(memberId) + '" data-field-name="' + escapeHtml(fieldName) + '">' + options + '</select>';
+        // Fallback pour les champs inattendus : select classique
+        const safeValue = escapeHtml(value);
+        return '<select class="mj-inline-input" data-member-id="' + escapeHtml(memberId) + '" data-field-name="' + escapeHtml(fieldName) + '">' + '<option value="' + safeValue + '" selected>' + safeValue + '</option>' + '</select>';
     }
 
     function buildInput(fieldType, fieldName, memberId, value) {
         const normalized = normalizeValue(value);
-        if (fieldType === 'select' || fieldName === 'status' || fieldName === 'role' || fieldName === 'photo_usage_consent') {
+        if (fieldType === 'select' || fieldName === 'status' || fieldName === 'role' || fieldName === 'photo_usage_consent' || fieldName === 'is_volunteer') {
             return buildSelect(fieldName, memberId, normalized);
         }
 
@@ -219,6 +330,108 @@ jQuery(document).ready(function($) {
         $cell.removeData('original-display');
         $cell.addClass('mj-editable');
         attachEditClick($cell);
+    }
+
+    function activateChoiceEditor($choice, $cell, originalFieldValue, originalHtml) {
+        const memberId = $choice.data('member-id');
+        const fieldName = $choice.data('field-name');
+        const $hiddenInput = $choice.find('.mj-inline-choice__input');
+        const $buttons = $choice.find('.mj-inline-choice__btn');
+        const $cancel = $choice.find('.mj-inline-choice__cancel');
+        const initialValue = normalizeValue(originalFieldValue);
+
+        $buttons.each(function(index) {
+            $(this).attr('data-choice-index', index);
+        });
+
+        function focusChoice(index) {
+            const $target = $buttons.filter(function() {
+                return Number($(this).attr('data-choice-index')) === index;
+            });
+            if ($target.length) {
+                $target.focus();
+            }
+        }
+
+        function restore() {
+            restoreEditableCell($cell, memberId, fieldName, originalHtml, originalFieldValue);
+        }
+
+        function commit(value) {
+            const normalized = normalizeValue(value);
+            $hiddenInput.val(normalized);
+            saveInlineEdit($hiddenInput, $cell, originalFieldValue, originalHtml);
+        }
+
+        $buttons.on('click', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            commit($(this).data('value'));
+        });
+
+        $buttons.on('keydown', function(event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                event.stopPropagation();
+                commit($(this).data('value'));
+            }
+        });
+
+        $choice.on('keydown', function(event) {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                restore();
+                return;
+            }
+
+            const navigationKeys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'];
+            if (navigationKeys.indexOf(event.key) === -1) {
+                return;
+            }
+
+            const $focused = $(document.activeElement);
+            if (!$focused.hasClass('mj-inline-choice__btn')) {
+                return;
+            }
+
+            const currentIndex = Number($focused.attr('data-choice-index'));
+            if (Number.isNaN(currentIndex)) {
+                return;
+            }
+
+            event.preventDefault();
+
+            const total = $buttons.length;
+            if (!total) {
+                return;
+            }
+
+            let nextIndex = currentIndex;
+            if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                nextIndex = (currentIndex + 1) % total;
+            } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                nextIndex = (currentIndex - 1 + total) % total;
+            }
+
+            focusChoice(nextIndex);
+        });
+
+        $cancel.on('click', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            restore();
+        });
+
+        const $active = $buttons.filter('.mj-inline-choice__btn--active');
+        if ($active.length) {
+            $active.first().focus();
+        } else if ($buttons.length) {
+            $buttons.first().focus();
+        }
+
+        if (normalizeValue($hiddenInput.val()) === '') {
+            $hiddenInput.val(initialValue);
+        }
     }
 
     function saveInlineEdit($input, $cell, originalFieldValue, originalHtml) {
@@ -253,6 +466,8 @@ jQuery(document).ready(function($) {
                 let displayHtml = getDisplayHtml(fieldName, normalized);
                 let requiresPaymentFlag = null;
 
+                clearFieldMessage($cell);
+
                 if (fieldName === 'date_last_payement') {
                     const requiresAttr = $cell.attr('data-requires-payment');
                     requiresPaymentFlag = requiresAttr === undefined ? true : parseBooleanFlag(requiresAttr);
@@ -269,10 +484,12 @@ jQuery(document).ready(function($) {
             } else {
                 const message = response && response.data && response.data.message ? response.data.message : 'Erreur inconnue';
                 restoreEditableCell($cell, memberId, fieldName, originalHtml, originalFieldValue);
+                showFieldMessage($cell, message, 'error');
                 showNotice('Erreur: ' + message, 'error');
             }
         }).fail(function() {
             restoreEditableCell($cell, memberId, fieldName, originalHtml, originalFieldValue);
+            showFieldMessage($cell, 'Erreur de communication', 'error');
             showNotice('Erreur de communication', 'error');
         });
     }
@@ -296,6 +513,12 @@ jQuery(document).ready(function($) {
 
             $thisCell.removeClass('mj-editable');
             $thisCell.html(inputHtml);
+
+            const $choice = $thisCell.find('.mj-inline-choice');
+            if ($choice.length) {
+                activateChoiceEditor($choice, $thisCell, originalFieldValue, originalHtml);
+                return;
+            }
 
             const $input = $thisCell.find('.mj-inline-input');
             const isSelect = $input.is('select');

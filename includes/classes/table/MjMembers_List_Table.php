@@ -2,8 +2,9 @@
 
 namespace Mj\Member\Classes\Table;
 
-use Mj\Member\Classes\Crud\MjMembers_CRUD;
+use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\MjTools;
+use Mj\Member\Classes\Value\MemberData;
 use WP_List_Table;
 
 if (!defined('ABSPATH')) {
@@ -81,8 +82,8 @@ class MjMembers_List_Table extends WP_List_Table {
             $effective_orderby = 'birth_date';
         }
 
-        $members      = MjMembers_CRUD::getAll($per_page, $offset, $effective_orderby, $effective_order, $search, $this->activeFilters);
-        $total_items  = MjMembers_CRUD::countAll($search, $this->activeFilters);
+        $members      = MjMembers::getAll($per_page, $offset, $effective_orderby, $effective_order, $search, $this->activeFilters);
+        $total_items  = MjMembers::countAll($search, $this->activeFilters);
 
         $this->hydrateGuardians($members);
         $this->hydrateUsers($members);
@@ -323,13 +324,22 @@ class MjMembers_List_Table extends WP_List_Table {
 
     public function column_role($item) {
         $label = $this->formatRoleLabel($item->role);
-        $badge = '<span class="badge" style="display:inline-flex;align-items:center;gap:4px;background-color:#eef1ff;color:#1d2b6b;padding:3px 8px;border-radius:12px;font-size:12px;">' . esc_html($label) . '</span>';
+        $role_badge = '<span class="badge" style="display:inline-flex;align-items:center;gap:4px;background-color:#eef1ff;color:#1d2b6b;padding:3px 8px;border-radius:12px;font-size:12px;">' . esc_html($label) . '</span>';
 
-        return '<span class="mj-editable" data-member-id="' . esc_attr($item->id) . '" data-field-name="role" data-field-type="select" data-field-value="' . esc_attr($item->role) . '" title="Cliquez pour éditer">' . $badge . '</span>';
+        $editable = '<span class="mj-editable" data-member-id="' . esc_attr($item->id) . '" data-field-name="role" data-field-type="select" data-field-value="' . esc_attr($item->role) . '" title="Cliquez pour éditer">' . $role_badge . '</span>';
+
+        $extra_badge = '';
+        if (!empty($item->is_volunteer)) {
+            $extra_badge = '<span class="badge" style="display:inline-flex;align-items:center;gap:4px;background-color:#fff3d6;color:#6b4b1d;padding:3px 8px;border-radius:12px;font-size:12px;">Bénévole</span>';
+        }
+
+        $content = $editable . $extra_badge;
+
+        return '<div class="mj-role-cell" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">' . $content . '</div>';
     }
 
     public function column_guardian($item) {
-        if ($item->role !== MjMembers_CRUD::ROLE_JEUNE) {
+        if ($item->role !== MjMembers::ROLE_JEUNE) {
             return '<span style="color:#999;">Non applicable</span>';
         }
 
@@ -368,13 +378,13 @@ class MjMembers_List_Table extends WP_List_Table {
             return '<span class="badge" style="background-color:#6c757d;color:#fff;padding:3px 8px;border-radius:12px;font-size:12px;">Dispensé</span>';
         }
 
-        $suffix = ($item->role === MjMembers_CRUD::ROLE_TUTEUR) ? ' (paye pour ses jeunes)' : '';
+        $suffix = ($item->role === MjMembers::ROLE_TUTEUR) ? ' (paye pour ses jeunes)' : '';
 
         return '<span class="badge" style="background-color:#28a745;color:#fff;padding:3px 8px;border-radius:12px;font-size:12px;">Obligatoire' . esc_html($suffix) . '</span>';
     }
 
     public function column_status($item) {
-        $is_active = $item->status === MjMembers_CRUD::STATUS_ACTIVE;
+        $is_active = $item->status === MjMembers::STATUS_ACTIVE;
         $class     = $is_active ? 'background-color:#28a745;' : 'background-color:#fd7e14;';
         $label     = $is_active ? 'Actif' : 'Inactif';
 
@@ -462,6 +472,11 @@ class MjMembers_List_Table extends WP_List_Table {
         $chips[] = $this->buildDetailRoleChip($item);
         $chips[] = $this->buildDetailStatusChip($item);
 
+        $volunteer_chip = $this->buildDetailVolunteerChip($item);
+        if ($volunteer_chip !== '') {
+            $chips[] = $volunteer_chip;
+        }
+
         $age_chip = $this->buildDetailAgeChip($item);
         if ($age_chip !== '') {
             $chips[] = $age_chip;
@@ -488,7 +503,7 @@ class MjMembers_List_Table extends WP_List_Table {
 
         $finance_rows = array();
 
-        if ($item->role === MjMembers_CRUD::ROLE_JEUNE) {
+        if ($item->role === MjMembers::ROLE_JEUNE) {
             $guardian_html = $this->column_guardian($item);
             $finance_rows[] = $this->renderDetailRow('👥', __('Responsable', 'mj-member'), $guardian_html);
         }
@@ -521,7 +536,11 @@ class MjMembers_List_Table extends WP_List_Table {
             return '<span style="color:#999;">—</span>';
         }
 
-        return '<div class="mj-manage-cell">' . implode('', $sections) . '</div>';
+        $wrapped_sections = array_map(function ($section) {
+            return '<div class="mj-manage-card__section">' . $section . '</div>';
+        }, $sections);
+
+        return '<div class="mj-manage-cell"><div class="mj-manage-card">' . implode('', $wrapped_sections) . '</div></div>';
     }
 
     public function column_photo_usage_consent($item) {
@@ -593,7 +612,7 @@ class MjMembers_List_Table extends WP_List_Table {
         }
 
         $filters = $this->activeFilters;
-        $role_labels = MjMembers_CRUD::getRoleLabels();
+        $role_labels = MjMembers::getRoleLabels();
         $page_slug = isset($_REQUEST['page']) ? sanitize_key(wp_unslash($_REQUEST['page'])) : 'mj_members';
         $reset_url = remove_query_arg(array('filter_last_name','filter_first_name','filter_email','filter_age_min','filter_age_max','filter_payment','filter_date_start','filter_date_end','filter_role','paged'));
         ?>
@@ -748,7 +767,7 @@ class MjMembers_List_Table extends WP_List_Table {
 
         if (!empty($_REQUEST['filter_role'])) {
             $role = sanitize_key(wp_unslash($_REQUEST['filter_role']));
-            if (in_array($role, array_keys(MjMembers_CRUD::getRoleLabels()), true)) {
+            if (in_array($role, array_keys(MjMembers::getRoleLabels()), true)) {
                 $filters['role'] = $role;
             }
         }
@@ -819,18 +838,41 @@ class MjMembers_List_Table extends WP_List_Table {
             }
         }
 
-        foreach ($members as $member) {
+        foreach ($members as $index => $member) {
             $user_id = !empty($member->wp_user_id) ? (int) $member->wp_user_id : 0;
             if ($user_id && isset($this->userCache[$user_id]) && $this->userCache[$user_id] instanceof WP_User) {
-                $member->wp_user = $this->userCache[$user_id];
-                $member->wp_user_login = $this->userCache[$user_id]->user_login;
-                $member->wp_user_email = $this->userCache[$user_id]->user_email;
-                $member->wp_user_roles = is_array($this->userCache[$user_id]->roles) ? $this->userCache[$user_id]->roles : array();
+                $wp_user      = $this->userCache[$user_id];
+                $user_payload = array(
+                    'wp_user'       => $wp_user,
+                    'wp_user_login' => $wp_user->user_login,
+                    'wp_user_email' => $wp_user->user_email,
+                    'wp_user_roles' => is_array($wp_user->roles) ? $wp_user->roles : array(),
+                );
+
+                if ($member instanceof MemberData) {
+                    $members[$index] = $member->with($user_payload);
+                } else {
+                    $member->wp_user = $user_payload['wp_user'];
+                    $member->wp_user_login = $user_payload['wp_user_login'];
+                    $member->wp_user_email = $user_payload['wp_user_email'];
+                    $member->wp_user_roles = $user_payload['wp_user_roles'];
+                }
             } else {
-                $member->wp_user = null;
-                $member->wp_user_login = '';
-                $member->wp_user_email = '';
-                $member->wp_user_roles = array();
+                $user_payload = array(
+                    'wp_user' => null,
+                    'wp_user_login' => '',
+                    'wp_user_email' => '',
+                    'wp_user_roles' => array(),
+                );
+
+                if ($member instanceof MemberData) {
+                    $members[$index] = $member->with($user_payload);
+                } else {
+                    $member->wp_user = null;
+                    $member->wp_user_login = '';
+                    $member->wp_user_email = '';
+                    $member->wp_user_roles = array();
+                }
             }
         }
     }
@@ -857,7 +899,7 @@ class MjMembers_List_Table extends WP_List_Table {
 
         if (!empty($missing_ids)) {
             global $wpdb;
-            $table = MjMembers_CRUD::getTableName(MjMembers_CRUD::TABLE_NAME);
+            $table = MjMembers::getTableName(MjMembers::TABLE_NAME);
             $placeholders = implode(',', array_fill(0, count($missing_ids), '%d'));
             $sql = "SELECT id, first_name, last_name, email, phone FROM $table WHERE id IN ($placeholders)";
             $sql = call_user_func_array(array($wpdb, 'prepare'), array_merge(array($sql), $missing_ids));
@@ -868,15 +910,21 @@ class MjMembers_List_Table extends WP_List_Table {
             }
 
             foreach ($results as $row) {
-                $this->guardianCache[(int) $row->id] = $row;
+                $this->guardianCache[(int) $row->id] = MemberData::fromRow($row);
             }
         }
 
-        foreach ($members as $member) {
+        foreach ($members as $index => $member) {
             if (!empty($member->guardian_id) && isset($this->guardianCache[(int) $member->guardian_id])) {
-                $member->guardian = $this->guardianCache[(int) $member->guardian_id];
+                $guardian = $this->guardianCache[(int) $member->guardian_id];
             } else {
-                $member->guardian = null;
+                $guardian = null;
+            }
+
+            if ($member instanceof MemberData) {
+                $members[$index] = $member->with(array('guardian' => $guardian));
+            } else {
+                $member->guardian = $guardian;
             }
         }
     }
@@ -997,8 +1045,10 @@ class MjMembers_List_Table extends WP_List_Table {
     private function renderDetailRow($icon, $label, $valueHtml) {
         $icon_html = '<span class="mj-detail-icon" role="img" aria-label="' . esc_attr($label) . '">' . esc_html($icon) . '</span>';
         $title_attr = ' title="' . esc_attr($label) . '"';
-        $header_html = '<div class="mj-detail-row-header" style="display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:4px;">' . $icon_html . '<span class="mj-detail-label-text">' . esc_html($label) . '</span></div>';
-        return '<div class="mj-detail-row" data-detail-label="' . esc_attr($label) . '"' . $title_attr . '>' . $header_html . '<div class="mj-detail-value">' . $valueHtml . '</div></div>';
+        $row_html = '<div class="mj-detail-row" data-detail-label="' . esc_attr($label) . '"' . $title_attr . '>' . $icon_html . '<div class="mj-detail-value">' . $valueHtml . '</div></div>';
+        $label_html = '<span class="mj-detail-label-text">' . esc_html($label) . '</span>';
+
+        return '<div class="mj-detail-row-wrapper" data-detail-label="' . esc_attr($label) . '">' . $label_html . $row_html . '</div>';
     }
 
     private function buildDetailNamePart($item, $field) {
@@ -1057,10 +1107,40 @@ class MjMembers_List_Table extends WP_List_Table {
         return '<span' . $attr_html . '>' . esc_html($label) . '</span>';
     }
 
+    private function buildDetailVolunteerChip($item) {
+        $member_id = isset($item->id) ? (int) $item->id : 0;
+        $raw_value = isset($item->is_volunteer) ? (int) $item->is_volunteer : 0;
+        $is_volunteer = ($raw_value === 1);
+
+        $modifier = $is_volunteer ? 'success' : 'muted';
+        $label = $is_volunteer ? __('Bénévole', 'mj-member') : __('Non bénévole', 'mj-member');
+
+        $classes = array('mj-editable', 'mj-detail-chip', 'mj-detail-chip--interactive', 'mj-detail-chip--' . $modifier);
+
+        $attributes = array(
+            'class'            => implode(' ', $classes),
+            'data-member-id'   => (string) $member_id,
+            'data-field-name'  => 'is_volunteer',
+            'data-field-type'  => 'select',
+            'data-field-value' => $is_volunteer ? '1' : '0',
+            'title'            => __('Cliquez pour éditer', 'mj-member'),
+        );
+
+        $attr_html = '';
+        foreach ($attributes as $attr_name => $attr_value) {
+            if ($attr_value === '') {
+                continue;
+            }
+            $attr_html .= ' ' . $attr_name . '="' . esc_attr($attr_value) . '"';
+        }
+
+        return '<span' . $attr_html . '>' . esc_html($label) . '</span>';
+    }
+
     private function buildDetailStatusChip($item) {
         $member_id = isset($item->id) ? (int) $item->id : 0;
         $raw_status = isset($item->status) ? (string) $item->status : '';
-        $is_active = ($raw_status === MjMembers_CRUD::STATUS_ACTIVE);
+        $is_active = ($raw_status === MjMembers::STATUS_ACTIVE);
         $modifier = $is_active ? 'success' : 'warning';
         $label = $is_active ? __('Actif', 'mj-member') : __('Inactif', 'mj-member');
         if ($raw_status === '') {
@@ -1217,7 +1297,7 @@ class MjMembers_List_Table extends WP_List_Table {
             ? esc_html__('Cotisation : Obligatoire', 'mj-member')
             : esc_html__('Cotisation : Dispensé', 'mj-member');
 
-        if ($requires_payment && $item->role === MjMembers_CRUD::ROLE_TUTEUR) {
+        if ($requires_payment && $item->role === MjMembers::ROLE_TUTEUR) {
             $cotisation_text .= ' ' . esc_html__('(paye pour ses jeunes)', 'mj-member');
         }
 
@@ -1377,15 +1457,15 @@ class MjMembers_List_Table extends WP_List_Table {
 
     private function formatRoleLabel($role) {
         switch ($role) {
-            case MjMembers_CRUD::ROLE_JEUNE:
+            case MjMembers::ROLE_JEUNE:
                 return 'Jeune';
-            case MjMembers_CRUD::ROLE_ANIMATEUR:
+            case MjMembers::ROLE_ANIMATEUR:
                 return 'Animateur';
-            case MjMembers_CRUD::ROLE_COORDINATEUR:
+            case MjMembers::ROLE_COORDINATEUR:
                 return 'Coordinateur';
-            case MjMembers_CRUD::ROLE_BENEVOLE:
+            case MjMembers::ROLE_BENEVOLE:
                 return 'Bénévole';
-            case MjMembers_CRUD::ROLE_TUTEUR:
+            case MjMembers::ROLE_TUTEUR:
                 return 'Tuteur';
             default:
                 return ucfirst($role);

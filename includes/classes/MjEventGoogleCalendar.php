@@ -6,6 +6,8 @@ use DateTime;
 use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
+use Mj\Member\Classes\Crud\MjEventClosures;
+use Mj\Member\Classes\Crud\MjEvents;
 use WP_Error;
 
 if (!defined('ABSPATH')) {
@@ -223,7 +225,7 @@ class MjEventGoogleCalendar {
         }
 
         $events = mj_member_get_public_events(array(
-            'statuses' => array(MjEvents_CRUD::STATUS_ACTIVE),
+            'statuses' => array(MjEvents::STATUS_ACTIVE),
             'limit' => 240,
             'order' => 'ASC',
             'orderby' => 'date_debut',
@@ -244,7 +246,7 @@ class MjEventGoogleCalendar {
         }
 
         $closures = array();
-        if (class_exists('MjEventClosures')) {
+        if (class_exists(MjEventClosures::class)) {
             $from_date = substr($since, 0, 10);
             $to_date = substr($until, 0, 10);
             $closures = MjEventClosures::get_all(array(
@@ -376,24 +378,83 @@ class MjEventGoogleCalendar {
 
         if (!empty($closures)) {
             foreach ($closures as $closure) {
-                if (!is_object($closure) || empty($closure->closure_date)) {
+                if (!is_object($closure)) {
                     continue;
                 }
 
-                $start = self::create_datetime($closure->closure_date . ' 00:00:00');
+                $start_value = '';
+                if (!empty($closure->start_date)) {
+                    $start_value = (string) $closure->start_date;
+                } elseif (!empty($closure->closure_date)) {
+                    $start_value = (string) $closure->closure_date;
+                }
+
+                if ($start_value === '') {
+                    continue;
+                }
+
+                $end_value = !empty($closure->end_date) ? (string) $closure->end_date : $start_value;
+
+                $start = self::create_datetime($start_value . ' 00:00:00');
                 if (!$start) {
                     continue;
                 }
 
-                if ($start->getTimestamp() > $until_ts || $start->getTimestamp() < $since_ts) {
+                $end_exclusive = self::create_datetime($end_value . ' 00:00:00');
+                if ($end_exclusive instanceof DateTimeImmutable) {
+                    $end_exclusive = $end_exclusive->modify('+1 day');
+                } else {
+                    $end_exclusive = $start->modify('+1 day');
+                }
+
+                $inclusive_end = self::create_datetime($end_value . ' 23:59:59');
+                if (!$inclusive_end instanceof DateTimeImmutable) {
+                    $inclusive_end = $end_exclusive->modify('-1 second');
+                }
+
+                if ($inclusive_end->getTimestamp() < $since_ts || $start->getTimestamp() > $until_ts) {
                     continue;
                 }
 
-                $end = $start->modify('+1 day');
                 $description = isset($closure->description) ? sanitize_text_field($closure->description) : '';
-                $summary_detail = $description !== ''
-                    ? $description
-                    : wp_date(get_option('date_format', 'd/m/Y'), $start->getTimestamp());
+
+                $cover_id = isset($closure->cover_id) ? (int) $closure->cover_id : 0;
+                $cover_url = '';
+                $cover_mime = '';
+                if ($cover_id > 0) {
+                    $candidate_url = '';
+                    if (wp_attachment_is_image($cover_id)) {
+                        $candidate_url = wp_get_attachment_image_url($cover_id, 'large');
+                        if (!$candidate_url) {
+                            $candidate_url = wp_get_attachment_url($cover_id);
+                        }
+                    } else {
+                        $candidate_url = wp_get_attachment_url($cover_id);
+                    }
+
+                    if ($candidate_url) {
+                        $cover_url = esc_url_raw($candidate_url);
+                        $cover_mime = get_post_mime_type($cover_id);
+                        if (!is_string($cover_mime)) {
+                            $cover_mime = '';
+                        }
+                    }
+                }
+
+                if ($start_value === $end_value) {
+                    $summary_detail = $description !== ''
+                        ? $description
+                        : wp_date(get_option('date_format', 'd/m/Y'), $start->getTimestamp());
+                } else {
+                    $summary_detail = sprintf(
+                        __('Du %s au %s', 'mj-member'),
+                        wp_date(get_option('date_format', 'd/m/Y'), $start->getTimestamp()),
+                        wp_date(get_option('date_format', 'd/m/Y'), $inclusive_end->getTimestamp())
+                    );
+                    if ($description !== '') {
+                        $summary_detail .= ' – ' . $description;
+                    }
+                }
 
                 $entries[] = array(
                     'event' => array(
@@ -402,14 +463,23 @@ class MjEventGoogleCalendar {
                         'description' => $description,
                         'force_color' => '#D32F2F',
                         'categories' => 'MJ Fermeture',
-                        'closure_date' => sanitize_text_field($closure->closure_date),
+                        'closure_date' => sanitize_text_field($start_value),
+                        'closure_start' => sanitize_text_field($start_value),
+                        'closure_end' => sanitize_text_field($end_value),
+                        'cover_id' => $cover_id,
+                        'cover_url' => $cover_url,
+                        'cover_mime' => $cover_mime,
                     ),
                     'start' => $start,
-                    'end' => $end,
+                    'end' => $end_exclusive,
                     'context' => array(
                         'closure' => true,
                         'closure_summary' => $summary_detail,
                         'closure_description' => $description,
+                        'closure_range' => array(
+                            'start' => $start_value,
+                            'end' => $end_value,
+                        ),
                         'all_day' => true,
                     ),
                 );
@@ -587,6 +657,8 @@ class MjEventGoogleCalendar {
         $location = self::build_location($event);
         $description = self::build_description($event, $context);
         $url = isset($event['permalink']) ? esc_url_raw($event['permalink']) : '';
+        $attachment_url = isset($event['cover_url']) ? esc_url_raw((string) $event['cover_url']) : '';
+        $attachment_mime = isset($event['cover_mime']) ? sanitize_text_field((string) $event['cover_mime']) : '';
 
         $categories = '';
         if (isset($event['categories'])) {
@@ -640,6 +712,14 @@ class MjEventGoogleCalendar {
         if ($color !== '') {
             $lines[] = 'COLOR:' . strtoupper($color);
         }
+        if ($attachment_url !== '') {
+            $attach_line = 'ATTACH';
+            if ($attachment_mime !== '') {
+                $attach_line .= ';FMTTYPE=' . self::escape_text($attachment_mime);
+            }
+            $attach_line .= ':' . self::escape_text($attachment_url);
+            $lines[] = $attach_line;
+        }
 
         $lines[] = 'END:VEVENT';
 
@@ -670,11 +750,16 @@ class MjEventGoogleCalendar {
             $detail = '';
             if (!empty($context['closure_summary'])) {
                 $detail = sanitize_text_field($context['closure_summary']);
-            } elseif (!empty($event['closure_date'])) {
-                $detail = sanitize_text_field($event['closure_date']);
             }
 
             $detail = trim($detail);
+
+            if ($detail === '') {
+                list($range_start, $range_end) = self::resolve_closure_range($context, $event);
+                if ($range_start !== '') {
+                    $detail = self::build_closure_range_label($range_start, $range_end);
+                }
+            }
 
             if ($detail === '' && !empty($event['title'])) {
                 $detail = trim((string) $event['title']);
@@ -741,11 +826,16 @@ class MjEventGoogleCalendar {
             $detail = '';
             if (!empty($context['closure_summary'])) {
                 $detail = sanitize_text_field($context['closure_summary']);
-            } elseif (!empty($event['closure_date'])) {
-                $detail = sanitize_text_field($event['closure_date']);
             }
 
             $detail = trim($detail);
+            if ($detail === '') {
+                list($range_start, $range_end) = self::resolve_closure_range($context, $event);
+                if ($range_start !== '') {
+                    $detail = self::build_closure_range_label($range_start, $range_end);
+                }
+            }
+
             if ($detail !== '') {
                 $parts[] = sprintf('Mj Fermée : %s', $detail);
             } else {
@@ -754,6 +844,10 @@ class MjEventGoogleCalendar {
 
             if (!empty($context['closure_description'])) {
                 $parts[] = sanitize_textarea_field($context['closure_description']);
+            }
+
+            if (!empty($event['cover_url'])) {
+                $parts[] = sprintf(__('Photo : %s', 'mj-member'), esc_url_raw((string) $event['cover_url']));
             }
         }
 
@@ -898,18 +992,11 @@ class MjEventGoogleCalendar {
             }
         }
 
-        if (!empty($event['accent_color'])) {
-            $candidate = sanitize_hex_color($event['accent_color']);
-            if (is_string($candidate) && $candidate !== '') {
-                $color = strtoupper($candidate);
-            }
-        }
-
-        if ($color === '' && !empty($event['type']) && class_exists('MjEvents_CRUD')) {
+        if ($color === '' && !empty($event['type']) && class_exists(MjEvents::class)) {
             $type_key = sanitize_key($event['type']);
             if ($type_key !== '') {
-                if (method_exists('MjEvents_CRUD', 'get_type_colors')) {
-                    $type_colors = MjEvents_CRUD::get_type_colors();
+                if (method_exists('MjEvents', 'get_type_colors')) {
+                    $type_colors = MjEvents::get_type_colors();
                     if (isset($type_colors[$type_key])) {
                         $candidate = sanitize_hex_color($type_colors[$type_key]);
                         if (is_string($candidate) && $candidate !== '') {
@@ -918,8 +1005,8 @@ class MjEventGoogleCalendar {
                     }
                 }
 
-                if ($color === '' && method_exists('MjEvents_CRUD', 'get_default_color_for_type')) {
-                    $candidate = sanitize_hex_color(MjEvents_CRUD::get_default_color_for_type($type_key));
+                if ($color === '' && method_exists('MjEvents', 'get_default_color_for_type')) {
+                    $candidate = sanitize_hex_color(MjEvents::get_default_color_for_type($type_key));
                     if (is_string($candidate) && $candidate !== '') {
                         $color = strtoupper($candidate);
                     }
@@ -1171,6 +1258,71 @@ class MjEventGoogleCalendar {
         }
 
         return implode("\r\n", $output) . "\r\n";
+    }
+
+    /**
+     * @param array<string,mixed> $context
+     * @param array<string,mixed> $event
+     * @return array{0:string,1:string}
+     */
+    private static function resolve_closure_range($context, $event) {
+        $start = '';
+        $end = '';
+
+        if (!empty($context['closure_range']) && is_array($context['closure_range'])) {
+            $start = isset($context['closure_range']['start']) ? (string) $context['closure_range']['start'] : '';
+            $end = isset($context['closure_range']['end']) ? (string) $context['closure_range']['end'] : '';
+        } else {
+            if (!empty($event['closure_start'])) {
+                $start = (string) $event['closure_start'];
+            } elseif (!empty($event['closure_date'])) {
+                $start = (string) $event['closure_date'];
+            }
+
+            if (!empty($event['closure_end'])) {
+                $end = (string) $event['closure_end'];
+            }
+        }
+
+        if ($start !== '' && $end === '') {
+            $end = $start;
+        }
+
+        return array($start, $end);
+    }
+
+    /**
+     * @param string $start
+     * @param string $end
+     * @return string
+     */
+    private static function build_closure_range_label($start, $end) {
+        $start = trim((string) $start);
+        $end = trim((string) $end);
+
+        if ($start === '') {
+            return '';
+        }
+
+        $start_ts = strtotime($start);
+        if ($start_ts === false) {
+            return $start;
+        }
+
+        if ($end === '' || $end === $start) {
+            return wp_date('d/m/Y', $start_ts);
+        }
+
+        $end_ts = strtotime($end);
+        if ($end_ts === false) {
+            return wp_date('d/m/Y', $start_ts);
+        }
+
+        return sprintf(
+            __('Du %s au %s', 'mj-member'),
+            wp_date('d/m/Y', $start_ts),
+            wp_date('d/m/Y', $end_ts)
+        );
     }
 
     /**

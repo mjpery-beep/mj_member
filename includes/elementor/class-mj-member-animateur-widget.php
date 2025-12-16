@@ -11,6 +11,8 @@ use Elementor\Group_Control_Typography;
 use Elementor\Widget_Base;
 
 class Mj_Member_Elementor_Animateur_Widget extends Widget_Base {
+    use Mj_Member_Elementor_Widget_Visibility;
+
     public function get_name() {
         return 'mj-member-animateur';
     }
@@ -183,6 +185,8 @@ class Mj_Member_Elementor_Animateur_Widget extends Widget_Base {
         );
 
         $this->end_controls_section();
+
+        $this->register_visibility_controls();
 
         $this->start_controls_section(
             'section_style_general',
@@ -983,12 +987,13 @@ class Mj_Member_Elementor_Animateur_Widget extends Widget_Base {
     }
 
     protected function render() {
+        $settings = $this->get_settings_for_display();
+        $this->apply_visibility_to_wrapper($settings, 'mj-animateur-dashboard');
+
         if (!function_exists('mj_member_render_animateur_component')) {
             echo '<div class="mj-member-account-warning">' . esc_html__('Le module MJ Member doit être actif pour utiliser ce widget.', 'mj-member') . '</div>';
             return;
         }
-
-        $settings = $this->get_settings_for_display();
         $show_event_filter = !isset($settings['show_event_filter']) || $settings['show_event_filter'] === 'yes';
         $show_occurrence_filter = !isset($settings['show_occurrence_filter']) || $settings['show_occurrence_filter'] === 'yes';
         $show_attendance_actions = !isset($settings['show_attendance_actions']) || $settings['show_attendance_actions'] === 'yes';

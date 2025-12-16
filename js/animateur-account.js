@@ -1,15 +1,52 @@
 (function ($) {
 	'use strict';
 
-	function escapeHtml(value) {
-		return String(value === undefined || value === null ? '' : value)
-			.replace(/&/g, '&amp;')
-			.replace(/</g, '&lt;')
-			.replace(/>/g, '&gt;')
-			.replace(/"/g, '&quot;')
-			.replace(/'/g, '&#039;');
-	}
+	var Utils = window.MjMemberUtils || {};
 
+	var escapeHtml = typeof Utils.escapeHtml === 'function'
+		? Utils.escapeHtml
+		: function (value) {
+			return String(value === undefined || value === null ? '' : value)
+				.replace(/&/g, '&amp;')
+				.replace(/</g, '&lt;')
+				.replace(/>/g, '&gt;')
+				.replace(/"/g, '&quot;')
+				.replace(/'/g, '&#039;');
+		};
+
+	var toInt = typeof Utils.toInt === 'function'
+		? function (value) {
+			var parsed = Utils.toInt(value, null);
+			return parsed === undefined ? null : parsed;
+		}
+		: function (value) {
+			var parsed = parseInt(value, 10);
+			return isNaN(parsed) ? null : parsed;
+		};
+
+	var flagSummaryAssignments = typeof Utils.flagSummaryAssignments === 'function'
+		? Utils.flagSummaryAssignments
+		: function (summaries, assignedLookup) {
+			if (!Array.isArray(summaries) || !summaries.length) {
+				return summaries || [];
+			}
+			if (!assignedLookup) {
+				return summaries;
+			}
+			for (var i = 0; i < summaries.length; i += 1) {
+				var summary = summaries[i];
+				var id = summary && summary.id !== undefined ? toInt(summary.id) : null;
+				if (id === null) {
+					continue;
+				}
+				if (assignedLookup[id]) {
+					summary.assigned = true;
+				}
+			}
+			return summaries;
+		};
+
+	// Voir la fonction PHP mj_member_prepare_animateur_dashboard_config() pour la structure attendue.
 	function parseConfig($root) {
 		var raw = $root.attr('data-config');
 		if (!raw) {
@@ -21,11 +58,6 @@
 		} catch (error) {
 			return null;
 		}
-	}
-
-	function toInt(value) {
-		var parsed = parseInt(value, 10);
-		return isNaN(parsed) ? null : parsed;
 	}
 
 	function Dashboard($root, config) {
@@ -124,14 +156,10 @@
 		this.viewAllActive = (defaultFilter === 'all' && hasToggle) || (!hasAssigned && hasToggle);
 
 		var defaultEventId = toInt(this.config.defaultEvent);
-		if (defaultEventId === null) {
-			if (hasAssigned && this.events.length) {
-				defaultEventId = this.events[0].id;
-			} else if (this.viewAllActive && this.allEvents.length) {
-				defaultEventId = this.allEvents[0].id;
-			} else {
-				defaultEventId = null;
-			}
+		if (defaultEventId === null || defaultEventId <= 0) {
+			defaultEventId = null;
+		} else if (!this.getEvent(defaultEventId)) {
+			defaultEventId = null;
 		}
 
 		this.state = {
@@ -139,6 +167,9 @@
 			occurrence: null,
 			filter: defaultFilter
 		};
+
+		this.eventListVisible = true;
+		this.occurrenceListVisible = defaultEventId !== null;
 
 		this.eventOptions = [];
 		this.filteredEventOptions = [];
@@ -290,16 +321,7 @@
 		if (!this.allEvents.length) {
 			return;
 		}
-			for (var i = 0; i < this.allEvents.length; i += 1) {
-				var summary = this.allEvents[i];
-				var id = toInt(summary && summary.id);
-				if (id === null) {
-					continue;
-				}
-				if (this.assignedLookup[id]) {
-					summary.assigned = true;
-				}
-			}
+		flagSummaryAssignments(this.allEvents, this.assignedLookup);
 	};
 
 	Dashboard.prototype.ensureAssignedSummaries = function () {
@@ -357,9 +379,10 @@
 		this.$eventSelect = this.$root.find('.mj-animateur-dashboard__select--event');
 		this.$eventTabs = this.$root.find('[data-role="event-tabs"]');
 		this.$occurrenceSelect = this.$root.find('.mj-animateur-dashboard__select--occurrence');
-		this.$eventTrack = this.$root.find('[data-role="event-track"]');
-		this.$eventNavPrev = this.$root.find('[data-role="event-nav-prev"]');
-		this.$eventNavNext = this.$root.find('[data-role="event-nav-next"]');
+		this.$eventList = this.$root.find('[data-role="event-list"]');
+		this.$eventToggle = this.$root.find('[data-role="event-toggle"]');
+		this.$eventToggleText = this.$root.find('[data-role="event-toggle-text"]');
+		this.$eventCurrent = this.$root.find('[data-role="event-current"]');
 		this.$tableBody = this.$root.find('.mj-animateur-dashboard__table tbody');
 		this.$noData = this.$root.find('[data-role="no-participants"]');
 		this.$total = this.$root.find('[data-role="participant-total"]');
@@ -374,15 +397,17 @@
 		this.$smsWrapper = this.$root.find('[data-role="sms"]');
 		this.$unassignedNotice = this.$root.find('[data-role="unassigned-notice"]');
 		this.$agenda = this.$root.find('[data-role="occurrence-agenda"]');
-		this.$agendaTrack = this.$root.find('[data-role="agenda-track"]');
-		this.$agendaNavPrev = this.$root.find('[data-role="agenda-nav-prev"]');
-		this.$agendaNavNext = this.$root.find('[data-role="agenda-nav-next"]');
+		this.$agendaList = this.$root.find('[data-role="agenda-list"]');
+		this.$occurrenceToggle = this.$root.find('[data-role="occurrence-toggle"]');
+		this.$occurrenceToggleText = this.$root.find('[data-role="occurrence-toggle-text"]');
+		this.$occurrenceCurrent = this.$root.find('[data-role="occurrence-current"]');
 		this.$occurrenceWrapper = this.$root.find('.mj-animateur-dashboard__select-wrapper--occurrence');
 		this.$eventDetails = this.$root.find('[data-role="event-details"]');
 		this.$eventDetailTitle = this.$root.find('[data-role="event-detail-title"]');
 		this.$eventDetailMeta = this.$root.find('[data-role="event-detail-meta"]');
 		this.$eventDetailConditionsWrapper = this.$root.find('[data-role="event-detail-conditions-wrapper"]');
 		this.$eventDetailConditions = this.$root.find('[data-role="event-detail-conditions"]');
+		this.$dashboardBody = this.$root.find('[data-role="dashboard-body"]');
 		this.$memberPickerButton = this.$root.find('[data-role="open-member-picker"]');
 		this.$memberPickerContainer = this.$root.find('[data-role="member-picker"]');
 		this.$quickMemberButton = this.$root.find('[data-role="quick-member-open"]');
@@ -397,6 +422,7 @@
 	 			var selectedId = $(this).val();
 	 			self.state.eventId = selectedId ? toInt(selectedId) : null;
 				self.onCurrentEventChanged();
+				self.setEventListVisibility(false);
 	 		});
 	 	}
 
@@ -406,74 +432,58 @@
 	 			self.renderParticipants();
 	 			self.updateAgendaSelection();
 	 			self.clearFeedback();
+				self.setOccurrenceListVisibility(false);
 	 		});
 	 	}
 
-		if (this.$eventTrack.length) {
-	 		this.$eventTrack.on('click', '[data-role="event-card"]', function (event) {
-	 			event.preventDefault();
+		if (this.$eventList.length) {
+			this.$eventList.on('click', '[data-role="event-card"]', function (event) {
+				event.preventDefault();
 				self.onEventCardClick($(this));
-	 		});
-	 		this.$eventTrack.on('click', '[data-role="event-link"]', function (event) {
-	 			event.stopPropagation();
-	 		});
-			this.$eventTrack.on('click', '[data-role="assignment-toggle"]', function (event) {
+			});
+			this.$eventList.on('click', '[data-role="event-link"]', function (event) {
+				event.stopPropagation();
+			});
+			this.$eventList.on('click', '[data-role="assignment-toggle"]', function (event) {
 				event.preventDefault();
 				event.stopPropagation();
-				var $badge = $(this);
-				self.onAssignmentToggle($badge);
+				self.onAssignmentToggle($(this));
 			});
-			this.$eventTrack.on('keydown', '[data-role="assignment-toggle"]', function (event) {
+			this.$eventList.on('keydown', '[data-role="assignment-toggle"]', function (event) {
 				if (event.key === 'Enter' || event.key === ' ') {
 					event.preventDefault();
 					event.stopPropagation();
 					$(this).trigger('click');
 				}
 			});
-			this.$eventTrack.on('scroll', function () {
-				self.updateEventNavState();
+		}
+
+		if (this.$eventToggle.length) {
+			this.$eventToggle.on('click', function (event) {
+				event.preventDefault();
+				self.toggleEventList();
 			});
-	 	}
+		}
 
-	 	if (this.$eventNavPrev && this.$eventNavPrev.length) {
-	 		this.$eventNavPrev.on('click', function () {
-	 			self.scrollEventTrack('prev');
-	 		});
-	 	}
-
-	 	if (this.$eventNavNext && this.$eventNavNext.length) {
-	 		this.$eventNavNext.on('click', function () {
-	 			self.scrollEventTrack('next');
-	 		});
-	 	}
-
-	 	if (this.$agendaTrack && this.$agendaTrack.length) {
-	 		this.$agendaTrack.on('click', '[data-role="agenda-item"]', function (event) {
-	 			event.preventDefault();
-	 			self.onAgendaItemClick($(this));
-	 		});
-			this.$agendaTrack.on('scroll', function () {
-				self.updateAgendaNavState();
+		if (this.$agendaList && this.$agendaList.length) {
+			this.$agendaList.on('click', '[data-role="agenda-item"]', function (event) {
+				event.preventDefault();
+				self.onAgendaItemClick($(this));
 			});
-	 	}
+		}
+
+		if (this.$occurrenceToggle && this.$occurrenceToggle.length) {
+			this.$occurrenceToggle.on('click', function (event) {
+				event.preventDefault();
+				self.toggleOccurrenceList();
+			});
+		}
 		if (this.$eventTabs.length) {
 			this.$eventTabs.on('click', '[data-filter]', function (event) {
 				event.preventDefault();
 				self.onEventTabClick($(this));
 			});
 		}
-
-	 	if (this.$agendaNavPrev && this.$agendaNavPrev.length) {
-	 		this.$agendaNavPrev.on('click', function () {
-	 			self.scrollAgenda('prev');
-	 		});
-	 	}
-
-	 	if (this.$agendaNavNext && this.$agendaNavNext.length) {
-	 		this.$agendaNavNext.on('click', function () {
-	 			self.scrollAgenda('next');
-	 		});
-	 	}
 
 	 	if (this.$smsButton.length) {
 	 		this.$smsButton.on('click', function () {
@@ -648,17 +658,110 @@
 		});
 	};
 
-	Dashboard.prototype.toggleOccurrenceUi = function (hasOccurrences) {
-		var visible = !!hasOccurrences;
-		if (this.$agenda && this.$agenda.length) {
-			this.$agenda.toggle(visible);
-		}
+	Dashboard.prototype.toggleOccurrenceUi = function (hasOccurrences, hasMultipleOccurrences) {
+		var occurrencesAvailable = !!hasOccurrences;
+		var multipleAvailable = typeof hasMultipleOccurrences === 'undefined'
+			? occurrencesAvailable
+			: (occurrencesAvailable && !!hasMultipleOccurrences);
+
 		if (this.$occurrenceWrapper && this.$occurrenceWrapper.length) {
-			this.$occurrenceWrapper.toggle(visible);
+			this.$occurrenceWrapper.toggle(occurrencesAvailable);
 		}
+
 		if (this.$occurrenceSelect && this.$occurrenceSelect.length) {
-			this.$occurrenceSelect.prop('disabled', !visible);
+			this.$occurrenceSelect.prop('disabled', !occurrencesAvailable);
 		}
+
+		if (this.$agenda && this.$agenda.length) {
+			if (multipleAvailable) {
+				this.$agenda.show().removeAttr('hidden');
+			} else {
+				this.$agenda.hide().attr('hidden', 'hidden');
+			}
+		}
+
+		if (this.$occurrenceToggle && this.$occurrenceToggle.length) {
+			if (multipleAvailable) {
+				this.$occurrenceToggle.removeAttr('hidden');
+			} else {
+				this.$occurrenceToggle.attr('hidden', 'hidden').attr('aria-expanded', 'false');
+			}
+		}
+
+		if (!multipleAvailable) {
+			this.occurrenceListVisible = false;
+			if (this.$occurrenceCurrent && this.$occurrenceCurrent.length) {
+				this.$occurrenceCurrent.text('').attr('hidden', 'hidden');
+			}
+			if (this.$agendaList && this.$agendaList.length) {
+				this.$agendaList.attr('hidden', 'hidden');
+			}
+			if (this.$occurrenceToggleText && this.$occurrenceToggleText.length) {
+				var showKey = 'occurrenceListShow';
+				var showFallback = 'Afficher la liste des occurrences';
+				this.$occurrenceToggleText.text(this.translate(showKey, showFallback));
+			}
+		}
+	};
+
+	Dashboard.prototype.setOccurrenceListVisibility = function (visible) {
+		if (typeof visible === 'undefined') {
+			visible = this.occurrenceListVisible;
+		}
+		this.occurrenceListVisible = !!visible;
+
+		if (this.$agendaList && this.$agendaList.length) {
+			if (this.occurrenceListVisible) {
+				this.$agendaList.removeAttr('hidden');
+			} else {
+				this.$agendaList.attr('hidden', 'hidden');
+			}
+		}
+
+		if (this.$occurrenceToggle && this.$occurrenceToggle.length) {
+			this.$occurrenceToggle.attr('aria-expanded', this.occurrenceListVisible ? 'true' : 'false');
+		}
+
+		if (this.$occurrenceToggleText && this.$occurrenceToggleText.length) {
+			var key = this.occurrenceListVisible ? 'occurrenceListHide' : 'occurrenceListShow';
+			var fallback = this.occurrenceListVisible ? 'Masquer la liste des occurrences' : 'Afficher la liste des occurrences';
+			this.$occurrenceToggleText.text(this.translate(key, fallback));
+		}
+	};
+
+	Dashboard.prototype.toggleOccurrenceList = function () {
+		this.setOccurrenceListVisibility(!this.occurrenceListVisible);
+	};
+
+	Dashboard.prototype.updateOccurrenceCurrentLabel = function () {
+		if (!this.$occurrenceCurrent || !this.$occurrenceCurrent.length) {
+			return;
+		}
+
+		var event = this.getEvent(this.state.eventId);
+		var value = this.state.occurrence;
+		var label = '';
+
+		if (event && Array.isArray(event.occurrences) && value) {
+			for (var i = 0; i < event.occurrences.length; i += 1) {
+				var occurrence = event.occurrences[i];
+				if (occurrence.start === value) {
+					label = occurrence.label || value;
+					break;
+				}
+			}
+		}
+
+		if (label) {
+			var template = this.translate('occurrenceCurrentLabel', 'Occurrence sélectionnée : %s');
+			var text = template.indexOf('%s') !== -1 ? template.replace('%s', String(label)) : (template + ' ' + String(label));
+			this.$occurrenceCurrent.text(text);
+			this.$occurrenceCurrent.removeAttr('hidden');
+			return;
+		}
+
+		this.$occurrenceCurrent.text('');
+		this.$occurrenceCurrent.attr('hidden', 'hidden');
 	};
 
 	Dashboard.prototype.updateEventSnapshot = function (snapshot) {
@@ -668,21 +771,6 @@
 
 		var eventId = toInt(snapshot.id);
 		if (eventId === null) {
-			return;
-		}
-
-		var wasCurrent = this.state.eventId !== null && this.state.eventId === eventId;
-		var previousOccurrence = wasCurrent ? this.state.occurrence : null;
-		var isAssigned = Object.prototype.hasOwnProperty.call(snapshot, 'isAssigned') ? !!snapshot.isAssigned : this.isAssignedEvent(eventId);
-
-		this.eventsById[eventId] = snapshot;
-
-		var existingIndex = -1;
-		for (var i = 0; i < this.events.length; i += 1) {
-			if (toInt(this.events[i].id) === eventId) {
-				existingIndex = i;
-				break;
-			}
 		}
 
 		if (isAssigned) {
@@ -796,25 +884,7 @@
 			}
 			return false;
 		};
-
-		Dashboard.prototype.getVisibleParticipants = function (participants, occurrence) {
-			if (!Array.isArray(participants)) {
-				return [];
-			}
-			var visible = [];
-			for (var i = 0; i < participants.length; i += 1) {
-				if (this.participantMatchesOccurrence(participants[i], occurrence)) {
-					visible.push(participants[i]);
-				}
-			}
-			return visible;
-		};
-
 	Dashboard.prototype.onAttendanceOptionClick = function ($option) {
-		if (!this.settings.attendance || !$option || !$option.length) {
-			return;
-		}
-
 		var status = $option.attr('data-status');
 		if (!status) {
 			return;
@@ -879,9 +949,6 @@
 
 	Dashboard.prototype.formatEventSelectLabel = function (option) {
 		if (!option) {
-			if (status === 'pending') {
-				return this.translate('attendancePending', 'À confirmer');
-			}
 			return '';
 		}
 		var parts = [];
@@ -1187,7 +1254,7 @@
 
 		Dashboard.prototype.setEventLoading = function (isLoading, eventId) {
 			this.$root.toggleClass('mj-animateur-dashboard--event-loading', !!isLoading);
-			if (!this.$eventTrack.length) {
+			if (!this.$eventList.length) {
 				return;
 			}
 			var normalizedId = toInt(eventId);
@@ -1197,7 +1264,7 @@
 			if (normalizedId === null) {
 				return;
 			}
-			this.$eventTrack.find('[data-role="event-card"]').each(function () {
+			this.$eventList.find('[data-role="event-card"]').each(function () {
 				var $card = $(this);
 				var cardId = toInt($card.attr('data-event-id'));
 				if (cardId === normalizedId) {
@@ -1561,8 +1628,8 @@
 					return;
 				}
 			}
+			this.state.eventId = null;
 		}
-		this.state.eventId = options[0].id;
 	};
 
 	Dashboard.prototype.computeEventStats = function () {
@@ -1651,7 +1718,9 @@
 			return;
 		}
 		this.state.filter = filter;
+		this.eventListVisible = true;
 		this.refreshEventSelect();
+		this.setEventListVisibility(true);
 		this.updateViewAllButton();
 		this.onCurrentEventChanged();
 	};
@@ -1661,6 +1730,7 @@
 			var eventId = this.state.eventId;
 			this.clearFeedback();
 			this.updateEventSelectionUi();
+			this.occurrenceListVisible = true;
 			this.refreshOccurrences();
 			this.renderParticipants();
 			var isAssigned = this.isAssignedEvent(eventId);
@@ -1685,21 +1755,86 @@
 	};
 
 	Dashboard.prototype.renderEventCards = function () {
-		if (!this.$eventTrack.length) {
+		if (!this.$eventList.length) {
 			return;
 		}
 
 		var options = this.filteredEventOptions || [];
-		if (!options.length) {
-			this.$eventTrack.html('<div class="mj-animateur-dashboard__event-empty" data-role="event-empty">' + escapeHtml(this.translate('eventTabEmpty', 'Aucun événement trouvé')) + '</div>');
+		var html = '';
+		var hasOptions = options.length > 0;
+
+		if (!hasOptions) {
+			html = '<div class="mj-animateur-dashboard__event-empty" data-role="event-empty">' + escapeHtml(this.translate('eventTabEmpty', 'Aucun événement trouvé')) + '</div>';
+		} else {
+			for (var i = 0; i < options.length; i += 1) {
+				html += this.buildEventCardHtml(options[i]);
+			}
+		}
+
+		this.$eventList.html(html);
+
+		if (!hasOptions) {
+			this.eventListVisible = true;
+		}
+
+		this.setEventListVisibility(this.eventListVisible);
+	};
+
+	Dashboard.prototype.setEventListVisibility = function (visible) {
+		if (typeof visible === 'undefined') {
+			visible = this.eventListVisible;
+		}
+		this.eventListVisible = !!visible;
+
+		if (this.$eventList && this.$eventList.length) {
+			if (this.eventListVisible) {
+				this.$eventList.removeAttr('hidden');
+			} else {
+				this.$eventList.attr('hidden', 'hidden');
+			}
+		}
+
+		if (this.$eventToggle && this.$eventToggle.length) {
+			this.$eventToggle.attr('aria-expanded', this.eventListVisible ? 'true' : 'false');
+		}
+
+		if (this.$eventToggleText && this.$eventToggleText.length) {
+			var key = this.eventListVisible ? 'eventListHide' : 'eventListShow';
+			var fallback = this.eventListVisible ? 'Masquer la liste des événements' : 'Afficher la liste des événements';
+			this.$eventToggleText.text(this.translate(key, fallback));
+		}
+	};
+
+	Dashboard.prototype.toggleEventList = function () {
+		this.setEventListVisibility(!this.eventListVisible);
+	};
+
+	Dashboard.prototype.updateEventCurrentLabel = function () {
+		if (!this.$eventCurrent || !this.$eventCurrent.length) {
 			return;
 		}
 
-		var html = '';
-		for (var i = 0; i < options.length; i += 1) {
-			html += this.buildEventCardHtml(options[i]);
+		var event = this.getCurrentEvent();
+		var title = '';
+		if (event && event.title) {
+			title = String(event.title);
+		} else if (this.state.eventId !== null) {
+			var option = this.getEventOption(this.state.eventId);
+			if (option && option.title) {
+				title = String(option.title);
+			}
 		}
-		this.$eventTrack.html(html);
+
+		if (title) {
+			var template = this.translate('eventCurrentLabel', 'Événement : %s');
+			var label = template.indexOf('%s') !== -1 ? template.replace('%s', title) : (template + ' ' + title);
+			this.$eventCurrent.text(label);
+			this.$eventCurrent.removeAttr('hidden');
+			return;
+		}
+
+		this.$eventCurrent.text('');
+		this.$eventCurrent.attr('hidden', 'hidden');
 	};
 
 	Dashboard.prototype.buildEventCardHtml = function (option) {
@@ -1799,12 +1934,15 @@
 		this.renderEventTabs();
 		this.ensureSelectedEvent();
 
-		var options = this.filteredEventOptions;
+		var options = this.filteredEventOptions || [];
 		this.eventOptionLookup = {};
 
 		var html = '';
 		for (var i = 0; i < options.length; i += 1) {
 			var option = options[i];
+			if (!option) {
+				continue;
+			}
 			this.eventOptionLookup[option.id] = option;
 			if (this.$eventSelect.length) {
 				var isSelected = this.state.eventId !== null && option.id === this.state.eventId;
@@ -1812,22 +1950,25 @@
 			}
 		}
 
-		if (!options.length && this.$eventSelect.length) {
-			html = '<option value="">' + escapeHtml(this.translate('noEvents', 'Aucun événement disponible')) + '</option>';
-		}
-
 		if (this.$eventSelect.length) {
+			if (options.length) {
+				var placeholderLabel = this.translate('eventSelectPlaceholder', 'Sélectionnez un événement');
+				html = '<option value="">' + escapeHtml(placeholderLabel) + '</option>' + html;
+			} else {
+				html = '<option value="">' + escapeHtml(this.translate('noEvents', 'Aucun événement disponible')) + '</option>';
+			}
 			this.$eventSelect.html(html);
 			this.$eventSelect.prop('disabled', options.length === 0);
-			if (this.state.eventId !== null) {
+			if (this.state.eventId !== null && this.state.eventId !== undefined) {
 				this.$eventSelect.val(String(this.state.eventId));
+			} else {
+				this.$eventSelect.val('');
 			}
 		}
 
 		this.renderEventCards();
 		this.updateEventSelectionUi();
 		this.updateMemberPickerState(this.isAssignedEvent(this.state.eventId));
-		this.updateEventNavState();
 	};
 
 	Dashboard.prototype.updateEventSelectionUi = function () {
@@ -1839,20 +1980,33 @@
 			}
 		}
 
-		if (!this.$eventTrack.length) {
+		this.updateDashboardBodyVisibility();
+
+		if (!this.$eventList.length) {
 			return;
 		}
 
 		var self = this;
-		this.$eventTrack.find('[data-role="event-card"]').each(function () {
+		this.$eventList.find('[data-role="event-card"]').each(function () {
 			var $card = $(this);
 			var cardId = toInt($card.attr('data-event-id'));
 			var isSelected = self.state.eventId !== null && cardId !== null && cardId === self.state.eventId;
 			$card.toggleClass('is-selected', !!isSelected);
 		});
 
-		this.updateEventNavState();
+		this.updateEventCurrentLabel();
 	};
+
+		Dashboard.prototype.updateDashboardBodyVisibility = function () {
+			if (!this.$dashboardBody || !this.$dashboardBody.length) {
+				return;
+			}
+			if (this.state.eventId !== null && this.state.eventId !== undefined) {
+				this.$dashboardBody.removeAttr('hidden');
+			} else {
+				this.$dashboardBody.attr('hidden', 'hidden');
+			}
+		};
 
 	Dashboard.prototype.onEventCardClick = function ($card) {
 		if (!$card || !$card.length) {
@@ -1870,54 +2024,8 @@
 
 		this.state.eventId = eventId;
 		this.onCurrentEventChanged();
+		this.setEventListVisibility(false);
 	};
-
-	Dashboard.prototype.scrollEventTrack = function (direction) {
-		if (!this.$eventTrack.length) {
-			return;
-		}
-
-		var node = this.$eventTrack.get(0);
-		if (!node) {
-			return;
-		}
-
-		var distance = this.$eventTrack.outerWidth() || 0;
-		if (!distance) {
-			distance = 240;
-		}
-
-		var current = node.scrollLeft;
-		var target = direction === 'prev' ? current - distance : current + distance;
-		var self = this;
-		this.$eventTrack.stop(true, false).animate({ scrollLeft: target }, 250, function () {
-			self.updateEventNavState();
-		});
-	};
-
-	Dashboard.prototype.updateEventNavState = function () {
-		if (!this.$eventTrack.length) {
-			return;
-		}
-
-		var hasCards = this.$eventTrack.find('[data-role="event-card"]').length > 0;
-		var node = this.$eventTrack.get(0);
-		var maxScroll = node ? Math.max(0, node.scrollWidth - node.clientWidth) : 0;
-		var scrollLeft = node ? node.scrollLeft : 0;
-		var atStart = !hasCards || scrollLeft <= 1;
-		var atEnd = !hasCards || scrollLeft >= maxScroll - 1;
-
-		if (this.$eventNavPrev && this.$eventNavPrev.length) {
-			this.$eventNavPrev.prop('disabled', atStart);
-			this.$eventNavPrev.toggleClass('is-disabled', atStart);
-		}
-
-		if (this.$eventNavNext && this.$eventNavNext.length) {
-			this.$eventNavNext.prop('disabled', atEnd);
-			this.$eventNavNext.toggleClass('is-disabled', atEnd);
-		}
-	};
-
 	Dashboard.prototype.occurrenceExists = function (occurrences, value) {
 		if (!Array.isArray(occurrences)) {
 			return false;
@@ -1936,21 +2044,26 @@
 		if (!this.$occurrenceSelect.length) {
 			if (!event) {
 				this.state.occurrence = null;
-				this.toggleOccurrenceUi(false);
+				this.setOccurrenceListVisibility(false);
+				this.toggleOccurrenceUi(false, false);
 				this.renderAgenda();
 				return;
 			}
 			var list = Array.isArray(event.occurrences) ? event.occurrences : [];
 			if (!list.length) {
 				this.state.occurrence = null;
-				this.toggleOccurrenceUi(false);
+				this.setOccurrenceListVisibility(false);
+				this.toggleOccurrenceUi(false, false);
 				this.renderAgenda();
 				return;
 			}
+			var listHasMultiple = list.length > 1;
 			if (!this.state.occurrence || !this.occurrenceExists(list, this.state.occurrence)) {
 				this.state.occurrence = event.defaultOccurrence || list[0].start || null;
 			}
-			this.toggleOccurrenceUi(true);
+			this.occurrenceListVisible = listHasMultiple;
+			this.toggleOccurrenceUi(true, listHasMultiple);
+			this.setOccurrenceListVisibility(listHasMultiple);
 			this.renderAgenda();
 			return;
 		}
@@ -1959,7 +2072,8 @@
 			this.state.occurrence = null;
 			this.$occurrenceSelect.html('<option value="">' + escapeHtml(this.translate('noOccurrences', 'Aucune occurrence disponible')) + '</option>');
 			this.$occurrenceSelect.prop('disabled', true);
-			this.toggleOccurrenceUi(false);
+			this.setOccurrenceListVisibility(false);
+			this.toggleOccurrenceUi(false, false);
 			this.renderAgenda();
 			return;
 		}
@@ -1969,7 +2083,8 @@
 			this.state.occurrence = null;
 			this.$occurrenceSelect.html('<option value="">' + escapeHtml(this.translate('noOccurrences', 'Aucune occurrence disponible')) + '</option>');
 			this.$occurrenceSelect.prop('disabled', true);
-			this.toggleOccurrenceUi(false);
+			this.setOccurrenceListVisibility(false);
+			this.toggleOccurrenceUi(false, false);
 			return;
 		}
 
@@ -1992,24 +2107,29 @@
 		if (selected !== null) {
 			this.$occurrenceSelect.val(String(selected));
 		}
-		this.toggleOccurrenceUi(true);
+		var hasMultiple = occurrences.length > 1;
+		this.occurrenceListVisible = hasMultiple;
+		this.toggleOccurrenceUi(true, hasMultiple);
+		this.setOccurrenceListVisibility(hasMultiple);
 
 		this.renderAgenda();
 	};
 
 	Dashboard.prototype.renderAgenda = function () {
-		if (!this.$agendaTrack.length) {
+		if (!this.$agendaList.length) {
 			return;
 		}
 
 		var event = this.getEvent(this.state.eventId);
 		var occurrences = event && Array.isArray(event.occurrences) ? event.occurrences : [];
-		this.toggleOccurrenceUi(occurrences.length > 0);
+		var hasOccurrences = occurrences.length > 0;
+		var hasMultiple = occurrences.length > 1;
+		this.toggleOccurrenceUi(hasOccurrences, hasMultiple);
 
-		if (!occurrences.length) {
-			this.$agendaTrack.html('<div class="mj-animateur-dashboard__agenda-empty" data-role="agenda-empty">' + escapeHtml(this.translate('agendaEmpty', 'Aucune occurrence à afficher.')) + '</div>');
+		if (!hasOccurrences) {
+			this.$agendaList.html('<div class="mj-animateur-dashboard__agenda-empty" data-role="agenda-empty">' + escapeHtml(this.translate('agendaEmpty', 'Aucune occurrence à afficher.')) + '</div>');
 			this.updateAgendaSelection();
-			this.updateAgendaNavState();
+			this.updateOccurrenceCurrentLabel();
 			return;
 		}
 
@@ -2018,9 +2138,9 @@
 			html += this.buildAgendaItemHtml(occurrences[i]);
 		}
 
-		this.$agendaTrack.html(html);
+		this.$agendaList.html(html);
+		this.setOccurrenceListVisibility(this.occurrenceListVisible);
 		this.updateAgendaSelection();
-		this.updateAgendaNavState();
 	};
 
 	Dashboard.prototype.buildAgendaItemHtml = function (occurrence) {
@@ -2067,14 +2187,13 @@
 	};
 
 	Dashboard.prototype.updateAgendaSelection = function () {
-		if (!this.$agendaTrack.length) {
+		if (!this.$agendaList.length) {
 			return;
 		}
 
 		var occurrence = this.state.occurrence;
 		var selectionFound = false;
-
-		this.$agendaTrack.find('[data-role="agenda-item"]').each(function () {
+		this.$agendaList.find('[data-role="agenda-item"]').each(function () {
 			var $item = $(this);
 			var value = String($item.attr('data-occurrence') || '');
 			var isSelected = occurrence !== null && occurrence !== undefined && occurrence !== '' && value === occurrence;
@@ -2085,7 +2204,7 @@
 		});
 
 		if (!selectionFound) {
-			var $first = this.$agendaTrack.find('[data-role="agenda-item"]').first();
+			var $first = this.$agendaList.find('[data-role="agenda-item"]').first();
 			if ($first.length) {
 				$first.addClass('is-selected');
 				occurrence = String($first.attr('data-occurrence') || '');
@@ -2101,32 +2220,7 @@
 			}
 		}
 
-		this.ensureAgendaItemVisible();
-		this.updateAgendaNavState();
-	};
-
-	Dashboard.prototype.ensureAgendaItemVisible = function () {
-		if (!this.$agendaTrack.length) {
-			return;
-		}
-
-		var $selected = this.$agendaTrack.find('[data-role="agenda-item"].is-selected').first();
-		if (!$selected.length) {
-			return;
-		}
-
-		var trackLeft = this.$agendaTrack.scrollLeft();
-		var trackWidth = this.$agendaTrack.innerWidth();
-		var itemLeft = $selected.position().left + trackLeft;
-		var itemWidth = $selected.outerWidth(true);
-		var itemRight = itemLeft + itemWidth;
-		var trackRight = trackLeft + trackWidth;
-
-		if (itemLeft < trackLeft) {
-			this.$agendaTrack.scrollLeft(itemLeft);
-		} else if (itemRight > trackRight) {
-			this.$agendaTrack.scrollLeft(itemRight - trackWidth);
-		}
+		this.updateOccurrenceCurrentLabel();
 	};
 
 	Dashboard.prototype.onAgendaItemClick = function ($item) {
@@ -2151,52 +2245,7 @@
 		this.updateAgendaSelection();
 		this.renderParticipants();
 		this.clearFeedback();
-	};
-
-	Dashboard.prototype.scrollAgenda = function (direction) {
-		if (!this.$agendaTrack.length) {
-			return;
-		}
-
-		var node = this.$agendaTrack.get(0);
-		if (!node) {
-			return;
-		}
-
-		var distance = this.$agendaTrack.outerWidth() || 0;
-		if (!distance) {
-			distance = 240;
-		}
-
-		var current = node.scrollLeft;
-		var target = direction === 'prev' ? current - distance : current + distance;
-		var self = this;
-		this.$agendaTrack.stop(true, false).animate({ scrollLeft: target }, 250, function () {
-			self.updateAgendaNavState();
-		});
-	};
-
-	Dashboard.prototype.updateAgendaNavState = function () {
-		if (!this.$agendaTrack.length) {
-			return;
-		}
-
-		var hasItems = this.$agendaTrack.find('[data-role="agenda-item"]').length > 0;
-		var node = this.$agendaTrack.get(0);
-		var maxScroll = node ? Math.max(0, node.scrollWidth - node.clientWidth) : 0;
-		var scrollLeft = node ? node.scrollLeft : 0;
-		var atStart = !hasItems || scrollLeft <= 1;
-		var atEnd = !hasItems || scrollLeft >= maxScroll - 1;
-
-		if (this.$agendaNavPrev && this.$agendaNavPrev.length) {
-			this.$agendaNavPrev.prop('disabled', atStart);
-			this.$agendaNavPrev.toggleClass('is-disabled', atStart);
-		}
-
-		if (this.$agendaNavNext && this.$agendaNavNext.length) {
-			this.$agendaNavNext.prop('disabled', atEnd);
-			this.$agendaNavNext.toggleClass('is-disabled', atEnd);
-		}
+		this.setOccurrenceListVisibility(false);
 	};
 
 	Dashboard.prototype.getCurrentEvent = function () {
@@ -2272,6 +2321,31 @@
 		}
 
 		this.updateSmsState(visibleParticipants);
+	};
+
+	Dashboard.prototype.getVisibleParticipants = function (participants, occurrence) {
+		if (!Array.isArray(participants)) {
+			return [];
+		}
+
+		var target = occurrence;
+		if (!target) {
+			target = this.getCurrentOccurrence();
+		}
+
+		if (!target) {
+			return participants.slice();
+		}
+
+		var visible = [];
+		for (var i = 0; i < participants.length; i += 1) {
+			var participant = participants[i];
+			if (this.participantMatchesOccurrence(participant, target)) {
+				visible.push(participant);
+			}
+		}
+
+		return visible;
 	};
 
 	Dashboard.prototype.getEventPriceValue = function (event) {
@@ -4258,7 +4332,7 @@
 			return;
 		}
 		if (level === 'error') {
-			this.$feedback.addClass('is-error');
+			html = '<div class="mj-animateur-dashboard__event-empty" data-role="event-empty">' + escapeHtml(this.translate('eventTabEmpty', 'Aucun événement trouvé')) + '</div>';
 		} else if (level === 'success') {
 			this.$feedback.addClass('is-success');
 		}

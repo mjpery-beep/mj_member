@@ -4,6 +4,7 @@ namespace Mj\Member\Classes;
 
 use DateTime;
 use DateTimeInterface;
+use Mj\Member\Classes\Crud\MjEventOccurrences;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -30,21 +31,13 @@ class MjEventSchedule {
         $args = wp_parse_args($args, $defaults);
 
         $mode = isset($event->schedule_mode) ? sanitize_key($event->schedule_mode) : 'fixed';
-        if (!in_array($mode, array('fixed', 'range', 'recurring'), true)) {
+        if (!in_array($mode, array('fixed', 'range', 'recurring', 'series'), true)) {
             $mode = 'fixed';
         }
 
-        switch ($mode) {
-            case 'range':
-                $occurrences = self::build_range_occurrences($event);
-                break;
-            case 'recurring':
-                $occurrences = self::build_recurring_occurrences($event, $args);
-                break;
-            case 'fixed':
-            default:
-                $occurrences = self::build_fixed_occurrence($event);
-                break;
+        $occurrences = self::load_persisted_occurrences($event, $mode);
+        if (empty($occurrences)) {
+            $occurrences = self::build_occurrences_from_schedule($event, $mode, $args);
         }
 
         if (empty($occurrences)) {
@@ -99,6 +92,100 @@ class MjEventSchedule {
 
     /**
      * @param object $event
+     * @param string $mode
+     * @param array<string,mixed> $args
+     * @return array<int,array<string,mixed>>
+     */
+    private static function build_occurrences_from_schedule($event, $mode, array $args) {
+        switch ($mode) {
+            case 'range':
+                return self::build_range_occurrences($event);
+            case 'recurring':
+                return self::build_recurring_occurrences($event, $args);
+            case 'series':
+                return self::build_series_occurrences($event);
+            case 'fixed':
+            default:
+                return self::build_fixed_occurrence($event);
+        }
+    }
+
+    /**
+     * @param object $event
+     * @return array<int,array<string,mixed>>
+     */
+    public static function build_all_occurrences($event) {
+        $event = self::to_event_object($event);
+        if (!$event) {
+            return array();
+        }
+
+        $mode = isset($event->schedule_mode) ? sanitize_key($event->schedule_mode) : 'fixed';
+        if (!in_array($mode, array('fixed', 'range', 'recurring', 'series'), true)) {
+            $mode = 'fixed';
+        }
+
+        return self::build_occurrences_from_schedule($event, $mode, array());
+    }
+
+    /**
+     * @param object $event
+     * @param string $mode
+     * @return array<int,array<string,mixed>>
+     */
+    private static function load_persisted_occurrences($event, $mode) {
+        if (!isset($event->id) || !class_exists('Mj\\Member\\Classes\\Crud\\MjEventOccurrences')) {
+            return array();
+        }
+
+        $event_id = (int) $event->id;
+        if ($event_id <= 0) {
+            return array();
+        }
+
+        $rows = MjEventOccurrences::get_for_event($event_id);
+        if (empty($rows)) {
+            return array();
+        }
+
+        $occurrences = array();
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $start_value = isset($row['start_at']) ? $row['start_at'] : '';
+            $end_value = isset($row['end_at']) ? $row['end_at'] : '';
+            $start = self::to_datetime($start_value);
+            $end = self::to_datetime($end_value);
+            if (!$start || !$end) {
+                continue;
+            }
+
+            $source = isset($row['source']) ? sanitize_key((string) $row['source']) : $mode;
+            if ($source === '') {
+                $source = $mode;
+            }
+
+            $occurrences[] = self::format_occurrence($start, $end, $source);
+        }
+
+        if (empty($occurrences)) {
+            return array();
+        }
+
+        usort(
+            $occurrences,
+            static function ($left, $right) {
+                return (int) $left['timestamp'] <=> (int) $right['timestamp'];
+            }
+        );
+
+        return $occurrences;
+    }
+
+    /**
+     * @param object $event
      * @return array<int,array<string,mixed>>
      */
     private static function build_fixed_occurrence($event) {
@@ -113,7 +200,7 @@ class MjEventSchedule {
             $end->modify('+1 hour');
         }
 
-        return array(self::format_occurrence($start, $end));
+        return array(self::format_occurrence($start, $end, 'fixed'));
     }
 
     /**
@@ -157,9 +244,76 @@ class MjEventSchedule {
                 $occurrence_end->modify('+1 hour');
             }
 
-            $occurrences[] = self::format_occurrence($occurrence_start, $occurrence_end);
+            $occurrences[] = self::format_occurrence($occurrence_start, $occurrence_end, 'range');
             $cursor->modify('+1 day');
         }
+
+        return $occurrences;
+    }
+
+    /**
+     * @param object $event
+     * @return array<int,array<string,mixed>>
+     */
+    private static function build_series_occurrences($event) {
+        $payload = self::resolve_payload($event);
+        if (empty($payload['items']) || !is_array($payload['items'])) {
+            return array();
+        }
+
+        $timezone = wp_timezone();
+        $occurrences = array();
+
+        foreach ($payload['items'] as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $date_value = isset($item['date']) ? sanitize_text_field((string) $item['date']) : '';
+            $start_time_value = isset($item['start_time']) ? sanitize_text_field((string) $item['start_time']) : '';
+            $end_time_value = isset($item['end_time']) ? sanitize_text_field((string) $item['end_time']) : '';
+
+            if ($date_value === '' || $start_time_value === '') {
+                continue;
+            }
+
+            $start_candidate = DateTime::createFromFormat('Y-m-d H:i:s', $date_value . ' ' . self::ensure_time_format($start_time_value), $timezone);
+            if (!$start_candidate instanceof DateTime) {
+                $start_candidate = self::to_datetime($date_value . ' ' . self::ensure_time_format($start_time_value));
+            }
+            if (!$start_candidate instanceof DateTime) {
+                continue;
+            }
+
+            $end_candidate = null;
+            if ($end_time_value !== '') {
+                $end_candidate = DateTime::createFromFormat('Y-m-d H:i:s', $date_value . ' ' . self::ensure_time_format($end_time_value), $timezone);
+                if (!$end_candidate instanceof DateTime) {
+                    $end_candidate = self::to_datetime($date_value . ' ' . self::ensure_time_format($end_time_value));
+                }
+            }
+            if (!$end_candidate instanceof DateTime) {
+                $end_candidate = clone $start_candidate;
+                $end_candidate->modify('+1 hour');
+            }
+
+            if ($end_candidate <= $start_candidate) {
+                continue;
+            }
+
+            $occurrences[] = self::format_occurrence($start_candidate, $end_candidate, 'series');
+        }
+
+        if (empty($occurrences)) {
+            return array();
+        }
+
+        usort(
+            $occurrences,
+            static function ($left, $right) {
+                return (int) $left['timestamp'] <=> (int) $right['timestamp'];
+            }
+        );
 
         return $occurrences;
     }
@@ -281,7 +435,7 @@ class MjEventSchedule {
                     $occurrence_end->modify('+1 hour');
                 }
 
-                $occurrences[] = self::format_occurrence($occurrence_start, $occurrence_end);
+                $occurrences[] = self::format_occurrence($occurrence_start, $occurrence_end, 'recurring');
             }
 
             if (count($occurrences) > 300) {
@@ -343,7 +497,7 @@ class MjEventSchedule {
                 $occurrence_end->modify('+1 hour');
             }
 
-            $occurrences[] = self::format_occurrence($occurrence_start, $occurrence_end);
+            $occurrences[] = self::format_occurrence($occurrence_start, $occurrence_end, 'recurring');
 
             $cursor->modify('+' . $interval . ' months');
             $cursor->modify('first day of this month');
@@ -433,7 +587,7 @@ class MjEventSchedule {
      * @param DateTime $end
      * @return array<string,mixed>
      */
-    private static function format_occurrence($start, $end) {
+    private static function format_occurrence($start, $end, $source = '') {
         $start_ts = $start->getTimestamp();
         $end_ts = $end->getTimestamp();
 
@@ -449,13 +603,20 @@ class MjEventSchedule {
             }
         }
 
-        return array(
+        $occurrence = array(
             'start' => $start->format('Y-m-d H:i:s'),
             'end' => $end->format('Y-m-d H:i:s'),
             'label' => $label,
             'timestamp' => $start_ts,
             'is_past' => ($start_ts < current_time('timestamp')),
         );
+
+        $source_value = is_string($source) ? sanitize_key($source) : '';
+        if ($source_value !== '') {
+            $occurrence['source'] = $source_value;
+        }
+
+        return $occurrence;
     }
 
     /**

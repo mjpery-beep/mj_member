@@ -1,5 +1,6 @@
 <?php
 
+use Mj\Member\Classes\MjGoogleDrive;
 use Mj\Member\Core\Config;
 
 // Admin settings page for plugin
@@ -8,6 +9,10 @@ function mj_settings_page() {
         wp_enqueue_media();
     }
     wp_enqueue_script('jquery');
+
+    if (function_exists('mj_member_account_menu_icon_enqueue_assets')) {
+        mj_member_account_menu_icon_enqueue_assets();
+    }
 
     // Handle save
     if ((isset($_POST['mj_save_settings']) || isset($_POST['mj_events_google_sync_regenerate']) || isset($_POST['mj_events_google_sync_force'])) && check_admin_referer('mj_settings_nonce')) {
@@ -41,8 +46,14 @@ function mj_settings_page() {
         $stripe_success_page = isset($_POST['mj_stripe_success_page']) ? intval($_POST['mj_stripe_success_page']) : 0;
         $stripe_cancel_page = isset($_POST['mj_stripe_cancel_page']) ? intval($_POST['mj_stripe_cancel_page']) : 0;
         $registration_page = isset($_POST['mj_login_registration_page']) ? intval($_POST['mj_login_registration_page']) : 0;
+        $regulation_page = isset($_POST['mj_registration_regulation_page']) ? intval($_POST['mj_registration_regulation_page']) : 0;
         $default_avatar_id = isset($_POST['mj_login_default_avatar_id']) ? intval($_POST['mj_login_default_avatar_id']) : 0;
+        $cards_background_id = isset($_POST['mj_cards_pdf_background_image_id']) ? intval($_POST['mj_cards_pdf_background_image_id']) : 0;
+        $cards_background_back_id = isset($_POST['mj_cards_pdf_background_back_image_id']) ? intval($_POST['mj_cards_pdf_background_back_image_id']) : 0;
+        $cards_double_sided = isset($_POST['mj_cards_pdf_double_sided']) ? '1' : '0';
         $registration_page = isset($_POST['mj_login_registration_page']) ? intval($_POST['mj_login_registration_page']) : 0;
+        $openai_api_key = isset($_POST['mj_openai_api_key']) ? sanitize_text_field(wp_unslash($_POST['mj_openai_api_key'])) : '';
+        $photo_grimlins_prompt = isset($_POST['mj_photo_grimlins_prompt']) ? sanitize_textarea_field(wp_unslash($_POST['mj_photo_grimlins_prompt'])) : '';
         
         update_option('mj_notify_email', $notify_email);
         update_option('mj_smtp_settings', $smtp);
@@ -59,8 +70,42 @@ function mj_settings_page() {
         update_option('mj_stripe_success_page', $stripe_success_page > 0 ? $stripe_success_page : 0);
         update_option('mj_stripe_cancel_page', $stripe_cancel_page > 0 ? $stripe_cancel_page : 0);
         update_option('mj_login_registration_page', $registration_page > 0 ? $registration_page : 0);
+        update_option('mj_registration_regulation_page', $regulation_page > 0 ? $regulation_page : 0);
         update_option('mj_login_default_avatar_id', $default_avatar_id > 0 ? $default_avatar_id : 0);
+        update_option('mj_cards_pdf_background_image_id', $cards_background_id > 0 ? $cards_background_id : 0);
+        update_option('mj_cards_pdf_background_back_image_id', $cards_background_back_id > 0 ? $cards_background_back_id : 0);
+        update_option('mj_cards_pdf_double_sided', $cards_double_sided);
         update_option('mj_login_registration_page', $registration_page > 0 ? $registration_page : 0);
+        update_option('mj_member_openai_api_key', $openai_api_key);
+        update_option('mj_member_photo_grimlins_prompt', $photo_grimlins_prompt);
+
+        $drive_root_folder = isset($_POST['mj_documents_google_root_folder_id'])
+            ? sanitize_text_field(wp_unslash($_POST['mj_documents_google_root_folder_id']))
+            : '';
+        $drive_service_account_json = isset($_POST['mj_documents_google_service_account_json'])
+            ? trim((string) wp_unslash($_POST['mj_documents_google_service_account_json']))
+            : '';
+        $drive_impersonated_user = isset($_POST['mj_documents_google_impersonate_user'])
+            ? sanitize_email(wp_unslash($_POST['mj_documents_google_impersonate_user']))
+            : '';
+
+        $drive_credentials_valid = true;
+        if ($drive_service_account_json !== '') {
+            $decoded_drive_credentials = json_decode($drive_service_account_json, true);
+            if (!is_array($decoded_drive_credentials) || empty($decoded_drive_credentials['client_email']) || empty($decoded_drive_credentials['private_key'])) {
+                $notices[] = array(
+                    'type' => 'error',
+                    'message' => '[Erreur] Le JSON du compte de service Google Drive est invalide. Vérifiez la syntaxe et collez le fichier complet.',
+                );
+                $drive_credentials_valid = false;
+            }
+        }
+
+        update_option('mj_documents_google_root_folder_id', $drive_root_folder);
+        update_option('mj_documents_google_impersonate_user', $drive_impersonated_user);
+        if ($drive_credentials_valid) {
+            update_option('mj_documents_google_service_account_json', $drive_service_account_json);
+        }
 
         $google_sync_enabled = isset($_POST['mj_events_google_sync_enabled']) ? '1' : '0';
         update_option('mj_events_google_sync_enabled', $google_sync_enabled);
@@ -108,11 +153,13 @@ function mj_settings_page() {
             $enabled = isset($raw_row['enabled']) && (string) $raw_row['enabled'] === '1';
             $label = isset($raw_row['label']) ? sanitize_text_field($raw_row['label']) : '';
             $page_id = isset($raw_row['page_id']) ? (int) $raw_row['page_id'] : 0;
+            $icon_id = isset($raw_row['icon_id']) ? (int) $raw_row['icon_id'] : 0;
 
             $normalized_account_links[$link_key] = array(
                 'enabled' => $enabled ? 1 : 0,
                 'label' => (!empty($link_defaults['editable_label']) && $label !== '') ? $label : '',
                 'page_id' => $page_id > 0 ? $page_id : 0,
+                'icon_id' => $icon_id > 0 ? $icon_id : 0,
             );
         }
 
@@ -137,6 +184,14 @@ function mj_settings_page() {
             // store as float with 2 decimals
             $fee_val = number_format((float)$annual_fee, 2, '.', '');
             update_option('mj_annual_fee', $fee_val);
+        }
+
+        $annual_fee_manual = isset($_POST['mj_annual_fee_manual']) ? sanitize_text_field($_POST['mj_annual_fee_manual']) : '';
+        if ($annual_fee_manual !== '') {
+            $manual_fee_val = number_format((float)$annual_fee_manual, 2, '.', '');
+            update_option('mj_annual_fee_manual', $manual_fee_val);
+        } else {
+            update_option('mj_annual_fee_manual', '');
         }
         if (isset($_POST['mj_save_settings']) || isset($_POST['mj_events_google_sync_regenerate']) || isset($_POST['mj_events_google_sync_force'])) {
             $notices[] = array('type' => 'success', 'message' => '✅ Paramètres sauvegardés avec succès');
@@ -234,7 +289,10 @@ function mj_settings_page() {
     $stripe_success_redirect = get_option('mj_stripe_success_redirect', '');
     $stripe_cancel_redirect = get_option('mj_stripe_cancel_redirect', '');
     $annual_fee = get_option('mj_annual_fee', '2.00');
+    $annual_fee_manual_option = get_option('mj_annual_fee_manual', '');
+    $annual_fee_manual_display = $annual_fee_manual_option !== '' ? $annual_fee_manual_option : $annual_fee;
     $registration_page_id = (int) get_option('mj_login_registration_page', 0);
+    $regulation_page_id = (int) get_option('mj_registration_regulation_page', 0);
     $default_avatar_id = (int) get_option('mj_login_default_avatar_id', 0);
     $default_avatar_src = '';
     if ($default_avatar_id > 0) {
@@ -243,6 +301,47 @@ function mj_settings_page() {
             $default_avatar_src = $default_avatar_image[0];
         }
     }
+
+    $cards_pdf_background_id = (int) get_option('mj_cards_pdf_background_image_id', 0);
+    $cards_pdf_background_back_id = (int) get_option('mj_cards_pdf_background_back_image_id', 0);
+    $cards_pdf_double_sided = get_option('mj_cards_pdf_double_sided', '0') === '1';
+    $cards_pdf_background_src = '';
+    if ($cards_pdf_background_id > 0) {
+        $cards_pdf_background_image = wp_get_attachment_image_src($cards_pdf_background_id, 'medium');
+        if ($cards_pdf_background_image) {
+            $cards_pdf_background_src = $cards_pdf_background_image[0];
+        } else {
+            $fallback_background_url = wp_get_attachment_url($cards_pdf_background_id);
+            if ($fallback_background_url) {
+                $cards_pdf_background_src = $fallback_background_url;
+            }
+        }
+    }
+
+    $cards_pdf_background_back_src = '';
+    if ($cards_pdf_background_back_id > 0) {
+        $cards_pdf_background_back_image = wp_get_attachment_image_src($cards_pdf_background_back_id, 'medium');
+        if ($cards_pdf_background_back_image) {
+            $cards_pdf_background_back_src = $cards_pdf_background_back_image[0];
+        } else {
+            $fallback_background_back_url = wp_get_attachment_url($cards_pdf_background_back_id);
+            if ($fallback_background_back_url) {
+                $cards_pdf_background_back_src = $fallback_background_back_url;
+            }
+        }
+    }
+
+    $openai_api_key_option = get_option('mj_member_openai_api_key', '');
+    $photo_grimlins_prompt_option = get_option('mj_member_photo_grimlins_prompt', '');
+    if (!is_string($photo_grimlins_prompt_option) || $photo_grimlins_prompt_option === '') {
+        $photo_grimlins_prompt_option = __('Transforme cette personne en version "Grimlins" fun et stylisée, avec un rendu illustratif détaillé, sans éléments effrayants.', 'mj-member');
+    }
+
+    $drive_root_folder_option = get_option('mj_documents_google_root_folder_id', '');
+    $drive_service_account_option = get_option('mj_documents_google_service_account_json', '');
+    $drive_impersonated_user_option = get_option('mj_documents_google_impersonate_user', '');
+    $drive_sdk_available = MjGoogleDrive::isAvailable();
+    $drive_configuration_ready = Config::googleDriveIsReady() && $drive_root_folder_option !== '' && $drive_sdk_available;
 
     $google_sync_enabled_flag = get_option('mj_events_google_sync_enabled', '0') === '1';
     $google_sync_token_display = '';
@@ -304,6 +403,7 @@ function mj_settings_page() {
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-calendar" data-tab-target="calendar" role="tab" aria-controls="mj-tab-calendar" aria-selected="false">📅 Agenda & Google</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-account" data-tab-target="account" role="tab" aria-controls="mj-tab-account" aria-selected="false">👤 Espace membre</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-messaging" data-tab-target="messaging" role="tab" aria-controls="mj-tab-messaging" aria-selected="false">✉️ Notifications &amp; envois</button>
+                    <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-ai" data-tab-target="ai" role="tab" aria-controls="mj-tab-ai" aria-selected="false">🧠 IA &amp; médias</button>
                 </div>
 
                 <div class="mj-settings-tabs__panels">
@@ -414,12 +514,6 @@ function mj_settings_page() {
                                     <?php endif; ?>
                                 </div>
                             </div>
-                            <p>
-                                <label><strong>Montant de la cotisation annuelle (€)</strong></label><br>
-                                <input type="text" name="mj_annual_fee" value="<?php echo esc_attr($annual_fee); ?>" class="regular-text" placeholder="2.00">
-                                <small style="color: #999;">Montant par défaut utilisé pour les demandes de paiement (format: 2.00)</small>
-                            </p>
-
                             <?php if ($stripe_configured): ?>
                                 <p style="color: green; font-weight: bold;">✅ Stripe <?php echo $stripe_test_mode_enabled ? 'TEST' : 'LIVE'; ?> est configuré - Les paiements <?php echo $stripe_test_mode_enabled ? 'de simulation' : 'réels'; ?> passent par Stripe Checkout.</p>
                             <?php else: ?>
@@ -502,6 +596,47 @@ function mj_settings_page() {
                                     <span style="color:#475569; font-size:13px;">Met à jour immédiatement le calendrier cible en créant ou en remplaçant les événements correspondants.</span>
                                 </div>
                             </div>
+
+                            <div style="margin-top:20px; padding:16px; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px;">
+                                <h3 style="margin-top:0; margin-bottom:10px; color:#0f172a;">📁 Google Drive – Gestion des documents</h3>
+                                <p style="margin-top:0; color:#475569; font-size:13px;">Ces paramètres alimentent le widget «&nbsp;Documents&nbsp;» et l'intégration Google Drive. Ils nécessitent la bibliothèque PHP <code>google/apiclient</code> (Google API Client) préinstallée sur votre hébergement.</p>
+
+                                <?php if (!$drive_sdk_available) : ?>
+                                    <p style="margin:0 0 12px 0; color:#b91c1c; font-weight:600;">
+                                        <?php esc_html_e('Le SDK Google Drive n’est pas chargé. Installez le package composer "google/apiclient" et assurez-vous que vendor/autoload.php est inclus.', 'mj-member'); ?>
+                                    </p>
+                                <?php elseif ($drive_configuration_ready) : ?>
+                                    <p style="margin:0 0 12px 0; color:#15803d; font-weight:600;">Configuration Google Drive opérationnelle.</p>
+                                <?php else : ?>
+                                    <p style="margin:0 0 12px 0; color:#b91c1c; font-weight:600;">Configuration Google Drive incomplète. Complétez les champs ci-dessous.</p>
+                                <?php endif; ?>
+
+                                <ol style="margin:0 0 16px 18px; color:#475569; font-size:13px;">
+                                    <li>Dans Google Cloud Console : créez un projet, activez l'API Drive puis générez un <strong>compte de service</strong> (format JSON).</li>
+                                    <li>Partagez le dossier Google Drive cible avec l'adresse e-mail du compte de service en lui accordant au minimum un accès «&nbsp;Contributeur&nbsp;».</li>
+                                    <li>Copiez l'identifiant du dossier (la partie après <code>/folders/</code> dans l'URL) et collez-le ci-dessous.</li>
+                                    <li>Collez le fichier JSON du compte de service (contenu complet) et, si nécessaire, indiquez une adresse e-mail à impersoner (compte Google Workspace autorisé).</li>
+                                </ol>
+
+                                <div style="display:flex; flex-wrap:wrap; gap:16px;">
+                                    <div style="flex:1 1 260px;">
+                                        <label for="mj-documents-google-root" style="font-weight:600; display:block; margin-bottom:4px;">ID du dossier racine</label>
+                                        <input type="text" id="mj-documents-google-root" name="mj_documents_google_root_folder_id" value="<?php echo esc_attr($drive_root_folder_option); ?>" class="regular-text" placeholder="1AbCDeFGhijkLmNop" />
+                                        <small style="color:#64748b; display:block; margin-top:4px;">Copiez l'identifiant figurant dans l'URL <code>https://drive.google.com/drive/folders/&lt;ID&gt;</code>.</small>
+                                    </div>
+                                    <div style="flex:1 1 260px;">
+                                        <label for="mj-documents-google-impersonate" style="font-weight:600; display:block; margin-bottom:4px;">Utilisateur Google à impersoner (facultatif)</label>
+                                        <input type="email" id="mj-documents-google-impersonate" name="mj_documents_google_impersonate_user" value="<?php echo esc_attr($drive_impersonated_user_option); ?>" class="regular-text" placeholder="animateur@votre-domaine.be" />
+                                        <small style="color:#64748b; display:block; margin-top:4px;">Uniquement requis si votre Drive est géré par Google Workspace et que le compte de service doit agir au nom d'un utilisateur.</small>
+                                    </div>
+                                </div>
+
+                                <div style="margin-top:16px;">
+                                    <label for="mj-documents-google-json" style="font-weight:600; display:block; margin-bottom:4px;">JSON du compte de service</label>
+                                    <textarea id="mj-documents-google-json" name="mj_documents_google_service_account_json" rows="8" class="large-text code" placeholder="{&#10;  &quot;type&quot;: &quot;service_account&quot;,&#10;  ...&#10;}"><?php echo esc_textarea($drive_service_account_option); ?></textarea>
+                                    <small style="color:#64748b; display:block; margin-top:4px;">Collez le contenu complet du fichier <code>*.json</code> téléchargé depuis Google Cloud. Enregistré tel quel (sécurisé en base de données).</small>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -521,6 +656,29 @@ function mj_settings_page() {
                             <small style="color:#666; display:block; margin-top:4px;">Cette page sera ouverte depuis le lien d'inscription du composant de connexion. Laissez vide pour utiliser <?php echo esc_html(home_url('/inscription')); ?>.</small>
                         </p>
                         <p>
+                            <label for="mj-annual-fee" style="font-weight:600;">Montant de la cotisation annuelle (€) (paiement en ligne)</label><br>
+                            <input type="text" id="mj-annual-fee" name="mj_annual_fee" value="<?php echo esc_attr($annual_fee); ?>" class="regular-text" placeholder="2.00" />
+                            <small style="color:#666; display:block; margin-top:4px;">Montant par défaut utilisé pour les paiements en ligne (format : 2.00).</small>
+                        </p>
+                        <p>
+                            <label for="mj-annual-fee-manual" style="font-weight:600;">Montant de la cotisation annuelle (€) (paiement en main propre)</label><br>
+                            <input type="text" id="mj-annual-fee-manual" name="mj_annual_fee_manual" value="<?php echo esc_attr($annual_fee_manual_display); ?>" class="regular-text" placeholder="2.00" />
+                            <small style="color:#666; display:block; margin-top:4px;">Montant utilisé pour le message "Remets [montant_cotisation]" lorsque l’on remet la cotisation à un animateur (format : 2.00). Laissez vide pour reprendre le montant en ligne.</small>
+                        </p>
+                        <p>
+                            <label for="mj-registration-regulation-page">Page du règlement d'ordre intérieur</label><br>
+                            <?php
+                            wp_dropdown_pages(array(
+                                'name' => 'mj_registration_regulation_page',
+                                'id' => 'mj-registration-regulation-page',
+                                'show_option_none' => '— Sélectionnez une page —',
+                                'option_none_value' => '0',
+                                'selected' => $regulation_page_id,
+                            ));
+                            ?>
+                            <small style="color:#666; display:block; margin-top:4px;">Cette page sera proposée par défaut lors des inscriptions publiques et dans les widgets nécessitant la consultation du règlement.</small>
+                        </p>
+                        <p>
                             <label for="mj-login-default-avatar-id">Image par défaut pour les membres sans photo</label><br>
                             <input type="hidden" name="mj_login_default_avatar_id" id="mj-login-default-avatar-id" value="<?php echo esc_attr($default_avatar_id); ?>" />
                             <div id="mj-login-default-avatar-preview" class="mj-login-avatar-preview">
@@ -536,20 +694,80 @@ function mj_settings_page() {
                             </div>
                             <small style="color:#666; display:block; margin-top:4px;">Cette image sera utilisée dans la fenêtre de compte si le membre n'a pas encore de photo.</small>
                         </p>
+                        <p>
+                            <label for="mj-card-background-id">Image de fond pour les cartes de visite PDF</label><br>
+                            <input type="hidden" name="mj_cards_pdf_background_image_id" id="mj-card-background-id" value="<?php echo esc_attr($cards_pdf_background_id); ?>" />
+                            <div id="mj-card-background-preview" class="mj-card-background-preview" style="margin:8px 0; max-width:260px; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; background:#f8fafc;">
+                                <img src="<?php echo !empty($cards_pdf_background_src) ? esc_url($cards_pdf_background_src) : ''; ?>" alt="" style="display:<?php echo !empty($cards_pdf_background_src) ? 'block' : 'none'; ?>; width:100%; height:auto;" />
+                                <span class="mj-card-background-preview__placeholder" style="display:<?php echo !empty($cards_pdf_background_src) ? 'none' : 'block'; ?>; padding:20px; text-align:center; color:#64748b; font-size:13px;">Aucune image sélectionnée</span>
+                            </div>
+                            <div class="mj-card-background-actions" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                <button type="button" class="button" id="mj-card-background-select">Choisir une image</button>
+                                <button type="button" class="button-secondary" id="mj-card-background-clear" <?php echo $cards_pdf_background_id ? '' : 'style="display:none;"'; ?>>Retirer</button>
+                            </div>
+                            <small style="color:#666; display:block; margin-top:4px;">Cette image sera proposée par défaut dans le module PDF des cartes de visite et appliquée en fond lors de la génération.</small>
+                        </p>
+                        <p style="margin-top:18px;">
+                            <label for="mj-card-double-sided" style="display:flex; align-items:center; gap:8px;">
+                                <input type="hidden" name="mj_cards_pdf_double_sided" value="0" />
+                                <input type="checkbox" id="mj-card-double-sided" name="mj_cards_pdf_double_sided" value="1" <?php checked($cards_pdf_double_sided); ?> />
+                                <span>Activer la génération recto/verso</span>
+                            </label>
+                            <small style="color:#666; display:block; margin-top:4px;">Lorsque cette option est cochée, chaque planche de cartes sera accompagnée d’une page verso.</small>
+                        </p>
+                        <div id="mj-card-back-background-wrapper" style="margin:16px 0; <?php echo $cards_pdf_double_sided ? '' : 'display:none;'; ?>">
+                            <label for="mj-card-back-background-id" style="display:block; margin-bottom:6px;">Image de fond pour le verso</label>
+                            <input type="hidden" name="mj_cards_pdf_background_back_image_id" id="mj-card-back-background-id" value="<?php echo esc_attr($cards_pdf_background_back_id); ?>" />
+                            <div id="mj-card-back-background-preview" class="mj-card-background-preview" style="margin:8px 0; max-width:260px; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; background:#f1f5f9;">
+                                <img src="<?php echo !empty($cards_pdf_background_back_src) ? esc_url($cards_pdf_background_back_src) : ''; ?>" alt="" style="display:<?php echo !empty($cards_pdf_background_back_src) ? 'block' : 'none'; ?>; width:100%; height:auto;" />
+                                <span class="mj-card-back-background-preview__placeholder" style="display:<?php echo !empty($cards_pdf_background_back_src) ? 'none' : 'block'; ?>; padding:20px; text-align:center; color:#64748b; font-size:13px;">Aucune image sélectionnée pour le verso</span>
+                            </div>
+                            <div class="mj-card-background-actions" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                <button type="button" class="button" id="mj-card-back-background-select">Choisir une image</button>
+                                <button type="button" class="button-secondary" id="mj-card-back-background-clear" <?php echo $cards_pdf_background_back_id ? '' : 'style="display:none;"'; ?>>Retirer</button>
+                            </div>
+                            <small style="color:#666; display:block; margin-top:4px;">Définissez une image spécifique pour le verso. Si aucun visuel n’est sélectionné, le verso restera uni.</small>
+                        </div>
 
                         <div style="margin:24px 0; padding:20px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px;">
                             <h3 style="margin:0 0 12px 0;">🔗 Liens &laquo;&nbsp;Mon compte&nbsp;&raquo;</h3>
                             <p style="margin:0 0 16px 0; color:#4b5563; font-size:14px;">Configurez ici l'ordre, les libellés et les pages cibles des actions proposées dans l'espace membre. Les boutons mis en avant sur Elementor utilisent automatiquement ces paramètres.</p>
                             <?php foreach ($account_link_settings as $link_key => $link_config) :
-                                $default_label = isset($account_link_defaults[$link_key]['label']) ? $account_link_defaults[$link_key]['label'] : (isset($link_config['label']) ? $link_config['label'] : ucfirst($link_key));
+                                $default_label = isset($account_link_defaults[$link_key]['label'])
+                                    ? $account_link_defaults[$link_key]['label']
+                                    : (isset($link_config['label']) ? $link_config['label'] : ucfirst(str_replace('_', ' ', $link_key)));
                                 $is_logout = isset($link_config['type']) && $link_config['type'] === 'logout';
                                 $is_for_animateur = isset($link_config['visibility']) && $link_config['visibility'] === 'animateur';
+                                $is_for_hours_team = isset($link_config['visibility']) && $link_config['visibility'] === 'hours_team';
                                 $requires_capability = isset($link_config['requires_capability']) ? (string) $link_config['requires_capability'] : '';
                                 $editable_label = !empty($link_config['editable_label']);
                                 $current_label = isset($link_config['label']) ? $link_config['label'] : $default_label;
                                 $page_id_value = isset($link_config['page_id']) ? (int) $link_config['page_id'] : 0;
                                 $section_value = isset($link_config['query']['section']) ? sanitize_key($link_config['query']['section']) : sanitize_key($link_key);
                                 $slug_value = isset($link_config['slug']) ? (string) $link_config['slug'] : '';
+                                $icon_id_value = isset($link_config['icon_id']) ? (int) $link_config['icon_id'] : 0;
+                                $icon_payload = array();
+                                if ($icon_id_value > 0 && function_exists('mj_member_account_menu_build_icon_payload_from_attachment')) {
+                                    $icon_payload = mj_member_account_menu_build_icon_payload_from_attachment($icon_id_value);
+                                }
+                                if (function_exists('mj_member_account_menu_sanitize_icon_payload')) {
+                                    $icon_payload = mj_member_account_menu_sanitize_icon_payload($icon_payload);
+                                }
+                                $icon_preview_url = '';
+                                if (!empty($icon_payload['preview_url'])) {
+                                    $icon_preview_url = $icon_payload['preview_url'];
+                                } elseif (!empty($icon_payload['url'])) {
+                                    $icon_preview_url = $icon_payload['url'];
+                                }
+                                $icon_preview_markup = '<span class="mj-member-menu-icon-placeholder">' . esc_html__('Aucune image', 'mj-member') . '</span>';
+                                if (!empty($icon_payload['html'])) {
+                                    $icon_preview_markup = wp_kses_post($icon_payload['html']);
+                                } elseif ($icon_preview_url !== '') {
+                                    $icon_preview_markup = sprintf(
+                                        '<img src="%1$s" alt="" class="mj-member-menu-icon-preview-image" />',
+                                        esc_url($icon_preview_url)
+                                    );
+                                }
                                 $field_prefix_base = sanitize_key($link_key);
                                 if ($field_prefix_base === '') {
                                     $field_prefix_base = 'link_' . md5($link_key);
@@ -578,6 +796,20 @@ function mj_settings_page() {
                                         <small style="display:block; margin-top:4px; color:#6b7280;">Le libellé de ce lien est fixe pour garantir la cohérence de l'interface.</small>
                                     <?php endif; ?>
                                 </p>
+                                <div style="margin:0 0 12px 0;">
+                                    <span style="display:block; margin-bottom:6px; font-weight:600; color:#111827;">Icône du lien</span>
+                                    <div class="mj-member-menu-icon-control" data-mj-member-menu-icon>
+                                        <div class="mj-member-menu-icon-preview" data-image-url="<?php echo esc_attr($icon_preview_url); ?>">
+                                            <?php echo $icon_preview_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                                        </div>
+                                        <div class="mj-member-menu-icon-actions" style="margin-top:8px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                                            <input type="hidden" class="mj-member-menu-icon-input" name="mj_account_links[<?php echo esc_attr($link_key); ?>][icon_id]" value="<?php echo esc_attr((string) $icon_id_value); ?>" />
+                                            <button type="button" class="button mj-member-menu-icon-select"><?php esc_html_e('Sélectionner une image', 'mj-member'); ?></button>
+                                            <button type="button" class="button-link-delete mj-member-menu-icon-remove"<?php echo $icon_id_value > 0 ? '' : ' style="display:none;"'; ?>><?php esc_html_e('Retirer', 'mj-member'); ?></button>
+                                        </div>
+                                    </div>
+                                    <small style="display:block; margin-top:6px; color:#6b7280;">Affiche une petite image à gauche du libellé dans les menus Elementor et la fenêtre &laquo;&nbsp;Mon compte&nbsp;&raquo;.</small>
+                                </div>
                                 <p style="margin:0 0 12px 0;">
                                     <label for="<?php echo esc_attr($field_prefix . '-page'); ?>">Page cible</label><br>
                                     <?php
@@ -593,6 +825,8 @@ function mj_settings_page() {
                                 </p>
                                 <?php if ($is_for_animateur) : ?>
                                     <p style="margin:0 0 8px 0; color:#0f766e; font-size:13px;">Visible uniquement pour les membres ayant le rôle d'animateur.</p>
+                                <?php elseif ($is_for_hours_team) : ?>
+                                    <p style="margin:0 0 8px 0; color:#0f766e; font-size:13px;">Visible uniquement pour les animateurs, coordinateurs et bénévoles.</p>
                                 <?php endif; ?>
                                 <?php if ($requires_capability) : ?>
                                     <p style="margin:0 0 8px 0; color:#312e81; font-size:13px;">
@@ -759,6 +993,41 @@ function mj_settings_page() {
                             <label>Nom expéditeur</label><br>
                             <input type="text" name="mj_smtp_from_name" value="<?php echo esc_attr($smtp['from_name'] ?? ''); ?>" class="regular-text" placeholder="MJ Péry">
                         </p>
+                    </div>
+
+                    <div id="mj-tab-ai" class="mj-settings-tabs__panel" data-tab="ai" role="tabpanel" aria-labelledby="mj-tab-button-ai" aria-hidden="true">
+                        <div style="background:#f8fafc; border-left:4px solid #7c3aed; padding:18px 20px; border-radius:10px; margin-bottom:24px;">
+                            <h2 style="margin:0 0 8px 0;">🧠 Génération d'avatars Grimlins</h2>
+                            <p style="margin:0; color:#475569;">
+                                <?php esc_html_e('Configurez l’accès OpenAI pour permettre au widget Elementor « Photo Grimlins » de transformer les portraits en versions illustrées.', 'mj-member'); ?><br>
+                                <?php esc_html_e('Laissez la clé vide pour désactiver la fonctionnalité. Vous pouvez aussi définir la constante MJ_MEMBER_OPENAI_API_KEY dans wp-config.php.', 'mj-member'); ?>
+                            </p>
+                        </div>
+
+                        <p style="margin-bottom:18px;">
+                            <label for="mj-openai-api-key"><strong><?php esc_html_e('Clé API OpenAI', 'mj-member'); ?></strong></label><br>
+                            <input type="password" name="mj_openai_api_key" id="mj-openai-api-key" value="<?php echo esc_attr($openai_api_key_option); ?>" class="regular-text" autocomplete="off" placeholder="sk-...">
+                            <small style="color:#6b7280; display:block; margin-top:4px;">
+                                <?php esc_html_e('La clé doit disposer de l’accès au modèle « gpt-image-1 ». Elle est stockée dans la base WordPress (utilisez un gestionnaire de secrets pour la production).', 'mj-member'); ?>
+                            </small>
+                        </p>
+
+                        <p style="margin-bottom:18px;">
+                            <label for="mj-photo-grimlins-prompt"><strong><?php esc_html_e('Prompt de transformation', 'mj-member'); ?></strong></label><br>
+                            <textarea name="mj_photo_grimlins_prompt" id="mj-photo-grimlins-prompt" rows="4" class="large-text" placeholder="<?php echo esc_attr__('Décris le rendu souhaité…', 'mj-member'); ?>"><?php echo esc_textarea($photo_grimlins_prompt_option); ?></textarea>
+                            <small style="color:#6b7280; display:block; margin-top:4px;">
+                                <?php esc_html_e('Personnalisez l’instruction envoyée à OpenAI. Le portrait initial est transmis en entrée et la sortie est générée au format PNG 1024×1024.', 'mj-member'); ?>
+                            </small>
+                        </p>
+
+                        <div style="margin-top:24px; padding:16px; border:1px dashed #cbd5f5; border-radius:8px; background:#fff; color:#334155;">
+                            <p style="margin:0 0 6px 0;"><strong><?php esc_html_e('Bonnes pratiques', 'mj-member'); ?></strong></p>
+                            <ul style="margin:0 0 0 18px; padding:0; list-style:disc; color:#475569;">
+                                <li><?php esc_html_e('Limitez le poids des images d’entrée à 5 Mo (format JPG/PNG/WebP).', 'mj-member'); ?></li>
+                                <li><?php esc_html_e('Informez les membres que les avatars générés sont destinés à un usage ludique et peuvent différer du portrait original.', 'mj-member'); ?></li>
+                                <li><?php esc_html_e('Supprimez régulièrement les fichiers temporaires si vous n’activez pas la suppression automatique côté serveur.', 'mj-member'); ?></li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -997,9 +1266,9 @@ function mj_settings_page() {
                 }
 
                 mediaFrame = wp.media({
-                    title: 'Choisir l\'image par défaut',
+                    title: '<?php echo esc_js(__('Choisir l\'image par défaut', 'mj-member')); ?>',
                     library: { type: 'image' },
-                    button: { text: 'Utiliser cette image' },
+                    button: { text: '<?php echo esc_js(__('Utiliser cette image', 'mj-member')); ?>' },
                     multiple: false
                 });
 
@@ -1018,6 +1287,131 @@ function mj_settings_page() {
                 input.val('');
                 renderPreview('');
             });
+
+            renderPreview(preview.find('img').length ? preview.find('img').attr('src') : '');
+
+            var cardFrame;
+            var cardSelectButton = $('#mj-card-background-select');
+            var cardClearButton = $('#mj-card-background-clear');
+            var cardPreview = $('#mj-card-background-preview');
+            var cardInput = $('#mj-card-background-id');
+            var cardImage = cardPreview.find('img');
+            var cardPlaceholder = cardPreview.find('.mj-card-background-preview__placeholder');
+
+            function renderCardPreview(url) {
+                if (url) {
+                    cardImage.attr('src', url).show();
+                    cardPlaceholder.hide();
+                    cardClearButton.show();
+                } else {
+                    cardImage.attr('src', '').hide();
+                    cardPlaceholder.show();
+                    cardClearButton.hide();
+                }
+            }
+
+            cardSelectButton.on('click', function (event) {
+                event.preventDefault();
+
+                if (cardFrame) {
+                    cardFrame.open();
+                    return;
+                }
+
+                cardFrame = wp.media({
+                    title: '<?php echo esc_js(__('Choisir une image de fond', 'mj-member')); ?>',
+                    library: { type: 'image' },
+                    button: { text: '<?php echo esc_js(__('Utiliser cette image', 'mj-member')); ?>' },
+                    multiple: false
+                });
+
+                cardFrame.on('select', function () {
+                    var attachment = cardFrame.state().get('selection').first().toJSON();
+                    var imageUrl = attachment.sizes && attachment.sizes.medium ? attachment.sizes.medium.url : attachment.url;
+                    cardInput.val(attachment.id);
+                    renderCardPreview(imageUrl);
+                });
+
+                cardFrame.open();
+            });
+
+            cardClearButton.on('click', function (event) {
+                event.preventDefault();
+                cardInput.val('');
+                renderCardPreview('');
+            });
+
+            var cardDoubleCheckbox = $('#mj-card-double-sided');
+            var cardBackWrapper = $('#mj-card-back-background-wrapper');
+
+            function refreshCardBackVisibility() {
+                if (!cardBackWrapper.length) {
+                    return;
+                }
+
+                if (cardDoubleCheckbox.is(':checked')) {
+                    cardBackWrapper.stop(true, true).slideDown(150);
+                } else {
+                    cardBackWrapper.stop(true, true).slideUp(150);
+                }
+            }
+
+            cardDoubleCheckbox.on('change', refreshCardBackVisibility);
+
+            var cardBackFrame;
+            var cardBackSelectButton = $('#mj-card-back-background-select');
+            var cardBackClearButton = $('#mj-card-back-background-clear');
+            var cardBackPreview = $('#mj-card-back-background-preview');
+            var cardBackInput = $('#mj-card-back-background-id');
+            var cardBackImage = cardBackPreview.find('img');
+            var cardBackPlaceholder = cardBackPreview.find('.mj-card-back-background-preview__placeholder');
+
+            function renderCardBackPreview(url) {
+                if (url) {
+                    cardBackImage.attr('src', url).show();
+                    cardBackPlaceholder.hide();
+                    cardBackClearButton.show();
+                } else {
+                    cardBackImage.attr('src', '').hide();
+                    cardBackPlaceholder.show();
+                    cardBackClearButton.hide();
+                }
+            }
+
+            cardBackSelectButton.on('click', function (event) {
+                event.preventDefault();
+
+                if (cardBackFrame) {
+                    cardBackFrame.open();
+                    return;
+                }
+
+                cardBackFrame = wp.media({
+                    title: '<?php echo esc_js(__('Choisir une image de verso', 'mj-member')); ?>',
+                    library: { type: 'image' },
+                    button: { text: '<?php echo esc_js(__('Utiliser cette image', 'mj-member')); ?>' },
+                    multiple: false
+                });
+
+                cardBackFrame.on('select', function () {
+                    var attachment = cardBackFrame.state().get('selection').first().toJSON();
+                    var imageUrl = attachment.sizes && attachment.sizes.medium ? attachment.sizes.medium.url : attachment.url;
+                    cardBackInput.val(attachment.id);
+                    renderCardBackPreview(imageUrl);
+                });
+
+                cardBackFrame.open();
+            });
+
+            cardBackClearButton.on('click', function (event) {
+                event.preventDefault();
+                cardBackInput.val('');
+                renderCardBackPreview('');
+            });
+
+            renderCardPreview(cardImage.length && cardImage.attr('src') ? cardImage.attr('src') : '');
+            renderCardBackPreview(cardBackImage.length && cardBackImage.attr('src') ? cardBackImage.attr('src') : '');
+            refreshCardBackVisibility();
         })(jQuery);
         </script>
     </div>

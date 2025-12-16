@@ -1,5 +1,179 @@
 /* Styles pour le formulaire d'evenement en admin */
 
+.mj-event-form-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background-color: #ffffff;
+    border: 1px solid #dcdcde;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(31, 35, 40, 0.08);
+    margin-top: 18px;
+    overflow: hidden;
+}
+
+.mj-event-form-table tr:not(.mj-event-section-heading) > th {
+    width: 220px;
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.mj-event-form-table th,
+.mj-event-form-table td {
+    padding: 18px 20px;
+    vertical-align: top;
+}
+
+.mj-event-form-table tr + tr th,
+.mj-event-form-table tr + tr td {
+    border-top: 1px solid #ececec;
+}
+
+.mj-event-form-table .mj-event-section-heading th {
+    padding: 20px;
+    border-top: 0;
+}
+
+.mj-event-form-table .mj-event-section-heading + tr th,
+.mj-event-form-table .mj-event-section-heading + tr td {
+    border-top: 0;
+}
+
+.mj-event-section-heading {
+    background: #f6f7f7;
+}
+
+.mj-event-section-heading__content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mj-event-section-heading__title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #1d2327;
+}
+
+.mj-event-section-heading__hint {
+    margin: 0;
+    font-size: 13px;
+    color: #50575e;
+}
+
+.mj-event-color-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.mj-event-color-hint #mj-event-accent-default-swatch {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    border: 1px solid #d0d4d9;
+    background: #f6f7f7;
+}
+
+.mj-event-color-hint__label {
+    margin: 0;
+    font-size: 12px;
+    color: #50575e;
+}
+
+.mj-event-help-text {
+    margin-top: 6px;
+    margin-bottom: 0;
+    color: #50575e;
+}
+
+.mj-event-field-label {
+    display: block;
+    font-weight: 600;
+    margin: 12px 0 4px;
+}
+
+.mj-event-field-label:first-of-type {
+    margin-top: 0;
+}
+
+.mj-event-select {
+    width: 100%;
+    max-width: 360px;
+}
+
+.mj-event-select[multiple] {
+    min-height: 120px;
+}
+
+.mj-event-article-preview {
+    margin-top: 10px;
+}
+
+.mj-event-article-image {
+    margin-top: 8px;
+}
+
+.mj-event-cover-preview {
+    margin-bottom: 12px;
+}
+
+.mj-event-cover-preview span {
+    display: inline-block;
+    color: #50575e;
+}
+
+.mj-event-cover-actions {
+    display: inline-flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.mj-event-location-preview {
+    margin-top: 12px;
+    padding: 14px 16px;
+    background-color: #f8f9fb;
+    border: 1px solid #e3e5e8;
+    border-radius: 6px;
+}
+
+.mj-event-location-preview strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+.mj-event-location-map {
+    margin-top: 10px;
+    max-width: 520px;
+}
+
+.mj-event-animateur-list,
+.mj-event-volunteer-list {
+    margin-top: 10px;
+    padding: 12px 16px;
+    background-color: #f8f9fb;
+    border: 1px solid #e3e5e8;
+    border-radius: 6px;
+}
+
+.mj-event-animateur-list ul,
+.mj-event-volunteer-list ul {
+    margin: 6px 0 0 18px;
+}
+
+.mj-event-toggle label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+}
+
+.mj-event-toggle input[type="checkbox"] {
+    margin: 0;
+}
+
 .mj-event-schedule-mode {
     margin-bottom: 12px;
 }
@@ -95,6 +269,49 @@
 .mj-schedule-card p.description {
     margin-top: 6px;
     margin-bottom: 0;
+}
+
+.mj-series-builder {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.mj-series-builder__inputs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.mj-series-builder__inputs label {
+    font-weight: 600;
+}
+
+.mj-series-builder__table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.mj-series-builder__table th,
+.mj-series-builder__table td {
+    padding: 8px;
+}
+
+.mj-series-builder__cell {
+    display: inline-block;
+    font-weight: 600;
+}
+
+.mj-series-builder__actions {
+    text-align: right;
+    width: 120px;
+}
+
+.mj-series-builder__empty {
+    text-align: center;
+    font-style: italic;
+    color: #50575e;
 }
 
 .mj-admin-event-summary {

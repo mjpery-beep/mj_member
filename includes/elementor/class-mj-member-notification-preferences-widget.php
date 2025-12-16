@@ -6,9 +6,11 @@ if (!defined('ABSPATH')) {
 
 use Elementor\Controls_Manager;
 use Elementor\Widget_Base;
-use Mj\Member\Core\Config;
+use Mj\Member\Core\AssetsManager;
 
 class Mj_Member_Elementor_Notification_Preferences_Widget extends Widget_Base {
+    use Mj_Member_Elementor_Widget_Visibility;
+
     public function get_name() {
         return 'mj-member-notification-preferences';
     }
@@ -108,15 +110,18 @@ class Mj_Member_Elementor_Notification_Preferences_Widget extends Widget_Base {
         );
 
         $this->end_controls_section();
+
+        $this->register_visibility_controls();
     }
 
     protected function render() {
-        if (!class_exists('MjMembers_CRUD')) {
+        $settings = $this->get_settings_for_display();
+        $this->apply_visibility_to_wrapper($settings, 'mj-notification-preferences');
+
+        if (!class_exists('MjMembers')) {
             echo '<div class="mj-member-account-warning">' . esc_html__('Le module MJ Member doit être actif pour utiliser ce widget.', 'mj-member') . '</div>';
             return;
         }
-
-        $settings = $this->get_settings_for_display();
 
         $title = isset($settings['title']) ? $settings['title'] : '';
         $description = isset($settings['description']) ? $settings['description'] : '';
@@ -151,9 +156,9 @@ class Mj_Member_Elementor_Notification_Preferences_Widget extends Widget_Base {
 
         $preferences = array();
         if ($member && isset($member->id)) {
-            $preferences = MjMembers_CRUD::getNotificationPreferences($member->id);
+            $preferences = MjMembers::getNotificationPreferences($member->id);
         } else {
-            $preferences = MjMembers_CRUD::getNotificationPreferenceDefaults(array(
+            $preferences = MjMembers::getNotificationPreferenceDefaults(array(
                 'newsletter_opt_in' => 1,
                 'sms_opt_in' => 1,
             ));
@@ -205,20 +210,12 @@ class Mj_Member_Elementor_Notification_Preferences_Widget extends Widget_Base {
             ),
         );
 
-        $style_handle = 'mj-member-notification-preferences';
-        $style_path = Config::path() . 'css/notification-preferences.css';
-        $style_version = file_exists($style_path) ? (string) filemtime($style_path) : Config::version();
-        wp_enqueue_style($style_handle, Config::url() . 'css/notification-preferences.css', array(), $style_version);
-
-        $script_handle = 'mj-member-notification-preferences';
-        $script_path = Config::path() . 'js/notification-preferences.js';
-        $script_version = file_exists($script_path) ? (string) filemtime($script_path) : Config::version();
-        wp_enqueue_script($script_handle, Config::url() . 'js/notification-preferences.js', array(), $script_version, true);
+        AssetsManager::requirePackage('notification-preferences');
 
         static $script_localized = false;
         if (!$script_localized) {
             wp_localize_script(
-                $script_handle,
+                'mj-member-notification-preferences',
                 'MjMemberNotificationPreferences',
                 array(
                     'ajaxUrl' => admin_url('admin-ajax.php'),
@@ -291,7 +288,7 @@ class Mj_Member_Elementor_Notification_Preferences_Widget extends Widget_Base {
         if ($sms_test_mode) {
             echo '<p class="mj-member-notifications__alert mj-member-notifications__alert--info">' . esc_html__("Le mode test SMS est activé : les messages sont journalisés mais non transmis.", 'mj-member') . '</p>';
         }
-        if ($member && property_exists($member, 'sms_opt_in') && (int) $member->sms_opt_in === 0) {
+        if ($member && MjMembers::hasField($member, 'sms_opt_in') && (int) MjMembers::getField($member, 'sms_opt_in', 0) === 0) {
             echo '<p class="mj-member-notifications__alert">' . esc_html__("Vous avez actuellement refusé les SMS. Activez au moins une option pour rétablir l’autorisation.", 'mj-member') . '</p>';
         }
         if ($sms_provider === 'disabled' || !$sms_provider_ready) {

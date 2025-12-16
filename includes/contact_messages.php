@@ -197,10 +197,10 @@ if (!function_exists('mj_member_get_contact_recipient_options')) {
     function mj_member_get_contact_recipient_options() {
         $options = array();
 
-        if (class_exists('MjMembers_CRUD')) {
-            $role_labels = MjMembers_CRUD::getRoleLabels();
+        if (class_exists('MjMembers')) {
+            $role_labels = MjMembers::getRoleLabels();
 
-            $coordinateurs = MjMembers_CRUD::getAll(0, 0, 'last_name', 'ASC', '', array('role' => MjMembers_CRUD::ROLE_COORDINATEUR));
+            $coordinateurs = MjMembers::getAll(0, 0, 'last_name', 'ASC', '', array('role' => MjMembers::ROLE_COORDINATEUR));
             if (!empty($coordinateurs) && is_array($coordinateurs)) {
                 foreach ($coordinateurs as $index => $coordinateur) {
                     if (!isset($coordinateur->id)) {
@@ -214,7 +214,7 @@ if (!function_exists('mj_member_get_contact_recipient_options')) {
                         $full_name = sprintf(__('Coordinateur #%d', 'mj-member'), (int) $coordinateur->id);
                     }
 
-                    $role_key = isset($coordinateur->role) ? sanitize_key((string) $coordinateur->role) : MjMembers_CRUD::ROLE_COORDINATEUR;
+                    $role_key = isset($coordinateur->role) ? sanitize_key((string) $coordinateur->role) : MjMembers::ROLE_COORDINATEUR;
                     $role_label = isset($role_labels[$role_key]) ? $role_labels[$role_key] : __('Coordinateur', 'mj-member');
 
                     $description = '';
@@ -241,7 +241,7 @@ if (!function_exists('mj_member_get_contact_recipient_options')) {
                 }
             }
 
-            $animateurs = MjMembers_CRUD::getAll(0, 0, 'last_name', 'ASC', '', array('role' => MjMembers_CRUD::ROLE_ANIMATEUR));
+            $animateurs = MjMembers::getAll(0, 0, 'last_name', 'ASC', '', array('role' => MjMembers::ROLE_ANIMATEUR));
             if (!empty($animateurs) && is_array($animateurs)) {
                 foreach ($animateurs as $index => $animateur) {
                     if (!isset($animateur->id)) {
@@ -255,7 +255,7 @@ if (!function_exists('mj_member_get_contact_recipient_options')) {
                         $full_name = sprintf(__('Animateur #%d', 'mj-member'), (int) $animateur->id);
                     }
 
-                    $role_key = isset($animateur->role) ? sanitize_key((string) $animateur->role) : MjMembers_CRUD::ROLE_ANIMATEUR;
+                    $role_key = isset($animateur->role) ? sanitize_key((string) $animateur->role) : MjMembers::ROLE_ANIMATEUR;
                     $role_label = isset($role_labels[$role_key]) ? $role_labels[$role_key] : __('Animateur', 'mj-member');
 
                     $description = '';
@@ -349,8 +349,8 @@ if (!function_exists('mj_member_parse_contact_recipient_choice')) {
             }
 
             $label = sprintf(__('Coordinateur #%d', 'mj-member'), $member_id);
-            if (class_exists('MjMembers_CRUD')) {
-                $row = MjMembers_CRUD::getById($member_id);
+            if (class_exists('MjMembers')) {
+                $row = MjMembers::getById($member_id);
                 if ($row && isset($row->first_name, $row->last_name)) {
                     $candidate = trim($row->first_name . ' ' . $row->last_name);
                     if ($candidate !== '') {
@@ -382,8 +382,8 @@ if (!function_exists('mj_member_parse_contact_recipient_choice')) {
             }
 
             $label = sprintf(__('Animateur #%d', 'mj-member'), $member_id);
-            if (class_exists('MjMembers_CRUD')) {
-                $row = MjMembers_CRUD::getById($member_id);
+            if (class_exists('MjMembers')) {
+                $row = MjMembers::getById($member_id);
                 if ($row && isset($row->first_name, $row->last_name)) {
                     $candidate = trim($row->first_name . ' ' . $row->last_name);
                     if ($candidate !== '') {
@@ -471,8 +471,8 @@ if (!function_exists('mj_member_handle_contact_message_submission')) {
             if ($locked_email !== '') {
                 $sender_email = sanitize_email($locked_email);
             }
-        } elseif ($posted_member_id > 0 && class_exists('MjMembers_CRUD') && $sender_email !== '') {
-            $possible_member = MjMembers_CRUD::getById($posted_member_id);
+        } elseif ($posted_member_id > 0 && class_exists('MjMembers') && $sender_email !== '') {
+            $possible_member = MjMembers::getById($posted_member_id);
             if ($possible_member && !empty($possible_member->email) && strcasecmp((string) $possible_member->email, $sender_email) === 0) {
                 $member_id = (int) $possible_member->id;
             }

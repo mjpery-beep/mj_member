@@ -1,5 +1,6 @@
 <?php
 
+use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Core\Config;
 
 if (!defined('ABSPATH')) {
@@ -45,7 +46,7 @@ function mj_link_member_user_callback() {
         wp_send_json_error(array('message' => __('Rôle sélectionné invalide.', 'mj-member')));
     }
 
-    $member = MjMembers_CRUD::getById($member_id);
+    $member = MjMembers::getById($member_id);
     if (!$member) {
         wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
     }
@@ -199,10 +200,14 @@ function mj_link_member_user_callback() {
     }
 
     $member_login_value = $manual_login !== '' ? $manual_login : ($user_login !== '' ? $user_login : ($existing_user ? $existing_user->user_login : ''));
-    MjMembers_CRUD::update($member_id, array(
+    $link_result = MjMembers::update($member_id, array(
         'wp_user_id'           => $user_id,
         'member_account_login' => $member_login_value,
     ));
+
+    if (is_wp_error($link_result)) {
+        wp_send_json_error(array('message' => $link_result->get_error_message()));
+    }
 
     $response = array(
         'user_id' => $user_id,
@@ -261,14 +266,15 @@ function mj_inline_edit_member_callback() {
             'date_last_payement',
             'requires_payment',
             'photo_usage_consent',
-            'photo_id'
+            'photo_id',
+            'is_volunteer'
         );
 
         if (!in_array($field_name, $allowed_fields, true)) {
             wp_send_json_error(array('message' => 'Champ non autorisé'));
         }
 
-        $member = MjMembers_CRUD::getById($member_id);
+        $member = MjMembers::getById($member_id);
         if (!$member) {
             wp_send_json_error(array('message' => 'Membre introuvable'));
         }
@@ -279,7 +285,7 @@ function mj_inline_edit_member_callback() {
                 $sanitized_email = sanitize_email($field_value);
 
                 if ($sanitized_email === '') {
-                    if ($raw_email === '' && $member->role === MjMembers_CRUD::ROLE_JEUNE) {
+                    if ($raw_email === '' && $member->role === MjMembers::ROLE_JEUNE) {
                         $field_value = null;
                         break;
                     }
@@ -319,17 +325,17 @@ function mj_inline_edit_member_callback() {
                 break;
             case 'role':
                 $field_value = sanitize_text_field($field_value);
-                $allowed_roles = MjMembers_CRUD::getAllowedRoles();
+                $allowed_roles = MjMembers::getAllowedRoles();
                 if (!in_array($field_value, $allowed_roles, true)) {
                     wp_send_json_error(array('message' => 'Rôle invalide'));
                 }
-                if ($field_value !== MjMembers_CRUD::ROLE_JEUNE && empty($member->email)) {
+                if ($field_value !== MjMembers::ROLE_JEUNE && empty($member->email)) {
                     wp_send_json_error(array('message' => 'Ajoutez un email avant de changer le rôle.'));
                 }
                 break;
             case 'status':
                 $field_value = sanitize_text_field($field_value);
-                if (!in_array($field_value, array(MjMembers_CRUD::STATUS_ACTIVE, MjMembers_CRUD::STATUS_INACTIVE), true)) {
+                if (!in_array($field_value, array(MjMembers::STATUS_ACTIVE, MjMembers::STATUS_INACTIVE), true)) {
                     wp_send_json_error(array('message' => 'Statut invalide'));
                 }
                 break;
@@ -338,6 +344,9 @@ function mj_inline_edit_member_callback() {
                 break;
             case 'requires_payment':
                 $field_value = (!empty($field_value) && $field_value !== '0' && strtolower($field_value) !== 'false') ? 1 : 0;
+                break;
+            case 'is_volunteer':
+                $field_value = (!empty($field_value) && $field_value !== '0' && strtolower($field_value) !== 'false' && strtolower($field_value) !== 'no' && strtolower($field_value) !== 'non') ? 1 : 0;
                 break;
             case 'photo_usage_consent':
                 $normalized = strtolower(trim($field_value));
@@ -360,16 +369,16 @@ function mj_inline_edit_member_callback() {
         }
 
         $data = array($field_name => $field_value);
-        $result = MjMembers_CRUD::update($member_id, $data);
+        $result = MjMembers::update($member_id, $data);
 
-        if ($result !== false) {
-            wp_send_json_success(array(
-                'message' => 'Mise à jour réussie',
-                'value' => $field_value
-            ));
-        } else {
-            wp_send_json_error(array('message' => 'Erreur lors de la mise à jour'));
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()));
         }
+
+        wp_send_json_success(array(
+            'message' => 'Mise à jour réussie',
+            'value' => $field_value
+        ));
     } else {
         wp_send_json_error(array('message' => 'Données manquantes'));
     }
@@ -393,7 +402,7 @@ function mj_upload_member_photo_callback() {
     $member_id = intval($_POST['member_id']);
     $attachment_id = intval($_POST['attachment_id']);
 
-    $member = MjMembers_CRUD::getById($member_id);
+    $member = MjMembers::getById($member_id);
     if (!$member) {
         wp_send_json_error(array('message' => 'Membre introuvable'));
     }

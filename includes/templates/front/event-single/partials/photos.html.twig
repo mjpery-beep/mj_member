@@ -1,0 +1,144 @@
+{% set notice = photos.notice|default(null) %}
+{% set has_items = photos.has_items|default(false) %}
+{% set can_upload = photos.can_upload|default(false) %}
+
+{% if notice or has_items or can_upload %}
+    {% set total = photos.total|default(0) %}
+    {% set items = photos.items|default([]) %}
+    {% set pending = photos.pending|default({}) %}
+    {% set pending_has = pending.has|default(false) %}
+    {% set pending_count = pending.count|default(0) %}
+    {% set pending_items = pending.items|default([]) %}
+    {% set is_unlimited = photos.is_unlimited|default(false) %}
+    {% set member_remaining = photos.member_remaining|default(0) %}
+    {% set reason = photos.reason|default('') %}
+    {% set event_title = photos.event_title|default(model.event.title|default('')) %}
+    {% set redirect_url = photos.redirect_url|default('') %}
+    {% set event_id = model.event.id|default(0) %}
+
+    <section class="mj-member-event-single__card mj-member-event-single__photos">
+        <div class="mj-member-event-single__photos-header">
+            <h2>{{ __('Souvenirs partagés', 'mj-member') }}</h2>
+            {% if total > 0 %}
+                <span class="mj-member-event-single__photo-count">{{ _n('%d photo validée', '%d photos validées', total, 'mj-member')|format(total) }}</span>
+            {% endif %}
+        </div>
+
+        {% if notice %}
+            {% set notice_type = notice.type|default('info')|lower|replace({' ': '-'}) %}
+            <p class="mj-member-event-single__photo-notice is-{{ notice_type }}">{{ notice.message|default('') }}</p>
+        {% endif %}
+
+        {% if pending_has %}
+            {% if pending_count <= 1 %}
+                {% set pending_message = __('Ta photo ci-dessous est en attente de validation par l’équipe.', 'mj-member') %}
+            {% else %}
+                {% set pending_message = __('Tes %d photos ci-dessous sont en attente de validation par l’équipe.', 'mj-member')|format(pending_count) %}
+            {% endif %}
+            <div class="mj-member-event-single__photo-pending" role="status">
+                <p class="mj-member-event-single__photo-pending-message">{{ pending_message }}</p>
+                <ul class="mj-member-event-single__photo-pending-list">
+                    {% for entry in pending_items %}
+                        {% set thumb = entry.thumb|default('') %}
+                        {% set display = entry.display|default('') %}
+                        {% set full = entry.full|default(display) %}
+                        {% set caption = entry.caption|default('') %}
+                        {% set submitted = entry.submitted|default('') %}
+                        {% set alt = caption %}
+                        {% if not alt %}
+                            {% if submitted %}
+                                {% set alt = __('Photo envoyée le %s', 'mj-member')|format(submitted) %}
+                            {% else %}
+                                {% set alt = __('Photo en attente de validation', 'mj-member') %}
+                            {% endif %}
+                        {% endif %}
+                        <li class="mj-member-event-single__photo-pending-item">
+                            {% if thumb %}
+                                <div class="mj-member-event-single__photo-pending-thumb">
+                                    <img src="{{ thumb|esc_url }}" alt="{{ alt|esc_attr }}" loading="lazy" decoding="async" />
+                                </div>
+                            {% endif %}
+                            <div class="mj-member-event-single__photo-pending-meta">
+                                {% if caption %}
+                                    <p class="mj-member-event-single__photo-pending-caption">{{ caption }}</p>
+                                {% endif %}
+                                {% if submitted %}
+                                    <p class="mj-member-event-single__photo-pending-date">{{ __('Envoyée le %s', 'mj-member')|format(submitted) }}</p>
+                                {% endif %}
+                                {% if full %}
+                                    <div class="mj-member-event-single__photo-pending-meta-actions">
+                                        <a class="mj-member-event-single__photo-pending-open" href="{{ full|esc_url }}" target="_blank" rel="noopener">{{ __('Voir l’image', 'mj-member') }}</a>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
+        {% if has_items %}
+            <div class="mj-member-event-single__photo-grid">
+                {% for photo in items %}
+                    {% set full = photo.full|default('') %}
+                    {% set display = photo.url|default('') %}
+                    {% set url = full ?: display %}
+                    {% set thumb = photo.thumb|default(display ?: url) %}
+                    {% set caption = photo.caption|default('') %}
+                    {% if thumb %}
+                        {% set alt = caption ?: event_title %}
+                        <figure>
+                            <div class="mj-member-event-single__photo">
+                                {% if url %}
+                                    <a href="{{ url|esc_url }}" target="_blank" rel="noopener">
+                                        <img src="{{ thumb|esc_url }}" alt="{{ alt|esc_attr }}" loading="lazy" decoding="async" />
+                                    </a>
+                                {% else %}
+                                    <img src="{{ thumb|esc_url }}" alt="{{ alt|esc_attr }}" loading="lazy" decoding="async" />
+                                {% endif %}
+                            </div>
+                            {% if caption %}
+                                <figcaption class="mj-member-event-single__photo-caption">{{ caption }}</figcaption>
+                            {% endif %}
+                        </figure>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="mj-member-event-single__photo-empty">{{ __('Aucune photo validée pour l’instant. Partage les tiennes !', 'mj-member') }}</p>
+        {% endif %}
+
+        {% if can_upload %}
+            <form class="mj-member-event-single__photo-upload" action="{{ admin_url('admin-post.php')|esc_url }}" method="post" enctype="multipart/form-data">
+                {{ wp_nonce_field('mj-member-event-photo', 'mj_event_photo_nonce', true, false)|raw }}
+                <input type="hidden" name="action" value="mj_member_submit_event_photo" />
+                <input type="hidden" name="event_id" value="{{ event_id }}" />
+                <input type="hidden" name="redirect_to" value="{{ redirect_url|esc_attr }}" />
+
+                <label for="mj-member-event-photo-file">{{ __('Ajoute ta photo', 'mj-member') }}</label>
+                <input id="mj-member-event-photo-file" type="file" name="event_photo_file" accept="image/*" required />
+
+                <label for="mj-member-event-photo-caption">{{ __('Décris ton souvenir (optionnel)', 'mj-member') }}</label>
+                <textarea id="mj-member-event-photo-caption" name="photo_caption" maxlength="180" placeholder="{{ __('Exemple : Soirée jeu du vendredi !', 'mj-member') }}"></textarea>
+
+                <label class="mj-member-event-single__photo-consent" for="mj-member-event-photo-consent">
+                    <input id="mj-member-event-photo-consent" type="checkbox" name="mj_event_photo_consent" value="1" required />
+                    {{ __('Je garantis avoir l’autorisation des personnes présentes et j’accepte la diffusion conforme aux règles RGPD de la MJ.', 'mj-member') }}
+                </label>
+                <p class="mj-member-event-single__photo-consent-hint">{{ __('Partage uniquement des photos dont chaque personne a donné son accord.', 'mj-member') }}</p>
+
+                <p class="mj-member-event-single__photo-note">
+                    {% if is_unlimited %}
+                        {{ __('Tu peux partager un nombre illimité de photos pour cet événement.', 'mj-member') }}
+                    {% else %}
+                        {{ _n('Il te reste %d envoi pour cet événement.', 'Il te reste %d envois pour cet événement.', member_remaining, 'mj-member')|format(member_remaining) }}
+                    {% endif %}
+                </p>
+
+                <button type="submit">{{ __('Envoyer ma photo', 'mj-member') }}</button>
+            </form>
+        {% elseif reason %}
+            <p class="mj-member-event-single__photo-empty">{{ reason }}</p>
+        {% endif %}
+    </section>
+{% endif %}

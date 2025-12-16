@@ -1,22 +1,29 @@
 <?php
 
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\Crud\MjMembers;
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
 function mj_member_cards_pdf_default_values() {
+    $stored_background_id = (int) get_option('mj_cards_pdf_background_image_id', 0);
+    $stored_back_background_id = (int) get_option('mj_cards_pdf_background_back_image_id', 0);
+    $stored_double_sided = get_option('mj_cards_pdf_double_sided', '0') === '1';
+
     return array(
         'selection_mode' => 'all',
         'roles' => array(),
         'members' => array(),
         'card_bg' => '#ffffff',
-        'accent_color' => '#2563eb',
-        'text_color' => '#1f2937',
+        'background_image_id' => $stored_background_id,
+        'background_back_image_id' => $stored_back_background_id,
+        'text_color' => '#ffffff',
         'font' => 'Helvetica',
         'logo_id' => 0,
         'include_inactive' => false,
+        'double_sided' => $stored_double_sided,
     );
 }
 
@@ -50,7 +57,7 @@ function mj_member_cards_pdf_handle_generate() {
     $values = mj_member_cards_pdf_default_values();
     $errors = array();
 
-    $role_labels = method_exists('MjMembers_CRUD', 'getRoleLabels') ? MjMembers_CRUD::getRoleLabels() : array();
+    $role_labels = method_exists('MjMembers', 'getRoleLabels') ? MjMembers::getRoleLabels() : array();
     $role_labels = is_array($role_labels) ? $role_labels : array();
 
     $values['selection_mode'] = isset($post_data['selection_mode']) ? sanitize_key($post_data['selection_mode']) : 'all';
@@ -83,14 +90,9 @@ function mj_member_cards_pdf_handle_generate() {
         $values['card_bg'] = '#ffffff';
     }
 
-    $values['accent_color'] = isset($post_data['accent_color']) ? sanitize_hex_color($post_data['accent_color']) : '#2563eb';
-    if (!$values['accent_color']) {
-        $values['accent_color'] = '#2563eb';
-    }
-
-    $values['text_color'] = isset($post_data['text_color']) ? sanitize_hex_color($post_data['text_color']) : '#1f2937';
+    $values['text_color'] = isset($post_data['text_color']) ? sanitize_hex_color($post_data['text_color']) : '#ffffff';
     if (!$values['text_color']) {
-        $values['text_color'] = '#1f2937';
+        $values['text_color'] = '#ffffff';
     }
 
     $available_fonts = array('Helvetica', 'Arial', 'Courier', 'Times');
@@ -99,8 +101,11 @@ function mj_member_cards_pdf_handle_generate() {
         $values['font'] = 'Helvetica';
     }
 
+    $values['background_image_id'] = isset($post_data['background_image_id']) ? (int) $post_data['background_image_id'] : 0;
+    $values['background_back_image_id'] = isset($post_data['background_back_image_id']) ? (int) $post_data['background_back_image_id'] : 0;
     $values['logo_id'] = isset($post_data['logo_id']) ? (int) $post_data['logo_id'] : 0;
     $values['include_inactive'] = !empty($post_data['include_inactive']);
+    $values['double_sided'] = !empty($post_data['double_sided']);
 
     $logo_path = '';
     if ($values['logo_id'] > 0) {
@@ -109,6 +114,26 @@ function mj_member_cards_pdf_handle_generate() {
             $logo_path = $logo_path_candidate;
         } else {
             $errors[] = esc_html__('Le logo indiqué est introuvable sur le serveur.', 'mj-member');
+        }
+    }
+
+    $background_path = '';
+    if ($values['background_image_id'] > 0) {
+        $background_candidate = get_attached_file($values['background_image_id']);
+        if ($background_candidate && file_exists($background_candidate)) {
+            $background_path = $background_candidate;
+        } else {
+            $errors[] = esc_html__('L’image de décor indiquée est introuvable sur le serveur.', 'mj-member');
+        }
+    }
+
+    $back_background_path = '';
+    if ($values['background_back_image_id'] > 0) {
+        $background_back_candidate = get_attached_file($values['background_back_image_id']);
+        if ($background_back_candidate && file_exists($background_back_candidate)) {
+            $back_background_path = $background_back_candidate;
+        } else {
+            $errors[] = esc_html__('L’image de décor verso est introuvable sur le serveur.', 'mj-member');
         }
     }
 
@@ -142,10 +167,12 @@ function mj_member_cards_pdf_handle_generate() {
         $selected_members,
         array(
             'background_color' => $values['card_bg'],
-            'accent_color' => $values['accent_color'],
+            'background_image_path' => $background_path,
+            'background_back_image_path' => $back_background_path,
             'text_color' => $values['text_color'],
             'font_family' => $values['font'],
             'logo_path' => $logo_path,
+            'double_sided' => $values['double_sided'],
         )
     );
 
@@ -199,6 +226,8 @@ function mj_member_cards_pdf_page() {
         wp_die(esc_html__('Vous n’avez pas les droits nécessaires pour accéder à cette page.', 'mj-member'));
     }
 
+    wp_enqueue_media();
+
     $default_values = mj_member_cards_pdf_default_values();
     $values = $default_values;
     $errors = array();
@@ -217,7 +246,7 @@ function mj_member_cards_pdf_page() {
         }
     }
 
-    $role_labels = method_exists('MjMembers_CRUD', 'getRoleLabels') ? MjMembers_CRUD::getRoleLabels() : array();
+    $role_labels = method_exists('MjMembers', 'getRoleLabels') ? MjMembers::getRoleLabels() : array();
     $role_labels = is_array($role_labels) ? $role_labels : array();
 
     $all_members_for_select = MjMemberBusinessCards::collect_members('all', array('include_inactive' => true));
@@ -238,6 +267,22 @@ function mj_member_cards_pdf_page() {
         'Courier' => 'Courier',
         'Times' => 'Times New Roman',
     );
+
+    $background_preview_url = '';
+    if (!empty($values['background_image_id'])) {
+        $background_preview_url = wp_get_attachment_image_url((int) $values['background_image_id'], 'medium');
+        if (!$background_preview_url) {
+            $background_preview_url = wp_get_attachment_url((int) $values['background_image_id']);
+        }
+    }
+
+    $back_background_preview_url = '';
+    if (!empty($values['background_back_image_id'])) {
+        $back_background_preview_url = wp_get_attachment_image_url((int) $values['background_back_image_id'], 'medium');
+        if (!$back_background_preview_url) {
+            $back_background_preview_url = wp_get_attachment_url((int) $values['background_back_image_id']);
+        }
+    }
 
     $member_select_size = min(15, max(6, count($all_members_for_select)));
     ?>
@@ -337,9 +382,56 @@ function mj_member_cards_pdf_page() {
                     </td>
                 </tr>
                 <tr>
-                    <th scope="row"><label for="mj-accent-color"><?php esc_html_e('Couleur d’accent', 'mj-member'); ?></label></th>
+                    <th scope="row"><?php esc_html_e('Image décorative', 'mj-member'); ?></th>
                     <td>
-                        <input type="color" id="mj-accent-color" name="accent_color" value="<?php echo esc_attr($values['accent_color']); ?>" />
+                        <div class="mj-member-cards-media-picker" data-role="cards-background-picker">
+                            <input type="hidden" id="mj-background-image-id" name="background_image_id" value="<?php echo esc_attr($values['background_image_id']); ?>" data-role="attachment-field" />
+                            <div class="mj-member-cards-media-picker__preview" data-role="preview"<?php echo $background_preview_url ? '' : ' style="display:none;"'; ?> style="margin:8px 0;max-width:220px;border:1px solid rgba(148,163,184,0.4);border-radius:8px;overflow:hidden;">
+                                <img src="<?php echo $background_preview_url ? esc_url($background_preview_url) : ''; ?>" alt="<?php esc_attr_e('Aperçu du décor sélectionné', 'mj-member'); ?>" style="display:block;width:100%;height:auto;" />
+                            </div>
+                            <p class="description" data-role="placeholder"<?php echo $background_preview_url ? ' style="display:none;"' : ''; ?>><?php esc_html_e('Aucune image sélectionnée.', 'mj-member'); ?></p>
+                            <p class="description"><?php esc_html_e('Choisissez une image (JPG/PNG) de la médiathèque. Elle sera appliquée en fond sur chaque carte.', 'mj-member'); ?></p>
+                            <div class="mj-member-cards-media-picker__actions">
+                                <button type="button" class="button" data-role="select">
+                                    <?php echo esc_html__('Choisir une image', 'mj-member'); ?>
+                                </button>
+                                <button type="button" class="button-link" data-role="remove"<?php echo $background_preview_url ? '' : ' style="display:none;"'; ?>>
+                                    <?php echo esc_html__('Retirer', 'mj-member'); ?>
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><?php esc_html_e('Recto / verso', 'mj-member'); ?></th>
+                    <td>
+                        <label>
+                            <input type="hidden" name="double_sided" value="0" />
+                            <input type="checkbox" name="double_sided" value="1" data-role="double-sided-toggle" <?php checked($values['double_sided']); ?> />
+                            <span><?php esc_html_e('Générer également une page verso avec le décor configuré.', 'mj-member'); ?></span>
+                        </label>
+                        <p class="description"><?php esc_html_e('Chaque planche de cartes sera suivie d’une page verso calée sur la même grille.', 'mj-member'); ?></p>
+                    </td>
+                </tr>
+                <tr data-double-sided="background"<?php echo $values['double_sided'] ? '' : ' style="display:none;"'; ?>>
+                    <th scope="row"><?php esc_html_e('Image décorative (verso)', 'mj-member'); ?></th>
+                    <td>
+                        <div class="mj-member-cards-media-picker" data-role="cards-background-picker">
+                            <input type="hidden" id="mj-background-back-image-id" name="background_back_image_id" value="<?php echo esc_attr($values['background_back_image_id']); ?>" data-role="attachment-field" />
+                            <div class="mj-member-cards-media-picker__preview" data-role="preview"<?php echo $back_background_preview_url ? '' : ' style="display:none;"'; ?> style="margin:8px 0;max-width:220px;border:1px solid rgba(148,163,184,0.4);border-radius:8px;overflow:hidden;">
+                                <img src="<?php echo $back_background_preview_url ? esc_url($back_background_preview_url) : ''; ?>" alt="<?php esc_attr_e('Aperçu du décor verso sélectionné', 'mj-member'); ?>" style="display:block;width:100%;height:auto;" />
+                            </div>
+                            <p class="description" data-role="placeholder"<?php echo $back_background_preview_url ? ' style="display:none;"' : ''; ?>><?php esc_html_e('Aucune image sélectionnée pour le verso.', 'mj-member'); ?></p>
+                            <p class="description"><?php esc_html_e('Sélectionnez une image spécifique pour le verso. À défaut, la page arrière restera unie.', 'mj-member'); ?></p>
+                            <div class="mj-member-cards-media-picker__actions">
+                                <button type="button" class="button" data-role="select">
+                                    <?php echo esc_html__('Choisir une image', 'mj-member'); ?>
+                                </button>
+                                <button type="button" class="button-link" data-role="remove"<?php echo $back_background_preview_url ? '' : ' style="display:none;"'; ?>>
+                                    <?php echo esc_html__('Retirer', 'mj-member'); ?>
+                                </button>
+                            </div>
+                        </div>
                     </td>
                 </tr>
                 <tr>
@@ -378,6 +470,7 @@ function mj_member_cards_pdf_page() {
         document.addEventListener('DOMContentLoaded', function () {
             var modeInputs = document.querySelectorAll('input[name="selection_mode"]');
             var sections = document.querySelectorAll('[data-selection-section]');
+
             function refreshSections() {
                 var current = document.querySelector('input[name="selection_mode"]:checked');
                 var activeValue = current ? current.value : 'all';
@@ -385,10 +478,124 @@ function mj_member_cards_pdf_page() {
                     section.style.display = (section.getAttribute('data-selection-section') === activeValue) ? 'table-row' : 'none';
                 });
             }
+
             modeInputs.forEach(function (input) {
                 input.addEventListener('change', refreshSections);
             });
             refreshSections();
+
+            var doubleSidedToggle = document.querySelector('[data-role="double-sided-toggle"]');
+            var doubleSidedSections = document.querySelectorAll('[data-double-sided]');
+
+            function refreshDoubleSided() {
+                var enabled = doubleSidedToggle ? doubleSidedToggle.checked : false;
+                doubleSidedSections.forEach(function (section) {
+                    section.style.display = enabled ? 'table-row' : 'none';
+                });
+            }
+
+            if (doubleSidedToggle) {
+                doubleSidedToggle.addEventListener('change', refreshDoubleSided);
+            }
+            refreshDoubleSided();
+
+            if (window.wp && wp.media) {
+                var pickers = document.querySelectorAll('[data-role="cards-background-picker"]');
+
+                pickers.forEach(function (picker) {
+                    if (!picker) {
+                        return;
+                    }
+
+                    var field = picker.querySelector('[data-role="attachment-field"]');
+                    if (!field) {
+                        return;
+                    }
+
+                    var preview = picker.querySelector('[data-role="preview"]');
+                    var previewImg = preview ? preview.querySelector('img') : null;
+                    var placeholder = picker.querySelector('[data-role="placeholder"]');
+                    var selectBtn = picker.querySelector('[data-role="select"]');
+                    var removeBtn = picker.querySelector('[data-role="remove"]');
+                    var frame = null;
+
+                    function updatePreview(url, attachmentId) {
+                        var hasUrl = !!url;
+                        if (typeof attachmentId !== 'undefined') {
+                            field.value = attachmentId;
+                        }
+                        if (!hasUrl && attachmentId === undefined) {
+                            field.value = '';
+                        }
+                        if (preview) {
+                            if (!hasUrl) {
+                                preview.style.display = 'none';
+                                if (previewImg) {
+                                    previewImg.removeAttribute('src');
+                                }
+                            } else {
+                                preview.style.display = '';
+                                if (previewImg) {
+                                    previewImg.setAttribute('src', url);
+                                }
+                            }
+                        }
+                        if (placeholder) {
+                            placeholder.style.display = hasUrl ? 'none' : '';
+                        }
+                        if (removeBtn) {
+                            removeBtn.style.display = hasUrl ? '' : 'none';
+                        }
+                    }
+
+                    if (selectBtn) {
+                        selectBtn.addEventListener('click', function (event) {
+                            event.preventDefault();
+                            if (frame) {
+                                frame.open();
+                                return;
+                            }
+
+                            frame = wp.media({
+                                title: '<?php echo esc_js(__('Choisir une image de fond', 'mj-member')); ?>',
+                                library: {
+                                    type: 'image'
+                                },
+                                button: {
+                                    text: '<?php echo esc_js(__('Utiliser cette image', 'mj-member')); ?>'
+                                },
+                                multiple: false
+                            });
+
+                            frame.on('select', function () {
+                                var attachment = frame.state().get('selection').first();
+                                if (!attachment) {
+                                    return;
+                                }
+
+                                attachment = attachment.toJSON();
+                                var imageUrl = (attachment.sizes && attachment.sizes.medium) ? attachment.sizes.medium.url : attachment.url;
+                                updatePreview(imageUrl, attachment.id);
+                            });
+
+                            frame.open();
+                        });
+                    }
+
+                    if (removeBtn) {
+                        removeBtn.addEventListener('click', function (event) {
+                            event.preventDefault();
+                            updatePreview('', '');
+                        });
+                    }
+
+                    if (previewImg && previewImg.getAttribute('src')) {
+                        updatePreview(previewImg.getAttribute('src'));
+                    } else {
+                        updatePreview('');
+                    }
+                });
+            }
         });
     </script>
     <?php

@@ -9,8 +9,11 @@ use Elementor\Group_Control_Border;
 use Elementor\Group_Control_Box_Shadow;
 use Elementor\Group_Control_Typography;
 use Elementor\Widget_Base;
+use Mj\Member\Core\AssetsManager;
 
 class Mj_Member_Elementor_Account_Links_Widget extends Widget_Base {
+    use Mj_Member_Elementor_Widget_Visibility;
+
     public function get_name() {
         return 'mj-member-account-links';
     }
@@ -209,6 +212,8 @@ class Mj_Member_Elementor_Account_Links_Widget extends Widget_Base {
         );
 
         $this->end_controls_section();
+
+        $this->register_visibility_controls();
 
         $this->start_controls_section(
             'section_style_container',
@@ -469,10 +474,9 @@ class Mj_Member_Elementor_Account_Links_Widget extends Widget_Base {
         }
 
         $settings = $this->get_settings_for_display();
+    $this->apply_visibility_to_wrapper($settings, 'mj-member-account-links');
 
-        if (!wp_style_is('mj-member-login-component', 'enqueued')) {
-            wp_enqueue_style('mj-member-login-component');
-        }
+        AssetsManager::requirePackage('login-component');
 
         $preview_mode = function_exists('mj_member_login_component_is_preview_mode')
             ? mj_member_login_component_is_preview_mode()
@@ -609,7 +613,32 @@ class Mj_Member_Elementor_Account_Links_Widget extends Widget_Base {
             }
         }
 
-        $wrapper_attributes = array('class="mj-member-account-links"');
+        $member_role_key = '';
+        if ($preview_mode && !$is_logged_in) {
+            $member_role_key = 'animateur';
+        } elseif ($member && isset($member->role) && $member->role !== '') {
+            $member_role_key = sanitize_key((string) $member->role);
+        }
+
+        $role_class = 'mj-member-login-component--role-default';
+        if ($member_role_key !== '') {
+            $role_class = 'mj-member-login-component--role-' . sanitize_html_class($member_role_key);
+        }
+
+        $wrapper_classes = array('mj-member-account-links', $role_class);
+
+        $show_on_tablet = !isset($settings['show_on_tablet']) || $settings['show_on_tablet'] === 'yes';
+        $show_on_mobile = !isset($settings['show_on_mobile']) || $settings['show_on_mobile'] === 'yes';
+
+        if (!$show_on_tablet) {
+            $wrapper_classes[] = 'mj-member-account-links--hide-tablet';
+        }
+
+        if (!$show_on_mobile) {
+            $wrapper_classes[] = 'mj-member-account-links--hide-mobile';
+        }
+
+        $wrapper_attributes = array('class="' . esc_attr(implode(' ', $wrapper_classes)) . '"');
         if ($preview_mode) {
             $wrapper_attributes[] = 'data-preview="1"';
         }
@@ -617,7 +646,7 @@ class Mj_Member_Elementor_Account_Links_Widget extends Widget_Base {
         echo '<div ' . implode(' ', $wrapper_attributes) . '>';
 
         if (!empty($settings['title'])) {
-            echo '<h3 class="mj-member-account-links__title">' . esc_html($settings['title']) . '</h3>';
+            echo '<h2 class="mj-member-account-links__title">' . esc_html($settings['title']) . '</h2>';
         }
 
         if (!empty($settings['intro'])) {
@@ -640,9 +669,7 @@ class Mj_Member_Elementor_Account_Links_Widget extends Widget_Base {
             if ($show_greeting) {
                 echo '<span class="mj-member-account-links__greeting">' . esc_html($greeting_message) . '</span>';
             }
-            if ($display_name !== '') {
-                echo '<span class="mj-member-login-component__member-name">' . esc_html($display_name) . '</span>';
-            }
+   
             echo '</span>';
             echo '</div>';
         }
@@ -652,10 +679,21 @@ class Mj_Member_Elementor_Account_Links_Widget extends Widget_Base {
             $url = isset($link['url']) ? esc_url($link['url']) : '#';
             $label = isset($link['label']) ? $link['label'] : '';
             $key = isset($link['key']) ? sanitize_key($link['key']) : '';
+            $badge = isset($link['badge']) ? (int) $link['badge'] : 0;
+            $icon_html = '';
+            if (!empty($link['icon']) && is_array($link['icon']) && !empty($link['icon']['html'])) {
+                $icon_html = $link['icon']['html'];
+            }
             if ($label === '' || $url === '') {
                 continue;
             }
             $label = wp_strip_all_tags($label);
+            if ($key === 'contact_messages') {
+                $clean_label = trim(preg_replace('/\s*\(\d+\+?\)\s*$/', '', $label));
+                if ($clean_label !== '') {
+                    $label = $clean_label;
+                }
+            }
             $is_current = false;
             if ($current_section !== '' && $key !== '' && $current_section === $key) {
                 $is_current = true;
@@ -674,9 +712,30 @@ class Mj_Member_Elementor_Account_Links_Widget extends Widget_Base {
                 $link_classes[] = 'is-current';
             }
 
+            if (!empty($link['is_logout'])) {
+                $link_classes[] = 'mj-member-login-component__account-link--logout';
+            }
+
             echo '<li class="' . esc_attr(implode(' ', $item_classes)) . '">';
-            echo '<a class="' . esc_attr(implode(' ', $link_classes)) . '" href="' . $url . '"' . ($is_current ? ' aria-current="page"' : '') . '>';
+            $link_attributes = ' href="' . $url . '"';
+            if ($is_current) {
+                $link_attributes .= ' aria-current="page"';
+            }
+            if (!empty($link['is_logout'])) {
+                $link_attributes .= ' rel="nofollow"';
+            }
+            echo '<a class="' . esc_attr(implode(' ', $link_classes)) . '"' . $link_attributes . '>';
+            echo '<span class="mj-member-login-component__account-main">';
+            if ($icon_html !== '') {
+                echo '<span class="mj-member-account-menu__item-icon">' . $icon_html . '</span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+            }
             echo '<span class="mj-member-login-component__account-label">' . esc_html($label) . '</span>';
+            if ($badge > 0) {
+                $badge_display = $badge > 99 ? '99+' : number_format_i18n($badge);
+                $badge_label = sprintf(_n('%d notification', '%d notifications', $badge, 'mj-member'), $badge);
+                echo '<span class="mj-member-login-component__account-badge" aria-label="' . esc_attr($badge_label) . '">' . esc_html($badge_display) . '</span>';
+            }
+            echo '</span>';
             echo '<span class="mj-member-login-component__account-icon" aria-hidden="true">&rsaquo;</span>';
             echo '</a>';
             echo '</li>';

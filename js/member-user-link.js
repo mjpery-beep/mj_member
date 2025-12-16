@@ -55,6 +55,12 @@ jQuery(function($) {
     const $passwordBox = $modal.find('.mj-user-link-password');
     const $suggestionBox = $modal.find('.mj-password-suggestion');
     const $submitButton = $modal.find('.mj-user-link-submit');
+    const utils = window.MjMemberUtils || {};
+    const escapeHtml = typeof utils.escapeHtml === 'function'
+        ? utils.escapeHtml
+        : function(value) {
+            return $('<div>').text(value == null ? '' : value).html();
+        };
 
     const SUGGESTED_PASSWORD_LENGTH = 7;
     const roleStyles = {
@@ -130,8 +136,8 @@ jQuery(function($) {
             return;
         }
 
-        const escapedPassword = $('<div>').text(password).html();
-        const escapedLogin = login ? $('<div>').text(login).html() : '';
+        const escapedPassword = escapeHtml(password);
+        const escapedLogin = login ? escapeHtml(login) : '';
         const html = '<strong>' + (i18n.passwordLabel || 'Mot de passe généré :') + '</strong><br>' +
             '<code style="display:inline-block; margin:8px 0; padding:4px 8px; background:#fff; border-radius:4px;">' + escapedPassword + '</code>' +
             '<br><small>' + (escapedLogin ? 'Login : ' + escapedLogin : '') + '</small>' +
@@ -147,7 +153,7 @@ jQuery(function($) {
             return;
         }
 
-        const escapedPassword = $('<div>').text(password).html();
+        const escapedPassword = escapeHtml(password);
         const html = '<strong>' + (i18n.suggestedPasswordLabel || 'Mot de passe suggéré :') + '</strong><br>' +
             '<code style="display:inline-block; margin:6px 0; padding:4px 8px; background:#fff; border-radius:4px; font-size:13px;">' + escapedPassword + '</code>' +
             '<br><button type="button" class="button button-small mj-user-link-copy" data-password="' + escapedPassword + '">' + (i18n.copyLabel || 'Copier') + '</button>';
@@ -186,10 +192,6 @@ jQuery(function($) {
             classSuffix: roleStyles.default.classSuffix,
             normalized: ''
         };
-    }
-
-    function escapeHtml(text) {
-        return $('<div>').text(text || '').html();
     }
 
     function updateLoginCell(memberId, login, roleKey, roleLabel, editUrl) {

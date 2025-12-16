@@ -1,9 +1,12 @@
 <?php
 
+use Mj\Member\Core\AssetsManager;
+
 if (!defined('ABSPATH')) {
     exit;
 }
 
+AssetsManager::requirePackage('contact-form');
 
 $template_data = isset($template_data) && is_array($template_data) ? $template_data : array();
 

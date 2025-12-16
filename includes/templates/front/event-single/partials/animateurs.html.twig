@@ -1,0 +1,88 @@
+{% set count = animateurs.count|default(0) %}
+{% if count > 0 %}
+    {% set items = animateurs.items|default([]) %}
+    {% set base_url = assets.event_single.base_url|default('') %}
+    {% set whatsapp_icon = base_url ? base_url ~ 'images/whatsapp-icon.png' : '' %}
+
+    <section class="mj-member-event-single__card mj-member-event-single__animateurs">
+        <h4>{{ __('Animateurs responsables', 'mj-member') }}</h4>
+        <div class="mj-member-event-single__animateurs-list">
+            {% for animateur in items %}
+                {% set classes = ['mj-member-event-single__animateur'] %}
+                {% if animateur.is_primary|default(false) %}
+                    {% set classes = classes|merge(['is-primary']) %}
+                {% endif %}
+                {% set avatar_url = animateur.avatar_url|default('') %}
+                {% set avatar_alt = animateur.avatar_alt|default(animateur.name|default(__('Portrait animateur', 'mj-member'))) %}
+                {% set initials = animateur.initials|default('#') %}
+                {% set email = animateur.email|default('') %}
+                {% set phone = animateur.phone|default('') %}
+                {% set phone_uri = animateur.phone_uri|default(phone|replace({' ': '', '.': '', '-': '', '(': '', ')': ''})) %}
+                {% set whatsapp_link = animateur.whatsapp_link|default('') %}
+                {% set contact_form_url = animateur.contact_form_url|default('') %}
+                {% set has_contact = email or phone or whatsapp_link or contact_form_url %}
+                <article class="{{ classes|join(' ') }}">
+                    <span class="mj-member-event-single__animateur-avatar">
+                        {% if avatar_url %}
+                            <img src="{{ avatar_url|esc_url }}" alt="{{ avatar_alt|esc_attr }}" loading="lazy" />
+                        {% else %}
+                            {{ initials }}
+                        {% endif %}
+                    </span>
+                    <div class="mj-member-event-single__animateur-content">
+                        {% if animateur.name|default('') %}
+                            <p class="mj-member-event-single__animateur-name">{{ animateur.name }}</p>
+                        {% endif %}
+                        {% if animateur.role_label|default('') %}
+                            <p class="mj-member-event-single__animateur-role">
+                                <span class="mj-member-event-single__animateur-role-badge">{{ animateur.role_label }}</span>
+                            </p>
+                        {% endif %}
+                        {% if has_contact %}
+                            <ul class="mj-member-event-single__animateur-contact">
+                                {% if email %}
+                                    <li>
+                                        <a href="mailto:{{ email|esc_attr }}">
+                                            <span class="mj-member-event-single__animateur-contact-icon">@</span>
+                                            <span class="screen-reader-text">{{ __('Envoyer un email', 'mj-member') }}</span>
+                                        </a>
+                                    </li>
+                                {% endif %}
+                                {% if phone %}
+                                    <li>
+                                        <a href="tel:{{ phone_uri|esc_attr }}">
+                                            <span class="mj-member-event-single__animateur-contact-icon">☎</span>
+                                            <span class="screen-reader-text">{{ __('Appeler', 'mj-member') }}</span>
+                                        </a>
+                                    </li>
+                                {% endif %}
+                                {% if whatsapp_link %}
+                                    <li>
+                                        <a href="{{ whatsapp_link|esc_url }}" target="_blank" rel="noopener">
+                                            <span class="mj-member-event-single__animateur-contact-icon">
+                                                {% if whatsapp_icon %}
+                                                    <img src="{{ whatsapp_icon|esc_url }}" alt="WhatsApp" />
+                                                {% else %}
+                                                    WA
+                                                {% endif %}
+                                            </span>
+                                            <span class="screen-reader-text">{{ __('Contacter via WhatsApp', 'mj-member') }}</span>
+                                        </a>
+                                    </li>
+                                {% endif %}
+                                {% if contact_form_url %}
+                                    <li>
+                                        <a href="{{ contact_form_url|esc_url }}" title="{{ __('Page contact MJ (demandes sérieuses uniquement)', 'mj-member')|esc_attr }}">
+                                            <span class="mj-member-event-single__animateur-contact-icon">✉</span>
+                                            <span class="screen-reader-text">{{ __('Accéder à la page contact MJ', 'mj-member') }}</span>
+                                        </a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        {% endif %}
+                    </div>
+                </article>
+            {% endfor %}
+        </div>
+    </section>
+{% endif %}

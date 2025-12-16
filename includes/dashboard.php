@@ -1,16 +1,13 @@
 <?php
 
+use Mj\Member\Admin\Page\HoursPage;
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\Crud\MjEvents;
+use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjMemberHours;
 
 if (!defined('ABSPATH')) {
     exit;
-}
-
-if (!class_exists('MjEvents_CRUD')) {
-    $events_crud_path = trailingslashit(Config::path()) . 'includes/classes/crud/MjEvents_CRUD.php';
-    if (file_exists($events_crud_path)) {
-        require_once $events_crud_path;
-    }
 }
 
 function mj_member_dashboard_page() {
@@ -24,6 +21,7 @@ function mj_member_dashboard_page() {
     $event_stats = mj_member_get_event_statistics();
     $membership_summary = mj_member_get_membership_due_summary();
     $recent_members = mj_member_get_recent_members();
+    $hours_summary = mj_member_get_hours_weekly_summary();
 
     $timezone = wp_timezone();
     $max_value = 0;
@@ -49,6 +47,7 @@ function mj_member_dashboard_page() {
     $membership_up_to_date = number_format_i18n((int) $membership_summary['up_to_date_count']);
     $membership_upcoming_items = isset($membership_summary['upcoming']) ? $membership_summary['upcoming'] : array();
     $upcoming_events_summary = isset($event_stats['upcoming_events_summary']) ? $event_stats['upcoming_events_summary'] : array();
+    $hours_summary_blocks = isset($hours_summary) ? $hours_summary : array();
     $upcoming_events_displayed = number_format_i18n(count($upcoming_events_summary));
     ?>
     <div class="wrap mj-member-dashboard">
@@ -240,6 +239,45 @@ function mj_member_dashboard_page() {
                 <?php endif; ?>
             </div>
 
+            <div class="mj-dashboard-panel mj-dashboard-panel--hours">
+                <h2><?php esc_html_e('Heures bénévoles (semaines récentes)', 'mj-member'); ?></h2>
+                <?php if (empty($hours_summary_blocks)) : ?>
+                    <p class="mj-hours-summary__empty"><?php esc_html_e('Aucune heure encodée récemment.', 'mj-member'); ?></p>
+                <?php else : ?>
+                    <?php foreach ($hours_summary_blocks as $hours_week) :
+                        $week_label = isset($hours_week['week_label']) ? $hours_week['week_label'] : '';
+                        $week_items = isset($hours_week['items']) ? $hours_week['items'] : array();
+                        ?>
+                        <section class="mj-hours-summary__week">
+                            <h3><?php echo esc_html($week_label); ?></h3>
+                            <?php if (empty($week_items)) : ?>
+                                <p class="mj-hours-summary__week-empty"><?php esc_html_e('Aucune heure déclarée pour cette semaine.', 'mj-member'); ?></p>
+                            <?php else : ?>
+                                <table class="mj-hours-summary__table">
+                                    <thead>
+                                        <tr>
+                                            <th><?php esc_html_e('Membre', 'mj-member'); ?></th>
+                                            <th><?php esc_html_e('Durée totale', 'mj-member'); ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($week_items as $week_item) :
+                                            $member_label = isset($week_item['member_label']) ? $week_item['member_label'] : '';
+                                            $duration_label = isset($week_item['duration_human']) ? $week_item['duration_human'] : '';
+                                            ?>
+                                            <tr>
+                                                <td><?php echo esc_html($member_label); ?></td>
+                                                <td><?php echo esc_html($duration_label); ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            <?php endif; ?>
+                        </section>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+
             <div class="mj-dashboard-panel mj-dashboard-panel--events-upcoming">
                 <h2><?php esc_html_e('Événements à venir', 'mj-member'); ?></h2>
                 <?php if (empty($upcoming_events_summary)) : ?>
@@ -417,7 +455,7 @@ function mj_member_dashboard_page() {
 function mj_member_get_dashboard_stats() {
     global $wpdb;
 
-    $members_table = MjMembers_CRUD::getTableName(MjMembers_CRUD::TABLE_NAME);
+    $members_table = MjMembers::getTableName(MjMembers::TABLE_NAME);
     $payments_table = $wpdb->prefix . 'mj_payments';
     $registrations_table = mj_member_get_event_registrations_table_name();
 
@@ -434,13 +472,13 @@ function mj_member_get_dashboard_stats() {
 
     $stats['active_members'] = (int) $wpdb->get_var($wpdb->prepare(
         "SELECT COUNT(*) FROM {$members_table} WHERE status = %s",
-        MjMembers_CRUD::STATUS_ACTIVE
+        MjMembers::STATUS_ACTIVE
     ));
 
     $stats['active_animateurs'] = (int) $wpdb->get_var($wpdb->prepare(
         "SELECT COUNT(*) FROM {$members_table} WHERE status = %s AND role = %s",
-        MjMembers_CRUD::STATUS_ACTIVE,
-        MjMembers_CRUD::ROLE_ANIMATEUR
+        MjMembers::STATUS_ACTIVE,
+        MjMembers::ROLE_ANIMATEUR
     ));
 
     $payments_row = $wpdb->get_row($wpdb->prepare(
@@ -530,12 +568,12 @@ function mj_member_get_dashboard_monthly_series($months = 6) {
 function mj_member_get_member_statistics() {
     global $wpdb;
 
-    $table = MjMembers_CRUD::getTableName(MjMembers_CRUD::TABLE_NAME);
+    $table = MjMembers::getTableName(MjMembers::TABLE_NAME);
     $total_members = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
     $percent_base = $total_members > 0 ? $total_members : 1;
 
     // Aggregate counts by role, status, payment situation, and age brackets.
-    $role_labels = MjMembers_CRUD::getRoleLabels();
+    $role_labels = MjMembers::getRoleLabels();
     $roles = array();
     foreach ($role_labels as $key => $label) {
         $roles[$key] = array(
@@ -577,8 +615,8 @@ function mj_member_get_member_statistics() {
     unset($role);
 
     $status_labels = array(
-        MjMembers_CRUD::STATUS_ACTIVE => __('Actif', 'mj-member'),
-        MjMembers_CRUD::STATUS_INACTIVE => __('Inactif', 'mj-member'),
+        MjMembers::STATUS_ACTIVE => __('Actif', 'mj-member'),
+        MjMembers::STATUS_INACTIVE => __('Inactif', 'mj-member'),
         'other' => __('Autre', 'mj-member'),
     );
     $statuses = array();
@@ -755,17 +793,17 @@ function mj_member_get_event_statistics() {
         return $stats;
     }
 
-    if (class_exists('MjEvents_CRUD')) {
+    if (class_exists('MjEvents')) {
         $stats['total_events'] = (int) $wpdb->get_var($wpdb->prepare(
             "SELECT COUNT(*) FROM {$events_table} WHERE status = %s",
-            MjEvents_CRUD::STATUS_ACTIVE
+            MjEvents::STATUS_ACTIVE
         ));
 
         $stats['upcoming_events'] = (int) $wpdb->get_var($wpdb->prepare(
             "SELECT COUNT(*) FROM {$events_table}
              WHERE status = %s
              AND (date_debut IS NULL OR date_debut = '0000-00-00 00:00:00' OR date_debut >= %s)",
-            MjEvents_CRUD::STATUS_ACTIVE,
+            MjEvents::STATUS_ACTIVE,
             $today_start
         ));
     }
@@ -811,7 +849,7 @@ function mj_member_get_event_statistics() {
     }
     $stats['registration_breakdown'] = $registration_breakdown;
 
-    if (class_exists('MjEvents_CRUD')) {
+    if (class_exists('MjEvents')) {
         $active_statuses = array(
             MjEventRegistrations::STATUS_PENDING,
             MjEventRegistrations::STATUS_CONFIRMED,
@@ -840,7 +878,7 @@ function mj_member_get_event_statistics() {
             $active_statuses,
             array(
                 MjEventRegistrations::STATUS_WAITLIST,
-                MjEvents_CRUD::STATUS_ACTIVE,
+                MjEvents::STATUS_ACTIVE,
             )
         );
 
@@ -897,7 +935,7 @@ function mj_member_get_event_statistics() {
             $active_statuses,
             array(
                 MjEventRegistrations::STATUS_WAITLIST,
-                MjEvents_CRUD::STATUS_ACTIVE,
+                MjEvents::STATUS_ACTIVE,
                 $today_start,
             )
         );
@@ -935,6 +973,179 @@ function mj_member_get_event_statistics() {
     return $stats;
 }
 
+function mj_member_get_hours_weekly_summary($weeks = 6, $perWeek = 5) {
+    global $wpdb;
+
+    if (!class_exists(MjMemberHours::class)) {
+        return array();
+    }
+
+    $weeks = max(1, (int) $weeks);
+    $perWeek = max(1, (int) $perWeek);
+
+    $rows = MjMemberHours::get_weekly_totals(array(
+        'weeks' => $weeks,
+    ));
+
+    if (empty($rows)) {
+        return array();
+    }
+
+    $grouped = array();
+    $memberIds = array();
+
+    foreach ($rows as $row) {
+        $weekKey = isset($row['week_key']) ? (int) $row['week_key'] : 0;
+        $memberId = isset($row['member_id']) ? (int) $row['member_id'] : 0;
+        $minutes = isset($row['total_minutes']) ? (int) $row['total_minutes'] : 0;
+
+        if ($memberId <= 0 || $minutes <= 0) {
+            continue;
+        }
+
+        if (!isset($grouped[$weekKey])) {
+            $grouped[$weekKey] = array(
+                'week_key' => $weekKey,
+                'week_start' => isset($row['week_start']) ? (string) $row['week_start'] : '',
+                'week_end' => isset($row['week_end']) ? (string) $row['week_end'] : '',
+                'items' => array(),
+            );
+        }
+
+        if (count($grouped[$weekKey]['items']) >= $perWeek) {
+            continue;
+        }
+
+        $grouped[$weekKey]['items'][] = array(
+            'member_id' => $memberId,
+            'total_minutes' => $minutes,
+        );
+
+        $memberIds[$memberId] = true;
+    }
+
+    if (empty($grouped)) {
+        return array();
+    }
+
+    $memberLabels = mj_member_load_member_labels(array_keys($memberIds));
+
+    foreach ($grouped as $weekKey => &$weekData) {
+        $range = mj_member_format_hour_week_range($weekKey, $weekData['week_start'], $weekData['week_end']);
+        $weekData['week_label'] = $range['label'];
+
+        $weekData['items'] = array_map(static function ($item) use ($memberLabels) {
+            $memberId = isset($item['member_id']) ? (int) $item['member_id'] : 0;
+            $minutes = isset($item['total_minutes']) ? (int) $item['total_minutes'] : 0;
+
+            $label = isset($memberLabels[$memberId]) ? $memberLabels[$memberId] : sprintf(__('Membre #%d', 'mj-member'), $memberId);
+
+            return array(
+                'member_id' => $memberId,
+                'member_label' => $label,
+                'total_minutes' => $minutes,
+                'duration_human' => HoursPage::formatDuration($minutes),
+            );
+        }, $weekData['items']);
+    }
+    unset($weekData);
+
+    krsort($grouped);
+
+    return array_values($grouped);
+}
+
+function mj_member_load_member_labels(array $memberIds) {
+    global $wpdb;
+
+    $labels = array();
+
+    if (empty($memberIds)) {
+        return $labels;
+    }
+
+    $memberIds = array_filter(array_map('intval', $memberIds));
+    if (empty($memberIds)) {
+        return $labels;
+    }
+
+    $placeholders = implode(',', array_fill(0, count($memberIds), '%d'));
+    $table = MjMembers::getTableName(MjMembers::TABLE_NAME);
+    $query = $wpdb->prepare(
+        "SELECT id, first_name, last_name FROM {$table} WHERE id IN ({$placeholders})",
+        ...$memberIds
+    );
+    $rows = $wpdb->get_results($query);
+
+    if (!is_array($rows)) {
+        return $labels;
+    }
+
+    foreach ($rows as $row) {
+        $id = isset($row->id) ? (int) $row->id : 0;
+        $first = isset($row->first_name) ? trim((string) $row->first_name) : '';
+        $last = isset($row->last_name) ? trim((string) $row->last_name) : '';
+        $label = trim($first . ' ' . $last);
+        if ($label === '') {
+            $label = sprintf(__('Membre #%d', 'mj-member'), $id);
+        }
+        $labels[$id] = $label;
+    }
+
+    return $labels;
+}
+
+function mj_member_format_hour_week_range(int $weekKey, string $fallbackStart = '', string $fallbackEnd = '') {
+    $timezone = wp_timezone();
+    $weekNumber = 0;
+    $startDate = $fallbackStart;
+    $endDate = $fallbackEnd;
+
+    if ($weekKey > 0) {
+        $isoYear = (int) floor($weekKey / 100);
+        $isoWeek = $weekKey % 100;
+
+        try {
+            $start = (new \DateTimeImmutable('now', $timezone))->setISODate($isoYear, $isoWeek, 1);
+            $end = (new \DateTimeImmutable('now', $timezone))->setISODate($isoYear, $isoWeek, 7);
+
+            $startDate = $start->format('Y-m-d');
+            $endDate = $end->format('Y-m-d');
+            $weekNumber = (int) $start->format('W');
+        } catch (\Exception $exception) {
+            // Fallback to existing dates if parsing fails.
+        }
+    }
+
+    if ($weekNumber === 0 && $startDate !== '') {
+        $timestamp = strtotime($startDate);
+        if ($timestamp !== false) {
+            $weekNumber = (int) gmdate('W', $timestamp);
+        }
+    }
+
+    $startLabel = HoursPage::formatDate($startDate);
+    if ($startLabel === '' && $startDate !== '') {
+        $startLabel = $startDate;
+    }
+
+    $endLabel = HoursPage::formatDate($endDate);
+    if ($endLabel === '' && $endDate !== '') {
+        $endLabel = $endDate;
+    }
+
+    $label = ($startLabel !== '' && $endLabel !== '')
+        ? sprintf(__('Semaine %1$d : %2$s - %3$s', 'mj-member'), $weekNumber, $startLabel, $endLabel)
+        : sprintf(__('Semaine %d', 'mj-member'), $weekNumber);
+
+    return array(
+        'label' => $label,
+        'start' => $startDate,
+        'end' => $endDate,
+        'week_number' => $weekNumber,
+    );
+}
+
 function mj_member_get_membership_due_summary() {
     global $wpdb;
 
@@ -947,11 +1158,11 @@ function mj_member_get_membership_due_summary() {
         'upcoming' => array(),
     );
 
-    if (!class_exists('MjMembers_CRUD')) {
+    if (!class_exists('MjMembers')) {
         return $summary;
     }
 
-    $members_table = MjMembers_CRUD::getTableName(MjMembers_CRUD::TABLE_NAME);
+    $members_table = MjMembers::getTableName(MjMembers::TABLE_NAME);
     if (empty($members_table)) {
         return $summary;
     }
@@ -967,7 +1178,7 @@ function mj_member_get_membership_due_summary() {
         "SELECT id, first_name, last_name, email, date_last_payement, requires_payment, status
          FROM {$members_table}
          WHERE requires_payment = 1 AND (status = %s OR status = %s OR status IS NULL)",
-        MjMembers_CRUD::STATUS_ACTIVE,
+        MjMembers::STATUS_ACTIVE,
         ''
     ));
 
@@ -1050,12 +1261,12 @@ function mj_member_get_membership_due_summary() {
 }
 
 function mj_member_get_recent_members($limit = 5) {
-    if (!class_exists('MjMembers_CRUD')) {
+    if (!class_exists('MjMembers')) {
         return array();
     }
 
     global $wpdb;
-    $table = MjMembers_CRUD::getTableName(MjMembers_CRUD::TABLE_NAME);
+    $table = MjMembers::getTableName(MjMembers::TABLE_NAME);
     if (empty($table)) {
         return array();
     }
@@ -1076,8 +1287,8 @@ function mj_member_get_recent_members($limit = 5) {
     }
 
     $status_labels = array(
-        MjMembers_CRUD::STATUS_ACTIVE => __('Actif', 'mj-member'),
-        MjMembers_CRUD::STATUS_INACTIVE => __('Inactif', 'mj-member'),
+        MjMembers::STATUS_ACTIVE => __('Actif', 'mj-member'),
+        MjMembers::STATUS_INACTIVE => __('Inactif', 'mj-member'),
     );
 
     $timezone = wp_timezone();
@@ -1173,6 +1384,15 @@ function mj_member_dashboard_styles() {
         .mj-events-upcoming__table th,
         .mj-events-upcoming__table td { text-align: left; padding: 6px 0; border-bottom: 1px solid #dcdcde; }
         .mj-events-upcoming__table th { font-weight: 600; color: #1d2327; }
+        .mj-dashboard-panel--hours .mj-hours-summary__week { margin: 18px 0 0; padding: 16px 0 0; border-top: 1px solid #dcdcde; }
+        .mj-dashboard-panel--hours .mj-hours-summary__week:first-of-type { margin-top: 12px; border-top: none; padding-top: 0; }
+        .mj-hours-summary__week h3 { margin: 0 0 8px; font-size: 1rem; color: #1d2327; }
+        .mj-hours-summary__table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .mj-hours-summary__table th,
+        .mj-hours-summary__table td { text-align: left; padding: 6px 0; border-bottom: 1px solid #dcdcde; }
+        .mj-hours-summary__table th { font-weight: 600; color: #1d2327; }
+        .mj-hours-summary__week-empty,
+        .mj-hours-summary__empty { margin: 0; color: #50575e; }
         .mj-dashboard-panel--recent-members .mj-recent-members__table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
         .mj-recent-members__table th,
         .mj-recent-members__table td { text-align: left; padding: 6px 0; border-bottom: 1px solid #dcdcde; }

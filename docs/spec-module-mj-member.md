@@ -5,7 +5,7 @@ MJ Member est un plugin WordPress conçu pour centraliser la gestion des membres
 
 ## Périmètre fonctionnel
 ### Gestion des membres
-- CRUD complet dans l'administration (`mj_members_page`, `MjMembers_CRUD`).
+- CRUD complet dans l'administration (`mj_members_page`, `MjMembers`).
 - Rôles supportés : jeunes, tuteurs, animateurs, bénévoles.
 - Gestion des tuteurs et rattachement de plusieurs jeunes via `guardian_id`.
 - Suivi des statuts (actif/inactif), des consentements photo et des préférences de communication.
@@ -16,7 +16,7 @@ MJ Member est un plugin WordPress conçu pour centraliser la gestion des membres
 - Historique des paiements et journalisation (`mj_payments`, `mj_payment_history`).
 
 ### Événements et inscriptions
-- CRUD événements/stages (`MjEvents_CRUD`, interfaces `includes/forms/form_event.php` et `includes/table_events.php`).
+- CRUD événements/stages (`MjMembers`, interfaces `includes/forms/form_event.php` et `includes/table_events.php`).
 - Gestion des lieux (`MjEventLocations`), animateurs associés (`MjEventAnimateurs`), capacités et récurrences.
 - Inscriptions membres ou tuteurs (`MjEventRegistrations`, `MjEventAttendance`) avec files d'attente et suivi de présence.
 

@@ -2,6 +2,7 @@
 
 namespace Mj\Member\Classes\Table;
 
+use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\MjTools;
 use Mj\Member\Core\Config;
 use WP_List_Table;
@@ -29,17 +30,76 @@ class MjEvents_List_Table extends WP_List_Table {
         'sortie' => 'Sortie',
     );
 
+    /** @var array<string, mixed> */
+    private $requestArgs = array();
     /** @var array<string, string> */
     private $activeFilters = array();
     /** @var array<int, array<string, int>> */
     private $registrationStats = array();
+    /** @var array<int,string> */
+    private $lastDeleteErrors = array();
 
     public function __construct() {
         parent::__construct(array(
             'singular' => 'mj_event',
             'plural'   => 'mj_events',
-            'ajax'     => false,
+            'ajax'     => true,
         ));
+    }
+
+    /**
+     * Définit un jeu de variables de requête utilisé pour les appels AJAX.
+     *
+     * @param array<string, mixed> $args
+     * @return void
+     */
+    public function setRequestArgs(array $args): void {
+        $this->requestArgs = array();
+
+        foreach ($args as $key => $value) {
+            if (!is_string($key)) {
+                continue;
+            }
+
+            if (is_string($value)) {
+                $this->requestArgs[$key] = wp_unslash($value);
+                continue;
+            }
+
+            $this->requestArgs[$key] = $value;
+        }
+    }
+
+    /**
+     * Récupère une valeur de requête en tenant compte des surcharges AJAX.
+     *
+     * @param string $key
+     * @param mixed $default
+     * @return mixed
+     */
+    private function getRequestValue(string $key, $default = '') {
+        if (array_key_exists($key, $this->requestArgs)) {
+            return $this->requestArgs[$key];
+        }
+
+        if (isset($_REQUEST[$key])) {
+            $value = $_REQUEST[$key];
+            return is_string($value) ? wp_unslash($value) : $value;
+        }
+
+        return $default;
+    }
+
+    public function get_pagenum() {
+        $requested = $this->getRequestValue('paged', null);
+        if ($requested !== null && $requested !== '') {
+            $page = (int) $requested;
+            if ($page > 0) {
+                return $page;
+            }
+        }
+
+        return parent::get_pagenum();
     }
 
     public function get_columns() {
@@ -94,9 +154,13 @@ class MjEvents_List_Table extends WP_List_Table {
         $current_page = $this->get_pagenum();
         $offset       = ($current_page - 1) * $per_page;
 
-        $status_filter = isset($_REQUEST['filter_status']) ? sanitize_key(wp_unslash($_REQUEST['filter_status'])) : '';
-        $type_filter   = isset($_REQUEST['filter_type']) ? sanitize_key(wp_unslash($_REQUEST['filter_type'])) : '';
-        $search        = isset($_REQUEST['s']) ? sanitize_text_field(wp_unslash($_REQUEST['s'])) : '';
+        $status_raw = $this->getRequestValue('filter_status', '');
+        $type_raw = $this->getRequestValue('filter_type', '');
+        $search_raw = $this->getRequestValue('s', '');
+
+        $status_filter = $status_raw !== '' ? sanitize_key((string) $status_raw) : '';
+        $type_filter = $type_raw !== '' ? sanitize_key((string) $type_raw) : '';
+        $search = $search_raw !== '' ? sanitize_text_field((string) $search_raw) : '';
 
         if (!array_key_exists($status_filter, self::STATUSES)) {
             $status_filter = '';
@@ -137,12 +201,14 @@ class MjEvents_List_Table extends WP_List_Table {
         $has_locations = mj_member_table_exists($locations_table);
 
         $allowed_orderby = array('title', 'status', 'type', 'date_debut', 'date_fin', 'date_fin_inscription', 'location', 'prix', 'updated_at');
-        $orderby         = isset($_REQUEST['orderby']) ? sanitize_key(wp_unslash($_REQUEST['orderby'])) : 'date_debut';
+        $orderby_raw     = $this->getRequestValue('orderby', 'date_debut');
+        $orderby         = $orderby_raw !== '' ? sanitize_key((string) $orderby_raw) : 'date_debut';
         if (!in_array($orderby, $allowed_orderby, true)) {
             $orderby = 'date_debut';
         }
 
-        $order = isset($_REQUEST['order']) ? strtoupper(sanitize_text_field(wp_unslash($_REQUEST['order']))) : 'DESC';
+        $order_raw = $this->getRequestValue('order', 'DESC');
+        $order = strtoupper(sanitize_text_field((string) $order_raw));
         $order = $order === 'ASC' ? 'ASC' : 'DESC';
 
         $orderby_map = array(
@@ -287,13 +353,13 @@ class MjEvents_List_Table extends WP_List_Table {
         $label  = self::STATUSES[$status] ?? ucfirst($status);
 
         $color_map = array(
-            'actif'     => '#28a745',
-            'brouillon' => '#6c757d',
-            'passe'     => '#6f42c1',
+            'actif'     => 'background:#28a745;',
+            'brouillon' => 'background:#6c757d;',
+            'passe'     => 'background:#6f42c1;',
         );
-        $background = $color_map[$status] ?? '#6c757d';
+        $background = $color_map[$status] ?? 'background:#6c757d;';
 
-        return '<span class="mj-status-badge" style="display:inline-block;padding:3px 8px;border-radius:12px;font-size:12px;color:#fff;background:' . esc_attr($background) . ';">' . esc_html($label) . '</span>';
+        return '<span class="mj-editable badge" data-event-id="' . esc_attr($item['id']) . '" data-field-name="status" data-field-type="select" data-field-value="' . esc_attr($status) . '" title="Cliquez pour éditer" style="' . esc_attr($background . 'color:#fff;padding:3px 8px;border-radius:12px;font-size:12px;display:inline-block;') . '">' . esc_html($label) . '</span>';
     }
 
     public function column_type($item) {
@@ -307,13 +373,18 @@ class MjEvents_List_Table extends WP_List_Table {
         $article_id = isset($item['article_id']) ? (int) $item['article_id'] : 0;
         $title = isset($item['title']) ? (string) $item['title'] : '';
 
+        $output = '<div class="mj-cover-container" style="text-align:center;">';
+
         if ($cover_id > 0) {
             $image_html = wp_get_attachment_image($cover_id, array(80, 80), false, array(
                 'style' => 'max-height:60px;width:auto;border-radius:4px;display:block;margin:0 auto;',
+                'class' => 'mj-event-cover',
             ));
 
             if ($image_html) {
-                return wp_kses_post($image_html);
+                $output .= wp_kses_post($image_html);
+                $output .= '</div>';
+                return $output;
             }
         }
 
@@ -332,16 +403,20 @@ class MjEvents_List_Table extends WP_List_Table {
                 }
 
                 if ($article_cover_url !== '') {
-                    return sprintf(
-                        '<img src="%1$s" alt="%2$s" style="max-height:60px;width:auto;border-radius:4px;display:block;margin:0 auto;" />',
+                    $output .= sprintf(
+                        '<img src="%1$s" alt="%2$s" class="mj-event-cover" style="max-height:60px;width:auto;border-radius:4px;display:block;margin:0 auto;" />',
                         esc_url($article_cover_url),
                         esc_attr($title)
                     );
+                    $output .= '</div>';
+                    return $output;
                 }
             }
         }
 
-        return '<span style="color:#6c757d;">Aucun visuel</span>';
+        $output .= '<span style="color:#6c757d;">Aucun visuel</span>';
+        $output .= '</div>';
+        return $output;
     }
 
     public function column_date_debut($item) {
@@ -467,15 +542,27 @@ class MjEvents_List_Table extends WP_List_Table {
         );
         $duplicate_url = wp_nonce_url($duplicate_url, 'mj_events_row_action');
 
+        $delete_url = add_query_arg(
+            array(
+                'page'   => 'mj_events',
+                'action' => 'delete',
+                'event'  => (int) $item['id'],
+            ),
+            admin_url('admin.php')
+        );
+        $delete_url = wp_nonce_url($delete_url, 'mj_events_row_action');
+
         $buttons = array();
-        $buttons[] = '<a class="mj-member-login-action" href="' . esc_url($edit_url) . '">✏️ Éditer</a>';
-        $buttons[] = '<a class="mj-member-login-action mj-member-login-action--create" href="' . esc_url($duplicate_url) . '">📄 Dupliquer</a>';
+        $confirm_message = esc_js(__('Supprimer définitivement cet événement ?', 'mj-member'));
+        $buttons[] = '<a class="button button-small mj-action-btn" href="' . esc_url($edit_url) . '">✏️ Éditer</a>';
+        $buttons[] = '<a class="button button-small mj-action-btn" href="' . esc_url($duplicate_url) . '">📄 Dupliquer</a>';
+        $buttons[] = '<a class="button button-small mj-action-btn mj-action-btn--danger" href="' . esc_url($delete_url) . '" onclick="return confirm(\'' . $confirm_message . '\');">🗑️ Supprimer</a>';
 
         if (empty($buttons)) {
             return '';
         }
 
-        return '<div class="mj-login-actions">' . implode('', $buttons) . '</div>';
+        return '<div class="mj-login-actions">' . implode(' ', $buttons) . '</div>';
     }
 
     public function column_default($item, $column_name) {
@@ -572,8 +659,16 @@ class MjEvents_List_Table extends WP_List_Table {
                 break;
             case 'delete':
                 $deleted = $this->delete_events($event_ids);
-                if ($deleted > 0) {
+                $error_count = count($this->lastDeleteErrors);
+                if ($deleted > 0 && $error_count === 0) {
                     $message = sprintf('%d événement(s) supprimé(s).', $deleted);
+                } elseif ($deleted > 0 && $error_count > 0) {
+                    $message = sprintf('%d événement(s) supprimé(s). %d suppression(s) en échec.', $deleted, $error_count);
+                    $message_type = 'warning';
+                } elseif ($error_count > 0) {
+                    $first_error = reset($this->lastDeleteErrors);
+                    $message = $first_error ? $first_error : 'Aucune suppression effectuée.';
+                    $message_type = 'error';
                 } else {
                     $message = 'Aucun événement supprimé.';
                     $message_type = 'warning';
@@ -738,80 +833,20 @@ class MjEvents_List_Table extends WP_List_Table {
             return 0;
         }
 
-        $wpdb         = MjTools::getWpdb();
-        $events_table = mj_member_get_events_table_name();
+        $this->lastDeleteErrors = array();
+        $deleted = 0;
 
-        if (!mj_member_table_exists($events_table)) {
-            return 0;
-        }
-
-        $ids           = array_values($normalized_ids);
-        $placeholders  = implode(',', array_fill(0, count($ids), '%d'));
-        $registration_ids = array();
-
-        if (function_exists('mj_member_get_event_registrations_table_name')) {
-            $registrations_table = mj_member_get_event_registrations_table_name();
-            if ($registrations_table && mj_member_table_exists($registrations_table)) {
-                $select_sql  = "SELECT id FROM {$registrations_table} WHERE event_id IN ($placeholders)";
-                $select_args = $ids;
-                array_unshift($select_args, $select_sql);
-                $prepared_select = call_user_func_array(array($wpdb, 'prepare'), $select_args);
-                $registration_ids = $wpdb->get_col($prepared_select);
-                if (!is_array($registration_ids)) {
-                    $registration_ids = array();
-                }
-
-                $delete_sql  = "DELETE FROM {$registrations_table} WHERE event_id IN ($placeholders)";
-                $delete_args = $ids;
-                array_unshift($delete_args, $delete_sql);
-                $prepared_delete = call_user_func_array(array($wpdb, 'prepare'), $delete_args);
-                $wpdb->query($prepared_delete);
+        foreach ($normalized_ids as $event_id) {
+            $result = MjEvents::delete($event_id);
+            if (is_wp_error($result)) {
+                $this->lastDeleteErrors[$event_id] = $result->get_error_message();
+                continue;
             }
+
+            $deleted++;
         }
 
-        if (function_exists('mj_member_get_event_animateurs_table_name')) {
-            $animateurs_table = mj_member_get_event_animateurs_table_name();
-            if ($animateurs_table && mj_member_table_exists($animateurs_table)) {
-                $delete_sql  = "DELETE FROM {$animateurs_table} WHERE event_id IN ($placeholders)";
-                $delete_args = $ids;
-                array_unshift($delete_args, $delete_sql);
-                $prepared_delete = call_user_func_array(array($wpdb, 'prepare'), $delete_args);
-                $wpdb->query($prepared_delete);
-            }
-        }
-
-        $payments_table = $wpdb->prefix . 'mj_payments';
-        if (mj_member_table_exists($payments_table)) {
-            $update_sql  = "UPDATE {$payments_table} SET event_id = NULL WHERE event_id IN ($placeholders)";
-            $update_args = $ids;
-            array_unshift($update_args, $update_sql);
-            $prepared_update = call_user_func_array(array($wpdb, 'prepare'), $update_args);
-            $wpdb->query($prepared_update);
-
-            if (!empty($registration_ids)) {
-                $registration_ids = array_values(array_unique(array_map('intval', $registration_ids)));
-                $registration_ids = array_filter($registration_ids, static function ($value) {
-                    return $value > 0;
-                });
-
-                if (!empty($registration_ids)) {
-                    $reg_placeholders = implode(',', array_fill(0, count($registration_ids), '%d'));
-                    $reg_update_sql   = "UPDATE {$payments_table} SET registration_id = NULL WHERE registration_id IN ($reg_placeholders)";
-                    $reg_update_args  = $registration_ids;
-                    array_unshift($reg_update_args, $reg_update_sql);
-                    $prepared_reg_update = call_user_func_array(array($wpdb, 'prepare'), $reg_update_args);
-                    $wpdb->query($prepared_reg_update);
-                }
-            }
-        }
-
-        $delete_sql  = "DELETE FROM {$events_table} WHERE id IN ($placeholders)";
-        $delete_args = $ids;
-        array_unshift($delete_args, $delete_sql);
-        $prepared_delete = call_user_func_array(array($wpdb, 'prepare'), $delete_args);
-        $wpdb->query($prepared_delete);
-
-        return (int) $wpdb->rows_affected;
+        return $deleted;
     }
 
     private function redirect_with_message($message, $type = 'success') {

@@ -4,7 +4,7 @@
 Plugin Name: MJ Member
 Plugin URI: https://mj-pery.be
 Description: Gestion des membres avec table CRUD
-Version: 2.14.0
+Version: 2.19.0
 Author: Simon
 */
 // Exit if accessed directly
@@ -22,6 +22,18 @@ use Mj\Member\Core\Config;
 
 Config::bootstrap(__FILE__);
 
+// Charge l'autoloader Composer du plugin ou global s'il est installé (ex: /www/vendor).
+if (!class_exists('Google\\Client') && defined('ABSPATH')) {
+    $pluginAutoload = __DIR__ . '/vendor/autoload.php';
+    $globalAutoload = trailingslashit(ABSPATH) . 'vendor/autoload.php';
+
+    if (is_readable($pluginAutoload)) {
+        require_once $pluginAutoload;
+    } elseif (is_readable($globalAutoload)) {
+        require_once $globalAutoload;
+    }
+}
+
 $basePath = Config::path();
 
 Autoloader::register(
@@ -29,6 +41,8 @@ Autoloader::register(
         'Mj\\Member\\Classes\\Crud\\' => $basePath . 'includes/classes/crud/',
         'Mj\\Member\\Classes\\Sms\\' => $basePath . 'includes/classes/sms/',
         'Mj\\Member\\Classes\\Table\\' => $basePath . 'includes/classes/table/',
+        'Mj\\Member\\Classes\\Forms\\' => $basePath . 'includes/classes/forms/',
+        'Mj\\Member\\Classes\\Value\\' => $basePath . 'includes/classes/value/',
         'Mj\\Member\\Classes\\' => $basePath . 'includes/classes/',
         'Mj\\Member\\Core\\' => $basePath . 'includes/core/',
         'Mj\\Member\\' => $basePath . 'includes/',
@@ -38,8 +52,8 @@ Autoloader::register(
         'MjPayments' => 'Mj\\Member\\Classes\\MjPayments',
         'MjSms' => 'Mj\\Member\\Classes\\MjSms',
         'MjSmsTwilio' => 'Mj\\Member\\Classes\\Sms\\MjSmsTwilio',
-        'MjMembers_CRUD' => 'Mj\\Member\\Classes\\Crud\\MjMembers_CRUD',
-        'MjEvents_CRUD' => 'Mj\\Member\\Classes\\Crud\\MjEvents_CRUD',
+        'MjMembers' => 'Mj\\Member\\Classes\\Crud\\MjMembers',
+        'MjEvents' => 'Mj\\Member\\Classes\\Crud\\MjEvents',
         'MjEventRegistrations' => 'Mj\\Member\\Classes\\Crud\\MjEventRegistrations',
         'MjEventLocations' => 'Mj\\Member\\Classes\\Crud\\MjEventLocations',
         'MjEventClosures' => 'Mj\\Member\\Classes\\Crud\\MjEventClosures',
@@ -47,6 +61,7 @@ Autoloader::register(
         'MjContactMessages' => 'Mj\\Member\\Classes\\Crud\\MjContactMessages',
         'MjEventAttendance' => 'Mj\\Member\\Classes\\Crud\\MjEventAttendance',
         'MjEventAnimateurs' => 'Mj\\Member\\Classes\\Crud\\MjEventAnimateurs',
+        'MjEventVolunteers' => 'Mj\\Member\\Classes\\Crud\\MjEventVolunteers',
         'MjEventSchedule' => 'Mj\\Member\\Classes\\MjEventSchedule',
         'MjEventGoogleCalendar' => 'Mj\\Member\\Classes\\MjEventGoogleCalendar',
         'MjStripeConfig' => 'Mj\\Member\\Classes\\MjStripeConfig',
@@ -114,24 +129,6 @@ function mj_enable_admin_debug() {
         add_action('admin_notices', function() {
             echo '<div class="notice notice-info is-dismissible"><p><strong>Mode debug activé :</strong> affichage des erreurs activé pour l\'administrateur courant.</p></div>';
         });
-    }
-}
-
-// Handle payment confirmation via GET token
-add_action('init', 'mj_handle_payment_confirmation');
-function mj_handle_payment_confirmation() {
-    if (!empty($_GET['mj_payment_confirm'])) {
-        $token = sanitize_text_field($_GET['mj_payment_confirm']);
-        require_once plugin_dir_path(__FILE__) . 'includes/classes/MjPayments.php';
-        $ok = MjPayments::confirm_payment_by_token($token);
-        // Simple feedback page
-        if ($ok) {
-            wp_redirect(add_query_arg('mj_payment_status', 'ok', remove_query_arg('mj_payment_confirm')));
-            exit;
-        } else {
-            wp_redirect(add_query_arg('mj_payment_status', 'error', remove_query_arg('mj_payment_confirm')));
-            exit;
-        }
     }
 }
 

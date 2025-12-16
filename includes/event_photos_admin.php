@@ -18,6 +18,9 @@ if (!function_exists('mj_member_event_photos_page')) {
             wp_die(esc_html__('Accès refusé.', 'mj-member'));
         }
 
+        wp_enqueue_script('jquery');
+        wp_enqueue_script('wp-a11y');
+
         $status_filter = isset($_GET['status']) ? sanitize_key(wp_unslash($_GET['status'])) : MjEventPhotos::STATUS_PENDING;
         if ($status_filter !== '' && !in_array($status_filter, array_keys(MjEventPhotos::get_status_labels()), true)) {
             $status_filter = MjEventPhotos::STATUS_PENDING;
@@ -85,7 +88,9 @@ if (!function_exists('mj_member_event_photos_page')) {
                             <th><?php esc_html_e('Photo', 'mj-member'); ?></th>
                             <th><?php esc_html_e('Événement', 'mj-member'); ?></th>
                             <th><?php esc_html_e('Participant', 'mj-member'); ?></th>
+                            <th><?php esc_html_e('Légende', 'mj-member'); ?></th>
                             <th><?php esc_html_e('Statut', 'mj-member'); ?></th>
+                            <th><?php esc_html_e('Motif', 'mj-member'); ?></th>
                             <th><?php esc_html_e('Soumise le', 'mj-member'); ?></th>
                             <th><?php esc_html_e('Actions', 'mj-member'); ?></th>
                         </tr>
@@ -97,12 +102,12 @@ if (!function_exists('mj_member_event_photos_page')) {
                             $event_id = (int) $row->event_id;
                             $member_id = (int) $row->member_id;
 
-                            if ($event_id > 0 && !isset($events_cache[$event_id]) && class_exists('MjEvents_CRUD')) {
-                                $events_cache[$event_id] = MjEvents_CRUD::find($event_id);
+                            if ($event_id > 0 && !isset($events_cache[$event_id]) && class_exists('MjEvents')) {
+                                $events_cache[$event_id] = MjEvents::find($event_id);
                             }
 
-                            if ($member_id > 0 && !isset($members_cache[$member_id]) && class_exists('MjMembers_CRUD')) {
-                                $members_cache[$member_id] = MjMembers_CRUD::getById($member_id);
+                            if ($member_id > 0 && !isset($members_cache[$member_id]) && class_exists('MjMembers')) {
+                                $members_cache[$member_id] = MjMembers::getById($member_id);
                             }
 
                             $event = isset($events_cache[$event_id]) ? $events_cache[$event_id] : null;
@@ -111,12 +116,15 @@ if (!function_exists('mj_member_event_photos_page')) {
                             $event_title = $event && isset($event->title) ? $event->title : sprintf(__('Événement #%d', 'mj-member'), $event_id);
                             $event_link = $event && isset($event->slug) ? mj_member_get_event_public_link($event) : '';
                             $member_name = $member ? mj_member_event_photos_format_member_name($member) : sprintf(__('Membre #%d', 'mj-member'), $member_id);
+                            $caption_value = isset($row->caption) ? sanitize_text_field((string) $row->caption) : '';
                             $thumbnail = $attachment_id ? wp_get_attachment_image($attachment_id, array(120, 120)) : '';
                             $status = isset($row->status) ? sanitize_key((string) $row->status) : MjEventPhotos::STATUS_PENDING;
                             $status_label = isset($status_labels[$status]) ? $status_labels[$status] : $status;
                             $submitted_at = isset($row->created_at) ? strtotime((string) $row->created_at) : 0;
                             $submitted_display = $submitted_at ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $submitted_at) : '';
+                            $rejection_reason = isset($row->rejection_reason) ? sanitize_text_field((string) $row->rejection_reason) : '';
                             $nonce = wp_create_nonce('mj-member-review-photo-' . $photo_id);
+                            $caption_nonce = wp_create_nonce('mj-member-update-photo-caption-' . $photo_id);
                             $redirect_to = esc_url(add_query_arg(array('status' => $status_filter, 'paged' => $paged)));
                             ?>
                             <tr>
@@ -130,7 +138,35 @@ if (!function_exists('mj_member_event_photos_page')) {
                                     <?php endif; ?>
                                 </td>
                                 <td><?php echo esc_html($member_name); ?></td>
+                                <td class="mj-event-photos-admin__caption-cell">
+                                    <div class="mj-event-photos-admin__caption-view">
+                                        <span class="mj-event-photos-admin__caption-text<?php echo $caption_value === '' ? ' is-empty' : ''; ?>" data-caption="<?php echo esc_attr($caption_value); ?>">
+                                            <?php echo $caption_value === '' ? esc_html__('Sans légende', 'mj-member') : esc_html($caption_value); ?>
+                                        </span>
+                                        <button type="button" class="button-link mj-event-photos-admin__caption-edit" data-photo-id="<?php echo esc_attr($photo_id); ?>">
+                                            <?php esc_html_e('Modifier', 'mj-member'); ?>
+                                        </button>
+                                    </div>
+                                    <div class="mj-event-photos-admin__caption-editor" hidden>
+                                        <textarea maxlength="180" placeholder="<?php esc_attr_e('Ajouter une légende...', 'mj-member'); ?>"><?php echo esc_textarea($caption_value); ?></textarea>
+                                        <div class="mj-event-photos-admin__caption-actions">
+                                            <button type="button" class="button button-primary mj-event-photos-admin__caption-save" data-photo-id="<?php echo esc_attr($photo_id); ?>" data-nonce="<?php echo esc_attr($caption_nonce); ?>">
+                                                <?php esc_html_e('Enregistrer', 'mj-member'); ?>
+                                            </button>
+                                            <button type="button" class="button mj-event-photos-admin__caption-cancel">
+                                                <?php esc_html_e('Annuler', 'mj-member'); ?>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </td>
                                 <td><?php echo esc_html($status_label); ?></td>
+                                <td>
+                                    <?php if ($status === MjEventPhotos::STATUS_REJECTED && $rejection_reason !== '') : ?>
+                                        <?php echo esc_html($rejection_reason); ?>
+                                    <?php else : ?>
+                                        <span aria-hidden="true">—</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?php echo esc_html($submitted_display); ?></td>
                                 <td>
                                     <div style="display:flex;flex-direction:column;gap:6px;">
@@ -167,6 +203,99 @@ if (!function_exists('mj_member_event_photos_page')) {
                 </table>
             <?php endif; ?>
         </div>
+        <script>
+        (function($) {
+            const labels = {
+                empty: <?php echo wp_json_encode(__('Sans légende', 'mj-member')); ?>,
+                success: <?php echo wp_json_encode(__('Légende mise à jour.', 'mj-member')); ?>,
+                error: <?php echo wp_json_encode(__('Impossible de mettre à jour la légende.', 'mj-member')); ?>
+            };
+
+            function closeEditor(cell) {
+                cell.removeClass('is-editing');
+                cell.find('.mj-event-photos-admin__caption-editor').prop('hidden', true);
+                cell.find('.mj-event-photos-admin__caption-view').prop('hidden', false);
+                cell.find('.mj-event-photos-admin__caption-save, .mj-event-photos-admin__caption-cancel').prop('disabled', false);
+            }
+
+            $(document).on('click', '.mj-event-photos-admin__caption-edit', function(event) {
+                event.preventDefault();
+                const cell = $(this).closest('.mj-event-photos-admin__caption-cell');
+                const editor = cell.find('.mj-event-photos-admin__caption-editor');
+                const view = cell.find('.mj-event-photos-admin__caption-view');
+                const textarea = editor.find('textarea');
+                const currentCaption = cell.find('.mj-event-photos-admin__caption-text').data('caption') || '';
+
+                textarea.val(currentCaption);
+                cell.addClass('is-editing');
+                view.prop('hidden', true);
+                editor.prop('hidden', false);
+                textarea.trigger('focus');
+            });
+
+            $(document).on('click', '.mj-event-photos-admin__caption-cancel', function(event) {
+                event.preventDefault();
+                const cell = $(this).closest('.mj-event-photos-admin__caption-cell');
+                closeEditor(cell);
+            });
+
+            $(document).on('click', '.mj-event-photos-admin__caption-save', function(event) {
+                event.preventDefault();
+                const button = $(this);
+                const cell = button.closest('.mj-event-photos-admin__caption-cell');
+                const textarea = cell.find('textarea');
+                const caption = textarea.val();
+                const photoId = button.data('photoId');
+                const nonce = button.data('nonce');
+
+                if (!photoId || !nonce) {
+                    window.alert(labels.error);
+                    return;
+                }
+
+                cell.addClass('is-loading');
+                button.prop('disabled', true);
+                cell.find('.mj-event-photos-admin__caption-cancel').prop('disabled', true);
+
+                $.post(ajaxurl, {
+                    action: 'mj_member_update_event_photo_caption',
+                    photo_id: photoId,
+                    caption: caption,
+                    nonce: nonce
+                }).done(function(response) {
+                    cell.removeClass('is-loading');
+                    button.prop('disabled', false);
+                    cell.find('.mj-event-photos-admin__caption-cancel').prop('disabled', false);
+
+                    if (!response || !response.success) {
+                        const message = response && response.data && response.data.message ? response.data.message : labels.error;
+                        window.alert(message);
+                        return;
+                    }
+
+                    const newCaption = response.data.caption || '';
+                    const textNode = cell.find('.mj-event-photos-admin__caption-text');
+                    textNode.data('caption', newCaption);
+                    if (newCaption === '') {
+                        textNode.text(labels.empty).addClass('is-empty');
+                    } else {
+                        textNode.text(newCaption).removeClass('is-empty');
+                    }
+
+                    closeEditor(cell);
+
+                    if (window.wp && wp.a11y && typeof wp.a11y.speak === 'function') {
+                        wp.a11y.speak(labels.success, 'assertive');
+                    }
+                }).fail(function() {
+                    cell.removeClass('is-loading');
+                    button.prop('disabled', false);
+                    cell.find('.mj-event-photos-admin__caption-cancel').prop('disabled', false);
+                    window.alert(labels.error);
+                });
+            });
+        })(jQuery);
+        </script>
         <?php
     }
 }
@@ -215,10 +344,10 @@ if (!function_exists('mj_member_event_photos_review_handler')) {
             case 'delete':
                 $attachment_id = isset($photo->attachment_id) ? (int) $photo->attachment_id : 0;
                 $deleted = MjEventPhotos::delete($photo_id);
-                if ($deleted && $attachment_id > 0) {
+                if (!is_wp_error($deleted) && $attachment_id > 0) {
                     wp_delete_attachment($attachment_id, true);
                 }
-                $notice = $deleted ? 'deleted' : 'error';
+                $notice = !is_wp_error($deleted) ? 'deleted' : 'error';
                 break;
             default:
                 $notice = 'error';
@@ -230,6 +359,49 @@ if (!function_exists('mj_member_event_photos_review_handler')) {
     }
 
     add_action('admin_post_mj_member_review_event_photo', 'mj_member_event_photos_review_handler');
+}
+
+if (!function_exists('mj_member_event_photos_update_caption_ajax')) {
+    function mj_member_event_photos_update_caption_ajax() {
+        $capability = Config::capability();
+
+        if (!current_user_can($capability)) {
+            wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
+        }
+
+        $photo_id = isset($_POST['photo_id']) ? (int) $_POST['photo_id'] : 0;
+        $nonce = isset($_POST['nonce']) ? sanitize_text_field(wp_unslash($_POST['nonce'])) : '';
+
+        if ($photo_id <= 0 || $nonce === '' || !wp_verify_nonce($nonce, 'mj-member-update-photo-caption-' . $photo_id)) {
+            wp_send_json_error(array('message' => __('Requête invalide.', 'mj-member')), 400);
+        }
+
+        $caption_raw = isset($_POST['caption']) ? wp_unslash($_POST['caption']) : '';
+        $caption = sanitize_text_field($caption_raw);
+
+        $updated = MjEventPhotos::update($photo_id, array(
+            'caption' => $caption !== '' ? $caption : null,
+        ));
+
+        if (is_wp_error($updated)) {
+            wp_send_json_error(array('message' => __('Impossible de mettre à jour la légende.', 'mj-member')), 500);
+        }
+
+        $photo = MjEventPhotos::get($photo_id);
+        if ($photo && !empty($photo->attachment_id)) {
+            wp_update_post(array(
+                'ID' => (int) $photo->attachment_id,
+                'post_excerpt' => $caption,
+            ));
+        }
+
+        wp_send_json_success(array(
+            'caption' => $caption,
+            'message' => __('Légende mise à jour.', 'mj-member'),
+        ));
+    }
+
+    add_action('wp_ajax_mj_member_update_event_photo_caption', 'mj_member_event_photos_update_caption_ajax');
 }
 
 if (!function_exists('mj_member_get_event_public_link')) {

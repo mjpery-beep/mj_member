@@ -2,6 +2,10 @@
 
 namespace Mj\Member\Classes;
 
+use Mj\Member\Core\Logger;
+use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjEventAttendance;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -15,7 +19,7 @@ class MjPayments extends MjTools {
     public static function create_stripe_payment($member_id, $amount = null, array $options = array()) {
         global $wpdb;
 
-        $member = MjMembers_CRUD::getById($member_id);
+        $member = MjMembers::getById($member_id);
         if (!$member) {
             return false;
         }
@@ -72,8 +76,8 @@ class MjPayments extends MjTools {
         if ($context_type === 'event') {
             if (!empty($options['event']) && is_object($options['event'])) {
                 $event = $options['event'];
-            } elseif ($event_id > 0 && class_exists('MjEvents_CRUD')) {
-                $event = MjEvents_CRUD::find($event_id);
+            } elseif ($event_id > 0 && class_exists('MjEvents')) {
+                $event = MjEvents::find($event_id);
             }
         }
 
@@ -192,7 +196,9 @@ class MjPayments extends MjTools {
         }
         $secret_key = self::get_secret_key_safely();
         if (empty($secret_key)) {
-            error_log('MjPayments: Cle secrete Stripe manquante');
+            Logger::error('Stripe secret key missing', array(
+                'member_id' => isset($member->id) ? (int) $member->id : 0,
+            ), 'payments');
             return false;
         }
 
@@ -310,7 +316,12 @@ class MjPayments extends MjTools {
         $response = self::stripe_api_call('POST', 'https://api.stripe.com/v1/checkout/sessions', $data, $secret_key);
 
         if (!$response || isset($response['error'])) {
-            error_log('MjPayments: Erreur API Stripe - ' . json_encode($response));
+            Logger::error('Stripe API error during checkout session creation', array(
+                'member_id' => (int) $member->id,
+                'amount' => number_format((float) $amount, 2, '.', ''),
+                'response' => $response,
+                'context' => $context_logged,
+            ), 'payments');
             self::log_stripe_event('checkout.session.create.error', array(
                 'member_id' => (int) $member->id,
                 'amount' => number_format((float) $amount, 2, '.', ''),
@@ -449,7 +460,7 @@ class MjPayments extends MjTools {
         $payment_id = $wpdb->insert_id;
         if (!$payment_id) return false;
 
-        $member = MjMembers_CRUD::getById($member_id);
+        $member = MjMembers::getById($member_id);
         if (!$member) return false;
 
         $confirm_url = add_query_arg(array('mj_payment_confirm' => $token), site_url('/'));
@@ -491,7 +502,7 @@ class MjPayments extends MjTools {
         if (!$payment_id) return false;
 
         // Load member
-        $member = MjMembers_CRUD::getById($member_id);
+        $member = MjMembers::getById($member_id);
         if (!$member) return false;
 
         // Si Stripe est configuré, générer une session Stripe via la config sécurisée
@@ -585,8 +596,8 @@ class MjPayments extends MjTools {
         $members_table = $wpdb->prefix . 'mj_members';
         $wpdb->update($members_table, array('date_last_payement' => $now, 'status' => 'active'), array('id' => intval($payment->member_id)), array('%s','%s'), array('%d'));
 
-        if (class_exists('MjMembers_CRUD') && class_exists('MjMail')) {
-            $member = MjMembers_CRUD::getById((int) $payment->member_id);
+        if (class_exists('MjMembers') && class_exists('MjMail')) {
+            $member = MjMembers::getById((int) $payment->member_id);
             if ($member) {
                 $context = array(
                     'payment_amount' => $payment->amount,
@@ -628,7 +639,7 @@ class MjPayments extends MjTools {
         }
 
         if (!array_key_exists($guardian_id, $cache)) {
-            $cache[$guardian_id] = MjMembers_CRUD::getById($guardian_id);
+            $cache[$guardian_id] = MjMembers::getById($guardian_id);
         }
 
         return $cache[$guardian_id] ?: null;
@@ -741,8 +752,8 @@ class MjPayments extends MjTools {
             'email' => '',
         );
 
-        if ($member_data['id'] > 0 && class_exists('MjMembers_CRUD')) {
-            $member_obj = MjMembers_CRUD::getById($member_data['id']);
+        if ($member_data['id'] > 0 && class_exists('MjMembers')) {
+            $member_obj = MjMembers::getById($member_data['id']);
             if ($member_obj) {
                 $member_data['name'] = self::format_member_name($member_obj);
                 $member_data['role'] = isset($member_obj->role) ? sanitize_key($member_obj->role) : '';
@@ -754,8 +765,8 @@ class MjPayments extends MjTools {
         }
 
         $payer_data = null;
-        if (!empty($payment->payer_id) && class_exists('MjMembers_CRUD')) {
-            $payer_obj = MjMembers_CRUD::getById((int) $payment->payer_id);
+        if (!empty($payment->payer_id) && class_exists('MjMembers')) {
+            $payer_obj = MjMembers::getById((int) $payment->payer_id);
             if ($payer_obj) {
                 $payer_email = isset($payer_obj->email) ? sanitize_email($payer_obj->email) : '';
                 $payer_data = array(
@@ -767,8 +778,8 @@ class MjPayments extends MjTools {
         }
 
         $event_data = null;
-        if (!empty($payment->event_id) && class_exists('MjEvents_CRUD')) {
-            $event_obj = MjEvents_CRUD::find((int) $payment->event_id);
+        if (!empty($payment->event_id) && class_exists('MjEvents')) {
+            $event_obj = MjEvents::find((int) $payment->event_id);
             if ($event_obj) {
                 $event_start_ts = self::normalize_datetime_value(isset($event_obj->date_debut) ? $event_obj->date_debut : null);
                 $event_end_ts = self::normalize_datetime_value(isset($event_obj->date_fin) ? $event_obj->date_fin : null);
@@ -917,10 +928,6 @@ class MjPayments extends MjTools {
      * Ecrit un evenement Stripe dans un journal dedie cote serveur.
      */
     public static function log_stripe_event($event, $context = array()) {
-        if (!function_exists('wp_upload_dir')) {
-            return;
-        }
-
         if (!is_array($context)) {
             $context = array('message' => (string) $context);
         }
@@ -933,34 +940,9 @@ class MjPayments extends MjTools {
             $context['mode'] = MjStripeConfig::is_test_mode() ? 'test' : 'live';
         }
 
-        $uploads = wp_upload_dir();
-        if (!empty($uploads['error'])) {
-            error_log('MjPayments: upload dir indisponible pour la journalisation - ' . $uploads['error']);
-            return;
-        }
+        $context['event'] = $event;
 
-        $log_dir = trailingslashit($uploads['basedir']) . 'mj-member';
-        if (!wp_mkdir_p($log_dir)) {
-            error_log('MjPayments: impossible de creer le repertoire de log ' . $log_dir);
-            return;
-        }
-
-        $log_file = trailingslashit($log_dir) . 'stripe-events.log';
-        $entry = array(
-            'timestamp' => current_time('mysql'),
-            'event' => $event,
-            'data' => $context,
-        );
-
-        $json = wp_json_encode($entry, JSON_UNESCAPED_SLASHES);
-        if ($json === false) {
-            $json = json_encode($entry);
-        }
-        if ($json === false) {
-            $json = '{"timestamp":"' . current_time('mysql') . '","event":"' . $event . '"}';
-        }
-
-        file_put_contents($log_file, $json . PHP_EOL, FILE_APPEND | LOCK_EX);
+        Logger::info('stripe.' . $event, $context, 'stripe');
     }
 }
 

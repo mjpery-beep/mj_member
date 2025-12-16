@@ -11,6 +11,8 @@ use Elementor\Group_Control_Typography;
 use Elementor\Widget_Base;
 
 class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
+    use Mj_Member_Elementor_Widget_Visibility;
+
     public function get_name() {
         return 'mj-member-registrations';
     }
@@ -120,6 +122,8 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
 
         $this->end_controls_section();
 
+        $this->register_visibility_controls();
+
         $this->start_controls_section(
             'section_style_card',
             array(
@@ -208,6 +212,9 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
     }
 
     protected function render() {
+        $settings = $this->get_settings_for_display();
+        $this->apply_visibility_to_wrapper($settings, 'mj-member-registrations');
+
         if (!function_exists('mj_member_get_member_registrations')) {
             echo '<div class="mj-member-account-warning">' . esc_html__('Le module MJ Member doit être actif pour utiliser ce widget.', 'mj-member') . '</div>';
             return;
@@ -225,7 +232,6 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
             return;
         }
 
-        $settings = $this->get_settings_for_display();
         $limit = isset($settings['limit']) ? max(1, (int) $settings['limit']) : 10;
         $registrations = mj_member_get_member_registrations(
             $member->id,

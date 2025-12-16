@@ -1,0 +1,67 @@
+{% if location.has_card|default(false) %}
+    {% set title = location.title|default('') %}
+    {% set address = location.address|default('') %}
+    {% set cover_url = location.cover_url|default('') %}
+    {% set cover_alt = location.cover_alt|default(title ? title : __('Lieu de l\'evenement', 'mj-member')) %}
+    {% set types = location.types|default([]) %}
+    {% set description_html = location.description_html|default('') %}
+    {% set notes_html = location.notes_html|default('') %}
+    {% set map_embed = location.map_embed|default('') %}
+    {% set map_link = location.map_link|default('') %}
+
+    <section class="mj-member-event-single__card mj-member-event-single__location">
+        <h2>{{ __('Lieu', 'mj-member') }}</h2>
+        {% if cover_url %}
+            <div class="mj-member-event-single__location-header">
+                <span class="mj-member-event-single__location-cover">
+                    <img src="{{ cover_url|esc_url }}" alt="{{ cover_alt|esc_attr }}" loading="lazy" />
+                </span>
+                <div>
+                    {% if title %}
+                        <p class="mj-member-event-single__location-title">{{ title }}</p>
+                    {% endif %}
+                    {% if address %}
+                        <p class="mj-member-event-single__location-address">{{ address }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        {% elseif title or address %}
+            <div class="mj-member-event-single__location-header" style="gap:8px;">
+                <div>
+                    {% if title %}
+                        <p class="mj-member-event-single__location-title">{{ title }}</p>
+                    {% endif %}
+                    {% if address %}
+                        <p class="mj-member-event-single__location-address">{{ address }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+
+        {% if types|length %}
+            <div class="mj-member-event-single__location-types">
+                {% for type_label in types %}
+                    <span class="mj-member-event-single__location-type">{{ type_label }}</span>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if description_html %}
+            <p class="mj-member-event-single__location-notes">{{ description_html|wp_kses_post }}</p>
+        {% endif %}
+        {% if notes_html %}
+            <p class="mj-member-event-single__location-notes">{{ notes_html|wp_kses_post }}</p>
+        {% endif %}
+
+        {% if map_embed %}
+            <div class="mj-member-event-single__location-map">
+                <iframe src="{{ map_embed|esc_url }}" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
+                {% if map_link %}
+                    <div class="mj-member-event-single__location-map-actions">
+                        <a class="mj-member-event-single__location-map-link" href="{{ map_link|esc_url }}" target="_blank" rel="noopener">{{ __('Ouvrir dans Google Maps', 'mj-member') }}</a>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </section>
+{% endif %}

@@ -18,6 +18,9 @@ function mj_member_ensure_capabilities()
     $roles = apply_filters('mj_member_capability_roles', array('administrator', 'editor'));
     $capability = Config::capability();
     $contactCapability = Config::contactCapability();
+    $hoursCapability = Config::hoursCapability();
+    $todosCapability = Config::todosCapability();
+    $documentsCapability = Config::documentsCapability();
 
     foreach ($roles as $role_name) {
         $role = get_role($role_name);
@@ -26,6 +29,36 @@ function mj_member_ensure_capabilities()
         }
         if ($contactCapability !== '' && $role && !$role->has_cap($contactCapability)) {
             $role->add_cap($contactCapability);
+        }
+    }
+
+    if ($hoursCapability !== '') {
+        $hoursRoles = apply_filters('mj_member_hours_capability_roles', array('administrator', 'animateur', 'coordinateur', 'benevole'));
+        foreach ($hoursRoles as $role_name) {
+            $role = get_role($role_name);
+            if ($role && !$role->has_cap($hoursCapability)) {
+                $role->add_cap($hoursCapability);
+            }
+        }
+    }
+
+    if ($todosCapability !== '') {
+        $todoRoles = apply_filters('mj_member_todos_capability_roles', array('administrator', 'animateur', 'coordinateur', 'benevole'));
+        foreach ($todoRoles as $role_name) {
+            $role = get_role($role_name);
+            if ($role && !$role->has_cap($todosCapability)) {
+                $role->add_cap($todosCapability);
+            }
+        }
+    }
+
+    if ($documentsCapability !== '') {
+        $documentRoles = apply_filters('mj_member_documents_capability_roles', array('administrator', 'animateur'));
+        foreach ($documentRoles as $role_name) {
+            $role = get_role($role_name);
+            if ($role && !$role->has_cap($documentsCapability)) {
+                $role->add_cap($documentsCapability);
+            }
         }
     }
 }
@@ -43,6 +76,9 @@ function mj_member_remove_capabilities()
     $roles = apply_filters('mj_member_capability_roles', array('administrator', 'editor'));
     $capability = Config::capability();
     $contactCapability = Config::contactCapability();
+    $hoursCapability = Config::hoursCapability();
+    $todosCapability = Config::todosCapability();
+    $documentsCapability = Config::documentsCapability();
 
     foreach ($roles as $role_name) {
         $role = get_role($role_name);
@@ -51,6 +87,36 @@ function mj_member_remove_capabilities()
         }
         if ($contactCapability !== '' && $role && $role->has_cap($contactCapability)) {
             $role->remove_cap($contactCapability);
+        }
+    }
+
+    if ($hoursCapability !== '') {
+        $hoursRoles = apply_filters('mj_member_hours_capability_roles', array('administrator', 'animateur', 'coordinateur', 'benevole'));
+        foreach ($hoursRoles as $role_name) {
+            $role = get_role($role_name);
+            if ($role && $role->has_cap($hoursCapability)) {
+                $role->remove_cap($hoursCapability);
+            }
+        }
+    }
+
+    if ($todosCapability !== '') {
+        $todoRoles = apply_filters('mj_member_todos_capability_roles', array('administrator', 'animateur', 'coordinateur', 'benevole'));
+        foreach ($todoRoles as $role_name) {
+            $role = get_role($role_name);
+            if ($role && $role->has_cap($todosCapability)) {
+                $role->remove_cap($todosCapability);
+            }
+        }
+    }
+
+    if ($documentsCapability !== '') {
+        $documentRoles = apply_filters('mj_member_documents_capability_roles', array('administrator', 'animateur'));
+        foreach ($documentRoles as $role_name) {
+            $role = get_role($role_name);
+            if ($role && $role->has_cap($documentsCapability)) {
+                $role->remove_cap($documentsCapability);
+            }
         }
     }
 }

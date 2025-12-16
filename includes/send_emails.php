@@ -161,8 +161,8 @@ function mj_member_collect_email_targets($member, $include_guardian = false) {
         $emails[] = $primary;
     }
 
-    if ($include_guardian && !empty($member->guardian_id) && class_exists('MjMembers_CRUD')) {
-        $guardian = MjMembers_CRUD::getById((int) $member->guardian_id);
+    if ($include_guardian && !empty($member->guardian_id) && class_exists('MjMembers')) {
+        $guardian = MjMembers::getById((int) $member->guardian_id);
         if ($guardian && !empty($guardian->email)) {
             $guardian_email = sanitize_email($guardian->email);
             if ($guardian_email && is_email($guardian_email)) {
@@ -252,14 +252,14 @@ function mj_member_build_email_context($member, $selected_template = null) {
 
     if (!isset($context['guardian_children']) || !is_array($context['guardian_children'])) {
         $guardian_source = null;
-        if (!empty($member->role) && $member->role === MjMembers_CRUD::ROLE_TUTEUR) {
+        if (!empty($member->role) && $member->role === MjMembers::ROLE_TUTEUR) {
             $guardian_source = $member;
-        } elseif (!empty($member->guardian_id) && class_exists('MjMembers_CRUD')) {
-            $guardian_source = MjMembers_CRUD::getById((int) $member->guardian_id);
+        } elseif (!empty($member->guardian_id) && class_exists('MjMembers')) {
+            $guardian_source = MjMembers::getById((int) $member->guardian_id);
         }
 
-        if ($guardian_source && isset($guardian_source->id) && class_exists('MjMembers_CRUD')) {
-            $guardian_children = MjMembers_CRUD::getChildrenForGuardian((int) $guardian_source->id);
+        if ($guardian_source && isset($guardian_source->id) && class_exists('MjMembers')) {
+            $guardian_children = MjMembers::getChildrenForGuardian((int) $guardian_source->id);
             if (!empty($guardian_children)) {
                 $context['guardian_children'] = $guardian_children;
             }

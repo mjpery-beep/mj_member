@@ -1,0 +1,9 @@
+{% set cover_url = cover.cover_url|default('') %}
+{% set cover_thumb = cover.cover_thumb|default('') %}
+{% set title = cover.title|default('') %}
+
+{% if cover_url and not cover_thumb %}
+    <figure class="mj-member-event-single__card" style="padding:0;overflow:hidden;">
+        <img src="{{ cover_url|esc_url }}" alt="{{ title|esc_attr }}" loading="lazy" style="display:block;width:100%;height:auto;" />
+    </figure>
+{% endif %}

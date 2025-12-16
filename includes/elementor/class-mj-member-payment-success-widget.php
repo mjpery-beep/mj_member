@@ -8,6 +8,8 @@ use Elementor\Controls_Manager;
 use Elementor\Widget_Base;
 
 class Mj_Member_Elementor_Payment_Success_Widget extends Widget_Base {
+    use Mj_Member_Elementor_Widget_Visibility;
+
     public function get_name() {
         return 'mj-member-payment-success';
     }
@@ -208,15 +210,19 @@ class Mj_Member_Elementor_Payment_Success_Widget extends Widget_Base {
         );
 
         $this->end_controls_section();
+
+        $this->register_visibility_controls();
     }
 
     protected function render() {
+        $settings = $this->get_settings_for_display();
+        $this->apply_visibility_to_wrapper($settings, 'mj-payment-success');
+
         if (!class_exists('MjPayments')) {
             echo '<div class="mj-member-account-warning">' . esc_html__('Le module de paiements MJ Member est requis pour utiliser ce widget.', 'mj-member') . '</div>';
             return;
         }
 
-        $settings = $this->get_settings_for_display();
         $is_preview = $this->is_preview_mode();
 
         $session_id = '';

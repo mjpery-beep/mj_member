@@ -5,18 +5,27 @@ namespace Mj\Member\Classes\Crud;
 use DateTime;
 use Mj\Member\Classes\MjEventSchedule;
 use Mj\Member\Classes\MjMail;
+use Mj\Member\Classes\Value\EventRegistrationData;
 use WP_Error;
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-class MjEventRegistrations {
+class MjEventRegistrations implements CrudRepositoryInterface {
+    const TABLE = 'mj_event_registrations';
     /** @var array<string,mixed> */
     private static $last_creation_context = array();
 
     /** @var array<string,array<string,bool>> */
     private static $members_table_columns = array();
+
+    /**
+     * @return string
+     */
+    private static function table_name() {
+        return mj_member_get_event_registrations_table_name();
+    }
 
     /**
      * @param string $table_name
@@ -120,8 +129,110 @@ class MjEventRegistrations {
     }
 
     /**
+     * @param array<string,mixed> $args
+     * @return array<int,EventRegistrationData>
+     */
+    public static function get_all(array $args = array()) {
+        global $wpdb;
+        $table = self::table_name();
+
+        $defaults = array(
+            'ids' => array(),
+            'exclude_ids' => array(),
+            'event_ids' => array(),
+            'event_id' => 0,
+            'member_ids' => array(),
+            'member_id' => 0,
+            'guardian_ids' => array(),
+            'statuses' => array(),
+            'payment_statuses' => array(),
+            'search' => '',
+            'orderby' => 'created_at',
+            'order' => 'DESC',
+            'limit' => 0,
+            'offset' => 0,
+        );
+        $args = wp_parse_args($args, $defaults);
+
+        if (!empty($args['event_id'])) {
+            $args['event_ids'][] = (int) $args['event_id'];
+        }
+        if (!empty($args['member_id'])) {
+            $args['member_ids'][] = (int) $args['member_id'];
+        }
+
+        $builder = CrudQueryBuilder::for_table($table);
+        self::apply_common_filters($builder, $args);
+
+        $allowed_orderby = array('created_at', 'updated_at', 'event_id', 'member_id', 'statut', 'payment_status', 'payment_recorded_at');
+        $orderby = sanitize_key($args['orderby']);
+        if (!in_array($orderby, $allowed_orderby, true)) {
+            $orderby = 'created_at';
+        }
+
+        $order = strtoupper((string) $args['order']) === 'ASC' ? 'ASC' : 'DESC';
+
+        $limit = (int) $args['limit'];
+        $offset = max(0, (int) $args['offset']);
+        list($sql, $params) = $builder->build_select('*', $orderby, $order, $limit, $offset);
+
+        if (!empty($params)) {
+            $sql = $wpdb->prepare($sql, $params);
+        }
+
+        $results = $wpdb->get_results($sql);
+        if (!is_array($results) || empty($results)) {
+            return array();
+        }
+
+        return self::hydrate_registrations($results);
+    }
+
+    /**
+     * @param array<string,mixed> $args
+     * @return int
+     */
+    public static function count(array $args = array()) {
+        global $wpdb;
+        $table = self::table_name();
+
+        $defaults = array(
+            'ids' => array(),
+            'exclude_ids' => array(),
+            'event_ids' => array(),
+            'event_id' => 0,
+            'member_ids' => array(),
+            'member_id' => 0,
+            'guardian_ids' => array(),
+            'statuses' => array(),
+            'payment_statuses' => array(),
+            'search' => '',
+        );
+        $args = wp_parse_args($args, $defaults);
+
+        if (!empty($args['event_id'])) {
+            $args['event_ids'][] = (int) $args['event_id'];
+        }
+        if (!empty($args['member_id'])) {
+            $args['member_ids'][] = (int) $args['member_id'];
+        }
+
+        $builder = CrudQueryBuilder::for_table($table);
+        self::apply_common_filters($builder, $args);
+
+        list($sql, $params) = $builder->build_count('*');
+
+        if (!empty($params)) {
+            $sql = $wpdb->prepare($sql, $params);
+        }
+
+        $count = $wpdb->get_var($sql);
+        return $count ? (int) $count : 0;
+    }
+
+    /**
      * @param int $event_id
-     * @return array<int, object>
+     * @return array<int,EventRegistrationData>
      */
     public static function get_by_event($event_id) {
         $event_id = (int) $event_id;
@@ -129,58 +240,92 @@ class MjEventRegistrations {
             return array();
         }
 
-        if (class_exists('MjEventAttendance')) {
-            MjEventAttendance::get_table_name();
+        return self::get_all(array(
+            'event_ids' => array($event_id),
+            'orderby' => 'created_at',
+            'order' => 'DESC',
+        ));
+    }
+
+    /**
+     * @param CrudQueryBuilder $builder
+     * @param array<string,mixed> $args
+     * @return void
+     */
+    private static function apply_common_filters(CrudQueryBuilder $builder, array $args) {
+        $builder
+            ->where_in_int('id', (array) $args['ids'])
+            ->where_not_in_int('id', (array) $args['exclude_ids'])
+            ->where_in_int('event_id', (array) $args['event_ids'])
+            ->where_in_int('member_id', (array) $args['member_ids'])
+            ->where_in_int('guardian_id', (array) $args['guardian_ids'])
+            ->where_in_strings('statut', (array) $args['statuses'], 'sanitize_key')
+            ->where_in_strings('payment_status', (array) $args['payment_statuses'], 'sanitize_key');
+
+        $search = isset($args['search']) ? trim((string) $args['search']) : '';
+        if ($search !== '') {
+            $builder->where_like_any(array('notes', 'payment_method', 'payment_reference'), $search);
         }
+    }
 
-        global $wpdb;
-        $table = mj_member_get_event_registrations_table_name();
-
-        $registrations = $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT * FROM {$table} WHERE event_id = %d ORDER BY created_at DESC",
-                $event_id
-            )
-        );
-
+    /**
+     * @param array<int,object> $registrations
+     * @return array<int,EventRegistrationData>
+     */
+    private static function hydrate_registrations(array $registrations) {
         if (empty($registrations)) {
             return array();
         }
 
-        if (class_exists('MjEventAttendance')) {
-            foreach ($registrations as $registration_row) {
-                $registration_row->occurrence_assignments = MjEventAttendance::get_registration_assignments($registration_row);
+        $normalized = array();
+        $member_ids = array();
+        $guardian_ids = array();
+
+        foreach ($registrations as $registration_row) {
+            if (!is_object($registration_row)) {
+                $registration_row = (object) $registration_row;
             }
-        } else {
-            foreach ($registrations as $registration_row) {
-                $registration_row->occurrence_assignments = array(
+
+            $data = get_object_vars($registration_row);
+
+            if (class_exists('MjEventAttendance')) {
+                MjEventAttendance::get_table_name();
+                $assignments = MjEventAttendance::get_registration_assignments($registration_row);
+            } else {
+                $assignments = array(
                     'mode' => 'all',
                     'occurrences' => array(),
                 );
             }
-        }
 
-        $member_ids = array();
-        $guardian_ids = array();
-        foreach ($registrations as $registration_row) {
-            if (!empty($registration_row->member_id)) {
-                $member_ids[(int) $registration_row->member_id] = true;
+            $data['occurrence_assignments'] = is_array($assignments)
+                ? $assignments
+                : array('mode' => 'all', 'occurrences' => array());
+
+            $member_id = isset($data['member_id']) ? (int) $data['member_id'] : 0;
+            if ($member_id > 0) {
+                $member_ids[$member_id] = true;
             }
-            if (!empty($registration_row->guardian_id)) {
-                $guardian_ids[(int) $registration_row->guardian_id] = true;
+
+            $guardian_id = isset($data['guardian_id']) ? (int) $data['guardian_id'] : 0;
+            if ($guardian_id > 0) {
+                $guardian_ids[$guardian_id] = true;
             }
+
+            $normalized[] = $data;
         }
 
         $members_index = array();
         $all_member_ids = array_keys($member_ids + $guardian_ids);
         if (!empty($all_member_ids)) {
-            $members_table = MjMembers_CRUD::getTableName(MjMembers_CRUD::TABLE_NAME);
+            $members_table = MjMembers::getTableName(MjMembers::TABLE_NAME);
             $can_query_members = true;
             if (function_exists('mj_member_table_exists')) {
                 $can_query_members = mj_member_table_exists($members_table);
             }
 
             if ($can_query_members) {
+                global $wpdb;
                 $placeholders = implode(',', array_fill(0, count($all_member_ids), '%d'));
                 $member_fields = self::build_member_select_fields($members_table);
                 $member_sql = "SELECT {$member_fields} FROM {$members_table} WHERE id IN ({$placeholders})";
@@ -189,136 +334,150 @@ class MjEventRegistrations {
                 $members = $wpdb->get_results($prepared_members);
                 if (is_array($members)) {
                     foreach ($members as $member) {
-                        $members_index[(int) $member->id] = $member;
+                        $members_index[(int) $member->id] = get_object_vars($member);
                     }
                 }
             }
         }
 
-        foreach ($registrations as $registration_row) {
-            $member_id = isset($registration_row->member_id) ? (int) $registration_row->member_id : 0;
-            $guardian_id = isset($registration_row->guardian_id) ? (int) $registration_row->guardian_id : 0;
+        foreach ($normalized as &$data) {
+            $member_id = isset($data['member_id']) ? (int) $data['member_id'] : 0;
+            $guardian_id = isset($data['guardian_id']) ? (int) $data['guardian_id'] : 0;
 
             $member = ($member_id > 0 && isset($members_index[$member_id])) ? $members_index[$member_id] : null;
             if ($member) {
-                $registration_row->first_name = $member->first_name;
-                $registration_row->last_name = $member->last_name;
-                $registration_row->nickname = isset($member->nickname) ? $member->nickname : '';
-                $registration_row->role = isset($member->role) ? $member->role : '';
-                $registration_row->birth_date = isset($member->birth_date) ? $member->birth_date : null;
-                $registration_row->email = isset($member->email) ? $member->email : '';
-                $registration_row->phone = isset($member->phone) ? $member->phone : '';
-                $registration_row->sms_opt_in = !empty($member->sms_opt_in);
-                $registration_row->is_autonomous = isset($member->is_autonomous) ? $member->is_autonomous : null;
-                if (empty($registration_row->guardian_id) && !empty($member->guardian_id)) {
-                    $registration_row->guardian_id = (int) $member->guardian_id;
-                    if ($registration_row->guardian_id > 0) {
-                        $guardian_id = (int) $registration_row->guardian_id;
+                $data['first_name'] = isset($member['first_name']) ? $member['first_name'] : '';
+                $data['last_name'] = isset($member['last_name']) ? $member['last_name'] : '';
+                $data['nickname'] = isset($member['nickname']) ? $member['nickname'] : '';
+                $data['role'] = isset($member['role']) ? $member['role'] : '';
+                $data['birth_date'] = isset($member['birth_date']) ? $member['birth_date'] : null;
+                $data['email'] = isset($member['email']) ? $member['email'] : '';
+                $data['phone'] = isset($member['phone']) ? $member['phone'] : '';
+                $data['sms_opt_in'] = !empty($member['sms_opt_in']);
+                $data['is_autonomous'] = array_key_exists('is_autonomous', $member) ? $member['is_autonomous'] : null;
+
+                if (empty($data['guardian_id']) && !empty($member['guardian_id'])) {
+                    $candidate_guardian = (int) $member['guardian_id'];
+                    if ($candidate_guardian > 0) {
+                        $data['guardian_id'] = $candidate_guardian;
+                        $guardian_id = $candidate_guardian;
                     }
                 }
             } else {
-                if (!isset($registration_row->first_name)) {
-                    $registration_row->first_name = '';
+                $data['first_name'] = isset($data['first_name']) ? $data['first_name'] : '';
+                $data['last_name'] = isset($data['last_name']) ? $data['last_name'] : '';
+                $data['nickname'] = isset($data['nickname']) ? $data['nickname'] : '';
+                $data['role'] = isset($data['role']) ? $data['role'] : '';
+                if (!array_key_exists('birth_date', $data)) {
+                    $data['birth_date'] = null;
                 }
-                if (!isset($registration_row->last_name)) {
-                    $registration_row->last_name = '';
+                $data['email'] = isset($data['email']) ? $data['email'] : '';
+                $data['phone'] = isset($data['phone']) ? $data['phone'] : '';
+                if (!array_key_exists('sms_opt_in', $data)) {
+                    $data['sms_opt_in'] = false;
                 }
-                if (!isset($registration_row->nickname)) {
-                    $registration_row->nickname = '';
+                if (!array_key_exists('is_autonomous', $data)) {
+                    $data['is_autonomous'] = null;
                 }
             }
 
-            if (!isset($registration_row->role) || $registration_row->role === null) {
-                $registration_row->role = '';
+            if (!isset($data['role']) || $data['role'] === null) {
+                $data['role'] = '';
             }
 
             $guardian = ($guardian_id > 0 && isset($members_index[$guardian_id])) ? $members_index[$guardian_id] : null;
             if ($guardian) {
-                $registration_row->guardian_first_name = $guardian->first_name;
-                $registration_row->guardian_last_name = $guardian->last_name;
-                $registration_row->guardian_phone = isset($guardian->phone) ? $guardian->phone : '';
-                $registration_row->guardian_email = isset($guardian->email) ? $guardian->email : '';
-                $registration_row->guardian_sms_opt_in = !empty($guardian->sms_opt_in);
+                $data['guardian_first_name'] = isset($guardian['first_name']) ? $guardian['first_name'] : '';
+                $data['guardian_last_name'] = isset($guardian['last_name']) ? $guardian['last_name'] : '';
+                $data['guardian_phone'] = isset($guardian['phone']) ? $guardian['phone'] : '';
+                $data['guardian_email'] = isset($guardian['email']) ? $guardian['email'] : '';
+                $data['guardian_sms_opt_in'] = !empty($guardian['sms_opt_in']);
             } else {
-                if (!isset($registration_row->guardian_first_name)) {
-                    $registration_row->guardian_first_name = '';
-                }
-                if (!isset($registration_row->guardian_last_name)) {
-                    $registration_row->guardian_last_name = '';
-                }
-                if (!isset($registration_row->guardian_phone)) {
-                    $registration_row->guardian_phone = '';
-                }
-                if (!isset($registration_row->guardian_email)) {
-                    $registration_row->guardian_email = '';
-                }
-                if (!isset($registration_row->guardian_sms_opt_in)) {
-                    $registration_row->guardian_sms_opt_in = 0;
+                $data['guardian_first_name'] = isset($data['guardian_first_name']) ? $data['guardian_first_name'] : '';
+                $data['guardian_last_name'] = isset($data['guardian_last_name']) ? $data['guardian_last_name'] : '';
+                $data['guardian_phone'] = isset($data['guardian_phone']) ? $data['guardian_phone'] : '';
+                $data['guardian_email'] = isset($data['guardian_email']) ? $data['guardian_email'] : '';
+                if (!array_key_exists('guardian_sms_opt_in', $data)) {
+                    $data['guardian_sms_opt_in'] = 0;
                 }
             }
         }
+        unset($data);
 
-        return $registrations;
+        $hydrated = array();
+        foreach ($normalized as $entry) {
+            $hydrated[] = EventRegistrationData::fromArray($entry);
+        }
+
+        return $hydrated;
     }
 
     /**
      * @param int $registration_id
-     * @return object|null
+     * @return EventRegistrationData|null
      */
     public static function get($registration_id) {
         global $wpdb;
-        $table = mj_member_get_event_registrations_table_name();
+        $table = self::table_name();
 
-        return $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id = %d", (int) $registration_id));
+        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id = %d", (int) $registration_id));
+        $hydrated = self::hydrate_registrations($row ? array($row) : array());
+
+        return isset($hydrated[0]) ? $hydrated[0] : null;
     }
 
     /**
      * @param int $event_id
      * @param int $member_id
-     * @return object|null
+     * @return EventRegistrationData|null
      */
     public static function get_existing($event_id, $member_id) {
         global $wpdb;
-        $table = mj_member_get_event_registrations_table_name();
+        $table = self::table_name();
 
         $sql = "SELECT * FROM {$table} WHERE event_id = %d AND member_id = %d ORDER BY created_at DESC LIMIT 1";
-        return $wpdb->get_row($wpdb->prepare($sql, (int) $event_id, (int) $member_id));
+        $row = $wpdb->get_row($wpdb->prepare($sql, (int) $event_id, (int) $member_id));
+        $hydrated = self::hydrate_registrations($row ? array($row) : array());
+
+        return isset($hydrated[0]) ? $hydrated[0] : null;
     }
 
     /**
-     * @param int $event_id
-     * @param int $member_id
-     * @param array<string, mixed> $args
+     * @param array<string,mixed> $data
      * @return int|WP_Error
      */
-    public static function create($event_id, $member_id, array $args = array()) {
+    public static function create($data) {
         self::$last_creation_context = array();
 
-        $event_id = (int) $event_id;
-        $member_id = (int) $member_id;
+        if (!is_array($data)) {
+            return new WP_Error('mj_event_registration_invalid_payload', 'Format de donnees invalide pour l\'inscription.');
+        }
+
+        $event_id = isset($data['event_id']) ? (int) $data['event_id'] : 0;
+        $member_id = isset($data['member_id']) ? (int) $data['member_id'] : 0;
 
         if ($event_id <= 0 || $member_id <= 0) {
             return new WP_Error('mj_event_registration_invalid_ids', 'Evenement ou membre invalide.');
         }
 
         $send_notifications = true;
-        if (array_key_exists('send_notifications', $args)) {
-            $send_notifications = !empty($args['send_notifications']);
-        } elseif (array_key_exists('notify', $args)) {
-            $send_notifications = !empty($args['notify']);
+        if (array_key_exists('send_notifications', $data)) {
+            $send_notifications = !empty($data['send_notifications']);
+        } elseif (array_key_exists('notify', $data)) {
+            $send_notifications = !empty($data['notify']);
         }
 
-        $event = MjEvents_CRUD::find($event_id);
+        $event = MjEvents::find($event_id);
         if (!$event) {
             return new WP_Error('mj_event_registration_missing_event', 'Evenement introuvable.');
         }
 
-        $member = MjMembers_CRUD::getById($member_id);
+        $member = MjMembers::getById($member_id);
         if (!$member) {
             return new WP_Error('mj_event_registration_missing_member', 'Membre introuvable.');
         }
 
-        $validation = self::validate_registration($event, $member, $event_id, $member_id, $args);
+        $validation = self::validate_registration($event, $member, $event_id, $member_id, $data);
         if (is_wp_error($validation)) {
             return $validation;
         }
@@ -344,7 +503,16 @@ class MjEventRegistrations {
             }
         }
 
-        $guardian_id = isset($args['guardian_id']) ? (int) $args['guardian_id'] : 0;
+        $requires_validation = true;
+        if (isset($event->requires_validation)) {
+            $requires_validation = (int) $event->requires_validation !== 0;
+        }
+
+        if ($registration_status === self::STATUS_PENDING && !$requires_validation) {
+            $registration_status = self::STATUS_CONFIRMED;
+        }
+
+        $guardian_id = isset($data['guardian_id']) ? (int) $data['guardian_id'] : 0;
         if ($guardian_id <= 0 && isset($member->guardian_id)) {
             $guardian_id = (int) $member->guardian_id;
         }
@@ -352,10 +520,10 @@ class MjEventRegistrations {
             $guardian_id = null;
         }
 
-        $notes = isset($args['notes']) ? sanitize_textarea_field($args['notes']) : '';
+        $notes = isset($data['notes']) ? sanitize_textarea_field($data['notes']) : '';
 
         global $wpdb;
-        $table = mj_member_get_event_registrations_table_name();
+        $table = self::table_name();
 
         $insert = array(
             'event_id' => $event_id,
@@ -399,7 +567,100 @@ class MjEventRegistrations {
             self::maybe_trigger_capacity_notification($event, $active_before + 1);
         }
 
+        self::sync_capacity_counters($event_id);
+
         return $registration_id;
+    }
+
+    /**
+     * @param int $registration_id
+     * @param array<string,mixed> $data
+     * @return true|WP_Error
+     */
+    public static function update($registration_id, $data) {
+        $registration_id = (int) $registration_id;
+        if ($registration_id <= 0) {
+            return new WP_Error('mj_event_registration_invalid_id', 'Inscription invalide.');
+        }
+
+        if (!is_array($data)) {
+            return new WP_Error('mj_event_registration_invalid_payload', 'Format de donnees invalide pour l\'inscription.');
+        }
+
+        $status_result = null;
+        if (array_key_exists('statut', $data)) {
+            $status_result = self::update_status($registration_id, $data['statut']);
+            unset($data['statut']);
+        } elseif (array_key_exists('status', $data)) {
+            $status_result = self::update_status($registration_id, $data['status']);
+            unset($data['status']);
+        }
+
+        if (is_wp_error($status_result)) {
+            return $status_result;
+        }
+
+        $updates = array();
+        $formats = array();
+
+        if (array_key_exists('guardian_id', $data)) {
+            $guardian_id = (int) $data['guardian_id'];
+            $updates['guardian_id'] = $guardian_id > 0 ? $guardian_id : null;
+            $formats[] = '%d';
+        }
+
+        if (array_key_exists('notes', $data)) {
+            $notes = sanitize_textarea_field((string) $data['notes']);
+            $updates['notes'] = ($notes !== '') ? $notes : null;
+            $formats[] = '%s';
+        }
+
+        if (array_key_exists('payment_status', $data)) {
+            $payment_status = sanitize_key((string) $data['payment_status']);
+            $updates['payment_status'] = $payment_status !== '' ? $payment_status : null;
+            $formats[] = '%s';
+        }
+
+        if (array_key_exists('payment_method', $data)) {
+            $payment_method = sanitize_key((string) $data['payment_method']);
+            $updates['payment_method'] = $payment_method !== '' ? $payment_method : null;
+            $formats[] = '%s';
+        }
+
+        if (array_key_exists('payment_recorded_at', $data)) {
+            $recorded_at = sanitize_text_field((string) $data['payment_recorded_at']);
+            $updates['payment_recorded_at'] = $recorded_at !== '' ? $recorded_at : null;
+            $formats[] = '%s';
+        }
+
+        if (array_key_exists('payment_recorded_by', $data)) {
+            $recorded_by = (int) $data['payment_recorded_by'];
+            $updates['payment_recorded_by'] = $recorded_by > 0 ? $recorded_by : null;
+            $formats[] = '%d';
+        }
+
+        if (array_key_exists('payment_reference', $data)) {
+            $reference = sanitize_text_field((string) $data['payment_reference']);
+            $updates['payment_reference'] = $reference !== '' ? $reference : null;
+            $formats[] = '%s';
+        }
+
+        if (empty($updates)) {
+            return $status_result === null ? true : $status_result;
+        }
+
+        $updates['updated_at'] = current_time('mysql');
+        $formats[] = '%s';
+
+        global $wpdb;
+        $table = self::table_name();
+        $result = $wpdb->update($table, $updates, array('id' => $registration_id), $formats, array('%d'));
+
+        if ($result === false) {
+            return new WP_Error('mj_event_registration_update_failed', 'Impossible de mettre a jour l\'inscription.');
+        }
+
+        return true;
     }
 
     /**
@@ -430,7 +691,7 @@ class MjEventRegistrations {
         $event_id = isset($registration->event_id) ? (int) $registration->event_id : 0;
 
         global $wpdb;
-        $table = mj_member_get_event_registrations_table_name();
+        $table = self::table_name();
         $updated = $wpdb->update($table, array('statut' => $new_status), array('id' => $registration_id), array('%s'), array('%d'));
 
         if ($updated === false) {
@@ -468,7 +729,7 @@ class MjEventRegistrations {
         }
 
         global $wpdb;
-        $table = mj_member_get_event_registrations_table_name();
+        $table = self::table_name();
         $current_status = isset($registration->payment_status) ? sanitize_key((string) $registration->payment_status) : 'unpaid';
         $current_method = isset($registration->payment_method) ? sanitize_key((string) $registration->payment_method) : '';
 
@@ -557,7 +818,7 @@ class MjEventRegistrations {
         }
 
         global $wpdb;
-        $table = mj_member_get_event_registrations_table_name();
+        $table = self::table_name();
         $recorded_at = isset($args['recorded_at']) && $args['recorded_at'] !== ''
             ? sanitize_text_field((string) $args['recorded_at'])
             : current_time('mysql');
@@ -627,12 +888,12 @@ class MjEventRegistrations {
         }
 
         $occurrence_map = array();
-        if ($event_id > 0 && class_exists('MjEvents_CRUD') && class_exists('MjEventSchedule')) {
+        if ($event_id > 0 && class_exists('MjEvents') && class_exists('MjEventSchedule')) {
             static $event_occurrence_cache = array();
             if (isset($event_occurrence_cache[$event_id])) {
                 $occurrence_map = $event_occurrence_cache[$event_id];
             } else {
-                $event_object = MjEvents_CRUD::find($event_id);
+                $event_object = MjEvents::find($event_id);
                 if ($event_object) {
                     $occurrences = MjEventSchedule::get_occurrences($event_object, array(
                         'max' => 300,
@@ -822,7 +1083,7 @@ class MjEventRegistrations {
         $event_id = isset($registration->event_id) ? (int) $registration->event_id : 0;
 
         global $wpdb;
-        $table = mj_member_get_event_registrations_table_name();
+        $table = self::table_name();
         $deleted = $wpdb->delete($table, array('id' => $registration_id), array('%d'));
 
         if ($deleted === false) {
@@ -852,14 +1113,23 @@ class MjEventRegistrations {
         }
 
         $now = current_time('timestamp');
-        $event_start = strtotime($event->date_debut);
+        $event_start = isset($event->date_debut) ? strtotime($event->date_debut) : false;
         $allow_late_registration = !empty($args['allow_late_registration']);
+        $deadline = self::resolve_deadline($event);
+        $has_custom_deadline = self::event_has_custom_deadline($event);
+
+        if (!$allow_late_registration) {
+            if ($deadline && $now <= $deadline) {
+                $allow_late_registration = true;
+            } elseif (!$has_custom_deadline && self::event_has_future_occurrence($event, $now)) {
+                $allow_late_registration = true;
+            }
+        }
 
         if (!$allow_late_registration && $event_start && $now > $event_start) {
             return new WP_Error('mj_event_registration_event_started', 'L evenement a deja commence.');
         }
 
-        $deadline = self::resolve_deadline($event);
         if (!$allow_late_registration && $deadline && $now > $deadline) {
             return new WP_Error('mj_event_registration_deadline', 'La date limite est depassee.');
         }
@@ -869,7 +1139,7 @@ class MjEventRegistrations {
             $allow_guardian_registration = (int) $event->allow_guardian_registration;
         }
         $member_role = isset($member->role) ? sanitize_key($member->role) : '';
-        if ($allow_guardian_registration !== 1 && $member_role === MjMembers_CRUD::ROLE_TUTEUR) {
+        if ($allow_guardian_registration !== 1 && $member_role === MjMembers::ROLE_TUTEUR) {
             return new WP_Error('mj_event_registration_guardian_blocked', 'Les tuteurs ne peuvent pas s\'inscrire a cet evenement.');
         }
 
@@ -894,11 +1164,114 @@ class MjEventRegistrations {
         if (!empty($event->date_debut)) {
             $start = strtotime($event->date_debut);
             if ($start) {
-                return $start - (14 * DAY_IN_SECONDS);
+                return $start;
             }
         }
 
         return null;
+    }
+
+    /**
+     * @param object $event
+     * @return bool
+     */
+    private static function event_has_custom_deadline($event) {
+        if (!isset($event->date_fin_inscription)) {
+            return false;
+        }
+
+        $raw = trim((string) $event->date_fin_inscription);
+        return $raw !== '' && $raw !== '0000-00-00 00:00:00';
+    }
+
+    /**
+     * @param object $event
+     * @param int|null $current_timestamp
+     * @return bool
+     */
+    private static function event_has_future_occurrence($event, $current_timestamp = null) {
+        if (!class_exists(MjEventSchedule::class)) {
+            return false;
+        }
+
+        $reference = ($current_timestamp !== null) ? (int) $current_timestamp : current_time('timestamp');
+
+        $occurrences = MjEventSchedule::get_occurrences(
+            $event,
+            array(
+                'max' => 3,
+                'include_past' => false,
+            )
+        );
+
+        if (empty($occurrences) || !is_array($occurrences)) {
+            return false;
+        }
+
+        foreach ($occurrences as $occurrence) {
+            if (!is_array($occurrence)) {
+                continue;
+            }
+
+            $timestamp = isset($occurrence['timestamp']) ? (int) $occurrence['timestamp'] : 0;
+            if ($timestamp <= 0 && !empty($occurrence['start'])) {
+                $timestamp = strtotime((string) $occurrence['start']);
+            }
+
+            if ($timestamp && $timestamp >= $reference) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Retourne l'état de la capacité pour un événement donné.
+     *
+     * @param int $event_id
+     * @return array<string,int|null|bool>
+     */
+    public static function get_capacity_state($event_id) {
+        $event_id = (int) $event_id;
+
+        $default = array(
+            'capacity_total' => null,
+            'waitlist_total' => null,
+            'active_count' => 0,
+            'waitlist_count' => 0,
+            'remaining' => null,
+            'waitlist_remaining' => null,
+            'waitlist_enabled' => false,
+        );
+
+        if ($event_id <= 0) {
+            return $default;
+        }
+
+        $event = MjEvents::find($event_id);
+        if (!$event) {
+            return $default;
+        }
+
+        $capacity_total = isset($event->capacity_total) ? (int) $event->capacity_total : 0;
+        $waitlist_limit = isset($event->capacity_waitlist) ? (int) $event->capacity_waitlist : 0;
+
+        $active_count = self::count_active_registrations($event_id);
+        $waitlist_count = self::count_waitlist_registrations($event_id);
+
+        $remaining = $capacity_total > 0 ? max(0, $capacity_total - $active_count) : null;
+        $waitlist_remaining = $waitlist_limit > 0 ? max(0, $waitlist_limit - $waitlist_count) : null;
+
+        return array(
+            'capacity_total' => $capacity_total > 0 ? $capacity_total : null,
+            'waitlist_total' => $waitlist_limit > 0 ? $waitlist_limit : null,
+            'active_count' => $active_count,
+            'waitlist_count' => $waitlist_count,
+            'remaining' => $remaining,
+            'waitlist_remaining' => $waitlist_remaining,
+            'waitlist_enabled' => $waitlist_limit > 0,
+        );
     }
 
     /**
@@ -992,7 +1365,7 @@ class MjEventRegistrations {
         }
 
         global $wpdb;
-        $table = mj_member_get_event_registrations_table_name();
+        $table = self::table_name();
         $placeholders = implode(',', array_fill(0, count($normalized), '%s'));
         $params = array_merge(array($event_id), $normalized);
 
@@ -1017,7 +1390,7 @@ class MjEventRegistrations {
         }
 
         global $wpdb;
-        $table = mj_member_get_event_registrations_table_name();
+        $table = self::table_name();
         $limit = max(1, (int) $limit);
 
         $sql = $wpdb->prepare(
@@ -1049,7 +1422,7 @@ class MjEventRegistrations {
         $remaining = max(0, $capacity_total - (int) $active_after);
         if ($remaining > $threshold) {
             if (!empty($event->capacity_notified)) {
-                MjEvents_CRUD::update((int) $event->id, array('capacity_notified' => 0));
+                MjEvents::update((int) $event->id, array('capacity_notified' => 0));
                 $event->capacity_notified = 0;
             }
             return;
@@ -1141,7 +1514,7 @@ class MjEventRegistrations {
             ));
         }
 
-        MjEvents_CRUD::update((int) $event->id, array('capacity_notified' => 1));
+        MjEvents::update((int) $event->id, array('capacity_notified' => 1));
         $event->capacity_notified = 1;
     }
 
@@ -1155,7 +1528,7 @@ class MjEventRegistrations {
             return;
         }
 
-        $event = MjEvents_CRUD::find($event_id);
+        $event = MjEvents::find($event_id);
         if (!$event) {
             return;
         }
@@ -1163,7 +1536,7 @@ class MjEventRegistrations {
         $capacity_total = isset($event->capacity_total) ? (int) $event->capacity_total : 0;
         if ($capacity_total <= 0) {
             if (!empty($event->capacity_notified)) {
-                MjEvents_CRUD::update($event_id, array('capacity_notified' => 0));
+                MjEvents::update($event_id, array('capacity_notified' => 0));
             }
             return;
         }
@@ -1176,10 +1549,10 @@ class MjEventRegistrations {
             if ($remaining <= $threshold) {
                 self::maybe_trigger_capacity_notification($event, $active_count);
             } elseif (!empty($event->capacity_notified)) {
-                MjEvents_CRUD::update($event_id, array('capacity_notified' => 0));
+                MjEvents::update($event_id, array('capacity_notified' => 0));
             }
         } elseif (!empty($event->capacity_notified)) {
-            MjEvents_CRUD::update($event_id, array('capacity_notified' => 0));
+            MjEvents::update($event_id, array('capacity_notified' => 0));
         }
     }
 
@@ -1193,7 +1566,7 @@ class MjEventRegistrations {
             return;
         }
 
-        $event = MjEvents_CRUD::find($event_id);
+        $event = MjEvents::find($event_id);
         if (!$event) {
             return;
         }
@@ -1215,7 +1588,7 @@ class MjEventRegistrations {
 
         $candidate = $waitlist_entries[0];
         global $wpdb;
-        $table = mj_member_get_event_registrations_table_name();
+        $table = self::table_name();
 
         $updated = $wpdb->update(
             $table,
@@ -1234,7 +1607,7 @@ class MjEventRegistrations {
             return;
         }
 
-        $member = MjMembers_CRUD::getById((int) $registration->member_id);
+        $member = MjMembers::getById((int) $registration->member_id);
         if (!$member) {
             return;
         }
@@ -1251,13 +1624,13 @@ class MjEventRegistrations {
     }
 
     /**
-     * @param object|null $registration
+     * @param EventRegistrationData|null $registration
      * @param object $event
      * @param object $member
      * @param int|null $guardian_id
      * @return void
      */
-    private static function notify_registration_created($registration, $event, $member, $guardian_id, $context = array()) {
+    private static function notify_registration_created(?EventRegistrationData $registration, $event, $member, $guardian_id, $context = array()) {
         if (!$registration) {
             return;
         }
@@ -1271,7 +1644,7 @@ class MjEventRegistrations {
 
         $guardian = null;
         if ($guardian_id) {
-            $guardian = MjMembers_CRUD::getById($guardian_id);
+            $guardian = MjMembers::getById($guardian_id);
         }
 
         $animateur_members = array();
@@ -1279,10 +1652,15 @@ class MjEventRegistrations {
             $animateur_members = MjEventAnimateurs::get_members_by_event((int) $event->id);
         }
         if (empty($animateur_members) && !empty($event->animateur_id)) {
-            $legacy_animateur = MjMembers_CRUD::getById((int) $event->animateur_id);
+            $legacy_animateur = MjMembers::getById((int) $event->animateur_id);
             if ($legacy_animateur) {
                 $animateur_members[] = $legacy_animateur;
             }
+        }
+
+        $volunteer_members = array();
+        if (class_exists('MjEventVolunteers')) {
+            $volunteer_members = MjEventVolunteers::get_members_by_event((int) $event->id);
         }
 
         if ($is_promotion) {
@@ -1342,6 +1720,21 @@ class MjEventRegistrations {
                 $message_lines[] = 'Animateurs referents:';
                 foreach ($animateur_members as $animateur_member) {
                     $message_lines[] = ' - ' . self::format_member_summary($animateur_member);
+                }
+            }
+        }
+
+        if (!empty($volunteer_members)) {
+            $message_lines[] = '';
+            if (count($volunteer_members) === 1) {
+                $first_volunteer = reset($volunteer_members);
+                if ($first_volunteer) {
+                    $message_lines[] = 'Benevole referent: ' . self::format_member_summary($first_volunteer);
+                }
+            } else {
+                $message_lines[] = 'Benevoles referents:';
+                foreach ($volunteer_members as $volunteer_member) {
+                    $message_lines[] = ' - ' . self::format_member_summary($volunteer_member);
                 }
             }
         }

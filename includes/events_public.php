@@ -6,6 +6,96 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+if (!function_exists('mj_member_normalize_json_payload')) {
+    function mj_member_normalize_json_payload($value) {
+        if (is_array($value)) {
+            foreach ($value as $key => $item) {
+                $value[$key] = mj_member_normalize_json_payload($item);
+            }
+            return $value;
+        }
+
+        if (is_object($value)) {
+            return mj_member_normalize_json_payload((array) $value);
+        }
+
+        if (is_string($value)) {
+            $clean = wp_check_invalid_utf8($value, true);
+            if ($clean === '' && $value !== '') {
+                if (function_exists('mb_convert_encoding')) {
+                    $clean = @mb_convert_encoding($value, 'UTF-8', 'UTF-8');
+                }
+                if (!is_string($clean) || $clean === '') {
+                    $clean = @iconv('UTF-8', 'UTF-8//IGNORE', $value);
+                }
+                if (!is_string($clean) || $clean === '') {
+                    $clean = '';
+                }
+            }
+
+            $clean = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $clean);
+            if ($clean === null) {
+                $clean = '';
+            }
+
+            return $clean;
+        }
+
+        return $value;
+    }
+}
+
+    if (!function_exists('mj_member_user_can_view_internal_events')) {
+        /**
+         * Indique si l'utilisateur courant est autorisé à consulter les événements internes.
+         *
+         * @return bool
+         */
+        function mj_member_user_can_view_internal_events() {
+            $member = null;
+
+            if (is_user_logged_in() && function_exists('mj_member_get_current_member')) {
+                $member = mj_member_get_current_member();
+            }
+
+            $allowed_roles = array('coordinateur', 'animateur', 'benevole');
+
+            if (class_exists('MjMembers')) {
+                $allowed_roles = array(
+                    sanitize_key((string) MjMembers::ROLE_COORDINATEUR),
+                    sanitize_key((string) MjMembers::ROLE_ANIMATEUR),
+                    sanitize_key((string) MjMembers::ROLE_BENEVOLE),
+                );
+            } elseif (class_exists('Mj\\Member\\Classes\\Crud\\MjMembers')) {
+                $mj_members_class = 'Mj\\Member\\Classes\\Crud\\MjMembers';
+                $allowed_roles = array(
+                    sanitize_key((string) $mj_members_class::ROLE_COORDINATEUR),
+                    sanitize_key((string) $mj_members_class::ROLE_ANIMATEUR),
+                    sanitize_key((string) $mj_members_class::ROLE_BENEVOLE),
+                );
+            }
+
+            $can_view = false;
+
+            if ($member && is_object($member) && isset($member->role)) {
+                $role = sanitize_key((string) $member->role);
+                if ($role !== '' && in_array($role, $allowed_roles, true)) {
+                    $can_view = true;
+                }
+            }
+
+            if (!$can_view && function_exists('current_user_can')) {
+                if (current_user_can('manage_options')) {
+                    $can_view = true;
+                } elseif (class_exists(Config::class) && current_user_can(Config::capability())) {
+                    $can_view = true;
+                }
+            }
+
+            return (bool) apply_filters('mj_member_can_view_internal_events', $can_view, $member);
+        }
+    }
+
 if (!function_exists('mj_member_ajax_update_event_assignments')) {
     function mj_member_ajax_update_event_assignments() {
         if (!wp_doing_ajax()) {
@@ -16,39 +106,27 @@ if (!function_exists('mj_member_ajax_update_event_assignments')) {
 
         if (!is_user_logged_in()) {
             wp_send_json_error(
-                array('message' => __('Vous devez être connecté pour gérer vos inscriptions.', 'mj-member')),
+                array('message' => __('Connecte-toi pour gérer tes inscriptions.', 'mj-member')),
                 401
             );
         }
 
-        $event_id = isset($_POST['event_id']) ? (int) $_POST['event_id'] : 0;
-        $member_id = isset($_POST['member_id']) ? (int) $_POST['member_id'] : 0;
-        $payment_mode_raw = isset($_POST['payment_mode']) ? wp_unslash($_POST['payment_mode']) : '';
-        $payment_mode = $payment_mode_raw !== '' ? sanitize_key($payment_mode_raw) : '';
-        $payment_deferred = in_array($payment_mode, array('defer', 'email', 'delayed'), true);
-        $payment_mode_raw = isset($_POST['payment_mode']) ? wp_unslash($_POST['payment_mode']) : '';
-        $payment_mode = $payment_mode_raw !== '' ? sanitize_key($payment_mode_raw) : '';
-        $payment_deferred = in_array($payment_mode, array('defer', 'email', 'delayed'), true);
-        $payment_mode_raw = isset($_POST['payment_mode']) ? wp_unslash($_POST['payment_mode']) : '';
-        $payment_mode = $payment_mode_raw !== '' ? sanitize_key($payment_mode_raw) : '';
-        $payment_deferred = in_array($payment_mode, array('defer', 'email', 'delayed'), true);
-        $registration_id = isset($_POST['registration_id']) ? (int) $_POST['registration_id'] : 0;
-
-        if ($event_id <= 0 || $member_id <= 0) {
-            wp_send_json_error(
-                array('message' => __('Requête invalide. Veuillez réessayer.', 'mj-member')),
-                400
-            );
-        }
-
-        if (!class_exists('MjEvents_CRUD') || !class_exists('MjEventRegistrations') || !class_exists('MjEventAttendance')) {
+        if (!class_exists('MjEvents') || !class_exists('MjEventRegistrations') || !class_exists('MjEventAttendance')) {
             wp_send_json_error(
                 array('message' => __('Le module événements est indisponible pour le moment.', 'mj-member')),
                 500
             );
         }
 
-        $event = MjEvents_CRUD::find($event_id);
+        $event_id = isset($_POST['event_id']) ? (int) $_POST['event_id'] : 0;
+        if ($event_id <= 0) {
+            wp_send_json_error(
+                array('message' => __('Événement introuvable.', 'mj-member')),
+                400
+            );
+        }
+
+        $event = MjEvents::find($event_id);
         if (!$event) {
             wp_send_json_error(
                 array('message' => __('Événement introuvable.', 'mj-member')),
@@ -56,11 +134,33 @@ if (!function_exists('mj_member_ajax_update_event_assignments')) {
             );
         }
 
+        $member_id = isset($_POST['member_id']) ? (int) $_POST['member_id'] : 0;
+        if ($member_id <= 0) {
+            wp_send_json_error(
+                array('message' => __('Participant invalide.', 'mj-member')),
+                400
+            );
+        }
+
+        $registration_id = isset($_POST['registration_id']) ? (int) $_POST['registration_id'] : 0;
+
+        $occurrence_selection_mode = isset($event->occurrence_selection_mode) ? sanitize_key((string) $event->occurrence_selection_mode) : 'member_choice';
+        if (!in_array($occurrence_selection_mode, array('member_choice', 'all_occurrences'), true)) {
+            $occurrence_selection_mode = 'member_choice';
+        }
+        if ($occurrence_selection_mode === 'all_occurrences') {
+            wp_send_json_error(
+                array('message' => __('Ce format inscrit automatiquement chaque participant sur toutes les occurrences.', 'mj-member')),
+                400
+            );
+        }
+
+
         $schedule_mode = isset($event->schedule_mode) ? sanitize_key((string) $event->schedule_mode) : 'fixed';
-        if (!in_array($schedule_mode, array('fixed', 'range', 'recurring'), true)) {
+        if (!in_array($schedule_mode, array('fixed', 'range', 'recurring', 'series'), true)) {
             $schedule_mode = 'fixed';
         }
-        if ($schedule_mode !== 'recurring') {
+        if (!in_array($schedule_mode, array('recurring', 'series'), true)) {
             wp_send_json_error(
                 array('message' => __('Ce format ne propose pas de gestion des occurrences.', 'mj-member')),
                 400
@@ -180,34 +280,6 @@ if (!function_exists('mj_member_ajax_update_event_assignments')) {
     add_action('wp_ajax_mj_member_update_event_assignments', 'mj_member_ajax_update_event_assignments');
     add_action('wp_ajax_nopriv_mj_member_update_event_assignments', 'mj_member_ajax_update_event_assignments');
 }
-if (!function_exists('mj_member_register_events_widget_assets')) {
-    function mj_member_register_events_widget_assets() {
-        $version = Config::version();
-        $baseUrl = Config::url();
-        $basePath = Config::path();
-
-        wp_register_script(
-            'mj-member-events-widget',
-            $baseUrl . 'js/events-widget.js',
-            array(),
-            $version,
-            true
-        );
-
-        $toggle_path = $basePath . 'js/event-toggles.js';
-        $toggle_version = file_exists($toggle_path) ? filemtime($toggle_path) : $version;
-
-        wp_register_script(
-            'mj-member-event-toggles',
-            $baseUrl . 'js/event-toggles.js',
-            array(),
-            $toggle_version,
-            true
-        );
-    }
-    add_action('init', 'mj_member_register_events_widget_assets', 8);
-}
-
 if (!function_exists('mj_member_output_events_widget_styles')) {
     function mj_member_output_events_widget_styles() {
         static $printed = false;
@@ -272,7 +344,12 @@ if (!function_exists('mj_member_output_events_widget_styles')) {
     @media (max-width:780px){.mj-member-events__item.layout-horizontal{flex-direction:column;}.mj-member-events__cover.is-horizontal{width:100%;border-radius:var(--mj-events-cover-radius,var(--mj-events-radius)) var(--mj-events-cover-radius,var(--mj-events-radius)) 0 0;}.mj-member-events.is-wide .mj-member-events__cover{flex:1 1 auto;width:100%;min-height:var(--mj-events-cover-min,220px);}}
     CSS;
 
-        echo '<style>' . $css . '</style>';
+        if (!wp_style_is('mj-member-events-widget-inline', 'registered')) {
+            wp_register_style('mj-member-events-widget-inline', false, array(), null);
+        }
+
+        wp_add_inline_style('mj-member-events-widget-inline', $css);
+        wp_enqueue_style('mj-member-events-widget-inline');
     }
 }
 
@@ -296,6 +373,8 @@ if (!function_exists('mj_member_ensure_events_widget_localized')) {
                     'cancel' => __('Annuler', 'mj-member'),
                     'loginRequired' => __('Connectez-vous pour continuer.', 'mj-member'),
                     'selectParticipant' => __('Merci de sélectionner un participant.', 'mj-member'),
+                    'confirmationRequired' => __('Merci de confirmer ta participation en cochant la case.', 'mj-member'),
+                    'confirmationRequiredPayment' => __('Merci de confirmer que tu finaliseras ton inscription et le paiement en cochant la case.', 'mj-member'),
                     'genericError' => __('Une erreur est survenue. Merci de réessayer.', 'mj-member'),
                     'registered' => __('Inscription envoyée', 'mj-member'),
                     'success' => __('Inscription enregistrée !', 'mj-member'),
@@ -303,7 +382,9 @@ if (!function_exists('mj_member_ensure_events_widget_localized')) {
                     'loading' => __('En cours...', 'mj-member'),
                     'noParticipant' => __("Aucun profil disponible pour l'instant.", 'mj-member'),
                     'alreadyRegistered' => __('Déjà inscrit', 'mj-member'),
+                    'ineligibleStatus' => __('Conditions non respectées', 'mj-member'),
                     'allRegistered' => __('Tous les profils sont déjà inscrits pour cet événement.', 'mj-member'),
+                    'noEligibleParticipant' => __('Aucun profil éligible n’est disponible pour cette inscription.', 'mj-member'),
                     'noteLabel' => __('Message pour l’équipe (optionnel)', 'mj-member'),
                     'notePlaceholder' => __('Précisez une remarque utile (allergies, arrivée tardive, etc.).', 'mj-member'),
                     'cta' => __("S'inscrire", 'mj-member'),
@@ -316,6 +397,7 @@ if (!function_exists('mj_member_ensure_events_widget_localized')) {
                     'occurrenceLegend' => __('Quelles dates ?', 'mj-member'),
                     'occurrenceHelp' => __('Cochez les occurrences auxquelles vous participerez.', 'mj-member'),
                     'occurrenceHelpRecurring' => __('Sélectionnez de nouvelles dates ou retirez une réservation.', 'mj-member'),
+                    'occurrenceCalendarAllDay' => __('Toute la journée', 'mj-member'),
                     'occurrenceMissing' => __('Merci de sélectionner au moins une occurrence.', 'mj-member'),
                     'occurrencePast' => __('Passée', 'mj-member'),
                     'occurrenceEmpty' => __('Aucune occurrence disponible.', 'mj-member'),
@@ -323,6 +405,17 @@ if (!function_exists('mj_member_ensure_events_widget_localized')) {
                     'occurrenceAvailableTitle' => __('Autres dates disponibles', 'mj-member'),
                     'occurrenceRegisteredEmpty' => __('Aucune réservation active.', 'mj-member'),
                     'occurrenceAvailableEmpty' => __('Toutes les dates sont déjà réservées.', 'mj-member'),
+                    'reservationsLoading' => __('Actualisation des réservations...', 'mj-member'),
+                    'reservationsError' => __('Impossible de mettre à jour tes réservations. Merci de réessayer.', 'mj-member'),
+                    'reservationsUpdated' => __('Tes réservations sont à jour.', 'mj-member'),
+                    'occurrenceAutoAssigned' => __('Toutes les occurrences sont incluses automatiquement.', 'mj-member'),
+                    'reservationUnknown' => __('Participant', 'mj-member'),
+                    'reservationCreated' => __('Réservé le %s', 'mj-member'),
+                    'paymentSummaryTitle' => __('Récapitulatif du paiement', 'mj-member'),
+                    'paymentSummaryMessage' => __('Tu peux effectuer le paiement maintenant ou plus tard depuis ton espace membre ou en main propre auprès d’un animateur.', 'mj-member'),
+                    'paymentSummaryAmountLabel' => __('Montant à régler', 'mj-member'),
+                    'paymentSummaryPayNow' => __('Payer en ligne', 'mj-member'),
+                    'paymentSummaryClose' => __('Fermer', 'mj-member'),
                 ),
             )
         );
@@ -368,7 +461,6 @@ if (!function_exists('mj_member_ensure_event_toggles_localized')) {
                 ),
             )
         );
-
         $localized = true;
     }
 }
@@ -379,15 +471,18 @@ if (!function_exists('mj_member_build_event_registration_context')) {
             'event_id' => isset($event_data['id']) ? (int) $event_data['id'] : 0,
             'is_open' => false,
             'requires_login' => !is_user_logged_in(),
+            'requires_validation' => true,
             'cta_label' => apply_filters('mj_member_event_single_cta_label', __("S'inscrire", 'mj-member'), $event_data),
             'cta_registered_label' => apply_filters('mj_member_event_single_cta_registered_label', __('Déjà inscrit', 'mj-member'), $event_data),
-            'payload' => array(),
+            'config' => array(),
             'participants' => array(),
             'registered_count' => 0,
             'available_count' => 0,
             'all_registered' => false,
             'has_participants' => false,
             'needs_script' => false,
+            'is_free_participation' => false,
+            'free_participation_message' => '',
         );
 
         $event_id = $context['event_id'];
@@ -410,93 +505,191 @@ if (!function_exists('mj_member_build_event_registration_context')) {
             $registration_open = false;
             $closed_by_start = true;
         }
+
         $occurrence_selection = array();
         $occurrence_assignments = array(
             'mode' => 'all',
             'occurrences' => array(),
         );
+        $occurrence_catalog = array();
+        $occurrence_lookup = array();
         $next_occurrence_ts = null;
+        $has_future_occurrence = false;
 
         $schedule_mode = isset($event_data['schedule_mode']) ? sanitize_key((string) $event_data['schedule_mode']) : 'fixed';
-        if (!in_array($schedule_mode, array('fixed', 'range', 'recurring'), true)) {
+        if (!in_array($schedule_mode, array('fixed', 'range', 'recurring', 'series'), true)) {
             $schedule_mode = 'fixed';
         }
+
+        $occurrence_selection_mode = isset($event_data['occurrence_selection_mode']) ? sanitize_key((string) $event_data['occurrence_selection_mode']) : 'member_choice';
+        if (!in_array($occurrence_selection_mode, array('member_choice', 'all_occurrences'), true)) {
+            $occurrence_selection_mode = 'member_choice';
+        }
+        $allow_occurrence_selection = ($occurrence_selection_mode !== 'all_occurrences');
 
         if (!empty($event_data)) {
             $event_object = is_object($event_data) ? clone $event_data : (object) $event_data;
 
             if (class_exists('MjEventSchedule')) {
-                $schedule_args = array(
-                    'max' => 40,
-                    'include_past' => true,
+                $occurrence_limit = 120;
+                $process_occurrence = static function ($occurrence_entry) use (&$occurrence_lookup, &$occurrence_catalog, &$next_occurrence_ts, &$has_future_occurrence, $now_ts) {
+                    if (!is_array($occurrence_entry)) {
+                        return;
+                    }
+
+                    $start_value = isset($occurrence_entry['start']) ? (string) $occurrence_entry['start'] : '';
+                    if ($start_value === '') {
+                        return;
+                    }
+
+                    $slug_value = isset($occurrence_entry['slug']) ? (string) $occurrence_entry['slug'] : $start_value;
+                    $label_value = isset($occurrence_entry['label']) ? sanitize_text_field((string) $occurrence_entry['label']) : '';
+                    $timestamp_value = isset($occurrence_entry['timestamp']) ? (int) $occurrence_entry['timestamp'] : strtotime($start_value);
+                    if ($timestamp_value === false) {
+                        $timestamp_value = 0;
+                    }
+
+                    $normalized_start = $start_value;
+                    $normalized_slug = $slug_value;
+                    if (class_exists('MjEventAttendance')) {
+                        $normalized_candidate = MjEventAttendance::normalize_occurrence($start_value);
+                        if ($normalized_candidate !== '') {
+                            $normalized_start = $normalized_candidate;
+                        }
+                        $slug_candidate = MjEventAttendance::normalize_occurrence($slug_value);
+                        if ($slug_candidate !== '') {
+                            $normalized_slug = $slug_candidate;
+                        }
+                    }
+
+                    $is_past = ($timestamp_value > 0 && $timestamp_value < $now_ts);
+                    $is_today = ($timestamp_value > 0 && wp_date('Y-m-d', $timestamp_value) === wp_date('Y-m-d', $now_ts));
+
+                    if ($next_occurrence_ts === null && !$is_past && $timestamp_value > 0) {
+                        $next_occurrence_ts = $timestamp_value;
+                    }
+
+                    if ($timestamp_value > $now_ts) {
+                        $has_future_occurrence = true;
+                    }
+
+                    $display_label = $label_value;
+                    if ($display_label === '') {
+                        if ($timestamp_value > 0) {
+                            $display_label = date_i18n(get_option('date_format'), $timestamp_value) . ' - ' . date_i18n(get_option('time_format'), $timestamp_value);
+                        } else {
+                            $display_label = $start_value;
+                        }
+                    }
+
+                    $occurrence_payload = array(
+                        'start' => sanitize_text_field($start_value),
+                        'slug' => sanitize_text_field($slug_value),
+                        'label' => sanitize_text_field($display_label),
+                        'timestamp' => $timestamp_value > 0 ? (int) $timestamp_value : 0,
+                        'normalized' => sanitize_text_field($normalized_start),
+                        'normalized_slug' => sanitize_text_field($normalized_slug),
+                        'isPast' => $is_past,
+                        'isToday' => $is_today,
+                    );
+
+                    if (isset($occurrence_entry['occurrence_id'])) {
+                        $occurrence_payload['occurrence_id'] = (int) $occurrence_entry['occurrence_id'];
+                    }
+                    if (isset($occurrence_entry['id'])) {
+                        $occurrence_payload['id'] = (int) $occurrence_entry['id'];
+                    }
+
+                    $selection_key = '';
+                    foreach (array($normalized_start, $normalized_slug, $slug_value, $start_value) as $candidate_value) {
+                        if (is_string($candidate_value)) {
+                            $candidate_value = trim($candidate_value);
+                        }
+                        if (!is_string($candidate_value) || $candidate_value === '') {
+                            continue;
+                        }
+                        $selection_key = $candidate_value;
+                        break;
+                    }
+
+                    if ($selection_key === '') {
+                        $selection_key = 'occ_' . md5($start_value . '|' . $timestamp_value . '|' . microtime(true));
+                    }
+
+                    $occurrence_lookup[$selection_key] = $occurrence_payload;
+
+                    $catalog_keys = array(
+                        $slug_value,
+                        $normalized_slug,
+                        $start_value,
+                        $normalized_start,
+                        sanitize_key($slug_value),
+                        sanitize_key($normalized_slug),
+                        sanitize_key($start_value),
+                        sanitize_key($normalized_start),
+                    );
+
+                    $catalog_keys = array_values(
+                        array_filter(
+                            array_unique(
+                                array_map(
+                                    static function ($value) {
+                                        return is_string($value) ? trim($value) : '';
+                                    },
+                                    $catalog_keys
+                                )
+                            )
+                        )
+                    );
+
+                    foreach ($catalog_keys as $catalog_key) {
+                        if ($catalog_key === '') {
+                            continue;
+                        }
+                        $occurrence_catalog[$catalog_key] = $occurrence_payload;
+                    }
+                };
+
+                $occurrences_raw = MjEventSchedule::get_occurrences(
+                    $event_object,
+                    array(
+                        'max' => $occurrence_limit,
+                        'include_past' => true,
+                    )
                 );
-                $occurrences_raw = MjEventSchedule::get_occurrences($event_object, $schedule_args);
 
                 if (!empty($occurrences_raw) && is_array($occurrences_raw)) {
                     foreach ($occurrences_raw as $occurrence_entry) {
-                        if (!is_array($occurrence_entry)) {
-                            continue;
-                        }
-
-                        $start_value = isset($occurrence_entry['start']) ? (string) $occurrence_entry['start'] : '';
-                        if ($start_value === '') {
-                            continue;
-                        }
-
-                        $label_value = isset($occurrence_entry['label']) ? sanitize_text_field((string) $occurrence_entry['label']) : '';
-                        $timestamp_value = isset($occurrence_entry['timestamp']) ? (int) $occurrence_entry['timestamp'] : strtotime($start_value);
-                        if ($timestamp_value === false) {
-                            $timestamp_value = 0;
-                        }
-
-                        $normalized_start = $start_value;
-                        if (class_exists('MjEventAttendance')) {
-                            $normalized_candidate = MjEventAttendance::normalize_occurrence($start_value);
-                            if ($normalized_candidate !== '') {
-                                $normalized_start = $normalized_candidate;
-                            }
-                        }
-
-                        $is_past = ($timestamp_value !== 0 && $timestamp_value < $now_ts);
-                        $is_today = ($timestamp_value !== 0 && wp_date('Y-m-d', $timestamp_value) === wp_date('Y-m-d', $now_ts));
-
-                        if ($next_occurrence_ts === null && !$is_past) {
-                            $next_occurrence_ts = $timestamp_value;
-                        }
-
-                        $occurrence_selection[] = array(
-                            'start' => $normalized_start,
-                            'label' => ($label_value !== '' ? $label_value : $normalized_start),
-                            'timestamp' => $timestamp_value,
-                            'isPast' => $is_past,
-                            'isToday' => $is_today,
-                        );
+                        $process_occurrence($occurrence_entry);
                     }
+                }
 
-                    if (!empty($occurrence_selection)) {
-                        usort($occurrence_selection, static function ($left, $right) {
-                            $left_ts = isset($left['timestamp']) ? (int) $left['timestamp'] : 0;
-                            $right_ts = isset($right['timestamp']) ? (int) $right['timestamp'] : 0;
-                            if ($left_ts === $right_ts) {
-                                return 0;
-                            }
-                            if ($left_ts === 0) {
-                                return 1;
-                            }
-                            if ($right_ts === 0) {
-                                return -1;
-                            }
-                            return $left_ts < $right_ts ? -1 : 1;
-                        });
+                if ($allow_occurrence_selection && (!$has_future_occurrence || empty($occurrence_lookup))) {
+                    $future_occurrences = MjEventSchedule::get_occurrences(
+                        $event_object,
+                        array(
+                            'max' => $occurrence_limit,
+                            'include_past' => false,
+                        )
+                    );
 
-                        $occurrence_selection = array_slice($occurrence_selection, 0, 20);
+                    if (!empty($future_occurrences) && is_array($future_occurrences)) {
+                        foreach ($future_occurrences as $occurrence_entry) {
+                            $process_occurrence($occurrence_entry);
+                        }
                     }
+                }
+
+                if (!empty($occurrence_lookup)) {
+                    $occurrence_selection = array_values($occurrence_lookup);
                 }
             }
         }
 
-        if (!$registration_open && $closed_by_start && $next_occurrence_ts !== null && $next_occurrence_ts > $now_ts) {
+        $deadline_is_custom = ($deadline_raw !== '' && $deadline_raw !== '0000-00-00 00:00:00');
+        if (!$registration_open && $closed_by_start && !$deadline_is_custom && $has_future_occurrence) {
             $registration_open = true;
+            $closed_by_start = false;
         }
 
         if ($registration_open && $next_occurrence_ts !== null && $next_occurrence_ts <= $now_ts) {
@@ -515,6 +708,13 @@ if (!function_exists('mj_member_build_event_registration_context')) {
         $context['deadline_timestamp'] = $deadline_ts ? (int) $deadline_ts : 0;
 
         $allow_guardian_registration = !empty($event_data['allow_guardian_registration']);
+        $requires_validation = array_key_exists('requires_validation', $event_data)
+            ? !empty($event_data['requires_validation'])
+            : true;
+
+        $context['requires_validation'] = $requires_validation;
+        $context['allow_guardian_registration'] = $allow_guardian_registration;
+        $context['closed_by_start'] = $closed_by_start;
 
         $current_member = (is_user_logged_in() && function_exists('mj_member_get_current_member')) ? mj_member_get_current_member() : null;
         $participant_options = array();
@@ -536,11 +736,25 @@ if (!function_exists('mj_member_build_event_registration_context')) {
                 $member_display_name = sprintf(__('Membre #%d', 'mj-member'), (int) $current_member->id);
             }
 
+            $member_first_name = !empty($current_member->first_name) ? sanitize_text_field($current_member->first_name) : '';
+            $member_last_name = !empty($current_member->last_name) ? sanitize_text_field($current_member->last_name) : '';
+            $member_role = isset($current_member->role) ? sanitize_key($current_member->role) : 'member';
+            $member_birth_date = '';
+            if (!empty($current_member->birth_date) && $current_member->birth_date !== '0000-00-00') {
+                $member_birth_date = sanitize_text_field((string) $current_member->birth_date);
+            }
+
             $self_label = $member_display_name . ' (' . __('moi', 'mj-member') . ')';
             $participant_options[] = array(
                 'id' => (int) $current_member->id,
                 'label' => $self_label,
-                'type' => isset($current_member->role) ? sanitize_key($current_member->role) : 'member',
+                'type' => $member_role,
+                'role' => $member_role,
+                'first_name' => $member_first_name,
+                'last_name' => $member_last_name,
+                'full_name' => $member_display_name,
+                'birth_date' => $member_birth_date,
+                'guardian_id' => isset($current_member->guardian_id) ? (int) $current_member->guardian_id : 0,
                 'isSelf' => true,
             );
         }
@@ -569,10 +783,24 @@ if (!function_exists('mj_member_build_event_registration_context')) {
                         $child_label = sprintf(__('Jeune #%d', 'mj-member'), (int) $child->id);
                     }
 
+                    $child_first_name = !empty($child->first_name) ? sanitize_text_field($child->first_name) : '';
+                    $child_last_name = !empty($child->last_name) ? sanitize_text_field($child->last_name) : '';
+                    $child_role = isset($child->role) ? sanitize_key((string) $child->role) : 'child';
+                    $child_birth_date = '';
+                    if (!empty($child->birth_date) && $child->birth_date !== '0000-00-00') {
+                        $child_birth_date = sanitize_text_field((string) $child->birth_date);
+                    }
+
                     $participant_options[] = array(
                         'id' => (int) $child->id,
                         'label' => $child_label,
-                        'type' => 'child',
+                        'type' => $child_role !== '' ? $child_role : 'child',
+                        'role' => $child_role,
+                        'first_name' => $child_first_name,
+                        'last_name' => $child_last_name,
+                        'full_name' => $child_label,
+                        'birth_date' => $child_birth_date,
+                        'guardian_id' => !empty($current_member->id) ? (int) $current_member->id : 0,
                         'isSelf' => false,
                     );
                 }
@@ -584,24 +812,31 @@ if (!function_exists('mj_member_build_event_registration_context')) {
         }
 
         $participants_source = $participant_options;
-        if (!$allow_guardian_registration && !empty($participant_options)) {
-            $participants_source = array();
-            foreach ($participant_options as $participant_option) {
-                $option_type = isset($participant_option['type']) ? sanitize_key($participant_option['type']) : '';
-                $is_self = !empty($participant_option['isSelf']);
-                if ($is_self && $option_type === MjMembers_CRUD::ROLE_TUTEUR) {
-                    continue;
-                }
-                $participants_source[] = $participant_option;
-            }
-        }
 
         $event_participants = array();
         $registered_count = 0;
         $available_count = 0;
+        $ineligible_count = 0;
+
+        $age_min = isset($event_data['age_min']) ? (int) $event_data['age_min'] : 0;
+        $age_max = isset($event_data['age_max']) ? (int) $event_data['age_max'] : 0;
+        $age_reference_available = ($start_ts && $start_ts > 0);
+        $age_reference_timestamp = $age_reference_available ? (int) $start_ts : (int) $now_ts;
+        if ($age_reference_timestamp <= 0) {
+            $age_reference_timestamp = (int) $now_ts;
+            $age_reference_available = false;
+        }
+        $timezone_string = function_exists('wp_timezone_string') ? (string) wp_timezone_string() : '';
+        if ($timezone_string === '') {
+            $timezone_string = 'UTC';
+        }
 
         if (!empty($participants_source)) {
             foreach ($participants_source as $participant_option) {
+                if (!is_array($participant_option)) {
+                    $participant_option = (array) $participant_option;
+                }
+
                 $participant_entry = $participant_option;
                 $participant_entry['isRegistered'] = false;
                 $participant_entry['registrationId'] = 0;
@@ -613,6 +848,15 @@ if (!function_exists('mj_member_build_event_registration_context')) {
                 );
 
                 $participant_id = isset($participant_option['id']) ? (int) $participant_option['id'] : 0;
+                $participant_label = isset($participant_option['label']) ? sanitize_text_field((string) $participant_option['label']) : '';
+                $participant_first_name = isset($participant_option['first_name']) ? sanitize_text_field((string) $participant_option['first_name']) : '';
+                $participant_last_name = isset($participant_option['last_name']) ? sanitize_text_field((string) $participant_option['last_name']) : '';
+                $participant_full_name = isset($participant_option['full_name']) ? sanitize_text_field((string) $participant_option['full_name']) : ($participant_label !== '' ? $participant_label : '');
+                $participant_role = isset($participant_option['role']) ? sanitize_key((string) $participant_option['role']) : '';
+                if ($participant_role === '' && isset($participant_option['type'])) {
+                    $participant_role = sanitize_key((string) $participant_option['type']);
+                }
+                $participant_birth_date = isset($participant_option['birth_date']) ? sanitize_text_field((string) $participant_option['birth_date']) : '';
 
                 if ($participant_id > 0 && class_exists('MjEventRegistrations')) {
                     $existing_registration = MjEventRegistrations::get_existing($event_id, $participant_id);
@@ -632,13 +876,110 @@ if (!function_exists('mj_member_build_event_registration_context')) {
                             if (isset($participant_entry['occurrenceAssignments']['mode']) && $participant_entry['occurrenceAssignments']['mode'] === 'custom' && !empty($participant_entry['occurrenceAssignments']['occurrences'])) {
                                 $occurrence_assignments = $participant_entry['occurrenceAssignments'];
                             }
+                            if (!$allow_occurrence_selection) {
+                                $participant_entry['occurrenceAssignments'] = array(
+                                    'mode' => 'all',
+                                    'occurrences' => array(),
+                                );
+                            }
                         }
                     }
                 }
 
+                $participant_entry['label'] = $participant_label !== '' ? $participant_label : (isset($participant_entry['label']) ? $participant_entry['label'] : '');
+                $participant_entry['name'] = $participant_full_name !== '' ? $participant_full_name : $participant_entry['label'];
+                $participant_entry['fullName'] = $participant_entry['name'];
+                $participant_entry['first_name'] = $participant_first_name;
+                $participant_entry['last_name'] = $participant_last_name;
+                $participant_entry['firstName'] = $participant_first_name;
+                $participant_entry['lastName'] = $participant_last_name;
+                $participant_entry['role'] = $participant_role;
+                $participant_entry['birth_date'] = $participant_birth_date;
+                $participant_entry['birthDate'] = $participant_birth_date;
+
+                $eligible = true;
+                $ineligible_reasons = array();
+
+                if (!$allow_guardian_registration && defined('MjMembers::ROLE_TUTEUR') && $participant_role === MjMembers::ROLE_TUTEUR) {
+                    $eligible = false;
+                    $ineligible_reasons[] = __('Rôle tuteur non autorisé pour cet événement.', 'mj-member');
+                }
+
+                $age_current = null;
+                $birth_date_known = $participant_birth_date !== '' && $participant_birth_date !== '0000-00-00';
+                if ($birth_date_known) {
+                    try {
+                        $birth_instance = new DateTime((string) $participant_birth_date);
+                        $today_instance = new DateTime('today');
+                        $age_current = (int) $birth_instance->diff($today_instance)->y;
+                    } catch (Exception $exception) {
+                        $age_current = null;
+                    }
+                }
+
+                if ($age_min > 0 || $age_max > 0) {
+                    if (!$birth_date_known || $age_current === null) {
+                        $eligible = false;
+                        $ineligible_reasons[] = __('Âge du membre indisponible.', 'mj-member');
+                    } else {
+                        if (!$age_reference_available) {
+                            if ($age_min > 0 && $age_current < $age_min) {
+                                $eligible = false;
+                                $ineligible_reasons[] = sprintf(__('Âge inférieur au minimum (%d ans).', 'mj-member'), $age_min);
+                            }
+                            if ($age_max > 0 && $age_current > $age_max) {
+                                $eligible = false;
+                                $ineligible_reasons[] = sprintf(__('Âge supérieur au maximum (%d ans).', 'mj-member'), $age_max);
+                            }
+                        }
+
+                        if ($age_reference_timestamp > 0 && $birth_date_known) {
+                            try {
+                                $reference_date = new DateTime('@' . $age_reference_timestamp);
+                                $reference_date->setTimezone(new DateTimeZone($timezone_string));
+                                $birth_reference = new DateTime((string) $participant_birth_date);
+                                $age_at_event = (int) $birth_reference->diff($reference_date)->y;
+                                if ($age_min > 0 && $age_at_event < $age_min) {
+                                    $eligible = false;
+                                    $ineligible_reasons[] = sprintf(__('Âge à la date de l\'événement inférieur au minimum (%d ans).', 'mj-member'), $age_min);
+                                }
+                                if ($age_max > 0 && $age_at_event > $age_max) {
+                                    $eligible = false;
+                                    $ineligible_reasons[] = sprintf(__('Âge à la date de l\'événement supérieur au maximum (%d ans).', 'mj-member'), $age_max);
+                                }
+                            } catch (Exception $exception) {
+                                if ($age_reference_available) {
+                                    if ($age_min > 0 && $age_current !== null && $age_current < $age_min) {
+                                        $eligible = false;
+                                        $ineligible_reasons[] = sprintf(__('Âge inférieur au minimum (%d ans).', 'mj-member'), $age_min);
+                                    }
+                                    if ($age_max > 0 && $age_current !== null && $age_current > $age_max) {
+                                        $eligible = false;
+                                        $ineligible_reasons[] = sprintf(__('Âge supérieur au maximum (%d ans).', 'mj-member'), $age_max);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (!empty($ineligible_reasons)) {
+                    $ineligible_reasons = array_values(array_map('sanitize_text_field', array_unique($ineligible_reasons)));
+                }
+
+                $participant_entry['eligible'] = $eligible;
+                $participant_entry['isEligible'] = $eligible ? 1 : 0;
+                $participant_entry['ineligibleReasons'] = $ineligible_reasons;
+                $participant_entry['ineligible_reasons'] = $ineligible_reasons;
+                $participant_entry['age'] = $age_current !== null ? (int) $age_current : null;
+
+                if (!$eligible) {
+                    $ineligible_count++;
+                }
+
                 if ($participant_entry['isRegistered']) {
                     $registered_count++;
-                } else {
+                } elseif ($eligible) {
                     $available_count++;
                 }
 
@@ -648,18 +989,78 @@ if (!function_exists('mj_member_build_event_registration_context')) {
 
         $all_registered = !empty($event_participants) && $registered_count === count($event_participants);
 
-        $payload = array(
+        $non_interactive_modes = apply_filters(
+            'mj_member_event_registration_non_interactive_modes',
+            array('attendance', 'attendance_free', 'free_participation', 'free', 'open_access', 'no_registration', 'optional', 'none', 'libre', 'presence')
+        );
+
+        if (!is_array($non_interactive_modes)) {
+            $non_interactive_modes = array('attendance', 'attendance_free', 'free_participation', 'free', 'open_access', 'no_registration', 'optional', 'none', 'libre', 'presence');
+        }
+
+        $non_interactive_modes = array_values(array_filter(array_map('sanitize_key', $non_interactive_modes), static function ($value) {
+            return $value !== '';
+        }));
+        if (!in_array('free_participation', $non_interactive_modes, true)) {
+            $non_interactive_modes[] = 'free_participation';
+        }
+
+        $is_free_participation = !empty($event_data['free_participation']) || !empty($event_data['is_free_participation']);
+
+        $legacy_registration_mode = '';
+        if (isset($event_data['registration_mode'])) {
+            $legacy_registration_mode = sanitize_key((string) $event_data['registration_mode']);
+        }
+        if ($legacy_registration_mode === '') {
+            $legacy_registration_mode = $is_free_participation ? 'free_participation' : 'participant';
+        }
+
+        if (!$is_free_participation && in_array($legacy_registration_mode, $non_interactive_modes, true)) {
+            $is_free_participation = true;
+        }
+
+        $default_free_participation = __('La participation est libre : aucune inscription n\'est requise.', 'mj-member');
+        $free_participation_message = '';
+        if ($is_free_participation) {
+            $filtered_message = apply_filters(
+                'mj_member_event_free_participation_message',
+                $default_free_participation,
+                $event_data,
+                $legacy_registration_mode,
+                $is_free_participation
+            );
+            if (is_string($filtered_message)) {
+                $free_participation_message = trim((string) $filtered_message);
+            } else {
+                $free_participation_message = $default_free_participation;
+            }
+            if ($free_participation_message === '') {
+                $free_participation_message = $default_free_participation;
+            }
+        }
+
+        $registration_config = array(
             'eventId' => $event_id,
             'eventTitle' => isset($event_data['title']) ? $event_data['title'] : '',
             'participants' => $event_participants,
             'allRegistered' => $all_registered,
             'hasParticipants' => !empty($event_participants),
             'hasAvailableParticipants' => ($available_count > 0),
+            'hasIneligibleParticipants' => ($ineligible_count > 0),
+            'ineligibleCount' => $ineligible_count,
             'noteMaxLength' => 400,
+            'requiresValidation' => $requires_validation,
+            'allowGuardianRegistration' => $allow_guardian_registration,
         );
 
         if ($deadline_ts) {
-            $payload['deadline'] = gmdate('c', $deadline_ts);
+            $registration_config['deadline'] = gmdate('c', $deadline_ts);
+        }
+
+        $registration_config['isFreeParticipation'] = $is_free_participation;
+        $registration_config['freeParticipation'] = $is_free_participation;
+        if ($free_participation_message !== '') {
+            $registration_config['freeParticipationMessage'] = $free_participation_message;
         }
 
         $total_participants = count($event_participants);
@@ -668,9 +1069,14 @@ if (!function_exists('mj_member_build_event_registration_context')) {
             ? sprintf(__('Tarif : %s €', 'mj-member'), number_format_i18n($price_amount, 2))
             : __('Tarif : Gratuit', 'mj-member'));
 
+        $context['free_participation'] = $is_free_participation ? 1 : 0;
+        $context['is_free_participation'] = $is_free_participation;
+        $context['free_participation_message'] = $is_free_participation ? $free_participation_message : '';
         $context['participants'] = $event_participants;
         $context['registered_count'] = $registered_count;
         $context['available_count'] = $available_count;
+        $context['ineligible_count'] = $ineligible_count;
+        $context['has_ineligible'] = ($ineligible_count > 0);
         $context['all_registered'] = $all_registered;
         $context['total_count'] = $total_participants;
         $context['has_participants'] = !empty($event_participants);
@@ -681,16 +1087,47 @@ if (!function_exists('mj_member_build_event_registration_context')) {
             'total' => $total_participants,
             'registered' => $registered_count,
             'available' => $available_count,
+            'ineligible' => $ineligible_count,
         );
+
+        $capacity_state = array();
+        if (class_exists('MjEventRegistrations') && method_exists('MjEventRegistrations', 'get_capacity_state')) {
+            $capacity_state = MjEventRegistrations::get_capacity_state($event_id);
+        }
+        if (!empty($capacity_state)) {
+            $context['capacity'] = $capacity_state;
+            $registration_config['capacity'] = $capacity_state;
+        }
+
+        if (!$allow_occurrence_selection) {
+            $occurrence_assignments = array(
+                'mode' => 'all',
+                'occurrences' => array(),
+            );
+        }
         $context['occurrences'] = $occurrence_selection;
         $context['has_occurrences'] = !empty($occurrence_selection);
         $context['assignments'] = $occurrence_assignments;
-        $payload['occurrences'] = $occurrence_selection;
-        $payload['assignments'] = $occurrence_assignments;
-        $payload['scheduleMode'] = $schedule_mode;
-        $payload['hasOccurrences'] = !empty($occurrence_selection);
-        $context['payload'] = $payload;
+        $context['occurrence_selection_mode'] = $occurrence_selection_mode;
+        $context['allow_occurrence_selection'] = $allow_occurrence_selection;
+
+        $registration_config['occurrences'] = $occurrence_selection;
+        $registration_config['assignments'] = $occurrence_assignments;
+        $registration_config['scheduleMode'] = $schedule_mode;
+        $registration_config['hasOccurrences'] = !empty($occurrence_selection);
+        $registration_config['hasIneligibleParticipants'] = ($ineligible_count > 0);
+        $registration_config['ineligibleCount'] = $ineligible_count;
+        $registration_config['occurrenceSelectionMode'] = $occurrence_selection_mode;
+        $registration_config['allowOccurrenceSelection'] = $allow_occurrence_selection;
+        $registration_config['priceAmount'] = $price_amount;
+        $registration_config['priceLabel'] = $price_label;
+        $registration_config['paymentRequired'] = ($price_amount > 0);
+
+        $context['config'] = $registration_config;
         $context['needs_script'] = $registration_open && ($context['requires_login'] || !empty($event_participants));
+        if ($is_free_participation) {
+            $context['needs_script'] = false;
+        }
 
         return $context;
     }
@@ -894,7 +1331,7 @@ if (!function_exists('mj_member_get_public_events')) {
      */
     function mj_member_get_public_events($args = array()) {
         $defaults = array(
-            'statuses' => array(MjEvents_CRUD::STATUS_ACTIVE),
+            'statuses' => array(MjEvents::STATUS_ACTIVE),
             'types' => array(),
             'ids' => array(),
             'article_ids' => array(),
@@ -908,6 +1345,7 @@ if (!function_exists('mj_member_get_public_events')) {
         $args = wp_parse_args($args, $defaults);
 
         $include_past_events = !empty($args['include_past']) && $args['include_past'] !== 'no' && $args['include_past'] !== '0';
+        $can_view_internal_events = mj_member_user_can_view_internal_events();
 
         $statuses = array();
         if (!empty($args['statuses']) && is_array($args['statuses'])) {
@@ -920,7 +1358,7 @@ if (!function_exists('mj_member_get_public_events')) {
             }
         }
         if (empty($statuses)) {
-            $statuses = array(MjEvents_CRUD::STATUS_ACTIVE);
+            $statuses = array(MjEvents::STATUS_ACTIVE);
         }
 
         $types = array();
@@ -1026,8 +1464,32 @@ if (!function_exists('mj_member_get_public_events')) {
         );
 
         $supports_guardian_toggle = function_exists('mj_member_column_exists') ? mj_member_column_exists($events_table, 'allow_guardian_registration') : false;
+        $supports_validation_toggle = function_exists('mj_member_column_exists') ? mj_member_column_exists($events_table, 'requires_validation') : false;
+        $supports_free_participation = function_exists('mj_member_column_exists') ? mj_member_column_exists($events_table, 'free_participation') : false;
+        $supports_registration_mode = !$supports_free_participation && function_exists('mj_member_column_exists') ? mj_member_column_exists($events_table, 'registration_mode') : false;
         if ($supports_guardian_toggle) {
             $select_fields[] = 'events.allow_guardian_registration';
+        }
+        if ($supports_validation_toggle) {
+            $select_fields[] = 'events.requires_validation';
+        }
+        if ($supports_free_participation) {
+            $select_fields[] = 'events.free_participation';
+        }
+        if ($supports_registration_mode) {
+            $select_fields[] = 'events.registration_mode';
+        }
+
+        $default_free_registration_modes = array('attendance', 'attendance_free', 'free_participation', 'free', 'open_access', 'no_registration', 'optional', 'none', 'libre', 'presence');
+        $non_interactive_registration_modes = apply_filters('mj_member_event_registration_non_interactive_modes', $default_free_registration_modes);
+        if (!is_array($non_interactive_registration_modes)) {
+            $non_interactive_registration_modes = $default_free_registration_modes;
+        }
+        $non_interactive_registration_modes = array_values(array_filter(array_map('sanitize_key', $non_interactive_registration_modes), static function ($value) {
+            return $value !== '';
+        }));
+        if (!in_array('free_participation', $non_interactive_registration_modes, true)) {
+            $non_interactive_registration_modes[] = 'free_participation';
         }
 
         $join_sql = '';
@@ -1092,6 +1554,11 @@ if (!function_exists('mj_member_get_public_events')) {
             }
         }
 
+        if (!$can_view_internal_events) {
+            $where_fragments[] = 'events.type <> %s';
+            $where_params[] = MjEvents::TYPE_INTERNE;
+        }
+
         $now_value = isset($args['now']) ? sanitize_text_field($args['now']) : current_time('mysql');
         if (!$include_past_events) {
             $where_fragments[] = '(events.date_fin >= %s OR (events.schedule_mode = %s AND (events.recurrence_until IS NULL OR events.recurrence_until = "" OR events.recurrence_until = "0000-00-00 00:00:00" OR events.recurrence_until >= %s)))';
@@ -1115,7 +1582,7 @@ if (!function_exists('mj_member_get_public_events')) {
             return array();
         }
 
-        $type_color_map = method_exists('MjEvents_CRUD', 'get_type_colors') ? MjEvents_CRUD::get_type_colors() : array();
+        $type_color_map = method_exists('MjEvents', 'get_type_colors') ? MjEvents::get_type_colors() : array();
         $results = array();
         foreach ($rows as $row) {
             $cover_id = isset($row->cover_id) ? (int) $row->cover_id : 0;
@@ -1163,7 +1630,7 @@ if (!function_exists('mj_member_get_public_events')) {
             $excerpt = $description !== '' ? wp_trim_words(wp_strip_all_tags($description), 28, '&hellip;') : '';
 
             $schedule_mode = isset($row->schedule_mode) ? sanitize_key($row->schedule_mode) : 'fixed';
-            if (!in_array($schedule_mode, array('fixed', 'range', 'recurring'), true)) {
+            if (!in_array($schedule_mode, array('fixed', 'range', 'recurring', 'series'), true)) {
                 $schedule_mode = 'fixed';
             }
 
@@ -1181,7 +1648,43 @@ if (!function_exists('mj_member_get_public_events')) {
 
             $recurrence_until = isset($row->recurrence_until) ? sanitize_text_field($row->recurrence_until) : '';
 
-            if (!$include_past_events && $schedule_mode === 'recurring' && class_exists('MjEventSchedule')) {
+            $registration_is_free_participation = false;
+            $legacy_registration_mode = '';
+            if ($supports_free_participation && isset($row->free_participation)) {
+                $registration_is_free_participation = !empty($row->free_participation);
+            }
+
+            if ($supports_registration_mode && isset($row->registration_mode)) {
+                $registration_mode_candidate = sanitize_key((string) $row->registration_mode);
+                if ($registration_mode_candidate !== '') {
+                    $legacy_registration_mode = $registration_mode_candidate;
+                }
+                if (!$supports_free_participation) {
+                    $registration_is_free_participation = in_array($registration_mode_candidate, $non_interactive_registration_modes, true);
+                }
+            }
+
+            if ($legacy_registration_mode === '') {
+                $legacy_registration_mode = $registration_is_free_participation ? 'free_participation' : 'participant';
+            }
+
+            if ($supports_free_participation && !$registration_is_free_participation && in_array($legacy_registration_mode, $non_interactive_registration_modes, true)) {
+                $registration_is_free_participation = true;
+            }
+
+            if (!$supports_free_participation && !$supports_registration_mode) {
+                $registration_is_free_participation = false;
+            }
+
+            if ($legacy_registration_mode === '') {
+                $legacy_registration_mode = $registration_is_free_participation ? 'free_participation' : 'participant';
+            }
+
+            if (
+                !$include_past_events
+                && in_array($schedule_mode, array('recurring', 'series'), true)
+                && class_exists('MjEventSchedule')
+            ) {
                 $date_start_raw = isset($row->date_debut) ? $row->date_debut : '';
                 $date_end_raw = isset($row->date_fin) ? $row->date_fin : '';
 
@@ -1214,7 +1717,7 @@ if (!function_exists('mj_member_get_public_events')) {
                 $slug_value = sanitize_title($row->slug);
             }
             if ($slug_value === '' && isset($row->id)) {
-                $slug_value = MjEvents_CRUD::get_or_create_slug((int) $row->id);
+                $slug_value = MjEvents::get_or_create_slug((int) $row->id);
             }
             $event_permalink = '';
             if ($slug_value !== '') {
@@ -1342,8 +1845,8 @@ if (!function_exists('mj_member_get_public_events')) {
                 if ($type_key_candidate !== '') {
                     if (isset($type_color_map[$type_key_candidate])) {
                         $accent_color = strtoupper($type_color_map[$type_key_candidate]);
-                    } elseif (method_exists('MjEvents_CRUD', 'get_default_color_for_type')) {
-                        $accent_color = MjEvents_CRUD::get_default_color_for_type($type_key_candidate);
+                    } elseif (method_exists('MjEvents', 'get_default_color_for_type')) {
+                        $accent_color = MjEvents::get_default_color_for_type($type_key_candidate);
                     }
                 }
             }
@@ -1388,10 +1891,76 @@ if (!function_exists('mj_member_get_public_events')) {
                 'location_type_primary' => !empty($location_type_slugs) ? $location_type_slugs[0] : '',
                 'location_type_primary_label' => !empty($location_type_slugs) && isset($location_type_labels[$location_type_slugs[0]]) ? $location_type_labels[$location_type_slugs[0]] : '',
                 'allow_guardian_registration' => ($supports_guardian_toggle && isset($row->allow_guardian_registration)) ? (int) $row->allow_guardian_registration : 0,
+                'requires_validation' => ($supports_validation_toggle && isset($row->requires_validation)) ? (int) $row->requires_validation : 1,
+                'free_participation' => $registration_is_free_participation ? 1 : 0,
+                'is_free_participation' => $registration_is_free_participation,
+                'legacy_registration_mode' => $legacy_registration_mode,
             );
         }
 
+        if (!$can_view_internal_events) {
+            $results = array_values(array_filter($results, static function ($event_entry) {
+                if (!isset($event_entry['type'])) {
+                    return true;
+                }
+
+                $type_value = sanitize_key((string) $event_entry['type']);
+                return $type_value !== MjEvents::TYPE_INTERNE;
+            }));
+        }
+
         return $results;
+    }
+}
+
+if (!function_exists('mj_member_get_upcoming_events')) {
+    /**
+     * Récupère la liste des prochains événements pour les affichages publics.
+     *
+     * @param array<string,mixed> $args
+     * @return array<int,array<string,mixed>>
+     */
+    function mj_member_get_upcoming_events($args = array()) {
+        if (!function_exists('mj_member_get_public_events')) {
+            return array();
+        }
+
+        $defaults = array(
+            'limit' => 6,
+            'statuses' => array(MjEvents::STATUS_ACTIVE),
+            'types' => array(),
+            'order' => 'ASC',
+            'orderby' => 'date_debut',
+            'include_past' => false,
+        );
+
+        $args = wp_parse_args($args, $defaults);
+
+        $args['include_past'] = false;
+
+        $order_value = isset($args['order']) ? strtoupper((string) $args['order']) : 'ASC';
+        $args['order'] = $order_value === 'DESC' ? 'DESC' : 'ASC';
+
+        if (empty($args['orderby'])) {
+            $args['orderby'] = 'date_debut';
+        }
+
+        /**
+         * Filtre les arguments passés à la récupération des événements à venir.
+         *
+         * @param array<string,mixed> $args
+         */
+        $query_args = apply_filters('mj_member_upcoming_events_query_args', $args);
+
+        $events = mj_member_get_public_events($query_args);
+
+        /**
+         * Filtre les événements à venir renvoyés au widget.
+         *
+         * @param array<int,array<string,mixed>> $events
+         * @param array<string,mixed> $query_args
+         */
+        return apply_filters('mj_member_upcoming_events_results', $events, $query_args);
     }
 }
 
@@ -1717,6 +2286,21 @@ if (!function_exists('mj_member_format_event_datetime_range')) {
         }
 
         if ($start_ts && $end_ts) {
+            if ($start_ts === $end_ts) {
+                $date_label = wp_date(get_option('date_format', 'd/m/Y'), $start_ts);
+                $time_label = wp_date(get_option('time_format', 'H:i'), $start_ts);
+
+                if ($time_label !== '') {
+                    return sprintf(
+                        '%s %s',
+                        $date_label,
+                        sprintf(__('à partir de %s', 'mj-member'), $time_label)
+                    );
+                }
+
+                return wp_date(get_option('date_format', 'd/m/Y H:i'), $start_ts);
+            }
+
             if (wp_date('d/m/Y', $start_ts) === wp_date('d/m/Y', $end_ts)) {
                 return sprintf(
                     '%s %s - %s',
@@ -1734,6 +2318,17 @@ if (!function_exists('mj_member_format_event_datetime_range')) {
         }
 
         if ($start_ts) {
+            $date_label = wp_date(get_option('date_format', 'd/m/Y'), $start_ts);
+            $time_label = wp_date(get_option('time_format', 'H:i'), $start_ts);
+
+            if ($time_label !== '') {
+                return sprintf(
+                    '%s %s',
+                    $date_label,
+                    sprintf(__('à partir de %s', 'mj-member'), $time_label)
+                );
+            }
+
             return wp_date(get_option('date_format', 'd/m/Y H:i'), $start_ts);
         }
 
@@ -1768,9 +2363,9 @@ if (!function_exists('mj_member_resolve_event_permalink')) {
         $slug_reference = sanitize_title($slug_reference);
 
         if ($slug_reference === '' && is_array($event) && isset($event['id'])) {
-            $slug_reference = MjEvents_CRUD::get_or_create_slug((int) $event['id']);
+            $slug_reference = MjEvents::get_or_create_slug((int) $event['id']);
         } elseif ($slug_reference === '' && is_object($event) && isset($event->id)) {
-            $slug_reference = MjEvents_CRUD::get_or_create_slug((int) $event->id);
+            $slug_reference = MjEvents::get_or_create_slug((int) $event->id);
         }
 
         if ($slug_reference === '') {
@@ -1853,7 +2448,7 @@ if (!function_exists('mj_member_pick_contrast_color')) {
 
 if (!function_exists('mj_member_build_event_palette_data')) {
     function mj_member_build_event_palette_data($accent_color, $type_key) {
-        $palette_reference = method_exists('MjEvents_CRUD', 'get_type_colors') ? MjEvents_CRUD::get_type_colors() : array();
+        $palette_reference = method_exists('MjEvents', 'get_type_colors') ? MjEvents::get_type_colors() : array();
 
         $accent = mj_member_normalize_hex_color_value($accent_color);
         $type_key = sanitize_key($type_key);
@@ -1884,12 +2479,12 @@ if (!function_exists('mj_member_build_event_palette_data')) {
 
 if (!function_exists('mj_member_prepare_event_page_context')) {
     function mj_member_prepare_event_page_context($requested_slug) {
-        if (!class_exists('MjEvents_CRUD')) {
+        if (!class_exists('MjEvents')) {
             return null;
         }
 
-        $event_record = MjEvents_CRUD::find_by_slug($requested_slug);
-        if (!$event_record || !isset($event_record->id)) {
+        $event_record = MjEvents::find_by_slug($requested_slug);
+        if (!$event_record) {
             return null;
         }
 
@@ -1898,7 +2493,7 @@ if (!function_exists('mj_member_prepare_event_page_context')) {
             return null;
         }
 
-        $status_labels = MjEvents_CRUD::get_status_labels();
+        $status_labels = MjEvents::get_status_labels();
         $status_keys = array_keys($status_labels);
 
         $public_event_list = mj_member_get_public_events(
@@ -1913,26 +2508,26 @@ if (!function_exists('mj_member_prepare_event_page_context')) {
         $event_data = !empty($public_event_list) ? $public_event_list[0] : array();
 
         if (empty($event_data)) {
-            $slug = MjEvents_CRUD::get_or_create_slug($event_id);
+            $slug = MjEvents::get_or_create_slug($event_id);
             $event_data = array(
                 'id' => $event_id,
-                'title' => isset($event_record->title) ? sanitize_text_field($event_record->title) : '',
+                'title' => sanitize_text_field($event_record->title),
                 'slug' => $slug,
-                'status' => isset($event_record->status) ? sanitize_key($event_record->status) : '',
-                'type' => isset($event_record->type) ? sanitize_key($event_record->type) : '',
-                'accent_color' => mj_member_normalize_hex_color_value(isset($event_record->accent_color) ? $event_record->accent_color : ''),
-                'start_date' => isset($event_record->date_debut) ? sanitize_text_field($event_record->date_debut) : '',
-                'end_date' => isset($event_record->date_fin) ? sanitize_text_field($event_record->date_fin) : '',
-                'deadline' => isset($event_record->date_fin_inscription) ? sanitize_text_field($event_record->date_fin_inscription) : '',
-                'price' => isset($event_record->prix) ? (float) $event_record->prix : 0.0,
-                'age_min' => isset($event_record->age_min) ? (int) $event_record->age_min : 0,
-                'age_max' => isset($event_record->age_max) ? (int) $event_record->age_max : 0,
-                'description' => isset($event_record->description) ? wp_kses_post($event_record->description) : '',
+                'status' => sanitize_key((string) $event_record->status),
+                'type' => sanitize_key((string) $event_record->type),
+                'accent_color' => mj_member_normalize_hex_color_value($event_record->accent_color),
+                'start_date' => sanitize_text_field((string) $event_record->date_debut),
+                'end_date' => sanitize_text_field((string) $event_record->date_fin),
+                'deadline' => sanitize_text_field((string) $event_record->date_fin_inscription),
+                'price' => (float) $event_record->prix,
+                'age_min' => (int) $event_record->age_min,
+                'age_max' => (int) $event_record->age_max,
+                'description' => wp_kses_post((string) $event_record->description),
                 'excerpt' => '',
-                'cover_id' => isset($event_record->cover_id) ? (int) $event_record->cover_id : 0,
+                'cover_id' => (int) $event_record->cover_id,
                 'cover_url' => '',
                 'cover_thumb' => '',
-                'article_id' => isset($event_record->article_id) ? (int) $event_record->article_id : 0,
+                'article_id' => (int) $event_record->article_id,
                 'article_permalink' => '',
                 'article_cover_url' => '',
                 'article_cover_thumb' => '',
@@ -1953,6 +2548,11 @@ if (!function_exists('mj_member_prepare_event_page_context')) {
                 'location_type_primary' => '',
                 'location_type_primary_label' => '',
                 'allow_guardian_registration' => isset($event_record->allow_guardian_registration) ? (int) $event_record->allow_guardian_registration : 0,
+                'requires_validation' => isset($event_record->requires_validation) ? (int) $event_record->requires_validation : 1,
+                'free_participation' => isset($event_record->free_participation) ? (int) $event_record->free_participation : 0,
+                'is_free_participation' => false,
+                'free_participation_message' => '',
+                'legacy_registration_mode' => isset($event_record->registration_mode) ? sanitize_key((string) $event_record->registration_mode) : '',
             );
 
             if ($event_data['cover_id'] > 0) {
@@ -1984,16 +2584,63 @@ if (!function_exists('mj_member_prepare_event_page_context')) {
                 }
             }
         } else {
-            $event_data['slug'] = sanitize_title(isset($event_data['slug']) ? $event_data['slug'] : MjEvents_CRUD::get_or_create_slug($event_id));
+            $event_data['slug'] = sanitize_title(isset($event_data['slug']) ? $event_data['slug'] : MjEvents::get_or_create_slug($event_id));
             if (empty($event_data['permalink'])) {
                 $event_data['permalink'] = mj_member_build_event_permalink($event_data['slug']);
             }
         }
 
+        $legacy_registration_mode = isset($event_data['legacy_registration_mode']) ? sanitize_key((string) $event_data['legacy_registration_mode']) : '';
+        if ($legacy_registration_mode === '') {
+            $legacy_registration_mode = !empty($event_data['free_participation']) ? 'free_participation' : 'participant';
+        }
+        $event_data['legacy_registration_mode'] = $legacy_registration_mode;
+
+        $event_data['registration_config'] = isset($event_data['config']) && is_array($event_data['config']) ? $event_data['config'] : array();
+
+        if (!isset($non_interactive_registration_modes)) {
+            $default_free_registration_modes = array('attendance', 'attendance_free', 'free_participation', 'free', 'open_access', 'no_registration', 'optional', 'none', 'libre', 'presence');
+            $non_interactive_registration_modes = apply_filters('mj_member_event_registration_non_interactive_modes', $default_free_registration_modes);
+            if (!is_array($non_interactive_registration_modes)) {
+                $non_interactive_registration_modes = $default_free_registration_modes;
+            }
+            $non_interactive_registration_modes = array_values(array_filter(array_map('sanitize_key', $non_interactive_registration_modes), static function ($value) {
+                return $value !== '';
+            }));
+            if (!in_array('free_participation', $non_interactive_registration_modes, true)) {
+                $non_interactive_registration_modes[] = 'free_participation';
+            }
+        }
+
+        $event_is_free_participation = !empty($event_data['free_participation']) || !empty($event_data['is_free_participation']);
+        if (!$event_is_free_participation && in_array($legacy_registration_mode, $non_interactive_registration_modes, true)) {
+            $event_is_free_participation = true;
+        }
+
+        $event_data['is_free_participation'] = $event_is_free_participation ? true : false;
+        $event_data['free_participation'] = $event_is_free_participation ? 1 : 0;
+
+        if ($event_is_free_participation && (empty($event_data['free_participation_message']) || !is_string($event_data['free_participation_message']))) {
+            $default_free_participation_message = __('La participation est libre : aucune inscription n\'est requise.', 'mj-member');
+            $filtered_free_participation_message = apply_filters('mj_member_event_free_participation_message', $default_free_participation_message, $event_data, $legacy_registration_mode);
+            if (is_string($filtered_free_participation_message)) {
+                $filtered_free_participation_message = trim($filtered_free_participation_message);
+            } else {
+                $filtered_free_participation_message = $default_free_participation_message;
+            }
+            if ($filtered_free_participation_message === '') {
+                $filtered_free_participation_message = $default_free_participation_message;
+            }
+            $filtered_free_participation_message = sanitize_text_field($filtered_free_participation_message);
+            $event_data['free_participation_message'] = $filtered_free_participation_message;
+        } elseif (!$event_is_free_participation) {
+            $event_data['free_participation_message'] = '';
+        }
+
         $type_key = isset($event_data['type']) ? sanitize_key($event_data['type']) : '';
         $accent_color = isset($event_data['accent_color']) ? mj_member_normalize_hex_color_value($event_data['accent_color']) : '';
         if ($accent_color === '' && $type_key !== '') {
-            $accent_color = mj_member_normalize_hex_color_value(MjEvents_CRUD::get_default_color_for_type($type_key));
+            $accent_color = mj_member_normalize_hex_color_value(MjEvents::get_default_color_for_type($type_key));
         }
         if ($accent_color === '') {
             $accent_color = '#2563EB';
@@ -2001,7 +2648,7 @@ if (!function_exists('mj_member_prepare_event_page_context')) {
         $event_data['accent_color'] = $accent_color;
         $event_data['palette'] = mj_member_build_event_palette_data($accent_color, $type_key);
 
-        $type_labels = MjEvents_CRUD::get_type_labels();
+        $type_labels = MjEvents::get_type_labels();
         $event_data['type_label'] = isset($type_labels[$type_key]) ? $type_labels[$type_key] : ($type_key !== '' ? ucfirst($type_key) : '');
 
         $event_data['date_label'] = mj_member_format_event_datetime_range(
@@ -2159,7 +2806,7 @@ if (!function_exists('mj_member_prepare_event_page_context')) {
         if (class_exists('MjEventAnimateurs')) {
             $animateur_rows = MjEventAnimateurs::get_members_by_event($event_id);
             if (!empty($animateur_rows)) {
-                $role_labels = class_exists('MjMembers_CRUD') ? MjMembers_CRUD::getRoleLabels() : array();
+                $role_labels = class_exists('MjMembers') ? MjMembers::getRoleLabels() : array();
                 foreach ($animateur_rows as $index => $animateur_row) {
                     if (!is_object($animateur_row)) {
                         continue;
@@ -2186,6 +2833,19 @@ if (!function_exists('mj_member_prepare_event_page_context')) {
                     $phone = '';
                     if (!empty($animateur_row->phone)) {
                         $phone = sanitize_text_field($animateur_row->phone);
+                    }
+
+                    $whatsapp_opt_in = true;
+                    if (isset($animateur_row->whatsapp_opt_in)) {
+                        $whatsapp_opt_in = ((int) $animateur_row->whatsapp_opt_in) !== 0;
+                    }
+
+                    $whatsapp_link = '';
+                    if ($whatsapp_opt_in && $phone !== '') {
+                        $whatsapp_number = preg_replace('/\D+/', '', $phone);
+                        if ($whatsapp_number !== '' && strlen($whatsapp_number) >= 6) {
+                            $whatsapp_link = esc_url_raw('https://wa.me/' . $whatsapp_number);
+                        }
                     }
 
                     $bio = '';
@@ -2243,6 +2903,8 @@ if (!function_exists('mj_member_prepare_event_page_context')) {
                         'initials' => $initials,
                         'is_primary' => ($index === 0),
                         'avatar_alt' => sprintf(__('Portrait de %s', 'mj-member'), $full_name),
+                        'whatsapp_opt_in' => $whatsapp_opt_in,
+                        'whatsapp_link' => $whatsapp_link,
                     );
                 }
             }
@@ -2362,6 +3024,406 @@ if (!function_exists('mj_member_event_admin_bar_edit_link')) {
     add_action('admin_bar_menu', 'mj_member_event_admin_bar_edit_link', 90);
 }
 
+if (!function_exists('mj_member_ajax_get_event_reservations')) {
+    function mj_member_ajax_get_event_reservations() {
+        if (!wp_doing_ajax()) {
+            return;
+        }
+
+        check_ajax_referer('mj-member-event-register', 'nonce');
+
+        if (!is_user_logged_in()) {
+            wp_send_json_error(
+                array('message' => __('Connecte-toi pour consulter tes réservations.', 'mj-member')),
+                401
+            );
+        }
+
+        $event_id = isset($_POST['event_id']) ? (int) $_POST['event_id'] : 0;
+        if ($event_id <= 0) {
+            wp_send_json_error(
+                array('message' => __('Événement introuvable.', 'mj-member')),
+                400
+            );
+        }
+
+        if (!class_exists('MjEvents')) {
+            wp_send_json_error(
+                array('message' => __('Le module événements est indisponible pour le moment.', 'mj-member')),
+                500
+            );
+        }
+
+        $event = MjEvents::find($event_id);
+        if (!$event) {
+            wp_send_json_error(
+                array('message' => __('Événement introuvable.', 'mj-member')),
+                404
+            );
+        }
+
+        $slug = MjEvents::get_or_create_slug($event_id);
+        $context = mj_member_prepare_event_page_context($slug);
+        if (!$context || !is_array($context)) {
+            wp_send_json_error(
+                array('message' => __('Impossible de charger cet événement.', 'mj-member')),
+                404
+            );
+        }
+
+        $registration = isset($context['registration']) && is_array($context['registration']) ? $context['registration'] : array();
+        $registration_participants = isset($registration['participants']) && is_array($registration['participants']) ? $registration['participants'] : array();
+
+        $occurrence_catalog = array();
+        if (!empty($registration['occurrences']) && is_array($registration['occurrences'])) {
+            foreach ($registration['occurrences'] as $occurrence_entry) {
+                if (is_array($occurrence_entry)) {
+                    $entry = $occurrence_entry;
+                } elseif (is_string($occurrence_entry) || is_numeric($occurrence_entry)) {
+                    $scalar_value = sanitize_text_field((string) $occurrence_entry);
+                    if ($scalar_value === '') {
+                        continue;
+                    }
+                    $entry = array(
+                        'slug' => $scalar_value,
+                        'start' => $scalar_value,
+                    );
+                } else {
+                    continue;
+                }
+
+                if (empty($entry['label'])) {
+                    $label_source = '';
+                    if (!empty($entry['start'])) {
+                        $label_source = (string) $entry['start'];
+                    } elseif (!empty($entry['slug'])) {
+                        $label_source = (string) $entry['slug'];
+                    }
+
+                    if ($label_source !== '') {
+                        $label_timestamp = strtotime($label_source);
+                        if ($label_timestamp !== false) {
+                            $entry['label'] = date_i18n(get_option('date_format'), $label_timestamp) . ' - ' . date_i18n(get_option('time_format'), $label_timestamp);
+                        } else {
+                            $entry['label'] = $label_source;
+                        }
+                    }
+                }
+
+                $catalog_keys = array();
+
+                if (!empty($entry['slug'])) {
+                    $slug_raw = (string) $entry['slug'];
+                    $catalog_keys[] = $slug_raw;
+                    $catalog_keys[] = sanitize_key($slug_raw);
+                    if (class_exists('MjEventAttendance')) {
+                        $normalized_slug = MjEventAttendance::normalize_occurrence($slug_raw);
+                        if ($normalized_slug !== '') {
+                            $catalog_keys[] = $normalized_slug;
+                            $catalog_keys[] = sanitize_key($normalized_slug);
+                        }
+                    }
+                }
+
+                if (!empty($entry['start'])) {
+                    $start_raw = (string) $entry['start'];
+                    $catalog_keys[] = $start_raw;
+                    if (class_exists('MjEventAttendance')) {
+                        $normalized_start = MjEventAttendance::normalize_occurrence($start_raw);
+                        if ($normalized_start !== '') {
+                            $catalog_keys[] = $normalized_start;
+                            $catalog_keys[] = sanitize_key($normalized_start);
+                        }
+                    }
+                }
+
+                $catalog_keys = array_unique(
+                    array_filter(
+                        array_map(
+                            static function ($key) {
+                                return is_string($key) ? trim($key) : '';
+                            },
+                            $catalog_keys
+                        )
+                    )
+                );
+
+                if (empty($catalog_keys)) {
+                    continue;
+                }
+
+                foreach ($catalog_keys as $catalog_key) {
+                    if ($catalog_key === '') {
+                        continue;
+                    }
+                    $occurrence_catalog[$catalog_key] = $entry;
+                }
+            }
+        }
+
+        $current_member = function_exists('mj_member_get_current_member') ? mj_member_get_current_member() : null;
+        $current_member_id = 0;
+        if ($current_member && isset($current_member->id)) {
+            $current_member_id = (int) $current_member->id;
+        }
+
+        $allowed_member_lookup = array();
+        if ($current_member_id > 0) {
+            $allowed_member_lookup[$current_member_id] = true;
+        }
+
+        if ($current_member && function_exists('mj_member_can_manage_children') && function_exists('mj_member_get_guardian_children') && mj_member_can_manage_children($current_member)) {
+            $children = mj_member_get_guardian_children($current_member);
+            if (!empty($children) && is_array($children)) {
+                foreach ($children as $child_entry) {
+                    $child_id = 0;
+                    if (is_object($child_entry) && isset($child_entry->id)) {
+                        $child_id = (int) $child_entry->id;
+                    } elseif (is_array($child_entry) && isset($child_entry['id'])) {
+                        $child_id = (int) $child_entry['id'];
+                    }
+                    if ($child_id > 0) {
+                        $allowed_member_lookup[$child_id] = true;
+                    }
+                }
+            }
+        }
+
+        $cancelled_status_key = '';
+        if (class_exists('MjEventRegistrations') && defined('MjEventRegistrations::STATUS_CANCELLED')) {
+            $cancelled_status_key = sanitize_key((string) MjEventRegistrations::STATUS_CANCELLED);
+        }
+
+        $status_labels = (class_exists('MjEventRegistrations') && method_exists('MjEventRegistrations', 'get_status_labels'))
+            ? MjEventRegistrations::get_status_labels()
+            : array();
+
+        $sanitized_reservations = array();
+        if (!empty($registration_participants)) {
+            foreach ($registration_participants as $participant_entry) {
+                if (!is_array($participant_entry)) {
+                    continue;
+                }
+
+                $participant_member_id = 0;
+                if (isset($participant_entry['member_id'])) {
+                    $participant_member_id = (int) $participant_entry['member_id'];
+                } elseif (isset($participant_entry['memberId'])) {
+                    $participant_member_id = (int) $participant_entry['memberId'];
+                } elseif (isset($participant_entry['id'])) {
+                    $participant_member_id = (int) $participant_entry['id'];
+                }
+
+                $guardian_id = 0;
+                if (isset($participant_entry['guardian_id'])) {
+                    $guardian_id = (int) $participant_entry['guardian_id'];
+                } elseif (isset($participant_entry['guardianId'])) {
+                    $guardian_id = (int) $participant_entry['guardianId'];
+                }
+
+                $owns_participant = false;
+                if (!empty($allowed_member_lookup)) {
+                    if ($participant_member_id > 0 && isset($allowed_member_lookup[$participant_member_id])) {
+                        $owns_participant = true;
+                    } elseif ($guardian_id > 0 && isset($allowed_member_lookup[$guardian_id])) {
+                        $owns_participant = true;
+                    } elseif (!empty($participant_entry['isSelf']) && $current_member_id > 0) {
+                        $owns_participant = true;
+                    }
+                } else {
+                    $owns_participant = !empty($participant_entry['isSelf']);
+                }
+
+                if (!$owns_participant) {
+                    continue;
+                }
+
+                $status_key = '';
+                if (!empty($participant_entry['registrationStatus'])) {
+                    $status_key = sanitize_key((string) $participant_entry['registrationStatus']);
+                } elseif (!empty($participant_entry['status'])) {
+                    $status_key = sanitize_key((string) $participant_entry['status']);
+                } elseif (!empty($participant_entry['statut'])) {
+                    $status_key = sanitize_key((string) $participant_entry['statut']);
+                }
+
+                if ($status_key !== '' && $cancelled_status_key !== '' && $status_key === $cancelled_status_key) {
+                    continue;
+                }
+
+                $registration_id = 0;
+                if (isset($participant_entry['registrationId'])) {
+                    $registration_id = (int) $participant_entry['registrationId'];
+                } elseif (isset($participant_entry['registration_id'])) {
+                    $registration_id = (int) $participant_entry['registration_id'];
+                }
+
+                $is_registered = !empty($participant_entry['isRegistered']) || $registration_id > 0 || $status_key !== '';
+                if (!$is_registered) {
+                    continue;
+                }
+
+                $participant_name = isset($participant_entry['name']) ? trim((string) $participant_entry['name']) : '';
+                if ($participant_name === '' && !empty($participant_entry['label'])) {
+                    $participant_name = trim((string) $participant_entry['label']);
+                }
+                if ($participant_name === '' && !empty($participant_entry['fullName'])) {
+                    $participant_name = trim((string) $participant_entry['fullName']);
+                }
+                if ($participant_name === '' && (!empty($participant_entry['first_name']) || !empty($participant_entry['last_name']))) {
+                    $first_name = !empty($participant_entry['first_name']) ? trim((string) $participant_entry['first_name']) : '';
+                    $last_name = !empty($participant_entry['last_name']) ? trim((string) $participant_entry['last_name']) : '';
+                    $participant_name = trim($first_name . ' ' . $last_name);
+                }
+                if ($participant_name === '' && $participant_member_id > 0) {
+                    $participant_name = sprintf(__('Participant #%d', 'mj-member'), $participant_member_id);
+                }
+                if ($participant_name === '') {
+                    $participant_name = __('Participant', 'mj-member');
+                }
+
+                $status_label = '';
+                if ($status_key !== '' && isset($status_labels[$status_key])) {
+                    $status_label = $status_labels[$status_key];
+                } elseif (!empty($participant_entry['registrationStatusLabel'])) {
+                    $status_label = (string) $participant_entry['registrationStatusLabel'];
+                } elseif (!empty($participant_entry['status_label'])) {
+                    $status_label = (string) $participant_entry['status_label'];
+                } elseif (!empty($participant_entry['statusLabel'])) {
+                    $status_label = (string) $participant_entry['statusLabel'];
+                } elseif ($status_key !== '') {
+                    $status_label = ucfirst(str_replace('_', ' ', $status_key));
+                }
+
+                $status_class = $status_key !== '' ? 'is-status-' . sanitize_html_class($status_key) : '';
+
+                $created_label = '';
+                if (!empty($participant_entry['registrationCreatedAt'])) {
+                    $created_raw = (string) $participant_entry['registrationCreatedAt'];
+                    $timestamp = strtotime($created_raw);
+                    if ($timestamp) {
+                        $created_label = date_i18n(get_option('date_format'), $timestamp);
+                    }
+                } elseif (!empty($participant_entry['created_at'])) {
+                    $created_raw_alt = (string) $participant_entry['created_at'];
+                    $timestamp_alt = strtotime($created_raw_alt);
+                    if ($timestamp_alt) {
+                        $created_label = date_i18n(get_option('date_format'), $timestamp_alt);
+                    }
+                }
+
+                $occurrence_texts = array();
+                $assignments = array();
+                if (isset($participant_entry['occurrenceAssignments']) && is_array($participant_entry['occurrenceAssignments'])) {
+                    $assignments = $participant_entry['occurrenceAssignments'];
+                } elseif (isset($participant_entry['occurrence_assignments']) && is_array($participant_entry['occurrence_assignments'])) {
+                    $assignments = $participant_entry['occurrence_assignments'];
+                }
+
+                $assignments_mode = isset($assignments['mode']) ? sanitize_key((string) $assignments['mode']) : 'all';
+                $assigned_values = isset($assignments['occurrences']) && is_array($assignments['occurrences']) ? $assignments['occurrences'] : array();
+
+                if ($assignments_mode === 'custom' && !empty($assigned_values)) {
+                    foreach ($assigned_values as $assigned_slug) {
+                        $assigned_slug_raw = '';
+                        if (is_string($assigned_slug) || is_numeric($assigned_slug)) {
+                            $assigned_slug_raw = (string) $assigned_slug;
+                        } elseif (is_array($assigned_slug) && isset($assigned_slug['slug'])) {
+                            $assigned_slug_raw = (string) $assigned_slug['slug'];
+                        }
+
+                        if ($assigned_slug_raw === '') {
+                            continue;
+                        }
+
+                        $lookup_keys = array($assigned_slug_raw, sanitize_key($assigned_slug_raw));
+                        if (class_exists('MjEventAttendance')) {
+                            $normalized_slug = MjEventAttendance::normalize_occurrence($assigned_slug_raw);
+                            if ($normalized_slug !== '') {
+                                $lookup_keys[] = $normalized_slug;
+                                $lookup_keys[] = sanitize_key($normalized_slug);
+                            }
+                        }
+
+                        $catalog_entry = null;
+                        foreach ($lookup_keys as $lookup_key) {
+                            if (!is_string($lookup_key) || $lookup_key === '') {
+                                continue;
+                            }
+                            if (isset($occurrence_catalog[$lookup_key])) {
+                                $catalog_entry = $occurrence_catalog[$lookup_key];
+                                break;
+                            }
+                        }
+
+                        if ($catalog_entry && !empty($catalog_entry['label'])) {
+                            $occurrence_texts[] = sanitize_text_field((string) $catalog_entry['label']);
+                            continue;
+                        }
+
+                        $fallback_source = '';
+                        if ($catalog_entry && !empty($catalog_entry['start'])) {
+                            $fallback_source = (string) $catalog_entry['start'];
+                        } else {
+                            $fallback_source = $assigned_slug_raw;
+                        }
+
+                        $fallback_label = '';
+                        if ($fallback_source !== '') {
+                            $fallback_timestamp = strtotime($fallback_source);
+                            if ($fallback_timestamp !== false) {
+                                $fallback_label = date_i18n(get_option('date_format'), $fallback_timestamp) . ' - ' . date_i18n(get_option('time_format'), $fallback_timestamp);
+                            }
+                        }
+
+                        if ($fallback_label === '') {
+                            $fallback_label = $assigned_slug_raw;
+                        }
+
+                        $occurrence_texts[] = sanitize_text_field($fallback_label);
+                    }
+
+                    if (!empty($occurrence_texts)) {
+                        $occurrence_texts = array_values(array_unique($occurrence_texts));
+                    }
+                }
+
+                if (empty($occurrence_texts)) {
+                    if ($assignments_mode === 'custom') {
+                        $occurrence_texts[] = __('Occurrences à confirmer', 'mj-member');
+                    } else {
+                        $occurrence_texts[] = __('Toutes les occurrences', 'mj-member');
+                    }
+                }
+
+                $sanitized_reservations[] = array(
+                    'name' => sanitize_text_field($participant_name),
+                    'status_label' => sanitize_text_field($status_label),
+                    'status_class' => $status_class,
+                    'status_key' => $status_key,
+                    'created_label' => $created_label,
+                    'occurrences' => $occurrence_texts,
+                    'member_id' => $participant_member_id,
+                    'registration_id' => $registration_id,
+                    'can_cancel' => $owns_participant && $registration_id > 0,
+                );
+            }
+        }
+
+        $response = array(
+            'reservations' => $sanitized_reservations,
+            'has_reservations' => !empty($sanitized_reservations),
+            'empty_message' => __('Tu n\'as pas encore de réservation pour cet événement.', 'mj-member'),
+        );
+
+        $response = mj_member_normalize_json_payload($response);
+
+        wp_send_json_success($response);
+    }
+
+    add_action('wp_ajax_mj_member_get_event_reservations', 'mj_member_ajax_get_event_reservations');
+}
+
 if (!function_exists('mj_member_ajax_register_event')) {
     function mj_member_ajax_register_event() {
         if (!wp_doing_ajax()) {
@@ -2387,14 +3449,14 @@ if (!function_exists('mj_member_ajax_register_event')) {
             );
         }
 
-        if (!class_exists('MjEvents_CRUD') || !class_exists('MjEventRegistrations') || !class_exists('MjMembers_CRUD')) {
+        if (!class_exists('MjEvents') || !class_exists('MjEventRegistrations') || !class_exists('MjMembers')) {
             wp_send_json_error(
                 array('message' => __('Le module événements est indisponible pour le moment.', 'mj-member')),
                 500
             );
         }
 
-        $event = MjEvents_CRUD::find($event_id);
+        $event = MjEvents::find($event_id);
         if (!$event) {
             wp_send_json_error(
                 array('message' => __('Événement introuvable.', 'mj-member')),
@@ -2406,8 +3468,11 @@ if (!function_exists('mj_member_ajax_register_event')) {
         $deadline_passed = false;
         $closed_by_start = false;
         $has_future_occurrence = false;
-        if (!empty($event->date_fin_inscription) && $event->date_fin_inscription !== '0000-00-00 00:00:00') {
-            $deadline_ts = strtotime($event->date_fin_inscription);
+        $raw_deadline = isset($event->date_fin_inscription) ? trim((string) $event->date_fin_inscription) : '';
+        $has_custom_deadline = ($raw_deadline !== '' && $raw_deadline !== '0000-00-00 00:00:00');
+
+        if ($has_custom_deadline) {
+            $deadline_ts = strtotime($raw_deadline);
             if ($deadline_ts && $now > $deadline_ts) {
                 $deadline_passed = true;
             }
@@ -2421,30 +3486,18 @@ if (!function_exists('mj_member_ajax_register_event')) {
             }
         }
 
-        if ($deadline_passed && $closed_by_start && class_exists('MjEventSchedule')) {
-            $schedule_args = array(
-                'max' => 40,
-                'include_past' => true,
+        if ($deadline_passed && $closed_by_start && !$has_custom_deadline && class_exists('MjEventSchedule')) {
+            $upcoming_occurrences = MjEventSchedule::get_occurrences(
+                $event,
+                array(
+                    'max' => 1,
+                    'include_past' => false,
+                )
             );
-            $occurrence_list = MjEventSchedule::get_occurrences($event, $schedule_args);
-            if (!empty($occurrence_list) && is_array($occurrence_list)) {
-                foreach ($occurrence_list as $occurrence_entry) {
-                    if (!is_array($occurrence_entry)) {
-                        continue;
-                    }
-                    $occurrence_timestamp = 0;
-                    if (isset($occurrence_entry['timestamp'])) {
-                        $occurrence_timestamp = (int) $occurrence_entry['timestamp'];
-                    }
-                    if ($occurrence_timestamp <= 0 && !empty($occurrence_entry['start'])) {
-                        $occurrence_timestamp = strtotime((string) $occurrence_entry['start']);
-                    }
-                    if ($occurrence_timestamp && $occurrence_timestamp > $now) {
-                        $deadline_passed = false;
-                        $has_future_occurrence = true;
-                        break;
-                    }
-                }
+
+            if (!empty($upcoming_occurrences)) {
+                $deadline_passed = false;
+                $has_future_occurrence = true;
             }
         }
 
@@ -2490,7 +3543,7 @@ if (!function_exists('mj_member_ajax_register_event')) {
             );
         }
 
-        $participant = MjMembers_CRUD::getById($member_id);
+        $participant = MjMembers::getById($member_id);
         if (!$participant) {
             wp_send_json_error(
                 array('message' => __('Profil membre introuvable.', 'mj-member')),
@@ -2498,27 +3551,18 @@ if (!function_exists('mj_member_ajax_register_event')) {
             );
         }
 
-        $existing_registration = MjEventRegistrations::get_existing($event_id, $member_id);
-        if ($existing_registration && (!isset($existing_registration->statut) || $existing_registration->statut !== MjEventRegistrations::STATUS_CANCELLED)) {
-            wp_send_json_error(
-                array('message' => __('Ce participant est déjà inscrit à cet événement.', 'mj-member')),
-                409
-            );
-        }
+        $payment_mode_raw = isset($_POST['payment_mode']) ? wp_unslash($_POST['payment_mode']) : '';
+        $payment_mode = $payment_mode_raw !== '' ? sanitize_key($payment_mode_raw) : '';
+        $payment_deferred = in_array($payment_mode, array('defer', 'email', 'delayed'), true);
 
-        $create_args = array();
-        if ($guardian_id > 0) {
-            $create_args['guardian_id'] = $guardian_id;
-        }
-
-        $note_value = isset($_POST['note']) ? sanitize_textarea_field(wp_unslash($_POST['note'])) : '';
+        $note_input_present = array_key_exists('note', $_POST);
+        $note_value = $note_input_present ? sanitize_textarea_field(wp_unslash($_POST['note'])) : '';
         if ($note_value !== '') {
             if (function_exists('mb_substr')) {
                 $note_value = mb_substr($note_value, 0, 400);
             } else {
                 $note_value = substr($note_value, 0, 400);
             }
-            $create_args['notes'] = $note_value;
         }
 
         $occurrence_selection = array();
@@ -2549,11 +3593,152 @@ if (!function_exists('mj_member_ajax_register_event')) {
             }
         }
 
+        $existing_registration = MjEventRegistrations::get_existing($event_id, $member_id);
+        if ($existing_registration && (!isset($existing_registration->statut) || $existing_registration->statut !== MjEventRegistrations::STATUS_CANCELLED)) {
+            $desired_assignments = array(
+                'mode' => !empty($occurrence_selection) ? 'custom' : 'all',
+                'occurrences' => !empty($occurrence_selection) ? array_values($occurrence_selection) : array(),
+            );
+
+            $current_assignments = array('mode' => 'all', 'occurrences' => array());
+            if (class_exists('MjEventAttendance')) {
+                $current_assignments = MjEventAttendance::get_registration_assignments($existing_registration);
+            }
+
+            $current_mode = isset($current_assignments['mode']) ? sanitize_key((string) $current_assignments['mode']) : 'all';
+            if ($current_mode !== 'custom') {
+                $current_mode = 'all';
+            }
+
+            $current_occurrences = array();
+            if (!empty($current_assignments['occurrences']) && is_array($current_assignments['occurrences'])) {
+                foreach ($current_assignments['occurrences'] as $assignment_value) {
+                    if (!is_string($assignment_value) && !is_numeric($assignment_value)) {
+                        continue;
+                    }
+                    $normalized_assignment = sanitize_text_field((string) $assignment_value);
+                    if ($normalized_assignment === '') {
+                        continue;
+                    }
+                    $current_occurrences[$normalized_assignment] = $normalized_assignment;
+                }
+            }
+            $current_occurrences = array_values($current_occurrences);
+            sort($current_occurrences);
+
+            $desired_occurrence_map = array();
+            if (!empty($desired_assignments['occurrences'])) {
+                foreach ($desired_assignments['occurrences'] as $desired_value) {
+                    if (!is_string($desired_value) && !is_numeric($desired_value)) {
+                        continue;
+                    }
+                    $normalized_desired = sanitize_text_field((string) $desired_value);
+                    if ($normalized_desired === '') {
+                        continue;
+                    }
+                    $desired_occurrence_map[$normalized_desired] = $normalized_desired;
+                }
+            }
+            $desired_occurrences = array_values($desired_occurrence_map);
+            sort($desired_occurrences);
+
+            $assignments_changed = ($desired_assignments['mode'] !== $current_mode) || ($desired_occurrences !== $current_occurrences);
+            $assignments_updated = false;
+            $note_updated = false;
+            $update_messages = array();
+
+            if ($assignments_changed) {
+                if (!class_exists('MjEventAttendance')) {
+                    wp_send_json_error(
+                        array('message' => __('Ce participant est déjà inscrit à cet événement.', 'mj-member')),
+                        409
+                    );
+                }
+
+                $assignment_result = MjEventAttendance::set_registration_assignments((int) $existing_registration->id, $desired_assignments);
+                if (is_wp_error($assignment_result)) {
+                    wp_send_json_error(
+                        array('message' => $assignment_result->get_error_message()),
+                        500
+                    );
+                }
+
+                $assignments_updated = true;
+                $update_messages[] = __('Occurrences mises à jour.', 'mj-member');
+            }
+
+            $existing_note = isset($existing_registration->notes) ? (string) $existing_registration->notes : '';
+            if ($note_input_present && $existing_note !== $note_value) {
+                $note_result = MjEventRegistrations::update((int) $existing_registration->id, array('notes' => $note_value));
+                if (is_wp_error($note_result)) {
+                    wp_send_json_error(
+                        array('message' => $note_result->get_error_message()),
+                        500
+                    );
+                }
+
+                $note_updated = true;
+                $update_messages[] = $note_value !== ''
+                    ? __('Message mis à jour.', 'mj-member')
+                    : __('Message supprimé.', 'mj-member');
+            }
+
+            if ($assignments_updated || $note_updated) {
+                $latest_registration = MjEventRegistrations::get((int) $existing_registration->id);
+                if (!$latest_registration) {
+                    $latest_registration = $existing_registration;
+                }
+
+                $latest_assignments = class_exists('MjEventAttendance')
+                    ? MjEventAttendance::get_registration_assignments($latest_registration)
+                    : $desired_assignments;
+
+                $latest_note = isset($latest_registration->notes) ? (string) $latest_registration->notes : '';
+
+                if (empty($update_messages)) {
+                    $update_messages[] = __('Inscription mise à jour.', 'mj-member');
+                }
+
+                $response_payload = array(
+                    'message' => implode(' ', $update_messages),
+                    'registration_id' => (int) $existing_registration->id,
+                    'assignments' => $latest_assignments,
+                    'note' => $latest_note,
+                    'updated' => array(
+                        'assignments' => $assignments_updated,
+                        'note' => $note_updated,
+                    ),
+                );
+
+                $response_payload = mj_member_normalize_json_payload($response_payload);
+
+                wp_send_json_success($response_payload);
+            }
+
+            wp_send_json_error(
+                array('message' => __('Ce participant est déjà inscrit à cet événement.', 'mj-member')),
+                409
+            );
+        }
+
+        $create_args = array();
+        if ($guardian_id > 0) {
+            $create_args['guardian_id'] = $guardian_id;
+        }
+
+        if ($note_value !== '') {
+            $create_args['notes'] = $note_value;
+        }
+
         if ($has_future_occurrence) {
             $create_args['allow_late_registration'] = true;
         }
 
-        $result = MjEventRegistrations::create($event_id, $member_id, $create_args);
+        $registration_payload = $create_args;
+        $registration_payload['event_id'] = $event_id;
+        $registration_payload['member_id'] = $member_id;
+
+        $result = MjEventRegistrations::create($registration_payload);
 
         if (is_wp_error($result)) {
             wp_send_json_error(
@@ -2743,8 +3928,8 @@ if (!function_exists('mj_member_ajax_register_event')) {
             'is_waitlist' => $is_waitlist,
             'payment_required' => $payment_required,
             'payment_error' => $payment_error,
-            'payment_mode' => $payment_mode,
-            'payment_deferred' => $payment_deferred,
+            'payment_mode' => isset($payment_mode) ? $payment_mode : '',
+            'payment_deferred' => isset($payment_deferred) ? $payment_deferred : false,
             'payment_email_sent' => $payment_email_sent,
             'payment_email_error' => $payment_email_error,
         );
@@ -2762,7 +3947,40 @@ if (!function_exists('mj_member_ajax_register_event')) {
             );
         }
 
-        wp_send_json_success($response);
+        $response = mj_member_normalize_json_payload($response);
+
+        $json_flags = defined('JSON_INVALID_UTF8_SUBSTITUTE')
+            ? JSON_INVALID_UTF8_SUBSTITUTE
+            : 0;
+
+        if (defined('JSON_UNESCAPED_UNICODE')) {
+            $json_flags |= JSON_UNESCAPED_UNICODE;
+        }
+
+        $partial_flag = defined('JSON_PARTIAL_OUTPUT_ON_ERROR') ? JSON_PARTIAL_OUTPUT_ON_ERROR : 0;
+        if ($partial_flag) {
+            $json_flags |= $partial_flag;
+        }
+
+        $encoded = wp_json_encode(array('success' => true, 'data' => $response), $json_flags);
+
+        if ($encoded === false && $partial_flag) {
+            $response = mj_member_normalize_json_payload($response);
+            $encoded = wp_json_encode(array('success' => true, 'data' => $response), $json_flags & ~$partial_flag);
+        }
+
+        if ($encoded === false) {
+            $response = array('message' => __('Inscription enregistrée, mais un souci est survenu lors de la réponse.', 'mj-member'));
+            $encoded = wp_json_encode(array('success' => true, 'data' => $response));
+        }
+
+        if (!headers_sent()) {
+            nocache_headers();
+            header('Content-Type: application/json; charset=utf-8');
+        }
+
+        echo (string) $encoded;
+        wp_die('', '', array('response' => null));
     }
 
     add_action('wp_ajax_mj_member_register_event', 'mj_member_ajax_register_event');
@@ -2795,14 +4013,14 @@ if (!function_exists('mj_member_ajax_unregister_event')) {
             );
         }
 
-        if (!class_exists('MjEvents_CRUD') || !class_exists('MjEventRegistrations') || !class_exists('MjMembers_CRUD')) {
+        if (!class_exists('MjEvents') || !class_exists('MjEventRegistrations') || !class_exists('MjMembers')) {
             wp_send_json_error(
                 array('message' => __('Le module événements est indisponible pour le moment.', 'mj-member')),
                 500
             );
         }
 
-        $event = MjEvents_CRUD::find($event_id);
+        $event = MjEvents::find($event_id);
         if (!$event) {
             wp_send_json_error(
                 array('message' => __('Événement introuvable.', 'mj-member')),
@@ -2858,7 +4076,10 @@ if (!function_exists('mj_member_ajax_unregister_event')) {
             );
         }
 
-        $update = MjEventRegistrations::update_status((int) $existing_registration->id, MjEventRegistrations::STATUS_CANCELLED);
+        $update = MjEventRegistrations::update(
+            (int) $existing_registration->id,
+            array('statut' => MjEventRegistrations::STATUS_CANCELLED)
+        );
         if (is_wp_error($update)) {
             wp_send_json_error(
                 array('message' => $update->get_error_message()),

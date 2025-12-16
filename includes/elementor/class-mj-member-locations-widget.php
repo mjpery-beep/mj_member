@@ -11,6 +11,8 @@ use Elementor\Group_Control_Typography;
 use Elementor\Widget_Base;
 
 class Mj_Member_Elementor_Locations_Widget extends Widget_Base {
+    use Mj_Member_Elementor_Widget_Visibility;
+
     public function get_name() {
         return 'mj-member-locations';
     }
@@ -234,6 +236,8 @@ class Mj_Member_Elementor_Locations_Widget extends Widget_Base {
 
         $this->end_controls_section();
 
+        $this->register_visibility_controls();
+
         $this->start_controls_section(
             'section_style_header',
             array(
@@ -374,12 +378,13 @@ class Mj_Member_Elementor_Locations_Widget extends Widget_Base {
     }
 
     protected function render() {
+        $settings = $this->get_settings_for_display();
+        $this->apply_visibility_to_wrapper($settings, 'mj-member-locations');
+
         if (!class_exists('MjEventLocations')) {
             echo '<div class="mj-member-locations__warning">' . esc_html__('Le module des lieux MJ doit être actif pour utiliser ce widget.', 'mj-member') . '</div>';
             return;
         }
-
-        $settings = $this->get_settings_for_display();
 
         $title = isset($settings['title']) ? trim((string) $settings['title']) : '';
         $display_title = !isset($settings['display_title']) || $settings['display_title'] === 'yes';

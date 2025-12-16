@@ -11,6 +11,8 @@ use Elementor\Group_Control_Typography;
 use Elementor\Widget_Base;
 
 class Mj_Member_Elementor_Profile_Widget extends Widget_Base {
+    use Mj_Member_Elementor_Widget_Visibility;
+
     public function get_name() {
         return 'mj-member-profile';
     }
@@ -116,6 +118,8 @@ class Mj_Member_Elementor_Profile_Widget extends Widget_Base {
         );
 
         $this->end_controls_section();
+
+        $this->register_visibility_controls();
 
         $this->start_controls_section(
             'section_style_title',
@@ -225,12 +229,13 @@ class Mj_Member_Elementor_Profile_Widget extends Widget_Base {
     }
 
     protected function render() {
+        $settings = $this->get_settings_for_display();
+        $this->apply_visibility_to_wrapper($settings, 'mj-member-account');
+
         if (!function_exists('mj_member_render_account_component')) {
             echo '<div class="mj-member-account-warning">' . esc_html__('Le module MJ Member doit être actif pour utiliser ce widget.', 'mj-member') . '</div>';
             return;
         }
-
-        $settings = $this->get_settings_for_display();
 
         $options = array(
             'title' => isset($settings['title']) ? $settings['title'] : '',
@@ -242,6 +247,7 @@ class Mj_Member_Elementor_Profile_Widget extends Widget_Base {
             'payment_limit' => isset($settings['payment_limit']) ? max(1, (int) $settings['payment_limit']) : 10,
             'form_id' => $this->get_id(),
             'context' => 'elementor',
+            'show_membership' => false,
         );
 
         echo mj_member_render_account_component($options);

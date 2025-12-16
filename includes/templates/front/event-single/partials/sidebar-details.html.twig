@@ -1,0 +1,82 @@
+{% set deadline = sidebar.deadline_label|default('') %}
+{% set audience = sidebar.audience_label|default('') %}
+{% set price = sidebar.price_label|default('') %}
+{% set next_label = sidebar.next_label|default('') %}
+{% set occurrence_items = sidebar.occurrence_items|default([]) %}
+{% set remaining_count = sidebar.remaining_count|default(0) %}
+{% set stage_label = sidebar.stage_label|default('') %}
+{% set stage_time = sidebar.stage_time_range|default('') %}
+{% set capacity_total = sidebar.capacity_total|default(0) %}
+{% set has_multiple = sidebar.has_multiple_occurrences|default(false) %}
+
+{% set other_labels = [] %}
+{% for occurrence in occurrence_items %}
+    {% set label = occurrence.label|default('') %}
+    {% if label %}
+        {% if not (loop.first and next_label and label == next_label) %}
+            {% set other_labels = other_labels|merge([label]) %}
+        {% endif %}
+    {% endif %}
+{% endfor %}
+
+{% set other_summary = other_labels ? other_labels|join(', ') : '' %}
+{% set remaining_summary = remaining_count > 0 ? _n('%d créneau supplémentaire', '%d créneaux supplémentaires', remaining_count, 'mj-member')|format(remaining_count) : '' %}
+
+<section class="mj-member-event-single__card mj-member-event-single__details">
+    {% if deadline %}
+        <div class="mj-member-event-single__detail">
+            <span class="mj-member-event-single__detail-label">{{ __('Inscriptions jusqu\'au', 'mj-member') }}</span>
+            <span class="mj-member-event-single__detail-value">{{ deadline }}</span>
+        </div>
+    {% endif %}
+    {% if audience %}
+        <div class="mj-member-event-single__detail">
+            <span class="mj-member-event-single__detail-label">{{ __('Public', 'mj-member') }}</span>
+            <span class="mj-member-event-single__detail-value">{{ audience }}</span>
+        </div>
+    {% endif %}
+    {% if price %}
+        <div class="mj-member-event-single__detail">
+            <span class="mj-member-event-single__detail-label">{{ __('Tarif indicatif', 'mj-member') }}</span>
+            <span class="mj-member-event-single__detail-value">{{ price }}</span>
+        </div>
+    {% endif %}
+    {% if next_label %}
+        <div class="mj-member-event-single__detail">
+            <span class="mj-member-event-single__detail-label">{{ __('Prochain créneau', 'mj-member') }}</span>
+            <span class="mj-member-event-single__detail-value">{{ next_label }}</span>
+        </div>
+    {% endif %}
+    {% if other_summary or remaining_summary %}
+        <div class="mj-member-event-single__detail">
+            <span class="mj-member-event-single__detail-label">{{ __('Autres dates', 'mj-member') }}</span>
+            <span class="mj-member-event-single__detail-value">
+                {% if other_summary %}
+                    {{ other_summary }}{% if remaining_summary %} &bull; {% endif %}
+                {% endif %}
+                {% if remaining_summary %}
+                    {{ remaining_summary }}
+                {% endif %}
+            </span>
+        </div>
+    {% endif %}
+    {% if stage_label %}
+        <div class="mj-member-event-single__detail">
+            <span class="mj-member-event-single__detail-label">{{ __('Période', 'mj-member') }}</span>
+            <span class="mj-member-event-single__detail-value">{{ stage_label }}</span>
+        </div>
+    {% endif %}
+    {% if stage_time %}
+        <div class="mj-member-event-single__detail">
+            <span class="mj-member-event-single__detail-label">{{ __('Horaires', 'mj-member') }}</span>
+            <span class="mj-member-event-single__detail-value">{{ stage_time }}</span>
+        </div>
+    {% endif %}
+    {% if capacity_total > 0 and not has_multiple %}
+        <div class="mj-member-event-single__detail">
+            <span class="mj-member-event-single__detail-label">{{ __('Places max', 'mj-member') }}</span>
+            <span class="mj-member-event-single__detail-value">{{ _n('%d place', '%d places', capacity_total, 'mj-member')|format(capacity_total) }}</span>
+        </div>
+    {% endif %}
+    <div class="mj-member-event-single__details-enhancements" data-mj-event-sidebar-enhancements></div>
+</section>

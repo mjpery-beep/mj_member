@@ -5,16 +5,16 @@ $action = isset($_GET['action']) ? sanitize_text_field($_GET['action']) : 'add';
 $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 if ($action === 'edit' && $id > 0) {
-    $member = MjMembers_CRUD::getById($id);
+    $member = MjMembers::getById($id);
     if (!$member) {
         wp_die('Membre non trouvé');
     }
 }
 
-$allowed_roles = MjMembers_CRUD::getAllowedRoles();
-$role_labels = MjMembers_CRUD::getRoleLabels();
+$allowed_roles = MjMembers::getAllowedRoles();
+$role_labels = MjMembers::getRoleLabels();
 
-$current_role = $member ? $member->role : MjMembers_CRUD::ROLE_JEUNE;
+$current_role = $member ? $member->role : MjMembers::ROLE_JEUNE;
 if (!$member && $action === 'add') {
     $requested_role = isset($_GET['role']) ? sanitize_text_field((string) wp_unslash($_GET['role'])) : '';
     if ($requested_role !== '' && in_array($requested_role, $allowed_roles, true)) {
@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
 
     $requested_role = isset($_POST['member_role']) ? sanitize_text_field($_POST['member_role']) : $current_role;
     if (!in_array($requested_role, $allowed_roles, true)) {
-        $requested_role = MjMembers_CRUD::ROLE_JEUNE;
+        $requested_role = MjMembers::ROLE_JEUNE;
     }
     $current_role = $requested_role;
 
@@ -42,14 +42,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
     $date_last_payement_db = ($date_last_payement_input !== '') ? $date_last_payement_input . ' ' . current_time('H:i:s') : null;
 
     $requires_payment = isset($_POST['requires_payment']) ? 1 : 0;
-    if ($current_role === MjMembers_CRUD::ROLE_JEUNE && !isset($_POST['requires_payment'])) {
-        $requires_payment = 1;
-    }
 
     $input_data = array(
         'member_role' => $current_role,
         'member_last_name' => isset($_POST['member_last_name']) ? sanitize_text_field($_POST['member_last_name']) : '',
         'member_first_name' => isset($_POST['member_first_name']) ? sanitize_text_field($_POST['member_first_name']) : '',
+        'member_nickname' => isset($_POST['member_nickname']) ? sanitize_text_field($_POST['member_nickname']) : '',
         'member_email' => isset($_POST['member_email']) ? sanitize_email($_POST['member_email']) : '',
         'member_phone' => isset($_POST['member_phone']) ? sanitize_text_field($_POST['member_phone']) : '',
         'member_birth_date' => isset($_POST['member_birth_date']) ? sanitize_text_field($_POST['member_birth_date']) : '',
@@ -58,12 +56,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
         'member_postal' => isset($_POST['member_postal']) ? sanitize_text_field($_POST['member_postal']) : '',
         'member_description_courte' => isset($_POST['member_description_courte']) ? sanitize_text_field($_POST['member_description_courte']) : '',
         'member_description_longue' => isset($_POST['member_description_longue']) ? wp_kses_post($_POST['member_description_longue']) : '',
-        'status' => isset($_POST['status']) ? sanitize_text_field($_POST['status']) : MjMembers_CRUD::STATUS_ACTIVE,
+        'status' => isset($_POST['status']) ? sanitize_text_field($_POST['status']) : MjMembers::STATUS_ACTIVE,
         'requires_payment' => $requires_payment,
         'date_last_payement' => $date_last_payement_input,
-        'member_is_autonomous' => ($current_role === MjMembers_CRUD::ROLE_JEUNE) ? !empty($_POST['member_is_autonomous']) : true,
+        'member_is_volunteer' => !empty($_POST['member_is_volunteer']),
+        'member_is_autonomous' => ($current_role === MjMembers::ROLE_JEUNE) ? !empty($_POST['member_is_autonomous']) : true,
         'member_newsletter_opt_in' => !empty($_POST['member_newsletter_opt_in']),
         'member_sms_opt_in' => !empty($_POST['member_sms_opt_in']),
+        'member_whatsapp_opt_in' => !empty($_POST['member_whatsapp_opt_in']),
         'guardian_mode' => isset($_POST['guardian_mode']) ? sanitize_text_field($_POST['guardian_mode']) : 'existing',
         'guardian_id' => isset($_POST['guardian_id']) ? intval($_POST['guardian_id']) : 0,
         'guardian_last_name' => isset($_POST['guardian_last_name']) ? sanitize_text_field($_POST['guardian_last_name']) : '',
@@ -79,11 +79,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
         $input_data['guardian_mode'] = 'existing';
     }
 
-    if (!in_array($input_data['status'], array(MjMembers_CRUD::STATUS_ACTIVE, MjMembers_CRUD::STATUS_INACTIVE), true)) {
-        $input_data['status'] = MjMembers_CRUD::STATUS_ACTIVE;
+    if (!in_array($input_data['status'], array(MjMembers::STATUS_ACTIVE, MjMembers::STATUS_INACTIVE), true)) {
+        $input_data['status'] = MjMembers::STATUS_ACTIVE;
     }
 
-    if ($current_role !== MjMembers_CRUD::ROLE_JEUNE) {
+    if ($current_role !== MjMembers::ROLE_JEUNE) {
         $input_data['member_is_autonomous'] = true;
         $input_data['guardian_mode'] = 'existing';
         $input_data['guardian_id'] = 0;
@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
     if ($input_data['member_first_name'] === '') {
         $validation_errors[] = 'Le prénom du membre est obligatoire.';
     }
-    if ($current_role === MjMembers_CRUD::ROLE_JEUNE) {
+    if ($current_role === MjMembers::ROLE_JEUNE) {
         if ($input_data['member_email'] !== '' && !is_email($input_data['member_email'])) {
             $validation_errors[] = "L'email du membre n'est pas valide.";
         }
@@ -107,13 +107,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
         }
     }
 
-    if ($current_role === MjMembers_CRUD::ROLE_JEUNE && !$input_data['member_is_autonomous']) {
+    if ($current_role === MjMembers::ROLE_JEUNE && !$input_data['member_is_autonomous']) {
         if ($input_data['guardian_mode'] === 'existing') {
             if ($input_data['guardian_id'] <= 0) {
                 $validation_errors[] = 'Merci de sélectionner un tuteur existant.';
             } else {
-                $guardian_candidate = MjMembers_CRUD::getById($input_data['guardian_id']);
-                if (!$guardian_candidate || $guardian_candidate->role !== MjMembers_CRUD::ROLE_TUTEUR) {
+                $guardian_candidate = MjMembers::getById($input_data['guardian_id']);
+                if (!$guardian_candidate || $guardian_candidate->role !== MjMembers::ROLE_TUTEUR) {
                     $validation_errors[] = 'Le tuteur sélectionné est invalide.';
                 }
             }
@@ -143,6 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
 
         $member_payload = array(
             'first_name' => $input_data['member_first_name'],
+            'nickname' => $input_data['member_nickname'],
             'last_name' => $input_data['member_last_name'],
             'email' => $member_email_value,
             'phone' => $input_data['member_phone'],
@@ -150,6 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
             'role' => $current_role,
             'status' => $input_data['status'],
             'requires_payment' => $input_data['requires_payment'],
+            'is_volunteer' => !empty($input_data['member_is_volunteer']) ? 1 : 0,
             'address' => $input_data['member_address'],
             'city' => $input_data['member_city'],
             'postal_code' => $input_data['member_postal'],
@@ -160,9 +162,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
             'guardian_id' => null,
             'newsletter_opt_in' => !empty($input_data['member_newsletter_opt_in']) ? 1 : 0,
             'sms_opt_in' => !empty($input_data['member_sms_opt_in']) ? 1 : 0,
+            'whatsapp_opt_in' => !empty($input_data['member_whatsapp_opt_in']) ? 1 : 0,
         );
 
-        if ($current_role === MjMembers_CRUD::ROLE_JEUNE) {
+        if ($current_role === MjMembers::ROLE_JEUNE) {
             if ($input_data['member_is_autonomous']) {
                 $member_payload['guardian_id'] = null;
                 $member_payload['is_autonomous'] = 1;
@@ -178,11 +181,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
                     'address' => $input_data['guardian_address'],
                     'city' => $input_data['guardian_city'],
                     'postal_code' => $input_data['guardian_postal'],
-                    'status' => MjMembers_CRUD::STATUS_ACTIVE,
+                    'status' => MjMembers::STATUS_ACTIVE,
                 );
                 $existing_guardian_id = $member && !empty($member->guardian_id) ? (int) $member->guardian_id : 0;
-                $guardian_id = MjMembers_CRUD::upsertGuardian($guardian_payload, $existing_guardian_id);
-                if ($guardian_id) {
+                $guardian_id = MjMembers::upsertGuardian($guardian_payload, $existing_guardian_id);
+                if (is_wp_error($guardian_id)) {
+                    $has_validation_errors = true;
+                    $form_values = $input_data;
+                    echo '<div class="notice notice-error is-dismissible"><p>' . esc_html($guardian_id->get_error_message()) . '</p></div>';
+                } elseif ($guardian_id) {
                     $member_payload['guardian_id'] = $guardian_id;
                     $member_payload['is_autonomous'] = 0;
                     $created_guardian_id = $guardian_id;
@@ -190,10 +197,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
             }
         }
 
-        if ($action === 'add') {
-            $result = MjMembers_CRUD::create($member_payload);
-            if ($result) {
-                $member = MjMembers_CRUD::getById($result);
+        if ($has_validation_errors) {
+            $form_values = $input_data;
+        } elseif ($action === 'add') {
+            $result = MjMembers::create($member_payload);
+            if (is_wp_error($result)) {
+                echo '<div class="notice notice-error is-dismissible"><p>' . esc_html($result->get_error_message()) . '</p></div>';
+            } elseif ($result) {
+                $member = MjMembers::getById($result);
                 $current_role = $member ? $member->role : $current_role;
                 $action = 'edit';
                 $id = $result;
@@ -202,9 +213,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
                 echo '<div class="notice notice-error is-dismissible"><p>Erreur lors de l\'ajout du membre.</p></div>';
             }
         } elseif ($action === 'edit' && $id > 0) {
-            $update_result = MjMembers_CRUD::update($id, $member_payload);
-            if ($update_result !== false) {
-                $member = MjMembers_CRUD::getById($id);
+            $update_result = MjMembers::update($id, $member_payload);
+            if (is_wp_error($update_result)) {
+                echo '<div class="notice notice-error is-dismissible"><p>' . esc_html($update_result->get_error_message()) . '</p></div>';
+            } elseif ($update_result) {
+                $member = MjMembers::getById($id);
                 $current_role = $member ? $member->role : $current_role;
                 echo '<div class="notice notice-success is-dismissible"><p>Membre mis à jour avec succès.</p></div>';
             } else {
@@ -215,8 +228,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
 }
 
 $current_role = $member ? $member->role : $current_role;
-$guardian = ($member && !empty($member->guardian_id)) ? MjMembers_CRUD::getById($member->guardian_id) : null;
-$guardians = MjMembers_CRUD::getGuardians();
+$guardian = ($member && !empty($member->guardian_id)) ? MjMembers::getById($member->guardian_id) : null;
+$guardians = MjMembers::getGuardians();
 
 $birth_date_value = '';
 if ($member && !empty($member->birth_date)) {
@@ -234,41 +247,60 @@ if ($member && !empty($member->date_last_payement) && $member->date_last_payemen
     }
 }
 
-$default_is_autonomous = ($current_role === MjMembers_CRUD::ROLE_JEUNE)
+$default_is_autonomous = ($current_role === MjMembers::ROLE_JEUNE)
     ? ($member ? (bool) $member->is_autonomous : false)
     : true;
 
-$default_requires_payment = $member ? (bool) $member->requires_payment : ($current_role === MjMembers_CRUD::ROLE_JEUNE);
+$default_requires_payment = $member ? (bool) $member->requires_payment : ($current_role === MjMembers::ROLE_JEUNE);
 $default_guardian_mode = $guardian ? 'existing' : 'new';
 $default_guardian_id = $guardian ? (int) $guardian->id : ($created_guardian_id ?: 0);
 
+$extract_member_string = static function ($entity, $key) {
+    if (!is_object($entity)) {
+        return '';
+    }
+
+    if (method_exists($entity, 'get')) {
+        $value = $entity->get($key);
+    } elseif (property_exists($entity, $key)) {
+        $value = $entity->$key;
+    } else {
+        $value = null;
+    }
+
+    return is_scalar($value) ? (string) $value : '';
+};
+
 $form_defaults = array(
     'member_role' => $current_role,
-    'member_last_name' => $member ? $member->last_name : '',
-    'member_first_name' => $member ? $member->first_name : '',
-    'member_email' => ($member && isset($member->email)) ? $member->email : '',
-    'member_phone' => $member ? $member->phone : '',
+    'member_last_name' => $extract_member_string($member, 'last_name'),
+    'member_first_name' => $extract_member_string($member, 'first_name'),
+    'member_nickname' => $extract_member_string($member, 'nickname'),
+    'member_email' => $extract_member_string($member, 'email'),
+    'member_phone' => $extract_member_string($member, 'phone'),
     'member_birth_date' => $birth_date_value,
-    'member_address' => $member ? $member->address : '',
-    'member_city' => $member ? $member->city : '',
-    'member_postal' => $member ? $member->postal_code : '',
-    'member_description_courte' => ($member && isset($member->description_courte)) ? $member->description_courte : '',
-    'member_description_longue' => ($member && isset($member->description_longue)) ? $member->description_longue : '',
-    'status' => $member ? $member->status : MjMembers_CRUD::STATUS_ACTIVE,
+    'member_address' => $extract_member_string($member, 'address'),
+    'member_city' => $extract_member_string($member, 'city'),
+    'member_postal' => $extract_member_string($member, 'postal_code'),
+    'member_description_courte' => $extract_member_string($member, 'description_courte'),
+    'member_description_longue' => $extract_member_string($member, 'description_longue'),
+    'status' => ($extract_member_string($member, 'status') !== '') ? $extract_member_string($member, 'status') : MjMembers::STATUS_ACTIVE,
     'requires_payment' => $default_requires_payment,
     'date_last_payement' => $last_payment_value,
     'member_is_autonomous' => $default_is_autonomous,
+    'member_is_volunteer' => $member ? (isset($member->is_volunteer) ? (bool) $member->is_volunteer : false) : false,
     'member_newsletter_opt_in' => $member ? (isset($member->newsletter_opt_in) ? (bool) $member->newsletter_opt_in : true) : true,
     'member_sms_opt_in' => $member ? (isset($member->sms_opt_in) ? (bool) $member->sms_opt_in : true) : true,
+    'member_whatsapp_opt_in' => $member ? (isset($member->whatsapp_opt_in) ? (bool) $member->whatsapp_opt_in : true) : true,
     'guardian_mode' => $default_guardian_mode,
     'guardian_id' => $default_guardian_id,
-    'guardian_last_name' => $guardian ? $guardian->last_name : '',
-    'guardian_first_name' => $guardian ? $guardian->first_name : '',
-    'guardian_email' => $guardian ? $guardian->email : '',
-    'guardian_phone' => $guardian ? $guardian->phone : '',
-    'guardian_address' => $guardian ? $guardian->address : '',
-    'guardian_city' => $guardian ? $guardian->city : '',
-    'guardian_postal' => $guardian ? $guardian->postal_code : '',
+    'guardian_last_name' => $extract_member_string($guardian, 'last_name'),
+    'guardian_first_name' => $extract_member_string($guardian, 'first_name'),
+    'guardian_email' => $extract_member_string($guardian, 'email'),
+    'guardian_phone' => $extract_member_string($guardian, 'phone'),
+    'guardian_address' => $extract_member_string($guardian, 'address'),
+    'guardian_city' => $extract_member_string($guardian, 'city'),
+    'guardian_postal' => $extract_member_string($guardian, 'postal_code'),
 );
 
 if ($has_validation_errors) {
@@ -277,14 +309,16 @@ if ($has_validation_errors) {
     $form_values = $form_defaults;
 }
 
-$form_values['member_role'] = in_array($form_values['member_role'], $allowed_roles, true) ? $form_values['member_role'] : MjMembers_CRUD::ROLE_JEUNE;
-$form_values['status'] = in_array($form_values['status'], array(MjMembers_CRUD::STATUS_ACTIVE, MjMembers_CRUD::STATUS_INACTIVE), true)
+$form_values['member_role'] = in_array($form_values['member_role'], $allowed_roles, true) ? $form_values['member_role'] : MjMembers::ROLE_JEUNE;
+$form_values['status'] = in_array($form_values['status'], array(MjMembers::STATUS_ACTIVE, MjMembers::STATUS_INACTIVE), true)
     ? $form_values['status']
-    : MjMembers_CRUD::STATUS_ACTIVE;
+    : MjMembers::STATUS_ACTIVE;
 $form_values['requires_payment'] = !empty($form_values['requires_payment']);
 $form_values['member_is_autonomous'] = !empty($form_values['member_is_autonomous']);
+$form_values['member_is_volunteer'] = !empty($form_values['member_is_volunteer']);
 $form_values['member_newsletter_opt_in'] = !empty($form_values['member_newsletter_opt_in']);
 $form_values['member_sms_opt_in'] = !empty($form_values['member_sms_opt_in']);
+$form_values['member_whatsapp_opt_in'] = !empty($form_values['member_whatsapp_opt_in']);
 $form_values['guardian_id'] = isset($form_values['guardian_id']) ? intval($form_values['guardian_id']) : 0;
 if (!in_array($form_values['guardian_mode'], array('existing', 'new'), true)) {
     $form_values['guardian_mode'] = 'existing';
@@ -293,14 +327,14 @@ if (!in_array($form_values['guardian_mode'], array('existing', 'new'), true)) {
 if ($form_values['guardian_id'] && empty(array_filter($guardians, static function ($candidate) use ($form_values) {
     return intval($candidate->id) === intval($form_values['guardian_id']);
 }))) {
-    $linked_guardian = MjMembers_CRUD::getById($form_values['guardian_id']);
-    if ($linked_guardian && $linked_guardian->role === MjMembers_CRUD::ROLE_TUTEUR) {
+    $linked_guardian = MjMembers::getById($form_values['guardian_id']);
+    if ($linked_guardian && $linked_guardian->role === MjMembers::ROLE_TUTEUR) {
         $guardians[] = $linked_guardian;
     }
 }
 
 $title = ($action === 'add') ? 'Ajouter un membre' : 'Éditer le membre';
-$member_email_required = ($form_values['member_role'] !== MjMembers_CRUD::ROLE_JEUNE);
+$member_email_required = ($form_values['member_role'] !== MjMembers::ROLE_JEUNE);
 ?>
 
 <div class="mj-form-container">
@@ -329,6 +363,16 @@ $member_email_required = ($form_values['member_role'] !== MjMembers_CRUD::ROLE_J
                     </td>
                 </tr>
                 <tr>
+                    <th><label for="member_is_volunteer">Bénévole</label></th>
+                    <td>
+                        <label style="display:block;margin-bottom:6px;">
+                            <input type="checkbox" id="member_is_volunteer" name="member_is_volunteer" value="1" <?php checked($form_values['member_is_volunteer'], true); ?> />
+                            Marquer ce profil comme bénévole (en plus de son rôle principal)
+                        </label>
+                        <p class="description">Utilisez cette option pour distinguer les membres impliqués bénévolement sans modifier leurs droits principaux.</p>
+                    </td>
+                </tr>
+                <tr>
                     <th><label for="member_last_name">Nom *</label></th>
                     <td>
                         <input type="text" id="member_last_name" name="member_last_name" value="<?php echo esc_attr($form_values['member_last_name']); ?>" class="regular-text" required />
@@ -338,6 +382,13 @@ $member_email_required = ($form_values['member_role'] !== MjMembers_CRUD::ROLE_J
                     <th><label for="member_first_name">Prénom *</label></th>
                     <td>
                         <input type="text" id="member_first_name" name="member_first_name" value="<?php echo esc_attr($form_values['member_first_name']); ?>" class="regular-text" required />
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="member_nickname">Surnom</label></th>
+                    <td>
+                        <input type="text" id="member_nickname" name="member_nickname" value="<?php echo esc_attr($form_values['member_nickname']); ?>" class="regular-text" />
+                        <p class="description">Optionnel, utile si le membre préfère un prénom usuel ou un pseudo.</p>
                     </td>
                 </tr>
                 <tr>
@@ -362,6 +413,10 @@ $member_email_required = ($form_values['member_role'] !== MjMembers_CRUD::ROLE_J
                         <label style="display:block;">
                             <input type="checkbox" name="member_sms_opt_in" value="1" <?php checked($form_values['member_sms_opt_in'], true); ?> />
                             Recevoir des SMS informatifs de la MJ
+                        </label>
+                        <label style="display:block;">
+                            <input type="checkbox" name="member_whatsapp_opt_in" value="1" <?php checked($form_values['member_whatsapp_opt_in'], true); ?> />
+                            Recevoir des messages via WhatsApp
                         </label>
                         <p class="description">Ces réglages sont également visibles dans l’espace membre.</p>
                     </td>
@@ -507,8 +562,8 @@ $member_email_required = ($form_values['member_role'] !== MjMembers_CRUD::ROLE_J
                     <th><label for="status">Statut *</label></th>
                     <td>
                         <select id="status" name="status" class="regular-text" required>
-                            <option value="<?php echo esc_attr(MjMembers_CRUD::STATUS_ACTIVE); ?>" <?php selected($form_values['status'], MjMembers_CRUD::STATUS_ACTIVE); ?>>Actif</option>
-                            <option value="<?php echo esc_attr(MjMembers_CRUD::STATUS_INACTIVE); ?>" <?php selected($form_values['status'], MjMembers_CRUD::STATUS_INACTIVE); ?>>Inactif</option>
+                            <option value="<?php echo esc_attr(MjMembers::STATUS_ACTIVE); ?>" <?php selected($form_values['status'], MjMembers::STATUS_ACTIVE); ?>>Actif</option>
+                            <option value="<?php echo esc_attr(MjMembers::STATUS_INACTIVE); ?>" <?php selected($form_values['status'], MjMembers::STATUS_INACTIVE); ?>>Inactif</option>
                         </select>
                     </td>
                 </tr>

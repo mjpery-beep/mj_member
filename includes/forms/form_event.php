@@ -1,6 +1,11 @@
 <?php
 
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\Forms\EventFormDataMapper;
+use Mj\Member\Classes\Forms\EventFormFactory;
+use Mj\Member\Classes\Forms\EventFormOptionsBuilder;
+use Mj\Member\Classes\Value\EventLocationData;
+use Symfony\Component\HttpFoundation\Request;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -14,9 +19,10 @@ $basePath = Config::path();
 $baseUrl = Config::url();
 $pluginVersion = Config::version();
 
-require_once $basePath . 'includes/classes/crud/MjEvents_CRUD.php';
-require_once $basePath . 'includes/classes/crud/MjMembers_CRUD.php';
+require_once $basePath . 'includes/classes/crud/MjEvents.php';
+require_once $basePath . 'includes/classes/crud/MjMembers.php';
 require_once $basePath . 'includes/classes/crud/MjEventAnimateurs.php';
+require_once $basePath . 'includes/classes/crud/MjEventVolunteers.php';
 require_once $basePath . 'includes/classes/crud/MjEventRegistrations.php';
 require_once $basePath . 'includes/classes/crud/MjEventLocations.php';
 require_once $basePath . 'includes/classes/crud/MjEventAttendance.php';
@@ -52,12 +58,24 @@ if (!function_exists('mj_member_format_event_datetime')) {
             return '';
         }
 
-        $timestamp = strtotime($value);
-        if (!$timestamp) {
+        $timezone = wp_timezone();
+
+        if ($value instanceof DateTimeInterface) {
+            $datetime = DateTime::createFromFormat('Y-m-d H:i:s', $value->format('Y-m-d H:i:s'), $timezone);
+        } else {
+            $datetime = DateTime::createFromFormat('Y-m-d H:i:s', (string) $value, $timezone);
+            if (!$datetime) {
+                $datetime = date_create((string) $value, $timezone);
+            }
+        }
+
+        if (!$datetime) {
             return '';
         }
 
-        return wp_date('Y-m-d\TH:i', $timestamp);
+        $datetime->setTimezone($timezone);
+
+        return $datetime->format('Y-m-d\TH:i');
     }
 }
 
@@ -112,12 +130,13 @@ if (!function_exists('mj_member_fill_schedule_form_values')) {
         }
 
         $schedule_mode = !empty($event->schedule_mode) ? sanitize_key($event->schedule_mode) : 'fixed';
-        if (!in_array($schedule_mode, array('fixed', 'range', 'recurring'), true)) {
+        if (!in_array($schedule_mode, array('fixed', 'range', 'recurring', 'series'), true)) {
             $schedule_mode = 'fixed';
         }
 
         $form_values['schedule_mode'] = $schedule_mode;
         $form_values['schedule_payload'] = $payload_value;
+        $form_values['schedule_series_items'] = array();
         $form_values['recurrence_until'] = !empty($event->recurrence_until) ? wp_date('Y-m-d', strtotime($event->recurrence_until)) : '';
 
         $default_start_time = $form_values['date_debut'] !== '' ? substr($form_values['date_debut'], 11, 5) : '';
@@ -139,7 +158,7 @@ if (!function_exists('mj_member_fill_schedule_form_values')) {
             $form_values['schedule_recurring_interval'] = isset($payload_value['interval']) ? max(1, (int) $payload_value['interval']) : 1;
             $form_values['schedule_recurring_weekdays'] = array();
             if (isset($payload_value['weekdays']) && is_array($payload_value['weekdays'])) {
-                foreach ($payload_value['weekdays'] as $weekday_value) {
+                        foreach ($payload_value['weekdays'] as $weekday_value) { 
                     $weekday_value = sanitize_key($weekday_value);
                     if (isset($schedule_weekdays[$weekday_value])) {
                         $form_values['schedule_recurring_weekdays'][$weekday_value] = $weekday_value;
@@ -172,6 +191,90 @@ if (!function_exists('mj_member_fill_schedule_form_values')) {
             $form_values['schedule_recurring_weekdays'] = array();
             $form_values['schedule_recurring_month_ordinal'] = 'first';
             $form_values['schedule_recurring_month_weekday'] = 'saturday';
+
+            if ($schedule_mode === 'series') {
+                $series_items = array();
+
+                if (isset($payload_value['items']) && is_array($payload_value['items'])) {
+                    foreach ($payload_value['items'] as $series_entry) {
+                        if (!is_array($series_entry)) {
+                            continue;
+                        }
+
+                        $date_value = isset($series_entry['date']) ? sanitize_text_field($series_entry['date']) : '';
+                        $start_value = isset($series_entry['start_time']) ? sanitize_text_field($series_entry['start_time']) : '';
+                        $end_value = isset($series_entry['end_time']) ? sanitize_text_field($series_entry['end_time']) : '';
+
+                        if ($date_value === '' || $start_value === '') {
+                            continue;
+                        }
+
+                        $series_items[] = array(
+                            'date' => $date_value,
+                            'start_time' => $start_value,
+                            'end_time' => $end_value,
+                        );
+                    }
+                }
+
+                if (empty($series_items) && isset($event->id) && class_exists('Mj\\Member\\Classes\\Crud\\MjEventOccurrences')) {
+                    $persisted_series = \Mj\Member\Classes\Crud\MjEventOccurrences::get_for_event((int) $event->id);
+                    foreach ($persisted_series as $series_row) {
+                        if (!is_array($series_row)) {
+                            continue;
+                        }
+
+                        $start_raw = isset($series_row['start_at']) ? (string) $series_row['start_at'] : '';
+                        if ($start_raw === '') {
+                            continue;
+                        }
+
+                        $start_ts = strtotime($start_raw);
+                        if ($start_ts === false) {
+                            continue;
+                        }
+
+                        $end_raw = isset($series_row['end_at']) ? (string) $series_row['end_at'] : '';
+                        $end_ts = ($end_raw !== '') ? strtotime($end_raw) : false;
+
+                        $series_items[] = array(
+                            'date' => function_exists('wp_date') ? wp_date('Y-m-d', $start_ts) : gmdate('Y-m-d', $start_ts),
+                            'start_time' => function_exists('wp_date') ? wp_date('H:i', $start_ts) : gmdate('H:i', $start_ts),
+                            'end_time' => ($end_ts !== false)
+                                ? (function_exists('wp_date') ? wp_date('H:i', $end_ts) : gmdate('H:i', $end_ts))
+                                : '',
+                        );
+                    }
+                }
+
+                if (!empty($series_items)) {
+                    usort(
+                        $series_items,
+                        static function ($left, $right) {
+                            $left_ts = strtotime($left['date'] . ' ' . ($left['start_time'] !== '' ? $left['start_time'] : '00:00'));
+                            $right_ts = strtotime($right['date'] . ' ' . ($right['start_time'] !== '' ? $right['start_time'] : '00:00'));
+                            $left_ts = $left_ts !== false ? $left_ts : 0;
+                            $right_ts = $right_ts !== false ? $right_ts : 0;
+                            return $left_ts <=> $right_ts;
+                        }
+                    );
+
+                    $first_series = $series_items[0];
+                    if (!empty($first_series['date'])) {
+                        $form_values['schedule_fixed_date'] = $first_series['date'];
+                    }
+                    if (!empty($first_series['start_time'])) {
+                        $form_values['schedule_fixed_start_time'] = $first_series['start_time'];
+                    }
+                    if (!empty($first_series['end_time'])) {
+                        $form_values['schedule_fixed_end_time'] = $first_series['end_time'];
+                    }
+                }
+
+                $form_values['schedule_series_items'] = $series_items;
+                $form_values['schedule_range_start'] = '';
+                $form_values['schedule_range_end'] = '';
+            }
         }
 
         if ($schedule_mode === 'fixed') {
@@ -189,8 +292,12 @@ if (!function_exists('mj_member_fill_schedule_form_values')) {
                 $form_values['schedule_fixed_date'] = substr($form_values['date_debut'], 0, 10);
                 $form_values['schedule_fixed_start_time'] = substr($form_values['date_debut'], 11, 5);
             }
-            if ($form_values['date_fin'] !== '') {
-                $form_values['schedule_fixed_end_time'] = substr($form_values['date_fin'], 11, 5);
+            if ($form_values['schedule_fixed_end_time'] === '' && $form_values['date_fin'] !== '') {
+                $computed_end_time = substr($form_values['date_fin'], 11, 5);
+                $computed_start_time = $form_values['date_debut'] !== '' ? substr($form_values['date_debut'], 11, 5) : '';
+                if ($computed_end_time !== '' && $computed_end_time !== $computed_start_time) {
+                    $form_values['schedule_fixed_end_time'] = $computed_end_time;
+                }
             }
 
             $form_values['schedule_range_start'] = '';
@@ -312,29 +419,37 @@ if (function_exists('wp_enqueue_editor')) {
     wp_enqueue_editor();
 }
 wp_enqueue_style('wp-color-picker');
+$adminEventsCssPath = $basePath . 'includes/css/admin-events.css';
+$adminEventsCssVersion = file_exists($adminEventsCssPath) ? filemtime($adminEventsCssPath) : $pluginVersion;
 wp_enqueue_style(
     'mj-admin-events',
     $baseUrl . 'includes/css/admin-events.css',
     array(),
-    $pluginVersion
+    $adminEventsCssVersion
 );
 wp_enqueue_script('wp-color-picker');
+$adminEventsJsPath = $basePath . 'includes/js/admin-events.js';
+$adminEventsJsVersion = file_exists($adminEventsJsPath) ? filemtime($adminEventsJsPath) : $pluginVersion;
 wp_enqueue_script(
     'mj-admin-events',
     $baseUrl . 'includes/js/admin-events.js',
     array('jquery', 'wp-color-picker'),
-    $pluginVersion,
+    $adminEventsJsVersion,
     true
 );
-$type_color_palette = method_exists('MjEvents_CRUD', 'get_type_colors') ? MjEvents_CRUD::get_type_colors() : array();
+$type_color_palette = method_exists('MjEvents', 'get_type_colors') ? MjEvents::get_type_colors() : array();
 $type_colors_payload = array();
-if (!empty($type_color_palette) && is_array($type_color_palette)) {
-    foreach ($type_color_palette as $palette_type => $palette_color) {
-        $palette_type_key = sanitize_key((string) $palette_type);
-        $sanitized_color = sanitize_hex_color($palette_color);
-        if ($palette_type_key === '' || !is_string($sanitized_color) || $sanitized_color === '') {
+if (!empty($type_color_palette)) {
+    foreach ($type_color_palette as $palette_type_key => $palette_color) {
+        if (!is_string($palette_color)) {
             continue;
         }
+
+        $sanitized_color = sanitize_hex_color($palette_color);
+        if (!$sanitized_color) {
+            continue;
+        }
+
         $type_colors_payload[$palette_type_key] = strtoupper(strlen($sanitized_color) === 4
             ? '#' . $sanitized_color[1] . $sanitized_color[1] . $sanitized_color[2] . $sanitized_color[2] . $sanitized_color[3] . $sanitized_color[3]
             : $sanitized_color
@@ -367,6 +482,13 @@ wp_localize_script(
             'noPreview' => __('Cet article ne comporte pas d’aperçu disponible.', 'mj-member'),
             'noImage' => __('Cet article ne possède pas d’image mise en avant.', 'mj-member'),
         ),
+        'series' => array(
+            'missingDate' => __('Veuillez choisir une date valide.', 'mj-member'),
+            'missingStart' => __('Veuillez indiquer une heure de debut.', 'mj-member'),
+            'invalidEnd' => __('L\'heure de fin doit etre posterieure a l\'heure de debut.', 'mj-member'),
+            'removeLabel' => __('Supprimer', 'mj-member'),
+            'emptyLabel' => __('Aucune date ajoutee pour le moment.', 'mj-member'),
+        ),
     )
 );
 
@@ -379,16 +501,16 @@ if ($action === 'edit') {
         wp_die('Evenement introuvable');
     }
 
-    $event = MjEvents_CRUD::find($event_id);
+    $event = MjEvents::find($event_id);
     if (!$event) {
         wp_die('Evenement introuvable');
     }
 }
 
-$status_labels = MjEvents_CRUD::get_status_labels();
-$type_labels = MjEvents_CRUD::get_type_labels();
+$status_labels = MjEvents::get_status_labels();
+$type_labels = MjEvents::get_type_labels();
 $registration_status_labels = MjEventRegistrations::get_status_labels();
-$member_role_labels = MjMembers_CRUD::getRoleLabels();
+$member_role_labels = MjMembers::getRoleLabels();
 $locations_for_select = MjEventLocations::get_all(array('orderby' => 'name'));
 if (is_wp_error($locations_for_select)) {
     $locations_for_select = array();
@@ -398,8 +520,8 @@ $animateur_column_supported = function_exists('mj_member_column_exists') ? mj_me
 if (!$animateur_column_supported && $animateur_assignments_ready && function_exists('mj_member_column_exists')) {
     $animateur_column_supported = mj_member_column_exists(mj_member_get_events_table_name(), 'animateur_id');
 }
-$animateur_filters = array('role' => MjMembers_CRUD::ROLE_ANIMATEUR);
-$animateurs_for_select = MjMembers_CRUD::getAll(0, 0, 'last_name', 'ASC', '', $animateur_filters);
+$animateur_filters = array('role' => MjMembers::ROLE_ANIMATEUR);
+$animateurs_for_select = MjMembers::getAll(0, 0, 'last_name', 'ASC', '', $animateur_filters);
 if (!is_array($animateurs_for_select)) {
     $animateurs_for_select = array();
 }
@@ -416,6 +538,27 @@ foreach ($animateurs_for_select as $animateur_item) {
     $available_animateur_ids[$animateur_id_value] = true;
     $animateur_index[$animateur_id_value] = $animateur_item;
 }
+
+$volunteer_assignments_ready = class_exists('MjEventVolunteers') ? MjEventVolunteers::is_ready() : false;
+$volunteer_filters = array('is_volunteer' => 1);
+$volunteers_for_select = MjMembers::getAll(0, 0, 'last_name', 'ASC', '', $volunteer_filters);
+if (!is_array($volunteers_for_select)) {
+    $volunteers_for_select = array();
+}
+$available_volunteer_ids = array();
+$volunteer_index = array();
+foreach ($volunteers_for_select as $volunteer_item) {
+    if (!is_object($volunteer_item) || !isset($volunteer_item->id)) {
+        continue;
+    }
+    $volunteer_id_value = (int) $volunteer_item->id;
+    if ($volunteer_id_value <= 0) {
+        continue;
+    }
+    $available_volunteer_ids[$volunteer_id_value] = true;
+    $volunteer_index[$volunteer_id_value] = $volunteer_item;
+}
+
 
 $schedule_weekdays = array(
     'monday'    => __('Lundi', 'mj-member'),
@@ -435,12 +578,27 @@ $schedule_month_ordinals = array(
     'last'   => __('Dernier', 'mj-member'),
 );
 
-$defaults = MjEvents_CRUD::get_default_values();
+$default_free_registration_modes = array('attendance', 'attendance_free', 'free_participation', 'free', 'open_access', 'no_registration', 'optional', 'none', 'libre', 'presence');
+$non_interactive_registration_modes = apply_filters('mj_member_event_registration_non_interactive_modes', $default_free_registration_modes);
+if (!is_array($non_interactive_registration_modes)) {
+    $non_interactive_registration_modes = $default_free_registration_modes;
+}
+$non_interactive_registration_modes = array_values(array_filter(array_map('sanitize_key', $non_interactive_registration_modes), static function ($value) {
+    return $value !== '' && $value !== 'participant';
+}));
+if (!in_array('free_participation', $non_interactive_registration_modes, true)) {
+    $non_interactive_registration_modes[] = 'free_participation';
+}
+
+$defaults = MjEvents::get_default_values();
 $form_values = $defaults;
 $form_values['accent_color'] = isset($defaults['accent_color']) ? $defaults['accent_color'] : '';
 $form_values['animateur_ids'] = array();
+$form_values['volunteer_ids'] = array();
 $form_values['schedule_mode'] = isset($defaults['schedule_mode']) ? $defaults['schedule_mode'] : 'fixed';
 $form_values['schedule_payload'] = array();
+$form_values['occurrence_selection_mode'] = 'member_choice';
+$form_values['schedule_series_items'] = array();
 $form_values['recurrence_until'] = '';
 $form_values['schedule_recurring_start_date'] = '';
 $form_values['schedule_recurring_start_time'] = '';
@@ -455,8 +613,19 @@ $form_values['schedule_fixed_start_time'] = '';
 $form_values['schedule_fixed_end_time'] = '';
 $form_values['schedule_range_start'] = '';
 $form_values['schedule_range_end'] = '';
+$form_values['schedule_series_items'] = array();
 $form_values['article_id'] = isset($defaults['article_id']) ? (int) $defaults['article_id'] : 0;
 $form_values['article_cat'] = 0;
+$form_values['requires_validation'] = isset($defaults['requires_validation']) ? !empty($defaults['requires_validation']) : true;
+$form_values['free_participation'] = !empty($defaults['free_participation']);
+$form_values['registration_is_free_participation'] = !empty($form_values['free_participation']);
+
+$registration_payload_value = isset($form_values['registration_payload']) ? $form_values['registration_payload'] : array();
+if (!is_array($registration_payload_value)) {
+    $decoded_registration_payload = json_decode((string) $registration_payload_value, true);
+    $registration_payload_value = is_array($decoded_registration_payload) ? $decoded_registration_payload : array();
+}
+$form_values['registration_payload'] = $registration_payload_value;
 
 $timezone = wp_timezone();
 $now_timestamp = current_time('timestamp');
@@ -479,6 +648,7 @@ if ($event) {
     if (empty($assigned_animateurs) && $animateur_column_supported && isset($event->animateur_id) && (int) $event->animateur_id > 0) {
         $assigned_animateurs = array((int) $event->animateur_id);
     }
+    $assigned_volunteers = class_exists('MjEventVolunteers') ? MjEventVolunteers::get_ids_by_event($event_id) : array();
 
     $form_values = array_merge($form_values, array(
         'title' => $event->title,
@@ -489,6 +659,7 @@ if ($event) {
         'article_id' => isset($event->article_id) ? (int) $event->article_id : 0,
         'location_id' => (int) (isset($event->location_id) ? $event->location_id : 0),
         'allow_guardian_registration' => !empty($event->allow_guardian_registration) ? 1 : 0,
+        'requires_validation' => isset($event->requires_validation) ? (int) $event->requires_validation : 1,
         'description' => $event->description,
         'age_min' => (int) $event->age_min,
         'age_max' => (int) $event->age_max,
@@ -499,11 +670,41 @@ if ($event) {
     ));
     $form_values['animateur_ids'] = $assigned_animateurs;
     $form_values['animateur_id'] = !empty($assigned_animateurs) ? (int) $assigned_animateurs[0] : 0;
+    $form_values['volunteer_ids'] = $assigned_volunteers;
+    $occurrence_mode_value = isset($event->occurrence_selection_mode) ? sanitize_key((string) $event->occurrence_selection_mode) : 'member_choice';
+    if (!in_array($occurrence_mode_value, array('member_choice', 'all_occurrences'), true)) {
+        $occurrence_mode_value = 'member_choice';
+    }
+    $form_values['occurrence_selection_mode'] = $occurrence_mode_value;
     mj_member_fill_schedule_form_values($event, $form_values, $schedule_weekdays, $schedule_month_ordinals);
     $form_values['capacity_total'] = isset($event->capacity_total) ? (int) $event->capacity_total : 0;
     $form_values['capacity_waitlist'] = isset($event->capacity_waitlist) ? (int) $event->capacity_waitlist : 0;
     $form_values['capacity_notify_threshold'] = isset($event->capacity_notify_threshold) ? (int) $event->capacity_notify_threshold : 0;
     $capacity_notified_flag = !empty($event->capacity_notified);
+
+    $event_free_participation = isset($event->free_participation) ? !empty($event->free_participation) : !empty($form_values['free_participation']);
+    if (!$event_free_participation && isset($event->registration_mode)) {
+        $legacy_mode = sanitize_key((string) $event->registration_mode);
+        if ($legacy_mode === '') {
+            $legacy_mode = 'participant';
+        }
+        $event_free_participation = in_array($legacy_mode, $non_interactive_registration_modes, true);
+    }
+    $form_values['free_participation'] = $event_free_participation ? 1 : 0;
+    $form_values['registration_is_free_participation'] = $event_free_participation;
+
+    $event_registration_payload = array();
+    if (isset($event->registration_payload) && $event->registration_payload !== null && $event->registration_payload !== '') {
+        if (is_array($event->registration_payload)) {
+            $event_registration_payload = $event->registration_payload;
+        } else {
+            $decoded_registration_payload = json_decode((string) $event->registration_payload, true);
+            if (is_array($decoded_registration_payload)) {
+                $event_registration_payload = $decoded_registration_payload;
+            }
+        }
+    }
+    $form_values['registration_payload'] = $event_registration_payload;
 
     if (!empty($form_values['article_id'])) {
         $article_terms = get_the_category($form_values['article_id']);
@@ -513,9 +714,21 @@ if ($event) {
     }
 }
 
-$form_values['allow_guardian_registration'] = !empty($form_values['allow_guardian_registration']);
+    $current_type_key = isset($form_values['type']) ? sanitize_key((string) $form_values['type']) : '';
+    $default_accent_color = '';
+    if ($current_type_key !== '' && isset($type_colors_payload[$current_type_key])) {
+        $default_accent_color = $type_colors_payload[$current_type_key];
+    } elseif (method_exists('MjEvents', 'get_default_color_for_type')) {
+        $default_candidate = MjEvents::get_default_color_for_type($current_type_key);
+        $default_accent_color = mj_member_admin_normalize_hex_color($default_candidate);
+    }
 
-$event_type_key = isset($form_values['type']) ? sanitize_key((string) $form_values['type']) : '';
+$form_values['allow_guardian_registration'] = !empty($form_values['allow_guardian_registration']);
+$form_values['requires_validation'] = array_key_exists('requires_validation', $form_values) ? !empty($form_values['requires_validation']) : true;
+$form_values['free_participation'] = !empty($form_values['free_participation']) ? 1 : 0;
+$form_values['registration_is_free_participation'] = $form_values['free_participation'] === 1;
+
+    $event_type_key = $current_type_key;
 $admin_event_snapshot = array();
 $admin_occurrence_map = array();
 $registration_default_occurrence = '';
@@ -561,24 +774,28 @@ $event_location_preview_html = '';
 $capacity_counts = array('active' => 0, 'waitlist' => 0);
 $capacity_notified_flag = false;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
-    if (!wp_verify_nonce($_POST['mj_event_nonce'], 'mj_event_form')) {
-        wp_die('Verification de securite echouee');
-    }
+$symfony_request = null;
+$symfony_request_class = '\\Symfony\\Component\\HttpFoundation\\Request';
+$has_symfony_request = class_exists($symfony_request_class);
+if ($has_symfony_request) {
+    $symfony_request = $symfony_request_class::createFromGlobals();
+}
+$is_post_request = isset($_SERVER['REQUEST_METHOD']) && strtoupper((string) $_SERVER['REQUEST_METHOD']) === 'POST';
 
-    $title = isset($_POST['event_title']) ? sanitize_text_field($_POST['event_title']) : '';
+if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('POST') : $is_post_request) && isset($_POST['mj_event_nonce'])) {
+    $title = isset($_POST['event_title']) ? sanitize_text_field(wp_unslash($_POST['event_title'])) : '';
     if ($title === '') {
         $errors[] = 'Le titre est obligatoire.';
     }
 
-    $status = isset($_POST['event_status']) ? sanitize_key($_POST['event_status']) : MjEvents_CRUD::STATUS_DRAFT;
+    $status = isset($_POST['event_status']) ? sanitize_key($_POST['event_status']) : MjEvents::STATUS_DRAFT;
     if (!array_key_exists($status, $status_labels)) {
-        $status = MjEvents_CRUD::STATUS_DRAFT;
+        $status = MjEvents::STATUS_DRAFT;
     }
 
-    $type = isset($_POST['event_type']) ? sanitize_key($_POST['event_type']) : MjEvents_CRUD::TYPE_STAGE;
+    $type = isset($_POST['event_type']) ? sanitize_key($_POST['event_type']) : MjEvents::TYPE_STAGE;
     if (!array_key_exists($type, $type_labels)) {
-        $type = MjEvents_CRUD::TYPE_STAGE;
+        $type = MjEvents::TYPE_STAGE;
     }
 
     $accent_color_input = '';
@@ -601,7 +818,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
     }
 
     $schedule_mode_input = isset($_POST['event_schedule_mode']) ? sanitize_key($_POST['event_schedule_mode']) : $form_values['schedule_mode'];
-    $allowed_schedule_modes = array('fixed', 'range', 'recurring');
+    $allowed_schedule_modes = array('fixed', 'range', 'recurring', 'series');
     if (!in_array($schedule_mode_input, $allowed_schedule_modes, true)) {
         $schedule_mode_input = 'fixed';
     }
@@ -647,6 +864,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
     $schedule_payload = array();
     $recurrence_until_value = '';
     $recurring_weekdays = array();
+    $series_payload_items = array();
 
     if ($schedule_mode_input === 'recurring') {
         $start_datetime = null;
@@ -735,9 +953,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
             if ($fixed_start_time_input === '') {
                 $errors[] = 'L heure de debut est obligatoire.';
             }
-            if ($fixed_end_time_input === '') {
-                $errors[] = 'L heure de fin est obligatoire.';
-            }
 
             if ($fixed_date_input !== '' && $fixed_start_time_input !== '') {
                 $fixed_start_datetime = DateTime::createFromFormat('Y-m-d H:i', $fixed_date_input . ' ' . $fixed_start_time_input, $timezone);
@@ -753,14 +968,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
                 }
             }
 
-            if ($fixed_start_datetime instanceof DateTime && $fixed_end_datetime instanceof DateTime) {
-                if ($fixed_end_datetime <= $fixed_start_datetime) {
-                    $errors[] = 'L heure de fin doit etre posterieure a l heure de debut.';
-                } else {
+            if ($fixed_start_datetime instanceof DateTime) {
+                $final_end_datetime = null;
+
+                if ($fixed_end_time_input === '') {
+                    $final_end_datetime = clone $fixed_start_datetime;
+                } elseif ($fixed_end_datetime instanceof DateTime) {
+                    if ($fixed_end_datetime <= $fixed_start_datetime) {
+                        $errors[] = 'L heure de fin doit etre posterieure a l heure de debut.';
+                    } else {
+                        $final_end_datetime = $fixed_end_datetime;
+                    }
+                }
+
+                if ($final_end_datetime instanceof DateTime) {
                     $date_debut = $fixed_start_datetime->format('Y-m-d H:i:s');
-                    $date_fin = $fixed_end_datetime->format('Y-m-d H:i:s');
+                    $date_fin = $final_end_datetime->format('Y-m-d H:i:s');
                     $date_debut_input = $fixed_start_datetime->format('Y-m-d\TH:i');
-                    $date_fin_input = $fixed_end_datetime->format('Y-m-d\TH:i');
+                    $date_fin_input = $final_end_datetime->format('Y-m-d\TH:i');
                 }
             }
 
@@ -793,6 +1018,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
                 'mode' => 'range',
                 'start' => $range_start_input,
                 'end' => $range_end_input,
+            );
+        } elseif ($schedule_mode_input === 'series') {
+            $series_raw = isset($_POST['event_series_items']) ? wp_unslash($_POST['event_series_items']) : '[]';
+            $series_decoded = json_decode($series_raw, true);
+            if (!is_array($series_decoded)) {
+                $series_decoded = array();
+            }
+
+            $timezone = wp_timezone();
+            $earliest_start = null;
+            $latest_end = null;
+
+            foreach ($series_decoded as $series_entry) {
+                if (!is_array($series_entry)) {
+                    continue;
+                }
+
+                $date_value = isset($series_entry['date']) ? sanitize_text_field($series_entry['date']) : '';
+                $start_value = isset($series_entry['start_time']) ? sanitize_text_field($series_entry['start_time']) : '';
+                $end_value = isset($series_entry['end_time']) ? sanitize_text_field($series_entry['end_time']) : '';
+
+                if ($date_value === '' || $start_value === '') {
+                    continue;
+                }
+
+                $start_datetime = DateTime::createFromFormat('Y-m-d H:i', $date_value . ' ' . $start_value, $timezone);
+                if (!$start_datetime) {
+                    $start_datetime = DateTime::createFromFormat('Y-m-d H:i:s', $date_value . ' ' . $start_value, $timezone);
+                }
+                if (!$start_datetime) {
+                    continue;
+                }
+
+                $end_datetime = null;
+                if ($end_value !== '') {
+                    $end_datetime = DateTime::createFromFormat('Y-m-d H:i', $date_value . ' ' . $end_value, $timezone);
+                    if (!$end_datetime) {
+                        $end_datetime = DateTime::createFromFormat('Y-m-d H:i:s', $date_value . ' ' . $end_value, $timezone);
+                    }
+                }
+                if (!$end_datetime) {
+                    $end_datetime = clone $start_datetime;
+                    $end_datetime->modify('+1 hour');
+                }
+
+                if ($end_datetime <= $start_datetime) {
+                    $errors[] = "L'heure de fin doit etre posterieure a l'heure de debut pour chaque date de la serie.";
+                    continue;
+                }
+
+                $series_payload_items[] = array(
+                    'date' => $date_value,
+                    'start_time' => $start_value,
+                    'end_time' => $end_value,
+                );
+
+                if (!$earliest_start || $start_datetime < $earliest_start) {
+                    $earliest_start = clone $start_datetime;
+                }
+                if (!$latest_end || $end_datetime > $latest_end) {
+                    $latest_end = clone $end_datetime;
+                }
+            }
+
+            if (empty($series_payload_items)) {
+                $errors[] = 'Ajoutez au moins une date valide pour la serie.';
+            } else {
+                $date_debut = $earliest_start->format('Y-m-d H:i:s');
+                $date_fin = $latest_end->format('Y-m-d H:i:s');
+                $date_debut_input = $earliest_start->format('Y-m-d\TH:i');
+                $date_fin_input = $latest_end->format('Y-m-d\TH:i');
+            }
+
+            $schedule_payload = array(
+                'mode' => 'series',
+                'items' => $series_payload_items,
             );
         } else {
             $date_debut = mj_member_parse_event_datetime($date_debut_input);
@@ -885,9 +1186,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
         $animateur_ids[$candidate_id] = $candidate_id;
     }
 
+    $volunteer_ids_input = isset($_POST['event_volunteer_ids']) ? (array) $_POST['event_volunteer_ids'] : array();
+    $volunteer_ids = array();
+    foreach ($volunteer_ids_input as $candidate_id) {
+        $candidate_id = (int) $candidate_id;
+        if ($candidate_id <= 0) {
+            continue;
+        }
+
+        if (!isset($available_volunteer_ids[$candidate_id])) {
+            $errors[] = 'Un benevole selectionne est invalide.';
+            continue;
+        }
+
+        $volunteer_ids[$candidate_id] = $candidate_id;
+    }
+
     $animateur_ids_list = array_values($animateur_ids);
     $primary_animateur_id = !empty($animateur_ids_list) ? (int) $animateur_ids_list[0] : 0;
+    $volunteer_ids_list = array_values($volunteer_ids);
     $allow_guardian_registration = !empty($_POST['event_allow_guardian_registration']) ? 1 : 0;
+    $requires_validation = !empty($_POST['event_requires_validation']) ? 1 : 0;
+    $occurrence_selection_mode = isset($_POST['event_occurrence_selection_mode'])
+        ? sanitize_key((string) $_POST['event_occurrence_selection_mode'])
+        : (string) $form_values['occurrence_selection_mode'];
+    if (!in_array($occurrence_selection_mode, array('member_choice', 'all_occurrences'), true)) {
+        $occurrence_selection_mode = 'member_choice';
+    }
+
+    $free_participation_flag = !empty($_POST['event_free_participation']) ? 1 : 0;
 
     $form_values = array_merge($form_values, array(
         'title' => $title,
@@ -905,6 +1232,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
         'location_id' => $location_id,
         'animateur_id' => $animateur_column_supported ? $primary_animateur_id : 0,
         'allow_guardian_registration' => ($allow_guardian_registration === 1),
+        'requires_validation' => ($requires_validation === 1),
         'schedule_mode' => $schedule_mode_input,
         'recurrence_until' => $recurrence_until_input,
         'schedule_recurring_start_date' => $recurring_start_date,
@@ -924,10 +1252,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
         'capacity_notify_threshold' => $capacity_notify_threshold,
         'article_id' => isset($_POST['event_article_id']) ? (int)$_POST['event_article_id'] : 0,
         'article_cat' => isset($_POST['event_article_cat']) ? (int)$_POST['event_article_cat'] : 0,
+        'occurrence_selection_mode' => $occurrence_selection_mode,
+        'free_participation' => $free_participation_flag,
     ));
     $form_values['animateur_ids'] = $animateur_ids_list;
+    $form_values['volunteer_ids'] = $volunteer_ids_list;
     $form_values['schedule_recurring_weekdays'] = $recurring_weekdays;
     $form_values['schedule_payload'] = $schedule_payload;
+    $form_values['schedule_series_items'] = $series_payload_items;
+    $form_values['registration_is_free_participation'] = $free_participation_flag === 1;
 
     if (empty($errors)) {
         $capacity_notified_value = 0;
@@ -956,8 +1289,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
             'location_id' => $location_id,
             'animateur_id' => $animateur_column_supported ? $primary_animateur_id : null,
             'allow_guardian_registration' => $allow_guardian_registration,
+            'requires_validation' => $requires_validation,
             'schedule_mode' => $schedule_mode_input,
             'schedule_payload' => $schedule_payload,
+            'occurrence_selection_mode' => $occurrence_selection_mode,
+            'free_participation' => $free_participation_flag,
             'recurrence_until' => $recurrence_until_value !== '' ? $recurrence_until_value : null,
             'capacity_total' => $capacity_total,
             'capacity_waitlist' => $capacity_waitlist,
@@ -966,16 +1302,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
             'article_id' => isset($_POST['event_article_id']) ? (int)$_POST['event_article_id'] : 0,
         );
 
+            if ($schedule_mode_input === 'series') {
+                $payload['schedule_payload']['items'] = $series_payload_items;
+            }
+
         if ($action === 'add') {
-            $new_id = MjEvents_CRUD::create($payload);
-            if ($new_id) {
+            $new_id = MjEvents::create($payload);
+            if (is_wp_error($new_id)) {
+                $errors[] = $new_id->get_error_message();
+            } elseif ($new_id) {
                 $success_message = 'Evenement cree avec succes.';
                 $action = 'edit';
                 $event_id = $new_id;
                 if (class_exists('MjEventAnimateurs')) {
                     MjEventAnimateurs::sync_for_event($event_id, $animateur_ids_list);
                 }
-                $event = MjEvents_CRUD::find($event_id);
+                if (class_exists('MjEventVolunteers')) {
+                    MjEventVolunteers::sync_for_event($event_id, $volunteer_ids_list);
+                }
+                $event = MjEvents::find($event_id);
                 if ($event) {
                     $form_values['title'] = $event->title;
                     $form_values['status'] = $event->status;
@@ -993,6 +1338,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
                     $form_values['date_fin_inscription'] = mj_member_format_event_datetime($event->date_fin_inscription);
                     $form_values['prix'] = number_format((float) $event->prix, 2, '.', '');
                     $form_values['allow_guardian_registration'] = !empty($event->allow_guardian_registration);
+                    $form_values['requires_validation'] = isset($event->requires_validation) ? !empty($event->requires_validation) : true;
+                    $occurrence_mode_value = isset($event->occurrence_selection_mode) ? sanitize_key((string) $event->occurrence_selection_mode) : 'member_choice';
+                    if (!in_array($occurrence_mode_value, array('member_choice', 'all_occurrences'), true)) {
+                        $occurrence_mode_value = 'member_choice';
+                    }
+                    $form_values['occurrence_selection_mode'] = $occurrence_mode_value;
+                    $event_free_flag = isset($event->free_participation) ? !empty($event->free_participation) : !empty($form_values['free_participation']);
+                    if (!$event_free_flag && isset($event->registration_mode)) {
+                        $legacy_mode = sanitize_key((string) $event->registration_mode);
+                        if ($legacy_mode === '') {
+                            $legacy_mode = 'participant';
+                        }
+                        $event_free_flag = in_array($legacy_mode, $non_interactive_registration_modes, true);
+                    }
+                    $form_values['free_participation'] = $event_free_flag ? 1 : 0;
+                    $form_values['registration_is_free_participation'] = $event_free_flag;
+                    $event_registration_payload = array();
+                    if (isset($event->registration_payload) && $event->registration_payload !== null && $event->registration_payload !== '') {
+                        if (is_array($event->registration_payload)) {
+                            $event_registration_payload = $event->registration_payload;
+                        } else {
+                            $decoded_registration_payload = json_decode((string) $event->registration_payload, true);
+                            if (is_array($decoded_registration_payload)) {
+                                $event_registration_payload = $decoded_registration_payload;
+                            }
+                        }
+                    }
+                    $form_values['registration_payload'] = $event_registration_payload;
                     mj_member_fill_schedule_form_values($event, $form_values, $schedule_weekdays, $schedule_month_ordinals);
                     $form_values['capacity_total'] = isset($event->capacity_total) ? (int) $event->capacity_total : 0;
                     $form_values['capacity_waitlist'] = isset($event->capacity_waitlist) ? (int) $event->capacity_waitlist : 0;
@@ -1013,17 +1386,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
                     $form_values['animateur_ids'] = $animateur_ids_list;
                     $form_values['animateur_id'] = $primary_animateur_id;
                 }
+                if (class_exists('MjEventVolunteers')) {
+                    $form_values['volunteer_ids'] = MjEventVolunteers::get_ids_by_event($event_id);
+                } else {
+                    $form_values['volunteer_ids'] = $volunteer_ids_list;
+                }
             } else {
                 $errors[] = 'Erreur lors de la creation de l evenement.';
             }
         } else {
-            $update_result = MjEvents_CRUD::update($event_id, $payload);
-            if ($update_result) {
+            $update_result = MjEvents::update($event_id, $payload);
+            if (is_wp_error($update_result)) {
+                $errors[] = $update_result->get_error_message();
+            } elseif ($update_result) {
                 $success_message = 'Evenement mis a jour avec succes.';
                 if (class_exists('MjEventAnimateurs')) {
                     MjEventAnimateurs::sync_for_event($event_id, $animateur_ids_list);
                 }
-                $event = MjEvents_CRUD::find($event_id);
+                if (class_exists('MjEventVolunteers')) {
+                    MjEventVolunteers::sync_for_event($event_id, $volunteer_ids_list);
+                }
+                $event = MjEvents::find($event_id);
                 if ($event) {
                     $form_values['date_debut'] = mj_member_format_event_datetime($event->date_debut);
                     $form_values['date_fin'] = mj_member_format_event_datetime($event->date_fin);
@@ -1034,6 +1417,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
                     $form_values['description'] = $event->description;
                     $form_values['prix'] = number_format((float) $event->prix, 2, '.', '');
                     $form_values['allow_guardian_registration'] = !empty($event->allow_guardian_registration);
+                    $form_values['requires_validation'] = isset($event->requires_validation) ? !empty($event->requires_validation) : true;
+                    $occurrence_mode_value = isset($event->occurrence_selection_mode) ? sanitize_key((string) $event->occurrence_selection_mode) : 'member_choice';
+                    if (!in_array($occurrence_mode_value, array('member_choice', 'all_occurrences'), true)) {
+                        $occurrence_mode_value = 'member_choice';
+                    }
+                    $form_values['occurrence_selection_mode'] = $occurrence_mode_value;
+                    $event_free_flag = isset($event->free_participation) ? !empty($event->free_participation) : !empty($form_values['free_participation']);
+                    if (!$event_free_flag && isset($event->registration_mode)) {
+                        $legacy_mode = sanitize_key((string) $event->registration_mode);
+                        if ($legacy_mode === '') {
+                            $legacy_mode = 'participant';
+                        }
+                        $event_free_flag = in_array($legacy_mode, $non_interactive_registration_modes, true);
+                    }
+                    $form_values['free_participation'] = $event_free_flag ? 1 : 0;
+                    $form_values['registration_is_free_participation'] = $event_free_flag;
+                    $event_registration_payload = array();
+                    if (isset($event->registration_payload) && $event->registration_payload !== null && $event->registration_payload !== '') {
+                        if (is_array($event->registration_payload)) {
+                            $event_registration_payload = $event->registration_payload;
+                        } else {
+                            $decoded_registration_payload = json_decode((string) $event->registration_payload, true);
+                            if (is_array($decoded_registration_payload)) {
+                                $event_registration_payload = $decoded_registration_payload;
+                            }
+                        }
+                    }
+                    $form_values['registration_payload'] = $event_registration_payload;
                     mj_member_fill_schedule_form_values($event, $form_values, $schedule_weekdays, $schedule_month_ordinals);
                     $form_values['capacity_total'] = isset($event->capacity_total) ? (int) $event->capacity_total : 0;
                     $form_values['capacity_waitlist'] = isset($event->capacity_waitlist) ? (int) $event->capacity_waitlist : 0;
@@ -1054,6 +1465,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
                     $form_values['animateur_ids'] = $animateur_ids_list;
                     $form_values['animateur_id'] = $primary_animateur_id;
                 }
+                if (class_exists('MjEventVolunteers')) {
+                    $form_values['volunteer_ids'] = MjEventVolunteers::get_ids_by_event($event_id);
+                } else {
+                    $form_values['volunteer_ids'] = $volunteer_ids_list;
+                }
             } else {
                 $errors[] = 'Erreur lors de la mise a jour de l evenement.';
             }
@@ -1062,7 +1478,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_event_nonce'])) {
 }
 
 if ($action === 'edit' && $event_id > 0 && !$event) {
-    $event = MjEvents_CRUD::find($event_id);
+    $event = MjEvents::find($event_id);
 }
 
 if ($action === 'edit' && $event_id > 0 && $event) {
@@ -1104,7 +1520,7 @@ if ($action === 'edit' && $event_id > 0 && $event) {
                         : $raw_occurrence;
                 }
 
-                if ($event_type_key === MjEvents_CRUD::TYPE_ATELIER) {
+                if ($event_type_key === MjEvents::TYPE_ATELIER) {
                     $registration_selected_occurrence = $normalized_occurrence !== '' ? $normalized_occurrence : '';
                 } elseif ($normalized_occurrence !== '') {
                     $registration_selected_occurrence = $normalized_occurrence;
@@ -1125,7 +1541,7 @@ if ($action === 'edit' && $event_id > 0 && $event) {
                     $occurrence_scope_mode = 'all';
                     $scope_occurrences = array();
 
-                    if ($event_type_key === MjEvents_CRUD::TYPE_ATELIER) {
+                    if ($event_type_key === MjEvents::TYPE_ATELIER) {
                         if (empty($admin_occurrence_map)) {
                             $registration_errors[] = __('Aucune occurrence n\'est disponible pour cet evenement.', 'mj-member');
                             break;
@@ -1151,7 +1567,11 @@ if ($action === 'edit' && $event_id > 0 && $event) {
                         $create_args['guardian_id'] = $guardian_override;
                     }
 
-                    $create_result = MjEventRegistrations::create($event_id, $member_id, $create_args);
+                    $registration_payload = $create_args;
+                    $registration_payload['event_id'] = $event_id;
+                    $registration_payload['member_id'] = $member_id;
+
+                    $create_result = MjEventRegistrations::create($registration_payload);
                     if (is_wp_error($create_result)) {
                         $registration_errors[] = $create_result->get_error_message();
                     } else {
@@ -1204,7 +1624,7 @@ if ($action === 'edit' && $event_id > 0 && $event) {
                         break;
                     }
 
-                    $update_result = MjEventRegistrations::update_status($registration_id, $new_status);
+                    $update_result = MjEventRegistrations::update($registration_id, array('statut' => $new_status));
                     if (is_wp_error($update_result)) {
                         $registration_errors[] = $update_result->get_error_message();
                     } else {
@@ -1241,7 +1661,7 @@ if ($action === 'edit' && $event_id > 0 && $event) {
     }
 
     $registrations = MjEventRegistrations::get_by_event($event_id);
-    $members_for_select = MjMembers_CRUD::getAll(0, 0, 'last_name', 'ASC');
+    $members_for_select = MjMembers::getAll(0, 0, 'last_name', 'ASC');
     if (!is_array($members_for_select)) {
         $members_for_select = array();
     }
@@ -1418,12 +1838,34 @@ if (!empty($form_values['animateur_ids']) && is_array($form_values['animateur_id
             $assigned_member = $animateur_index[$assigned_id];
         } else {
             if (!isset($animateur_fallback_cache[$assigned_id])) {
-                $animateur_fallback_cache[$assigned_id] = MjMembers_CRUD::getById($assigned_id);
+                $animateur_fallback_cache[$assigned_id] = MjMembers::getById($assigned_id);
             }
             $assigned_member = $animateur_fallback_cache[$assigned_id];
         }
         if ($assigned_member) {
             $assigned_animateurs_display[$assigned_id] = $assigned_member;
+        }
+    }
+}
+
+$volunteer_fallback_cache = array();
+$assigned_volunteers_display = array();
+if (!empty($form_values['volunteer_ids']) && is_array($form_values['volunteer_ids'])) {
+    foreach ($form_values['volunteer_ids'] as $assigned_candidate) {
+        $assigned_id = (int) $assigned_candidate;
+        if ($assigned_id <= 0 || isset($assigned_volunteers_display[$assigned_id])) {
+            continue;
+        }
+        if (isset($volunteer_index[$assigned_id])) {
+            $assigned_member = $volunteer_index[$assigned_id];
+        } else {
+            if (!isset($volunteer_fallback_cache[$assigned_id])) {
+                $volunteer_fallback_cache[$assigned_id] = MjMembers::getById($assigned_id);
+            }
+            $assigned_member = $volunteer_fallback_cache[$assigned_id];
+        }
+        if ($assigned_member) {
+            $assigned_volunteers_display[$assigned_id] = $assigned_member;
         }
     }
 }
@@ -1446,13 +1888,6 @@ if ($action === 'edit' && $event_id > 0) {
 }
 
 $current_type_key = isset($form_values['type']) ? sanitize_key((string) $form_values['type']) : '';
-$default_accent_color = '';
-if ($current_type_key !== '' && isset($type_colors_payload[$current_type_key])) {
-    $default_accent_color = $type_colors_payload[$current_type_key];
-} elseif (method_exists('MjEvents_CRUD', 'get_default_color_for_type')) {
-    $default_candidate = MjEvents_CRUD::get_default_color_for_type($current_type_key);
-    $default_accent_color = mj_member_admin_normalize_hex_color($default_candidate);
-}
 $default_accent_label = $default_accent_color !== '' ? $default_accent_color : '—';
 $default_accent_swatch_style = 'display:none;width:18px;height:18px;border-radius:50%;border:1px solid #cbd5f5;vertical-align:middle;margin-right:8px;';
 if ($default_accent_color !== '') {
@@ -1541,6 +1976,62 @@ if (!empty($form_values['article_id'])) {
     }
 }
 
+$event_form_defaults = EventFormDataMapper::fromValues($form_values);
+$event_form_options = EventFormOptionsBuilder::build(array(
+    'status_labels' => $status_labels,
+    'type_labels' => $type_labels,
+    'type_colors' => $type_colors_payload,
+    'current_type' => $current_type_key,
+    'accent_default_color' => $default_accent_color,
+    'article_categories' => $article_categories,
+    'articles' => $articles_for_select,
+    'locations' => $locations_for_select,
+    'animateurs' => $animateurs_for_select,
+    'volunteers' => $volunteers_for_select,
+    'schedule_weekdays' => $schedule_weekdays,
+    'schedule_month_ordinals' => $schedule_month_ordinals,
+));
+$article_choice_attributes = isset($event_form_options['article_choice_attributes']) ? $event_form_options['article_choice_attributes'] : array();
+$location_choice_attributes = isset($event_form_options['location_choice_attributes']) ? $event_form_options['location_choice_attributes'] : array();
+$animateur_choice_attributes = isset($event_form_options['animateur_choice_attributes']) ? $event_form_options['animateur_choice_attributes'] : array();
+$volunteer_choice_attributes = isset($event_form_options['volunteer_choice_attributes']) ? $event_form_options['volunteer_choice_attributes'] : array();
+if (isset($event_form_options['accent_default_color'])) {
+    $default_accent_color = (string) $event_form_options['accent_default_color'];
+}
+$forms_class_name = '\\Symfony\\Component\\Form\\Forms';
+$has_symfony_forms_component = class_exists($forms_class_name) && class_exists(EventFormFactory::class);
+$event_form = null;
+
+if ($has_symfony_forms_component) {
+    $event_form_factory = new EventFormFactory();
+    $event_form = $event_form_factory->create($event_form_defaults, $event_form_options);
+} else {
+    echo '<div class="notice notice-warning"><p>' . esc_html__('Le composant Symfony Form n\'est pas disponible sur cette installation. Le formulaire fonctionne sans validation avancée.', 'mj-member') . '</p></div>';
+}
+$submitted_data = array();
+if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('POST') : $is_post_request) && isset($_POST['mj_event_nonce'])) {
+    if (!wp_verify_nonce($_POST['mj_event_nonce'], 'mj_event_form')) {
+        wp_die('Verification de securite echouee');
+    }
+
+    if ($has_symfony_request && $symfony_request && $event_form instanceof \Symfony\Component\Form\FormInterface) {
+        $event_form->handleRequest($symfony_request);
+        $submitted_data = $event_form->getData();
+        foreach ($submitted_data as $submitted_key => $submitted_value) {
+            $_POST[$submitted_key] = $submitted_value;
+        }
+    } else {
+        foreach ($_POST as $submitted_key => $submitted_value) {
+            if (is_array($submitted_value)) {
+                $submitted_data[$submitted_key] = array_map('wp_unslash', $submitted_value);
+            } else {
+                $submitted_data[$submitted_key] = wp_unslash((string) $submitted_value);
+            }
+        }
+    }
+    $form_values = EventFormDataMapper::mergeIntoValues($form_values, $submitted_data);
+}
+
 $back_url = add_query_arg(array('page' => 'mj_events'), admin_url('admin.php'));
 $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l evenement';
 ?>
@@ -1574,6 +2065,46 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                     <?php endif; ?>
                 </div>
             </div>
+                    <script>
+                    document.addEventListener('DOMContentLoaded', function () {
+                        var occurrenceRadios = document.querySelectorAll('input[name="event_occurrence_selection_mode"]');
+                        if (!occurrenceRadios.length) {
+                            return;
+                        }
+
+                        var occurrenceRows = document.querySelectorAll('.mj-event-registrations .mj-admin-event-occurrence-row');
+                        if (!occurrenceRows.length) {
+                            return;
+                        }
+
+                        var toggleRows = function () {
+                            var selected = document.querySelector('input[name="event_occurrence_selection_mode"]:checked');
+                            var hide = !!selected && selected.value === 'all_occurrences';
+
+                            occurrenceRows.forEach(function (row) {
+                                row.style.display = hide ? 'none' : '';
+
+                                row.querySelectorAll('select, input, textarea').forEach(function (field) {
+                                    if (hide) {
+                                        if (field.hasAttribute('required')) {
+                                            field.dataset.mjRequired = '1';
+                                            field.removeAttribute('required');
+                                        }
+                                    } else if (field.dataset && field.dataset.mjRequired === '1') {
+                                        field.setAttribute('required', 'required');
+                                        delete field.dataset.mjRequired;
+                                    }
+                                });
+                            });
+                        };
+
+                        occurrenceRadios.forEach(function (radio) {
+                            radio.addEventListener('change', toggleRows);
+                        });
+
+                        toggleRows();
+                    });
+                    </script>
             <?php if (!empty($admin_event_summary_conditions)) : ?>
                 <div class="mj-admin-event-summary__conditions">
                     <div class="mj-admin-event-summary__conditions-title"><?php esc_html_e('Conditions de l evenement', 'mj-member'); ?></div>
@@ -1587,10 +2118,28 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
         </div>
     <?php endif; ?>
 
+    <?php
+    $series_items_json = '[]';
+    if (!empty($form_values['schedule_series_items']) && is_array($form_values['schedule_series_items'])) {
+        $encoded_series = wp_json_encode(array_values($form_values['schedule_series_items']));
+        if (is_string($encoded_series) && $encoded_series !== '') {
+            $series_items_json = $encoded_series;
+        }
+    }
+    ?>
+
     <form method="post" class="mj-event-form" action="<?php echo esc_url($form_action_url); ?>">
         <?php wp_nonce_field('mj_event_form', 'mj_event_nonce'); ?>
 
-        <table class="form-table" role="presentation">
+        <table class="form-table mj-event-form-table" role="presentation">
+            <tr class="mj-event-section-heading">
+                <th colspan="2">
+                    <div class="mj-event-section-heading__content">
+                        <h3 class="mj-event-section-heading__title"><?php esc_html_e('Informations principales', 'mj-member'); ?></h3>
+                        <p class="mj-event-section-heading__hint"><?php esc_html_e("Renseignez les informations essentielles de l'événement.", 'mj-member'); ?></p>
+                    </div>
+                </th>
+            </tr>
             <tr>
                 <th scope="row"><label for="mj-event-title">Titre</label></th>
                 <td>
@@ -1632,15 +2181,14 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                 <th scope="row">Article lié</th>
                 <td>
                     <?php if (!empty($article_categories)) : ?>
-                        <label for="mj-event-article-cat">Catégorie&nbsp;:</label>
-                        <select id="mj-event-article-cat" name="event_article_cat" style="min-width:180px;">
+                        <label for="mj-event-article-cat" class="mj-event-field-label">Catégorie</label>
+                        <select id="mj-event-article-cat" name="event_article_cat" class="mj-event-select">
                             <?php foreach ($article_categories as $category_item) : ?>
                                 <option value="<?php echo esc_attr($category_item->term_id); ?>" <?php selected($selected_article_cat, $category_item->term_id); ?>><?php echo esc_html($category_item->name); ?></option>
                             <?php endforeach; ?>
                         </select>
-                        <br />
-                        <label for="mj-event-article-id">Article&nbsp;:</label>
-                        <select id="mj-event-article-id" name="event_article_id" style="min-width:260px;">
+                        <label for="mj-event-article-id" class="mj-event-field-label">Article</label>
+                        <select id="mj-event-article-id" name="event_article_id" class="mj-event-select">
                             <option value="0">Aucun article</option>
                             <?php foreach ($articles_for_select as $post_item) : ?>
                                 <?php
@@ -1655,11 +2203,11 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                                 <option value="<?php echo esc_attr($post_id); ?>" data-link="<?php echo esc_attr($post_link ? $post_link : ''); ?>" data-image-id="<?php echo esc_attr($thumb_id ? (int) $thumb_id : 0); ?>" data-image-src="<?php echo esc_attr($thumb_src ? $thumb_src : ''); ?>" <?php selected(isset($form_values['article_id']) ? (int) $form_values['article_id'] : 0, $post_id); ?>><?php echo esc_html(get_the_title($post_item)); ?></option>
                             <?php endforeach; ?>
                         </select>
-                        <div id="mj-event-article-preview" style="margin-top:10px;<?php echo !empty($article_preview_html) ? '' : 'display:none;'; ?>">
+                        <div id="mj-event-article-preview" class="mj-event-article-preview" style="<?php echo !empty($article_preview_html) ? '' : 'display:none;'; ?>">
                             <?php echo !empty($article_preview_html) ? wp_kses_post($article_preview_html) : ''; ?>
                         </div>
-                        <button type="button" class="button" id="mj-event-article-image" style="margin-top:8px;<?php echo (int) $form_values['article_id'] > 0 ? '' : 'display:none;'; ?>">Utiliser l'image de l'article</button>
-                        <p class="description">Sélectionnez un article publié pour le relier à cet événement.</p>
+                        <button type="button" class="button mj-event-article-image" id="mj-event-article-image" style="<?php echo (int) $form_values['article_id'] > 0 ? '' : 'display:none;'; ?>">Utiliser l'image de l'article</button>
+                        <p class="description mj-event-help-text">Sélectionnez un article publié pour le relier à cet événement.</p>
                     <?php else : ?>
                         <p>Aucune catégorie d'articles disponible. Créez des articles depuis l'éditeur WordPress pour activer cette option.</p>
                     <?php endif; ?>
@@ -1668,22 +2216,39 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
             <tr>
                 <th scope="row">Visuel</th>
                 <td>
-                    <div id="mj-event-cover-preview" style="margin-bottom:10px;">
+                    <div id="mj-event-cover-preview" class="mj-event-cover-preview">
                         <?php echo $cover_preview !== '' ? $cover_preview : '<span>Aucun visuel selectionne.</span>'; ?>
                     </div>
                     <input type="hidden" id="mj-event-cover-id" name="event_cover_id" value="<?php echo esc_attr((int) $form_values['cover_id']); ?>" />
-                    <button type="button" class="button" id="mj-event-cover-select">Choisir une image</button>
-                    <button type="button" class="button" id="mj-event-cover-remove">Retirer</button>
+                    <div class="mj-event-cover-actions">
+                        <button type="button" class="button" id="mj-event-cover-select">Choisir une image</button>
+                        <button type="button" class="button" id="mj-event-cover-remove">Retirer</button>
+                    </div>
                 </td>
+            </tr>
+            <tr class="mj-event-section-heading">
+                <th colspan="2">
+                    <div class="mj-event-section-heading__content">
+                        <h3 class="mj-event-section-heading__title"><?php esc_html_e('Lieu et équipe', 'mj-member'); ?></h3>
+                        <p class="mj-event-section-heading__hint"><?php esc_html_e("Choisissez le lieu d'accueil et les référents associés.", 'mj-member'); ?></p>
+                    </div>
+                </th>
             </tr>
             <tr>
                 <th scope="row"><label for="mj-event-location">Lieu</label></th>
                 <td>
-                    <select id="mj-event-location" name="event_location_id" style="min-width:260px;">
+                    <select id="mj-event-location" name="event_location_id" class="mj-event-select">
                         <option value="0">Aucun lieu defini</option>
                         <?php foreach ($locations_for_select as $location_item) : ?>
                             <?php
-                            $location_data = (array) $location_item;
+                            if ($location_item instanceof EventLocationData) {
+                                $location_data = $location_item->toArray();
+                            } elseif (is_object($location_item)) {
+                                $location_data = get_object_vars($location_item);
+                            } else {
+                                $location_data = (array) $location_item;
+                            }
+
                             $location_id_option = isset($location_data['id']) ? (int) $location_data['id'] : 0;
                             if ($location_id_option <= 0) {
                                 continue;
@@ -1711,7 +2276,7 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                         <?php endforeach; ?>
                     </select>
                     <p class="description">Administrez les lieux depuis <a href="<?php echo esc_url($manage_locations_url); ?>" target="_blank" rel="noopener noreferrer">la page des lieux</a>.</p>
-                    <div id="mj-event-location-preview" class="mj-event-location-preview" style="margin-top:12px;">
+                    <div id="mj-event-location-preview" class="mj-event-location-preview">
                         <?php if ($current_event_location) : ?>
                             <strong><?php echo esc_html($current_event_location->name); ?></strong><br />
                             <?php if ($event_location_address !== '') : ?>
@@ -1721,7 +2286,7 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                                 <span class="description">Notes: <?php echo esc_html($current_event_location->notes); ?></span><br />
                             <?php endif; ?>
                             <?php if ($event_location_map_src !== '') : ?>
-                                <div class="mj-event-location-map" style="margin-top:10px; max-width:520px;">
+                                <div class="mj-event-location-map">
                                     <iframe src="<?php echo esc_url($event_location_map_src); ?>" width="520" height="260" style="border:0;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
                                 </div>
                             <?php endif; ?>
@@ -1734,7 +2299,7 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
             <tr>
                 <th scope="row"><label for="mj-event-animateur">Animateurs referents</label></th>
                 <td>
-                    <select id="mj-event-animateur" name="event_animateur_ids[]" style="min-width:260px;" multiple="multiple"<?php echo $animateur_assignments_ready ? '' : ' data-info="legacy-mode"'; ?>>
+                    <select id="mj-event-animateur" name="event_animateur_ids[]" class="mj-event-select" multiple="multiple"<?php echo $animateur_assignments_ready ? '' : ' data-info="legacy-mode"'; ?>>
                         <?php foreach ($animateurs_for_select as $animateur_item) : ?>
                             <?php
                             if (!is_object($animateur_item)) {
@@ -1767,9 +2332,9 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                         <p class="description">Plusieurs animateurs peuvent etre selectionnes apres la migration des evenements (wp eval "mj_member_upgrade_to_2_3($GLOBALS['wpdb']);"). Pour l instant, seul le premier animateur choisi sera memorise; laissez vide pour aucun.</p>
                     <?php endif; ?>
                     <?php if (!empty($assigned_animateurs_display)) : ?>
-                        <div class="mj-event-animateur-list" style="margin-top:8px;">
+                        <div class="mj-event-animateur-list">
                             <strong>Animateur(s) assigne(s)</strong>
-                            <ul style="margin:6px 0 0 18px;">
+                            <ul>
                                 <?php foreach ($assigned_animateurs_display as $assigned_id => $assigned_member) : ?>
                                     <?php
                                     $assigned_first = isset($assigned_member->first_name) ? $assigned_member->first_name : '';
@@ -1803,13 +2368,118 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                 </td>
             </tr>
             <tr>
+                <th scope="row"><label for="mj-event-volunteers">Benevoles referents</label></th>
+                <td>
+                    <select id="mj-event-volunteers" name="event_volunteer_ids[]" class="mj-event-select" multiple="multiple"<?php echo $volunteer_assignments_ready ? '' : ' data-info="legacy-mode"'; ?>>
+                        <?php foreach ($volunteers_for_select as $volunteer_item) : ?>
+                            <?php
+                            if (!is_object($volunteer_item)) {
+                                continue;
+                            }
+                            $volunteer_id_option = isset($volunteer_item->id) ? (int) $volunteer_item->id : 0;
+                            if ($volunteer_id_option <= 0) {
+                                continue;
+                            }
+                            $volunteer_first = isset($volunteer_item->first_name) ? $volunteer_item->first_name : '';
+                            $volunteer_last = isset($volunteer_item->last_name) ? $volunteer_item->last_name : '';
+                            $volunteer_display = trim($volunteer_first . ' ' . $volunteer_last);
+                            if ($volunteer_display === '') {
+                                $volunteer_display = 'Benevole #' . $volunteer_id_option;
+                            }
+                            $volunteer_email_attr = '';
+                            if (!empty($volunteer_item->email) && is_email($volunteer_item->email)) {
+                                $volunteer_email_attr = ' data-email="' . esc_attr($volunteer_item->email) . '"';
+                            }
+                            $is_volunteer_selected = in_array($volunteer_id_option, $form_values['volunteer_ids'], true);
+                            ?>
+                            <option value="<?php echo esc_attr($volunteer_id_option); ?>" <?php selected($is_volunteer_selected, true, true); echo $volunteer_email_attr; ?>>
+                                <?php echo esc_html($volunteer_display); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <?php if ($volunteer_assignments_ready) : ?>
+                        <p class="description">Choisissez des benevoles referents (optionnel); ils recevront les notifications d'inscription pour cet evenement.</p>
+                    <?php else : ?>
+                        <p class="description">Activez la table des benevoles referents (wp eval "mj_member_upgrade_to_2_21($GLOBALS['wpdb']);") pour memoriser les selections.</p>
+                    <?php endif; ?>
+                    <?php if (!empty($assigned_volunteers_display)) : ?>
+                        <div class="mj-event-volunteer-list">
+                            <strong>Benevole(s) assigne(s)</strong>
+                            <ul>
+                                <?php foreach ($assigned_volunteers_display as $assigned_id => $assigned_member) : ?>
+                                    <?php
+                                    $assigned_first = isset($assigned_member->first_name) ? $assigned_member->first_name : '';
+                                    $assigned_last = isset($assigned_member->last_name) ? $assigned_member->last_name : '';
+                                    $assigned_name = trim($assigned_first . ' ' . $assigned_last);
+                                    if ($assigned_name === '') {
+                                        $assigned_name = 'Membre #' . $assigned_id;
+                                    }
+                                    $assigned_email = (!empty($assigned_member->email) && is_email($assigned_member->email)) ? $assigned_member->email : '';
+                                    $member_edit_url = add_query_arg(
+                                        array(
+                                            'page' => 'mj_members',
+                                            'action' => 'edit',
+                                            'member' => $assigned_id,
+                                        ),
+                                        admin_url('admin.php')
+                                    );
+                                    ?>
+                                    <li>
+                                        <a href="<?php echo esc_url($member_edit_url); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html($assigned_name); ?></a>
+                                        <?php if ($assigned_email !== '') : ?>
+                                            — <a href="mailto:<?php echo esc_attr($assigned_email); ?>"><?php echo esc_html($assigned_email); ?></a>
+                                        <?php else : ?>
+                                            — <span class="description">Email manquant</span>
+                                        <?php endif; ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </div>
+                    <?php endif; ?>
+                </td>
+            </tr>
+            <tr class="mj-event-section-heading">
+                <th colspan="2">
+                    <div class="mj-event-section-heading__content">
+                        <h3 class="mj-event-section-heading__title"><?php esc_html_e('Inscriptions et accès', 'mj-member'); ?></h3>
+                        <p class="mj-event-section-heading__hint"><?php esc_html_e("Configurez l'ouverture des inscriptions, les capacités et les publics autorisés.", 'mj-member'); ?></p>
+                    </div>
+                </th>
+            </tr>
+            <tr>
                 <th scope="row"><label for="mj-event-allow-guardian">Autoriser les tuteurs</label></th>
                 <td>
-                    <label for="mj-event-allow-guardian">
-                        <input type="checkbox" id="mj-event-allow-guardian" name="event_allow_guardian_registration" value="1" <?php checked(!empty($form_values['allow_guardian_registration']), true); ?> />
-                        Les tuteurs peuvent s'inscrire eux-memes a cet evenement
-                    </label>
-                    <p class="description">Par defaut, seuls les jeunes peuvent s'inscrire. Cochez pour ouvrir les inscriptions aux tuteurs.</p>
+                    <div class="mj-event-toggle">
+                        <label for="mj-event-allow-guardian">
+                            <input type="checkbox" id="mj-event-allow-guardian" name="event_allow_guardian_registration" value="1" <?php checked(!empty($form_values['allow_guardian_registration']), true); ?> />
+                            Les tuteurs peuvent s'inscrire eux-memes a cet evenement
+                        </label>
+                    </div>
+                    <p class="description mj-event-help-text">Par defaut, seuls les jeunes peuvent s'inscrire. Cochez pour ouvrir les inscriptions aux tuteurs.</p>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row"><label for="mj-event-free-participation">Participation libre</label></th>
+                <td>
+                    <div class="mj-event-toggle">
+                        <label for="mj-event-free-participation">
+                            <input type="checkbox" id="mj-event-free-participation" name="event_free_participation" value="1" <?php checked(!empty($form_values['registration_is_free_participation']), true); ?> />
+                            Il n'est pas necessaire de s'inscrire a cet evenement
+                        </label>
+                    </div>
+                    <p class="description mj-event-help-text">Aucune reservation n'est recue. L'evenement reste visible dans l'espace membre.</p>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row"><label for="mj-event-requires-validation">Validation des inscriptions</label></th>
+                <td>
+                    <div class="mj-event-toggle">
+                        <label for="mj-event-requires-validation">
+                            <input type="checkbox" id="mj-event-requires-validation" name="event_requires_validation" value="1" <?php checked(!empty($form_values['requires_validation']), true); ?> />
+                            Confirmer manuellement chaque inscription recue pour cet evenement
+                        </label>
+                    </div>
+                    <p class="description mj-event-help-text">Decochez pour valider automatiquement les reservations envoyees par les membres.</p>
                 </td>
             </tr>
             <tr>
@@ -1849,6 +2519,14 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                     <input type="number" id="mj-event-age-max" name="event_age_max" min="0" max="120" value="<?php echo esc_attr((int) $form_values['age_max']); ?>" style="width:70px;" />
                 </td>
             </tr>
+            <tr class="mj-event-section-heading">
+                <th colspan="2">
+                    <div class="mj-event-section-heading__content">
+                        <h3 class="mj-event-section-heading__title"><?php esc_html_e('Planification', 'mj-member'); ?></h3>
+                        <p class="mj-event-section-heading__hint"><?php esc_html_e("Définissez les dates et la fréquence de l'événement.", 'mj-member'); ?></p>
+                    </div>
+                </th>
+            </tr>
             <tr>
                 <th scope="row">Planification</th>
                 <td>
@@ -1865,6 +2543,10 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                         <label class="mj-event-schedule-mode__option">
                             <input type="radio" name="event_schedule_mode" value="recurring" <?php checked($form_values['schedule_mode'], 'recurring'); ?> />
                             Recurrence (hebdomadaire ou mensuelle)
+                        </label>
+                        <label class="mj-event-schedule-mode__option">
+                            <input type="radio" name="event_schedule_mode" value="series" <?php checked($form_values['schedule_mode'], 'series'); ?> />
+                            Serie de dates personnalisees
                         </label>
                     </fieldset>
                     <p class="description">Choisissez la facon de planifier l evenement; les sections ci-dessous s adaptent au mode selectionne.</p>
@@ -1973,11 +2655,94 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                     </div>
                 </td>
             </tr>
+            <tr class="mj-schedule-section<?php echo $form_values['schedule_mode'] === 'series' ? ' is-active' : ''; ?>" data-schedule-mode="series">
+                <th scope="row">Serie personnalisee</th>
+                <td>
+                    <div class="mj-schedule-card">
+                        <strong>Occurrences personnalisees</strong>
+                        <p class="description">Ajoutez chaque date de facon individuelle. Utilisez ce mode pour un planning non recurrent.</p>
+                        <div class="mj-series-builder">
+                            <div class="mj-series-builder__inputs">
+                                <label for="mj-event-series-date">Date</label>
+                                <input type="date" id="mj-event-series-date" autocomplete="off" />
+                                <label for="mj-event-series-start">Debut</label>
+                                <input type="time" id="mj-event-series-start" autocomplete="off" />
+                                <label for="mj-event-series-end">Fin</label>
+                                <input type="time" id="mj-event-series-end" autocomplete="off" />
+                                <button type="button" class="button button-secondary" id="mj-event-series-add">Ajouter la date</button>
+                            </div>
+                            <table class="mj-series-builder__table widefat fixed striped" id="mj-event-series-table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Date</th>
+                                        <th scope="col">Debut</th>
+                                        <th scope="col">Fin</th>
+                                        <th scope="col" class="mj-series-builder__actions"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (!empty($form_values['schedule_series_items'])) : ?>
+                                        <?php foreach ($form_values['schedule_series_items'] as $series_index => $series_item) : ?>
+                                            <?php
+                                            $series_date = isset($series_item['date']) ? sanitize_text_field($series_item['date']) : '';
+                                            $series_start = isset($series_item['start_time']) ? sanitize_text_field($series_item['start_time']) : '';
+                                            $series_end = isset($series_item['end_time']) ? sanitize_text_field($series_item['end_time']) : '';
+                                            $series_end_display = ($series_end !== '') ? $series_end : '--';
+                                            ?>
+                                            <tr data-series-index="<?php echo esc_attr((int) $series_index); ?>">
+                                                <td><span class="mj-series-builder__cell"><?php echo esc_html($series_date); ?></span></td>
+                                                <td><span class="mj-series-builder__cell"><?php echo esc_html($series_start); ?></span></td>
+                                                <td><span class="mj-series-builder__cell"><?php echo esc_html($series_end_display); ?></span></td>
+                                                <td class="mj-series-builder__actions">
+                                                    <button type="button" class="button button-link-delete mj-event-series-remove" data-series-index="<?php echo esc_attr((int) $series_index); ?>">Supprimer</button>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                        <tr id="mj-event-series-empty" style="display:none;">
+                                            <td colspan="4" class="mj-series-builder__empty">Aucune date ajoutee pour le moment.</td>
+                                        </tr>
+                                    <?php else : ?>
+                                        <tr id="mj-event-series-empty">
+                                            <td colspan="4" class="mj-series-builder__empty">Aucune date ajoutee pour le moment.</td>
+                                        </tr>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                            <input type="hidden" id="mj-event-series-items" name="event_series_items" value="<?php echo esc_attr($series_items_json); ?>" />
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            <tr class="mj-event-section-heading">
+                <th colspan="2">
+                    <div class="mj-event-section-heading__content">
+                        <h3 class="mj-event-section-heading__title"><?php esc_html_e('Occurrences et règles', 'mj-member'); ?></h3>
+                        <p class="mj-event-section-heading__hint"><?php esc_html_e("Précisez la gestion des occurrences, les délais et le tarif appliqué.", 'mj-member'); ?></p>
+                    </div>
+                </th>
+            </tr>
+            <tr>
+                <th scope="row">Gestion des occurrences</th>
+                <td>
+                    <fieldset class="mj-event-occurrence-mode">
+                        <legend class="screen-reader-text">Gestion des occurrences</legend>
+                        <label class="mj-event-occurrence-mode__option">
+                            <input type="radio" name="event_occurrence_selection_mode" value="member_choice" <?php checked($form_values['occurrence_selection_mode'], 'member_choice'); ?> />
+                            Les membres choisissent leurs occurrences
+                        </label>
+                        <label class="mj-event-occurrence-mode__option">
+                            <input type="radio" name="event_occurrence_selection_mode" value="all_occurrences" <?php checked($form_values['occurrence_selection_mode'], 'all_occurrences'); ?> />
+                            Inscrire automatiquement sur toutes les occurrences
+                        </label>
+                        <p class="description">Ce paramètre s&apos;applique aux événements récurrents, en série ou aux stages. En mode automatique, chaque inscription couvre toutes les occurrences disponibles.</p>
+                    </fieldset>
+                </td>
+            </tr>
             <tr>
                 <th scope="row"><label for="mj-event-date-deadline">Date limite d inscription</label></th>
                 <td>
                     <input type="datetime-local" id="mj-event-date-deadline" name="event_date_deadline" value="<?php echo esc_attr($form_values['date_fin_inscription']); ?>" />
-                    <p class="description">Laisser vide pour utiliser la date par defaut (14 jours avant le debut).</p>
+                    <p class="description mj-event-help-text">Laisser vide pour utiliser la date par defaut (14 jours avant le debut).</p>
                 </td>
             </tr>
             <tr>
@@ -1985,6 +2750,14 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                 <td>
                     <input type="number" id="mj-event-price" name="event_price" step="0.01" min="0" value="<?php echo esc_attr($form_values['prix']); ?>" /> €
                 </td>
+            </tr>
+            <tr class="mj-event-section-heading">
+                <th colspan="2">
+                    <div class="mj-event-section-heading__content">
+                        <h3 class="mj-event-section-heading__title"><?php esc_html_e('Description', 'mj-member'); ?></h3>
+                        <p class="mj-event-section-heading__hint"><?php esc_html_e("Présentez l'événement en détail pour les membres et le public.", 'mj-member'); ?></p>
+                    </div>
+                </th>
             </tr>
             <tr>
                 <th scope="row"><label for="mj-event-description">Description detaillee</label></th>
@@ -2040,7 +2813,7 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                                 <option value="">Choisir un membre</option>
                                 <?php foreach ($members_for_select as $member_option) : ?>
                                     <?php
-                                    if (isset($member_option->status) && $member_option->status !== MjMembers_CRUD::STATUS_ACTIVE) {
+                                    if (isset($member_option->status) && $member_option->status !== MjMembers::STATUS_ACTIVE) {
                                         continue;
                                     }
                                     $option_id = isset($member_option->id) ? (int) $member_option->id : 0;
@@ -2064,8 +2837,8 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                             <p class="description">Les membres deja inscrits sont desactives dans la liste.</p>
                         </td>
                     </tr>
-                    <?php if ($event_type_key === MjEvents_CRUD::TYPE_ATELIER) : ?>
-                    <tr>
+                    <?php if ($event_type_key === MjEvents::TYPE_ATELIER) : ?>
+                    <tr class="mj-admin-event-occurrence-row">
                         <th scope="row"><label for="mj-event-registration-occurrence">Occurrence</label></th>
                         <td>
                             <?php if (!empty($admin_occurrence_map)) : ?>
@@ -2099,8 +2872,8 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                             <?php endif; ?>
                         </td>
                     </tr>
-                    <?php elseif ($event_type_key === MjEvents_CRUD::TYPE_STAGE) : ?>
-                    <tr>
+                    <?php elseif ($event_type_key === MjEvents::TYPE_STAGE) : ?>
+                    <tr class="mj-admin-event-occurrence-row">
                         <th scope="row">Occurrences</th>
                         <td>
                             <p class="description"><?php esc_html_e('Chaque inscription couvre toutes les occurrences planifiees du stage. Selectionnez une occurrence ci-dessous pour suivre les compteurs journaliers avant de pointer les presences.', 'mj-member'); ?></p>
@@ -2142,7 +2915,7 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                         </td>
                     </tr>
                     <?php else : ?>
-                    <tr>
+                    <tr class="mj-admin-event-occurrence-row">
                         <th scope="row">Occurrences</th>
                         <td>
                             <?php if (!empty($admin_occurrence_map)) : ?>
@@ -2224,7 +2997,7 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                             if (!empty($registration_entry->guardian_id)) {
                                 $guardian_id = (int) $registration_entry->guardian_id;
                                 if (!isset($guardian_cache[$guardian_id])) {
-                                    $guardian_cache[$guardian_id] = MjMembers_CRUD::getById($guardian_id);
+                                    $guardian_cache[$guardian_id] = MjMembers::getById($guardian_id);
                                 }
                                 $guardian_member = $guardian_cache[$guardian_id];
                                 if ($guardian_member) {
@@ -2243,7 +3016,7 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                                 : array('mode' => 'all', 'occurrences' => array());
 
                             $assignment_text = '';
-                            if ($event_type_key === MjEvents_CRUD::TYPE_ATELIER) {
+                            if ($event_type_key === MjEvents::TYPE_ATELIER) {
                                 if (isset($assignment_scope['mode']) && $assignment_scope['mode'] === 'custom' && !empty($assignment_scope['occurrences'])) {
                                     $scope_labels = array();
                                     foreach ($assignment_scope['occurrences'] as $scope_occurrence) {

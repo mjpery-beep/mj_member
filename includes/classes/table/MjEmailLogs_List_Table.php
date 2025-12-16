@@ -2,7 +2,7 @@
 
 namespace Mj\Member\Classes\Table;
 
-use Mj\Member\Classes\Crud\MjMembers_CRUD;
+use Mj\Member\Classes\Crud\MjMembers;
 use WP_List_Table;
 
 if (!defined('ABSPATH')) {
@@ -215,7 +215,7 @@ class MjEmailLogs_List_Table extends WP_List_Table {
 
         if (!empty($member_ids)) {
             foreach ($member_ids as $member_id) {
-                $member = MjMembers_CRUD::getById($member_id);
+                $member = MjMembers::getById($member_id);
                 if ($member) {
                     $this->memberCache[$member_id] = $member;
                 }

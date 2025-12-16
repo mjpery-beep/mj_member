@@ -12,8 +12,11 @@ use Elementor\Group_Control_Box_Shadow;
 use Elementor\Group_Control_Typography;
 use Elementor\Utils;
 use Elementor\Widget_Base;
+use Mj\Member\Core\AssetsManager;
 
 class Mj_Member_Elementor_Events_Widget extends Widget_Base {
+    use Mj_Member_Elementor_Widget_Visibility;
+
     public function get_name() {
         return 'mj-member-events-list';
     }
@@ -39,12 +42,14 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
     }
 
     protected function register_controls() {
-        $status_options = method_exists('MjEvents_CRUD', 'get_status_labels') ? MjEvents_CRUD::get_status_labels() : array(
+
+        $status_options = method_exists('MjEvents', 'get_status_labels') ? MjEvents::get_status_labels() : array(
             'actif' => __('Actif', 'mj-member'),
             'brouillon' => __('Brouillon', 'mj-member'),
             'passe' => __('Passé', 'mj-member'),
         );
-        $type_options = method_exists('MjEvents_CRUD', 'get_type_labels') ? MjEvents_CRUD::get_type_labels() : array(
+
+        $type_options = method_exists('MjEvents', 'get_type_labels') ? MjEvents::get_type_labels() : array(
             'stage' => __('Stage', 'mj-member'),
             'soiree' => __('Soirée', 'mj-member'),
             'sortie' => __('Sortie', 'mj-member'),
@@ -306,6 +311,8 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         );
 
         $this->end_controls_section();
+
+        $this->register_visibility_controls();
 
         $this->start_controls_section(
             'section_style_header',
@@ -600,12 +607,13 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
     }
 
     protected function render() {
+        $settings = $this->get_settings_for_display();
+        $this->apply_visibility_to_wrapper($settings, 'mj-member-events-widget');
+
         if (!function_exists('mj_member_get_public_events')) {
             echo '<div class="mj-member-events__warning">' . esc_html__('Le module MJ Member doit être actif pour utiliser ce widget.', 'mj-member') . '</div>';
             return;
         }
-
-        $settings = $this->get_settings_for_display();
 
         $statuses = isset($settings['statuses']) ? (array) $settings['statuses'] : array();
         $types = isset($settings['types']) ? (array) $settings['types'] : array();
@@ -718,11 +726,7 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
             $fallback_url = esc_url_raw($settings['fallback_image']['url']);
         }
 
-        $type_labels = method_exists('MjEvents_CRUD', 'get_type_labels') ? MjEvents_CRUD::get_type_labels() : array();
-
-        if (function_exists('mj_member_output_events_widget_styles')) {
-            mj_member_output_events_widget_styles();
-        }
+        $type_labels = method_exists('MjEvents', 'get_type_labels') ? MjEvents::get_type_labels() : array();
 
         $instance_id = wp_unique_id('mj-member-events-');
         $root_classes = array('mj-member-events');
@@ -741,10 +745,7 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
             return;
         }
 
-        wp_enqueue_script('mj-member-events-widget');
-        if (function_exists('mj_member_ensure_events_widget_localized')) {
-            mj_member_ensure_events_widget_localized();
-        }
+        AssetsManager::requirePackage('events-widget', array('instance' => $instance_id));
 
         $grid_classes = array('mj-member-events__grid');
         $grid_classes[] = $layout === 'list' ? 'is-list' : 'is-grid';

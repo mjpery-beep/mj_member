@@ -2,13 +2,14 @@
 
 namespace Mj\Member\Classes\Crud;
 
+use Mj\Member\Classes\Value\EventLocationData;
 use WP_Error;
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-class MjEventLocations {
+class MjEventLocations implements CrudRepositoryInterface {
     const TABLE = 'mj_event_locations';
 
     /**
@@ -20,9 +21,9 @@ class MjEventLocations {
 
     /**
      * @param array<string, mixed> $args
-     * @return array<int, object>
+     * @return array<int, EventLocationData>
      */
-    public static function get_all($args = array()) {
+    public static function get_all(array $args = array()) {
         global $wpdb;
         $table = self::table_name();
 
@@ -58,12 +59,58 @@ class MjEventLocations {
             $sql = call_user_func_array(array($wpdb, 'prepare'), $where_values);
         }
 
-        return $wpdb->get_results($sql);
+        $results = $wpdb->get_results($sql);
+        if (!is_array($results) || empty($results)) {
+            return array();
+        }
+
+        return array_map(static function ($row) {
+            return EventLocationData::fromRow($row);
+        }, $results);
+    }
+
+    /**
+     * @param array<string,mixed> $args
+     * @return int
+     */
+    public static function count(array $args = array()) {
+        global $wpdb;
+        $table = self::table_name();
+
+        $defaults = array(
+            'search' => '',
+        );
+        $args = wp_parse_args($args, $defaults);
+
+        $where_parts = array();
+        $where_values = array();
+
+        if (!empty($args['search'])) {
+            $search = sanitize_text_field($args['search']);
+            $like = '%' . $wpdb->esc_like($search) . '%';
+            $where_parts[] = '(name LIKE %s OR city LIKE %s OR address_line LIKE %s)';
+            $where_values[] = $like;
+            $where_values[] = $like;
+            $where_values[] = $like;
+        }
+
+        $where_sql = '';
+        if (!empty($where_parts)) {
+            $where_sql = 'WHERE ' . implode(' AND ', $where_parts);
+        }
+
+        $sql = "SELECT COUNT(*) FROM {$table} {$where_sql}";
+        if (!empty($where_values)) {
+            array_unshift($where_values, $sql);
+            $sql = call_user_func_array(array($wpdb, 'prepare'), $where_values);
+        }
+
+        return (int) $wpdb->get_var($sql);
     }
 
     /**
      * @param int $location_id
-     * @return object|null
+     * @return EventLocationData|null
      */
     public static function find($location_id) {
         $location_id = (int) $location_id;
@@ -74,12 +121,14 @@ class MjEventLocations {
         global $wpdb;
         $table = self::table_name();
         $sql = $wpdb->prepare("SELECT * FROM {$table} WHERE id = %d", $location_id);
-        return $wpdb->get_row($sql);
+        $row = $wpdb->get_row($sql);
+
+        return $row ? EventLocationData::fromRow($row) : null;
     }
 
     /**
      * @param string $slug
-     * @return object|null
+     * @return EventLocationData|null
      */
     public static function find_by_slug($slug) {
         $slug = sanitize_title($slug);
@@ -90,7 +139,9 @@ class MjEventLocations {
         global $wpdb;
         $table = self::table_name();
         $sql = $wpdb->prepare("SELECT * FROM {$table} WHERE slug = %s", $slug);
-        return $wpdb->get_row($sql);
+        $row = $wpdb->get_row($sql);
+
+        return $row ? EventLocationData::fromRow($row) : null;
     }
 
     /**
@@ -116,7 +167,10 @@ class MjEventLocations {
      * @param array<string, mixed> $data
      * @return int|WP_Error
      */
-    public static function create(array $data) {
+    public static function create($data) {
+        if (!is_array($data)) {
+            return new WP_Error('mj_event_location_invalid_payload', 'Format de donnees invalide pour le lieu.');
+        }
         global $wpdb;
         $table = self::table_name();
 
@@ -142,7 +196,10 @@ class MjEventLocations {
      * @param array<string, mixed> $data
      * @return true|WP_Error
      */
-    public static function update($location_id, array $data) {
+    public static function update($location_id, $data) {
+        if (!is_array($data)) {
+            return new WP_Error('mj_event_location_invalid_payload', 'Format de donnees invalide pour le lieu.');
+        }
         $location_id = (int) $location_id;
         if ($location_id <= 0) {
             return new WP_Error('mj_event_location_invalid_id', 'Identifiant de lieu invalide.');
@@ -212,7 +269,7 @@ class MjEventLocations {
             return '';
         }
 
-        $location = (array) $location;
+        $location = self::normalize_location_array($location);
         $query = '';
 
         if (!empty($location['map_query'])) {
@@ -254,7 +311,7 @@ class MjEventLocations {
             return '';
         }
 
-        $location = (array) $location;
+        $location = self::normalize_location_array($location);
         $parts = array();
         if (!empty($location['address_line'])) {
             $parts[] = $location['address_line'];
@@ -283,7 +340,7 @@ class MjEventLocations {
      * @return array<int, array{slug: string, label: string}>
      */
     public static function extract_types($location) {
-        $location = (array) $location;
+        $location = self::normalize_location_array($location);
         if (empty($location)) {
             return array();
         }
@@ -426,6 +483,26 @@ class MjEventLocations {
         }
 
         return array_values($types);
+    }
+
+    /**
+     * @param mixed $location
+     * @return array<string,mixed>
+     */
+    private static function normalize_location_array($location) {
+        if ($location instanceof EventLocationData) {
+            return $location->toArray();
+        }
+
+        if (is_array($location)) {
+            return $location;
+        }
+
+        if (is_object($location)) {
+            return get_object_vars($location);
+        }
+
+        return array();
     }
 
     /**

@@ -12,11 +12,11 @@ if (!function_exists('mj_member_get_registration_type')) {
 
 if (!function_exists('mj_member_send_registration_email')) {
     function mj_member_send_registration_email($member_id, $guardian = null) {
-        if (!class_exists('MjMail') || !class_exists('MjMembers_CRUD')) {
+        if (!class_exists('MjMail') || !class_exists('MjMembers')) {
             return false;
         }
 
-        $member = is_object($member_id) ? $member_id : MjMembers_CRUD::getById((int) $member_id);
+        $member = is_object($member_id) ? $member_id : MjMembers::getById((int) $member_id);
         if (!$member) {
             return false;
         }
@@ -128,6 +128,11 @@ if (!function_exists('mj_process_frontend_inscription')) {
             return array('success' => false, 'message' => "Vous devez accepter le traitement de vos données personnelles.");
         }
 
+        $regulation_required = !empty($_POST['regulation_required']);
+        if ($regulation_required && empty($_POST['regulation_consent'])) {
+            return array('success' => false, 'message' => "Merci de lire et d'accepter le règlement intérieur avant de poursuivre.");
+        }
+
         $guardian_login_raw = sanitize_text_field(wp_unslash($_POST['guardian_user_login'] ?? ''));
         $guardian = array(
             'first_name'  => sanitize_text_field(wp_unslash($_POST['guardian_first_name'] ?? '')),
@@ -137,7 +142,7 @@ if (!function_exists('mj_process_frontend_inscription')) {
             'address'     => sanitize_text_field(wp_unslash($_POST['guardian_address'] ?? '')),
             'city'        => sanitize_text_field(wp_unslash($_POST['guardian_city'] ?? '')),
             'postal_code' => sanitize_text_field(wp_unslash($_POST['guardian_postal_code'] ?? '')),
-            'status'      => MjMembers_CRUD::STATUS_ACTIVE,
+            'status'      => MjMembers::STATUS_ACTIVE,
             'user_login'  => $guardian_login_raw,
             'user_password' => (string) wp_unslash($_POST['guardian_user_password'] ?? ''),
             'user_password_confirm' => (string) wp_unslash($_POST['guardian_user_password_confirm'] ?? ''),
@@ -267,13 +272,13 @@ if (!function_exists('mj_process_frontend_inscription')) {
 
         $guardian_was_existing = false;
         if ($requires_guardian && $guardian['email'] !== '') {
-            $wpdb = MjMembers_CRUD::getWpdb();
-            $table_name = MjMembers_CRUD::getTableName(MjMembers_CRUD::TABLE_NAME);
+            $wpdb = MjMembers::getWpdb();
+            $table_name = MjMembers::getTableName(MjMembers::TABLE_NAME);
             $existing_guardian_row = $wpdb->get_row(
                 $wpdb->prepare(
                     "SELECT id, wp_user_id FROM $table_name WHERE email = %s AND role = %s LIMIT 1",
                     $guardian['email'],
-                    MjMembers_CRUD::ROLE_TUTEUR
+                    MjMembers::ROLE_TUTEUR
                 )
             );
             if ($existing_guardian_row) {
@@ -283,7 +288,10 @@ if (!function_exists('mj_process_frontend_inscription')) {
 
         $guardian_id = null;
         if ($requires_guardian) {
-            $guardian_id = MjMembers_CRUD::upsertGuardian($guardian);
+            $guardian_id = MjMembers::upsertGuardian($guardian);
+            if (is_wp_error($guardian_id)) {
+                return array('success' => false, 'message' => $guardian_id->get_error_message());
+            }
             if (!$guardian_id) {
                 return array('success' => false, 'message' => "Impossible d'enregistrer le tuteur. Vérifiez les informations et réessayez.");
             }
@@ -294,10 +302,10 @@ if (!function_exists('mj_process_frontend_inscription')) {
 
         foreach ($children as $child) {
             if ($child['email'] !== '') {
-                $existing = MjMembers_CRUD::search($child['email']);
+                $existing = MjMembers::search($child['email']);
                 if (!empty($existing)) {
                     foreach ($existing as $record) {
-                        if ((int) $record->id !== (int) $guardian_id && $record->role === MjMembers_CRUD::ROLE_JEUNE) {
+                        if ((int) $record->id !== (int) $guardian_id && $record->role === MjMembers::ROLE_JEUNE) {
                             return array('success' => false, 'message' => sprintf("L'adresse email %s est déjà utilisée pour un jeune.", esc_html($child['email'])));
                         }
                     }
@@ -310,22 +318,23 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 'email'               => $child['email'],
                 'phone'               => $child['phone'],
                 'birth_date'          => $child['birth_date'],
-                'role'                => MjMembers_CRUD::ROLE_JEUNE,
+                'role'                => MjMembers::ROLE_JEUNE,
                 'guardian_id'         => ($requires_guardian && empty($child['is_autonomous'])) ? $guardian_id : null,
                 'is_autonomous'       => $registration_type === 'jeune' ? 1 : ($child['is_autonomous'] ? 1 : 0),
                 'requires_payment'    => 1,
                 'photo_usage_consent' => $child['photo_usage_consent'],
                 'notes'               => $child['notes'],
-                'status'              => MjMembers_CRUD::STATUS_ACTIVE,
+                'status'              => MjMembers::STATUS_ACTIVE,
             );
 
-            $member_id = MjMembers_CRUD::create($payload);
-            if (!$member_id) {
+            $member_id = MjMembers::create($payload);
+            if (is_wp_error($member_id) || !$member_id) {
+                $error_message = is_wp_error($member_id) ? $member_id->get_error_message() : sprintf("Impossible d'enregistrer %s %s. Veuillez réessayer.", esc_html($child['first_name']), esc_html($child['last_name']));
                 foreach ($created_member_ids as $created_id) {
-                    MjMembers_CRUD::delete($created_id);
+                    MjMembers::delete($created_id);
                 }
 
-                return array('success' => false, 'message' => sprintf("Impossible d'enregistrer %s %s. Veuillez réessayer.", esc_html($child['first_name']), esc_html($child['last_name'])));
+                return array('success' => false, 'message' => $error_message);
             }
 
             $created_member_ids[] = $member_id;
@@ -342,7 +351,7 @@ if (!function_exists('mj_process_frontend_inscription')) {
         $guardian_object = null;
 
         if ($requires_guardian && $guardian_id) {
-            $guardian_object = MjMembers_CRUD::getById($guardian_id);
+            $guardian_object = MjMembers::getById($guardian_id);
             if ($guardian_object) {
                 $guardian_account_result = mj_member_sync_member_user_account($guardian_object, array(
                     'role' => 'subscriber',
@@ -354,17 +363,17 @@ if (!function_exists('mj_process_frontend_inscription')) {
 
                 if (is_wp_error($guardian_account_result)) {
                     foreach ($created_member_ids as $created_id) {
-                        MjMembers_CRUD::delete($created_id);
+                        MjMembers::delete($created_id);
                     }
 
                     if (!$guardian_was_existing && $guardian_id) {
-                        MjMembers_CRUD::delete($guardian_id);
+                        MjMembers::delete($guardian_id);
                     }
 
                     return array('success' => false, 'message' => $guardian_account_result->get_error_message());
                 }
 
-                $guardian_object = MjMembers_CRUD::getById($guardian_id);
+                $guardian_object = MjMembers::getById($guardian_id);
             }
         }
 
@@ -373,7 +382,7 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 continue;
             }
 
-            $member_record = MjMembers_CRUD::getById((int) $entry['id']);
+            $member_record = MjMembers::getById((int) $entry['id']);
             if (!$member_record) {
                 continue;
             }
@@ -388,11 +397,11 @@ if (!function_exists('mj_process_frontend_inscription')) {
 
             if (is_wp_error($account_result)) {
                 foreach ($created_member_ids as $created_id) {
-                    MjMembers_CRUD::delete($created_id);
+                    MjMembers::delete($created_id);
                 }
 
                 if ($requires_guardian && !$guardian_was_existing && $guardian_id) {
-                    MjMembers_CRUD::delete($guardian_id);
+                    MjMembers::delete($guardian_id);
                 }
 
                 return array('success' => false, 'message' => $account_result->get_error_message());
@@ -771,13 +780,122 @@ if (!function_exists('mj_render_child_form_block')) {
     }
 }
 
-if (!function_exists('mj_inscription_shortcode')) {
-    function mj_inscription_shortcode() {
-        $result = mj_process_frontend_inscription();
+if (!function_exists('mj_member_render_registration_form')) {
+    function mj_member_render_registration_form($args = array()) {
+        $args = is_array($args) ? $args : array();
+        $default_regulation_page_id = (int) get_option('mj_registration_regulation_page', 0);
+        $default_regulation_url = $default_regulation_page_id > 0 ? get_permalink($default_regulation_page_id) : '';
+
+        $args = wp_parse_args($args, array(
+            'message_logged_out' => '',
+            'message_logged_in' => __('Tu es déjà inscrit.', 'mj-member'),
+            'title' => array(
+                'show' => true,
+                'text' => __('Inscription MJ', 'mj-member'),
+                'image_id' => 0,
+                'image_url' => '',
+                'image_alt' => '',
+                'image_position' => 'inline-right',
+                'margin_top' => '',
+            ),
+            'regulation' => array(
+                'enabled' => $default_regulation_page_id > 0,
+                'page_id' => $default_regulation_page_id,
+                'url' => $default_regulation_url,
+                'modal_title' => __('Règlement intérieur', 'mj-member'),
+                'trigger_label' => __('Règlement d\'ordre intérieur', 'mj-member'),
+                'checkbox_label' => __('Je confirme avoir pris connaissance du %s.', 'mj-member'),
+                'content' => '',
+            ),
+        ));
+
+        $title_defaults = array(
+            'show' => true,
+            'text' => __('Inscription MJ', 'mj-member'),
+            'image_id' => 0,
+            'image_url' => '',
+            'image_alt' => '',
+            'image_position' => 'inline-right',
+            'margin_top' => '',
+        );
+
+        $title_settings = is_array($args['title']) ? $args['title'] : array();
+        $title_settings = wp_parse_args($title_settings, $title_defaults);
+        $allowed_title_image_positions = array('inline-right', 'inline-left', 'above-center', 'above-right');
+        $allowed_title_image_positions[] = 'above-left';
+        $title_image_position = isset($title_settings['image_position']) ? (string) $title_settings['image_position'] : 'inline-right';
+        if (!in_array($title_image_position, $allowed_title_image_positions, true)) {
+            $title_image_position = 'inline-right';
+        }
+        $title_margin_top = isset($title_settings['margin_top']) ? (string) $title_settings['margin_top'] : '';
+        $args['title'] = array(
+            'show' => !empty($title_settings['show']),
+            'text' => isset($title_settings['text']) ? (string) $title_settings['text'] : $title_defaults['text'],
+            'image_id' => isset($title_settings['image_id']) ? (int) $title_settings['image_id'] : 0,
+            'image_url' => isset($title_settings['image_url']) ? (string) $title_settings['image_url'] : '',
+            'image_alt' => isset($title_settings['image_alt']) ? (string) $title_settings['image_alt'] : '',
+            'image_position' => $title_image_position,
+            'margin_top' => $title_margin_top,
+        );
+
+        $regulation_defaults = array(
+            'enabled' => false,
+            'page_id' => 0,
+            'url' => '',
+            'modal_title' => __('Règlement intérieur', 'mj-member'),
+            'trigger_label' => __('Lire le règlement intérieur', 'mj-member'),
+            'checkbox_label' => __('Je confirme avoir lu et accepté le règlement intérieur.', 'mj-member'),
+            'content' => '',
+        );
+
+        $regulation_settings = is_array($args['regulation']) ? $args['regulation'] : array();
+        $regulation_settings = wp_parse_args($regulation_settings, $regulation_defaults);
+        $args['regulation'] = array(
+            'enabled' => !empty($regulation_settings['enabled']),
+            'page_id' => isset($regulation_settings['page_id']) ? (int) $regulation_settings['page_id'] : 0,
+            'url' => isset($regulation_settings['url']) ? (string) $regulation_settings['url'] : '',
+            'modal_title' => isset($regulation_settings['modal_title']) ? (string) $regulation_settings['modal_title'] : $regulation_defaults['modal_title'],
+            'trigger_label' => isset($regulation_settings['trigger_label']) ? (string) $regulation_settings['trigger_label'] : $regulation_defaults['trigger_label'],
+            'checkbox_label' => isset($regulation_settings['checkbox_label']) ? (string) $regulation_settings['checkbox_label'] : $regulation_defaults['checkbox_label'],
+            'content' => isset($regulation_settings['content']) ? (string) $regulation_settings['content'] : '',
+        );
+
+        if ($args['regulation']['page_id'] > 0) {
+            if ($args['regulation']['url'] === '') {
+                $args['regulation']['url'] = get_permalink($args['regulation']['page_id']);
+            }
+
+            if ($args['regulation']['content'] === '') {
+                $regulation_post = get_post($args['regulation']['page_id']);
+                if ($regulation_post instanceof \WP_Post && $regulation_post->post_status === 'publish') {
+                    $regulation_content = apply_filters('the_content', $regulation_post->post_content);
+                    if (is_string($regulation_content) && $regulation_content !== '') {
+                        $args['regulation']['content'] = wp_kses_post($regulation_content);
+                    }
+                }
+            }
+
+            if (!empty($args['regulation']['url']) || $args['regulation']['content'] !== '') {
+                $args['regulation']['enabled'] = true;
+            }
+        }
+
+        $current_member = (is_user_logged_in() && function_exists('mj_member_get_current_member')) ? mj_member_get_current_member() : null;
+        $already_registered = $current_member && !is_wp_error($current_member);
+
+        $result = null;
+        if (!$already_registered) {
+            $result = mj_process_frontend_inscription();
+        }
 
         $registration_type = mj_member_get_registration_type();
         $guardian_values = mj_collect_guardian_form_values();
         $children_values = mj_collect_children_form_values();
+
+        $show_form = !$already_registered;
+        if ($show_form && $result && !empty($result['success']) && !is_user_logged_in()) {
+            $show_form = false;
+        }
 
         if ($result && !empty($result['success'])) {
             $registration_type = 'guardian';
@@ -808,14 +926,242 @@ if (!function_exists('mj_inscription_shortcode')) {
 
         ob_start();
         ?>
+        <?php
+        $intro_message = $already_registered
+            ? $args['message_logged_in']
+            : (is_user_logged_in() ? $args['message_logged_in'] : $args['message_logged_out']);
+
+        if ($intro_message !== '') {
+            $normalized_intro = trim(wp_strip_all_tags($intro_message));
+            if ($normalized_intro !== '') {
+                $normalized_intro_lower = function_exists('mb_strtolower') ? mb_strtolower($normalized_intro, 'UTF-8') : strtolower($normalized_intro);
+                if (strpos($normalized_intro_lower, 'valide tes données et ajoute un mot de passe') !== false) {
+                    $intro_message = '';
+                }
+            }
+        }
+        ?>
         <div class="mj-inscription-container">
+            <?php if (!empty($args['title']['show']) && (!empty($args['title']['text']) || !empty($args['title']['image_url']))) : ?>
+                <?php
+                $title_image_position = isset($args['title']['image_position']) ? (string) $args['title']['image_position'] : 'inline-right';
+                if (!in_array($title_image_position, array('inline-right', 'inline-left', 'above-center', 'above-left', 'above-right'), true)) {
+                    $title_image_position = 'inline-right';
+                }
+                $title_has_image = !empty($args['title']['image_url']);
+                $title_header_classes = array('mj-inscription-container__header');
+                if ($title_has_image) {
+                    $title_header_classes[] = 'mj-inscription-container__header--has-image';
+                    $title_header_classes[] = 'mj-inscription-container__header--image-' . $title_image_position;
+                    if (in_array($title_image_position, array('above-left', 'above-center', 'above-right'), true)) {
+                        $title_header_classes[] = 'mj-inscription-container__header--stack';
+                    }
+                }
+                $render_image_first = $title_has_image && in_array($title_image_position, array('above-left', 'above-center', 'above-right'), true);
+                $header_class_attr = implode(' ', array_map('sanitize_html_class', $title_header_classes));
+                ?>
+                <div class="<?php echo esc_attr($header_class_attr); ?>">
+                    <?php if ($title_has_image && $render_image_first) :
+                        $title_image_alt = $args['title']['image_alt'] !== '' ? $args['title']['image_alt'] : (isset($args['title']['text']) ? $args['title']['text'] : '');
+                    ?>
+                        <div class="mj-inscription-container__title-image">
+                            <img src="<?php echo esc_url($args['title']['image_url']); ?>" alt="<?php echo esc_attr($title_image_alt); ?>" />
+                        </div>
+                    <?php endif; ?>
+                    <?php
+                    $title_style_attr = '';
+                    if (!empty($args['title']['margin_top'])) {
+                        $raw_margin_top = (string) $args['title']['margin_top'];
+                        $normalized_margin_top = '';
+                        if (is_numeric($raw_margin_top)) {
+                            $normalized_margin_top = $raw_margin_top . 'px';
+                        } elseif (preg_match('/^-?\d+(?:\.\d+)?(px|rem|em|%)$/', $raw_margin_top)) {
+                            $normalized_margin_top = $raw_margin_top;
+                        }
+                        if ($normalized_margin_top !== '') {
+                            $title_style_attr = ' style="--mj-title-margin-top: ' . esc_attr($normalized_margin_top) . '"';
+                        }
+                    }
+                    ?>
+                    <?php if (!empty($args['title']['text'])) : ?>
+                        <h2 class="mj-inscription-container__title"<?php echo $title_style_attr; ?>><?php echo esc_html($args['title']['text']); ?></h2>
+                    <?php endif; ?>
+                    <?php if ($title_has_image && !$render_image_first) :
+                        $title_image_alt = $args['title']['image_alt'] !== '' ? $args['title']['image_alt'] : (isset($args['title']['text']) ? $args['title']['text'] : '');
+                    ?>
+                        <div class="mj-inscription-container__title-image">
+                            <img src="<?php echo esc_url($args['title']['image_url']); ?>" alt="<?php echo esc_attr($title_image_alt); ?>" />
+                        </div>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+            <?php if ($intro_message !== '') :
+                $message_classes = array('mj-inscription-message');
+                if (!$show_form) {
+                    $message_classes[] = 'mj-inscription-message--info';
+                }
+                $allowed_intro_html = wp_kses_allowed_html('post');
+                if (function_exists('mj_member_login_component_allowed_icon_tags')) {
+                    $icon_tags = mj_member_login_component_allowed_icon_tags();
+                    foreach ($icon_tags as $tag_name => $attributes) {
+                        if (!isset($allowed_intro_html[$tag_name])) {
+                            $allowed_intro_html[$tag_name] = $attributes;
+                            continue;
+                        }
+                        $allowed_intro_html[$tag_name] = array_merge($allowed_intro_html[$tag_name], $attributes);
+                    }
+                } else {
+                    $fallback_icon_tags = array(
+                        'svg' => array(
+                            'class' => true,
+                            'xmlns' => true,
+                            'width' => true,
+                            'height' => true,
+                            'viewBox' => true,
+                            'fill' => true,
+                            'stroke' => true,
+                            'stroke-width' => true,
+                            'stroke-linecap' => true,
+                            'stroke-linejoin' => true,
+                            'aria-hidden' => true,
+                            'focusable' => true,
+                            'role' => true,
+                            'preserveAspectRatio' => true,
+                        ),
+                        'path' => array(
+                            'd' => true,
+                            'fill' => true,
+                            'stroke' => true,
+                            'stroke-width' => true,
+                            'stroke-linecap' => true,
+                            'stroke-linejoin' => true,
+                        ),
+                        'g' => array(
+                            'class' => true,
+                            'fill' => true,
+                            'stroke' => true,
+                            'stroke-width' => true,
+                            'stroke-linecap' => true,
+                            'stroke-linejoin' => true,
+                            'transform' => true,
+                            'opacity' => true,
+                        ),
+                        'polygon' => array(
+                            'points' => true,
+                            'fill' => true,
+                            'stroke' => true,
+                            'stroke-width' => true,
+                            'stroke-linecap' => true,
+                            'stroke-linejoin' => true,
+                        ),
+                        'polyline' => array(
+                            'points' => true,
+                            'fill' => true,
+                            'stroke' => true,
+                            'stroke-width' => true,
+                            'stroke-linecap' => true,
+                            'stroke-linejoin' => true,
+                        ),
+                        'line' => array(
+                            'x1' => true,
+                            'x2' => true,
+                            'y1' => true,
+                            'y2' => true,
+                            'stroke' => true,
+                            'stroke-width' => true,
+                            'stroke-linecap' => true,
+                            'stroke-linejoin' => true,
+                        ),
+                        'circle' => array(
+                            'cx' => true,
+                            'cy' => true,
+                            'r' => true,
+                            'fill' => true,
+                            'stroke' => true,
+                            'stroke-width' => true,
+                        ),
+                        'ellipse' => array(
+                            'cx' => true,
+                            'cy' => true,
+                            'rx' => true,
+                            'ry' => true,
+                            'fill' => true,
+                            'stroke' => true,
+                            'stroke-width' => true,
+                        ),
+                        'rect' => array(
+                            'x' => true,
+                            'y' => true,
+                            'width' => true,
+                            'height' => true,
+                            'rx' => true,
+                            'ry' => true,
+                            'fill' => true,
+                            'stroke' => true,
+                            'stroke-width' => true,
+                        ),
+                        'use' => array(
+                            'xlink:href' => true,
+                        ),
+                    );
+                    foreach ($fallback_icon_tags as $tag_name => $attributes) {
+                        $allowed_intro_html[$tag_name] = array_merge(
+                            isset($allowed_intro_html[$tag_name]) ? $allowed_intro_html[$tag_name] : array(),
+                            $attributes
+                        );
+                    }
+                }
+                $allowed_intro_html['button'] = array_merge(
+                    isset($allowed_intro_html['button']) ? $allowed_intro_html['button'] : array(),
+                    array(
+                        'type' => true,
+                        'class' => true,
+                        'data-mj-login-trigger' => true,
+                        'data-target' => true,
+                        'aria-label' => true,
+                        'aria-expanded' => true,
+                    )
+                );
+                $allowed_intro_html['a'] = array_merge(
+                    isset($allowed_intro_html['a']) ? $allowed_intro_html['a'] : array(),
+                    array(
+                        'class' => true,
+                        'href' => true,
+                        'target' => true,
+                        'rel' => true,
+                        'data-mj-login-trigger' => true,
+                        'data-target' => true,
+                        'aria-label' => true,
+                    )
+                );
+                $allowed_intro_html['span'] = array_merge(
+                    isset($allowed_intro_html['span']) ? $allowed_intro_html['span'] : array(),
+                    array(
+                        'class' => true,
+                        'aria-hidden' => true,
+                        'data-role' => true,
+                    )
+                );
+                $allowed_intro_html['div'] = array_merge(
+                    isset($allowed_intro_html['div']) ? $allowed_intro_html['div'] : array(),
+                    array(
+                        'class' => true,
+                        'data-role' => true,
+                    )
+                );
+                $message_class_attr = implode(' ', array_map('sanitize_html_class', $message_classes));
+                ?>
+                <div class="<?php echo esc_attr($message_class_attr); ?>">
+                    <?php echo wp_kses($intro_message, $allowed_intro_html); ?>
+                </div>
+            <?php endif; ?>
             <?php if ($result) : ?>
                 <div class="mj-notice <?php echo !empty($result['success']) ? 'mj-notice--success' : 'mj-notice--error'; ?>">
                     <p><?php echo esc_html($result['message']); ?></p>
                 </div>
             <?php endif; ?>
 
-            <?php if (!$result || empty($result['success'])) : ?>
+            <?php if ($show_form) : ?>
                 <form method="post" class="mj-inscription-form" novalidate>
                     <?php wp_nonce_field('mj_frontend_form', 'mj_frontend_nonce'); ?>
 
@@ -896,12 +1242,73 @@ if (!function_exists('mj_inscription_shortcode')) {
                             <span>J'autorise l'utilisation de mes données personnelles dans le cadre de la gestion des activités de la MJ Péry.</span>
                         </label>
                         <p class="mj-field-hint">Vous pourrez demander la rectification ou la suppression de vos données à tout moment.</p>
+                        <?php if (!empty($args['regulation']['enabled'])) :
+                            $regulation_link_text_raw = !empty($args['regulation']['trigger_label']) ? (string) $args['regulation']['trigger_label'] : __('Règlement d\'ordre intérieur', 'mj-member');
+                            $regulation_link_text = wp_strip_all_tags($regulation_link_text_raw, true);
+                            $regulation_checkbox_label_raw = isset($args['regulation']['checkbox_label']) ? (string) $args['regulation']['checkbox_label'] : __('Je confirme avoir pris connaissance du %s.', 'mj-member');
+                            $regulation_checkbox_label = wp_strip_all_tags($regulation_checkbox_label_raw, true);
+
+                            $regulation_link_markup = '';
+                            if (!empty($args['regulation']['content'])) {
+                                $regulation_link_markup = '<button type="button" class="mj-link-button" data-mj-regulation-open>' . esc_html($regulation_link_text) . '</button>';
+                            } elseif (!empty($args['regulation']['url'])) {
+                                $regulation_link_markup = '<a class="mj-link-button" href="' . esc_url($args['regulation']['url']) . '" target="_blank" rel="noopener noreferrer">' . esc_html($regulation_link_text) . '</a>';
+                            }
+
+                            $regulation_checkbox_content = $regulation_checkbox_label;
+                            if ($regulation_link_markup !== '') {
+                                if (strpos($regulation_checkbox_label, '%s') !== false) {
+                                    $regulation_checkbox_content = sprintf($regulation_checkbox_label, $regulation_link_markup);
+                                } else {
+                                    $regulation_checkbox_content = $regulation_checkbox_label . ' ' . $regulation_link_markup;
+                                }
+                            }
+
+                            $regulation_allowed_label_html = array(
+                                'a' => array(
+                                    'href' => array(),
+                                    'target' => array(),
+                                    'rel' => array(),
+                                    'class' => array(),
+                                ),
+                                'button' => array(
+                                    'type' => array(),
+                                    'class' => array(),
+                                    'data-mj-regulation-open' => array(),
+                                ),
+                                'strong' => array(),
+                                'em' => array(),
+                                'span' => array('class' => array()),
+                            );
+                            ?>
+                            <div class="mj-regulation">
+                                <label class="mj-checkbox mj-regulation__consent">
+                                    <input type="checkbox" name="regulation_consent" value="1" <?php checked(!empty($_POST['regulation_consent'])); ?> required />
+                                    <span><?php echo wp_kses($regulation_checkbox_content, $regulation_allowed_label_html); ?></span>
+                                </label>
+                            </div>
+                            <input type="hidden" name="regulation_required" value="1" />
+                        <?php endif; ?>
                     </fieldset>
 
                     <div class="mj-form-actions">
                         <button type="submit" class="mj-button">Envoyer l'inscription</button>
                     </div>
                 </form>
+            <?php endif; ?>
+            <?php if ($show_form && !empty($args['regulation']['enabled']) && !empty($args['regulation']['content'])) : ?>
+                <div class="mj-modal-backdrop" data-mj-regulation-backdrop hidden></div>
+                <div class="mj-modal" id="mj-regulation-modal" role="dialog" aria-modal="true" aria-labelledby="mj-regulation-title" hidden>
+                    <div class="mj-modal__dialog">
+                        <div class="mj-modal__header">
+                            <h3 class="mj-modal__title" id="mj-regulation-title"><?php echo esc_html($args['regulation']['modal_title']); ?></h3>
+                            <button type="button" class="mj-modal__close" data-mj-regulation-close aria-label="<?php echo esc_attr__('Fermer', 'mj-member'); ?>">&times;</button>
+                        </div>
+                        <div class="mj-modal__content">
+                            <?php echo $args['regulation']['content']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                        </div>
+                    </div>
+                </div>
             <?php endif; ?>
         </div>
 
@@ -911,36 +1318,159 @@ if (!function_exists('mj_inscription_shortcode')) {
 
         <style>
             .mj-inscription-container {
-                max-width: 920px;
-                margin: 30px auto;
-                padding: 20px;
-                background: #f9f9f9;
-                border-radius: 10px;
-                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+                --mj-accent: #2563eb;
+                --mj-accent-soft: rgba(37, 99, 235, 0.12);
+                --mj-accent-dark: #1d4ed8;
+                --mj-border: #d0daf0;
+                --mj-muted: #64748b;
+                --mj-bg: #f8fafc;
+                max-width: 960px;
+                margin: 32px auto;
+                padding: 32px;
+                background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);
+                border-radius: 20px;
+                box-shadow: 0 26px 70px rgba(15, 23, 42, 0.12);
+            }
+
+            .mj-inscription-form {
+                background: #ffffff;
+                border-radius: 18px;
+                padding: 30px;
+                border: 1px solid rgba(208, 218, 240, 0.75);
+                box-shadow: 0 22px 48px rgba(15, 23, 42, 0.08);
+            }
+
+            .mj-inscription-message {
+                font-size: 18px;
+                font-weight: 600;
+                color: #0f172a;
+                margin-bottom: 24px;
+                padding: 18px 22px;
+                border-radius: 14px;
+                background: rgba(37, 99, 235, 0.08);
+                border: 1px solid rgba(37, 99, 235, 0.16);
+                text-align: center;
+            }
+
+            .mj-inscription-message > :last-child {
+                margin-bottom: 0;
+            }
+
+            .mj-inscription-message--info {
+                background: rgba(100, 116, 139, 0.14);
+                border-color: rgba(100, 116, 139, 0.22);
+                color: #1f2937;
+            }
+
+            .mj-inscription-container__header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 20px;
+                margin-bottom: 28px;
+            }
+
+            .mj-inscription-container__title {
+                margin: 0;
+                padding-top: var(--mj-title-margin-top, 0);
+                font-size: 36px;
+                font-weight: 800;
+                color: #0f172a;
+                letter-spacing: -0.02em;
+            }
+
+            .mj-inscription-container__title strong {
+                color: var(--mj-accent-dark);
+            }
+
+            .mj-inscription-container__title-image {
+                flex-shrink: 0;
+                display: block;
+                line-height: 0;
+                padding: 0;
+                background: none;
+                border-radius: 0;
+                box-shadow: none;
+            }
+
+            .mj-inscription-container__title-image img {
+                display: block;
+                height: auto;
+                max-width: 100%;
+            }
+
+            .mj-inscription-container__header--has-image {
+                flex-wrap: wrap;
+            }
+
+            .mj-inscription-container__header--image-inline-left .mj-inscription-container__title {
+                order: 2;
+            }
+
+            .mj-inscription-container__header--image-inline-left .mj-inscription-container__title-image {
+                order: 1;
+            }
+
+            .mj-inscription-container__header--stack {
+                display: block;
+                position: relative;
+            }
+
+            .mj-inscription-container__header--stack::after {
+                content: '';
+                display: block;
+                clear: both;
+            }
+
+            .mj-inscription-container__header--stack .mj-inscription-container__title-image {
+                margin-bottom: 0;
+            }
+
+            .mj-inscription-container__header--image-above-left .mj-inscription-container__title-image {
+                float: left;
+                margin-right: 16px;
+            }
+
+            .mj-inscription-container__header--image-above-center .mj-inscription-container__title-image {
+                float: none;
+                margin-left: auto;
+                margin-right: auto;
+                display: table;
+            }
+
+            .mj-inscription-container__header--image-above-right .mj-inscription-container__title-image {
+                float: right;
+                margin-left: 16px;
             }
 
             .mj-fieldset {
                 border: none;
-                margin: 0 0 30px;
-                padding: 0 0 10px;
+                margin: 0 0 34px;
+                padding: 28px 28px 10px;
+                border-radius: 18px;
+                background: linear-gradient(180deg, rgba(248, 250, 252, 0.92) 0%, rgba(248, 250, 252, 0.55) 100%);
+                border: 1px solid rgba(148, 163, 184, 0.28);
+                box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
             }
 
             .mj-fieldset legend {
-                font-size: 20px;
-                font-weight: 600;
-                color: #0073aa;
+                font-size: 22px;
+                font-weight: 700;
+                color: var(--mj-accent-dark);
                 margin-bottom: 20px;
+                letter-spacing: -0.01em;
             }
 
             .mj-field-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-                gap: 20px;
+                gap: 22px 30px;
             }
 
             .mj-field-group {
                 display: flex;
                 flex-direction: column;
+                gap: 10px;
             }
 
             .mj-field-group--full {
@@ -949,53 +1479,107 @@ if (!function_exists('mj_inscription_shortcode')) {
 
             .mj-field-group label {
                 font-weight: 600;
-                color: #333;
-                margin-bottom: 6px;
+                color: #0f172a;
+                margin-bottom: 0;
+                font-size: 15px;
             }
 
             .mj-field-group input,
             .mj-field-group textarea {
-                padding: 10px 14px;
-                border: 1px solid #d7d7d7;
-                border-radius: 6px;
-                font-size: 14px;
+                padding: 12px 16px;
+                border: 1px solid rgba(148, 163, 184, 0.55);
+                border-radius: 12px;
+                font-size: 15px;
                 font-family: inherit;
-                transition: border-color 0.2s ease;
+                transition: border-color 0.2s ease, box-shadow 0.2s ease;
+                background: rgba(255, 255, 255, 0.95);
+                color: #0f172a;
+                box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+            }
+
+            .mj-field-group textarea {
+                min-height: 120px;
             }
 
             .mj-field-group input:focus,
             .mj-field-group textarea:focus {
                 outline: none;
-                border-color: #0073aa;
-                box-shadow: 0 0 0 2px rgba(0, 115, 170, 0.15);
+                border-color: var(--mj-accent);
+                box-shadow: 0 0 0 4px var(--mj-accent-soft);
+            }
+
+            .mj-field-group input::placeholder,
+            .mj-field-group textarea::placeholder {
+                color: rgba(100, 116, 139, 0.7);
             }
 
             .mj-field-hint {
-                font-size: 12px;
-                color: #666;
-                margin-top: 6px;
+                font-size: 13px;
+                color: var(--mj-muted);
+                margin-top: -4px;
             }
 
             .mj-checkbox {
                 display: flex;
                 align-items: flex-start;
-                gap: 10px;
-                margin-bottom: 12px;
+                gap: 12px;
+                margin-bottom: 14px;
+                font-size: 15px;
+                color: #0f172a;
             }
 
             .mj-checkbox input {
-                margin-top: 4px;
+                margin-top: 3px;
+                width: 20px;
+                height: 20px;
+                border-radius: 6px;
+                border: 1px solid rgba(148, 163, 184, 0.7);
+                background: #fff;
+                -webkit-appearance: none;
+                appearance: none;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.2s ease;
+            }
+
+            .mj-checkbox input:focus-visible {
+                outline: 2px solid var(--mj-accent);
+                outline-offset: 2px;
+            }
+
+            .mj-checkbox input:checked {
+                border-color: var(--mj-accent);
+                background: var(--mj-accent);
+                box-shadow: 0 6px 18px rgba(37, 99, 235, 0.24);
+                color: #fff;
+            }
+
+            .mj-checkbox input:checked::after {
+                content: '\2713';
+                font-size: 13px;
+                line-height: 1;
             }
 
             .mj-radio {
                 display: flex;
                 align-items: flex-start;
-                gap: 10px;
-                margin-bottom: 10px;
+                gap: 12px;
+                margin-bottom: 14px;
+                padding: 12px 16px;
+                background: rgba(248, 250, 252, 0.8);
+                border-radius: 14px;
+                border: 1px solid rgba(148, 163, 184, 0.32);
+                transition: border-color 0.2s ease, background 0.2s ease;
             }
 
             .mj-radio input {
-                margin-top: 4px;
+                margin-top: 3px;
+            }
+
+            .mj-radio:hover {
+                border-color: var(--mj-accent);
+                background: rgba(37, 99, 235, 0.08);
             }
 
             .mj-hidden {
@@ -1004,114 +1588,274 @@ if (!function_exists('mj_inscription_shortcode')) {
 
             #mj-children-wrapper {
                 display: grid;
-                gap: 20px;
+                gap: 24px;
             }
 
             .mj-child-card {
-                background: #fff;
-                border: 1px solid #e3e6ea;
-                border-radius: 8px;
-                padding: 18px;
-                box-shadow: inset 0 0 0 1px rgba(0, 115, 170, 0.05);
+                background: rgba(255, 255, 255, 0.96);
+                border: 1px solid rgba(148, 163, 184, 0.28);
+                border-radius: 16px;
+                padding: 24px;
+                box-shadow: 0 20px 40px rgba(15, 23, 42, 0.14);
             }
 
             .mj-child-card__header {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                margin-bottom: 16px;
+                margin-bottom: 18px;
             }
 
             .mj-child-card__title {
                 margin: 0;
-                font-size: 18px;
-                font-weight: 600;
-                color: #333;
+                font-size: 20px;
+                font-weight: 700;
+                color: #0f172a;
             }
 
             .mj-child-card__remove {
                 border: none;
                 background: transparent;
-                color: #cc1d1d;
-                font-size: 20px;
+                color: #ef4444;
+                font-size: 22px;
                 cursor: pointer;
+                transition: transform 0.2s ease, color 0.2s ease;
+            }
+
+            .mj-child-card__remove:hover {
+                color: #b91c1c;
+                transform: scale(1.08);
             }
 
             .mj-child-card__grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 18px;
-                margin-bottom: 18px;
+                gap: 22px;
+                margin-bottom: 20px;
             }
 
             .mj-child-card__options {
                 display: flex;
                 flex-direction: column;
-                gap: 10px;
-                margin-bottom: 18px;
+                gap: 12px;
+                margin-bottom: 20px;
             }
 
             .mj-button {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                gap: 8px;
-                padding: 12px 24px;
-                border-radius: 6px;
+                gap: 10px;
+                padding: 14px 28px;
+                border-radius: 12px;
                 border: none;
-                background: #0073aa;
+                background: var(--mj-accent);
                 color: #fff;
                 font-size: 16px;
-                font-weight: 600;
+                font-weight: 700;
                 cursor: pointer;
-                transition: background 0.2s ease, transform 0.2s ease;
+                transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+                box-shadow: 0 22px 40px rgba(37, 99, 235, 0.28);
             }
 
             .mj-button:hover {
-                background: #005f8d;
-                transform: translateY(-1px);
+                background: var(--mj-accent-dark);
+                transform: translateY(-2px);
+                box-shadow: 0 26px 46px rgba(37, 99, 235, 0.34);
             }
 
             .mj-button:active {
                 transform: translateY(0);
+                box-shadow: 0 18px 34px rgba(37, 99, 235, 0.22);
             }
 
             .mj-button--secondary {
-                background: #f0f6fb;
-                color: #0073aa;
-                border: 1px dashed #aad0e6;
-                margin-top: 12px;
+                background: rgba(37, 99, 235, 0.08);
+                color: var(--mj-accent-dark);
+                border: 1px dashed rgba(37, 99, 235, 0.36);
+                margin-top: 16px;
+                box-shadow: none;
             }
 
             .mj-button--secondary:hover {
-                background: #e1eff8;
+                background: rgba(37, 99, 235, 0.14);
+                border-color: rgba(37, 99, 235, 0.52);
+            }
+
+            .mj-regulation {
+                margin-top: 20px;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+                padding-top: 12px;
+                border-top: 1px dashed rgba(148, 163, 184, 0.4);
+            }
+
+            .mj-regulation__consent {
+                align-items: center;
+            }
+
+            .mj-regulation__consent span {
+                flex: 1;
+            }
+
+            .mj-modal-backdrop[hidden],
+            .mj-modal[hidden] {
+                display: none !important;
+            }
+
+            .mj-link-button {
+                background: none;
+                border: none;
+                padding: 0;
+                color: var(--mj-accent-dark);
+                text-decoration: none;
+                font: inherit;
+                cursor: pointer;
+                position: relative;
+                font-weight: 600;
+            }
+
+            .mj-link-button::after {
+                content: '';
+                position: absolute;
+                left: 0;
+                right: 0;
+                bottom: -2px;
+                height: 2px;
+                background: currentColor;
+                opacity: 0.4;
+                transition: opacity 0.2s ease, transform 0.2s ease;
+                transform: scaleX(0.6);
+            }
+
+            .mj-link-button:hover,
+            .mj-link-button:focus {
+                color: var(--mj-accent);
+                outline: none;
+            }
+
+            .mj-link-button:hover::after,
+            .mj-link-button:focus::after {
+                opacity: 1;
+                transform: scaleX(1);
+            }
+
+            .mj-modal-backdrop {
+                position: fixed;
+                inset: 0;
+                background: rgba(15, 23, 42, 0.55);
+                z-index: 9997;
+                backdrop-filter: blur(4px);
+            }
+
+            .mj-modal {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: min(92vw, 760px);
+                max-height: 90vh;
+                z-index: 9998;
+                background: #ffffff;
+                border-radius: 18px;
+                box-shadow: 0 28px 70px rgba(15, 23, 42, 0.28);
+                overflow: hidden;
+            }
+
+            .mj-modal__dialog {
+                display: flex;
+                flex-direction: column;
+                max-height: 90vh;
+            }
+
+            .mj-modal__header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 22px 26px;
+                border-bottom: 1px solid rgba(208, 218, 240, 0.7);
+            }
+
+            .mj-modal__title {
+                margin: 0;
+                font-size: 24px;
+                font-weight: 700;
+                color: #0f172a;
+            }
+
+            .mj-modal__close {
+                border: none;
+                background: transparent;
+                font-size: 28px;
+                line-height: 1;
+                cursor: pointer;
+                color: #64748b;
+                transition: color 0.2s ease, transform 0.2s ease;
+            }
+
+            .mj-modal__close:hover {
+                color: #0f172a;
+                transform: scale(1.05);
+            }
+
+            .mj-modal__content {
+                padding: 22px 26px;
+                overflow-y: auto;
+            }
+
+            body.mj-modal-open {
+                overflow: hidden;
             }
 
             .mj-form-actions {
                 text-align: right;
-                margin-top: 30px;
+                margin-top: 34px;
             }
 
             .mj-notice {
-                padding: 16px 20px;
-                border-radius: 6px;
-                margin-bottom: 24px;
-                border-left: 4px solid;
+                padding: 18px 24px;
+                border-radius: 12px;
+                margin-bottom: 26px;
+                border-left: 5px solid;
+                box-shadow: 0 18px 34px rgba(15, 23, 42, 0.12);
             }
 
             .mj-notice--success {
-                background: #e8f7ef;
-                border-left-color: #1a7f37;
-                color: #145126;
+                background: rgba(16, 185, 129, 0.14);
+                border-left-color: #059669;
+                color: #065f46;
             }
 
             .mj-notice--error {
-                background: #fcebea;
-                border-left-color: #cc1d1d;
-                color: #761b18;
+                background: rgba(248, 113, 113, 0.18);
+                border-left-color: #dc2626;
+                color: #7f1d1d;
+            }
+
+            @media (max-width: 1024px) {
+                .mj-inscription-container {
+                    padding: 26px;
+                }
+
+                .mj-inscription-form {
+                    padding: 26px;
+                }
             }
 
             @media (max-width: 640px) {
+                .mj-inscription-container {
+                    padding: 22px;
+                }
+
+                .mj-inscription-form {
+                    padding: 22px;
+                }
+
+                .mj-inscription-container__title {
+                    font-size: 30px;
+                }
+
                 .mj-form-actions {
                     text-align: center;
                 }
@@ -1119,11 +1863,75 @@ if (!function_exists('mj_inscription_shortcode')) {
                 .mj-button {
                     width: 100%;
                 }
+
+                .mj-regulation {
+                    gap: 12px;
+                }
             }
         </style>
 
         <script>
             (function () {
+                const regulationModal = document.getElementById('mj-regulation-modal');
+                const regulationBackdrop = document.querySelector('[data-mj-regulation-backdrop]');
+                const regulationTriggers = document.querySelectorAll('[data-mj-regulation-open]');
+                const regulationCloseButtons = regulationModal ? regulationModal.querySelectorAll('[data-mj-regulation-close]') : [];
+
+                function openRegulationModal(event) {
+                    if (event) {
+                        event.preventDefault();
+                    }
+
+                    if (!regulationModal || !regulationBackdrop) {
+                        return;
+                    }
+
+                    regulationModal.hidden = false;
+                    regulationBackdrop.hidden = false;
+                    document.body.classList.add('mj-modal-open');
+
+                    const focusTarget = regulationModal.querySelector('[data-mj-regulation-close]');
+                    if (focusTarget) {
+                        focusTarget.focus();
+                    }
+                }
+
+                function closeRegulationModal() {
+                    if (!regulationModal || !regulationBackdrop) {
+                        return;
+                    }
+
+                    regulationModal.hidden = true;
+                    regulationBackdrop.hidden = true;
+                    document.body.classList.remove('mj-modal-open');
+                }
+
+                regulationTriggers.forEach(function (trigger) {
+                    trigger.addEventListener('click', openRegulationModal);
+                });
+
+                regulationCloseButtons.forEach(function (button) {
+                    button.addEventListener('click', function (event) {
+                        event.preventDefault();
+                        closeRegulationModal();
+                    });
+                });
+
+                if (regulationBackdrop) {
+                    regulationBackdrop.addEventListener('click', function (event) {
+                        event.preventDefault();
+                        closeRegulationModal();
+                    });
+                }
+
+                if (regulationModal) {
+                    document.addEventListener('keyup', function (event) {
+                        if (event.key === 'Escape' && !regulationModal.hidden) {
+                            closeRegulationModal();
+                        }
+                    });
+                }
+
                 const wrapper = document.getElementById('mj-children-wrapper');
                 if (!wrapper) {
                     return;
@@ -1365,5 +2173,3 @@ if (!function_exists('mj_inscription_shortcode')) {
         return ob_get_clean();
     }
 }
-
-add_shortcode('mj_inscription', 'mj_inscription_shortcode');

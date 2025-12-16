@@ -883,7 +883,7 @@ if (!function_exists('mj_member_handle_contact_message_delete')) {
             $message = MjContactMessages::get($message_id);
             if ($message) {
                 $deleted = MjContactMessages::delete($message_id);
-                if ($deleted) {
+                if (!is_wp_error($deleted)) {
                     $success = true;
                 }
             }

@@ -2,6 +2,7 @@
 
 namespace Mj\Member\Classes;
 
+use Mj\Member\Classes\Value\MemberData;
 use WP_Error;
 
 if (!defined('ABSPATH')) {
@@ -123,8 +124,13 @@ class MjSms extends MjTools {
             return false;
         }
 
+        if ($member instanceof MemberData) {
+            $flag = $member->get('sms_opt_in');
+            return $flag === null ? true : ((int) $flag === 1);
+        }
+
         if (property_exists($member, 'sms_opt_in')) {
-            return (bool) $member->sms_opt_in;
+            return (int) $member->sms_opt_in === 1;
         }
 
         return true;

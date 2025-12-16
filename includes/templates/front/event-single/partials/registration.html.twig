@@ -1,0 +1,225 @@
+{% set is_open = registration.is_open|default(false) %}
+{% set show_price = registration.show_price|default(false) %}
+{% set price_display = registration.price_display|default('') %}
+{% set has_interactive = registration.has_interactive|default(false) %}
+{% set requires_login = registration.requires_login|default(false) %}
+{% set participants = registration.participants|default({}) %}
+{% set ajax = registration.ajax|default({}) %}
+{% set form_available_count = registration.form_available_count|default(0) %}
+{% set config_json = registration.config_json|default('') %}
+{% set event_id = registration.event_id|default(0) %}
+{% set note_field_id = registration.note_field_id|default('mj-member-event-note-' ~ event_id) %}
+{% set note_max_length = registration.note_max_length|default(400) %}
+{% set confirmation = registration.confirmation|default({}) %}
+{% set submit_disabled = registration.submit_disabled|default(false) %}
+{% set cta_label = registration.cta_label|default(__("S'inscrire", 'mj-member')) %}
+{% set url = registration.url|default('') %}
+{% set payment_required = registration.payment_required|default(false) %}
+{% set has_reservations = registration.has_reservations|default(false) %}
+{% set reservations = registration.reservations|default([]) %}
+{% set capacity_total = registration.capacity_total|default(0) %}
+
+<section class="mj-member-event-single__card mj-member-event-single__registration">
+    <div class="mj-member-event-single__registration-header">
+        <h3>{{ __('Mes réservations', 'mj-member') }}</h3>
+        <span class="mj-member-event-single__registration-status {{ is_open ? 'is-open' : 'is-closed' }}">
+            {{ is_open ? __('Ouvertes', 'mj-member') : __('Clôturées', 'mj-member') }}
+        </span>
+    </div>
+
+    {% if show_price %}
+        <p class="mj-member-event-single__registration-price">
+            <span class="mj-member-event-single__registration-price-label">{{ __('Tarif', 'mj-member') }}</span>
+            <span class="mj-member-event-single__registration-price-value">{{ price_display }}</span>
+        </p>
+    {% endif %}
+
+    <div class="mj-member-event-single__registration-body">
+        <div class="mj-member-event-single__registration-actions">
+            {% if has_interactive %}
+                <div class="mj-member-event-single__registration-interactive">
+                    {% if requires_login %}
+                        <p class="mj-member-event-single__registration-note">{{ __('Connecte-toi pour continuer.', 'mj-member') }}</p>
+                        <button type="button" class="mj-member-event-single__registration-login" data-mj-event-open-login>{{ __('Se connecter', 'mj-member') }}</button>
+                    {% elseif participants.entries|default([])|length %}
+                        <form
+                            class="mj-member-event-single__registration-form"
+                            data-mj-event-registration
+                            data-event-id="{{ event_id }}"
+                            data-note-max="{{ note_max_length }}"
+                            data-ajax-url="{{ ajax.url|default('')|esc_url }}"
+                            data-ajax-nonce="{{ ajax.nonce|default('')|esc_attr }}"
+                            {% if config_json %}data-registration-config="{{ config_json|esc_attr }}"{% endif %}
+                        >
+                            {% set show_selector = participants.show_selector|default(false) %}
+                            <fieldset class="mj-member-event-single__registration-fieldset" aria-label="{{ __('Choisis la personne à inscrire', 'mj-member') }}"{% if not show_selector %} hidden{% endif %}>
+                                {% if show_selector %}
+                                    <legend>{{ __('Choisis la personne à inscrire', 'mj-member') }}</legend>
+                                {% endif %}
+                                <ul class="mj-member-event-single__registration-members" data-mj-event-members>
+                                    {% for entry in participants.entries %}
+                                        {% set member_classes = 'mj-member-event-single__registration-member' %}
+                                        {% if entry.is_registered|default(false) %}
+                                            {% set member_classes = member_classes ~ ' is-registered' %}
+                                        {% endif %}
+                                        {% if not entry.eligible|default(true) %}
+                                            {% set member_classes = member_classes ~ ' is-ineligible' %}
+                                        {% endif %}
+                                        <li
+                                            class="{{ member_classes }}"
+                                            data-mj-event-member
+                                            data-member-id="{{ entry.id|default(0) }}"
+                                            data-eligible="{{ entry.eligible|default(true) ? '1' : '0' }}"
+                                        >
+                                            <label class="mj-member-event-single__registration-member-label">
+                                                <input
+                                                    type="radio"
+                                                    name="participant"
+                                                    value="{{ entry.id|default(0) }}"
+                                                    {% if entry.input_disabled|default(false) %}disabled{% endif %}
+                                                    {% if entry.should_check|default(false) %} checked{% endif %}
+                                                />
+                                                <span class="mj-member-event-single__registration-member-name">{{ entry.name|default('') }}</span>
+                                            </label>
+                                            {% set status_class = entry.status_class|default('') %}
+                                            <span class="mj-member-event-single__registration-member-status{{ status_class ? ' ' ~ status_class|esc_attr : '' }}" data-role="status">
+                                                {% if entry.status_text|default('') %}
+                                                    {{ entry.status_text }}
+                                                {% endif %}
+                                            </span>
+                                            {% if not entry.eligible|default(true) and entry.reasons|default([])|length %}
+                                                <ul class="mj-member-event-single__registration-member-reasons">
+                                                    {% for reason in entry.reasons %}
+                                                        <li>{{ reason }}</li>
+                                                    {% endfor %}
+                                                </ul>
+                                            {% endif %}
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                                <p class="mj-member-event-single__registration-members-empty" data-mj-event-members-empty{% if participants.empty_hidden|default(false) %} hidden{% endif %}>{{ participants.empty_message|default('') }}</p>
+                            </fieldset>
+                            {% if not show_selector and participants.primary|default({}).name|default('') %}
+                                <p class="mj-member-event-single__registration-member-summary">{{ __('Inscription pour %s', 'mj-member')|format(participants.primary.name) }}</p>
+                            {% endif %}
+                            <div class="mj-member-event-single__registration-note">
+                                <label for="{{ note_field_id|esc_attr }}">{{ __('Message pour l’équipe (optionnel)', 'mj-member') }}</label>
+                                <textarea
+                                    id="{{ note_field_id|esc_attr }}"
+                                    name="note"
+                                    maxlength="{{ note_max_length }}"
+                                    placeholder="{{ __('Précise une allergie, une contrainte horaire, ...', 'mj-member') }}"
+                                ></textarea>
+                            </div>
+                            <div class="mj-member-event-single__registration-confirmation" data-mj-event-confirmation>
+                                <label class="mj-member-event-single__registration-confirmation-checkbox" for="{{ confirmation.field_id|default('')|esc_attr }}">
+                                    <input
+                                        type="checkbox"
+                                        id="{{ confirmation.field_id|default('')|esc_attr }}"
+                                        name="registration_confirmation"
+                                        value="1"
+                                        data-mj-event-confirmation-checkbox
+                                        required
+                                    />
+                                    <span>{{ confirmation.label|default('') }}</span>
+                                </label>
+                                <p class="mj-member-event-single__registration-confirmation-hint">{{ confirmation.hint|default('') }}</p>
+                            </div>
+                            <button type="submit" class="mj-member-event-single__registration-submit" data-mj-event-registration-submit{% if submit_disabled %} disabled{% endif %}>{{ __('Confirmer mon inscription', 'mj-member') }}</button>
+                            <div class="mj-member-event-single__registration-feedback" data-mj-event-registration-feedback aria-live="polite"></div>
+                        </form>
+                        {% if url %}
+                            <noscript>
+                                <div class="mj-member-event-single__registration-links">
+                                    <a class="mj-member-event-single__registration-link" href="{{ url|esc_url }}">{{ cta_label }}</a>
+                                </div>
+                            </noscript>
+                        {% endif %}
+                    {% else %}
+                        <p class="mj-member-event-single__registration-note">{{ __('Aucun profil éligible n’est disponible pour cette inscription.', 'mj-member') }}</p>
+                    {% endif %}
+                </div>
+            {% else %}
+                <div class="mj-member-event-single__registration-static">
+                    {% if is_open and url %}
+                        <div class="mj-member-event-single__registration-links">
+                            <a class="mj-member-event-single__registration-link" href="{{ url|esc_url }}">{{ cta_label }}</a>
+                        </div>
+                    {% elseif not is_open %}
+                        <p class="mj-member-event-single__registration-note">{{ __('Les inscriptions sont cloturées pour cet événement.', 'mj-member') }}</p>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+
+        {% if user.is_logged_in|default(false) %}
+            <div class="mj-member-event-single__registration-divider" aria-hidden="true"></div>
+            <div
+                class="mj-member-event-single__registration-reservations{{ has_reservations ? '' : ' is-empty' }}"
+                data-mj-event-reservations
+                data-event-id="{{ event_id }}"
+                data-has-reservations="{{ has_reservations ? '1' : '0' }}"
+            >
+                <div class="mj-member-event-single__reservations-feedback" data-mj-event-reservations-feedback aria-live="polite"></div>
+                <ul class="mj-member-event-single__reservations-list" data-mj-event-reservations-list>
+                    {% if has_reservations %}
+                        {% for reservation in reservations %}
+                            <li
+                                class="mj-member-event-single__reservation"
+                                data-mj-event-reservation
+                                data-member-id="{{ reservation.member_id|default(0) }}"
+                                data-registration-id="{{ reservation.registration_id|default(0) }}"
+                                {% if reservation.status_key|default('') %}data-status-key="{{ reservation.status_key|esc_attr }}"{% endif %}
+                            >
+                                <div class="mj-member-event-single__reservation-header">
+                                    <div class="mj-member-event-single__reservation-main">
+                                        <p class="mj-member-event-single__reservation-title">{{ reservation.name|default('') }}</p>
+                                        {% if reservation.status_label|default('') %}
+                                            {% set reservation_status_class = reservation.status_class|default('') %}
+                                            <span class="mj-member-event-single__reservation-status{{ reservation_status_class ? ' ' ~ reservation_status_class|esc_attr : '' }}">{{ reservation.status_label }}</span>
+                                        {% endif %}
+                                    </div>
+                                    {% if reservation.can_cancel|default(false) %}
+                                        <button
+                                            type="button"
+                                            class="mj-member-event-single__reservation-cancel"
+                                            data-mj-event-cancel
+                                            data-member-id="{{ reservation.member_id|default(0) }}"
+                                            data-registration-id="{{ reservation.registration_id|default(0) }}"
+                                        >{{ __('Se désinscrire', 'mj-member') }}</button>
+                                    {% endif %}
+                                </div>
+                                {% if reservation.created_label|default('') %}
+                                    <p class="mj-member-event-single__reservation-meta">{{ __('Réservé le %s', 'mj-member')|format(reservation.created_label) }}</p>
+                                {% endif %}
+                                {% if reservation.occurrences|default([])|length %}
+                                    <ul class="mj-member-event-single__reservation-occurrences">
+                                        {% for occurrence in reservation.occurrences %}
+                                            <li class="mj-member-event-single__reservation-occurrence">{{ occurrence }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    {% endif %}
+                </ul>
+                <p class="mj-member-event-single__reservations-empty" data-mj-event-reservations-empty{% if has_reservations %} hidden{% endif %}>{{ __('Tu n'as pas encore de réservation pour cet événement.', 'mj-member') }}</p>
+            </div>
+        {% else %}
+            <div class="mj-member-event-single__registration-divider" aria-hidden="true"></div>
+            <div class="mj-member-event-single__registration-reminder">
+                <p>{{ __('Connecte-toi pour prévisualiser et gérer tes réservations.', 'mj-member') }}</p>
+            </div>
+        {% endif %}
+
+        {% if capacity_total > 0 %}
+            <div class="mj-member-event-single__registration-divider" aria-hidden="true"></div>
+            <ul class="mj-member-event-single__registration-meta">
+                <li>
+                    <strong>{{ __('Places max', 'mj-member') }}</strong>
+                    <span>{{ _n('%d place', '%d places', capacity_total, 'mj-member')|format(capacity_total) }}</span>
+                </li>
+            </ul>
+        {% endif %}
+    </div>
+</section>

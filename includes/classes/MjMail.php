@@ -2,6 +2,8 @@
 
 namespace Mj\Member\Classes;
 
+use Mj\Member\Classes\Crud\MjMembers;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -63,13 +65,13 @@ class MjMail extends MjTools {
             </a>
         </div>
         <div class="mj-email-content">
+use Mj\Member\Classes\Crud\MjMembers;
 '.$content.'
         </div>
     </div>
 </body>
 </html>';
     }
-
     static public function getTemplate($id){
         $table_name =  self::getTableName('template_email');
         return self::getWpdb()->get_row(self::getWpdb()->prepare("SELECT * FROM $table_name WHERE id = %s",$id));
@@ -87,18 +89,15 @@ class MjMail extends MjTools {
             nom d'utilisateur/username adresse mail complète & entière
             mot de passe/password celui attribué à l'adresse mail en question
          */
-        // Paramètres SMTP
       /*
        
         $smtpServer = 'mail.infomaniak.com';
         $smtpUsername = 'info@mj-pery.be';
-        $smtpPassword = 'Vegan286';
         $smtpPort = 465; // ou 587 pour TLS ou 465 pour SSL
 */
         
         
         // Contenu du message (ici, on utilise le contenu du template)
-        if(!is_object($template))
             $template = VMail::getTemplate($template);
         $sujet = $template->sujet . $suffix_title;
         $raw_body = isset($template->text) ? (string) $template->text : '';
@@ -235,7 +234,7 @@ class MjMail extends MjTools {
             return $context['guardian'];
         }
 
-        if (empty($member->guardian_id) || !class_exists('MjMembers_CRUD')) {
+        if (empty($member->guardian_id) || !class_exists(MjMembers::class)) {
             return null;
         }
 
@@ -246,7 +245,7 @@ class MjMail extends MjTools {
         }
 
         if (!array_key_exists($guardian_id, $cache)) {
-            $cache[$guardian_id] = MjMembers_CRUD::getById($guardian_id);
+            $cache[$guardian_id] = MjMembers::getById($guardian_id);
         }
 
         return $cache[$guardian_id];
@@ -666,11 +665,11 @@ class MjMail extends MjTools {
         $guardian_source = null;
         if (is_object($guardian) && isset($guardian->id) && (int) $guardian->id > 0) {
             $guardian_source = $guardian;
-        } elseif (is_object($member) && isset($member->role) && $member->role === MjMembers_CRUD::ROLE_TUTEUR) {
+        } elseif (is_object($member) && isset($member->role) && $member->role === MjMembers::ROLE_TUTEUR) {
             $guardian_source = $member;
         }
 
-        if (!$guardian_source || !class_exists('MjMembers_CRUD')) {
+        if (!$guardian_source || !class_exists(MjMembers::class)) {
             return array();
         }
 
@@ -680,7 +679,7 @@ class MjMail extends MjTools {
         }
 
         if (!isset(self::$guardian_children_cache[$guardian_id])) {
-            self::$guardian_children_cache[$guardian_id] = MjMembers_CRUD::getChildrenForGuardian($guardian_id);
+            self::$guardian_children_cache[$guardian_id] = MjMembers::getChildrenForGuardian($guardian_id);
         }
 
         $children = self::$guardian_children_cache[$guardian_id];

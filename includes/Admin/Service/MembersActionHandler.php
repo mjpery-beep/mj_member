@@ -33,7 +33,10 @@ final class MembersActionHandler
             return;
         }
 
-        \MjMembers_CRUD::delete($memberId);
+        $delete_result = \MjMembers::delete($memberId);
+        if (is_wp_error($delete_result)) {
+            wp_die($delete_result->get_error_message());
+        }
 
         $redirect = add_query_arg(
             array(

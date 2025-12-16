@@ -15,6 +15,9 @@ use Mj\Member\Admin\Page\SettingsPage;
 use Mj\Member\Admin\Page\ImportMembersPage;
 use Mj\Member\Admin\Page\CardsPdfPage;
 use Mj\Member\Admin\Page\ContactMessagesPage;
+use Mj\Member\Admin\Page\HoursPage;
+use Mj\Member\Admin\Page\TodosPage;
+use Mj\Member\Admin\Page\TodoProjectsPage;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -37,6 +40,10 @@ final class AdminMenu
     {
         $capability = Config::capability();
         $contactCapability = Config::contactCapability();
+        $hoursCapability = Config::hoursCapability();
+        if ($hoursCapability === '') {
+            $hoursCapability = $capability;
+        }
 
         add_menu_page(
             'Maison de Jeune',
@@ -151,6 +158,15 @@ final class AdminMenu
             array(CardsPdfPage::class, 'render')
         );
 
+        add_submenu_page(
+            'mj_member',
+            __('Encodage des heures', 'mj-member'),
+            __('Encodage des heures', 'mj-member'),
+            $hoursCapability,
+            HoursPage::slug(),
+            array(HoursPage::class, 'render')
+        );
+
         if ($contactCapability !== '') {
             add_submenu_page(
                 'mj_member',
@@ -161,5 +177,25 @@ final class AdminMenu
                 array(ContactMessagesPage::class, 'render')
             );
         }
+
+        $todosHook = add_submenu_page(
+            'mj_member',
+            __('Gestion des tâches', 'mj-member'),
+            __('Todos', 'mj-member'),
+            $capability,
+            TodosPage::slug(),
+            array(TodosPage::class, 'render')
+        );
+        TodosPage::registerHooks($todosHook);
+
+        $projectsHook = add_submenu_page(
+            'mj_member',
+            __('Projets', 'mj-member'),
+            __('Projets', 'mj-member'),
+            $capability,
+            TodoProjectsPage::slug(),
+            array(TodoProjectsPage::class, 'render')
+        );
+        TodoProjectsPage::registerHooks($projectsHook);
     }
 }

@@ -9,9 +9,12 @@ use Elementor\Core\Kits\Documents\Tabs\Global_Colors;
 use Elementor\Core\Kits\Documents\Tabs\Global_Typography;
 use Elementor\Group_Control_Typography;
 use Elementor\Widget_Base;
+use Mj\Member\Core\AssetsManager;
 use Mj\Member\Core\Config;
 
 class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
+    use Mj_Member_Elementor_Widget_Visibility;
+
     public function get_name() {
         return 'mj-member-events-calendar';
     }
@@ -33,12 +36,12 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
     }
 
     protected function register_controls() {
-        $status_options = method_exists('MjEvents_CRUD', 'get_status_labels') ? MjEvents_CRUD::get_status_labels() : array(
+        $status_options = method_exists('MjEvents', 'get_status_labels') ? MjEvents::get_status_labels() : array(
             'actif' => __('Actif', 'mj-member'),
             'brouillon' => __('Brouillon', 'mj-member'),
             'passe' => __('Passé', 'mj-member'),
         );
-        $type_options = method_exists('MjEvents_CRUD', 'get_type_labels') ? MjEvents_CRUD::get_type_labels() : array(
+        $type_options = method_exists('MjEvents', 'get_type_labels') ? MjEvents::get_type_labels() : array(
             'stage' => __('Stage', 'mj-member'),
             'soiree' => __('Soirée', 'mj-member'),
             'sortie' => __('Sortie', 'mj-member'),
@@ -145,7 +148,51 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             )
         );
 
+        $this->add_control(
+            'cover_width_desktop',
+            array(
+                'label' => __('Largeur image (desktop)', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px'),
+                'range' => array(
+                    'px' => array('min' => 10, 'max' => 500),
+                ),
+                'default' => array('size' => 120, 'unit' => 'px'),
+                'render_type' => 'ui',
+            )
+        );
+
+        $this->add_control(
+            'cover_width_tablet',
+            array(
+                'label' => __('Largeur image (tablette)', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px'),
+                'range' => array(
+                    'px' => array('min' => 10, 'max' => 500),
+                ),
+                'default' => array('size' => 110, 'unit' => 'px'),
+                'render_type' => 'ui',
+            )
+        );
+
+        $this->add_control(
+            'cover_width_mobile',
+            array(
+                'label' => __('Largeur image (mobile)', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px'),
+                'range' => array(
+                    'px' => array('min' => 10, 'max' => 500),
+                ),
+                'default' => array('size' => 90, 'unit' => 'px'),
+                'render_type' => 'ui',
+            )
+        );
+
         $this->end_controls_section();
+
+        $this->register_visibility_controls();
 
         $this->start_controls_section(
             'section_style_typography',
@@ -206,6 +253,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
     protected function render() {
         $settings = $this->get_settings_for_display();
+        $this->apply_visibility_to_wrapper($settings, 'mj-member-events-calendar');
 
         $status_filter = array();
         if (!empty($settings['statuses']) && is_array($settings['statuses'])) {
@@ -218,7 +266,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             }
         }
         if (empty($status_filter)) {
-            $status_filter = array(MjEvents_CRUD::STATUS_ACTIVE);
+            $status_filter = array(MjEvents::STATUS_ACTIVE);
         } else {
             $status_filter = array_values($status_filter);
         }
@@ -263,6 +311,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $highlight_closure_days = isset($settings['highlight_closure_days']) && $settings['highlight_closure_days'] === 'yes';
         $hide_closure_occurrences = !isset($settings['hide_closure_occurrences']) || $settings['hide_closure_occurrences'] === 'yes';
 
+        $cover_width_settings = self::normalize_cover_width_settings($settings);
+
         $empty_message = '';
         if (isset($settings['empty_message']) && is_string($settings['empty_message'])) {
             $empty_message = trim($settings['empty_message']);
@@ -285,7 +335,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             );
         }
 
-        $type_colors_map = method_exists('MjEvents_CRUD', 'get_type_colors') ? MjEvents_CRUD::get_type_colors() : array();
+        $type_colors_map = method_exists('MjEvents', 'get_type_colors') ? MjEvents::get_type_colors() : array();
         $is_elementor_preview = false;
         if (class_exists('\Elementor\Plugin')) {
             $elementor_plugin = \Elementor\Plugin::instance();
@@ -348,7 +398,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             );
         }
 
-        $type_labels_map = method_exists('MjEvents_CRUD', 'get_type_labels') ? MjEvents_CRUD::get_type_labels() : array();
+        $type_labels_map = method_exists('MjEvents', 'get_type_labels') ? MjEvents::get_type_labels() : array();
         $available_type_filters = array();
 
         $next_event_pointer = null;
@@ -422,6 +472,12 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             $cover_thumb = !empty($event['cover_thumb']) ? esc_url($event['cover_thumb']) : $cover_modal;
             if ($cover_thumb === '' && !empty($event['article_cover_thumb'])) {
                 $cover_thumb = esc_url($event['article_cover_thumb']);
+            }
+            $cover_id = isset($event['cover_id']) ? (int) $event['cover_id'] : 0;
+            $cover_sources = self::build_cover_sources($cover_id, $cover_modal, $cover_thumb);
+            $primary_cover = $cover_thumb;
+            if (($primary_cover === '' || $primary_cover === false) && !empty($cover_sources['fallback'])) {
+                $primary_cover = $cover_sources['fallback'];
             }
             $location_label = isset($event['location']) ? sanitize_text_field($event['location']) : '';
             $address_label = isset($event['location_address']) ? sanitize_text_field($event['location_address']) : '';
@@ -550,7 +606,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                     'id' => $multi_event_key,
                                     'title' => $title,
                                     'time' => $is_head ? __('Toute la journée', 'mj-member') : '',
-                                    'cover' => $is_head ? $cover_thumb : '',
+                                    'cover' => $is_head ? $primary_cover : '',
+                                    'cover_sources' => $is_head ? $cover_sources : array(),
                                     'type_label' => $is_head ? $type_label : '',
                                     'type_key' => $event_type_key,
                                     'start_ts' => $day_iterator->getTimestamp(),
@@ -577,7 +634,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             'start_day' => $segment_start_day_key,
                             'end_day' => $segment_end_day_key,
                             'start_ts' => $event_start_dt ? $event_start_dt->getTimestamp() : $clamped_start_day_dt->getTimestamp(),
-                            'cover' => $cover_thumb,
+                            'cover' => $primary_cover,
+                            'cover_sources' => $cover_sources,
                             'permalink' => $permalink,
                             'palette' => $palette,
                         );
@@ -638,14 +696,24 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 $ensure_day_bucket($months, $month_key, $day_key);
 
                 $time_label = wp_date(get_option('time_format', 'H:i'), $start_ts, $timezone);
-                $occurrence_end_raw = isset($occurrence['end']) ? (string) $occurrence['end'] : $occurrence_start_raw;
+                $occurrence_end_raw = isset($occurrence['end']) ? (string) $occurrence['end'] : '';
+                $end_ts_candidate = $occurrence_end_raw !== '' ? strtotime($occurrence_end_raw) : false;
+                if ($time_label !== '') {
+                    if ($occurrence_end_raw === '' || $end_ts_candidate === false || $end_ts_candidate === $start_ts) {
+                        $time_label = sprintf(__('à partir de %s', 'mj-member'), $time_label);
+                    }
+                }
+                if ($occurrence_end_raw === '') {
+                    $occurrence_end_raw = $occurrence_start_raw;
+                }
                 $occurrence_key = $event_id . ':' . $start_ts;
 
                 $months[$month_key]['days'][$day_key]['events'][] = array(
                     'id' => $occurrence_key,
                     'title' => $title,
                     'time' => $time_label,
-                    'cover' => $cover_thumb,
+                    'cover' => $primary_cover,
+                    'cover_sources' => $cover_sources,
                     'type_label' => $type_label,
                     'type_key' => $event_type_key,
                     'start_ts' => $start_ts,
@@ -678,6 +746,25 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
                 $ensure_day_bucket($months, $month_key, $closure_date);
 
+                $cover_thumb = '';
+                $cover_full = '';
+                $closure_cover_id = isset($closure_details['cover_id']) ? (int) $closure_details['cover_id'] : 0;
+                if (is_array($closure_details)) {
+                    if (!empty($closure_details['cover_thumb'])) {
+                        $cover_thumb = esc_url($closure_details['cover_thumb']);
+                    }
+                    if (!empty($closure_details['cover_full'])) {
+                        $cover_full = esc_url($closure_details['cover_full']);
+                    } elseif ($cover_thumb !== '') {
+                        $cover_full = $cover_thumb;
+                    }
+                }
+                $closure_sources = self::build_cover_sources($closure_cover_id, $cover_full, $cover_thumb);
+                $closure_primary_cover = $cover_thumb;
+                if (($closure_primary_cover === '' || $closure_primary_cover === false) && !empty($closure_sources['fallback'])) {
+                    $closure_primary_cover = $closure_sources['fallback'];
+                }
+
                 $description = '';
                 if (is_array($closure_details) && !empty($closure_details['description'])) {
                     $description = sanitize_text_field((string) $closure_details['description']);
@@ -706,7 +793,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         'id' => $closure_event_id,
                         'title' => $closure_title,
                         'time' => $closure_time_label,
-                        'cover' => '',
+                        'cover' => $closure_primary_cover,
+                        'cover_sources' => $closure_sources,
+                        'cover_full' => $cover_full,
                         'type_label' => __('Fermeture', 'mj-member'),
                         'type_key' => 'closure',
                         'start_ts' => $closure_timestamp,
@@ -780,7 +869,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 . '.mj-member-events-calendar__day.is-closure .mj-member-events-calendar__day-number{color:#b91c1c;}'
                 . '.mj-member-events-calendar__day.is-filtered-empty{opacity:0.65;}'
                 . '.mj-member-events-calendar__events{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}'
-                . '.mj-member-events-calendar__event{background:var(--mj-event-surface,var(--mj-events-calendar-event-bg));border-radius:12px;padding:0;display:flex;flex-direction:column;gap:6px;border:1px solid var(--mj-event-border,transparent);transition:background 0.2s ease,border-color 0.2s ease,box-shadow 0.2s ease;}'
+                . '.mj-member-events-calendar__event{margin-top: 0px; background:var(--mj-event-surface,var(--mj-events-calendar-event-bg));border-radius:12px;padding:0;display:flex;flex-direction:column;gap:6px;border:1px solid var(--mj-event-border,transparent);transition:background 0.2s ease,border-color 0.2s ease,box-shadow 0.2s ease;position:relative;overflow:visible;}'
                 . '.mj-member-events-calendar__event.is-next{border-color:var(--mj-event-accent,var(--mj-events-calendar-accent));background:var(--mj-event-highlight,#e5ecfd);}'
                 . '.mj-member-events-calendar__event.is-multi{margin:0;margin-left:-6px;margin-right:-6px;padding:0;border-radius:0;background:var(--mj-event-range-bg,#dce6fc);border:1px solid var(--mj-event-range-border,#c2d3f9);min-height:64px;display:flex;align-items:center;}'
                 . '.mj-member-events-calendar__event.is-multi-head{border-top-left-radius:12px;border-bottom-left-radius:12px;margin-right:-100%;position:relative;z-index:9999;}'
@@ -789,15 +878,21 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 . '.mj-member-events-calendar__event.is-multi:not(.is-multi-head){border-left:none;}'
                 . '.mj-member-events-calendar__event.is-multi:not(.is-multi-tail){border:0;}'
                 . '.mj-member-events-calendar__event-trigger{display:flex;align-items:center;gap:10px;background:none;border:0;padding:6px 8px;margin:0;text-align:left;width:100%;height:100%;cursor:pointer;color:var(--mj-events-calendar-event-text);text-decoration:none;}'
+                . '.mj-member-events-calendar__event:not(.is-multi) .mj-member-events-calendar__event-trigger{flex-direction:column;align-items:flex-start;padding:18px 18px 18px;gap:14px;}'
                 . '.mj-member-events-calendar__event-trigger:hover,.mj-member-events-calendar__event-trigger:focus{background:none;color:var(--mj-events-calendar-event-text);text-decoration:none;}'
                 . '.mj-member-events-calendar__event.is-multi .mj-member-events-calendar__event-trigger{width:100%;height:100%;padding:0 12px;}'
                 . '.mj-member-events-calendar__event.is-multi:not(.is-multi-head) .mj-member-events-calendar__event-trigger{justify-content:center;}'
-                . '.mj-member-events-calendar__event-thumb{width:60px;height:60px;border-radius:10px;overflow:hidden;flex-shrink:0;background:var(--mj-event-thumb-bg,#e2e8f0);}'
+                . '.mj-member-events-calendar__event-thumb{width:60px;height:60px;border-radius:10px;overflow:hidden;flex-shrink:0; display:block;}'
+                . '.mj-member-events-calendar__event:not(.is-multi) .mj-member-events-calendar__event-thumb{margin-right:0;margin-bottom:0px;}'
                 . '.mj-member-events-calendar__event-thumb img{display:block;width:100%;height:100%;object-fit:cover;}'
-                . '.page-content .mj-member-events-calendar__event-copy{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;line-height:15px;text-decoration:none;}'
+                . '.mj-member-events-calendar__event-copy{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0;line-height:1.2;text-decoration:none;}'
+                . '.mj-member-events-calendar__event:not(.is-multi) .mj-member-events-calendar__event-copy{padding-top: 0px;width:100%;}'
                 . '.mj-member-events-calendar__event-trigger{transition:transform 0.2s ease;text-decoration:none;}'
                 . '.mj-member-events-calendar__event-trigger:hover{transform:translateY(-1px);}'
-                . '.mj-member-events-calendar__event-title{font-size:0.82rem;font-weight:600;color:var(--mj-events-calendar-event-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}'
+                . '.mj-member-events-calendar__event.is-closure .mj-member-events-calendar__event-trigger{cursor:default;}'
+                . '.mj-member-events-calendar__event.is-closure .mj-member-events-calendar__event-trigger:hover{transform:none;}'
+                . '.mj-member-events-calendar__event-title{ border: 0; background: none; padding:0; font-size:0.82rem;font-weight:600;color:var(--mj-events-calendar-event-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}'
+                . '.mj-member-events-calendar__event:not(.is-multi) .mj-member-events-calendar__event-title{position:absolute;top:1px;left:22px;transform:translateX(-18px); border-radius:0px; padding:5px 16px;box-shadow:0 10px 20px rgba(15,23,42,0.15);z-index:5;max-width:calc(100% - 0px); border: 0; background: none; padding:0;}'
                 . '.mj-member-events-calendar__event-meta{display:flex;align-items:center;gap:6px;font-size:0.7rem;color:var(--mj-events-calendar-event-time);}'
                 . '.mj-member-events-calendar__event-continuation{display:block;width:100%;height:100%;min-height:12px;border-radius:999px;background:none;border:0;}'
                 . '.mj-member-events-calendar__event-type{display:inline-flex;align-items:center;gap:4px;font-size:0.66rem;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--mj-event-pill-bg,#d8e3fb);color:var(--mj-event-pill-text,var(--mj-events-calendar-accent));text-transform:uppercase;letter-spacing:0.05em;width:fit-content;}'
@@ -815,23 +910,30 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 . '.mj-member-events-calendar__mobile-day[open] .mj-member-events-calendar__mobile-summary{background:#edf2ff;}'
                 . '.mj-member-events-calendar__mobile-count{font-size:0.75rem;color:var(--mj-events-calendar-event-time);font-weight:500;}'
                 . '.mj-member-events-calendar__mobile-events{list-style:none;margin:0;padding:0 16px 16px;display:flex;flex-direction:column;gap:8px;}'
-                . '.mj-member-events-calendar__mobile-event{background:var(--mj-event-surface,#f8fafc);border-radius:12px;padding:10px 12px;border:1px solid var(--mj-event-border,transparent);display:flex;flex-direction:column;gap:4px;}'
+                . '.mj-member-events-calendar__mobile-event{background:var(--mj-event-surface,#f8fafc);border-radius:12px;border:1px solid var(--mj-event-border,transparent);overflow:hidden;transition:transform 0.2s ease;}'
+                . '.mj-member-events-calendar__mobile-event:hover{transform:translateY(-1px);}'
+                . '.mj-member-events-calendar__mobile-link{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;color:var(--mj-events-calendar-event-text);text-decoration:none;width:100%;height:100%;}'
+                . '.mj-member-events-calendar__mobile-link:hover,.mj-member-events-calendar__mobile-link:focus{color:var(--mj-events-calendar-event-text);text-decoration:none;}'
+                . '.mj-member-events-calendar__mobile-link.is-static{cursor:default;}'
                 . '.mj-member-events-calendar__mobile-event.is-filtered-out{display:none!important;}'
                 . '.mj-member-events-calendar__mobile-pill{display:inline-flex;align-items:center;gap:4px;font-size:0.66rem;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--mj-event-pill-bg,#d8e3fb);color:var(--mj-event-pill-text,var(--mj-events-calendar-accent));text-transform:uppercase;letter-spacing:0.05em;width:fit-content;}'
                 . '.mj-member-events-calendar__mobile-title{font-size:0.9rem;font-weight:600;color:var(--mj-events-calendar-event-text);}'
                 . '.mj-member-events-calendar__mobile-meta{font-size:0.8rem;color:var(--mj-events-calendar-event-time);}'
                 . '.mj-member-events-calendar__mobile-event[data-calendar-type="closure"]{background:#fee2e2;border-color:#fecaca;}'
                 . '.mj-member-events-calendar__mobile-event[data-calendar-type="closure"] .mj-member-events-calendar__mobile-pill{background:#ffe4e6;color:#be123c;}'
-                . '@media (max-width:900px){.mj-member-events-calendar__event-thumb{display:none;}}
+                . '.mj-member-events-calendar__mobile-body{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0;}'
+                . '.mj-member-events-calendar__event-thumb--mobile{flex-shrink:0;border-radius:10px;overflow:hidden;}'
+                . '@media (max-width:900px){.mj-member-events-calendar__event:not(.is-multi) .mj-member-events-calendar__event-trigger{padding:16px 16px 18px;gap:12px;}.mj-member-events-calendar__event:not(.is-multi) .mj-member-events-calendar__event-thumb{margin-bottom:0px;}.mj-member-events-calendar__event:not(.is-multi) .mj-member-events-calendar__event-title{ font-size:0.74rem;top:1px;left:18px;transform:translateX(-12px);max-width:calc(100% - 28px);}}
 @media (max-width:640px){.mj-member-events-calendar__toolbar{flex-direction:column;align-items:stretch;gap:14px;}.mj-member-events-calendar__toolbar-left{width:100%;justify-content:space-between;gap:12px;}.mj-member-events-calendar__nav-group{width:100%;justify-content:space-between;padding:6px 12px;}.mj-member-events-calendar__nav-button{width:32px;height:32px;}.mj-member-events-calendar__toolbar-actions{width:100%;flex-direction:column;align-items:stretch;gap:12px;}.mj-member-events-calendar__filters{width:100%;flex-direction:column;align-items:stretch;}.mj-member-events-calendar__filter{width:100%;justify-content:flex-start;}.mj-member-events-calendar__today-button{width:100%;}.mj-member-events-calendar__grid-wrapper{display:none;}.mj-member-events-calendar__mobile-list{display:flex;}}'
                 . '</style>';
         }
 
-            $script_handle = 'mj-member-events-calendar';
-            $script_path = Config::path() . 'js/elementor/events-calendar.js';
-            $script_url = Config::url() . 'js/elementor/events-calendar.js';
-            $script_version = file_exists($script_path) ? filemtime($script_path) : Config::version();
-            wp_enqueue_script($script_handle, $script_url, array(), $script_version, true);
+        $instance_thumb_styles = self::build_cover_width_style_block($instance_id, $cover_width_settings);
+        if ($instance_thumb_styles !== '') {
+            echo '<style>' . $instance_thumb_styles . '</style>';
+        }
+
+            AssetsManager::requirePackage('events-calendar');
 
         $preferred_index = -1;
         $month_keys = array_keys($months);
@@ -903,7 +1005,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             $cell_count = (int) ceil(($first_day_week_index - 1 + $days_in_month) / 7) * 7;
 
             echo '<section class="' . esc_attr(implode(' ', $month_classes)) . '" data-calendar-month="' . esc_attr($month_key) . '" data-calendar-label="' . esc_attr($month_data['label']) . '">';
-            echo '<h4 class="mj-member-events-calendar__month-heading">' . esc_html($month_data['label']) . '</h4>';
+            //echo '<h4 class="mj-member-events-calendar__month-heading">' . esc_html($month_data['label']) . '</h4>';
             echo '<div class="mj-member-events-calendar__grid-wrapper">';
             $week_days = array(
                 __('Lun', 'mj-member'),
@@ -1153,13 +1255,40 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             if ($event_type_key === '') {
                                 $event_type_key = 'misc';
                             }
+                            $event_is_closure = !empty($event_entry['is_closure']);
                             $is_known_type = isset($available_type_filters[$event_type_key]) || $event_type_key === 'closure';
                             $type_attributes = ' data-calendar-type-item="1" data-calendar-type="' . esc_attr($event_type_key) . '" data-calendar-type-known="' . ($is_known_type ? '1' : '0') . '"';
                             echo '<li class="' . esc_attr(implode(' ', $event_classes)) . '"' . $style_attribute . $type_attributes . '>';
-                            echo '<a class="mj-member-events-calendar__event-trigger" href="' . esc_url($event_href) . '"' . ($event_is_multi ? ' data-calendar-range="' . esc_attr($event_range_key) . '"' : '') . '>';
+                            $trigger_attributes = ' class="mj-member-events-calendar__event-trigger"' . ($event_is_multi ? ' data-calendar-range="' . esc_attr($event_range_key) . '"' : '');
+                            if ($event_is_closure) {
+                                echo '<div' . $trigger_attributes . '>';
+                            } else {
+                                echo '<a' . $trigger_attributes . ' href="' . esc_url($event_href) . '">';
+                            }
                             if (!$event_is_multi || $event_is_multi_head) {
                                 if (!empty($event_entry['cover'])) {
-                                    echo '<span class="mj-member-events-calendar__event-thumb"><img src="' . esc_url($event_entry['cover']) . '" alt="' . esc_attr($event_entry['title']) . '" loading="lazy" /></span>';
+                                    $cover_sources = array();
+                                    if (isset($event_entry['cover_sources']) && is_array($event_entry['cover_sources'])) {
+                                        $cover_sources = $event_entry['cover_sources'];
+                                    }
+                                    $fallback_cover = $event_entry['cover'];
+                                    if ($fallback_cover === '' && isset($cover_sources['fallback']) && $cover_sources['fallback'] !== '') {
+                                        $fallback_cover = $cover_sources['fallback'];
+                                    }
+                                    echo '<span class="mj-member-events-calendar__event-thumb">';
+                                    echo '<picture>';
+                                    if (!empty($cover_sources['desktop'])) {
+                                        echo '<source media="(min-width: 901px)" srcset="' . esc_url($cover_sources['desktop']) . '" />';
+                                    }
+                                    if (!empty($cover_sources['tablet'])) {
+                                        echo '<source media="(min-width: 641px)" srcset="' . esc_url($cover_sources['tablet']) . '" />';
+                                    }
+                                    if (!empty($cover_sources['mobile'])) {
+                                        echo '<source media="(max-width: 640px)" srcset="' . esc_url($cover_sources['mobile']) . '" />';
+                                    }
+                                    echo '<img src="' . esc_url($fallback_cover) . '" alt="' . esc_attr($event_entry['title']) . '" loading="lazy" />';
+                                    echo '</picture>';
+                                    echo '</span>';
                                 }
                                 echo '<span class="mj-member-events-calendar__event-copy">';
                                 if (!empty($event_entry['type_label'])) {
@@ -1176,8 +1305,11 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             if ($event_is_multi && !$event_is_multi_head) {
                                 echo '<span class="screen-reader-text">' . esc_html(sprintf(__('Suite de %s', 'mj-member'), $event_entry['title'])) . '</span>';
                             }
-
-                            echo '</a>';
+                            if ($event_is_closure) {
+                                echo '</div>';
+                            } else {
+                                echo '</a>';
+                            }
                             echo '</li>';
                         }
                         echo '</ul>';
@@ -1226,7 +1358,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     $events_count = count($mobile_events);
                     $count_label = sprintf(_n('%d événement', '%d événements', $events_count, 'mj-member'), $events_count);
 
-                    echo '<details class="' . esc_attr(implode(' ', $mobile_day_classes)) . '" data-calendar-day="' . esc_attr($day_key) . '">';
+                    echo '<details class="' . esc_attr(implode(' ', $mobile_day_classes)) . '" data-calendar-day="' . esc_attr($day_key) . '" open>';
                     echo '<summary class="mj-member-events-calendar__mobile-summary">';
                     echo '<span>' . esc_html($day_label) . '</span>';
                     echo '<span class="mj-member-events-calendar__mobile-count" data-calendar-day-count>' . esc_html($count_label) . '</span>';
@@ -1244,11 +1376,51 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         }
                         $is_known_type = isset($available_type_filters[$event_type_key]) || $event_type_key === 'closure';
                         $mobile_classes = array('mj-member-events-calendar__mobile-event');
-                        if (!empty($mobile_event['is_closure'])) {
+                        $mobile_is_closure = !empty($mobile_event['is_closure']);
+                        if ($mobile_is_closure) {
                             $mobile_classes[] = 'is-closure';
                         }
+
                         $mobile_style = self::build_event_style_attribute($mobile_event);
+                        $mobile_cover_sources = array();
+                        if (isset($mobile_event['cover_sources']) && is_array($mobile_event['cover_sources'])) {
+                            $mobile_cover_sources = $mobile_event['cover_sources'];
+                        }
+                        $mobile_fallback_cover = isset($mobile_event['cover']) ? (string) $mobile_event['cover'] : '';
+                        if ($mobile_fallback_cover === '' && isset($mobile_cover_sources['fallback']) && $mobile_cover_sources['fallback'] !== '') {
+                            $mobile_fallback_cover = $mobile_cover_sources['fallback'];
+                        }
+                        $has_mobile_cover = $mobile_fallback_cover !== '';
+
+                        $mobile_permalink = isset($mobile_event['permalink']) ? (string) $mobile_event['permalink'] : '';
+                        $mobile_tag = ($mobile_is_closure || $mobile_permalink === '') ? 'div' : 'a';
+                        $mobile_attributes = ' class="mj-member-events-calendar__mobile-link' . ($mobile_is_closure ? ' is-static' : '') . '"';
+                        if ($mobile_tag === 'a') {
+                            $mobile_attributes .= ' href="' . esc_url($mobile_permalink) . '"';
+                        }
+
                         echo '<li class="' . esc_attr(implode(' ', $mobile_classes)) . '"' . $mobile_style . ' data-calendar-type-item="1" data-calendar-type="' . esc_attr($event_type_key) . '" data-calendar-type-known="' . ($is_known_type ? '1' : '0') . '">';
+
+                        echo '<' . $mobile_tag . $mobile_attributes . '>';
+
+                        if ($has_mobile_cover) {
+                            echo '<span class="mj-member-events-calendar__event-thumb mj-member-events-calendar__event-thumb--mobile">';
+                            echo '<picture>';
+                            if (!empty($mobile_cover_sources['desktop'])) {
+                                echo '<source media="(min-width: 901px)" srcset="' . esc_url($mobile_cover_sources['desktop']) . '" />';
+                            }
+                            if (!empty($mobile_cover_sources['tablet'])) {
+                                echo '<source media="(min-width: 641px)" srcset="' . esc_url($mobile_cover_sources['tablet']) . '" />';
+                            }
+                            if (!empty($mobile_cover_sources['mobile'])) {
+                                echo '<source media="(max-width: 640px)" srcset="' . esc_url($mobile_cover_sources['mobile']) . '" />';
+                            }
+                            echo '<img src="' . esc_url($mobile_fallback_cover) . '" alt="' . esc_attr($mobile_event['title']) . '" loading="lazy" />';
+                            echo '</picture>';
+                            echo '</span>';
+                        }
+
+                        echo '<div class="mj-member-events-calendar__mobile-body">';
                         if (!empty($mobile_event['type_label'])) {
                             echo '<span class="mj-member-events-calendar__mobile-pill">' . esc_html($mobile_event['type_label']) . '</span>';
                         }
@@ -1256,6 +1428,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         if (!empty($mobile_event['time'])) {
                             echo '<span class="mj-member-events-calendar__mobile-meta">' . esc_html($mobile_event['time']) . '</span>';
                         }
+                        echo '</div>';
+                        echo '</' . $mobile_tag . '>';
+
                         echo '</li>';
                     }
                     echo '</ul>';
@@ -1410,6 +1585,174 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $luminance = (0.2126 * $rgb[0]) + (0.7152 * $rgb[1]) + (0.0722 * $rgb[2]);
 
         return $luminance >= 150 ? '#0F172A' : '#FFFFFF';
+    }
+
+    /**
+     * Normalize cover width settings coming from Elementor sliders.
+     *
+     * @param array<string,mixed> $settings
+     * @return array<string,int>
+     */
+    private static function normalize_cover_width_settings($settings) {
+        $defaults = array(
+            'desktop' => 120,
+            'tablet' => 110,
+            'mobile' => 90,
+        );
+
+        $normalized = array();
+
+        foreach ($defaults as $key => $fallback) {
+            $setting_key = 'cover_width_' . $key;
+            $value = isset($settings[$setting_key]) ? $settings[$setting_key] : array();
+            $normalized[$key] = self::extract_cover_width_value($value, $fallback);
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * Extract a sanitized width value from an Elementor slider control.
+     *
+     * @param mixed $value
+     * @param int $fallback
+     * @return int
+     */
+    private static function extract_cover_width_value($value, $fallback) {
+        $min = 10;
+        $max = 500;
+
+        if (is_array($value)) {
+            if (isset($value['size']) && is_numeric($value['size'])) {
+                $candidate = (float) $value['size'];
+                if ($candidate >= $min && $candidate <= $max) {
+                    return (int) round($candidate);
+                }
+            }
+        } elseif (is_numeric($value)) {
+            $candidate = (float) $value;
+            if ($candidate >= $min && $candidate <= $max) {
+                return (int) round($candidate);
+            }
+        }
+
+        return (int) $fallback;
+    }
+
+    /**
+     * Build the CSS rules that apply the chosen cover widths per breakpoint.
+     *
+     * @param string $instance_id
+     * @param array<string,int> $widths
+     * @return string
+     */
+    private static function build_cover_width_style_block($instance_id, $widths) {
+        if (!is_string($instance_id) || $instance_id === '' || !is_array($widths)) {
+            return '';
+        }
+
+        $normalized_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $instance_id);
+        if ($normalized_id === '') {
+            return '';
+        }
+
+        $desktop = isset($widths['desktop']) ? (int) $widths['desktop'] : 120;
+        $tablet = isset($widths['tablet']) ? (int) $widths['tablet'] : 110;
+        $mobile = isset($widths['mobile']) ? (int) $widths['mobile'] : 90;
+
+        $desktop = min(500, max(10, $desktop));
+        $tablet = min(500, max(10, $tablet));
+        $mobile = min(500, max(10, $mobile));
+
+        $rules = array();
+        $rules[] = sprintf('#%1$s .mj-member-events-calendar__event-thumb{width:%2$dpx;height:%2$dpx;}', $normalized_id, $desktop);
+        $rules[] = sprintf('#%1$s .mj-member-events-calendar__event-thumb img{width:100%%;height:100%%;object-fit:cover;}', $normalized_id);
+        $rules[] = sprintf('@media (max-width: 900px){#%1$s .mj-member-events-calendar__event-thumb{width:%2$dpx;height:%2$dpx;}}', $normalized_id, $tablet);
+        $rules[] = sprintf('@media (max-width: 640px){#%1$s .mj-member-events-calendar__event-thumb{width:%2$dpx;height:%2$dpx;}}', $normalized_id, $mobile);
+
+        return implode('', $rules);
+    }
+
+    /**
+     * Build responsive cover sources depending on the current device mode.
+     *
+     * @param int $cover_id
+     * @param string $fallback_large
+     * @param string $fallback_medium
+     * @return array<string,string>
+     */
+    private static function build_cover_sources($cover_id, $fallback_large = '', $fallback_medium = '') {
+        $cover_id = (int) $cover_id;
+
+        $sanitize_url = static function ($value) {
+            $value = is_string($value) ? trim($value) : '';
+            if ($value === '') {
+                return '';
+            }
+
+            return esc_url_raw($value);
+        };
+
+        $fallback_large = $sanitize_url($fallback_large);
+        $fallback_medium = $sanitize_url($fallback_medium);
+
+        $sources = array(
+            'desktop' => '',
+            'tablet' => '',
+            'mobile' => '',
+            'fallback' => '',
+        );
+
+        if ($cover_id > 0 && function_exists('wp_attachment_is_image') && wp_attachment_is_image($cover_id)) {
+            $desktop = wp_get_attachment_image_src($cover_id, 'large');
+            $tablet = wp_get_attachment_image_src($cover_id, 'medium_large');
+            if (!is_array($tablet)) {
+                $tablet = wp_get_attachment_image_src($cover_id, 'medium');
+            }
+            $mobile = wp_get_attachment_image_src($cover_id, 'medium');
+            if (!is_array($mobile)) {
+                $mobile = wp_get_attachment_image_src($cover_id, 'thumbnail');
+            }
+            $thumbnail = wp_get_attachment_image_src($cover_id, 'thumbnail');
+
+            if (is_array($desktop) && !empty($desktop[0])) {
+                $sources['desktop'] = esc_url_raw($desktop[0]);
+            }
+            if (is_array($tablet) && !empty($tablet[0])) {
+                $sources['tablet'] = esc_url_raw($tablet[0]);
+            }
+            if (is_array($mobile) && !empty($mobile[0])) {
+                $sources['mobile'] = esc_url_raw($mobile[0]);
+            } elseif (is_array($thumbnail) && !empty($thumbnail[0])) {
+                $sources['mobile'] = esc_url_raw($thumbnail[0]);
+            }
+        }
+
+        $fallback = $fallback_large !== '' ? $fallback_large : $fallback_medium;
+        if ($sources['desktop'] === '') {
+            $sources['desktop'] = $fallback;
+        }
+        if ($sources['tablet'] === '') {
+            $sources['tablet'] = $fallback !== '' ? $fallback : $sources['desktop'];
+        }
+        if ($sources['mobile'] === '') {
+            $sources['mobile'] = $fallback_medium !== '' ? $fallback_medium : ($fallback !== '' ? $fallback : $sources['tablet']);
+        }
+
+        if ($sources['fallback'] === '' && $fallback !== '') {
+            $sources['fallback'] = $fallback;
+        } elseif ($sources['fallback'] === '') {
+            $sources['fallback'] = $sources['desktop'] !== '' ? $sources['desktop'] : ($sources['tablet'] !== '' ? $sources['tablet'] : $sources['mobile']);
+        }
+
+        foreach ($sources as $key => $value) {
+            if ($value === '') {
+                continue;
+            }
+            $sources[$key] = esc_url($value);
+        }
+
+        return $sources;
     }
 
     /**

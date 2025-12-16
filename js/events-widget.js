@@ -1,6 +1,47 @@
 (function () {
     'use strict';
 
+    var Utils = window.MjMemberUtils || {};
+    var domReady = typeof Utils.domReady === 'function'
+        ? Utils.domReady
+        : function (callback) {
+            if (typeof callback !== 'function') {
+                return;
+            }
+
+            if (typeof document === 'undefined') {
+                callback();
+                return;
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', callback);
+            } else {
+                callback();
+            }
+        };
+    var toArray = typeof Utils.toArray === 'function'
+        ? Utils.toArray
+        : function (collection) {
+            if (!collection) {
+                return [];
+            }
+
+            if (Array.isArray(collection)) {
+                return collection.slice();
+            }
+
+            try {
+                return Array.prototype.slice.call(collection);
+            } catch (error) {
+                var fallback = [];
+                for (var idx = 0; idx < collection.length; idx += 1) {
+                    fallback.push(collection[idx]);
+                }
+                return fallback;
+            }
+        };
+
     var settings = window.mjMemberEventsWidget || {};
     var ajaxUrl = settings.ajaxUrl || '';
     var nonce = settings.nonce || '';
@@ -10,13 +51,365 @@
     var defaultCtaLabel = strings.cta || "S'inscrire";
     var registeredCtaLabel = strings.registered || strings.confirm || "Confirmer l'inscription";
     var eventWidgets = [];
+    var reservationPanel = {
+        root: null,
+        list: null,
+        empty: null,
+        feedback: null,
+        eventId: 0,
+        loading: false,
+        pending: null,
+        bound: false,
+    };
 
-    function ready(callback) {
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', callback);
-        } else {
-            callback();
+    function resolveReservationPanel() {
+        if (reservationPanel.root) {
+            return reservationPanel;
         }
+
+        if (typeof document === 'undefined') {
+            return null;
+        }
+
+        var root = document.querySelector('[data-mj-event-reservations]');
+        if (!root) {
+            return null;
+        }
+
+        reservationPanel.root = root;
+        reservationPanel.list = root.querySelector('[data-mj-event-reservations-list]');
+        reservationPanel.empty = root.querySelector('[data-mj-event-reservations-empty]');
+        reservationPanel.feedback = root.querySelector('[data-mj-event-reservations-feedback]');
+
+        var eventAttr = root.getAttribute('data-event-id') || '0';
+        var eventId = parseInt(eventAttr, 10);
+        if (Number.isNaN(eventId) || eventId < 0) {
+            eventId = 0;
+        }
+        reservationPanel.eventId = eventId;
+
+        if (!reservationPanel.bound) {
+            root.addEventListener('click', function (event) {
+                var target = event.target;
+                if (!target || typeof target.closest !== 'function') {
+                    return;
+                }
+                var button = target.closest('[data-mj-event-cancel]');
+                if (!button || !root.contains(button)) {
+                    return;
+                }
+                handleReservationCancel(button);
+            });
+            reservationPanel.bound = true;
+        }
+
+        return reservationPanel;
+    }
+
+    function updateReservationFeedback(panel, message, isError) {
+        if (!panel || !panel.feedback) {
+            return;
+        }
+        panel.feedback.textContent = message || '';
+        if (isError) {
+            panel.feedback.classList.add('is-error');
+        } else {
+            panel.feedback.classList.remove('is-error');
+        }
+    }
+
+    function toggleReservationLoading(panel, isLoading) {
+        if (!panel || !panel.root) {
+            return;
+        }
+        if (isLoading) {
+            panel.root.classList.add('is-loading');
+        } else {
+            panel.root.classList.remove('is-loading');
+        }
+    }
+
+    function buildReservationElement(entry) {
+        var listItem = document.createElement('li');
+        listItem.className = 'mj-member-event-single__reservation';
+        listItem.setAttribute('data-mj-event-reservation', '');
+
+        var memberId = entry && entry.member_id ? parseInt(entry.member_id, 10) : 0;
+        if (Number.isNaN(memberId) || memberId < 0) {
+            memberId = 0;
+        }
+        listItem.setAttribute('data-member-id', String(memberId));
+
+        var registrationId = entry && entry.registration_id ? parseInt(entry.registration_id, 10) : 0;
+        if (Number.isNaN(registrationId) || registrationId < 0) {
+            registrationId = 0;
+        }
+        listItem.setAttribute('data-registration-id', String(registrationId));
+
+        if (entry && entry.status_key) {
+            listItem.setAttribute('data-status-key', String(entry.status_key));
+        }
+
+        var header = document.createElement('div');
+        header.className = 'mj-member-event-single__reservation-header';
+
+        var main = document.createElement('div');
+        main.className = 'mj-member-event-single__reservation-main';
+
+        var title = document.createElement('p');
+        title.className = 'mj-member-event-single__reservation-title';
+        title.textContent = entry && entry.name ? String(entry.name) : (strings.reservationUnknown || 'Participant');
+        main.appendChild(title);
+
+        if (entry && entry.status_label) {
+            var status = document.createElement('span');
+            var baseClass = 'mj-member-event-single__reservation-status';
+            if (entry.status_class) {
+                baseClass += ' ' + String(entry.status_class);
+            }
+            status.className = baseClass;
+            status.textContent = String(entry.status_label);
+            main.appendChild(status);
+        }
+
+        header.appendChild(main);
+
+        if (entry && entry.can_cancel && memberId > 0) {
+            var cancel = document.createElement('button');
+            cancel.type = 'button';
+            cancel.className = 'mj-member-event-single__reservation-cancel';
+            cancel.setAttribute('data-mj-event-cancel', '');
+            cancel.setAttribute('data-member-id', String(memberId));
+            cancel.setAttribute('data-registration-id', String(registrationId));
+            cancel.textContent = strings.unregister || 'Se désinscrire';
+            header.appendChild(cancel);
+        }
+
+        listItem.appendChild(header);
+
+        if (entry && entry.created_label) {
+            var meta = document.createElement('p');
+            meta.className = 'mj-member-event-single__reservation-meta';
+            var template = strings.reservationCreated || 'Réservé le %s';
+            meta.textContent = template.replace('%s', String(entry.created_label));
+            listItem.appendChild(meta);
+        }
+
+        if (entry && Array.isArray(entry.occurrences) && entry.occurrences.length) {
+            var occurrencesList = document.createElement('ul');
+            occurrencesList.className = 'mj-member-event-single__reservation-occurrences';
+            for (var i = 0; i < entry.occurrences.length; i += 1) {
+                var occurrenceLabel = entry.occurrences[i];
+                if (!occurrenceLabel) {
+                    continue;
+                }
+                var occurrenceItem = document.createElement('li');
+                occurrenceItem.className = 'mj-member-event-single__reservation-occurrence';
+                occurrenceItem.textContent = String(occurrenceLabel);
+                occurrencesList.appendChild(occurrenceItem);
+            }
+            listItem.appendChild(occurrencesList);
+        }
+
+        return listItem;
+    }
+
+    function updateReservationPanel(data) {
+        var panel = resolveReservationPanel();
+        if (!panel) {
+            return;
+        }
+
+        if (panel.list) {
+            panel.list.innerHTML = '';
+        }
+
+        var hasReservations = false;
+        if (data && Array.isArray(data.reservations) && data.reservations.length) {
+            hasReservations = true;
+            for (var i = 0; i < data.reservations.length; i += 1) {
+                var entry = data.reservations[i];
+                if (!panel.list) {
+                    break;
+                }
+                panel.list.appendChild(buildReservationElement(entry));
+            }
+        }
+
+        panel.root.setAttribute('data-has-reservations', hasReservations ? '1' : '0');
+        panel.root.classList.toggle('is-empty', !hasReservations);
+
+        if (panel.empty) {
+            if (data && data.empty_message) {
+                panel.empty.textContent = String(data.empty_message);
+            }
+            panel.empty.hidden = hasReservations;
+        }
+    }
+
+    function refreshReservationPanel(options) {
+        var panel = resolveReservationPanel();
+        if (!panel || !panel.eventId || !ajaxUrl || !nonce) {
+            return Promise.resolve(null);
+        }
+
+        if (panel.loading && panel.pending) {
+            return panel.pending;
+        }
+
+        var showFeedback = !(options && options.silent);
+        var successMessage = options && options.successMessage ? String(options.successMessage) : '';
+        var loadingMessage = strings.reservationsLoading || strings.loading || '';
+
+        panel.loading = true;
+        toggleReservationLoading(panel, true);
+
+        if (showFeedback && loadingMessage) {
+            updateReservationFeedback(panel, loadingMessage, false);
+        }
+
+        var payload = new window.FormData();
+        payload.append('action', 'mj_member_get_event_reservations');
+        payload.append('nonce', nonce);
+        payload.append('event_id', panel.eventId);
+
+        panel.pending = window.fetch(ajaxUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: payload,
+        }).then(function (response) {
+            return response.json().then(function (json) {
+                return { ok: response.ok, status: response.status, json: json };
+            }).catch(function () {
+                return { ok: response.ok, status: response.status, json: null };
+            });
+        }).then(function (result) {
+            if (!result.ok || !result.json) {
+                var networkMessage = strings.reservationsError || strings.genericError || 'Une erreur est survenue. Merci de réessayer.';
+                updateReservationFeedback(panel, networkMessage, true);
+                throw new Error(networkMessage);
+            }
+
+            if (!result.json.success) {
+                var failMessage = strings.reservationsError || strings.genericError || 'Une erreur est survenue. Merci de réessayer.';
+                if (result.json.data && result.json.data.message) {
+                    failMessage = result.json.data.message;
+                }
+                updateReservationFeedback(panel, failMessage, true);
+                throw new Error(failMessage);
+            }
+
+            updateReservationPanel(result.json.data || {});
+
+            if (successMessage) {
+                updateReservationFeedback(panel, successMessage, false);
+            } else if (!showFeedback) {
+                // keep previous feedback untouched when silent
+            } else {
+                updateReservationFeedback(panel, '', false);
+            }
+
+            return result.json.data;
+        }).catch(function (error) {
+            var errorMessage = strings.reservationsError || strings.genericError || 'Une erreur est survenue. Merci de réessayer.';
+            if (error && error.message) {
+                errorMessage = error.message;
+            }
+            updateReservationFeedback(panel, errorMessage, true);
+            throw error;
+        }).finally(function () {
+            panel.loading = false;
+            toggleReservationLoading(panel, false);
+            panel.pending = null;
+        });
+
+        return panel.pending;
+    }
+
+    function sendUnregisterRequest(eventId, memberId, registrationId) {
+        if (!ajaxUrl || !nonce) {
+            return Promise.reject(new Error(strings.genericError || 'Une erreur est survenue. Merci de réessayer.'));
+        }
+
+        var payload = new window.FormData();
+        payload.append('action', 'mj_member_unregister_event');
+        payload.append('nonce', nonce);
+        payload.append('event_id', eventId);
+        payload.append('member_id', memberId);
+        if (registrationId > 0) {
+            payload.append('registration_id', registrationId);
+        }
+
+        return window.fetch(ajaxUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: payload,
+        }).then(function (response) {
+            return response.json().then(function (json) {
+                return { ok: response.ok, status: response.status, json: json };
+            }).catch(function () {
+                return { ok: response.ok, status: response.status, json: null };
+            });
+        }).then(function (result) {
+            if (!result.ok || !result.json) {
+                var messageNetwork = strings.unregisterError || strings.genericError || 'Une erreur est survenue. Merci de réessayer.';
+                throw new Error(messageNetwork);
+            }
+
+            if (!result.json.success) {
+                var messageFail = strings.unregisterError || strings.genericError || 'Une erreur est survenue. Merci de réessayer.';
+                if (result.json.data && result.json.data.message) {
+                    messageFail = result.json.data.message;
+                }
+                throw new Error(messageFail);
+            }
+
+            return result.json.data || {};
+        });
+    }
+
+    function handleReservationCancel(button) {
+        var panel = resolveReservationPanel();
+        if (!panel || panel.loading) {
+            return;
+        }
+
+        var memberId = parseInt(button.getAttribute('data-member-id'), 10);
+        if (Number.isNaN(memberId) || memberId <= 0) {
+            return;
+        }
+
+        var registrationId = parseInt(button.getAttribute('data-registration-id'), 10);
+        if (Number.isNaN(registrationId) || registrationId < 0) {
+            registrationId = 0;
+        }
+
+        if (strings.unregisterConfirm && !window.confirm(strings.unregisterConfirm)) {
+            return;
+        }
+
+        panel.loading = true;
+        toggleReservationLoading(panel, true);
+        updateReservationFeedback(panel, strings.reservationsLoading || strings.loading || '', false);
+        button.disabled = true;
+
+        sendUnregisterRequest(panel.eventId, memberId, registrationId)
+            .then(function () {
+                return refreshReservationPanel({
+                    silent: true,
+                    successMessage: strings.unregisterSuccess || strings.reservationsUpdated || 'Inscription annulée.',
+                });
+            }).catch(function (error) {
+                var messageError = strings.unregisterError || strings.genericError || 'Une erreur est survenue. Merci de réessayer.';
+                if (error && error.message) {
+                    messageError = error.message;
+                }
+                updateReservationFeedback(panel, messageError, true);
+            }).finally(function () {
+                panel.loading = false;
+                toggleReservationLoading(panel, false);
+                button.disabled = false;
+            });
     }
 
     function setFeedback(element, message, isError) {
@@ -85,6 +478,986 @@
         }
     }
 
+    function setupInlineRegistrationForm(form) {
+        if (!form || form.dataset.mjEventRegistrationInit === '1') {
+            return;
+        }
+
+        form.dataset.mjEventRegistrationInit = '1';
+
+        var eventAttr = form.getAttribute('data-event-id') || '0';
+        var eventId = parseInt(eventAttr, 10);
+        if (Number.isNaN(eventId) || eventId <= 0) {
+            eventId = 0;
+        }
+
+        var noteAttr = form.getAttribute('data-note-max') || '0';
+        var noteMaxLength = parseInt(noteAttr, 10);
+        if (Number.isNaN(noteMaxLength) || noteMaxLength <= 0) {
+            noteMaxLength = 400;
+        }
+
+        var submitButton = form.querySelector('[data-mj-event-registration-submit]');
+        var feedbackNode = form.querySelector('[data-mj-event-registration-feedback]');
+        var membersEmptyNode = form.querySelector('[data-mj-event-members-empty]');
+        var noteField = form.querySelector('textarea[name="note"]');
+        var noteContainer = form.querySelector('.mj-member-event-single__registration-note');
+        var radios = form.querySelectorAll('input[name="participant"]');
+        var originalSubmitLabel = submitButton ? submitButton.textContent : '';
+
+        var registrationConfig = null;
+        var configAttr = form.getAttribute('data-registration-config') || '';
+        if (configAttr) {
+            try {
+                registrationConfig = JSON.parse(configAttr);
+            } catch (error) {
+                registrationConfig = null;
+            }
+        }
+
+        var occurrenceItems = Array.isArray(registrationConfig && registrationConfig.occurrences)
+            ? registrationConfig.occurrences
+            : [];
+        var occurrenceSummaryText = '';
+        var scheduleMode = 'fixed';
+        if (registrationConfig) {
+            if (typeof registrationConfig.occurrenceSummary === 'string') {
+                occurrenceSummaryText = registrationConfig.occurrenceSummary;
+            } else if (typeof registrationConfig.occurrence_summary === 'string') {
+                occurrenceSummaryText = registrationConfig.occurrence_summary;
+            } else if (typeof registrationConfig.occurrenceSummaryText === 'string') {
+                occurrenceSummaryText = registrationConfig.occurrenceSummaryText;
+            }
+
+            if (typeof registrationConfig.scheduleMode === 'string') {
+                scheduleMode = registrationConfig.scheduleMode;
+            } else if (typeof registrationConfig.schedule_mode === 'string') {
+                scheduleMode = registrationConfig.schedule_mode;
+            }
+        }
+        var occurrenceAssignments = registrationConfig && registrationConfig.assignments && typeof registrationConfig.assignments === 'object'
+            ? registrationConfig.assignments
+            : null;
+        var selectedOccurrenceMap = Object.create(null);
+        if (occurrenceAssignments && occurrenceAssignments.mode === 'custom' && Array.isArray(occurrenceAssignments.occurrences)) {
+            for (var occIdx = 0; occIdx < occurrenceAssignments.occurrences.length; occIdx += 1) {
+                var normalizedValue = normalizeOccurrenceValue(occurrenceAssignments.occurrences[occIdx]);
+                if (normalizedValue) {
+                    selectedOccurrenceMap[normalizedValue] = true;
+                }
+            }
+        }
+
+        var allowOccurrenceSelection = false;
+        if (registrationConfig) {
+            if (Object.prototype.hasOwnProperty.call(registrationConfig, 'allowOccurrenceSelection')) {
+                allowOccurrenceSelection = !!registrationConfig.allowOccurrenceSelection;
+            } else if (typeof registrationConfig.occurrenceSelectionMode === 'string') {
+                allowOccurrenceSelection = registrationConfig.occurrenceSelectionMode !== 'all_occurrences';
+            }
+        }
+
+        var occurrenceFieldset = null;
+        var occurrenceHelpNode = null;
+        var occurrenceCheckboxes = [];
+        var occurrenceStoreField = null;
+        var requiresOccurrenceSelection = allowOccurrenceSelection && occurrenceItems.length > 0;
+
+        function ensureOccurrenceStore() {
+            if (!form) {
+                return null;
+            }
+            if (occurrenceStoreField && form.contains(occurrenceStoreField)) {
+                return occurrenceStoreField;
+            }
+            var existing = form.querySelector('input[type="hidden"][data-event-occurrences-selected]');
+            if (existing) {
+                occurrenceStoreField = existing;
+                return occurrenceStoreField;
+            }
+            var field = document.createElement('input');
+            field.type = 'hidden';
+            field.name = 'occurrences_json';
+            field.value = '[]';
+            field.setAttribute('data-event-occurrences-selected', '1');
+            form.appendChild(field);
+            occurrenceStoreField = field;
+            return occurrenceStoreField;
+        }
+
+        function sanitizeOccurrenceValues(values) {
+            if (!Array.isArray(values)) {
+                return [];
+            }
+            var normalized = [];
+            var registry = Object.create(null);
+            for (var idx = 0; idx < values.length; idx += 1) {
+                var normalizedValue = normalizeOccurrenceValue(values[idx]);
+                if (!normalizedValue || registry[normalizedValue]) {
+                    continue;
+                }
+                registry[normalizedValue] = true;
+                normalized.push(normalizedValue);
+            }
+            return normalized;
+        }
+
+        function readOccurrenceStore() {
+            var field = ensureOccurrenceStore();
+            if (!field) {
+                return [];
+            }
+            var raw = field.value || '';
+            if (!raw) {
+                return [];
+            }
+            try {
+                var parsed = JSON.parse(raw);
+                return sanitizeOccurrenceValues(parsed);
+            } catch (error) {
+                return [];
+            }
+        }
+
+        function writeOccurrenceStore(values) {
+            var field = ensureOccurrenceStore();
+            if (!field) {
+                return;
+            }
+            var normalized = sanitizeOccurrenceValues(values);
+            try {
+                field.value = JSON.stringify(normalized);
+            } catch (error) {
+                field.value = '[]';
+            }
+        }
+
+        function notifyOccurrenceSelectionChanged(source) {
+            if (!form || typeof form.dispatchEvent !== 'function' || typeof window.CustomEvent !== 'function') {
+                return;
+            }
+            var payload = readOccurrenceStore();
+            try {
+                form.dispatchEvent(new CustomEvent('mj-member:event-single-occurrences-sync', {
+                    detail: {
+                        source: source || 'legacy',
+                        occurrences: payload.slice ? payload.slice() : payload,
+                    },
+                }));
+            } catch (error) {
+                // ignore
+            }
+        }
+
+        ensureOccurrenceStore();
+
+        function determineOccurrenceTimePreference() {
+            var activeCount = 0;
+            var timeKeySet = Object.create(null);
+
+            for (var idx = 0; idx < occurrenceItems.length; idx += 1) {
+                var entry = occurrenceItems[idx];
+                if (!entry) {
+                    continue;
+                }
+                if (!entry.isPast) {
+                    activeCount += 1;
+                }
+                var timeKey = getOccurrenceTimeKey(entry);
+                if (timeKey) {
+                    timeKeySet[timeKey] = true;
+                }
+            }
+
+            if (activeCount <= 1) {
+                return true;
+            }
+
+            var uniqueTimes = 0;
+            for (var key in timeKeySet) {
+                if (Object.prototype.hasOwnProperty.call(timeKeySet, key)) {
+                    uniqueTimes += 1;
+                    if (uniqueTimes > 1) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        function collectSelectedOccurrences() {
+            if (!occurrenceCheckboxes.length) {
+                return readOccurrenceStore();
+            }
+
+            var collected = [];
+            for (var idx = 0; idx < occurrenceCheckboxes.length; idx += 1) {
+                var checkbox = occurrenceCheckboxes[idx];
+                if (checkbox && !checkbox.disabled && checkbox.checked) {
+                    collected.push(checkbox.value);
+                }
+            }
+
+            var sanitized = sanitizeOccurrenceValues(collected);
+            writeOccurrenceStore(sanitized);
+            return sanitized;
+        }
+
+        function resetOccurrenceSelection() {
+            for (var idx = 0; idx < occurrenceCheckboxes.length; idx += 1) {
+                var checkbox = occurrenceCheckboxes[idx];
+                if (!checkbox) {
+                    continue;
+                }
+                if (!checkbox.disabled) {
+                    checkbox.checked = false;
+                }
+                var occurrenceItem = checkbox.closest('.mj-member-events__signup-calendar-occurrence, .mj-member-events__signup-occurrence-item');
+                if (occurrenceItem) {
+                    occurrenceItem.classList.remove('is-selected');
+                }
+                var dayNode = checkbox.closest('.mj-member-events__signup-calendar-day');
+                syncInlineCalendarDay(dayNode);
+            }
+
+            writeOccurrenceStore([]);
+            notifyOccurrenceSelectionChanged('legacy');
+        }
+
+        function syncInlineCalendarDay(dayNode) {
+            if (!dayNode) {
+                return;
+            }
+            var hasSelection = false;
+            var occurrences = dayNode.querySelectorAll('.mj-member-events__signup-calendar-occurrence');
+            Array.prototype.forEach.call(occurrences, function (item) {
+                if (item.classList.contains('is-selected')) {
+                    hasSelection = true;
+                }
+            });
+            dayNode.classList.toggle('has-selection', hasSelection);
+        }
+
+        function updateSubmitAvailability(availableCountOverride) {
+            var availableCount = typeof availableCountOverride === 'number' ? availableCountOverride : null;
+            if (submitButton) {
+                if (form.dataset.submitting === '1') {
+                    submitButton.disabled = true;
+                } else {
+                    var hasParticipants = false;
+                    if (availableCount !== null) {
+                        hasParticipants = availableCount > 0;
+                    } else {
+                        var selectableParticipant = form.querySelector('input[name="participant"]:not([disabled])');
+                        hasParticipants = !!selectableParticipant;
+                    }
+                    var hasOccurrences = !requiresOccurrenceSelection || collectSelectedOccurrences().length > 0;
+                    submitButton.disabled = !hasParticipants || !hasOccurrences;
+                }
+            }
+
+            if (occurrenceHelpNode) {
+                var shouldWarn = requiresOccurrenceSelection && collectSelectedOccurrences().length === 0;
+                occurrenceHelpNode.classList.toggle('is-warning', shouldWarn);
+            }
+        }
+
+        function buildInlineCalendar() {
+            var normalized = [];
+            var seenValues = Object.create(null);
+            var hasEnabledOccurrence = false;
+
+            for (var idx = 0; idx < occurrenceItems.length; idx += 1) {
+                var entry = occurrenceItems[idx];
+                if (!entry) {
+                    continue;
+                }
+
+                var occurrenceValue = normalizeOccurrenceValue(entry.start);
+                if (!occurrenceValue || seenValues[occurrenceValue]) {
+                    continue;
+                }
+
+                var occurrenceDate = parseOccurrenceDate(entry);
+                if (!occurrenceDate) {
+                    continue;
+                }
+
+                seenValues[occurrenceValue] = true;
+                normalized.push({
+                    value: occurrenceValue,
+                    entry: entry,
+                    date: occurrenceDate,
+                });
+
+                if (!entry.isPast) {
+                    hasEnabledOccurrence = true;
+                }
+            }
+
+            if (!normalized.length) {
+                return false;
+            }
+
+            normalized.sort(function (a, b) {
+                return a.date.getTime() - b.date.getTime();
+            });
+
+            var monthMap = Object.create(null);
+            var monthOrder = [];
+
+            normalized.forEach(function (item) {
+                var year = item.date.getFullYear();
+                var monthIndex = item.date.getMonth();
+                var dayIndex = item.date.getDate();
+                var monthKey = year + '-' + String(monthIndex + 1).padStart(2, '0');
+
+                if (!monthMap[monthKey]) {
+                    monthMap[monthKey] = {
+                        year: year,
+                        month: monthIndex,
+                        days: Object.create(null),
+                    };
+                    monthOrder.push(monthKey);
+                }
+
+                var monthData = monthMap[monthKey];
+                if (!monthData.days[dayIndex]) {
+                    monthData.days[dayIndex] = {
+                        iso: year + '-' + String(monthIndex + 1).padStart(2, '0') + '-' + String(dayIndex).padStart(2, '0'),
+                        occurrences: [],
+                    };
+                }
+                monthData.days[dayIndex].occurrences.push(item);
+            });
+
+            var calendarRoot = document.createElement('div');
+            calendarRoot.className = 'mj-member-events__signup-calendar';
+
+            var locale = resolveFormatterLocale();
+            var monthFormatter = null;
+            var weekdayFormatter = null;
+            try {
+                monthFormatter = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' });
+            } catch (error) {
+                monthFormatter = null;
+            }
+            try {
+                weekdayFormatter = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+            } catch (error) {
+                weekdayFormatter = null;
+            }
+
+            var weekdayLabels = [];
+            if (weekdayFormatter) {
+                var reference = new Date(2020, 5, 1);
+                for (var offset = 0; offset < 7; offset += 1) {
+                    var candidate = new Date(reference.getTime());
+                    candidate.setDate(reference.getDate() + offset);
+                    var labelCandidate = weekdayFormatter.format(candidate) || '';
+                    labelCandidate = labelCandidate.replace(/\.$/, '');
+                    if (labelCandidate.length > 3) {
+                        labelCandidate = labelCandidate.slice(0, 3);
+                    }
+                    if (labelCandidate) {
+                        labelCandidate = labelCandidate.charAt(0).toUpperCase() + labelCandidate.slice(1).toLowerCase();
+                    }
+                    weekdayLabels.push(labelCandidate);
+                }
+            } else {
+                weekdayLabels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+            }
+
+            var builtCount = 0;
+
+            monthOrder.forEach(function (monthKey) {
+                var monthData = monthMap[monthKey];
+                if (!monthData) {
+                    return;
+                }
+
+                var monthNode = document.createElement('section');
+                monthNode.className = 'mj-member-events__signup-calendar-month';
+
+                var titleNode = document.createElement('p');
+                titleNode.className = 'mj-member-events__signup-calendar-title';
+                var titleLabel = monthFormatter ? monthFormatter.format(new Date(monthData.year, monthData.month, 1)) : monthKey.replace('-', ' / ');
+                if (titleLabel && titleLabel.charAt) {
+                    titleLabel = titleLabel.charAt(0).toUpperCase() + titleLabel.slice(1);
+                }
+                titleNode.textContent = titleLabel;
+                monthNode.appendChild(titleNode);
+
+                var weekdayRow = document.createElement('ol');
+                weekdayRow.className = 'mj-member-events__signup-calendar-weekdays';
+                for (var w = 0; w < 7; w += 1) {
+                    var weekdayNode = document.createElement('li');
+                    weekdayNode.className = 'mj-member-events__signup-calendar-weekday';
+                    weekdayNode.textContent = weekdayLabels[w] || '';
+                    weekdayRow.appendChild(weekdayNode);
+                }
+                monthNode.appendChild(weekdayRow);
+
+                var dayGrid = document.createElement('ol');
+                dayGrid.className = 'mj-member-events__signup-calendar-grid';
+
+                var firstDay = new Date(monthData.year, monthData.month, 1);
+                var daysInMonth = new Date(monthData.year, monthData.month + 1, 0).getDate();
+                var startOffset = (firstDay.getDay() + 6) % 7;
+
+                for (var blank = 0; blank < startOffset; blank += 1) {
+                    var blankCell = document.createElement('li');
+                    blankCell.className = 'mj-member-events__signup-calendar-day is-empty';
+                    blankCell.setAttribute('aria-hidden', 'true');
+                    dayGrid.appendChild(blankCell);
+                }
+
+                for (var dayIndex = 1; dayIndex <= daysInMonth; dayIndex += 1) {
+                    var dayEntry = monthData.days[dayIndex] || null;
+                    var dayNode = document.createElement('li');
+                    dayNode.className = 'mj-member-events__signup-calendar-day';
+                    dayNode.dataset.date = monthData.year + '-' + String(monthData.month + 1).padStart(2, '0') + '-' + String(dayIndex).padStart(2, '0');
+
+                    var weekdayIndex = (startOffset + dayIndex - 1) % 7;
+                    if (weekdayIndex >= 5) {
+                        dayNode.classList.add('is-weekend');
+                    }
+
+                    var dayNumber = document.createElement('span');
+                    dayNumber.className = 'mj-member-events__signup-calendar-day-number';
+                    dayNumber.textContent = String(dayIndex);
+                    dayNode.appendChild(dayNumber);
+
+                    if (dayEntry && dayEntry.occurrences.length) {
+                        var occurrenceList = document.createElement('ul');
+                        occurrenceList.className = 'mj-member-events__signup-calendar-occurrences';
+
+                        dayEntry.occurrences.forEach(function (entryItem) {
+                            var occurrenceNode = document.createElement('li');
+                            occurrenceNode.className = 'mj-member-events__signup-calendar-occurrence';
+                            var occurrenceIsPast = !!entryItem.entry.isPast;
+                            if (occurrenceIsPast) {
+                                occurrenceNode.classList.add('is-past');
+                            }
+
+                            var occurrenceLabelNode = document.createElement('label');
+                            occurrenceLabelNode.className = 'mj-member-events__signup-calendar-checkbox';
+
+                            var checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+                            checkbox.name = 'occurrence[]';
+                            checkbox.value = entryItem.value;
+                            checkbox.disabled = occurrenceIsPast;
+                            if (!occurrenceIsPast) {
+                                requiresOccurrenceSelection = true;
+                            }
+                            if (selectedOccurrenceMap[entryItem.value]) {
+                                checkbox.checked = true;
+                                occurrenceNode.classList.add('is-selected');
+                            }
+
+                            occurrenceLabelNode.appendChild(checkbox);
+
+                            var pill = document.createElement('span');
+                            pill.className = 'mj-member-events__signup-calendar-pill';
+                            var timeLabel = formatOccurrenceTime(entryItem.entry);
+                            pill.textContent = timeLabel || strings.occurrenceCalendarAllDay || 'Toute la journée';
+                            occurrenceLabelNode.appendChild(pill);
+
+                            occurrenceNode.appendChild(occurrenceLabelNode);
+
+                            occurrenceCheckboxes.push(checkbox);
+
+                            (function (inputNode, itemNode, dayContext) {
+                                inputNode.addEventListener('change', function () {
+                                    if (inputNode.checked) {
+                                        itemNode.classList.add('is-selected');
+                                    } else {
+                                        itemNode.classList.remove('is-selected');
+                                    }
+                                    syncInlineCalendarDay(dayContext);
+                                    updateSubmitAvailability();
+                                    notifyOccurrenceSelectionChanged('legacy');
+                                });
+                            })(checkbox, occurrenceNode, dayNode);
+
+                            occurrenceList.appendChild(occurrenceNode);
+                            syncInlineCalendarDay(dayNode);
+                            builtCount += 1;
+                        });
+
+                        dayNode.appendChild(occurrenceList);
+                    } else {
+                        dayNode.classList.add('is-disabled');
+                    }
+
+                    dayGrid.appendChild(dayNode);
+                }
+
+                monthNode.appendChild(dayGrid);
+                calendarRoot.appendChild(monthNode);
+            });
+
+            if (!builtCount) {
+                return false;
+            }
+
+            occurrenceFieldset.appendChild(calendarRoot);
+
+            if (!hasEnabledOccurrence) {
+                requiresOccurrenceSelection = false;
+            }
+
+            return true;
+        }
+
+        function buildInlineOccurrenceList(includeTime) {
+            var listRoot = document.createElement('ul');
+            listRoot.className = 'mj-member-events__signup-occurrence-list';
+
+            var seenValues = Object.create(null);
+            var builtCount = 0;
+            var hasEnabledOccurrence = false;
+
+            for (var idx = 0; idx < occurrenceItems.length; idx += 1) {
+                var entry = occurrenceItems[idx];
+                if (!entry) {
+                    continue;
+                }
+
+                var occurrenceValue = normalizeOccurrenceValue(entry.start);
+                if (!occurrenceValue || seenValues[occurrenceValue]) {
+                    continue;
+                }
+                seenValues[occurrenceValue] = true;
+
+                var occurrenceItem = document.createElement('li');
+                occurrenceItem.className = 'mj-member-events__signup-occurrence-item';
+                var occurrenceIsPast = !!entry.isPast;
+                if (occurrenceIsPast) {
+                    occurrenceItem.classList.add('is-past');
+                }
+
+                var labelNode = document.createElement('label');
+                labelNode.className = 'mj-member-events__signup-occurrence-label';
+
+                var checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.name = 'occurrence[]';
+                checkbox.value = occurrenceValue;
+                checkbox.disabled = occurrenceIsPast;
+                if (!occurrenceIsPast) {
+                    hasEnabledOccurrence = true;
+                }
+                if (selectedOccurrenceMap[occurrenceValue]) {
+                    checkbox.checked = true;
+                    occurrenceItem.classList.add('is-selected');
+                }
+                labelNode.appendChild(checkbox);
+
+                var textNode = document.createElement('span');
+                textNode.textContent = formatOccurrenceLabel(entry, includeTime);
+                labelNode.appendChild(textNode);
+
+                if (occurrenceIsPast) {
+                    var badge = document.createElement('span');
+                    badge.className = 'mj-member-events__signup-occurrence-badge';
+                    badge.textContent = strings.occurrencePast || 'Passée';
+                    labelNode.appendChild(badge);
+                }
+
+                occurrenceItem.appendChild(labelNode);
+                listRoot.appendChild(occurrenceItem);
+                occurrenceCheckboxes.push(checkbox);
+
+                (function (inputNode, itemNode) {
+                    inputNode.addEventListener('change', function () {
+                        if (inputNode.checked) {
+                            itemNode.classList.add('is-selected');
+                        } else {
+                            itemNode.classList.remove('is-selected');
+                        }
+                        updateSubmitAvailability();
+                        notifyOccurrenceSelectionChanged('legacy');
+                    });
+                })(checkbox, occurrenceItem);
+
+                builtCount += 1;
+            }
+
+            if (!builtCount) {
+                return false;
+            }
+
+            occurrenceFieldset.appendChild(listRoot);
+
+            if (!hasEnabledOccurrence) {
+                requiresOccurrenceSelection = false;
+            }
+
+            return true;
+        }
+
+        function buildOccurrenceSelector() {
+            if (!allowOccurrenceSelection || !occurrenceItems.length) {
+                requiresOccurrenceSelection = false;
+                writeOccurrenceStore([]);
+                notifyOccurrenceSelectionChanged('legacy');
+                return;
+            }
+
+            if (occurrenceFieldset && occurrenceFieldset.parentNode) {
+                occurrenceFieldset.parentNode.removeChild(occurrenceFieldset);
+            }
+
+            occurrenceCheckboxes = [];
+            occurrenceHelpNode = null;
+            requiresOccurrenceSelection = allowOccurrenceSelection && occurrenceItems.length > 0;
+
+            occurrenceFieldset = document.createElement('fieldset');
+            occurrenceFieldset.className = 'mj-member-event-single__registration-occurrences';
+
+            var legendNode = document.createElement('legend');
+            legendNode.textContent = strings.occurrenceLegend || 'Quelles dates ?';
+            occurrenceFieldset.appendChild(legendNode);
+
+            if (occurrenceSummaryText) {
+                var summaryNode = document.createElement('p');
+                summaryNode.className = 'mj-member-events__signup-occurrence-summary';
+                summaryNode.textContent = occurrenceSummaryText;
+                occurrenceFieldset.appendChild(summaryNode);
+            }
+
+            var includeTime = determineOccurrenceTimePreference();
+            var calendarBuilt = buildInlineCalendar();
+            if (!calendarBuilt) {
+                buildInlineOccurrenceList(includeTime);
+            }
+
+            if (!occurrenceCheckboxes.length) {
+                var emptyNotice = document.createElement('p');
+                emptyNotice.className = 'mj-member-events__signup-occurrence-empty';
+                emptyNotice.textContent = strings.occurrenceAvailableEmpty || 'Aucune occurrence disponible.';
+                occurrenceFieldset.appendChild(emptyNotice);
+                requiresOccurrenceSelection = false;
+            } else {
+                occurrenceHelpNode = document.createElement('p');
+                occurrenceHelpNode.className = 'mj-member-events__signup-occurrence-help';
+                if (scheduleMode === 'recurring' || scheduleMode === 'series') {
+                    occurrenceHelpNode.textContent = strings.occurrenceHelpRecurring || "Selectionne les dates qui t interessent.";
+                } else {
+                    occurrenceHelpNode.textContent = strings.occurrenceHelp || 'Coche les occurrences auxquelles tu participeras.';
+                }
+                occurrenceFieldset.appendChild(occurrenceHelpNode);
+            }
+
+            if (noteContainer) {
+                form.insertBefore(occurrenceFieldset, noteContainer);
+            } else if (submitButton) {
+                form.insertBefore(occurrenceFieldset, submitButton);
+            } else {
+                form.appendChild(occurrenceFieldset);
+            }
+
+            if (requiresOccurrenceSelection && occurrenceHelpNode) {
+                occurrenceHelpNode.classList.toggle('is-warning', collectSelectedOccurrences().length === 0);
+            }
+
+            updateSubmitAvailability();
+            notifyOccurrenceSelectionChanged('legacy');
+        }
+
+        form.addEventListener('mj-member:event-single-occurrences', function (event) {
+            var detail = event && event.detail ? event.detail : {};
+            var origin = typeof detail.origin === 'string' ? detail.origin : 'external';
+            var values = sanitizeOccurrenceValues(detail.occurrences);
+
+            writeOccurrenceStore(values);
+
+            if (occurrenceCheckboxes.length) {
+                var lookup = Object.create(null);
+                for (var i = 0; i < values.length; i += 1) {
+                    lookup[values[i]] = true;
+                }
+
+                for (var idx = 0; idx < occurrenceCheckboxes.length; idx += 1) {
+                    var checkbox = occurrenceCheckboxes[idx];
+                    if (!checkbox) {
+                        continue;
+                    }
+                    var normalizedValue = normalizeOccurrenceValue(checkbox.value);
+                    var shouldCheck = !!lookup[normalizedValue];
+                    if (!checkbox.disabled) {
+                        checkbox.checked = shouldCheck;
+                    }
+                    var occurrenceItem = checkbox.closest('.mj-member-events__signup-calendar-occurrence, .mj-member-events__signup-occurrence-item');
+                    if (occurrenceItem) {
+                        occurrenceItem.classList.toggle('is-selected', shouldCheck && !checkbox.disabled);
+                    }
+                    var dayNode = checkbox.closest('.mj-member-events__signup-calendar-day');
+                    syncInlineCalendarDay(dayNode);
+                }
+            }
+
+            if (occurrenceHelpNode) {
+                occurrenceHelpNode.classList.toggle('is-warning', requiresOccurrenceSelection && values.length === 0);
+            }
+
+            if (origin !== 'legacy') {
+                updateSubmitAvailability();
+            }
+        });
+
+        function setSubmitting(isSubmitting) {
+            form.dataset.submitting = isSubmitting ? '1' : '0';
+            if (!submitButton) {
+                return;
+            }
+
+            if (isSubmitting) {
+                if (!submitButton.dataset.originalLabel) {
+                    submitButton.dataset.originalLabel = submitButton.textContent || '';
+                }
+                submitButton.disabled = true;
+                if (strings.loading) {
+                    submitButton.textContent = strings.loading;
+                }
+            } else {
+                submitButton.disabled = false;
+                var restoredLabel = submitButton.dataset.originalLabel || originalSubmitLabel;
+                if (restoredLabel) {
+                    submitButton.textContent = restoredLabel;
+                }
+                updateSubmitAvailability();
+            }
+        }
+
+        function ensureSelection() {
+            var checked = form.querySelector('input[name="participant"]:checked:not([disabled])');
+            if (checked) {
+                return;
+            }
+            var firstAvailable = form.querySelector('input[name="participant"]:not([disabled])');
+            if (firstAvailable) {
+                firstAvailable.checked = true;
+            }
+        }
+
+        function updateMembersState() {
+            var availableCount = 0;
+            Array.prototype.forEach.call(radios, function (radio) {
+                if (!radio.disabled) {
+                    availableCount += 1;
+                }
+            });
+
+            if (membersEmptyNode) {
+                membersEmptyNode.hidden = availableCount > 0;
+            }
+
+            ensureSelection();
+            updateSubmitAvailability(availableCount);
+        }
+
+        function markParticipantAsRegistered(radio, responseData) {
+            if (!radio) {
+                return;
+            }
+
+            radio.checked = false;
+            radio.disabled = true;
+
+            var item = radio.closest('[data-mj-event-member]');
+            if (!item) {
+                return;
+            }
+
+            item.classList.add('is-registered');
+            if (responseData && responseData.registration_id) {
+                item.setAttribute('data-registration-id', String(responseData.registration_id));
+            }
+
+            var statusNode = item.querySelector('[data-role="status"]');
+            if (statusNode) {
+                var statusText = '';
+                if (responseData && responseData.is_waitlist) {
+                    statusText = strings.waitlistStatus || "En liste d'attente";
+                    item.setAttribute('data-status-key', 'liste_attente');
+                } else {
+                    statusText = strings.pendingStatus || strings.registered || strings.success || 'Inscription envoyée';
+                    item.setAttribute('data-status-key', 'en_attente');
+                }
+                statusNode.textContent = statusText;
+            }
+        }
+
+        Array.prototype.forEach.call(radios, function (radio) {
+            radio.addEventListener('change', function () {
+                if (radio.disabled) {
+                    return;
+                }
+                setFeedback(feedbackNode, '', false);
+                updateSubmitAvailability();
+            });
+        });
+
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            if (form.dataset.submitting === '1') {
+                return;
+            }
+
+            if (!ajaxUrl || !nonce) {
+                setFeedback(feedbackNode, strings.genericError || 'Une erreur est survenue. Merci de réessayer.', true);
+                return;
+            }
+
+            if (!eventId) {
+                setFeedback(feedbackNode, strings.genericError || 'Une erreur est survenue. Merci de réessayer.', true);
+                return;
+            }
+
+            var selected = form.querySelector('input[name="participant"]:checked');
+            if (!selected || selected.disabled) {
+                setFeedback(feedbackNode, strings.selectParticipant || 'Merci de sélectionner un participant.', true);
+                return;
+            }
+
+            var memberId = selected.value || '';
+            if (!memberId) {
+                setFeedback(feedbackNode, strings.selectParticipant || 'Merci de sélectionner un participant.', true);
+                return;
+            }
+
+            setSubmitting(true);
+            setFeedback(feedbackNode, '', false);
+
+            var payload = new window.FormData();
+            payload.append('action', 'mj_member_register_event');
+            payload.append('nonce', nonce);
+            payload.append('event_id', String(eventId));
+            payload.append('member_id', memberId);
+
+            if (noteField) {
+                var noteValue = noteField.value || '';
+                if (noteValue && noteMaxLength > 0 && noteValue.length > noteMaxLength) {
+                    noteValue = noteValue.slice(0, noteMaxLength);
+                }
+                payload.append('note', noteValue);
+            } else {
+                payload.append('note', '');
+            }
+
+            var selectedOccurrences = collectSelectedOccurrences();
+            if (requiresOccurrenceSelection && selectedOccurrences.length === 0) {
+                setFeedback(feedbackNode, strings.occurrenceMissing || 'Merci de sélectionner au moins une occurrence.', true);
+                if (occurrenceHelpNode) {
+                    occurrenceHelpNode.classList.add('is-warning');
+                }
+                setSubmitting(false);
+                updateSubmitAvailability();
+                return;
+            }
+
+            if (selectedOccurrences.length) {
+                try {
+                    payload.append('occurrences', JSON.stringify(selectedOccurrences));
+                } catch (error) {
+                    // silently ignore JSON issues
+                }
+            }
+
+            window.fetch(ajaxUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: payload,
+            }).then(function (response) {
+                return response.json().then(function (json) {
+                    return { ok: response.ok, status: response.status, json: json };
+                }).catch(function () {
+                    return { ok: response.ok, status: response.status, json: null };
+                });
+            }).then(function (result) {
+                if (!result.ok || !result.json) {
+                    var messageError = strings.genericError || 'Une erreur est survenue. Merci de réessayer.';
+                    if (result.json && result.json.data && result.json.data.message) {
+                        messageError = result.json.data.message;
+                    }
+                    setFeedback(feedbackNode, messageError, true);
+                    return null;
+                }
+
+                if (!result.json.success) {
+                    var messageFail = strings.genericError || 'Une erreur est survenue. Merci de réessayer.';
+                    if (result.json.data && result.json.data.message) {
+                        messageFail = result.json.data.message;
+                    }
+                    setFeedback(feedbackNode, messageFail, true);
+                    return null;
+                }
+
+                return result.json.data || {};
+            }).then(function (data) {
+                if (!data) {
+                    return;
+                }
+
+                var serverMessage = data.message || strings.success || 'Inscription enregistrée !';
+                var paymentInfo = data.payment || null;
+                var feedbackMessage = serverMessage;
+
+                if (paymentInfo && paymentInfo.checkout_url) {
+                    feedbackMessage = serverMessage + ' ' + (strings.paymentFallback || "Si la page de paiement ne s'ouvre pas, copiez ce lien : ") + ' ' + paymentInfo.checkout_url;
+                }
+
+                setFeedback(feedbackNode, feedbackMessage, !!data.payment_error);
+
+                if (noteField) {
+                    noteField.value = '';
+                }
+
+                markParticipantAsRegistered(selected, data);
+                resetOccurrenceSelection();
+                updateMembersState();
+
+                refreshReservationPanel({ silent: true });
+
+                if (paymentInfo && paymentInfo.checkout_url) {
+                    var opened = window.open(paymentInfo.checkout_url, '_blank', 'noopener,noreferrer');
+                    if (!opened) {
+                        window.location.href = paymentInfo.checkout_url;
+                    }
+                }
+            }).catch(function (error) {
+                var errorMessage = strings.genericError || 'Une erreur est survenue. Merci de réessayer.';
+                if (error && error.message) {
+                    errorMessage = error.message;
+                }
+                setFeedback(feedbackNode, errorMessage, true);
+            }).finally(function () {
+                setSubmitting(false);
+                updateMembersState();
+                updateSubmitAvailability();
+            });
+        });
+
+        buildOccurrenceSelector();
+        updateMembersState();
+    }
+
+    function initEventRegistrationForms() {
+        if (typeof document === 'undefined') {
+            return;
+        }
+
+        var forms = document.querySelectorAll('[data-mj-event-registration]');
+        toArray(forms).forEach(function (form) {
+            setupInlineRegistrationForm(form);
+        });
+    }
+
     function parsePayload(button) {
         var raw = button.getAttribute('data-registration');
         if (!raw) {
@@ -99,12 +1472,13 @@
 
     function recomputePayloadState(payload) {
         if (!payload) {
-            return { total: 0, available: 0 };
+            return { total: 0, available: 0, ineligible: 0 };
         }
 
         var participants = Array.isArray(payload.participants) ? payload.participants : [];
         var available = 0;
         var total = 0;
+        var ineligible = 0;
 
         for (var i = 0; i < participants.length; i++) {
             var participant = participants[i];
@@ -112,16 +1486,30 @@
                 continue;
             }
             total += 1;
-            if (!participant.isRegistered) {
+
+            var participantEligible = true;
+            if (Object.prototype.hasOwnProperty.call(participant, 'eligible')) {
+                participantEligible = !!participant.eligible;
+            } else if (Object.prototype.hasOwnProperty.call(participant, 'isEligible')) {
+                participantEligible = participant.isEligible !== 0 && participant.isEligible !== false;
+            }
+
+            if (!participantEligible) {
+                ineligible += 1;
+            }
+
+            if (!participant.isRegistered && participantEligible) {
                 available += 1;
             }
         }
 
         payload.hasParticipants = total > 0;
         payload.hasAvailableParticipants = available > 0;
+        payload.hasIneligibleParticipants = ineligible > 0;
+        payload.ineligibleCount = ineligible;
         payload.allRegistered = total > 0 && available === 0;
 
-        return { total: total, available: available };
+        return { total: total, available: available, ineligible: ineligible };
     }
 
     function normalizeOccurrenceValue(value) {
@@ -246,7 +1634,6 @@
             }
         }
         return fallback;
-        return entry.start ? String(entry.start) : raw;
     }
 
     function resolveButtonMessages(button) {
@@ -291,7 +1678,9 @@
     }
 
     function buildSignup(card, button, signup, feedback, payload) {
-        if (activeSignup && activeSignup !== signup) {
+        var isPersistentSignup = !!(signup && signup.dataset && signup.dataset.persistent === '1');
+
+        if (activeSignup && activeSignup !== signup && !isPersistentSignup) {
             closeSignup(activeSignup);
         }
 
@@ -334,6 +1723,70 @@
         form.className = 'mj-member-events__signup-form';
         form.setAttribute('data-event-id', payload.eventId || '');
 
+        var inlineCta = null;
+        var inlineCtaRegisterLabel = strings.confirmInline || strings.confirm || "Confirmer l'inscription";
+        var inlineCtaUpdateLabel = strings.updateInline || strings.updateOccurrences || 'Mettre à jour';
+        var inlineCtaLoadingLabel = strings.loading || 'En cours...';
+
+        function setInlineCtaHidden(hidden) {
+            if (!inlineCta) {
+                return;
+            }
+            inlineCta.hidden = !!hidden;
+        }
+
+        function setInlineCtaDisabled(disabled) {
+            if (!inlineCta) {
+                return;
+            }
+            if (disabled) {
+                inlineCta.classList.add('is-disabled');
+                inlineCta.setAttribute('aria-disabled', 'true');
+            } else {
+                inlineCta.classList.remove('is-disabled');
+                inlineCta.removeAttribute('aria-disabled');
+            }
+        }
+
+        function setInlineCtaLabel(label) {
+            if (!inlineCta) {
+                return;
+            }
+            inlineCta.textContent = label;
+        }
+
+        function triggerInlineSubmit() {
+            if (form.dataset.submitting === '1') {
+                return;
+            }
+            if (!inlineCta || inlineCta.classList.contains('is-disabled')) {
+                return;
+            }
+            if (typeof form.requestSubmit === 'function') {
+                form.requestSubmit();
+            } else {
+                form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+            }
+        }
+
+        function syncCalendarDayState(dayNode) {
+            if (!dayNode) {
+                return;
+            }
+            var hasHighlight = false;
+            var occurrenceItems = dayNode.querySelectorAll('.mj-member-events__signup-calendar-occurrence');
+            Array.prototype.forEach.call(occurrenceItems, function (item) {
+                if (item.classList.contains('is-assigned') || item.classList.contains('is-selected')) {
+                    hasHighlight = true;
+                }
+            });
+            if (hasHighlight) {
+                dayNode.classList.add('has-selection');
+            } else {
+                dayNode.classList.remove('has-selection');
+            }
+        }
+
         var title = document.createElement('p');
         title.className = 'mj-member-events__signup-title';
         title.textContent = strings.chooseParticipant || 'Choisissez le participant';
@@ -342,6 +1795,8 @@
         var participants = Array.isArray(payload.participants) ? payload.participants : [];
         var participantsCount = participants.length;
         var availableParticipantsCount = 0;
+        var hasIneligible = false;
+        var hasUnregistered = false;
         var firstSelectable = null;
         var preferredRadio = null;
         var infoMessage = null;
@@ -352,6 +1807,12 @@
             noteMaxLength = 400;
         }
         var occurrences = Array.isArray(payload.occurrences) ? payload.occurrences : [];
+        var allowOccurrenceSelection = true;
+        if (payload && Object.prototype.hasOwnProperty.call(payload, 'allowOccurrenceSelection')) {
+            allowOccurrenceSelection = !!payload.allowOccurrenceSelection;
+        } else if (payload && typeof payload.occurrenceSelectionMode === 'string') {
+            allowOccurrenceSelection = payload.occurrenceSelectionMode !== 'all_occurrences';
+        }
         var assignments = payload && payload.assignments && typeof payload.assignments === 'object' ? payload.assignments : {};
         var selectedOccurrenceMap = Object.create(null);
         if (assignments.mode === 'custom' && Array.isArray(assignments.occurrences)) {
@@ -406,10 +1867,38 @@
                     registrationId = 0;
                 }
 
+                var isEligible = true;
+                if (Object.prototype.hasOwnProperty.call(entry, 'eligible')) {
+                    isEligible = !!entry.eligible;
+                } else if (Object.prototype.hasOwnProperty.call(entry, 'isEligible')) {
+                    isEligible = entry.isEligible !== 0 && entry.isEligible !== false;
+                }
+
+                var ineligibleReasons = [];
+                if (Array.isArray(entry.ineligibleReasons) && entry.ineligibleReasons.length) {
+                    ineligibleReasons = entry.ineligibleReasons.slice();
+                } else if (Array.isArray(entry.ineligible_reasons) && entry.ineligible_reasons.length) {
+                    ineligibleReasons = entry.ineligible_reasons.slice();
+                }
+                ineligibleReasons = ineligibleReasons.map(function (reason) {
+                    return reason ? String(reason) : '';
+                }).filter(function (reason) {
+                    return reason !== '';
+                });
+
+                if (!isRegistered) {
+                    hasUnregistered = true;
+                }
+
                 var option = document.createElement('li');
                 option.className = 'mj-member-events__signup-option';
+                option.dataset.participantId = participantId;
                 if (isRegistered) {
                     option.classList.add('is-registered');
+                }
+                if (!isEligible) {
+                    option.classList.add('is-ineligible');
+                    hasIneligible = true;
                 }
 
                 var label = document.createElement('label');
@@ -420,20 +1909,20 @@
                 input.name = 'participant';
                 input.value = participantId;
                 input.required = true;
-                input.disabled = false;
+                input.disabled = !isEligible;
 
-                if (!isRegistered) {
+                if (!isRegistered && isEligible) {
                     availableParticipantsCount += 1;
                     if (!firstSelectable) {
                         firstSelectable = input;
                     }
                 }
 
-                if (preferredParticipantId && participantId === preferredParticipantId) {
+                if (preferredParticipantId && participantId === preferredParticipantId && !input.disabled) {
                     preferredRadio = input;
                 }
 
-                if (!firstSelectable && !preferredRadio && isRegistered && !availableParticipantsCount) {
+                if (!firstSelectable && !preferredRadio && isRegistered && !availableParticipantsCount && !input.disabled) {
                     firstSelectable = input;
                 }
 
@@ -444,139 +1933,44 @@
                 label.appendChild(input);
                 label.appendChild(span);
 
+                var statusText = '';
+                var statusClassName = 'mj-member-events__signup-status';
+                var currentStatus = entry.registrationStatus ? String(entry.registrationStatus) : '';
+
                 if (isRegistered) {
-                    var status = document.createElement('span');
-                    status.className = 'mj-member-events__signup-status';
-                    var statusLabel = strings.alreadyRegistered || 'Déjà inscrit';
-                    var currentStatus = entry.registrationStatus ? String(entry.registrationStatus) : '';
+                    statusText = strings.alreadyRegistered || 'Déjà inscrit';
                     if (currentStatus === 'liste_attente') {
-                        statusLabel = strings.waitlistStatus || 'En liste d\'attente';
+                        statusText = strings.waitlistStatus || 'En liste d\'attente';
                     } else if (currentStatus === 'en_attente') {
-                        statusLabel = strings.pendingStatus || 'En attente';
+                        statusText = strings.pendingStatus || 'En attente';
                     } else if (currentStatus === 'valide') {
-                        statusLabel = strings.confirmedStatus || 'Confirmé';
+                        statusText = strings.confirmedStatus || 'Confirmé';
                     }
-                    status.textContent = statusLabel;
+                }
+
+                if (!isEligible) {
+                    statusText = strings.ineligibleStatus || 'Conditions non respectées';
+                    statusClassName += ' is-ineligible';
+                }
+
+                if (statusText) {
+                    var status = document.createElement('span');
+                    status.className = statusClassName;
+                    status.textContent = statusText;
                     label.appendChild(status);
                 }
 
                 option.appendChild(label);
 
-                if (isRegistered && ajaxUrl && nonce) {
-                    (function (participantEntry, currentRegistrationId) {
-                        var controls = document.createElement('div');
-                        controls.className = 'mj-member-events__signup-controls';
-
-                        var unregisterButton = document.createElement('button');
-                        unregisterButton.type = 'button';
-                        unregisterButton.className = 'mj-member-events__signup-toggle';
-                        unregisterButton.textContent = strings.unregister || 'Se désinscrire';
-
-                        controls.appendChild(unregisterButton);
-                        option.appendChild(controls);
-
-                        unregisterButton.addEventListener('click', function () {
-                            if (form.dataset.submitting === '1') {
-                                return;
-                            }
-
-                            if (!ajaxUrl || !nonce) {
-                                setFeedback(formFeedback, strings.genericError || 'Une erreur est survenue. Merci de réessayer.', true);
-                                return;
-                            }
-
-                            if (strings.unregisterConfirm && !window.confirm(strings.unregisterConfirm)) {
-                                return;
-                            }
-
-                            form.dataset.submitting = '1';
-                            unregisterButton.disabled = true;
-                            setFeedback(formFeedback, '', false);
-                            if (feedback) {
-                                setFeedback(feedback, '', false);
-                            }
-
-                            var payloadData = new window.FormData();
-                            payloadData.append('action', 'mj_member_unregister_event');
-                            payloadData.append('nonce', nonce);
-                            payloadData.append('event_id', payload.eventId || '');
-                            payloadData.append('member_id', participantEntry.id || '');
-                            if (currentRegistrationId > 0) {
-                                payloadData.append('registration_id', currentRegistrationId);
-                            }
-
-                            window.fetch(ajaxUrl, {
-                                method: 'POST',
-                                credentials: 'same-origin',
-                                body: payloadData,
-                            }).then(function (response) {
-                                return response.json().then(function (json) {
-                                    return { ok: response.ok, status: response.status, json: json };
-                                }).catch(function () {
-                                    return { ok: response.ok, status: response.status, json: null };
-                                });
-                            }).then(function (result) {
-                                if (!result.ok || !result.json) {
-                                    var messageNetwork = strings.unregisterError || strings.genericError || 'Une erreur est survenue. Merci de réessayer.';
-                                    setFeedback(formFeedback, messageNetwork, true);
-                                    return;
-                                }
-
-                                if (!result.json.success) {
-                                    var messageFail = strings.unregisterError || strings.genericError || 'Une erreur est survenue. Merci de réessayer.';
-                                    if (result.json.data && result.json.data.message) {
-                                        messageFail = result.json.data.message;
-                                    }
-                                    setFeedback(formFeedback, messageFail, true);
-                                    return;
-                                }
-
-                                participantEntry.isRegistered = false;
-                                participantEntry.registrationId = 0;
-                                participantEntry.registrationStatus = '';
-                                participantEntry.registrationCreatedAt = '';
-                                participantEntry.occurrenceAssignments = {
-                                    mode: 'all',
-                                    occurrences: [],
-                                };
-
-                                participantStates[String(participantEntry.id)] = {
-                                    isRegistered: false,
-                                    assignments: participantEntry.occurrenceAssignments,
-                                    registrationId: 0,
-                                };
-
-                                payload.participants = participants;
-                                recomputePayloadState(payload);
-
-                                try {
-                                    button.setAttribute('data-registration', JSON.stringify(payload));
-                                } catch (error) {
-                                    // Ignore serialization errors silently
-                                }
-
-                                updateButtonState(button, payload);
-
-                                if (feedback) {
-                                    setFeedback(feedback, strings.unregisterSuccess || 'Inscription annulée.', false);
-                                }
-
-                                form.dataset.submitting = '0';
-                                unregisterButton.disabled = false;
-
-                                payload.preselectParticipantId = participantEntry.id;
-                                buildSignup(card, button, signup, feedback, payload);
-                            }).catch(function () {
-                                var messageError = strings.unregisterError || strings.genericError || 'Une erreur est survenue. Merci de réessayer.';
-                                setFeedback(formFeedback, messageError, true);
-                            }).then(function () {
-                                if (form.dataset.submitting !== '0') {
-                                    form.dataset.submitting = '0';
-                                }
-                                unregisterButton.disabled = false;
-                            });
-                        });
-                    })(entry, registrationId);
+                if (!isEligible && ineligibleReasons.length) {
+                    var reasonsList = document.createElement('ul');
+                    reasonsList.className = 'mj-member-events__signup-reasons';
+                    for (var reasonIndex = 0; reasonIndex < ineligibleReasons.length; reasonIndex++) {
+                        var reasonItem = document.createElement('li');
+                        reasonItem.textContent = ineligibleReasons[reasonIndex];
+                        reasonsList.appendChild(reasonItem);
+                    }
+                    option.appendChild(reasonsList);
                 }
 
                 list.appendChild(option);
@@ -591,262 +1985,624 @@
         }
 
         if (occurrences.length) {
-            var timeKeySet = Object.create(null);
-            var activeOccurrenceCount = 0;
-            for (var occIdxLoop = 0; occIdxLoop < occurrences.length; occIdxLoop++) {
-                var occurrenceCandidate = occurrences[occIdxLoop];
-                if (!occurrenceCandidate || occurrenceCandidate.isPast) {
-                    continue;
+            if (!allowOccurrenceSelection) {
+                if (occurrenceSummaryText) {
+                    var occurrenceSummaryMessage = document.createElement('p');
+                    occurrenceSummaryMessage.className = 'mj-member-events__signup-occurrence-summary';
+                    occurrenceSummaryMessage.textContent = occurrenceSummaryText;
+                    form.appendChild(occurrenceSummaryMessage);
                 }
-                activeOccurrenceCount++;
-                var keyCandidate = getOccurrenceTimeKey(occurrenceCandidate);
-                if (keyCandidate) {
-                    timeKeySet[keyCandidate] = true;
-                }
-            }
-            var includeTime = false;
-            if (activeOccurrenceCount <= 1) {
-                includeTime = true;
+
+                var autoAssignment = document.createElement('p');
+                autoAssignment.className = 'mj-member-events__signup-occurrence-summary';
+                autoAssignment.textContent = strings.occurrenceAutoAssigned || 'Toutes les occurrences sont incluses automatiquement.';
+                form.appendChild(autoAssignment);
             } else {
-                var timeKeyCount = 0;
-                for (var timeKey in timeKeySet) {
-                    if (Object.prototype.hasOwnProperty.call(timeKeySet, timeKey)) {
-                        timeKeyCount++;
-                        if (timeKeyCount > 1) {
-                            includeTime = true;
-                            break;
+                var timeKeySet = Object.create(null);
+                var activeOccurrenceCount = 0;
+                for (var occIdxLoop = 0; occIdxLoop < occurrences.length; occIdxLoop++) {
+                    var occurrenceCandidate = occurrences[occIdxLoop];
+                    if (!occurrenceCandidate || occurrenceCandidate.isPast) {
+                        continue;
+                    }
+                    activeOccurrenceCount++;
+                    var keyCandidate = getOccurrenceTimeKey(occurrenceCandidate);
+                    if (keyCandidate) {
+                        timeKeySet[keyCandidate] = true;
+                    }
+                }
+                var includeTime = false;
+                if (activeOccurrenceCount <= 1) {
+                    includeTime = true;
+                } else {
+                    var timeKeyCount = 0;
+                    for (var timeKey in timeKeySet) {
+                        if (Object.prototype.hasOwnProperty.call(timeKeySet, timeKey)) {
+                            timeKeyCount++;
+                            if (timeKeyCount > 1) {
+                                includeTime = true;
+                                break;
+                            }
                         }
                     }
                 }
-            }
 
-            occurrenceFieldset = document.createElement('fieldset');
-            occurrenceFieldset.className = 'mj-member-events__signup-occurrences';
+                occurrenceFieldset = document.createElement('fieldset');
+                occurrenceFieldset.className = 'mj-member-events__signup-occurrences';
 
-            var occurrenceLegend = document.createElement('legend');
-            occurrenceLegend.textContent = strings.occurrenceLegend || 'Quelles dates ?';
-            occurrenceFieldset.appendChild(occurrenceLegend);
+                var occurrenceLegend = document.createElement('legend');
+                occurrenceLegend.textContent = strings.occurrenceLegend || 'Quelles dates ?';
+                occurrenceFieldset.appendChild(occurrenceLegend);
 
-            if (occurrenceSummaryText) {
-                var occurrenceSummary = document.createElement('p');
-                occurrenceSummary.className = 'mj-member-events__signup-occurrence-summary';
-                occurrenceSummary.textContent = occurrenceSummaryText;
-                occurrenceFieldset.appendChild(occurrenceSummary);
-            }
-
-            var occurrenceSeen = Object.create(null);
-
-            function createOccurrenceSection(title, modifier) {
-                var section = document.createElement('section');
-                section.className = 'mj-member-events__signup-occurrence-section';
-                if (modifier) {
-                    section.className += ' is-' + modifier;
+                if (occurrenceSummaryText) {
+                    var occurrenceSummaryNode = document.createElement('p');
+                    occurrenceSummaryNode.className = 'mj-member-events__signup-occurrence-summary';
+                    occurrenceSummaryNode.textContent = occurrenceSummaryText;
+                    occurrenceFieldset.appendChild(occurrenceSummaryNode);
                 }
 
-                var heading = document.createElement('p');
-                heading.className = 'mj-member-events__signup-occurrence-heading';
-                heading.textContent = title;
-                section.appendChild(heading);
-
-                var list = document.createElement('ul');
-                list.className = 'mj-member-events__signup-occurrence-list';
-                section.appendChild(list);
-
-                var empty = document.createElement('p');
-                empty.className = 'mj-member-events__signup-occurrence-empty';
-                empty.textContent = modifier === 'registered'
-                    ? (strings.occurrenceRegisteredEmpty || 'Aucune réservation active.')
-                    : (strings.occurrenceAvailableEmpty || 'Toutes les dates sont déjà réservées.');
-                empty.hidden = true;
-                section.appendChild(empty);
-
-                return { section: section, list: list, empty: empty };
-            }
-
-            if (!isRecurringEvent) {
-                occurrenceList = document.createElement('ul');
-                occurrenceList.className = 'mj-member-events__signup-occurrence-list';
-            } else {
-                occurrenceColumns = document.createElement('div');
-                occurrenceColumns.className = 'mj-member-events__signup-occurrence-columns';
-
-                occurrenceRegisteredSection = createOccurrenceSection(
-                    strings.occurrenceRegisteredTitle || 'Vos réservations',
-                    'registered'
-                );
-                occurrenceAvailableSection = createOccurrenceSection(
-                    strings.occurrenceAvailableTitle || 'Autres dates disponibles',
-                    'available'
-                );
-
-                occurrenceColumns.appendChild(occurrenceRegisteredSection.section);
-                occurrenceColumns.appendChild(occurrenceAvailableSection.section);
-            }
-
-            function updateOccurrenceSectionState(sectionData, count) {
-                if (!sectionData || !sectionData.section || !sectionData.empty) {
-                    return;
-                }
-                if (typeof count !== 'number') {
-                    count = sectionData.list ? sectionData.list.children.length : 0;
-                }
-                if (count > 0) {
-                    sectionData.section.classList.remove('is-empty');
-                    sectionData.empty.hidden = true;
-                } else {
-                    sectionData.section.classList.add('is-empty');
-                    sectionData.empty.hidden = false;
-                }
-            }
-
-            syncOccurrenceSections = function () {
-                if (!isRecurringEvent) {
-                    return;
-                }
-
-                var registeredCount = 0;
-                var availableCount = 0;
-
-                for (var cIdx = 0; cIdx < occurrenceControls.length; cIdx++) {
-                    var controlEntry = occurrenceControls[cIdx];
-                    var parentNode = controlEntry && controlEntry.element ? controlEntry.element.parentNode : null;
-                    if (controlEntry.registeredList && parentNode === controlEntry.registeredList) {
-                        registeredCount++;
-                    } else if (controlEntry.availableList && parentNode === controlEntry.availableList) {
-                        availableCount++;
+                function parseOccurrenceDate(entry) {
+                    if (!entry) {
+                        return null;
                     }
+                    var parsedTimestamp = entry.timestamp !== undefined ? parseInt(entry.timestamp, 10) : NaN;
+                    if (!Number.isNaN(parsedTimestamp) && parsedTimestamp > 0) {
+                        return new Date(parsedTimestamp * 1000);
+                    }
+                    var startValue = entry.start ? String(entry.start) : '';
+                    if (startValue) {
+                        var normalized = startValue.replace(' ', 'T');
+                        var normalizedDate = new Date(normalized);
+                        if (!Number.isNaN(normalizedDate.getTime())) {
+                            return normalizedDate;
+                        }
+                        var fallbackDate = new Date(startValue);
+                        if (!Number.isNaN(fallbackDate.getTime())) {
+                            return fallbackDate;
+                        }
+                    }
+                    return null;
                 }
 
-                updateOccurrenceSectionState(occurrenceRegisteredSection, registeredCount);
-                updateOccurrenceSectionState(occurrenceAvailableSection, availableCount);
+                function buildOccurrenceCalendar() {
+                    var normalized = [];
+                    var seenValues = Object.create(null);
 
-                if (occurrenceRegisteredSection && occurrenceRegisteredSection.section) {
-                    occurrenceRegisteredSection.section.hidden = false;
-                }
-                if (occurrenceAvailableSection && occurrenceAvailableSection.section) {
-                    occurrenceAvailableSection.section.hidden = false;
-                }
-            };
+                    for (var idx = 0; idx < occurrences.length; idx++) {
+                        var entry = occurrences[idx];
+                        if (!entry) {
+                            continue;
+                        }
 
-            for (var occIndex = 0; occIndex < occurrences.length; occIndex++) {
-                var occurrenceEntry = occurrences[occIndex];
-                if (!occurrenceEntry) {
-                    continue;
-                }
+                        var occurrenceValue = normalizeOccurrenceValue(entry.start);
+                        if (!occurrenceValue || seenValues[occurrenceValue]) {
+                            continue;
+                        }
 
-                var occurrenceValue = normalizeOccurrenceValue(occurrenceEntry.start);
-                if (!occurrenceValue || occurrenceSeen[occurrenceValue]) {
-                    continue;
-                }
-                occurrenceSeen[occurrenceValue] = true;
+                        var occurrenceDate = parseOccurrenceDate(entry);
+                        if (!occurrenceDate) {
+                            return false;
+                        }
 
-                var occurrenceLabel = formatOccurrenceLabel(occurrenceEntry, includeTime);
-                var occurrenceIsPast = !!occurrenceEntry.isPast;
+                        seenValues[occurrenceValue] = true;
+                        normalized.push({
+                            value: occurrenceValue,
+                            entry: entry,
+                            date: occurrenceDate,
+                        });
+                    }
 
-                var occurrenceItem = document.createElement('li');
-                occurrenceItem.className = 'mj-member-events__signup-occurrence-item';
+                    if (!normalized.length) {
+                        return false;
+                    }
 
-                var occurrenceLabelNode = document.createElement('label');
-                occurrenceLabelNode.className = 'mj-member-events__signup-occurrence-label';
+                    normalized.sort(function (a, b) {
+                        return a.date.getTime() - b.date.getTime();
+                    });
 
-                var occurrenceInput = document.createElement('input');
-                occurrenceInput.type = 'checkbox';
-                occurrenceInput.name = 'occurrence[]';
-                occurrenceInput.value = occurrenceValue;
-                occurrenceInput.checked = false;
+                    var monthMap = Object.create(null);
+                    var monthOrder = [];
 
-                if (occurrenceIsPast) {
-                    occurrenceInput.disabled = true;
-                } else {
-                    hasEnabledOccurrence = true;
-                }
+                    normalized.forEach(function (item) {
+                        var year = item.date.getFullYear();
+                        var monthIndexValue = item.date.getMonth();
+                        var dayIndexValue = item.date.getDate();
+                        var monthKey = year + '-' + String(monthIndexValue + 1).padStart(2, '0');
 
-                occurrenceLabelNode.appendChild(occurrenceInput);
+                        if (!monthMap[monthKey]) {
+                            monthMap[monthKey] = {
+                                year: year,
+                                month: monthIndexValue,
+                                days: Object.create(null),
+                            };
+                            monthOrder.push(monthKey);
+                        }
 
-                var occurrenceText = document.createElement('span');
-                occurrenceText.textContent = occurrenceLabel;
-                occurrenceLabelNode.appendChild(occurrenceText);
+                        var monthData = monthMap[monthKey];
+                        if (!monthData.days[dayIndexValue]) {
+                            monthData.days[dayIndexValue] = {
+                                iso: year + '-' + String(monthIndexValue + 1).padStart(2, '0') + '-' + String(dayIndexValue).padStart(2, '0'),
+                                occurrences: [],
+                            };
+                        }
+                        monthData.days[dayIndexValue].occurrences.push(item);
+                    });
 
-                if (occurrenceIsPast) {
-                    var occurrenceBadge = document.createElement('span');
-                    occurrenceBadge.className = 'mj-member-events__signup-occurrence-badge';
-                    occurrenceBadge.textContent = strings.occurrencePast || 'Passée';
-                    occurrenceLabelNode.appendChild(occurrenceBadge);
-                }
+                    var calendarRoot = document.createElement('div');
+                    calendarRoot.className = 'mj-member-events__signup-calendar';
 
-                occurrenceItem.appendChild(occurrenceLabelNode);
+                    var locale = resolveFormatterLocale();
+                    var monthFormatter = null;
+                    var weekdayFormatter = null;
+                    try {
+                        monthFormatter = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' });
+                    } catch (error) {
+                        monthFormatter = null;
+                    }
+                    try {
+                        weekdayFormatter = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+                    } catch (error) {
+                        weekdayFormatter = null;
+                    }
 
-                var occurrenceActions = document.createElement('div');
-                occurrenceActions.className = 'mj-member-events__signup-occurrence-actions';
-                occurrenceActions.hidden = true;
+                    var weekdayLabels = [];
+                    if (weekdayFormatter) {
+                        var referenceDate = new Date(2020, 5, 1);
+                        for (var offset = 0; offset < 7; offset++) {
+                            var dateCandidate = new Date(referenceDate.getTime());
+                            dateCandidate.setDate(referenceDate.getDate() + offset);
+                            var weekdayLabel = weekdayFormatter.format(dateCandidate) || '';
+                            weekdayLabel = weekdayLabel.replace(/\.$/, '');
+                            if (weekdayLabel.length > 3) {
+                                weekdayLabel = weekdayLabel.slice(0, 3);
+                            }
+                            if (weekdayLabel) {
+                                weekdayLabel = weekdayLabel.charAt(0).toUpperCase() + weekdayLabel.slice(1).toLowerCase();
+                            }
+                            weekdayLabels.push(weekdayLabel);
+                        }
+                    } else {
+                        weekdayLabels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+                    }
 
-                var occurrenceUnregister = document.createElement('button');
-                occurrenceUnregister.type = 'button';
-                occurrenceUnregister.className = 'mj-member-events__signup-occurrence-toggle';
-                occurrenceUnregister.textContent = strings.unregisterOccurrence || strings.unregister || 'Se désinscrire';
-                occurrenceUnregister.dataset.occurrenceValue = occurrenceValue;
-                occurrenceUnregister.hidden = true;
+                    var builtCount = 0;
 
-                occurrenceActions.appendChild(occurrenceUnregister);
-                occurrenceItem.appendChild(occurrenceActions);
+                    monthOrder.forEach(function (monthKey) {
+                        var monthData = monthMap[monthKey];
+                        if (!monthData) {
+                            return;
+                        }
 
-                if (isRecurringEvent && occurrenceAvailableSection) {
-                    occurrenceAvailableSection.list.appendChild(occurrenceItem);
-                } else if (occurrenceList) {
-                    occurrenceList.appendChild(occurrenceItem);
-                }
+                        var monthNode = document.createElement('section');
+                        monthNode.className = 'mj-member-events__signup-calendar-month';
 
-                occurrenceControls.push({
-                    element: occurrenceItem,
-                    value: occurrenceValue,
-                    isPast: !!occurrenceIsPast,
-                    checkbox: occurrenceInput,
-                    actions: occurrenceActions,
-                    unregister: occurrenceUnregister,
-                    label: occurrenceLabelNode,
-                    registeredList: occurrenceRegisteredSection ? occurrenceRegisteredSection.list : null,
-                    availableList: occurrenceAvailableSection ? occurrenceAvailableSection.list : occurrenceList,
-                    registeredEmpty: occurrenceRegisteredSection ? occurrenceRegisteredSection.empty : null,
-                    availableEmpty: occurrenceAvailableSection ? occurrenceAvailableSection.empty : null,
-                    registeredSection: occurrenceRegisteredSection ? occurrenceRegisteredSection.section : null,
-                    availableSection: occurrenceAvailableSection ? occurrenceAvailableSection.section : null,
-                });
-            }
+                        var monthTitle = document.createElement('p');
+                        monthTitle.className = 'mj-member-events__signup-calendar-title';
+                        var monthLabel = monthFormatter ? monthFormatter.format(new Date(monthData.year, monthData.month, 1)) : monthKey.replace('-', ' / ');
+                        if (monthLabel && monthLabel.charAt) {
+                            monthLabel = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
+                        }
+                        monthTitle.textContent = monthLabel;
+                        monthNode.appendChild(monthTitle);
 
-            if (isRecurringEvent && occurrenceColumns) {
-                occurrenceFieldset.appendChild(occurrenceColumns);
-            } else if (occurrenceList && occurrenceList.children.length) {
-                occurrenceFieldset.appendChild(occurrenceList);
-                if (hasEnabledOccurrence) {
+                        var weekdayRow = document.createElement('ol');
+                        weekdayRow.className = 'mj-member-events__signup-calendar-weekdays';
+                        for (var wd = 0; wd < 7; wd++) {
+                            var weekdayItem = document.createElement('li');
+                            weekdayItem.className = 'mj-member-events__signup-calendar-weekday';
+                            weekdayItem.textContent = weekdayLabels[wd] || '';
+                            weekdayRow.appendChild(weekdayItem);
+                        }
+                        monthNode.appendChild(weekdayRow);
+
+                        var dayGrid = document.createElement('ol');
+                        dayGrid.className = 'mj-member-events__signup-calendar-grid';
+
+                        var firstDay = new Date(monthData.year, monthData.month, 1);
+                        var daysInMonth = new Date(monthData.year, monthData.month + 1, 0).getDate();
+                        var startOffset = (firstDay.getDay() + 6) % 7;
+                        for (var blank = 0; blank < startOffset; blank++) {
+                            var emptyCell = document.createElement('li');
+                            emptyCell.className = 'mj-member-events__signup-calendar-day is-empty';
+                            emptyCell.setAttribute('aria-hidden', 'true');
+                            dayGrid.appendChild(emptyCell);
+                        }
+
+                        for (var dayIndex = 1; dayIndex <= daysInMonth; dayIndex++) {
+                            var dayEntry = monthData.days[dayIndex] || null;
+                            var dayCell = document.createElement('li');
+                            dayCell.className = 'mj-member-events__signup-calendar-day';
+                            dayCell.dataset.date = monthData.year + '-' + String(monthData.month + 1).padStart(2, '0') + '-' + String(dayIndex).padStart(2, '0');
+
+                            var weekdayIndex = (startOffset + dayIndex - 1) % 7;
+                            if (weekdayIndex >= 5) {
+                                dayCell.classList.add('is-weekend');
+                            }
+
+                            var dayNumber = document.createElement('span');
+                            dayNumber.className = 'mj-member-events__signup-calendar-day-number';
+                            dayNumber.textContent = String(dayIndex);
+                            dayCell.appendChild(dayNumber);
+
+                            if (dayEntry && dayEntry.occurrences.length) {
+                                var dayList = document.createElement('ul');
+                                dayList.className = 'mj-member-events__signup-calendar-occurrences';
+
+                                dayEntry.occurrences.forEach(function (itemData) {
+                                    var occurrenceEntry = itemData.entry;
+                                    var occurrenceValue = itemData.value;
+                                    var occurrenceIsPast = !!occurrenceEntry.isPast;
+
+                                    var occurrenceItem = document.createElement('li');
+                                    occurrenceItem.className = 'mj-member-events__signup-calendar-occurrence';
+                                    if (occurrenceIsPast) {
+                                        occurrenceItem.classList.add('is-past');
+                                    } else {
+                                        hasEnabledOccurrence = true;
+                                    }
+
+                                    var occurrenceLabelNode = document.createElement('label');
+                                    occurrenceLabelNode.className = 'mj-member-events__signup-calendar-checkbox';
+
+                                    var occurrenceInput = document.createElement('input');
+                                    occurrenceInput.type = 'checkbox';
+                                    occurrenceInput.name = 'occurrence[]';
+                                    occurrenceInput.value = occurrenceValue;
+                                    occurrenceInput.checked = false;
+                                    if (occurrenceIsPast) {
+                                        occurrenceInput.disabled = true;
+                                    }
+
+                                    occurrenceLabelNode.appendChild(occurrenceInput);
+
+                                    var pill = document.createElement('span');
+                                    pill.className = 'mj-member-events__signup-calendar-pill';
+                                    var timeLabel = formatOccurrenceTime(occurrenceEntry);
+                                    if (timeLabel) {
+                                        pill.textContent = timeLabel;
+                                    } else {
+                                        pill.textContent = strings.occurrenceCalendarAllDay || 'Toute la journée';
+                                    }
+                                    occurrenceLabelNode.appendChild(pill);
+
+                                    occurrenceItem.appendChild(occurrenceLabelNode);
+
+                                    var occurrenceActions = document.createElement('div');
+                                    occurrenceActions.className = 'mj-member-events__signup-occurrence-actions';
+                                    occurrenceActions.hidden = true;
+
+                                    var occurrenceUnregister = document.createElement('button');
+                                    occurrenceUnregister.type = 'button';
+                                    occurrenceUnregister.className = 'mj-member-events__signup-occurrence-toggle';
+                                    occurrenceUnregister.textContent = strings.unregisterOccurrence || strings.unregister || 'Se désinscrire';
+                                    occurrenceUnregister.dataset.occurrenceValue = occurrenceValue;
+                                    occurrenceUnregister.hidden = true;
+
+                                    occurrenceActions.appendChild(occurrenceUnregister);
+                                    occurrenceItem.appendChild(occurrenceActions);
+
+                                    if (hasCustomPreselection && selectedOccurrenceMap[occurrenceValue]) {
+                                        occurrenceInput.checked = true;
+                                        occurrenceItem.classList.add('is-selected');
+                                    }
+
+                                    (function (inputNode, itemNode, cellNode) {
+                                        inputNode.addEventListener('change', function () {
+                                            if (inputNode.checked) {
+                                                itemNode.classList.add('is-selected');
+                                            } else {
+                                                itemNode.classList.remove('is-selected');
+                                            }
+                                            syncCalendarDayState(cellNode);
+                                            updateInlineCtaAvailability();
+                                        });
+                                    })(occurrenceInput, occurrenceItem, dayCell);
+
+                                    dayList.appendChild(occurrenceItem);
+
+                                    occurrenceControls.push({
+                                        element: occurrenceItem,
+                                        value: occurrenceValue,
+                                        isPast: occurrenceIsPast,
+                                        checkbox: occurrenceInput,
+                                        actions: occurrenceActions,
+                                        unregister: occurrenceUnregister,
+                                        label: occurrenceLabelNode,
+                                        registeredList: dayList,
+                                        availableList: dayList,
+                                        registeredEmpty: null,
+                                        availableEmpty: null,
+                                        registeredSection: null,
+                                        availableSection: null,
+                                    });
+
+                                    syncCalendarDayState(dayCell);
+                                    builtCount++;
+                                });
+
+                                dayCell.appendChild(dayList);
+                            } else {
+                                dayCell.classList.add('is-disabled');
+                            }
+
+                            dayGrid.appendChild(dayCell);
+                        }
+
+                        monthNode.appendChild(dayGrid);
+                        calendarRoot.appendChild(monthNode);
+                    });
+
+                    if (!builtCount) {
+                        return false;
+                    }
+
+                    occurrenceFieldset.appendChild(calendarRoot);
+
                     occurrenceHelp = document.createElement('p');
                     occurrenceHelp.className = 'mj-member-events__signup-occurrence-help';
-                    occurrenceHelp.textContent = strings.occurrenceHelp || 'Cochez les occurrences auxquelles vous participerez.';
+                    if (isRecurringEvent) {
+                        occurrenceHelp.textContent = strings.occurrenceHelpRecurring || 'Sélectionnez de nouvelles dates ou retirez une réservation.';
+                    } else {
+                        occurrenceHelp.textContent = strings.occurrenceHelp || 'Cochez les occurrences auxquelles vous participerez.';
+                    }
                     occurrenceFieldset.appendChild(occurrenceHelp);
+
+                    return true;
                 }
-            } else if (!isRecurringEvent) {
-                var occurrenceEmpty = document.createElement('p');
-                occurrenceEmpty.className = 'mj-member-events__signup-occurrence-empty';
-                occurrenceEmpty.textContent = strings.occurrenceEmpty || 'Aucune occurrence disponible.';
-                occurrenceFieldset.appendChild(occurrenceEmpty);
-            }
 
-            if (isRecurringEvent && occurrenceColumns) {
-                occurrenceHelp = document.createElement('p');
-                occurrenceHelp.className = 'mj-member-events__signup-occurrence-help';
-                occurrenceHelp.textContent = strings.occurrenceHelpRecurring || 'Sélectionnez de nouvelles dates ou retirez une réservation.';
-                occurrenceFieldset.appendChild(occurrenceHelp);
-            }
+                function createOccurrenceSection(title, modifier) {
+                    var section = document.createElement('section');
+                    section.className = 'mj-member-events__signup-occurrence-section';
+                    if (modifier) {
+                        section.className += ' is-' + modifier;
+                    }
 
-            form.appendChild(occurrenceFieldset);
-            if (isRecurringEvent) {
-                syncOccurrenceSections();
+                    var heading = document.createElement('p');
+                    heading.className = 'mj-member-events__signup-occurrence-heading';
+                    heading.textContent = title;
+                    section.appendChild(heading);
+
+                    var listNode = document.createElement('ul');
+                    listNode.className = 'mj-member-events__signup-occurrence-list';
+                    section.appendChild(listNode);
+
+                    var emptyState = document.createElement('p');
+                    emptyState.className = 'mj-member-events__signup-occurrence-empty';
+                    emptyState.textContent = modifier === 'registered'
+                        ? (strings.occurrenceRegisteredEmpty || 'Aucune réservation active.')
+                        : (strings.occurrenceAvailableEmpty || 'Toutes les dates sont déjà réservées.');
+                    emptyState.hidden = true;
+                    section.appendChild(emptyState);
+
+                    return { section: section, list: listNode, empty: emptyState };
+                }
+
+                function buildOccurrenceListLayout() {
+                    var initialCount = occurrenceControls.length;
+                    var occurrenceSeen = Object.create(null);
+
+                    occurrenceColumns = null;
+                    occurrenceRegisteredSection = null;
+                    occurrenceAvailableSection = null;
+                    occurrenceList = null;
+
+                    if (!isRecurringEvent) {
+                        occurrenceList = document.createElement('ul');
+                        occurrenceList.className = 'mj-member-events__signup-occurrence-list';
+                    } else {
+                        occurrenceColumns = document.createElement('div');
+                        occurrenceColumns.className = 'mj-member-events__signup-occurrence-columns';
+
+                        occurrenceRegisteredSection = createOccurrenceSection(
+                            strings.occurrenceRegisteredTitle || 'Vos réservations',
+                            'registered'
+                        );
+                        occurrenceAvailableSection = createOccurrenceSection(
+                            strings.occurrenceAvailableTitle || 'Autres dates disponibles',
+                            'available'
+                        );
+
+                        occurrenceColumns.appendChild(occurrenceRegisteredSection.section);
+                        occurrenceColumns.appendChild(occurrenceAvailableSection.section);
+                    }
+
+                    for (var occIndex = 0; occIndex < occurrences.length; occIndex++) {
+                        var occurrenceEntry = occurrences[occIndex];
+                        if (!occurrenceEntry) {
+                            continue;
+                        }
+
+                        var occurrenceValue = normalizeOccurrenceValue(occurrenceEntry.start);
+                        if (!occurrenceValue || occurrenceSeen[occurrenceValue]) {
+                            continue;
+                        }
+                        occurrenceSeen[occurrenceValue] = true;
+
+                        var occurrenceLabel = formatOccurrenceLabel(occurrenceEntry, includeTime);
+                        var occurrenceIsPast = !!occurrenceEntry.isPast;
+
+                        var occurrenceItem = document.createElement('li');
+                        occurrenceItem.className = 'mj-member-events__signup-occurrence-item';
+                        if (occurrenceIsPast) {
+                            occurrenceItem.classList.add('is-past');
+                        }
+
+                        var occurrenceLabelNode = document.createElement('label');
+                        occurrenceLabelNode.className = 'mj-member-events__signup-occurrence-label';
+
+                        var occurrenceInput = document.createElement('input');
+                        occurrenceInput.type = 'checkbox';
+                        occurrenceInput.name = 'occurrence[]';
+                        occurrenceInput.value = occurrenceValue;
+                        occurrenceInput.checked = false;
+
+                        if (occurrenceIsPast) {
+                            occurrenceInput.disabled = true;
+                        } else {
+                            hasEnabledOccurrence = true;
+                        }
+
+                        occurrenceLabelNode.appendChild(occurrenceInput);
+
+                        var occurrenceText = document.createElement('span');
+                        occurrenceText.textContent = occurrenceLabel;
+                        occurrenceLabelNode.appendChild(occurrenceText);
+
+                        if (occurrenceIsPast) {
+                            var occurrenceBadge = document.createElement('span');
+                            occurrenceBadge.className = 'mj-member-events__signup-occurrence-badge';
+                            occurrenceBadge.textContent = strings.occurrencePast || 'Passée';
+                            occurrenceLabelNode.appendChild(occurrenceBadge);
+                        }
+
+                        occurrenceItem.appendChild(occurrenceLabelNode);
+
+                        var occurrenceActions = document.createElement('div');
+                        occurrenceActions.className = 'mj-member-events__signup-occurrence-actions';
+                        occurrenceActions.hidden = true;
+
+                        var occurrenceUnregister = document.createElement('button');
+                        occurrenceUnregister.type = 'button';
+                        occurrenceUnregister.className = 'mj-member-events__signup-occurrence-toggle';
+                        occurrenceUnregister.textContent = strings.unregisterOccurrence || strings.unregister || 'Se désinscrire';
+                        occurrenceUnregister.dataset.occurrenceValue = occurrenceValue;
+                        occurrenceUnregister.hidden = true;
+
+                        occurrenceActions.appendChild(occurrenceUnregister);
+                        occurrenceItem.appendChild(occurrenceActions);
+
+                        if (hasCustomPreselection && selectedOccurrenceMap[occurrenceValue]) {
+                            occurrenceInput.checked = true;
+                            occurrenceItem.classList.add('is-selected');
+                        }
+
+                        (function (inputNode, itemNode) {
+                            inputNode.addEventListener('change', function () {
+                                if (inputNode.checked) {
+                                    itemNode.classList.add('is-selected');
+                                } else {
+                                    itemNode.classList.remove('is-selected');
+                                }
+                                updateInlineCtaAvailability();
+                            });
+                        })(occurrenceInput, occurrenceItem);
+
+                        if (isRecurringEvent && occurrenceAvailableSection) {
+                            occurrenceAvailableSection.list.appendChild(occurrenceItem);
+                        } else if (occurrenceList) {
+                            occurrenceList.appendChild(occurrenceItem);
+                        }
+
+                        occurrenceControls.push({
+                            element: occurrenceItem,
+                            value: occurrenceValue,
+                            isPast: occurrenceIsPast,
+                            checkbox: occurrenceInput,
+                            actions: occurrenceActions,
+                            unregister: occurrenceUnregister,
+                            label: occurrenceLabelNode,
+                            registeredList: occurrenceRegisteredSection ? occurrenceRegisteredSection.list : null,
+                            availableList: occurrenceAvailableSection ? occurrenceAvailableSection.list : occurrenceList,
+                            registeredEmpty: occurrenceRegisteredSection ? occurrenceRegisteredSection.empty : null,
+                            availableEmpty: occurrenceAvailableSection ? occurrenceAvailableSection.empty : null,
+                            registeredSection: occurrenceRegisteredSection ? occurrenceRegisteredSection.section : null,
+                            availableSection: occurrenceAvailableSection ? occurrenceAvailableSection.section : null,
+                        });
+                    }
+
+                    if (isRecurringEvent && occurrenceColumns) {
+                        occurrenceFieldset.appendChild(occurrenceColumns);
+                    } else if (occurrenceList && occurrenceList.children.length) {
+                        occurrenceFieldset.appendChild(occurrenceList);
+                    }
+
+                    if (isRecurringEvent && occurrenceColumns) {
+                        occurrenceHelp = document.createElement('p');
+                        occurrenceHelp.className = 'mj-member-events__signup-occurrence-help';
+                        occurrenceHelp.textContent = strings.occurrenceHelpRecurring || 'Sélectionnez de nouvelles dates ou retirez une réservation.';
+                        occurrenceFieldset.appendChild(occurrenceHelp);
+                    } else if (!isRecurringEvent && occurrenceList && occurrenceList.children.length) {
+                        occurrenceHelp = document.createElement('p');
+                        occurrenceHelp.className = 'mj-member-events__signup-occurrence-help';
+                        occurrenceHelp.textContent = strings.occurrenceHelp || 'Cochez les occurrences auxquelles vous participerez.';
+                        occurrenceFieldset.appendChild(occurrenceHelp);
+                    }
+
+                    if (isRecurringEvent && occurrenceColumns) {
+                        function updateOccurrenceSectionState(sectionData, count) {
+                            if (!sectionData || !sectionData.section || !sectionData.empty) {
+                                return;
+                            }
+                            if (typeof count !== 'number') {
+                                count = sectionData.list ? sectionData.list.children.length : 0;
+                            }
+                            if (count > 0) {
+                                sectionData.section.classList.remove('is-empty');
+                                sectionData.empty.hidden = true;
+                            } else {
+                                sectionData.section.classList.add('is-empty');
+                                sectionData.empty.hidden = false;
+                            }
+                        }
+
+                        syncOccurrenceSections = function () {
+                            var registeredCount = 0;
+                            var availableCount = 0;
+
+                            for (var cIdx = 0; cIdx < occurrenceControls.length; cIdx++) {
+                                var controlEntry = occurrenceControls[cIdx];
+                                var parentNode = controlEntry && controlEntry.element ? controlEntry.element.parentNode : null;
+                                if (controlEntry.registeredList && parentNode === controlEntry.registeredList) {
+                                    registeredCount++;
+                                } else if (controlEntry.availableList && parentNode === controlEntry.availableList) {
+                                    availableCount++;
+                                }
+                            }
+
+                            updateOccurrenceSectionState(occurrenceRegisteredSection, registeredCount);
+                            updateOccurrenceSectionState(occurrenceAvailableSection, availableCount);
+
+                            if (occurrenceRegisteredSection && occurrenceRegisteredSection.section) {
+                                occurrenceRegisteredSection.section.hidden = false;
+                            }
+                            if (occurrenceAvailableSection && occurrenceAvailableSection.section) {
+                                occurrenceAvailableSection.section.hidden = false;
+                            }
+                        };
+                    }
+
+                    return occurrenceControls.length > initialCount;
+                }
+
+                var calendarBuilt = buildOccurrenceCalendar();
+
+                var listBuilt = calendarBuilt;
+                if (!calendarBuilt) {
+                    listBuilt = buildOccurrenceListLayout();
+                }
+
+                if (!calendarBuilt && !listBuilt) {
+                    var occurrenceEmpty = document.createElement('p');
+                    occurrenceEmpty.className = 'mj-member-events__signup-occurrence-empty';
+                    occurrenceEmpty.textContent = strings.occurrenceEmpty || 'Aucune occurrence disponible.';
+                    occurrenceFieldset.appendChild(occurrenceEmpty);
+                }
+
+                form.appendChild(occurrenceFieldset);
+                if (isRecurringEvent && typeof syncOccurrenceSections === 'function') {
+                    syncOccurrenceSections();
+                }
             }
         }
 
         if (availableParticipantsCount === 0 && participants.length && !isRecurringEvent) {
             infoMessage = document.createElement('p');
             infoMessage.className = 'mj-member-events__signup-info';
-            infoMessage.textContent = strings.allRegistered || 'Tous les profils sont déjà inscrits pour cet événement.';
+            if (hasIneligible && hasUnregistered) {
+                infoMessage.textContent = strings.noEligibleParticipant || 'Aucun profil éligible n’est disponible pour cette inscription.';
+            } else {
+                infoMessage.textContent = strings.allRegistered || 'Tous les profils sont déjà inscrits pour cet événement.';
+            }
             form.appendChild(infoMessage);
         }
 
@@ -866,22 +2622,12 @@
         noteWrapper.appendChild(noteField);
         form.appendChild(noteWrapper);
 
-        var actions = document.createElement('div');
-        actions.className = 'mj-member-events__signup-actions';
-
-        var submit = document.createElement('button');
-        submit.type = 'submit';
-        submit.className = 'mj-member-events__signup-submit';
-        submit.textContent = strings.confirm || "Confirmer l'inscription";
-
-        var cancel = document.createElement('button');
-        cancel.type = 'button';
-        cancel.className = 'mj-member-events__signup-cancel';
-        cancel.textContent = strings.cancel || 'Annuler';
-
-        actions.appendChild(submit);
-        actions.appendChild(cancel);
-        form.appendChild(actions);
+        inlineCta = document.createElement('div');
+        inlineCta.className = 'mj-member-events__signup-cta';
+        inlineCta.setAttribute('role', 'button');
+        inlineCta.setAttribute('tabindex', '0');
+        inlineCta.textContent = inlineCtaRegisterLabel;
+        form.appendChild(inlineCta);
 
         formFeedback = document.createElement('div');
         formFeedback.className = 'mj-member-events__signup-feedback';
@@ -890,11 +2636,11 @@
 
         signup.appendChild(form);
 
-        cancel.addEventListener('click', function () {
-            closeSignup(signup);
-            setFeedback(formFeedback, '', false);
-            if (feedback) {
-                setFeedback(feedback, '', false);
+        inlineCta.addEventListener('click', triggerInlineSubmit);
+        inlineCta.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                triggerInlineSubmit();
             }
         });
 
@@ -966,20 +2712,26 @@
             return participantStates[participantId];
         }
 
-        function updateParticipantAssignments(participantId, assignmentsInput) {
-            var normalized = normalizeAssignments(assignmentsInput);
-            if (participantStates[participantId]) {
-                participantStates[participantId].assignments = normalized;
-            }
-            if (participantIndex[participantId]) {
-                participantIndex[participantId].occurrenceAssignments = normalized;
-            }
+        function updateOptionActiveState(participantId) {
+            var optionNodes = form.querySelectorAll('.mj-member-events__signup-option');
+            optionNodes.forEach(function (node) {
+                if (!node.dataset.participantId) {
+                    node.classList.remove('is-active');
+                    return;
+                }
+                if (participantId && node.dataset.participantId === participantId) {
+                    node.classList.add('is-active');
+                } else {
+                    node.classList.remove('is-active');
+                }
+            });
         }
 
         function setParticipantRegistrationState(participantId, isRegistered, registrationId) {
-            if (participantStates[participantId]) {
-                participantStates[participantId].isRegistered = !!isRegistered;
-                participantStates[participantId].registrationId = registrationId || 0;
+            var state = getParticipantState(participantId);
+            if (state) {
+                state.isRegistered = !!isRegistered;
+                state.registrationId = registrationId || 0;
             }
             if (participantIndex[participantId]) {
                 participantIndex[participantId].isRegistered = !!isRegistered;
@@ -997,8 +2749,10 @@
             for (var idx = 0; idx < occurrenceControls.length; idx++) {
                 var control = occurrenceControls[idx];
                 var isAssigned = !!assignedSet[control.value];
+                var dayNode = control.element ? control.element.closest('.mj-member-events__signup-calendar-day') : null;
                 control.element.classList.remove('is-assigned');
                 control.element.classList.remove('is-available');
+                control.element.classList.remove('is-selected');
 
                 control.checkbox.checked = false;
                 control.checkbox.disabled = control.isPast;
@@ -1043,13 +2797,20 @@
                         control.availableList.appendChild(control.element);
                     }
                 }
+
+                if (!state.isRegistered && hasCustomPreselection && selectedOccurrenceMap[control.value] && !control.checkbox.disabled && !control.checkbox.hidden) {
+                    control.checkbox.checked = true;
+                    control.element.classList.add('is-selected');
+                }
+
+                syncCalendarDayState(dayNode);
             }
 
             if (occurrenceFieldset) {
-                occurrenceFieldset.hidden = !isRecurringEvent;
+                occurrenceFieldset.hidden = !isRecurringEvent && !allowOccurrenceSelection;
             }
             if (occurrenceHelp) {
-                occurrenceHelp.hidden = !isRecurringEvent;
+                occurrenceHelp.hidden = !isRecurringEvent && !allowOccurrenceSelection;
             }
 
             syncOccurrenceSections();
@@ -1065,34 +2826,38 @@
 
         function updateSubmitState(participantId) {
             var state = getParticipantState(participantId);
-            if (!submit) {
+
+            if (!inlineCta) {
                 return;
             }
 
             if (!state || !state.isRegistered) {
-                submit.hidden = false;
-                submit.disabled = false;
-                submit.textContent = strings.confirm || "Confirmer l'inscription";
+                inlineCta.dataset.mode = 'register';
+                setInlineCtaLabel(inlineCtaRegisterLabel);
+                setInlineCtaHidden(false);
+                setInlineCtaDisabled(false);
                 return;
             }
 
             if (isFixedSchedule) {
-                submit.hidden = true;
-                submit.disabled = true;
-                submit.textContent = strings.registered || strings.confirm || "Confirmer l'inscription";
-            } else {
-                submit.hidden = false;
-                submit.disabled = false;
-                submit.textContent = strings.updateOccurrences || strings.confirm || 'Mettre à jour';
+                setInlineCtaHidden(true);
+                return;
             }
+
+            inlineCta.dataset.mode = 'update';
+            setInlineCtaLabel(inlineCtaUpdateLabel);
+            setInlineCtaHidden(false);
+            setInlineCtaDisabled(false);
         }
 
         function handleParticipantChange() {
             var selected = form.querySelector('input[name="participant"]:checked');
             currentParticipantId = selected ? selected.value : '';
+            updateOptionActiveState(currentParticipantId);
             toggleNoteVisibility(currentParticipantId);
             updateSubmitState(currentParticipantId);
             refreshOccurrenceDisplay(currentParticipantId);
+            updateInlineCtaAvailability();
         }
 
         function collectCheckedOccurrences() {
@@ -1135,8 +2900,8 @@
             }
 
             form.dataset.submitting = '1';
-            submit.disabled = true;
-            submit.textContent = strings.loading || 'En cours...';
+            setInlineCtaDisabled(true);
+            setInlineCtaLabel(inlineCtaLoadingLabel);
             setFeedback(formFeedback, '', false);
 
             var payloadData = new window.FormData();
@@ -1212,8 +2977,8 @@
                 setFeedback(formFeedback, strings.genericError || 'Une erreur est survenue. Merci de réessayer.', true);
             }).then(function () {
                 form.dataset.submitting = '0';
-                submit.disabled = false;
-                submit.textContent = strings.updateOccurrences || strings.confirm || 'Mettre à jour';
+                updateSubmitState(currentParticipantId);
+                updateInlineCtaAvailability();
             });
         }
 
@@ -1306,6 +3071,7 @@
                                 // ignore
                             }
 
+                            refreshReservationPanel({ silent: true });
                             payload.preselectParticipantId = unregisterEntry.id;
                             buildSignup(card, button, signup, feedback, payload);
                         }).catch(function () {
@@ -1362,8 +3128,8 @@
             var selectedEntry = participantIndex[selectedParticipantId];
 
             form.dataset.submitting = '1';
-            submit.disabled = true;
-            submit.textContent = strings.loading || 'En cours...';
+            setInlineCtaDisabled(true);
+            setInlineCtaLabel(inlineCtaLoadingLabel);
             setFeedback(formFeedback, '', false);
 
             var payloadData = new window.FormData();
@@ -1387,8 +3153,9 @@
 
             if (wantsAssignmentUpdate) {
                 form.dataset.submitting = '0';
-                submit.disabled = false;
-                submit.textContent = strings.updateOccurrences || strings.confirm || 'Mettre à jour';
+                inlineCta.dataset.mode = 'update';
+                setInlineCtaDisabled(false);
+                setInlineCtaLabel(inlineCtaUpdateLabel);
 
                 if (!selectedOccurrenceValues.length) {
                     setFeedback(formFeedback, strings.occurrenceMissing || 'Merci de sélectionner au moins une occurrence.', true);
@@ -1406,8 +3173,8 @@
                 if (!selectedOccurrenceValues.length) {
                     setFeedback(formFeedback, strings.occurrenceMissing || 'Merci de sélectionner au moins une occurrence.', true);
                     form.dataset.submitting = '0';
-                    submit.disabled = false;
-                    submit.textContent = strings.confirm || "Confirmer l'inscription";
+                    updateSubmitState(currentParticipantId);
+                    updateInlineCtaAvailability();
                     return;
                 }
                 try {
@@ -1519,8 +3286,9 @@
 
                 updateButtonState(button, payload);
 
+                refreshReservationPanel({ silent: true });
                 payload.preselectParticipantId = selectedParticipantId;
-                closeSignup(signup);
+                buildSignup(card, button, signup, feedback, payload);
 
                 if (paymentInfo && paymentInfo.checkout_url) {
                     // Open Stripe Checkout in a new context without blocking user interaction.
@@ -1533,15 +3301,60 @@
                 setFeedback(formFeedback, strings.genericError || 'Une erreur est survenue. Merci de réessayer.', true);
             }).then(function () {
                 form.dataset.submitting = '0';
-                submit.disabled = false;
-                submit.textContent = strings.confirm || "Confirmer l'inscription";
+                updateSubmitState(currentParticipantId);
+                updateInlineCtaAvailability();
                 handleParticipantChange();
             });
         });
 
-        var firstRadio = signup.querySelector('input[name="participant"]');
-        if (firstRadio) {
-            firstRadio.focus();
+        function updateInlineCtaAvailability() {
+            if (!inlineCta || inlineCta.hidden) {
+                return;
+            }
+            if (form.dataset.submitting === '1') {
+                setInlineCtaDisabled(true);
+                return;
+            }
+
+            if (!currentParticipantId) {
+                setInlineCtaDisabled(true);
+                return;
+            }
+
+            var state = getParticipantState(currentParticipantId);
+            if (!state) {
+                setInlineCtaDisabled(true);
+                return;
+            }
+
+            if (state.isRegistered && isFixedSchedule) {
+                setInlineCtaDisabled(true);
+                return;
+            }
+
+            if (occurrenceControls.length) {
+                var selectedOccurrences = collectCheckedOccurrences();
+                if (!selectedOccurrences.length && (!state.isRegistered || !isRecurringEvent)) {
+                    setInlineCtaDisabled(true);
+                    return;
+                }
+            }
+
+            setInlineCtaDisabled(false);
+            if (inlineCta.dataset.mode === 'update') {
+                setInlineCtaLabel(inlineCtaUpdateLabel);
+            } else {
+                setInlineCtaLabel(inlineCtaRegisterLabel);
+            }
+        }
+
+        if (isPersistentSignup) {
+            activeSignup = null;
+        } else {
+            var firstRadio = signup.querySelector('input[name="participant"]');
+            if (firstRadio) {
+                firstRadio.focus();
+            }
         }
     }
 
@@ -1610,10 +3423,26 @@
         }
     }
 
-    ready(function () {
+    if (typeof document !== 'undefined') {
+        document.addEventListener('mj-member:refresh-reservations', function () {
+            refreshReservationPanel({ silent: true });
+        });
+    }
+
+    domReady(function () {
+        initEventRegistrationForms();
+
+        var loginButtons = document.querySelectorAll('[data-mj-event-open-login]');
+        toArray(loginButtons).forEach(function (loginButton) {
+            loginButton.addEventListener('click', function (event) {
+                event.preventDefault();
+                openLoginModal();
+            });
+        });
+
         var buttons = document.querySelectorAll('.mj-member-events__cta');
 
-        Array.prototype.forEach.call(buttons, function (button) {
+        toArray(buttons).forEach(function (button) {
             button.addEventListener('click', function () {
                 if (button.disabled) {
                     return;
@@ -1647,6 +3476,55 @@
             });
         });
 
+        var autoSignups = document.querySelectorAll('.mj-member-events__signup[data-autoload="1"]');
+        toArray(autoSignups).forEach(function (signup) {
+            var card = signup.closest('.mj-member-events__item');
+            if (!card) {
+                return;
+            }
+
+            var button = card.querySelector('.mj-member-events__cta');
+            var feedback = card.querySelector('.mj-member-events__feedback');
+            if (!button) {
+                return;
+            }
+
+            if (button.getAttribute('data-requires-login') === '1') {
+                signup.removeAttribute('hidden');
+                signup.classList.add('is-open');
+                signup.innerHTML = '';
+
+                var loginNotice = document.createElement('p');
+                loginNotice.className = 'mj-member-events__signup-empty';
+                loginNotice.textContent = strings.loginRequired || 'Connecte-toi pour continuer.';
+                signup.appendChild(loginNotice);
+
+                signup.dataset.persistent = '1';
+                return;
+            }
+
+            var payload = parsePayload(button);
+            if (!payload) {
+                return;
+            }
+
+            if (typeof button.blur === 'function') {
+                button.blur();
+            }
+            button.setAttribute('tabindex', '-1');
+            button.setAttribute('hidden', 'hidden');
+
+            if (!signup.dataset.persistent) {
+                signup.dataset.persistent = '1';
+            }
+
+            buildSignup(card, button, signup, feedback, payload);
+
+            if (signup.dataset.persistent === '1' && activeSignup === signup) {
+                activeSignup = null;
+            }
+        });
+
         document.addEventListener('click', function (event) {
             if (!activeSignup) {
                 return;
@@ -1664,6 +3542,7 @@
         });
 
         collectEventWidgets();
+        resolveReservationPanel();
     });
 
     window.addEventListener('mjMemberEvents:filterByLocationType', function (event) {
@@ -1679,7 +3558,7 @@
 
         if (selector) {
             try {
-                selectorMatches = Array.prototype.slice.call(document.querySelectorAll(selector));
+                selectorMatches = toArray(document.querySelectorAll(selector));
             } catch (error) {
                 selectorMatches = [];
             }

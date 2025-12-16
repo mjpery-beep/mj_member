@@ -9,6 +9,8 @@ use Elementor\Widget_Base;
 use Mj\Member\Core\Config;
 
 class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
+    use Mj_Member_Elementor_Widget_Visibility;
+
     public function get_name() {
         return 'mj-member-contact-messages';
     }
@@ -76,6 +78,8 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
 
         $this->end_controls_section();
 
+        $this->register_visibility_controls();
+
         $this->start_controls_section('section_style_container', array(
             'label' => __('Apparence', 'mj-member'),
             'tab' => Controls_Manager::TAB_STYLE,
@@ -103,7 +107,7 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
             'label' => __('Couleur du badge', 'mj-member'),
             'type' => Controls_Manager::COLOR,
             'selectors' => array(
-                '{{WRAPPER}} .mj-contact-messages__badge' => 'background-color: {{VALUE}};',
+                '{{WRAPPER}} .mj-contact-messages__state-indicator' => 'background-color: {{VALUE}};',
             ),
         ));
 
@@ -112,6 +116,7 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
 
     protected function render() {
         $settings = $this->get_settings_for_display();
+        $this->apply_visibility_to_wrapper($settings, 'mj-contact-messages');
 
         $title = isset($settings['title']) && $settings['title'] !== '' ? $settings['title'] : __('Messages et réponses', 'mj-member');
         $default_received_label = __('Messages reçus', 'mj-member');
@@ -516,9 +521,9 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
 
         $animateur_role = 'animateur';
         $coordinateur_role = 'coordinateur';
-        if (class_exists('MjMembers_CRUD')) {
-            $animateur_role = sanitize_key((string) MjMembers_CRUD::ROLE_ANIMATEUR);
-            $coordinateur_role = sanitize_key((string) MjMembers_CRUD::ROLE_COORDINATEUR);
+        if (class_exists('MjMembers')) {
+            $animateur_role = sanitize_key((string) MjMembers::ROLE_ANIMATEUR);
+            $coordinateur_role = sanitize_key((string) MjMembers::ROLE_COORDINATEUR);
         }
 
         $is_animateur = ($member_role === $animateur_role);

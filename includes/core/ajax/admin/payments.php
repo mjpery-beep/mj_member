@@ -1,6 +1,7 @@
 <?php
 
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\Crud\MjMembers;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -29,11 +30,11 @@ function mj_admin_generate_event_payment_link() {
         wp_send_json_error(array('message' => __('Données manquantes pour générer le paiement.', 'mj-member')), 400);
     }
 
-    require_once Config::path() . 'includes/classes/crud/MjEvents_CRUD.php';
+    require_once Config::path() . 'includes/classes/crud/MjEvents.php';
     require_once Config::path() . 'includes/classes/crud/MjEventRegistrations.php';
     require_once Config::path() . 'includes/classes/MjPayments.php';
 
-    $event = MjEvents_CRUD::find($event_id);
+    $event = MjEvents::find($event_id);
     if (!$event) {
         wp_send_json_error(array('message' => __('Evenement introuvable.', 'mj-member')), 404);
     }
@@ -182,8 +183,8 @@ function mj_admin_get_payment_history() {
     $history_table = $wpdb->prefix . 'mj_payment_history';
     $payments_table = $wpdb->prefix . 'mj_payments';
     $events_table = $wpdb->prefix . 'mj_events';
-    if (class_exists('MjEvents_CRUD')) {
-        $events_table = $wpdb->prefix . MjEvents_CRUD::TABLE;
+    if (class_exists('MjEvents')) {
+        $events_table = $wpdb->prefix . MjEvents::TABLE;
     }
 
     $entries = array();
@@ -494,7 +495,7 @@ function mj_member_mark_paid() {
         wp_send_json_error(array('message' => __('ID membre invalide.', 'mj-member')));
     }
 
-    $member = MjMembers_CRUD::getById($member_id);
+    $member = MjMembers::getById($member_id);
     if (!$member) {
         wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
     }
@@ -505,12 +506,12 @@ function mj_member_mark_paid() {
 
     $update_payload = array(
         'date_last_payement' => $now,
-        'status' => MjMembers_CRUD::STATUS_ACTIVE,
+        'status' => MjMembers::STATUS_ACTIVE,
     );
 
-    $updated = MjMembers_CRUD::update($member_id, $update_payload);
-    if ($updated === false) {
-        wp_send_json_error(array('message' => __('Impossible de mettre à jour la fiche membre.', 'mj-member')));
+    $updated = MjMembers::update($member_id, $update_payload);
+    if (is_wp_error($updated)) {
+        wp_send_json_error(array('message' => $updated->get_error_message()));
     }
 
     global $wpdb;
@@ -549,9 +550,9 @@ function mj_member_mark_paid() {
         );
     }
 
-    $updated_member = MjMembers_CRUD::getById($member_id);
+    $updated_member = MjMembers::getById($member_id);
     $date_display = ($updated_member && !empty($updated_member->date_last_payement)) ? wp_date('d/m/Y', strtotime($updated_member->date_last_payement)) : '';
-    $status_label = ($updated_member && $updated_member->status === MjMembers_CRUD::STATUS_ACTIVE) ? __('Actif', 'mj-member') : __('Inactif', 'mj-member');
+    $status_label = ($updated_member && $updated_member->status === MjMembers::STATUS_ACTIVE) ? __('Actif', 'mj-member') : __('Inactif', 'mj-member');
 
     $admin_name = '';
     if ($admin_user_id > 0) {

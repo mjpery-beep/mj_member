@@ -1,6 +1,5 @@
 (function ($) {
     'use strict';
-    console.info('MJ admin events script loaded');
     var mediaFrame;
 
     function pad(value) {
@@ -399,7 +398,6 @@
     var fixedStartTimeInput = $('#mj-event-fixed-start-time');
     var fixedEndTimeInput = $('#mj-event-fixed-end-time');
     $(function () {
-        console.info('MJ admin events script ready');
 
         var typeColors = (typeof mjAdminEvents !== 'undefined' && mjAdminEvents.typeColors) ? mjAdminEvents.typeColors : {};
         var accentColorInput = $('#mj-event-accent-color');
@@ -481,6 +479,221 @@
         var fixedEndTimeInput = $('#mj-event-fixed-end-time');
         var rangeStartInput = $('#mj-event-range-start');
         var rangeEndInput = $('#mj-event-range-end');
+        var seriesField = $('#mj-event-series-items');
+        var seriesTableBody = $('#mj-event-series-table tbody');
+        var seriesEmptyRow = $('#mj-event-series-empty');
+        var seriesDateInput = $('#mj-event-series-date');
+        var seriesStartInput = $('#mj-event-series-start');
+        var seriesEndInput = $('#mj-event-series-end');
+        var seriesAddButton = $('#mj-event-series-add');
+        var seriesConfig = (typeof mjAdminEvents !== 'undefined' && mjAdminEvents.series) ? mjAdminEvents.series : {};
+        var seriesEntries = [];
+
+        function normalizeSeriesEntry(entry) {
+            if (!entry || typeof entry !== 'object') {
+                return null;
+            }
+
+            var dateValue = '';
+            var startValue = '';
+            var endValue = '';
+
+            if (typeof entry.date === 'string') {
+                dateValue = entry.date.trim();
+            } else if (typeof entry.day === 'string') {
+                dateValue = entry.day.trim();
+            }
+
+            if (typeof entry.start_time === 'string') {
+                startValue = entry.start_time.trim();
+            } else if (typeof entry.start === 'string') {
+                startValue = entry.start.trim();
+            }
+
+            if (typeof entry.end_time === 'string') {
+                endValue = entry.end_time.trim();
+            } else if (typeof entry.end === 'string') {
+                endValue = entry.end.trim();
+            }
+
+            if (!dateValue || !startValue) {
+                return null;
+            }
+
+            return {
+                date: dateValue,
+                start_time: startValue,
+                end_time: endValue
+            };
+        }
+
+        function buildSeriesKey(dateValue, timeValue) {
+            var datePart = (dateValue || '').trim();
+            var timePart = (timeValue || '').trim();
+            if (!datePart) {
+                return '';
+            }
+            if (!timePart) {
+                timePart = '00:00';
+            }
+            return datePart + 'T' + timePart;
+        }
+
+        function sortSeriesEntries() {
+            if (!seriesEntries.length) {
+                return;
+            }
+            seriesEntries.sort(function (left, right) {
+                var leftKey = buildSeriesKey(left.date, left.start_time);
+                var rightKey = buildSeriesKey(right.date, right.start_time);
+                if (leftKey === rightKey) {
+                    return 0;
+                }
+                if (!leftKey) {
+                    return 1;
+                }
+                if (!rightKey) {
+                    return -1;
+                }
+                return leftKey < rightKey ? -1 : 1;
+            });
+        }
+
+        function serializeSeries() {
+            if (!seriesField.length) {
+                return;
+            }
+
+            var jsonValue = '[]';
+            if (seriesEntries.length && window.JSON && typeof window.JSON.stringify === 'function') {
+                jsonValue = window.JSON.stringify(seriesEntries);
+            }
+            seriesField.val(jsonValue);
+        }
+
+        function renderSeries() {
+            sortSeriesEntries();
+
+            if (seriesTableBody.length) {
+                var preservedEmpty = seriesEmptyRow.length ? seriesEmptyRow : $();
+                seriesTableBody.find('tr').not(preservedEmpty).remove();
+
+                var emptyText = seriesConfig.emptyLabel || 'Aucune date ajoutee pour le moment.';
+                if (seriesEmptyRow.length) {
+                    seriesEmptyRow.find('.mj-series-builder__empty').text(emptyText);
+                }
+
+                if (!seriesEntries.length) {
+                    if (seriesEmptyRow.length) {
+                        seriesEmptyRow.show();
+                    }
+                } else {
+                    if (seriesEmptyRow.length) {
+                        seriesEmptyRow.hide();
+                    }
+
+                    var removeLabel = seriesConfig.removeLabel || 'Supprimer';
+                    seriesEntries.forEach(function (entry, index) {
+                        var row = $('<tr />').attr('data-series-index', index);
+                        row.append(
+                            $('<td />').append(
+                                $('<span />').addClass('mj-series-builder__cell').text(entry.date)
+                            )
+                        );
+                        row.append(
+                            $('<td />').append(
+                                $('<span />').addClass('mj-series-builder__cell').text(entry.start_time)
+                            )
+                        );
+                        var endDisplay = entry.end_time && entry.end_time.trim() ? entry.end_time : '--';
+                        row.append(
+                            $('<td />').append(
+                                $('<span />').addClass('mj-series-builder__cell').text(endDisplay)
+                            )
+                        );
+                        row.append(
+                            $('<td />')
+                                .addClass('mj-series-builder__actions')
+                                .append(
+                                    $('<button />', {
+                                        type: 'button',
+                                        class: 'button button-link-delete mj-event-series-remove',
+                                        'data-series-index': index,
+                                        text: removeLabel
+                                    })
+                                )
+                        );
+                        seriesTableBody.append(row);
+                    });
+                }
+            }
+
+            serializeSeries();
+            refreshScheduleUI('series-render');
+        }
+
+        function loadSeriesFromField() {
+            if (!seriesField.length) {
+                seriesEntries = [];
+                return;
+            }
+
+            var rawValue = seriesField.val();
+            var parsed = [];
+            if (typeof rawValue === 'string' && rawValue.trim() !== '') {
+                try {
+                    parsed = window.JSON && typeof window.JSON.parse === 'function' ? window.JSON.parse(rawValue) : [];
+                } catch (parseError) {
+                    parsed = [];
+                }
+            }
+
+            seriesEntries = [];
+            if (Array.isArray(parsed)) {
+                parsed.forEach(function (candidate) {
+                    var normalized = normalizeSeriesEntry(candidate);
+                    if (normalized) {
+                        seriesEntries.push(normalized);
+                    }
+                });
+            }
+        }
+
+        function getSeriesBounds() {
+            if (!seriesEntries.length) {
+                return { start: '', end: '' };
+            }
+
+            var startKey = '';
+            var endKey = '';
+
+            seriesEntries.forEach(function (entry) {
+                var candidateStart = buildSeriesKey(entry.date, entry.start_time);
+                if (candidateStart && (!startKey || candidateStart < startKey)) {
+                    startKey = candidateStart;
+                }
+
+                var candidateEnd = buildSeriesKey(entry.date, entry.end_time && entry.end_time.trim() ? entry.end_time : entry.start_time);
+                if (candidateEnd && (!endKey || candidateEnd > endKey)) {
+                    endKey = candidateEnd;
+                }
+            });
+
+            return {
+                start: startKey,
+                end: endKey
+            };
+        }
+
+        if (seriesField.length) {
+            seriesField.on('change', function () {
+                loadSeriesFromField();
+                renderSeries();
+            });
+
+            loadSeriesFromField();
+            renderSeries();
+        }
 
         function toggleScheduleSections(mode) {
             if (!scheduleSections.length) {
@@ -511,7 +724,8 @@
         }
 
         function updateFieldRequirements(mode) {
-            fixedDateInput.add(fixedStartTimeInput).add(fixedEndTimeInput).prop('required', mode === 'fixed');
+            fixedDateInput.add(fixedStartTimeInput).prop('required', mode === 'fixed');
+            fixedEndTimeInput.prop('required', false);
             rangeStartInput.add(rangeEndInput).prop('required', mode === 'range');
             recurringDateInput.add(recurringStartTimeInput).add(recurringEndTimeInput).prop('required', mode === 'recurring');
             if (recurringUntilInput.length) {
@@ -536,6 +750,14 @@
             } else if (mode === 'range') {
                 startValue = rangeStartInput.val() || '';
                 endValue = rangeEndInput.val() || '';
+            } else if (mode === 'series') {
+                var bounds = getSeriesBounds();
+                if (bounds.start) {
+                    startValue = bounds.start;
+                }
+                if (bounds.end) {
+                    endValue = bounds.end;
+                }
             } else if (mode === 'recurring') {
                 var recurringDateValue = recurringDateInput.val();
                 var recurringStartValue = recurringStartTimeInput.val();
@@ -562,13 +784,11 @@
         function refreshScheduleUI(source) {
             var modeInput = $(scheduleModeSelector).filter(':checked');
             var mode = modeInput.length ? modeInput.val() : 'fixed';
-            console.info('MJ admin events refresh', mode, source || '');
             toggleScheduleSections(mode);
             updateFieldRequirements(mode);
             updateRecurringSections();
             computeScheduleDatetimes(mode);
         }
-        console.info('scheduleModeSelector', scheduleModeSelector);
         $(document).on('change', scheduleModeSelector, function () {
             refreshScheduleUI('mode');
         });
@@ -588,6 +808,66 @@
 
         rangeStartInput.add(rangeEndInput).on('change', function () {
             refreshScheduleUI('range');
+        });
+
+        if (seriesAddButton.length) {
+            seriesAddButton.on('click', function (event) {
+                event.preventDefault();
+
+                var dateValue = seriesDateInput.length ? String(seriesDateInput.val() || '').trim() : '';
+                var startValue = seriesStartInput.length ? String(seriesStartInput.val() || '').trim() : '';
+                var endValue = seriesEndInput.length ? String(seriesEndInput.val() || '').trim() : '';
+
+                if (!dateValue) {
+                    window.alert(seriesConfig.missingDate || 'Merci de donner une date valide.');
+                    return;
+                }
+
+                if (!startValue) {
+                    window.alert(seriesConfig.missingStart || 'Merci d indiquer une heure de debut.');
+                    return;
+                }
+
+                if (endValue) {
+                    var startKey = buildSeriesKey(dateValue, startValue);
+                    var endKey = buildSeriesKey(dateValue, endValue);
+                    if (endKey <= startKey) {
+                        window.alert(seriesConfig.invalidEnd || 'L heure de fin doit etre superieure a l heure de debut.');
+                        return;
+                    }
+                }
+
+                seriesEntries.push({
+                    date: dateValue,
+                    start_time: startValue,
+                    end_time: endValue
+                });
+
+                renderSeries();
+
+                if (seriesDateInput.length) {
+                    seriesDateInput.val('').focus();
+                }
+                if (seriesStartInput.length) {
+                    seriesStartInput.val('');
+                }
+                if (seriesEndInput.length) {
+                    seriesEndInput.val('');
+                }
+            });
+        }
+
+        $(document).on('click', '.mj-event-series-remove', function (event) {
+            event.preventDefault();
+
+            var button = $(this);
+            var index = parseInt(button.attr('data-series-index'), 10);
+            if (isNaN(index) || index < 0 || index >= seriesEntries.length) {
+                return;
+            }
+
+            seriesEntries.splice(index, 1);
+            renderSeries();
         });
 
         var paymentConfig = (typeof mjAdminEvents !== 'undefined' && mjAdminEvents.payment) ? mjAdminEvents.payment : {};

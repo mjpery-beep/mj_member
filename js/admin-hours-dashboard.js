@@ -1,0 +1,692 @@
+var mjHoursPreactReadyPromise = null;
+var mjHoursScriptPromises = {};
+var h = null;
+var render = null;
+var useMemo = null;
+var useState = null;
+var useEffect = null;
+var useRef = null;
+
+var PREACT_SCRIPT_ID = 'mj-member-preact-lib';
+var PREACT_HOOKS_SCRIPT_ID = 'mj-member-preact-hooks';
+var PREACT_SCRIPT_URL = 'https://unpkg.com/preact@10.19.3/dist/preact.min.js';
+var PREACT_HOOKS_SCRIPT_URL = 'https://unpkg.com/preact@10.19.3/hooks/dist/hooks.umd.js';
+
+var CHART_JS_SCRIPT_ID = 'mj-member-chartjs';
+var CHART_JS_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js';
+var chartJsReadyPromise = null;
+
+const COLOR_PALETTE = [
+    '#6366f1',
+    '#22c55e',
+    '#f97316',
+    '#a855f7',
+    '#ef4444',
+    '#14b8a6',
+    '#f59e0b',
+    '#3b82f6',
+];
+
+function loadScriptOnce(id, url) {
+    if (mjHoursScriptPromises[id]) {
+        return mjHoursScriptPromises[id];
+    }
+
+    var existing = document.getElementById(id);
+    if (existing) {
+        mjHoursScriptPromises[id] = Promise.resolve();
+        return mjHoursScriptPromises[id];
+    }
+
+    mjHoursScriptPromises[id] = new Promise(function (resolve, reject) {
+        var script = document.createElement('script');
+        script.id = id;
+        script.src = url;
+        script.async = true;
+        script.onload = function () {
+            resolve();
+        };
+        script.onerror = function () {
+            reject(new Error('Unable to load script ' + url));
+        };
+        document.head.appendChild(script);
+    });
+
+    return mjHoursScriptPromises[id];
+}
+
+function ensurePreact() {
+    if (h && render && useMemo && useState) {
+        return Promise.resolve();
+    }
+
+    if (!mjHoursPreactReadyPromise) {
+        mjHoursPreactReadyPromise = Promise.resolve()
+            .then(function () {
+                if (typeof window !== 'undefined' && window.preact) {
+                    return;
+                }
+                return loadScriptOnce(PREACT_SCRIPT_ID, PREACT_SCRIPT_URL);
+            })
+            .then(function () {
+                if (typeof window !== 'undefined' && window.preactHooks) {
+                    return;
+                }
+                return loadScriptOnce(PREACT_HOOKS_SCRIPT_ID, PREACT_HOOKS_SCRIPT_URL);
+            })
+            .then(function () {
+                var globalObject = typeof window !== 'undefined' ? window : {};
+                var preact = globalObject.preact;
+                var hooks = globalObject.preactHooks || (preact && preactHooksFallback(preact));
+
+                if (!preact || !hooks) {
+                    throw new Error('Preact global introuvable');
+                }
+
+                h = preact.h;
+                render = preact.render;
+                useMemo = hooks.useMemo;
+                useState = hooks.useState;
+                useEffect = hooks.useEffect;
+                useRef = hooks.useRef;
+
+                if (typeof h !== 'function' || typeof render !== 'function' || typeof useMemo !== 'function' || typeof useState !== 'function' || typeof useEffect !== 'function' || typeof useRef !== 'function') {
+                    throw new Error('Exports Preact incomplets');
+                }
+            })
+            .catch(function (error) {
+                console.error('MJ Member Hours dashboard failed to load Preact', error);
+                throw error;
+            });
+    }
+
+    return mjHoursPreactReadyPromise;
+}
+
+function preactHooksFallback(preact) {
+    if (!preact || !preact.options) {
+        return null;
+    }
+    // Preact UMD n’expose pas toujours preactHooks. Cherche les hooks via options.
+    if (typeof preact.useState === 'function' && typeof preact.useMemo === 'function' && typeof preact.useEffect === 'function' && typeof preact.useRef === 'function') {
+        return {
+            useState: preact.useState,
+            useMemo: preact.useMemo,
+            useEffect: preact.useEffect,
+            useRef: preact.useRef,
+        };
+    }
+    return null;
+}
+
+function ensureChartJs() {
+    if (typeof window !== 'undefined' && typeof window.Chart !== 'undefined') {
+        return Promise.resolve(window.Chart);
+    }
+
+    if (!chartJsReadyPromise) {
+        chartJsReadyPromise = loadScriptOnce(CHART_JS_SCRIPT_ID, CHART_JS_SCRIPT_URL)
+            .then(function () {
+                if (typeof window === 'undefined' || typeof window.Chart === 'undefined') {
+                    throw new Error('Chart.js introuvable');
+                }
+                return window.Chart;
+            })
+            .catch(function (error) {
+                console.error('MJ Member Hours dashboard failed to load Chart.js', error);
+                throw error;
+            });
+    }
+
+    return chartJsReadyPromise;
+}
+
+function parseConfig(raw) {
+    if (typeof raw !== 'string' || raw === '') {
+        return {};
+    }
+
+    try {
+        return JSON.parse(raw);
+    } catch (error) {
+        try {
+            var textarea = document.createElement('textarea');
+            textarea.innerHTML = raw;
+            return JSON.parse(textarea.value);
+        } catch (secondError) {
+            return {};
+        }
+    }
+}
+
+function formatPercentage(value) {
+    if (!Number.isFinite(value) || value <= 0) {
+        return '0%';
+    }
+    if (value >= 99.5) {
+        return '100%';
+    }
+    return `${Math.round(value * 10) / 10}%`;
+}
+
+function formatMinutesToHoursLabel(minutes) {
+    var value = Number(minutes);
+    if (!Number.isFinite(value) || value <= 0) {
+        return '0 min';
+    }
+
+    var totalMinutes = Math.round(value);
+    var hours = Math.floor(totalMinutes / 60);
+    var rest = totalMinutes % 60;
+    var parts = [];
+
+    if (hours > 0) {
+        parts.push(hours + ' h');
+    }
+
+    if (rest > 0) {
+        parts.push(rest + ' min');
+    }
+
+    if (parts.length === 0) {
+        return '0 min';
+    }
+
+    return parts.join(' ');
+}
+
+function useChartJs(canvasRef, chartType, chartData, chartOptions) {
+    useEffect(function () {
+        var chartInstance = null;
+        var isMounted = true;
+
+        if (!canvasRef || typeof canvasRef !== 'object') {
+            return undefined;
+        }
+
+        if (!chartType || !chartData) {
+            return function () {
+                isMounted = false;
+            };
+        }
+
+        ensureChartJs()
+            .then(function (ChartConstructor) {
+                if (!isMounted || !canvasRef.current || !chartData) {
+                    return;
+                }
+
+                var context = canvasRef.current.getContext('2d');
+                if (!context) {
+                    return;
+                }
+
+                chartInstance = new ChartConstructor(context, {
+                    type: chartType,
+                    data: chartData,
+                    options: chartOptions || {},
+                });
+            })
+            .catch(function (error) {
+                console.error('MJ Member Hours dashboard failed to initialise Chart.js', error);
+            });
+
+        return function () {
+            isMounted = false;
+            if (chartInstance) {
+                chartInstance.destroy();
+                chartInstance = null;
+            }
+        };
+    }, [canvasRef, chartType, chartData, chartOptions]);
+}
+
+function SummaryCards({ totals, i18n }) {
+    const cards = [
+        {
+            key: 'total-hours',
+            title: i18n.totalHours,
+            value: totals.human || '0',
+            meta: totals.entries ? `${totals.entries} ${i18n.entriesLabel}` : null,
+        },
+        {
+            key: 'members-count',
+            title: i18n.membersCount,
+            value: String(totals.member_count || 0),
+            meta: null,
+        },
+        {
+            key: 'projects-count',
+            title: i18n.projectsCount,
+            value: String(totals.project_count || 0),
+            meta: null,
+        },
+        {
+            key: 'unassigned',
+            title: i18n.unassignedHours,
+            value: totals.unassigned_human || '0',
+            meta: (function () {
+                var totalBase = Math.max(totals.minutes || 0, 0);
+                if (totalBase <= 0) {
+                    return '0%';
+                }
+                var percent = ((totals.unassigned_minutes || 0) / totalBase) * 100;
+                return formatPercentage(percent);
+            }()),
+        },
+    ];
+
+    return (
+        h('div', { className: 'mj-hours-dashboard__summary' },
+            cards.map(function (card) {
+                return h('div', { key: card.key, className: 'mj-hours-dashboard-card' },
+                    h('p', { className: 'mj-hours-dashboard-card__title' }, card.title || ''),
+                    h('p', { className: 'mj-hours-dashboard-card__value' }, card.value || '0'),
+                    card.meta ? h('p', { className: 'mj-hours-dashboard-card__meta' }, card.meta) : null,
+                );
+            })
+        )
+    );
+}
+
+function DonutChart({ title, items, totalMinutes, centerLabel, centerValue, i18n, emptyLabel, wrap = true, headingLevel = 'h2' }) {
+    var hasData = Array.isArray(items) && items.length > 0 && totalMinutes > 0;
+    var projectWithoutLabel = i18n && i18n.projectWithoutLabel ? i18n.projectWithoutLabel : '';
+    var headingTag = typeof headingLevel === 'string' && headingLevel !== '' ? headingLevel : 'h2';
+    var containerClass = wrap ? 'mj-hours-dashboard-donut mj-hours-dashboard-card' : 'mj-hours-dashboard-donut';
+
+    var canvasRef = useRef(null);
+
+    var chartData = useMemo(function () {
+        if (!hasData) {
+            return null;
+        }
+
+        var labels = items.map(function (item) {
+            return item.label || projectWithoutLabel;
+        });
+
+        return {
+            labels: labels,
+            datasets: [
+                {
+                    data: items.map(function (item) {
+                        return Math.max(item.minutes || 0, 0);
+                    }),
+                    backgroundColor: items.map(function (_item, index) {
+                        return COLOR_PALETTE[index % COLOR_PALETTE.length];
+                    }),
+                    borderWidth: 0,
+                    hoverOffset: 6,
+                },
+            ],
+        };
+    }, [hasData, items, projectWithoutLabel]);
+
+    var chartOptions = useMemo(function () {
+        if (!hasData) {
+            return null;
+        }
+
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            rotation: -90,
+            cutout: '65%',
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            var label = context.label || '';
+                            var value = typeof context.parsed === 'number' ? context.parsed : 0;
+                            var human = formatMinutesToHoursLabel(value);
+                            return label ? label + ': ' + human : human;
+                        },
+                    },
+                },
+            },
+        };
+    }, [hasData]);
+
+    useChartJs(canvasRef, hasData ? 'doughnut' : null, chartData, chartOptions);
+
+    return h('div', { className: containerClass },
+        title ? h(headingTag, { className: 'mj-hours-dashboard-card__heading mj-hours-dashboard-donut__title' }, title || '') : null,
+        hasData ? h('div', { className: 'mj-hours-dashboard-donut__canvas' },
+            h('canvas', { ref: canvasRef, role: 'img', 'aria-label': title || '' }),
+            h('div', { className: 'mj-hours-dashboard-donut__center' },
+                h('p', { className: 'mj-hours-dashboard-donut__center-value' }, centerValue || '0'),
+                centerLabel ? h('p', { className: 'mj-hours-dashboard-donut__center-label' }, centerLabel) : null,
+            ),
+        ) : h('p', { className: 'mj-hours-dashboard__empty' }, emptyLabel || (i18n && i18n.noProjectsForMember) || ''),
+        hasData ? h('ul', { className: 'mj-hours-dashboard-donut__legend' },
+            items.map(function (item, index) {
+                var minutes = Math.max(item.minutes || 0, 0);
+                var percentage = totalMinutes > 0 ? (minutes / totalMinutes) * 100 : 0;
+                return h('li', { key: `${item.key || index}-legend`, className: 'mj-hours-dashboard-donut__legend-item' },
+                    h('span', { className: 'mj-hours-dashboard-donut__legend-label' },
+                        h('span', {
+                            className: 'mj-hours-dashboard-donut__legend-swatch',
+                            style: { background: COLOR_PALETTE[index % COLOR_PALETTE.length] },
+                        }),
+                        h('span', null, item.label || projectWithoutLabel),
+                    ),
+                    h('span', null, `${item.human || '0'} · ${formatPercentage(percentage)}`),
+                );
+            })
+        ) : null,
+    );
+}
+
+function BarChart({ title, subtitle, items, i18n, emptyLabel }) {
+    var hasData = Array.isArray(items) && items.length > 0;
+    var datasetLabel = subtitle || title || (i18n && i18n.totalHours ? i18n.totalHours : '');
+    var canvasRef = useRef(null);
+
+    var chartData = useMemo(function () {
+        if (!hasData) {
+            return null;
+        }
+
+        return {
+            labels: items.map(function (item) {
+                return item.short_label || item.label || '';
+            }),
+            datasets: [
+                {
+                    label: datasetLabel,
+                    data: items.map(function (item) {
+                        return Math.max(item.minutes || 0, 0);
+                    }),
+                    backgroundColor: items.map(function (_item, index) {
+                        return COLOR_PALETTE[index % COLOR_PALETTE.length];
+                    }),
+                    borderRadius: 10,
+                    maxBarThickness: 48,
+                },
+            ],
+        };
+    }, [hasData, items, datasetLabel]);
+
+    var chartOptions = useMemo(function () {
+        if (!hasData) {
+            return null;
+        }
+
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        autoSkip: false,
+                        maxRotation: 0,
+                        minRotation: 0,
+                    },
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(148, 163, 184, 0.25)',
+                        drawBorder: false,
+                    },
+                    ticks: {
+                        callback: function (value) {
+                            return formatMinutesToHoursLabel(value);
+                        },
+                    },
+                },
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            var label = context.label || '';
+                            var value = (context.parsed && typeof context.parsed.y === 'number') ? context.parsed.y : context.parsed;
+                            var minutes = typeof value === 'number' ? value : 0;
+                            var human = formatMinutesToHoursLabel(minutes);
+                            return label ? label + ': ' + human : human;
+                        },
+                    },
+                },
+            },
+        };
+    }, [hasData, items]);
+
+    useChartJs(canvasRef, hasData ? 'bar' : null, chartData, chartOptions);
+
+    return h('div', { className: 'mj-hours-dashboard-card mj-hours-dashboard-bar-chart' },
+        title ? h('h2', { className: 'mj-hours-dashboard-card__heading' }, title || '') : null,
+        subtitle ? h('p', { className: 'mj-hours-dashboard-card__subtitle' }, subtitle) : null,
+        hasData ? h('div', { className: 'mj-hours-dashboard-bar-chart__canvas' },
+            h('canvas', { ref: canvasRef, role: 'img', 'aria-label': title || datasetLabel || '' })
+        ) : h('p', { className: 'mj-hours-dashboard__empty' }, emptyLabel || (i18n && (i18n.barChartEmpty || i18n.noMemberData)) || '')
+    );
+}
+
+function MemberSelector({ members, selectedId, onChange, label, helper }) {
+    if (!Array.isArray(members) || members.length === 0) {
+        return null;
+    }
+
+    return h('div', { className: 'mj-hours-dashboard__select' },
+        label ? h('label', { htmlFor: 'mj-hours-dashboard-member-select' }, label) : null,
+        h('select', {
+            id: 'mj-hours-dashboard-member-select',
+            value: selectedId || '',
+            onChange: function (event) {
+                var value = parseInt(event.target.value, 10);
+                if (Number.isNaN(value)) {
+                    value = 0;
+                }
+                onChange(value);
+            },
+        },
+            members.map(function (member) {
+                return h('option', { key: member.id, value: member.id }, member.label || '');
+            })
+        ),
+        helper ? h('p', { className: 'mj-hours-dashboard__select-helper' }, helper) : null
+    );
+}
+
+function MembersTable({ members, totals, i18n }) {
+    if (!Array.isArray(members) || members.length === 0) {
+        return h('p', { className: 'mj-hours-dashboard__empty' }, i18n.noMemberData || '');
+    }
+
+    var totalMinutes = Math.max(totals.minutes || 0, 0);
+
+    return h('div', { className: 'mj-hours-dashboard-card mj-hours-dashboard__table-card' },
+        h('h2', { className: 'mj-hours-dashboard-card__heading' }, i18n.memberTableTitle || ''),
+        h('table', null,
+            h('thead', null,
+                h('tr', null,
+                    h('th', null, i18n.memberColumn || ''),
+                    h('th', null, i18n.hoursColumn || ''),
+                    h('th', null, i18n.entriesColumn || ''),
+                    h('th', null, i18n.rateColumn || ''),
+                ),
+            ),
+            h('tbody', null,
+                members.map(function (member) {
+                    var share = totalMinutes > 0 ? (member.minutes || 0) / totalMinutes : 0;
+                    return h('tr', { key: member.id },
+                        h('td', null, member.label || ''),
+                        h('td', null, member.human || '0'),
+                        h('td', null, String(member.entries || 0)),
+                        h('td', null, formatPercentage(share * 100)),
+                    );
+                })
+            )
+        )
+    );
+}
+
+function DashboardApp({ config }) {
+    var data = config.data || {};
+    var i18n = config.i18n || {};
+    var totals = data.totals || {};
+    var projects = Array.isArray(data.projects) ? data.projects : [];
+    var members = Array.isArray(data.members) ? data.members : [];
+    var timeseries = data.timeseries || {};
+    var monthlyAll = Array.isArray(timeseries.months) ? timeseries.months : [];
+    var weeklyAll = Array.isArray(timeseries.weeks) ? timeseries.weeks : [];
+    var monthlyByMember = (timeseries.months_by_member && typeof timeseries.months_by_member === 'object') ? timeseries.months_by_member : {};
+    var weeklyByMember = (timeseries.weeks_by_member && typeof timeseries.weeks_by_member === 'object') ? timeseries.weeks_by_member : {};
+
+    var defaultMemberId = members.length > 0 ? members[0].id : 0;
+    var [selectedMemberId, setSelectedMemberId] = useState(defaultMemberId);
+
+    var selectedMember = useMemo(function () {
+        if (!Array.isArray(members)) {
+            return null;
+        }
+        return members.find(function (member) {
+            return member.id === selectedMemberId;
+        }) || null;
+    }, [members, selectedMemberId]);
+
+    var memberProjects = selectedMember && Array.isArray(selectedMember.projects) ? selectedMember.projects : [];
+    var memberTotalMinutes = selectedMember ? Math.max(selectedMember.minutes || 0, 0) : 0;
+
+    var donutItems;
+    var donutTotalMinutes;
+    var donutCenterValue;
+    var donutCenterLabel;
+
+    if (selectedMember) {
+        donutItems = memberProjects;
+        donutTotalMinutes = memberTotalMinutes;
+        donutCenterValue = selectedMember.human || '0';
+        donutCenterLabel = selectedMember.label || '';
+    } else {
+        donutItems = projects;
+        donutTotalMinutes = Math.max(totals.minutes || 0, 0);
+        donutCenterValue = totals.human || '0';
+        donutCenterLabel = i18n.totalHours || '';
+    }
+
+    var monthlySeriesForMember = (selectedMemberId && monthlyByMember && monthlyByMember[selectedMemberId]) ? monthlyByMember[selectedMemberId] : null;
+    var weeklySeriesForMember = (selectedMemberId && weeklyByMember && weeklyByMember[selectedMemberId]) ? weeklyByMember[selectedMemberId] : null;
+
+    var monthlySeries;
+    if (selectedMember) {
+        monthlySeries = Array.isArray(monthlySeriesForMember) ? monthlySeriesForMember : [];
+    } else {
+        monthlySeries = monthlyAll;
+    }
+
+    var weeklySeries;
+    if (selectedMember) {
+        weeklySeries = Array.isArray(weeklySeriesForMember) ? weeklySeriesForMember : [];
+    } else {
+        weeklySeries = weeklyAll;
+    }
+
+    var monthlyTitle = i18n.monthlyHoursTitle || '';
+    var memberLabel = selectedMember ? (selectedMember.label || '') : '';
+    var memberHuman = selectedMember ? (selectedMember.human || '0') : '';
+    var totalHuman = totals.human || '';
+
+    var monthlySubtitle = selectedMember ? (memberLabel ? memberLabel + ' · ' + memberHuman : memberHuman) : totalHuman;
+    var weeklyTitle = i18n.weeklyHoursTitle || '';
+    var weeklySubtitle = selectedMember ? (memberLabel ? memberLabel + ' · ' + memberHuman : memberHuman) : totalHuman;
+
+    var baseProjectsTitle = i18n.projectsDonutTitle || '';
+    var projectsDonutTitle;
+    if (selectedMember && memberLabel) {
+        projectsDonutTitle = baseProjectsTitle ? (baseProjectsTitle + ' · ' + memberLabel) : memberLabel;
+    } else {
+        projectsDonutTitle = baseProjectsTitle;
+    }
+
+    return h('div', { className: 'mj-hours-dashboard__content' },
+        h(SummaryCards, { totals: totals, i18n: i18n }),
+        h(MemberSelector, {
+            members: members,
+            selectedId: selectedMemberId,
+            onChange: setSelectedMemberId,
+            label: i18n.memberSelectLabel,
+            helper: i18n.memberSelectHelper,
+        }),
+        h(DonutChart, {
+            title: projectsDonutTitle,
+            items: donutItems,
+            totalMinutes: donutTotalMinutes,
+            centerValue: donutCenterValue,
+            centerLabel: donutCenterLabel,
+            i18n: i18n,
+            emptyLabel: i18n.noProjectsForMember,
+        }),
+        h('div', { className: 'mj-hours-dashboard__grid mj-hours-dashboard__grid--timeseries' },
+            h(BarChart, {
+                title: monthlyTitle,
+                subtitle: monthlySubtitle,
+                items: monthlySeries,
+                i18n: i18n,
+                emptyLabel: i18n.barChartEmpty,
+            }),
+            h(BarChart, {
+                title: weeklyTitle,
+                subtitle: weeklySubtitle,
+                items: weeklySeries,
+                i18n: i18n,
+                emptyLabel: i18n.barChartEmpty,
+            })
+        ),
+        h(MembersTable, { members: members, totals: totals, i18n: i18n })
+    );
+}
+
+function bootstrap(root) {
+    var globalConfig = typeof window !== 'undefined' ? window.mjMemberHoursDashboardConfig : null;
+    var config = null;
+
+    if (globalConfig && typeof globalConfig === 'object') {
+        config = globalConfig;
+    }
+
+    if (!config) {
+        var rawConfig = root.getAttribute('data-config') || root.dataset.config || '{}';
+        config = parseConfig(rawConfig);
+    }
+
+    if (!config || typeof config !== 'object') {
+        config = {};
+    }
+
+    ensurePreact().then(function () {
+        try {
+            render(h(DashboardApp, { config: config }), root);
+            root.setAttribute('data-mj-hours-dashboard-ready', '1');
+        } catch (error) {
+            console.error('MJ Member Hours dashboard failed to render', error);
+            var fallbackMessageRender = (config && config.i18n && config.i18n.renderError)
+                ? config.i18n.renderError
+                : "Impossible d'afficher le tableau de bord pour le moment.";
+            root.innerHTML = '<p class="mj-hours-dashboard__empty">' + fallbackMessageRender + '</p>';
+        }
+    }).catch(function () {
+        var fallbackMessageLoad = (config && config.i18n && config.i18n.renderError)
+            ? config.i18n.renderError
+            : "Impossible d'afficher le tableau de bord pour le moment.";
+        root.innerHTML = '<p class="mj-hours-dashboard__empty">' + fallbackMessageLoad + '</p>';
+    });
+}
+
+function init() {
+    var roots = document.querySelectorAll('[data-mj-hours-dashboard]');
+    roots.forEach(function (root) {
+        bootstrap(root);
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}

@@ -1,6 +1,29 @@
 (function ($, window) {
     'use strict';
 
+    var Utils = window.MjMemberUtils || {};
+
+    var escapeHtml = typeof Utils.escapeHtml === 'function'
+        ? Utils.escapeHtml
+        : function (value) {
+            return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, function (match) {
+                switch (match) {
+                    case '&':
+                        return '&amp;';
+                    case '<':
+                        return '&lt;';
+                    case '>':
+                        return '&gt;';
+                    case '"':
+                        return '&quot;';
+                    case "'":
+                        return '&#039;';
+                    default:
+                        return match;
+                }
+            });
+        };
+
     var settings = window.mjMemberContactMessages || {};
     var i18n = settings.i18n || {};
 
@@ -9,25 +32,6 @@
             return i18n[key];
         }
         return fallback;
-    }
-
-    function escapeHtml(value) {
-        return String(value).replace(/[&<>"']/g, function (match) {
-            switch (match) {
-                case '&':
-                    return '&amp;';
-                case '<':
-                    return '&lt;';
-                case '>':
-                    return '&gt;';
-                case '"':
-                    return '&quot;';
-                case '\'':
-                    return '&#039;';
-                default:
-                    return match;
-            }
-        });
     }
 
     function normalizeBodyMarkup(source) {
@@ -112,6 +116,83 @@
         $list.append($entry);
     }
 
+    function updateReadStateDisplay($item, isUnread) {
+        if (!$item || !$item.length) {
+            return;
+        }
+
+        if (isUnread) {
+            $item.addClass('is-unread');
+        } else {
+            $item.removeClass('is-unread');
+        }
+
+        var $toggleForm = $item.find('.mj-contact-messages__toggle-form').first();
+        if ($toggleForm.length) {
+            var $toggleButton = $toggleForm.find('.mj-contact-messages__toggle-button');
+            var $toggleText = $toggleButton.find('.mj-contact-messages__toggle-text');
+            var $indicator = $toggleButton.find('.mj-contact-messages__state-indicator');
+            var $targetStateInput = $toggleForm.find('input[name="target_state"]').first();
+            var markReadLabel = $toggleButton.data('labelRead') || label('markRead', 'Marquer comme lu');
+            var markUnreadLabel = $toggleButton.data('labelUnread') || label('markUnread', 'Marquer comme non lu');
+
+            if (isUnread) {
+                $toggleButton
+                    .addClass('is-action-read')
+                    .removeClass('is-action-unread')
+                    .attr('data-target-state', 'read')
+                    .attr('title', markReadLabel)
+                    .attr('aria-label', markReadLabel)
+                    .data('targetState', 'read')
+                    .data('currentState', 'unread');
+                $toggleText.text(markReadLabel);
+                $indicator.addClass('is-unread').removeClass('is-read');
+                if ($targetStateInput.length) {
+                    $targetStateInput.val('read');
+                }
+            } else {
+                $toggleButton
+                    .addClass('is-action-unread')
+                    .removeClass('is-action-read')
+                    .attr('data-target-state', 'unread')
+                    .attr('title', markUnreadLabel)
+                    .attr('aria-label', markUnreadLabel)
+                    .data('targetState', 'unread')
+                    .data('currentState', 'read');
+                $toggleText.text(markUnreadLabel);
+                $indicator.addClass('is-read').removeClass('is-unread');
+                if ($targetStateInput.length) {
+                    $targetStateInput.val('unread');
+                }
+            }
+
+            return;
+        }
+
+        var $statePill = $item.find('.mj-contact-messages__state-pill');
+        if (!$statePill.length) {
+            var $actions = $item.find('.mj-contact-messages__summary-actions').first();
+            $statePill = $('<span class="mj-contact-messages__state-pill"><span class="mj-contact-messages__state-indicator" aria-hidden="true"></span><span class="mj-contact-messages__state-text"></span></span>');
+            if ($actions.length) {
+                $actions.prepend($statePill);
+            } else {
+                $item.prepend($statePill);
+            }
+        }
+
+        var $pillIndicator = $statePill.find('.mj-contact-messages__state-indicator');
+        var $pillText = $statePill.find('.mj-contact-messages__state-text');
+        if (isUnread) {
+            $statePill.addClass('is-unread').removeClass('is-read');
+            $pillIndicator.addClass('is-unread').removeClass('is-read');
+            $pillText.text(label('badgeUnread', 'Non lu'));
+        } else {
+            $statePill.addClass('is-read').removeClass('is-unread');
+            $pillIndicator.addClass('is-read').removeClass('is-unread');
+            $pillText.text(label('badgeRead', 'Lu'));
+        }
+    }
+
     function handleSubmit(event) {
         event.preventDefault();
 
@@ -191,18 +272,7 @@
                         }
 
                         var isUnread = responseData.is_read === 0 || responseData.is_read === '0';
-                        if (isUnread) {
-                            $item.addClass('is-unread');
-                            var $badge = $item.find('.mj-contact-messages__badge');
-                            if (!$badge.length) {
-                                $badge = $('<span class="mj-contact-messages__badge"></span>');
-                                $item.find('.mj-contact-messages__item-header').append($badge);
-                            }
-                            $badge.text(label('badgeUnread', 'Non lu'));
-                        } else {
-                            $item.removeClass('is-unread');
-                            $item.find('.mj-contact-messages__badge').remove();
-                        }
+                        updateReadStateDisplay($item, isUnread);
                     }
                 }
 
@@ -228,6 +298,10 @@
             $submit.prop('disabled', false).text($submit.data('defaultLabel') || label('submit', 'Envoyer'));
         });
     }
+
+    $(document).on('click', '.mj-contact-messages__toggle-button', function (event) {
+        event.stopPropagation();
+    });
 
     $(document).on('submit', '.mj-contact-messages__quick-reply-form', handleSubmit);
 })(window.jQuery, window);

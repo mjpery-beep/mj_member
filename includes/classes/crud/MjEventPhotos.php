@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class MjEventPhotos {
+class MjEventPhotos implements CrudRepositoryInterface {
     const STATUS_PENDING = 'pending';
     const STATUS_APPROVED = 'approved';
     const STATUS_REJECTED = 'rejected';
@@ -33,10 +33,21 @@ class MjEventPhotos {
     }
 
     /**
+     * @param array<string,mixed> $args
+     * @return array<int,object>
+     */
+    public static function get_all(array $args = array()) {
+        return self::query($args);
+    }
+
+    /**
      * @param array<string,mixed> $data
      * @return int|WP_Error
      */
-    public static function create(array $data) {
+    public static function create($data) {
+        if (!is_array($data)) {
+            return new WP_Error('mj_event_photo_invalid_payload', __('Format de données invalide.', 'mj-member'));
+        }
         global $wpdb;
         $table = self::get_table_name();
 
@@ -96,9 +107,12 @@ class MjEventPhotos {
     /**
      * @param int $photo_id
      * @param array<string,mixed> $data
-     * @return bool|WP_Error
+    * @return true|WP_Error
      */
-    public static function update($photo_id, array $data) {
+    public static function update($photo_id, $data) {
+        if (!is_array($data)) {
+            return new WP_Error('mj_event_photo_invalid_payload', __('Format de données invalide.', 'mj-member'));
+        }
         global $wpdb;
         $table = self::get_table_name();
         $photo_id = (int) $photo_id;
@@ -153,7 +167,7 @@ class MjEventPhotos {
      * @param int $photo_id
      * @param string $status
      * @param array<string,mixed> $args
-     * @return bool|WP_Error
+    * @return true|WP_Error
      */
     public static function update_status($photo_id, $status, array $args = array()) {
         $reviewed_at = isset($args['reviewed_at']) ? sanitize_text_field($args['reviewed_at']) : current_time('mysql');
@@ -225,9 +239,9 @@ class MjEventPhotos {
     }
 
     /**
-     * @param array<string,mixed> $args
-     * @return array<int,object>
-     */
+    * @param array<string,mixed> $args
+    * @return array<int,object>
+    */
     public static function query(array $args = array()) {
         global $wpdb;
         $table = self::get_table_name();
@@ -343,19 +357,71 @@ class MjEventPhotos {
     }
 
     /**
+     * @param array<string,mixed> $args
+     * @return int
+     */
+    public static function count(array $args = array()) {
+        global $wpdb;
+        $table = self::get_table_name();
+
+        $defaults = array(
+            'status' => '',
+            'event_id' => 0,
+            'member_id' => 0,
+        );
+        $query_args = wp_parse_args($args, $defaults);
+
+        $status = $query_args['status'] !== '' ? self::sanitize_status($query_args['status']) : '';
+        $event_id = (int) $query_args['event_id'];
+        $member_id = (int) $query_args['member_id'];
+
+        $where_parts = array('1=1');
+        $params = array();
+
+        if ($status !== '') {
+            $where_parts[] = 'status = %s';
+            $params[] = $status;
+        }
+
+        if ($event_id > 0) {
+            $where_parts[] = 'event_id = %d';
+            $params[] = $event_id;
+        }
+
+        if ($member_id > 0) {
+            $where_parts[] = 'member_id = %d';
+            $params[] = $member_id;
+        }
+
+        $where_sql = implode(' AND ', $where_parts);
+
+        $sql = "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}";
+        if (!empty($params)) {
+            $sql = $wpdb->prepare($sql, $params);
+        }
+
+        $count = $wpdb->get_var($sql);
+        return $count ? (int) $count : 0;
+    }
+
+    /**
      * @param int $photo_id
-     * @return bool
+     * @return true|WP_Error
      */
     public static function delete($photo_id) {
         global $wpdb;
         $table = self::get_table_name();
         $photo_id = (int) $photo_id;
         if ($photo_id <= 0) {
-            return false;
+            return new WP_Error('mj_event_photo_invalid_id', __('Identifiant photo invalide.', 'mj-member'));
         }
 
         $result = $wpdb->delete($table, array('id' => $photo_id), array('%d'));
-        return ($result !== false);
+        if ($result === false) {
+            return new WP_Error('mj_event_photo_delete_failed', __('Suppression impossible.', 'mj-member'));
+        }
+
+        return true;
     }
 
     /**

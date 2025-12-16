@@ -12,6 +12,8 @@ use Elementor\Icons_Manager;
 use Elementor\Widget_Base;
 
 class Mj_Member_Elementor_Login_Widget extends Widget_Base {
+    use Mj_Member_Elementor_Widget_Visibility;
+
     public function get_name() {
         return 'mj-member-login-button';
     }
@@ -96,8 +98,8 @@ class Mj_Member_Elementor_Login_Widget extends Widget_Base {
             array(
                 'label' => __('Titre du menu (connecté)', 'mj-member'),
                 'type' => Controls_Manager::TEXT,
-                'default' => __('Mon espace membre', 'mj-member'),
-                'placeholder' => __('Mon espace membre', 'mj-member'),
+                'default' => '',
+                'placeholder' => __('Ex : Bienvenue {{member_name}}', 'mj-member'),
                 'label_block' => true,
             )
         );
@@ -175,6 +177,9 @@ class Mj_Member_Elementor_Login_Widget extends Widget_Base {
 
         $this->end_controls_section();
 
+        $this->register_visibility_controls();
+
+
         $this->start_controls_section(
             'section_style_button',
             array(
@@ -183,23 +188,11 @@ class Mj_Member_Elementor_Login_Widget extends Widget_Base {
             )
         );
 
-        $this->add_control(
-            'button_text_color',
-            array(
-                'label' => __('Couleur du texte', 'mj-member'),
-                'type' => Controls_Manager::COLOR,
-                'selectors' => array(
-                    '{{WRAPPER}} .mj-member-login-component__trigger' => 'color: {{VALUE}};',
-                    '{{WRAPPER}} .mj-member-login-component__submit' => 'color: {{VALUE}};',
-                ),
-            )
-        );
-
         if ($this->icons_manager_available()) {
             $this->add_control(
                 'button_icon',
                 array(
-                    'label' => __('Icône du bouton', 'mj-member'),
+                    'label' => __('Icône du bouton (mode "Connexion")', 'mj-member'),
                     'type' => Controls_Manager::ICON,
                     'fa4compatibility' => 'button_icon',
                     'default' => array(
@@ -212,7 +205,7 @@ class Mj_Member_Elementor_Login_Widget extends Widget_Base {
             $this->add_control(
                 'button_icon_class',
                 array(
-                    'label' => __('Classe CSS de l\'icône', 'mj-member'),
+                    'label' => __('Classe CSS de l\'icône (mode "Connexion")', 'mj-member'),
                     'type' => Controls_Manager::TEXT,
                     'placeholder' => 'eicon-lock-user',
                     'default' => 'eicon-lock-user',
@@ -222,39 +215,151 @@ class Mj_Member_Elementor_Login_Widget extends Widget_Base {
         }
 
         $this->add_control(
-            'button_icon_color',
+            'login_button_image',
+            array(
+                'label' => __('Image du bouton (mode "Connexion")', 'mj-member'),
+                'type' => Controls_Manager::MEDIA,
+                'description' => __('Sélectionnez une image pour remplacer l\'icône. Laissez vide pour conserver l\'icône.', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
+            'account_button_image',
+            array(
+                'label' => __('Image du bouton (mode "Mon compte")', 'mj-member'),
+                'type' => Controls_Manager::MEDIA,
+                'description' => __('Affiche une image à la place de l’avatar lorsque l’utilisateur est connecté.', 'mj-member'),
+            )
+        );
+
+        $this->start_controls_tabs('tabs_button_modes');
+
+        $this->start_controls_tab(
+            'tab_button_login_mode',
+            array(
+                'label' => __('Mode "Connexion"', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
+            'login_button_text_color',
+            array(
+                'label' => __('Couleur du texte', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-out"]' => 'color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-member-login-component__submit' => 'color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'login_button_image_display_size',
+            array(
+                'label' => __('Taille de l\'image', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px', 'rem'),
+                'range' => array(
+                    'px' => array('min' => 16, 'max' => 96, 'step' => 1),
+                    'rem' => array('min' => 0.5, 'max' => 6, 'step' => 0.1),
+                ),
+                'default' => array('size' => 28, 'unit' => 'px'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-login-component' => '--mj-member-login-trigger-icon-size: {{SIZE}}{{UNIT}};',
+                ),
+                'condition' => array(
+                    'login_button_image[url]!' => '',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'account_button_image_display_size',
+            array(
+                'label' => __('Taille de l\'image (mode "Mon compte")', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px', 'rem'),
+                'range' => array(
+                    'px' => array('min' => 20, 'max' => 160, 'step' => 1),
+                    'rem' => array('min' => 1, 'max' => 8, 'step' => 0.1),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-login-component' => '--mj-member-login-trigger-account-image-size: {{SIZE}}{{UNIT}};',
+                ),
+                'condition' => array(
+                    'account_button_image[url]!' => '',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'login_button_icon_color',
             array(
                 'label' => __('Couleur de l\'icône', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-member-login-component__trigger-icon' => 'color: {{VALUE}};',
-                    '{{WRAPPER}} .mj-member-login-component__trigger-icon svg' => 'fill: {{VALUE}};',
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-out"] .mj-member-login-component__trigger-icon' => 'color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-out"] .mj-member-login-component__trigger-icon svg' => 'fill: {{VALUE}};',
                 ),
             )
         );
 
         $this->add_control(
-            'button_background_color',
+            'login_button_background_color',
             array(
                 'label' => __('Couleur de fond', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-member-login-component__trigger' => 'background-color: {{VALUE}}; border-color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-out"]' => 'background-color: {{VALUE}}; border-color: {{VALUE}};',
                     '{{WRAPPER}} .mj-member-login-component__submit' => 'background-color: {{VALUE}}; border-color: {{VALUE}};',
-                    '{{WRAPPER}} .mj-member-login-component__trigger-icon svg' => 'fill: currentColor;',
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-out"] .mj-member-login-component__trigger-icon svg' => 'fill: currentColor;',
                 ),
             )
         );
 
         $this->add_control(
-            'button_background_color_hover',
+            'login_button_background_color_hover',
             array(
                 'label' => __('Fond au survol', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-member-login-component__trigger:hover' => 'background-color: {{VALUE}}; border-color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-out"]:hover' => 'background-color: {{VALUE}}; border-color: {{VALUE}};',
                     '{{WRAPPER}} .mj-member-login-component__submit:hover' => 'background-color: {{VALUE}}; border-color: {{VALUE}};',
-                    '{{WRAPPER}} .mj-member-login-component__trigger:hover .mj-member-login-component__trigger-icon svg' => 'fill: currentColor;',
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-out"]:hover .mj-member-login-component__trigger-icon svg' => 'fill: currentColor;',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'login_button_transition_duration',
+            array(
+                'label' => __('Durée de la transition (s)', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('s'),
+                'range' => array(
+                    's' => array('min' => 0, 'max' => 2, 'step' => 0.05),
+                ),
+                'default' => array('size' => 0.25, 'unit' => 's'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-out"]' => 'transition: background-color {{SIZE}}{{UNIT}} ease, border-color {{SIZE}}{{UNIT}} ease, transform {{SIZE}}{{UNIT}} ease;',
+                    '{{WRAPPER}} .mj-member-login-component__submit' => 'transition: background-color {{SIZE}}{{UNIT}} ease, border-color {{SIZE}}{{UNIT}} ease, transform {{SIZE}}{{UNIT}} ease;',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'login_button_hover_translate',
+            array(
+                'label' => __('Effet au survol (décalage Y)', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px'),
+                'range' => array(
+                    'px' => array('min' => -20, 'max' => 20, 'step' => 1),
+                ),
+                'default' => array('size' => -2, 'unit' => 'px'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-out"]:hover' => 'transform: translateY({{SIZE}}{{UNIT}});',
+                    '{{WRAPPER}} .mj-member-login-component__submit:hover' => 'transform: translateY({{SIZE}}{{UNIT}});',
                 ),
             )
         );
@@ -263,8 +368,8 @@ class Mj_Member_Elementor_Login_Widget extends Widget_Base {
             $this->add_group_control(
                 Group_Control_Typography::get_type(),
                 array(
-                    'name' => 'button_typography',
-                    'selector' => '{{WRAPPER}} .mj-member-login-component__trigger, {{WRAPPER}} .mj-member-login-component__submit',
+                    'name' => 'login_button_typography',
+                    'selector' => '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-out"], {{WRAPPER}} .mj-member-login-component__submit',
                 )
             );
         }
@@ -273,8 +378,8 @@ class Mj_Member_Elementor_Login_Widget extends Widget_Base {
             $this->add_group_control(
                 Group_Control_Border::get_type(),
                 array(
-                    'name' => 'button_border',
-                    'selector' => '{{WRAPPER}} .mj-member-login-component__trigger, {{WRAPPER}} .mj-member-login-component__submit',
+                    'name' => 'login_button_border',
+                    'selector' => '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-out"], {{WRAPPER}} .mj-member-login-component__submit',
                 )
             );
         }
@@ -283,34 +388,215 @@ class Mj_Member_Elementor_Login_Widget extends Widget_Base {
             $this->add_group_control(
                 Group_Control_Box_Shadow::get_type(),
                 array(
-                    'name' => 'button_box_shadow',
-                    'selector' => '{{WRAPPER}} .mj-member-login-component__trigger, {{WRAPPER}} .mj-member-login-component__submit',
+                    'name' => 'login_button_box_shadow',
+                    'selector' => '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-out"], {{WRAPPER}} .mj-member-login-component__submit',
                 )
             );
         }
 
         $this->add_responsive_control(
-            'button_padding',
+            'login_button_padding',
             array(
                 'label' => __('Marge interne', 'mj-member'),
                 'type' => Controls_Manager::DIMENSIONS,
                 'size_units' => array('px', 'em', '%'),
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-member-login-component__trigger' => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-out"]' => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
                     '{{WRAPPER}} .mj-member-login-component__submit' => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
                 ),
             )
         );
 
         $this->add_responsive_control(
-            'button_border_radius',
+            'login_button_border_radius',
             array(
                 'label' => __('Rayon de bordure', 'mj-member'),
-                'type' => Controls_Manager::DIMENSIONS,
+                'type' => Controls_Manager::SLIDER,
                 'size_units' => array('px', '%'),
+                'range' => array(
+                    'px' => array('min' => 0, 'max' => 100, 'step' => 1),
+                    '%' => array('min' => 0, 'max' => 100),
+                ),
+                'default' => array('size' => 50, 'unit' => 'px'),
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-member-login-component__trigger' => 'border-radius: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
-                    '{{WRAPPER}} .mj-member-login-component__submit' => 'border-radius: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-out"]' => 'border-radius: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-member-login-component__submit' => 'border-radius: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->end_controls_tab();
+
+        $this->start_controls_tab(
+            'tab_button_account_mode',
+            array(
+                'label' => __('Mode "Mon compte"', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
+            'account_button_text_color',
+            array(
+                'label' => __('Couleur du texte', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-in"]' => 'color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-in"] .mj-member-login-component__trigger-label' => 'color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-in"] .mj-member-login-component__trigger-name' => 'color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'account_button_background_color',
+            array(
+                'label' => __('Couleur de fond', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-in"]' => 'background-color: {{VALUE}}; border-color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'account_button_background_color_hover',
+            array(
+                'label' => __('Fond au survol', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-in"]:hover' => 'background-color: {{VALUE}}; border-color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'account_button_transition_duration',
+            array(
+                'label' => __('Durée de la transition (s)', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('s'),
+                'range' => array(
+                    's' => array('min' => 0, 'max' => 2, 'step' => 0.05),
+                ),
+                'default' => array('size' => 0.25, 'unit' => 's'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-in"]' => 'transition: background-color {{SIZE}}{{UNIT}} ease, border-color {{SIZE}}{{UNIT}} ease, transform {{SIZE}}{{UNIT}} ease;',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'account_button_hover_translate',
+            array(
+                'label' => __('Effet au survol (décalage Y)', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px'),
+                'range' => array(
+                    'px' => array('min' => -20, 'max' => 20, 'step' => 1),
+                ),
+                'default' => array('size' => -2, 'unit' => 'px'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-in"]:hover' => 'transform: translateY({{SIZE}}{{UNIT}});',
+                ),
+            )
+        );
+
+        if (class_exists('Elementor\\Group_Control_Typography')) {
+            $this->add_group_control(
+                Group_Control_Typography::get_type(),
+                array(
+                    'name' => 'account_button_typography',
+                    'selector' => '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-in"]',
+                )
+            );
+        }
+
+        if (class_exists('Elementor\\Group_Control_Border')) {
+            $this->add_group_control(
+                Group_Control_Border::get_type(),
+                array(
+                    'name' => 'account_button_border',
+                    'selector' => '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-in"]',
+                )
+            );
+        }
+
+        if (class_exists('Elementor\\Group_Control_Box_Shadow')) {
+            $this->add_group_control(
+                Group_Control_Box_Shadow::get_type(),
+                array(
+                    'name' => 'account_button_box_shadow',
+                    'selector' => '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-in"]',
+                )
+            );
+        }
+
+        $this->add_responsive_control(
+            'account_button_padding',
+            array(
+                'label' => __('Marge interne', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', 'em', '%'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-in"]' => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'account_button_border_radius',
+            array(
+                'label' => __('Rayon de bordure', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px', '%'),
+                'range' => array(
+                    'px' => array('min' => 0, 'max' => 100, 'step' => 1),
+                    '%' => array('min' => 0, 'max' => 100),
+                ),
+                'default' => array('size' => 50, 'unit' => 'px'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-login-component__trigger[data-login-state="logged-in"]' => 'border-radius: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->end_controls_tab();
+
+        $this->end_controls_tabs();
+
+        $this->end_controls_section();
+
+        $this->start_controls_section(
+            'section_style_avatar',
+            array(
+                'label' => __('Avatar', 'mj-member'),
+                'tab' => Controls_Manager::TAB_STYLE,
+            )
+        );
+
+        $this->add_responsive_control(
+            'avatar_size',
+            array(
+                'label' => __('Taille de l\'avatar', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px', 'em', 'rem'),
+                'default' => array(
+                    'size' => 48,
+                    'unit' => 'px',
+                ),
+                'range' => array(
+                    'px' => array('min' => 24, 'max' => 160),
+                    'em' => array('min' => 1.5, 'max' => 10),
+                    'rem' => array('min' => 1.5, 'max' => 10),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-login-component__trigger-visual' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}}; padding: calc({{SIZE}}{{UNIT}} * 0.08);',
+                    '{{WRAPPER}} .mj-member-login-component__trigger-avatar' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-member-login-component__trigger-avatar img' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-member-login-component__trigger-avatar-placeholder' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}}; line-height: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-member-login-component__member-avatar' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-member-login-component__member-avatar img' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-member-account-links__avatar-placeholder' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}}; line-height: {{SIZE}}{{UNIT}};',
                 ),
             )
         );
@@ -506,6 +792,7 @@ class Mj_Member_Elementor_Login_Widget extends Widget_Base {
 
     protected function render() {
         $settings = $this->get_settings_for_display();
+        $this->apply_visibility_to_wrapper($settings, 'mj-member-login-component');
 
         $redirect = '';
         if (!empty($settings['redirect_url']['url'])) {
@@ -519,6 +806,7 @@ class Mj_Member_Elementor_Login_Widget extends Widget_Base {
         }
 
         $button_icon_html = $this->build_button_icon_html($settings);
+        $account_image_html = $this->build_account_button_image_html($settings);
 
         $args = array(
             'button_label_logged_out' => isset($settings['login_button_text']) ? $settings['login_button_text'] : '',
@@ -532,12 +820,18 @@ class Mj_Member_Elementor_Login_Widget extends Widget_Base {
             'alignment' => $alignment,
             'registration_link_label' => isset($settings['registration_link_text']) ? $settings['registration_link_text'] : '',
             'button_icon_html' => $button_icon_html,
+            'account_image_html' => $account_image_html,
         );
 
         echo mj_member_render_login_modal_component($args);
     }
     
     private function build_button_icon_html($settings) {
+        $image_html = $this->build_button_image_html($settings);
+        if ($image_html !== '') {
+            return $image_html;
+        }
+
         if ($this->icons_manager_available()) {
             $icon_setting = isset($settings['button_icon']) ? $settings['button_icon'] : null;
 
@@ -612,6 +906,113 @@ class Mj_Member_Elementor_Login_Widget extends Widget_Base {
         return sprintf(
             '<i class="mj-member-login-component__trigger-icon-shape %s" aria-hidden="true"></i>',
             esc_attr($icon_class)
+        );
+    }
+
+    private function build_button_image_html($settings) {
+        if (empty($settings['login_button_image']) || !is_array($settings['login_button_image'])) {
+            return '';
+        }
+
+        $image_setting = $settings['login_button_image'];
+        $image_id = isset($image_setting['id']) ? (int) $image_setting['id'] : 0;
+        $image_url = '';
+        $alt_text = '';
+
+        if ($image_id > 0) {
+            $image_url = wp_get_attachment_image_url($image_id, 'full');
+            $stored_alt = get_post_meta($image_id, '_wp_attachment_image_alt', true);
+            if (is_string($stored_alt)) {
+                $alt_text = trim($stored_alt);
+            }
+        }
+
+        if ($image_url === '' && !empty($image_setting['url'])) {
+            $image_url = $image_setting['url'];
+        }
+
+        if ($image_url === '') {
+            return '';
+        }
+
+        $alt_attribute = $alt_text !== '' ? $alt_text : '';
+        $attributes = array(
+            'class' => 'mj-member-login-component__trigger-icon-image',
+            'loading' => 'lazy',
+            'decoding' => 'async',
+            'aria-hidden' => 'true',
+        );
+
+        if ($alt_attribute !== '') {
+            $attributes['alt'] = $alt_attribute;
+        } else {
+            $attributes['alt'] = '';
+        }
+
+        if ($image_id > 0) {
+            $image_html = wp_get_attachment_image($image_id, 'full', false, $attributes);
+            if (is_string($image_html) && trim($image_html) !== '') {
+                return trim($image_html);
+            }
+        }
+
+        return sprintf(
+            '<img src="%s" alt="%s" class="mj-member-login-component__trigger-icon-image" loading="lazy" decoding="async" aria-hidden="true" />',
+            esc_url($image_url),
+            esc_attr($alt_attribute)
+        );
+    }
+
+    private function build_account_button_image_html($settings) {
+        if (empty($settings['account_button_image']) || !is_array($settings['account_button_image'])) {
+            return '';
+        }
+
+        $image_setting = $settings['account_button_image'];
+        $image_id = isset($image_setting['id']) ? (int) $image_setting['id'] : 0;
+        $image_url = '';
+        $alt_text = '';
+
+        if ($image_id > 0) {
+            $image_url = wp_get_attachment_image_url($image_id, 'full');
+            $stored_alt = get_post_meta($image_id, '_wp_attachment_image_alt', true);
+            if (is_string($stored_alt)) {
+                $alt_text = trim($stored_alt);
+            }
+        }
+
+        if ($image_url === '' && !empty($image_setting['url'])) {
+            $image_url = $image_setting['url'];
+        }
+
+        if ($image_url === '') {
+            return '';
+        }
+
+        $attributes = array(
+            'class' => 'mj-member-login-component__trigger-account-image',
+            'loading' => 'lazy',
+            'decoding' => 'async',
+            'aria-hidden' => 'true',
+        );
+
+        if ($alt_text !== '') {
+            $attributes['alt'] = $alt_text;
+        } else {
+            $attributes['alt'] = '';
+        }
+
+        if ($image_id > 0) {
+            $image_html = wp_get_attachment_image($image_id, 'full', false, $attributes);
+            if (is_string($image_html) && trim($image_html) !== '') {
+                return trim($image_html);
+            }
+        }
+
+        return sprintf(
+            '<img src="%s" alt="%s" class="mj-member-login-component__trigger-account-image" loading="lazy" decoding="async" aria-hidden="true" />',
+            esc_url($image_url),
+            esc_attr($alt_text)
         );
     }
 

@@ -23,7 +23,7 @@ if (isset($_POST['mj_inline_edit_nonce']) && wp_verify_nonce($_POST['mj_inline_e
             wp_send_json_error(array('message' => 'Champ non autorisé'));
         }
 
-        $member = MjMembers_CRUD::getById($member_id);
+        $member = MjMembers::getById($member_id);
         if (!$member) {
             wp_send_json_error(array('message' => 'Membre introuvable'));
         }
@@ -34,7 +34,7 @@ if (isset($_POST['mj_inline_edit_nonce']) && wp_verify_nonce($_POST['mj_inline_e
                 $sanitized_email = sanitize_email($field_value);
 
                 if ($sanitized_email === '') {
-                    if ($raw_email === '' && $member->role === MjMembers_CRUD::ROLE_JEUNE) {
+                    if ($raw_email === '' && $member->role === MjMembers::ROLE_JEUNE) {
                         $field_value = null;
                         break;
                     }
@@ -61,11 +61,11 @@ if (isset($_POST['mj_inline_edit_nonce']) && wp_verify_nonce($_POST['mj_inline_e
                 break;
             case 'role':
                 $field_value = sanitize_text_field($field_value);
-                $allowed_roles = MjMembers_CRUD::getAllowedRoles();
+                $allowed_roles = MjMembers::getAllowedRoles();
                 if (!in_array($field_value, $allowed_roles, true)) {
                     wp_send_json_error(array('message' => 'Rôle invalide'));
                 }
-                if ($field_value !== MjMembers_CRUD::ROLE_JEUNE && empty($member->email)) {
+                if ($field_value !== MjMembers::ROLE_JEUNE && empty($member->email)) {
                     wp_send_json_error(array('message' => 'Ajoutez un email avant de changer le rôle.'));
                 }
                 break;
@@ -81,16 +81,16 @@ if (isset($_POST['mj_inline_edit_nonce']) && wp_verify_nonce($_POST['mj_inline_e
         }
 
         $data = array($field_name => $field_value);
-        $result = MjMembers_CRUD::update($member_id, $data);
+        $result = MjMembers::update($member_id, $data);
 
-        if ($result !== false) {
-            wp_send_json_success(array(
-                'message' => 'Mise à jour réussie',
-                'value' => $field_value
-            ));
-        } else {
-            wp_send_json_error(array('message' => 'Erreur lors de la mise à jour'));
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()));
         }
+
+        wp_send_json_success(array(
+            'message' => 'Mise à jour réussie',
+            'value' => $field_value
+        ));
     } else {
         wp_send_json_error(array('message' => 'Données manquantes'));
     }

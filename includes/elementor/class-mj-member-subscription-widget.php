@@ -11,6 +11,8 @@ use Elementor\Group_Control_Typography;
 use Elementor\Widget_Base;
 
 class Mj_Member_Elementor_Subscription_Widget extends Widget_Base {
+    use Mj_Member_Elementor_Widget_Visibility;
+
     public function get_name() {
         return 'mj-member-subscription-status';
     }
@@ -112,13 +114,15 @@ class Mj_Member_Elementor_Subscription_Widget extends Widget_Base {
             array(
                 'label' => __('Message confort (paiement direct)', 'mj-member'),
                 'type' => Controls_Manager::TEXTAREA,
-                'default' => __('Tu préfères le contact direct ? Remets [montant_cotisation] à un animateur, tout fonctionne aussi !', 'mj-member'),
+                'default' => __('Tu préfères le contact direct ? Remets [montant_cotisation] à un animateur, ca fonctionne aussi !', 'mj-member'),
                 'rows' => 3,
                 'placeholder' => __('Laissez vide pour ne pas afficher de message.', 'mj-member'),
             )
         );
 
         $this->end_controls_section();
+
+        $this->register_visibility_controls();
 
         $this->start_controls_section(
             'section_style_card',
@@ -282,6 +286,9 @@ class Mj_Member_Elementor_Subscription_Widget extends Widget_Base {
     }
 
     protected function render() {
+        $settings = $this->get_settings_for_display();
+        $this->apply_visibility_to_wrapper($settings, 'mj-member-subscription');
+
         if (!function_exists('mj_member_get_membership_status')) {
             echo '<div class="mj-member-account-warning">' . esc_html__('Le module MJ Member doit être actif pour utiliser ce widget.', 'mj-member') . '</div>';
             return;
@@ -299,7 +306,6 @@ class Mj_Member_Elementor_Subscription_Widget extends Widget_Base {
             return;
         }
 
-        $settings = $this->get_settings_for_display();
         $status = mj_member_get_membership_status($member);
         $children_statuses = function_exists('mj_member_get_guardian_children_statuses') ? mj_member_get_guardian_children_statuses($member) : array();
         $children_due_count = 0;
@@ -312,6 +318,11 @@ class Mj_Member_Elementor_Subscription_Widget extends Widget_Base {
         }
 
         $amount_label = number_format((float) $status['amount'], 2, ',', ' ');
+        $manual_amount_option = get_option('mj_annual_fee_manual', '');
+        $manual_amount_label = $amount_label;
+        if ($manual_amount_option !== '' && is_numeric($manual_amount_option)) {
+            $manual_amount_label = number_format((float) $manual_amount_option, 2, ',', ' ');
+        }
         $show_amount = isset($settings['show_amount']) && $settings['show_amount'] === 'yes';
         $show_last_payment = isset($settings['show_last_payment']) && $settings['show_last_payment'] === 'yes';
         $show_expiry = isset($settings['show_expiry']) && $settings['show_expiry'] === 'yes';
@@ -351,8 +362,11 @@ class Mj_Member_Elementor_Subscription_Widget extends Widget_Base {
             if (!empty($children_statuses) && (empty($settings['button_label']) || $settings['button_label'] === __('Renouveler ma cotisation', 'mj-member'))) {
                 $settings['button_label'] = __('Payer toutes les cotisations', 'mj-member');
             }
-            if (!empty($children_statuses) && (empty($settings['manual_payment_message']) || $settings['manual_payment_message'] === __('Tu préfères le contact direct ? Remets [montant_cotisation] à un animateur, tout fonctionne aussi !', 'mj-member'))) {
-                $settings['manual_payment_message'] = __('Chaque jeune peut remettre 2 € directement à un animateur si tu préfères ce mode de paiement.', 'mj-member');
+            if (!empty($children_statuses) && (empty($settings['manual_payment_message']) || $settings['manual_payment_message'] === __('Tu préfères le contact direct ? Remets [montant_cotisation] à un animateur, ca fonctionne aussi !', 'mj-member'))) {
+                $settings['manual_payment_message'] = sprintf(
+                    __('Chaque jeune peut remettre %s € directement à un animateur si tu préfères ce mode de paiement.', 'mj-member'),
+                    $manual_amount_label
+                );
             }
         }
 
@@ -367,63 +381,498 @@ class Mj_Member_Elementor_Subscription_Widget extends Widget_Base {
         static $styles_printed = false;
         if (!$styles_printed) {
             $styles_printed = true;
-            echo '<style>'
-                . '.mj-member-subscription{border:1px solid #e3e6ea;border-radius:12px;padding:24px;background:#fff;box-shadow:0 10px 30px rgba(0,0,0,0.06);}'
-                . '.mj-member-subscription__header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;}'
-                . '.mj-member-subscription__title{margin:0;font-size:1.35rem;}'
-                . '.mj-member-subscription__badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;font-size:0.85rem;font-weight:600;background:#edf2ff;color:#2f5dff;}'
-                . '.mj-member-subscription__badge-icon{display:inline-flex;align-items:center;justify-content:center;font-size:1rem;}'
-                . '.mj-member-subscription.status-active .mj-member-subscription__badge{background:#e6f5ea;color:#1d6b2a;}'
-                . '.mj-member-subscription.status-expired .mj-member-subscription__badge{background:#ffecec;color:#d63638;}'
-                . '.mj-member-subscription.status-expiring .mj-member-subscription__badge{background:#fff2d6;color:#a05c00;}'
-                . '.mj-member-subscription__meta{margin:8px 0;font-size:0.95rem;color:#495057;}'
-                . '.mj-member-subscription__amount{font-weight:600;font-size:1.1rem;margin:12px 0;}'
-                . '.mj-member-subscription__form{margin-top:16px;}'
-                . '.mj-member-subscription__form .mj-member-button{display:inline-flex;align-items:center;justify-content:center;padding:12px 24px;border-radius:6px;border:none;background:#0073aa;color:#fff;font-size:16px;font-weight:600;cursor:pointer;transition:background 0.2s ease,transform 0.2s ease;}'
-                . '.mj-member-subscription__form .mj-member-button:hover{background:#005f8d;transform:translateY(-1px);}'
-                . '.mj-member-subscription__notice{margin-top:12px;padding:10px 14px;border-left:4px solid #d63638;background:#fbeaea;border-radius:6px;color:#8a1f1f;font-size:0.92rem;}'
-                . '.mj-member-subscription__details{margin:0;font-size:0.95rem;color:#555;}'
-                . '.mj-member-subscription__hint{margin-top:16px;padding:12px 16px;border-radius:8px;background:#f1f5f9;color:#1f2937;font-size:0.95rem;}'
-                . '.mj-member-subscription__children{margin-top:24px;padding-top:16px;border-top:1px solid rgba(0,0,0,0.08);}'
-                . '.mj-member-subscription__children-title{margin:0 0 12px;font-size:1.1rem;font-weight:600;}'
-                . '.mj-member-subscription__children-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;}'
-                . '.mj-member-subscription__children-item{padding:12px 14px;border-radius:10px;background:#f8fafc;display:flex;flex-direction:column;gap:6px;}'
-                . '.mj-member-subscription__children-item.status-expired{background:#fff4f4;}'
-                . '.mj-member-subscription__children-item.status-expiring{background:#fff8e6;}'
-                . '.mj-member-subscription__children-item.status-missing{background:#fef6ff;}'
-                . '.mj-member-subscription__children-item.status-active .mj-member-subscription__children-badge{background:#dcf5e3;color:#1d6b2a;}'
-                . '.mj-member-subscription__children-header{display:flex;align-items:center;justify-content:space-between;gap:12px;}'
-                . '.mj-member-subscription__children-name{font-weight:600;font-size:1rem;margin:0;}'
-                . '.mj-member-subscription__children-badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:0.78rem;background:#e2e8f0;color:#1e293b;font-weight:600;}'
-                . '.mj-member-subscription__children-meta{margin:0;color:#475569;font-size:0.9rem;line-height:1.45;}'
-                . '.mj-member-subscription__children-amount{font-weight:600;}'
-                . '.mj-member-subscription__children-note{margin-top:8px;font-size:0.92rem;color:#1f2937;background:#f1f5f9;padding:10px 12px;border-radius:8px;}'
-                . '.mj-member-subscription__children-actions{margin-top:8px;display:flex;flex-direction:column;gap:10px;}'
-                . '.mj-member-subscription__children-actions-main{display:flex;flex-wrap:wrap;gap:10px;align-items:center;}'
-                . '.mj-member-button--secondary{display:inline-flex;align-items:center;justify-content:center;padding:10px 18px;border-radius:6px;border:1px solid #1d4ed8;background:#1d4ed8;color:#fff;font-weight:600;text-decoration:none;transition:background 0.2s ease,transform 0.2s ease;}'
-                . '.mj-member-button--secondary:hover{background:#163fa3;border-color:#163fa3;transform:translateY(-1px);}'
-                . '.mj-member-button--ghost{display:inline-flex;align-items:center;justify-content:center;padding:10px 18px;border-radius:6px;border:1px solid rgba(15,23,42,0.25);background:#fff;color:#1f2937;font-weight:600;text-decoration:none;cursor:pointer;transition:background 0.2s ease,transform 0.2s ease;}'
-                . '.mj-member-button--ghost:hover{background:#f1f5f9;transform:translateY(-1px);}'
-                . '.mj-member-button--primary{display:inline-flex;align-items:center;justify-content:center;padding:12px 24px;border-radius:6px;border:none;background:#0073aa;color:#fff;font-weight:600;cursor:pointer;transition:background 0.2s ease,transform 0.2s ease;}'
-                . '.mj-member-button--primary:hover{background:#005f8d;transform:translateY(-1px);}'
-                . '.mj-member-subscription__children-pay-note{margin:0;font-size:0.88rem;color:#475569;}'
-                . '.mj-member-child-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:20px;z-index:10000;}'
-                . '.mj-member-child-modal.is-visible{display:flex;}'
-                . '.mj-member-child-modal__backdrop{position:absolute;inset:0;background:rgba(15,23,42,0.55);}'
-                . '.mj-member-child-modal__dialog{position:relative;background:#fff;border-radius:12px;width:100%;max-width:520px;padding:24px;box-shadow:0 24px 48px rgba(15,23,42,0.2);display:flex;flex-direction:column;gap:16px;}'
-                . '.mj-member-child-modal__title{margin:0;font-size:1.25rem;font-weight:600;color:#0f172a;}'
-                . '.mj-member-child-modal__subtitle{margin:0;color:#475569;font-size:0.95rem;}'
-                . '.mj-member-child-modal__close{position:absolute;top:12px;right:12px;background:transparent;border:none;font-size:1.4rem;line-height:1;color:#475569;cursor:pointer;}'
-                . '.mj-member-child-modal__form{display:flex;flex-direction:column;gap:12px;}'
-                . '.mj-member-child-modal__form label{display:flex;flex-direction:column;gap:6px;font-size:0.9rem;font-weight:600;color:#1f2937;}'
-                . '.mj-member-child-modal__form input,.mj-member-child-modal__form textarea{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:0.95rem;}'
-                . '.mj-member-child-modal__form textarea{min-height:96px;resize:vertical;}'
-                . '.mj-member-child-modal__checkbox{display:flex;align-items:center;gap:8px;font-weight:500;color:#1f2937;font-size:0.9rem;}'
-                . '.mj-member-child-modal__footer{display:flex;justify-content:flex-end;gap:12px;margin-top:4px;}'
-                . '.mj-member-child-modal__feedback{display:none;border-radius:8px;padding:10px 12px;font-size:0.9rem;}'
-                . '.mj-member-child-modal__feedback.is-error{display:block;background:#fee2e2;color:#991b1b;}'
-                . '.mj-member-child-modal__feedback.is-success{display:block;background:#dcfce7;color:#166534;}'
-                . '</style>';
+            ob_start();
+            ?>
+<style>
+.mj-member-subscription {
+    position: relative;
+    overflow: hidden;
+    border-radius: 24px;
+    padding: 2.2rem;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    background: linear-gradient(135deg, #ffffff 5%, #f7f8ff 100%);
+    box-shadow: 0 24px 48px rgba(15, 23, 42, 0.12);
+    display: grid;
+    gap: 1.4rem;
+    color: #0f172a;
+}
+.mj-member-subscription::before,
+.mj-member-subscription::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    z-index: 0;
+}
+.mj-member-subscription::before {
+    top: -80px;
+    right: -90px;
+    width: 240px;
+    height: 240px;
+    background: radial-gradient(circle at center, rgba(59, 130, 246, 0.37), transparent 68%);
+}
+.mj-member-subscription::after {
+    bottom: -120px;
+    left: -80px;
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle at center, rgba(79, 70, 229, 0.22), transparent 70%);
+}
+.mj-member-subscription > * {
+    position: relative;
+    z-index: 1;
+}
+.mj-member-subscription.status-active {
+    border-color: rgba(34, 197, 94, 0.22);
+}
+.mj-member-subscription.status-expiring {
+    border-color: rgba(250, 204, 21, 0.35);
+}
+.mj-member-subscription.status-expired {
+    border-color: rgba(239, 68, 68, 0.45);
+    background: linear-gradient(135deg, #fff5f5 5%, #fee2e2 100%);
+    box-shadow: 0 26px 54px rgba(220, 38, 38, 0.2);
+}
+.mj-member-subscription.status-expired::before {
+    background: radial-gradient(circle at center, rgba(248, 113, 113, 0.52), transparent 72%);
+}
+.mj-member-subscription.status-expired::after {
+    background: radial-gradient(circle at center, rgba(239, 68, 68, 0.32), transparent 74%);
+}
+.mj-member-subscription.status-missing {
+    border-color: rgba(251, 191, 36, 0.45);
+    background: linear-gradient(135deg, #fff7ed 5%, #fde68a 100%);
+    box-shadow: 0 26px 54px rgba(217, 119, 6, 0.18);
+}
+.mj-member-subscription.status-missing::before {
+    background: radial-gradient(circle at center, rgba(251, 191, 36, 0.38), transparent 70%);
+}
+.mj-member-subscription.status-missing::after {
+    background: radial-gradient(circle at center, rgba(234, 179, 8, 0.26), transparent 72%);
+}
+.mj-member-subscription__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1.5rem;
+}
+.mj-member-subscription__title {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+.mj-member-subscription__badge {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: rgba(59, 130, 246, 0.12);
+    color: #1d4ed8;
+    box-shadow: 0 14px 28px rgba(59, 130, 246, 0.2);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.mj-member-subscription__badge:hover,
+.mj-member-subscription__badge:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 34px rgba(59, 130, 246, 0.25);
+}
+.mj-member-subscription__badge-symbol {
+    font-size: 1.35rem;
+    line-height: 1;
+}
+.mj-member-subscription.status-active .mj-member-subscription__badge {
+    background: rgba(34, 197, 94, 0.18);
+    color: #0f766e;
+    box-shadow: 0 14px 28px rgba(34, 197, 94, 0.2);
+}
+.mj-member-subscription.status-expiring .mj-member-subscription__badge {
+    background: rgba(250, 204, 21, 0.2);
+    color: #b45309;
+    box-shadow: 0 14px 28px rgba(251, 191, 36, 0.18);
+}
+.mj-member-subscription.status-expired .mj-member-subscription__badge {
+    background: rgba(248, 113, 113, 0.24);
+    color: #b91c1c;
+    box-shadow: 0 16px 34px rgba(248, 113, 113, 0.28);
+}
+.mj-member-subscription.status-missing .mj-member-subscription__badge {
+    background: rgba(251, 191, 36, 0.24);
+    color: #92400e;
+    box-shadow: 0 16px 34px rgba(251, 191, 36, 0.24);
+}
+.mj-member-subscription__badge .screen-reader-text,
+.mj-member-subscription__children-badge .screen-reader-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+.mj-member-subscription__details {
+    margin: 0;
+    font-size: 1.05rem;
+    line-height: 1.65;
+    color: rgba(15, 23, 42, 0.78);
+}
+.mj-member-subscription__amount {
+    margin: 0;
+    font-size: 1.9rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: #0f172a;
+}
+.mj-member-subscription__meta {
+    margin: 0;
+    font-size: 0.95rem;
+    color: rgba(30, 41, 59, 0.78);
+}
+.mj-member-subscription__meta + .mj-member-subscription__meta {
+    margin-top: 0.35rem;
+}
+.mj-member-subscription__form {
+    margin-top: 0.5rem;
+}
+.mj-member-subscription__form .mj-member-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    padding: 0.85rem 1.9rem;
+    border-radius: 16px;
+    border: none;
+    background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+    color: #ffffff;
+    font-size: 0.98rem;
+    font-weight: 600;
+    box-shadow: 0 20px 38px rgba(79, 70, 229, 0.28);
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+.mj-member-subscription__form .mj-member-button:hover,
+.mj-member-subscription__form .mj-member-button:focus-visible {
+    transform: translateY(-3px);
+    box-shadow: 0 26px 44px rgba(79, 70, 229, 0.32);
+    filter: brightness(1.05);
+}
+.mj-member-subscription__form .mj-member-button:focus-visible {
+    outline: 3px solid rgba(79, 70, 229, 0.35);
+    outline-offset: 3px;
+}
+.mj-member-subscription__notice {
+    margin-top: 0.5rem;
+    padding: 0.9rem 1.1rem;
+    border-radius: 14px;
+    border: 1px solid rgba(248, 113, 113, 0.35);
+    background: rgba(254, 226, 226, 0.65);
+    color: #b91c1c;
+    font-size: 0.92rem;
+    box-shadow: 0 8px 18px rgba(248, 113, 113, 0.16);
+}
+.mj-member-subscription__hint {
+    margin: 0;
+    padding: 1rem 1.2rem;
+    border-radius: 18px;
+    background: rgba(244, 247, 255, 0.9);
+    color: #1f2937;
+    font-size: 0.93rem;
+    box-shadow: 0 10px 20px rgba(59, 130, 246, 0.08);
+}
+.mj-member-subscription__children {
+    margin-top: 1.6rem;
+    padding-top: 1.6rem;
+    border-top: 1px dashed rgba(148, 163, 184, 0.35);
+    display: grid;
+    gap: 1.1rem;
+}
+.mj-member-subscription__children-title {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+.mj-member-subscription__children-note {
+    margin: 0;
+    padding: 0.75rem 0.95rem;
+    border-radius: 16px;
+    background: rgba(59, 130, 246, 0.08);
+    color: #1d4ed8;
+    font-size: 0.9rem;
+    box-shadow: 0 10px 20px rgba(59, 130, 246, 0.1);
+}
+.mj-member-subscription__children-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.9rem;
+}
+.mj-member-subscription__children-item {
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 18px;
+    padding: 1rem 1.15rem;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    box-shadow: 0 14px 26px rgba(15, 23, 42, 0.08);
+    display: grid;
+    gap: 0.55rem;
+}
+.mj-member-subscription__children-item.status-expired {
+    background: rgba(254, 226, 226, 0.6);
+    border-color: rgba(248, 113, 113, 0.45);
+}
+.mj-member-subscription__children-item.status-expiring {
+    background: rgba(254, 249, 195, 0.58);
+    border-color: rgba(250, 204, 21, 0.45);
+}
+.mj-member-subscription__children-item.status-missing {
+    background: rgba(254, 243, 199, 0.62);
+    border-color: rgba(251, 191, 36, 0.48);
+}
+.mj-member-subscription__children-item.status-active .mj-member-subscription__children-badge {
+    background: rgba(34, 197, 94, 0.18);
+    color: #0f766e;
+}
+.mj-member-subscription__children-item.status-expiring .mj-member-subscription__children-badge,
+.mj-member-subscription__children-item.status-missing .mj-member-subscription__children-badge {
+    background: rgba(251, 191, 36, 0.25);
+    color: #92400e;
+}
+.mj-member-subscription__children-item.status-expired .mj-member-subscription__children-badge {
+    background: rgba(248, 113, 113, 0.26);
+    color: #b91c1c;
+}
+.mj-member-subscription__children-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.8rem;
+}
+.mj-member-subscription__children-name {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+.mj-member-subscription__children-badge {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    font-size: 1.1rem;
+    background: rgba(148, 163, 184, 0.2);
+    color: #1f2937;
+    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.mj-member-subscription__children-badge:hover,
+.mj-member-subscription__children-badge:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 24px rgba(148, 163, 184, 0.28);
+}
+.mj-member-subscription__children-badge-symbol {
+    line-height: 1;
+}
+.mj-member-subscription__children-meta {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: rgba(51, 65, 85, 0.9);
+}
+.mj-member-subscription__children-amount {
+    font-weight: 600;
+}
+.mj-member-subscription__children-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+.mj-member-subscription__children-actions-main {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+.mj-member-button--secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1.5rem;
+    border-radius: 14px;
+    border: none;
+    background: linear-gradient(135deg, #2563eb, #4c1d95);
+    color: #ffffff;
+    font-weight: 600;
+    box-shadow: 0 20px 32px rgba(79, 70, 229, 0.26);
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.mj-member-button--secondary:hover,
+.mj-member-button--secondary:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: 0 26px 42px rgba(79, 70, 229, 0.3);
+}
+.mj-member-button--ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1.4rem;
+    border-radius: 14px;
+    border: 1px solid rgba(148, 163, 184, 0.55);
+    background: rgba(255, 255, 255, 0.92);
+    color: #1f2937;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+.mj-member-button--ghost:hover,
+.mj-member-button--ghost:focus-visible {
+    transform: translateY(-2px);
+    background: rgba(241, 245, 249, 0.9);
+    box-shadow: 0 16px 30px rgba(148, 163, 184, 0.26);
+}
+.mj-member-subscription__children-pay-note {
+    margin: 0;
+    font-size: 0.85rem;
+    color: rgba(71, 85, 105, 0.9);
+}
+.mj-member-child-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 10000;
+}
+.mj-member-child-modal.is-visible {
+    display: flex;
+}
+.mj-member-child-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+}
+.mj-member-child-modal__dialog {
+    position: relative;
+    background: #ffffff;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 520px;
+    padding: 24px;
+    box-shadow: 0 24px 48px rgba(15, 23, 42, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.mj-member-child-modal__title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #0f172a;
+}
+.mj-member-child-modal__subtitle {
+    margin: 0;
+    color: #475569;
+    font-size: 0.95rem;
+}
+.mj-member-child-modal__close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: transparent;
+    border: none;
+    font-size: 1.4rem;
+    line-height: 1;
+    color: #475569;
+    cursor: pointer;
+}
+.mj-member-child-modal__form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.mj-member-child-modal__form label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+.mj-member-child-modal__form input,
+.mj-member-child-modal__form textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    font-size: 0.95rem;
+}
+.mj-member-child-modal__form textarea {
+    min-height: 96px;
+    resize: vertical;
+}
+.mj-member-child-modal__checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+    color: #1f2937;
+    font-size: 0.9rem;
+}
+.mj-member-child-modal__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 4px;
+}
+.mj-member-child-modal__feedback {
+    display: none;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.9rem;
+}
+.mj-member-child-modal__feedback.is-error {
+    display: block;
+    background: #fee2e2;
+    color: #991b1b;
+}
+.mj-member-child-modal__feedback.is-success {
+    display: block;
+    background: #dcfce7;
+    color: #166534;
+}
+@media (max-width: 768px) {
+    .mj-member-subscription {
+        padding: 1.6rem;
+        gap: 1.1rem;
+    }
+    .mj-member-subscription__header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    .mj-member-subscription__title {
+        font-size: 1.6rem;
+    }
+    .mj-member-subscription__children-item {
+        padding: 0.9rem 1rem;
+    }
+    .mj-member-subscription__form .mj-member-button,
+    .mj-member-button--secondary,
+    .mj-member-button--ghost {
+        width: 100%;
+    }
+}
+</style>
+<?php
+            echo ob_get_clean();
         }
 
             static $script_printed = false;
@@ -432,14 +881,15 @@ class Mj_Member_Elementor_Subscription_Widget extends Widget_Base {
         echo '<div class="mj-member-subscription__header">';
         $title = isset($settings['title']) ? $settings['title'] : '';
         if ($title !== '') {
-            echo '<h3 class="mj-member-subscription__title">' . esc_html($title) . '</h3>';
+            echo '<h2 class="mj-member-subscription__title">' . esc_html($title) . '</h2>';
         }
         if (!($is_guardian && !$status['requires_payment'])) {
-            $badge_icon = '';
-            if ($status['status'] === 'active') {
-                $badge_icon = '<span class="mj-member-subscription__badge-icon" aria-hidden="true">&#10003;</span>';
-            }
-            echo '<span class="mj-member-subscription__badge">' . $badge_icon . esc_html($status['status_label']) . '</span>';
+            $badge_label = isset($status['status_label']) ? $status['status_label'] : '';
+            $badge_icon = $this->get_membership_status_icon(isset($status['status']) ? $status['status'] : '');
+            echo '<span class="mj-member-subscription__badge" role="img" title="' . esc_attr($badge_label) . '" aria-label="' . esc_attr($badge_label) . '">';
+            echo '<span class="mj-member-subscription__badge-symbol" aria-hidden="true">' . esc_html($badge_icon) . '</span>';
+            echo '<span class="screen-reader-text">' . esc_html($badge_label) . '</span>';
+            echo '</span>';
         }
         echo '</div>';
 
@@ -480,11 +930,12 @@ class Mj_Member_Elementor_Subscription_Widget extends Widget_Base {
                 echo '<li class="mj-member-subscription__children-item status-' . esc_attr($child_status) . '" data-child-id="' . esc_attr((int) $child_entry['id']) . '">';
                 echo '<div class="mj-member-subscription__children-header">';
                 echo '<span class="mj-member-subscription__children-name">' . esc_html($child_entry['full_name']) . '</span>';
-                $child_badge_icon = '';
-                if ($child_status === 'active') {
-                    $child_badge_icon = '<span class="mj-member-subscription__badge-icon" aria-hidden="true">&#10003;</span>';
-                }
-                echo '<span class="mj-member-subscription__children-badge">' . $child_badge_icon . esc_html($child_entry['status_label']) . '</span>';
+                $child_badge_label = isset($child_entry['status_label']) ? $child_entry['status_label'] : '';
+                $child_badge_icon = $this->get_membership_status_icon($child_status);
+                echo '<span class="mj-member-subscription__children-badge" role="img" title="' . esc_attr($child_badge_label) . '" aria-label="' . esc_attr($child_badge_label) . '">';
+                echo '<span class="mj-member-subscription__children-badge-symbol" aria-hidden="true">' . esc_html($child_badge_icon) . '</span>';
+                echo '<span class="screen-reader-text">' . esc_html($child_badge_label) . '</span>';
+                echo '</span>';
                 echo '</div>';
 
                 $meta_parts = array();
@@ -964,12 +1415,11 @@ class Mj_Member_Elementor_Subscription_Widget extends Widget_Base {
             echo '</div>';
             echo '</div>';
         }
-
         $manual_message = isset($settings['manual_payment_message']) ? trim((string) $settings['manual_payment_message']) : '';
 
         if ($should_display_button && $manual_message !== '') {
-            $amount_with_currency = sprintf('%s €', $amount_label);
-            $message_prepared = str_replace('[montant_cotisation]', esc_html($amount_with_currency), $manual_message);
+            $manual_amount_with_currency = sprintf('%s €', $manual_amount_label);
+            $message_prepared = str_replace('[montant_cotisation]', esc_html($manual_amount_with_currency), $manual_message);
             $message_prepared = wp_kses_post($message_prepared);
             $message_prepared = preg_replace('/\r\n|\r|\n/', '<br>', $message_prepared);
             if ($message_prepared !== '') {
@@ -988,5 +1438,37 @@ class Mj_Member_Elementor_Subscription_Widget extends Widget_Base {
         }
 
         echo '</div>';
+    }
+
+    private function get_membership_status_icon($status) {
+        $normalized = is_string($status) ? sanitize_key($status) : '';
+
+        switch ($normalized) {
+            case 'active':
+            case 'paid':
+            case 'complete':
+                return '✔';
+            case 'expiring':
+            case 'expiring_soon':
+            case 'due_soon':
+                return '⏳';
+            case 'expired':
+                return '✖';
+            case 'missing':
+            case 'overdue':
+            case 'missing_payment':
+            case 'unpaid':
+                return '⚠';
+            case 'pending':
+            case 'processing':
+            case 'awaiting':
+                return '…';
+            case 'free':
+            case 'not_required':
+            case 'complimentary':
+                return '◎';
+            default:
+                return 'ℹ';
+        }
     }
 }

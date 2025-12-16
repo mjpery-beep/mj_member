@@ -1,0 +1,247 @@
+.mj-hours-dashboard-wrap {
+    max-width: 1200px;
+}
+
+.mj-hours-dashboard__updated {
+    margin-top: 0.75rem;
+    color: #6b7280;
+}
+
+.mj-hours-dashboard {
+    margin-top: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.mj-hours-dashboard__content {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.mj-hours-dashboard__summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+}
+
+.mj-hours-dashboard-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.mj-hours-dashboard-card__heading {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0;
+}
+
+.mj-hours-dashboard-card__title {
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #64748b;
+    margin: 0;
+}
+
+.mj-hours-dashboard-card__value {
+    font-size: 1.875rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0;
+}
+
+.mj-hours-dashboard-card__meta {
+    font-size: 0.875rem;
+    color: #6b7280;
+    margin: 0;
+}
+
+.mj-hours-dashboard__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+}
+
+.mj-hours-dashboard__grid--timeseries {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.mj-hours-dashboard-donut {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+    text-align: center;
+}
+
+.mj-hours-dashboard-donut__title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0;
+}
+
+.mj-hours-dashboard-donut__canvas {
+    position: relative;
+    width: 220px;
+    height: 220px;
+}
+
+.mj-hours-dashboard-donut__canvas canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.mj-hours-dashboard-donut__center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+}
+
+.mj-hours-dashboard-donut__center-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0;
+}
+
+.mj-hours-dashboard-donut__center-label {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin: 0;
+}
+
+.mj-hours-dashboard-donut__legend {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.mj-hours-dashboard-donut__legend-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    font-size: 0.875rem;
+    color: #0f172a;
+}
+
+.mj-hours-dashboard-donut__legend-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.mj-hours-dashboard-donut__legend-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    flex-shrink: 0;
+}
+
+.mj-hours-dashboard__select {
+    align-self: flex-start;
+    width: 100%;
+    max-width: 340px;
+}
+
+.mj-hours-dashboard__select label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #475569;
+    margin-bottom: 0.5rem;
+}
+
+.mj-hours-dashboard__select select {
+    width: 100%;
+    padding: 0.75rem 0.85rem;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    font-size: 0.95rem;
+    color: #0f172a;
+}
+
+.mj-hours-dashboard__select-helper {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.mj-hours-dashboard__table-card {
+    overflow: hidden;
+}
+
+.mj-hours-dashboard__table-card table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.mj-hours-dashboard__table-card thead {
+    background: #f8fafc;
+}
+
+.mj-hours-dashboard__table-card th,
+.mj-hours-dashboard__table-card td {
+    padding: 0.85rem 1.25rem;
+    text-align: left;
+    font-size: 0.95rem;
+    color: #0f172a;
+}
+
+.mj-hours-dashboard__table-card th {
+    font-weight: 600;
+    color: #475569;
+}
+
+.mj-hours-dashboard__table-card tbody tr:nth-child(even) {
+    background: #f8fafc;
+}
+
+.mj-hours-dashboard__empty {
+    font-size: 0.95rem;
+    color: #6b7280;
+}
+
+.mj-hours-dashboard-bar-chart {
+    min-height: 340px;
+}
+
+.mj-hours-dashboard-bar-chart__canvas {
+    position: relative;
+    flex: 1;
+    min-height: 280px;
+}
+
+.mj-hours-dashboard-bar-chart__canvas canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.mj-hours-dashboard-card__subtitle {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin: 0;
+}
+
+@media (max-width: 640px) {
+    .mj-hours-dashboard-donut__canvas {
+        width: 180px;
+        height: 180px;
+    }
+}
