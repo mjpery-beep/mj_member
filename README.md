@@ -22,7 +22,7 @@ MJ Member est un module WordPress conçu pour centraliser la gestion des adhére
 - Nom, prénom, coordonnées et date de naissance
 - Statut actif ou inactif, date d'inscription et dernier paiement
 - Rattachement à un type de membre : jeune, tuteur, animateur ou bénévole
-- Génération de cartes de visite en PDF pour les membres
+- Génération de cartes d'adhérent en PDF pour les membres
 
 ✅ **Gestion des événements et stages**
 - Création et gestion d'événements avec inscriptions en ligne
@@ -104,7 +104,7 @@ Le plugin propose une riche collection de widgets Elementor pour personnaliser v
 - **Boîte à idées** : proposition et vote d'idées d'activités
 - **Todos** : liste des tâches à accomplir
 - **Documents** : accès aux documents partagés via Google Drive
-- **Photo Grimlins** : transformation ludique de photos avec IA
+- **Photo Grimlins** : transformation ludique de photos en avatars stylisés avec IA
 - **Galerie Grimlins** : galerie des photos transformées
 
 ### Widgets paiements
@@ -152,9 +152,9 @@ Le plugin propose une riche collection de widgets Elementor pour personnaliser v
 
 ### OpenAI
 - Fonctionnalité "Photo Grimlins" utilisant l'API OpenAI
-- Transforme les photos des membres en avatars stylisés
+- Transforme les photos des membres en avatars stylisés et amusants inspirés du film Gremlins
 - Configurez votre clé API OpenAI dans les paramètres
-- Mode ludique pour engager les jeunes
+- Mode ludique pour engager les jeunes et créer une ambiance conviviale
 
 ## Protection des données
 
