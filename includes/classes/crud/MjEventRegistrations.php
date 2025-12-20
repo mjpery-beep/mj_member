@@ -5,6 +5,7 @@ namespace Mj\Member\Classes\Crud;
 use DateTime;
 use Mj\Member\Classes\MjEventSchedule;
 use Mj\Member\Classes\MjMail;
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\Value\EventRegistrationData;
 use WP_Error;
 
@@ -649,9 +650,6 @@ class MjEventRegistrations implements CrudRepositoryInterface {
             return $status_result === null ? true : $status_result;
         }
 
-        $updates['updated_at'] = current_time('mysql');
-        $formats[] = '%s';
-
         global $wpdb;
         $table = self::table_name();
         $result = $wpdb->update($table, $updates, array('id' => $registration_id), $formats, array('%d'));
@@ -1139,7 +1137,7 @@ class MjEventRegistrations implements CrudRepositoryInterface {
             $allow_guardian_registration = (int) $event->allow_guardian_registration;
         }
         $member_role = isset($member->role) ? sanitize_key($member->role) : '';
-        if ($allow_guardian_registration !== 1 && $member_role === MjMembers::ROLE_TUTEUR) {
+        if ($allow_guardian_registration !== 1 && MjRoles::isTuteur($member_role)) {
             return new WP_Error('mj_event_registration_guardian_blocked', 'Les tuteurs ne peuvent pas s\'inscrire a cet evenement.');
         }
 
@@ -1830,7 +1828,7 @@ class MjEventRegistrations implements CrudRepositoryInterface {
                 }
 
                 $animateur_placeholders = array_merge($placeholders, array(
-                    '{{audience}}' => 'animateur',
+                    '{{audience}}' => \Mj\Member\Classes\MjRoles::ANIMATEUR,
                 ));
 
                 MjMail::send_notification_to_emails('event_registration_notice_animateur', array($animateur_member->email), array(

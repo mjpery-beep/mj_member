@@ -3,6 +3,7 @@
 use Mj\Member\Classes\Crud\MjIdeas;
 use Mj\Member\Classes\Crud\MjIdeaVotes;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\Value\MemberData;
 
 if (!defined('ABSPATH')) {
@@ -84,6 +85,7 @@ if (!function_exists('mj_member_idea_box_localize')) {
         $config = array(
             'ajaxUrl' => esc_url_raw(admin_url('admin-ajax.php')),
             'nonce' => wp_create_nonce('mj_member_idea_box'),
+            'roles' => \Mj\Member\Classes\MjRoles::getJsConfig(),
             'actions' => array(
                 'fetch' => 'mj_member_idea_box_fetch',
                 'create' => 'mj_member_idea_box_create',
@@ -283,8 +285,8 @@ if (!function_exists('mj_member_ajax_idea_box_delete')) {
 
         $role = sanitize_key((string) $member->get('role', ''));
         $allowedRoles = array(
-            sanitize_key((string) MjMembers::ROLE_ANIMATEUR),
-            sanitize_key((string) MjMembers::ROLE_COORDINATEUR),
+            sanitize_key((string) MjRoles::ANIMATEUR),
+            sanitize_key((string) MjRoles::COORDINATEUR),
         );
 
         if (!in_array($role, $allowedRoles, true)) {

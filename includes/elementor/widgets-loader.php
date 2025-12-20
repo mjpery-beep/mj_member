@@ -25,6 +25,7 @@ if (!function_exists('mj_member_get_elementor_widgets_map')) {
             'Mj_Member_Elementor_Events_Widget' => 'includes/elementor/class-mj-member-events-widget.php',
             'Mj_Member_Elementor_Events_Calendar_Widget' => 'includes/elementor/class-mj-member-events-calendar-widget.php',
             'Mj_Member_Elementor_Upcoming_Events_Widget' => 'includes/elementor/class-mj-member-upcoming-events-widget.php',
+            'Mj_Member_Elementor_Payments_Widget' => 'includes/elementor/class-mj-member-payments-widget.php',
             'Mj_Member_Elementor_Hour_Encode_Widget' => 'includes/elementor/class-mj-member-hour-encode-widget.php',
             'Mj_Member_Elementor_Locations_Widget' => 'includes/elementor/class-mj-member-locations-widget.php',
             'Mj_Member_Elementor_Animateur_Widget' => 'includes/elementor/class-mj-member-animateur-widget.php',
@@ -37,6 +38,9 @@ if (!function_exists('mj_member_get_elementor_widgets_map')) {
             'Mj_Member_Elementor_Todo_Widget' => 'includes/elementor/class-mj-member-todo-widget.php',
             'Mj_Member_Elementor_Documents_Widget' => 'includes/elementor/class-mj-member-documents-widget.php',
             'Mj_Member_Elementor_Idea_Box_Widget' => 'includes/elementor/class-mj-member-idea-box-widget.php',
+            'Mj\Member\Elementor\EventsManager' => 'includes/elementor/EventsManager.php',
+            'Mj_Member_Elementor_Registration_Manager_Widget' => 'includes/elementor/class-mj-member-registration-manager-widget.php',
+            'Mj_Member_Elementor_Event_Schedule_Widget' => 'includes/elementor/class-mj-member-event-schedule-widget.php',
         );
     }
 }
@@ -56,7 +60,6 @@ if (!function_exists('mj_member_load_elementor_widget_class')) {
         return class_exists($class_name, false);
     }
 }
-
 if (!function_exists('mj_member_load_elementor_widgets')) {
     function mj_member_load_elementor_widgets(array $widgets_map) {
         $loaded = array();
@@ -67,3 +70,14 @@ if (!function_exists('mj_member_load_elementor_widgets')) {
         return $loaded;
     }
 }
+
+// Register custom Elementor category
+add_action('elementor/elements/categories_registered', function($elements_manager) {
+    $elements_manager->add_category(
+        'mj-member',
+        [
+            'title' => __('Maison de Jeunes', 'mj-member'),
+            'icon' => 'eicon-site-logo',
+        ]
+    );
+});

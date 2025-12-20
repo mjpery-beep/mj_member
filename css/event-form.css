@@ -1,0 +1,90 @@
+/* Formulaire événements - Styles réutilisables */
+
+.mj-form-field {
+    margin-bottom: 1.25rem;
+}
+
+.mj-form-field label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #1e293b;
+}
+
+.mj-form-field .required {
+    color: #dc2626;
+    margin-left: 0.25rem;
+}
+
+.mj-form-field input[type="text"],
+.mj-form-field input[type="number"],
+.mj-form-field input[type="datetime-local"],
+.mj-form-field textarea,
+.mj-form-field select {
+    width: 100%;
+    padding: 0.625rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.mj-form-field input[type="text"]:focus,
+.mj-form-field input[type="number"]:focus,
+.mj-form-field input[type="datetime-local"]:focus,
+.mj-form-field textarea:focus,
+.mj-form-field select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.mj-form-field .description {
+    margin-top: 0.375rem;
+    font-size: 0.8125rem;
+    color: #64748b;
+}
+
+.mj-form-field-group {
+    margin-bottom: 1.5rem;
+}
+
+.mj-form-field-group__label {
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: #1e293b;
+}
+
+.mj-form-field-group--row .mj-form-field-group__fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.mj-form-field-group--row .mj-form-field {
+    margin-bottom: 0;
+}
+
+.mj-form-field--inline {
+    flex: 1;
+}
+
+/* États de validation */
+.mj-form-field input:invalid,
+.mj-form-field textarea:invalid,
+.mj-form-field select:invalid {
+    border-color: #ef4444;
+}
+
+.mj-form-field input:invalid:focus,
+.mj-form-field textarea:invalid:focus,
+.mj-form-field select:invalid:focus {
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+    .mj-form-field-group--row .mj-form-field-group__fields {
+        grid-template-columns: 1fr;
+    }
+}

@@ -57,13 +57,14 @@ if (!function_exists('mj_member_event_photos_is_staff_member')) {
             return false;
         }
 
-        $animateur_role = 'animateur';
-        $coordinateur_role = 'coordinateur';
-
-        if (class_exists('MjMembers')) {
-            $animateur_role = sanitize_key((string) MjMembers::ROLE_ANIMATEUR);
-            $coordinateur_role = sanitize_key((string) MjMembers::ROLE_COORDINATEUR);
+        // Utiliser MjRoles si disponible
+        if (class_exists('Mj\\Member\\Classes\\MjRoles')) {
+            return \Mj\Member\Classes\MjRoles::isStaff($role);
         }
+
+        // Fallback pour compatibilité
+        $animateur_role = \Mj\Member\Classes\MjRoles::ANIMATEUR;
+        $coordinateur_role = \Mj\Member\Classes\MjRoles::COORDINATEUR;
 
         $staff_roles = apply_filters('mj_member_event_photo_staff_roles', array($animateur_role, $coordinateur_role));
         if (!is_array($staff_roles)) {
@@ -978,9 +979,18 @@ if (!function_exists('mj_member_event_photos_submission_handler')) {
         ));
 
         $member_role = isset($current_member->role) ? sanitize_key((string) $current_member->role) : '';
-        $auto_approve_roles = apply_filters('mj_member_event_photo_auto_approve_roles', array('animateur', 'coordinateur'));
+        
+        // Utiliser MjRoles pour déterminer les rôles avec auto-approbation
+        if (class_exists('Mj\\Member\\Classes\\MjRoles')) {
+            $auto_approve_roles = \Mj\Member\Classes\MjRoles::getPhotoAutoApproveRoles();
+        } else {
+            $auto_approve_roles = apply_filters('mj_member_event_photo_auto_approve_roles', array(
+                \Mj\Member\Classes\MjRoles::ANIMATEUR,
+                \Mj\Member\Classes\MjRoles::COORDINATEUR
+            ));
+        }
         if (!is_array($auto_approve_roles)) {
-            $auto_approve_roles = array('animateur', 'coordinateur');
+            $auto_approve_roles = array(\Mj\Member\Classes\MjRoles::ANIMATEUR, \Mj\Member\Classes\MjRoles::COORDINATEUR);
         }
         $auto_approve_roles = array_map('sanitize_key', $auto_approve_roles);
         $should_auto_approve = $member_role !== '' && in_array($member_role, $auto_approve_roles, true);

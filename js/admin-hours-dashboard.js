@@ -27,6 +27,9 @@ const COLOR_PALETTE = [
     '#3b82f6',
 ];
 
+const WEEKLY_REQUIRED_COLOR = '#3b82f6';
+const WEEKLY_EXTRA_COLOR = '#f97316';
+
 function loadScriptOnce(id, url) {
     if (mjHoursScriptPromises[id]) {
         return mjHoursScriptPromises[id];
@@ -242,39 +245,56 @@ function useChartJs(canvasRef, chartType, chartData, chartOptions) {
 }
 
 function SummaryCards({ totals, i18n }) {
-    const cards = [
-        {
-            key: 'total-hours',
-            title: i18n.totalHours,
-            value: totals.human || '0',
-            meta: totals.entries ? `${totals.entries} ${i18n.entriesLabel}` : null,
-        },
-        {
-            key: 'members-count',
-            title: i18n.membersCount,
-            value: String(totals.member_count || 0),
-            meta: null,
-        },
-        {
-            key: 'projects-count',
-            title: i18n.projectsCount,
-            value: String(totals.project_count || 0),
-            meta: null,
-        },
-        {
-            key: 'unassigned',
-            title: i18n.unassignedHours,
-            value: totals.unassigned_human || '0',
-            meta: (function () {
-                var totalBase = Math.max(totals.minutes || 0, 0);
-                if (totalBase <= 0) {
-                    return '0%';
-                }
-                var percent = ((totals.unassigned_minutes || 0) / totalBase) * 100;
-                return formatPercentage(percent);
-            }()),
-        },
-    ];
+    const cards = [];
+
+    cards.push({
+        key: 'total-hours',
+        title: i18n.totalHours,
+        value: totals.human || '0',
+        meta: totals.entries ? `${totals.entries} ${i18n.entriesLabel}` : null,
+    });
+
+    if (typeof totals.weekly_average_minutes === 'number' && !Number.isNaN(totals.weekly_average_minutes)) {
+        var averageMeta = typeof totals.weekly_average_meta === 'string' ? totals.weekly_average_meta : '';
+        if (averageMeta === '' && typeof i18n.weeklyAverageMetaFallback === 'string') {
+            averageMeta = i18n.weeklyAverageMetaFallback;
+        }
+
+        cards.push({
+            key: 'weekly-average',
+            title: i18n.averageWeeklyHours || 'Moyenne hebdomadaire encodée',
+            value: totals.weekly_average_human || '0',
+            meta: averageMeta !== '' ? averageMeta : null,
+        });
+    }
+
+    cards.push({
+        key: 'members-count',
+        title: i18n.membersCount,
+        value: String(totals.member_count || 0),
+        meta: null,
+    });
+
+    cards.push({
+        key: 'projects-count',
+        title: i18n.projectsCount,
+        value: String(totals.project_count || 0),
+        meta: null,
+    });
+
+    cards.push({
+        key: 'unassigned',
+        title: i18n.unassignedHours,
+        value: totals.unassigned_human || '0',
+        meta: (function () {
+            var totalBase = Math.max(totals.minutes || 0, 0);
+            if (totalBase <= 0) {
+                return '0%';
+            }
+            var percent = ((totals.unassigned_minutes || 0) / totalBase) * 100;
+            return formatPercentage(percent);
+        }()),
+    });
 
     return (
         h('div', { className: 'mj-hours-dashboard__summary' },
@@ -383,16 +403,71 @@ function BarChart({ title, subtitle, items, i18n, emptyLabel }) {
     var hasData = Array.isArray(items) && items.length > 0;
     var datasetLabel = subtitle || title || (i18n && i18n.totalHours ? i18n.totalHours : '');
     var canvasRef = useRef(null);
+    var hasSegments = hasData && items.some(function (item) {
+        if (!item || typeof item !== 'object') {
+            return false;
+        }
+        return typeof item.required_minutes === 'number' || typeof item.extra_minutes === 'number';
+    });
 
     var chartData = useMemo(function () {
         if (!hasData) {
             return null;
         }
 
+        var labels = items.map(function (item) {
+            return item.short_label || item.label || '';
+        });
+
+        if (hasSegments) {
+            var requiredLabel = (i18n && i18n.weeklyRequiredLabel) || datasetLabel || 'Heures dues';
+            var extraLabel = (i18n && i18n.weeklyExtraLabel) || 'Heures supplémentaires';
+
+            var requiredData = items.map(function (item) {
+                if (!item || typeof item !== 'object') {
+                    return 0;
+                }
+                if (typeof item.required_minutes === 'number') {
+                    return Math.max(item.required_minutes, 0);
+                }
+                return Math.max(item.minutes || 0, 0);
+            });
+
+            var extraData = items.map(function (item) {
+                if (!item || typeof item !== 'object') {
+                    return 0;
+                }
+                if (typeof item.extra_minutes === 'number') {
+                    return Math.max(item.extra_minutes, 0);
+                }
+                return 0;
+            });
+
+            return {
+                labels: labels,
+                datasets: [
+                    {
+                        label: requiredLabel,
+                        data: requiredData,
+                        backgroundColor: WEEKLY_REQUIRED_COLOR,
+                        stack: 'hours',
+                        borderRadius: 10,
+                        maxBarThickness: 48,
+                    },
+                    {
+                        label: extraLabel,
+                        data: extraData,
+                        backgroundColor: WEEKLY_EXTRA_COLOR,
+                        stack: 'hours',
+                        borderRadius: 10,
+                        maxBarThickness: 48,
+                    },
+                ],
+            };
+        }
+
         return {
-            labels: items.map(function (item) {
-                return item.short_label || item.label || '';
-            }),
+            labels: labels,
             datasets: [
                 {
                     label: datasetLabel,
@@ -407,7 +482,7 @@ function BarChart({ title, subtitle, items, i18n, emptyLabel }) {
                 },
             ],
         };
-    }, [hasData, items, datasetLabel]);
+    }, [hasData, hasSegments, items, datasetLabel, i18n]);
 
     var chartOptions = useMemo(function () {
         if (!hasData) {
@@ -419,6 +494,7 @@ function BarChart({ title, subtitle, items, i18n, emptyLabel }) {
             maintainAspectRatio: false,
             scales: {
                 x: {
+                    stacked: hasSegments,
                     grid: { display: false },
                     ticks: {
                         autoSkip: false,
@@ -428,6 +504,7 @@ function BarChart({ title, subtitle, items, i18n, emptyLabel }) {
                 },
                 y: {
                     beginAtZero: true,
+                    stacked: hasSegments,
                     grid: {
                         color: 'rgba(148, 163, 184, 0.25)',
                         drawBorder: false,
@@ -440,21 +517,58 @@ function BarChart({ title, subtitle, items, i18n, emptyLabel }) {
                 },
             },
             plugins: {
-                legend: { display: false },
+                legend: {
+                    display: hasSegments,
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                    },
+                },
                 tooltip: {
                     callbacks: {
                         label: function (context) {
-                            var label = context.label || '';
+                            var datasetLabelForPoint = context.dataset && context.dataset.label ? context.dataset.label : '';
+                            var fallbackLabel = !hasSegments && datasetLabelForPoint === '' ? datasetLabel : datasetLabelForPoint;
+                            var label = hasSegments ? datasetLabelForPoint : (context.label || fallbackLabel || '');
                             var value = (context.parsed && typeof context.parsed.y === 'number') ? context.parsed.y : context.parsed;
                             var minutes = typeof value === 'number' ? value : 0;
                             var human = formatMinutesToHoursLabel(minutes);
                             return label ? label + ': ' + human : human;
                         },
+                        afterBody: hasSegments ? function (contexts) {
+                            if (!Array.isArray(contexts) || contexts.length === 0) {
+                                return [];
+                            }
+
+                            var index = contexts[0].dataIndex;
+                            var item = items && items[index] ? items[index] : null;
+                            if (!item) {
+                                return [];
+                            }
+
+                            var lines = [];
+                            var expectedMinutes = item && typeof item.expected_minutes === 'number' ? Math.max(item.expected_minutes, 0) : 0;
+                            if (expectedMinutes > 0) {
+                                var expectedLabel = (i18n && i18n.weeklyExpectedLabel) || (i18n && i18n.weeklyRequiredLabel) || 'Heures attendues';
+                                lines.push(expectedLabel + ': ' + formatMinutesToHoursLabel(expectedMinutes));
+                            }
+
+                            var difference = item && typeof item.difference_minutes === 'number' ? item.difference_minutes : 0;
+                            if (difference !== 0) {
+                                var diffLabel = difference > 0
+                                    ? (i18n && i18n.weeklyExtraLabel) || 'Heures supplémentaires'
+                                    : (i18n && i18n.weeklyDeficitLabel) || 'Heures manquantes';
+                                var sign = difference > 0 ? '+' : '-';
+                                lines.push(diffLabel + ': ' + sign + formatMinutesToHoursLabel(Math.abs(difference)));
+                            }
+
+                            return lines;
+                        } : undefined,
                     },
                 },
             },
         };
-    }, [hasData, items]);
+    }, [hasData, hasSegments, items, i18n]);
 
     useChartJs(canvasRef, hasData ? 'bar' : null, chartData, chartOptions);
 
@@ -552,6 +666,10 @@ function DashboardApp({ config }) {
 
     var memberProjects = selectedMember && Array.isArray(selectedMember.projects) ? selectedMember.projects : [];
     var memberTotalMinutes = selectedMember ? Math.max(selectedMember.minutes || 0, 0) : 0;
+    var memberContractMinutes = selectedMember ? Math.max(selectedMember.weekly_contract_minutes || 0, 0) : 0;
+    var memberContractHuman = selectedMember ? (selectedMember.weekly_contract_human || '') : '';
+    var totalContractMinutes = Math.max(totals.weekly_contract_minutes || 0, 0);
+    var totalContractHuman = totals.weekly_contract_human || '';
 
     var donutItems;
     var donutTotalMinutes;
@@ -594,7 +712,19 @@ function DashboardApp({ config }) {
 
     var monthlySubtitle = selectedMember ? (memberLabel ? memberLabel + ' · ' + memberHuman : memberHuman) : totalHuman;
     var weeklyTitle = i18n.weeklyHoursTitle || '';
-    var weeklySubtitle = selectedMember ? (memberLabel ? memberLabel + ' · ' + memberHuman : memberHuman) : totalHuman;
+    var expectedLabelShort = (i18n && i18n.weeklyExpectedLabel) || (i18n && i18n.weeklyRequiredLabel) || '';
+    var weeklySubtitle;
+    if (selectedMember) {
+        weeklySubtitle = memberLabel ? memberLabel + ' · ' + memberHuman : memberHuman;
+        if (memberContractMinutes > 0 && expectedLabelShort && memberContractHuman) {
+            weeklySubtitle += ' · ' + expectedLabelShort + ' : ' + memberContractHuman;
+        }
+    } else {
+        weeklySubtitle = totalHuman;
+        if (totalContractMinutes > 0 && expectedLabelShort && totalContractHuman) {
+            weeklySubtitle += ' · ' + expectedLabelShort + ' : ' + totalContractHuman;
+        }
+    }
 
     var baseProjectsTitle = i18n.projectsDonutTitle || '';
     var projectsDonutTitle;

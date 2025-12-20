@@ -3,6 +3,7 @@
 namespace Mj\Member\Classes\Table;
 
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\MjTools;
 use Mj\Member\Classes\Value\MemberData;
 use WP_List_Table;
@@ -339,7 +340,7 @@ class MjMembers_List_Table extends WP_List_Table {
     }
 
     public function column_guardian($item) {
-        if ($item->role !== MjMembers::ROLE_JEUNE) {
+        if (!MjRoles::isJeune($item->role)) {
             return '<span style="color:#999;">Non applicable</span>';
         }
 
@@ -378,7 +379,7 @@ class MjMembers_List_Table extends WP_List_Table {
             return '<span class="badge" style="background-color:#6c757d;color:#fff;padding:3px 8px;border-radius:12px;font-size:12px;">Dispensé</span>';
         }
 
-        $suffix = ($item->role === MjMembers::ROLE_TUTEUR) ? ' (paye pour ses jeunes)' : '';
+        $suffix = MjRoles::isTuteur($item->role) ? ' (paye pour ses jeunes)' : '';
 
         return '<span class="badge" style="background-color:#28a745;color:#fff;padding:3px 8px;border-radius:12px;font-size:12px;">Obligatoire' . esc_html($suffix) . '</span>';
     }
@@ -503,7 +504,7 @@ class MjMembers_List_Table extends WP_List_Table {
 
         $finance_rows = array();
 
-        if ($item->role === MjMembers::ROLE_JEUNE) {
+        if (MjRoles::isJeune($item->role)) {
             $guardian_html = $this->column_guardian($item);
             $finance_rows[] = $this->renderDetailRow('👥', __('Responsable', 'mj-member'), $guardian_html);
         }
@@ -1297,7 +1298,7 @@ class MjMembers_List_Table extends WP_List_Table {
             ? esc_html__('Cotisation : Obligatoire', 'mj-member')
             : esc_html__('Cotisation : Dispensé', 'mj-member');
 
-        if ($requires_payment && $item->role === MjMembers::ROLE_TUTEUR) {
+        if ($requires_payment && MjRoles::isTuteur($item->role)) {
             $cotisation_text .= ' ' . esc_html__('(paye pour ses jeunes)', 'mj-member');
         }
 
@@ -1456,20 +1457,12 @@ class MjMembers_List_Table extends WP_List_Table {
     }
 
     private function formatRoleLabel($role) {
-        switch ($role) {
-            case MjMembers::ROLE_JEUNE:
-                return 'Jeune';
-            case MjMembers::ROLE_ANIMATEUR:
-                return 'Animateur';
-            case MjMembers::ROLE_COORDINATEUR:
-                return 'Coordinateur';
-            case MjMembers::ROLE_BENEVOLE:
-                return 'Bénévole';
-            case MjMembers::ROLE_TUTEUR:
-                return 'Tuteur';
-            default:
-                return ucfirst($role);
+        // Utilise la classe centralisée MjRoles
+        $labels = \Mj\Member\Classes\MjRoles::getRoleLabels();
+        if (isset($labels[$role])) {
+            return $labels[$role];
         }
+        return ucfirst($role);
     }
 
     private function roleIcon($role) {

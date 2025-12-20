@@ -491,6 +491,8 @@
         var runtimeHasAccess = runtime.hasAccess;
         var hasAccess = runtimeHasAccess === undefined ? (datasetAccess === undefined ? false : datasetAccess) : !!runtimeHasAccess;
         var i18n = runtime.i18n && typeof runtime.i18n === 'object' ? runtime.i18n : {};
+        // Charger les constantes de rôles depuis la config PHP
+        var roles = runtime.roles && typeof runtime.roles === 'object' ? runtime.roles : {};
 
         var title = typeof datasetConfig.title === 'string' ? datasetConfig.title : '';
         var intro = typeof datasetConfig.intro === 'string' ? datasetConfig.intro : '';
@@ -501,10 +503,12 @@
         var previewAssignables = normalizeMembersList(toArray(datasetConfig.previewData && datasetConfig.previewData.assignableMembers));
         var previewArchivedTodos = normalizeTodosList(toArray(datasetConfig.previewData && datasetConfig.previewData.archivedTodos));
         if (preview && previewAssignables.length === 0) {
+            // Utiliser la constante de rôle depuis la config PHP
+            var animateurRole = roles && roles.ANIMATEUR ? roles.ANIMATEUR : 'animateur';
             previewAssignables.push({
                 id: '1',
                 name: 'Jean Dupont',
-                role: 'animateur',
+                role: animateurRole,
                 isSelf: true,
                 avatar: {
                     url: '',

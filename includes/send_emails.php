@@ -1,4 +1,7 @@
 <?php
+
+use Mj\Member\Classes\MjRoles;
+
 function mj_send_emails_page() {
     global $wpdb;
 
@@ -252,7 +255,7 @@ function mj_member_build_email_context($member, $selected_template = null) {
 
     if (!isset($context['guardian_children']) || !is_array($context['guardian_children'])) {
         $guardian_source = null;
-        if (!empty($member->role) && $member->role === MjMembers::ROLE_TUTEUR) {
+        if (!empty($member->role) && MjRoles::isTuteur($member->role)) {
             $guardian_source = $member;
         } elseif (!empty($member->guardian_id) && class_exists('MjMembers')) {
             $guardian_source = MjMembers::getById((int) $member->guardian_id);

@@ -1,0 +1,151 @@
+{% set is_open = registration.is_open|default(false) %}
+{% set is_past = registration.is_past|default(false) %}
+{% set is_free_participation = registration.is_free_participation|default(false) %}
+{% set free_participation_message = registration.free_participation_message|default('') %}
+{% set requires_login = registration.requires_login|default(false) %}
+{% set requires_validation = registration.requires_validation|default(false) %}
+{% set payment_required = registration.payment_required|default(false) %}
+{% set price_display = registration.price_display|default('') %}
+{% set has_reservations = registration.has_reservations|default(false) %}
+{% set cta_label = registration.cta_label|default(__("S'inscrire", 'mj-member')) %}
+{% set cta_action = registration.cta_action|default('register') %}
+{% set config_json = registration.config_json|default('{}') %}
+{% set allows_selection = registration.allows_selection|default(false) %}
+{% set has_multiple_occurrences = registration.has_multiple_occurrences|default(false) %}
+{% set user = registration.user|default({}) %}
+{% set capacity_remaining = registration.capacity_remaining|default(null) %}
+{% set participants = registration.participants|default([]) %}
+{% set occurrences = sidebar.occurrences|default([]) %}
+
+{# Événement passé : message informatif #}
+{% if is_past %}
+<section class="mj-event-page__card mj-event-page__past-event">
+    <div class="mj-event-page__past-event-content">
+        <svg class="mj-event-page__past-event-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <p class="mj-event-page__past-event-message">{{ __('Cet événement est terminé.', 'mj-member') }}</p>
+    </div>
+</section>
+
+{# Participation libre : section simplifiée #}
+{% elseif is_free_participation %}
+<section class="mj-event-page__card mj-event-page__free-participation">
+    <div class="mj-event-page__free-participation-content">
+        <svg class="mj-event-page__free-participation-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        <p class="mj-event-page__free-participation-message">
+            {{ free_participation_message|default(__('Participation libre : aucune inscription n\'est requise.', 'mj-member')) }}
+        </p>
+    </div>
+</section>
+
+{% else %}
+{# Section inscription standard #}
+<section class="mj-event-page__card mj-event-page__registration">
+    <div class="mj-event-page__registration-header">
+        <h3>{{ __('Inscription', 'mj-member') }}</h3>
+        <span class="mj-event-page__registration-status {{ is_open ? 'is-open' : 'is-closed' }}">
+            {{ is_open ? __('Ouverte', 'mj-member') : __('Fermée', 'mj-member') }}
+        </span>
+    </div>
+
+    {% if price_display and payment_required %}
+        <p class="mj-event-page__registration-price">
+            <span class="mj-event-page__registration-price-label">{{ __('Tarif', 'mj-member') }}</span>
+            <span class="mj-event-page__registration-price-value">{{ price_display }}</span>
+        </p>
+    {% endif %}
+
+    <div class="mj-event-page__registration-body">
+        {# Login requis #}
+        {% if requires_login %}
+            <div class="mj-event-page__registration-login">
+                <p class="mj-event-page__registration-note">{{ __('Connecte-toi pour t\'inscrire.', 'mj-member') }}</p>
+                <button type="button" class="mj-event-page__btn mj-event-page__btn--primary" data-mj-event-open-login>
+                    {{ __('Se connecter', 'mj-member') }}
+                </button>
+            </div>
+
+        {# Inscriptions fermées #}
+        {% elseif not is_open %}
+            <div class="mj-event-page__registration-closed">
+                <p class="mj-event-page__registration-note">{{ __('Les inscriptions sont actuellement fermées.', 'mj-member') }}</p>
+            </div>
+
+        {# Formulaire interactif (Preact) #}
+        {% else %}
+            <div 
+                class="mj-event-page__registration-interactive"
+                data-mj-event-registration-app
+                data-config="{{ config_json|esc_attr }}"
+            >
+                {# Fallback noscript avec formulaire basique #}
+                <noscript>
+                    <form class="mj-event-page__registration-form" method="post">
+                        {% if participants|length > 1 %}
+                            <fieldset class="mj-event-page__registration-fieldset">
+                                <legend>{{ __('Choisir le participant', 'mj-member') }}</legend>
+                                {% for participant in participants %}
+                                    <label class="mj-event-page__registration-participant">
+                                        <input type="radio" name="participant_id" value="{{ participant.id }}" {{ loop.first ? 'checked' : '' }} />
+                                        <span>{{ participant.full_name|default(participant.name) }}</span>
+                                    </label>
+                                {% endfor %}
+                            </fieldset>
+                        {% elseif participants|length == 1 %}
+                            <input type="hidden" name="participant_id" value="{{ participants[0].id }}" />
+                            <p class="mj-event-page__registration-summary">
+                                {{ __('Inscription pour %s', 'mj-member')|format(participants[0].full_name|default(participants[0].name)) }}
+                            </p>
+                        {% endif %}
+
+                        {% if allows_selection and occurrences|length > 1 %}
+                            <fieldset class="mj-event-page__registration-fieldset">
+                                <legend>{{ __('Choisir les dates', 'mj-member') }}</legend>
+                                {% for occ in occurrences %}
+                                    {% if not occ.is_past %}
+                                        <label class="mj-event-page__registration-occurrence">
+                                            <input type="checkbox" name="occurrence_ids[]" value="{{ occ.timestamp }}" />
+                                            <span>{{ occ.label }}</span>
+                                        </label>
+                                    {% endif %}
+                                {% endfor %}
+                            </fieldset>
+                        {% endif %}
+
+                        <button type="submit" class="mj-event-page__btn mj-event-page__btn--primary">
+                            {{ cta_label }}
+                        </button>
+                    </form>
+                </noscript>
+
+                {# Placeholder pour le composant Preact #}
+                <div class="mj-event-page__registration-loading" data-mj-event-registration-loading>
+                    <span class="mj-event-page__spinner"></span>
+                    <span>{{ __('Chargement…', 'mj-member') }}</span>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    {# Infos supplémentaires #}
+    {% if requires_validation and is_open %}
+        <p class="mj-event-page__registration-info mj-event-page__registration-info--validation">
+            {{ __('Les inscriptions sont soumises à validation par l\'équipe.', 'mj-member') }}
+        </p>
+    {% endif %}
+
+    {% if payment_required and is_open %}
+        <p class="mj-event-page__registration-info mj-event-page__registration-info--payment">
+            {{ __('Vous pourrez effectuer le paiement après l\'inscription, dans votre espace membre ou en main propre à un animateur.', 'mj-member') }}
+        </p>
+    {% endif %}
+
+    {# Feedback zone #}
+    <div class="mj-event-page__registration-feedback" data-mj-event-registration-feedback aria-live="polite"></div>
+</section>
+{% endif %}

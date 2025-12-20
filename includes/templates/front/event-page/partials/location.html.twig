@@ -1,0 +1,66 @@
+{% set has_location = location.has_location|default(false) %}
+
+{% if has_location %}
+    {% set name = location.name|default('') %}
+    {% set address = location.address|default('') %}
+    {% set cover_url = location.cover_url|default('') %}
+    {% set notes = location.notes|default('') %}
+    {% set map_embed = location.map_embed|default('') %}
+    {% set map_link = location.map_link|default('') %}
+
+    <section class="mj-event-page__card mj-event-page__location">
+        <h2>{{ __('Lieu', 'mj-member') }}</h2>
+
+        {# En-tête avec logo/cover et informations #}
+        <div class="mj-event-page__location-header">
+            {% if cover_url %}
+                <span class="mj-event-page__location-cover">
+                    <img src="{{ cover_url|esc_url }}" alt="{{ name|esc_attr }}" loading="lazy" decoding="async" />
+                </span>
+            {% endif %}
+            <div class="mj-event-page__location-info">
+                {% if name %}
+                    <p class="mj-event-page__location-name">{{ name }}</p>
+                {% endif %}
+                {% if address %}
+                    <p class="mj-event-page__location-address">{{ address }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Notes / Description du lieu #}
+        {% if notes %}
+            <div class="mj-event-page__location-notes">
+                {{ notes|wp_kses_post }}
+            </div>
+        {% endif %}
+
+        {# Carte Google Maps #}
+        {% if map_embed %}
+            <div class="mj-event-page__location-map">
+                <iframe 
+                    src="{{ map_embed|esc_url }}" 
+                    loading="lazy" 
+                    allowfullscreen 
+                    referrerpolicy="no-referrer-when-downgrade"
+                    title="{{ __('Carte du lieu', 'mj-member') }}"
+                ></iframe>
+            </div>
+        {% endif %}
+
+        {# Lien vers Google Maps #}
+        {% if map_link %}
+            <div class="mj-event-page__location-actions">
+                <a 
+                    href="{{ map_link|esc_url }}" 
+                    class="mj-event-page__location-link"
+                    target="_blank" 
+                    rel="noopener"
+                >
+                    <span class="mj-event-page__location-link-icon" aria-hidden="true">📍</span>
+                    {{ __('Ouvrir dans Google Maps', 'mj-member') }}
+                </a>
+            </div>
+        {% endif %}
+    </section>
+{% endif %}

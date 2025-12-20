@@ -19,6 +19,7 @@ add_action('wp_ajax_mj_member_hour_encode_update', 'mj_member_ajax_hour_encode_u
 add_action('wp_ajax_mj_member_hour_encode_delete', 'mj_member_ajax_hour_encode_delete');
 add_action('wp_ajax_mj_member_hour_encode_rename_project', 'mj_member_ajax_hour_encode_rename_project');
 add_action('wp_ajax_mj_member_hour_encode_rename_task', 'mj_member_ajax_hour_encode_rename_task');
+add_action('wp_ajax_mj_member_hour_encode_move_task_to_project', 'mj_member_ajax_hour_encode_move_task_to_project');
 
 /**
  * Retourne les événements planifiés pour la semaine demandée.
@@ -348,6 +349,64 @@ function mj_member_ajax_hour_encode_rename_task() {
     }
 
     wp_send_json_success(array('updated' => (int) $result));
+}
+
+function mj_member_ajax_hour_encode_move_task_to_project() {
+    check_ajax_referer('mj-member-hour-encode', 'nonce');
+
+    $capability = Config::hoursCapability();
+    if ($capability === '') {
+        $capability = Config::capability();
+    }
+
+    if (!current_user_can($capability)) {
+        wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
+    }
+
+    $userId = get_current_user_id();
+    if ($userId <= 0) {
+        wp_send_json_error(array('message' => __('Utilisateur non authentifié.', 'mj-member')), 401);
+    }
+
+    if (!class_exists(MjMembers::class) || !class_exists(MjMemberHours::class)) {
+        wp_send_json_error(array('message' => __('Fonctionnalité indisponible.', 'mj-member')), 500);
+    }
+
+    $memberRow = MjMembers::getByWpUserId($userId);
+    if (!$memberRow || empty($memberRow->id)) {
+        wp_send_json_error(array('message' => __('Impossible de déterminer le membre associé.', 'mj-member')), 400);
+    }
+
+    $memberId = (int) $memberRow->id;
+    if ($memberId <= 0) {
+        wp_send_json_error(array('message' => __('Profil membre invalide.', 'mj-member')), 400);
+    }
+
+    $taskLabel = isset($_POST['task_label']) ? sanitize_text_field(wp_unslash((string) $_POST['task_label'])) : '';
+    $sourceProject = isset($_POST['source_project']) ? sanitize_text_field(wp_unslash((string) $_POST['source_project'])) : '';
+    $targetProject = isset($_POST['target_project']) ? sanitize_text_field(wp_unslash((string) $_POST['target_project'])) : '';
+
+    if ($taskLabel === '') {
+        wp_send_json_error(array('message' => __('Libellé de tâche invalide.', 'mj-member')));
+    }
+
+    if ($targetProject === '') {
+        wp_send_json_error(array('message' => __('Projet cible invalide.', 'mj-member')));
+    }
+
+    if (strcasecmp($sourceProject, $targetProject) === 0) {
+        wp_send_json_success(array('updated' => 0, 'message' => __('La tâche est déjà dans ce projet.', 'mj-member')));
+    }
+
+    $result = MjMemberHours::bulkMoveTaskToProject($taskLabel, $sourceProject, $targetProject, array('member_id' => $memberId));
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+    }
+
+    wp_send_json_success(array(
+        'updated' => (int) $result,
+        'message' => sprintf(__('%d entrée(s) déplacée(s).', 'mj-member'), (int) $result),
+    ));
 }
 
 function mj_member_ajax_hour_encode_update() {

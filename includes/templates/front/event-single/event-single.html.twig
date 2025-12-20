@@ -9,12 +9,10 @@
             <div class="mj-member-event-single__main">
                 {% include 'event-single/partials/description.html.twig' with { description: partials.description|default({}) } only %}
 
-                {% if not partials.registration|default({}).is_free_participation %}
-                    {% include 'event-single/partials/registration.html.twig' with {
-                        registration: partials.registration|default({}),
-                        user: user|default({})
-                    } only %}
-                {% endif %}
+                {% include 'event-single/partials/registration.html.twig' with {
+                    registration: partials.registration|default({}),
+                    user: user|default({})
+                } only %}
 
                 {% include 'event-single/partials/location.html.twig' with { location: partials.location|default({}) } only %}
 

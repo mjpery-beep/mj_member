@@ -24,7 +24,7 @@ class Mj_Member_Elementor_Hour_Encode_Widget extends Widget_Base {
     }
 
     public function get_categories() {
-        return array('general');
+        return array('mj-member');
     }
 
     public function get_keywords() {

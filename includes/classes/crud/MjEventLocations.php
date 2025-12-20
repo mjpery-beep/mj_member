@@ -299,7 +299,17 @@ class MjEventLocations implements CrudRepositoryInterface {
             return '';
         }
 
-        return 'https://www.google.com/maps?q=' . rawurlencode($query) . '&output=embed';
+        // Essayer d'utiliser la clé API Google Maps d'Elementor si disponible
+        $google_api_key = get_option('elementor_google_maps_api_key', '');
+        
+        if (!empty($google_api_key)) {
+            // Utiliser l'API Embed officielle de Google avec la clé
+            return 'https://www.google.com/maps/embed/v1/place?key=' . rawurlencode($google_api_key) . '&q=' . rawurlencode($query);
+        }
+
+        // Sans clé API, l'embed Google ne fonctionne plus (X-Frame-Options)
+        // Retourner une chaîne vide - le template affichera le lien cliquable à la place
+        return '';
     }
 
     /**

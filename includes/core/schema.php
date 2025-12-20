@@ -1,6 +1,7 @@
 <?php
 
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\MjRoles;
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
@@ -394,6 +395,9 @@ function mj_member_ensure_auxiliary_tables() {
     if (!mj_member_index_exists($payments_table, 'idx_registration')) {
         $wpdb->query("ALTER TABLE $payments_table ADD KEY idx_registration (registration_id)");
     }
+    if (!mj_member_column_exists($payments_table, 'checkout_url')) {
+        $wpdb->query("ALTER TABLE $payments_table ADD COLUMN checkout_url varchar(500) DEFAULT NULL AFTER external_ref");
+    }
 
     $payments_hist_table = $wpdb->prefix . 'mj_payment_history';
     $sql_history = "CREATE TABLE IF NOT EXISTS $payments_hist_table (
@@ -756,6 +760,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_32($wpdb);
     mj_member_upgrade_to_2_33($wpdb);
     mj_member_upgrade_to_2_34($wpdb);
+    mj_member_upgrade_to_2_35($wpdb);
     
     
     $registrations_table = mj_member_get_event_registrations_table_name();
@@ -949,7 +954,7 @@ function mj_member_migrate_legacy_members($table_name) {
                         'last_name' => sanitize_text_field($row['tutor_nom']),
                         'email' => sanitize_email($row['tutor_email']),
                         'phone' => sanitize_text_field($row['tutor_phone']),
-                        'role' => MjMembers::ROLE_TUTEUR,
+                        'role' => MjRoles::TUTEUR,
                         'status' => 'active',
                         'requires_payment' => 0,
                         'is_autonomous' => 1,
@@ -2053,6 +2058,21 @@ function mj_member_upgrade_to_2_34($wpdb) {
     }
 }
 
+/**
+ * Ajoute la colonne work_schedule pour stocker l'emploi du temps contractuel des membres staff.
+ */
+function mj_member_upgrade_to_2_35($wpdb) {
+    $members_table = $wpdb->prefix . 'mj_members';
+
+    if (!mj_member_table_exists($members_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($members_table, 'work_schedule')) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN work_schedule longtext DEFAULT NULL AFTER description_longue");
+    }
+}
+
 function mj_member_upgrade_to_2_5($wpdb) {
     $members_table = $wpdb->prefix . 'mj_members';
     $templates_table = $wpdb->prefix . 'mj_email_templates';
@@ -2566,6 +2586,11 @@ function mj_install()
             'post_status'  => 'publish',
             'post_type'    => 'page',
         ));
+    }
+
+    // Import des pages de l'espace membre depuis les exports JSON
+    if (class_exists('Mj\\Member\\Classes\\MjAccountPagesExport')) {
+        \Mj\Member\Classes\MjAccountPagesExport::onPluginActivation();
     }
 
     flush_rewrite_rules(false);

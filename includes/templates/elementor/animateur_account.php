@@ -1,5 +1,6 @@
 <?php
 
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\AssetsManager;
 use Mj\Member\Core\Config;
 
@@ -213,7 +214,7 @@ if (!function_exists('mj_member_get_current_animateur_member')) {
             return null;
         }
 
-        return ($role === MjMembers::ROLE_ANIMATEUR) ? $member : null;
+        return MjRoles::isAnimateur($role) ? $member : null;
     }
 }
 
@@ -1957,7 +1958,7 @@ if (!function_exists(function: 'mj_member_render_animateur_component')) {
                 'registrationEditLabel' => __('Modifier la fiche', 'mj-member'),
                 'participantEmailLabel' => __('Email', 'mj-member'),
                 'participantPhoneLabel' => __('Téléphone', 'mj-member'),
-                'participantGuardianLabel' => __('Tuteur', 'mj-member'),
+                'participantGuardianLabel' => \Mj\Member\Classes\MjRoles::getRoleLabel(\Mj\Member\Classes\MjRoles::TUTEUR),
                 'participantAgeYears' => __('%d ans', 'mj-member'),
             ),
             'settings' => array(
@@ -2945,7 +2946,7 @@ if (!function_exists('mj_member_ajax_animateur_generate_payment_link')) {
                 'registration_id' => $registration_id,
                 'event' => $event,
                 'payer_id' => get_current_user_id(),
-                'initiator' => 'animateur',
+                'initiator' => \Mj\Member\Classes\MjRoles::ANIMATEUR,
                 'occurrence_mode' => $occurrence_scope,
                 'occurrence_count' => $occurrence_count,
                 'occurrence_list' => $occurrence_list,
@@ -3325,7 +3326,7 @@ if (!function_exists('mj_member_ajax_animateur_search_members')) {
             $eligible = true;
             $ineligible_reasons = array();
 
-            if ($allow_guardian_registration !== 1 && $role_key === MjMembers::ROLE_TUTEUR) {
+            if ($allow_guardian_registration !== 1 && MjRoles::isTuteur($role_key)) {
                 $eligible = false;
                 $ineligible_reasons[] = __('Rôle tuteur non autorisé pour cet événement.', 'mj-member');
             }
@@ -3581,7 +3582,7 @@ if (!function_exists('mj_member_ajax_animateur_quick_create_member')) {
             'birth_date' => $birth_sanitized,
         );
 
-        $default_role = MjMembers::ROLE_JEUNE;
+        $default_role = MjRoles::JEUNE;
         $filtered_role = apply_filters('mj_member_quick_create_member_role', $default_role, $filter_payload, get_current_user_id());
         $allowed_roles = method_exists('MjMembers', 'getAllowedRoles') ? MjMembers::getAllowedRoles() : array($default_role);
         if (!in_array($filtered_role, $allowed_roles, true)) {

@@ -1,6 +1,7 @@
 <?php
 
 use Mj\Member\Classes\Crud\MjIdeas;
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\AssetsManager;
 
 if (!defined('ABSPATH')) {
@@ -29,7 +30,7 @@ if ($isPreview) {
             'author' => array(
                 'id' => 101,
                 'name' => __('Camille D.', 'mj-member'),
-                'role' => 'benevole',
+                'role' => MjRoles::BENEVOLE,
             ),
             'viewerHasVoted' => true,
             'isOwner' => false,
@@ -46,7 +47,7 @@ if ($isPreview) {
             'author' => array(
                 'id' => 102,
                 'name' => __('Léo P.', 'mj-member'),
-                'role' => 'animateur',
+                'role' => MjRoles::ANIMATEUR,
             ),
             'viewerHasVoted' => false,
             'isOwner' => false,
@@ -63,7 +64,7 @@ if ($isPreview) {
             'author' => array(
                 'id' => 103,
                 'name' => __('Nina S.', 'mj-member'),
-                'role' => 'jeune',
+                'role' => MjRoles::JEUNE,
             ),
             'viewerHasVoted' => false,
             'isOwner' => false,
@@ -82,7 +83,7 @@ $config = array(
         'member' => array(
             'id' => 999,
             'name' => __('Alexis R.', 'mj-member'),
-            'role' => 'animateur',
+            'role' => MjRoles::ANIMATEUR,
         ),
     ) : array(),
 );

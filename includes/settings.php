@@ -154,12 +154,24 @@ function mj_settings_page() {
             $label = isset($raw_row['label']) ? sanitize_text_field($raw_row['label']) : '';
             $page_id = isset($raw_row['page_id']) ? (int) $raw_row['page_id'] : 0;
             $icon_id = isset($raw_row['icon_id']) ? (int) $raw_row['icon_id'] : 0;
+            $position = isset($raw_row['position']) ? (int) $raw_row['position'] : 999;
+
+            // Sauvegarder le slug de la page pour permettre la portabilité entre sites
+            $page_slug = '';
+            if ($page_id > 0) {
+                $page_post = get_post($page_id);
+                if ($page_post && $page_post->post_type === 'page') {
+                    $page_slug = $page_post->post_name;
+                }
+            }
 
             $normalized_account_links[$link_key] = array(
                 'enabled' => $enabled ? 1 : 0,
                 'label' => (!empty($link_defaults['editable_label']) && $label !== '') ? $label : '',
                 'page_id' => $page_id > 0 ? $page_id : 0,
+                'page_slug' => $page_slug,
                 'icon_id' => $icon_id > 0 ? $icon_id : 0,
+                'position' => $position,
             );
         }
 
@@ -732,12 +744,33 @@ function mj_settings_page() {
                         <div style="margin:24px 0; padding:20px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px;">
                             <h3 style="margin:0 0 12px 0;">🔗 Liens &laquo;&nbsp;Mon compte&nbsp;&raquo;</h3>
                             <p style="margin:0 0 16px 0; color:#4b5563; font-size:14px;">Configurez ici l'ordre, les libellés et les pages cibles des actions proposées dans l'espace membre. Les boutons mis en avant sur Elementor utilisent automatiquement ces paramètres.</p>
-                            <?php foreach ($account_link_settings as $link_key => $link_config) :
+                            
+                            <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:16px; padding:12px; background:#fff; border:1px solid #e5e7eb; border-radius:6px;">
+                                <button type="button" id="mj-export-pages-btn" class="button button-secondary" style="display:inline-flex; align-items:center; gap:6px;">
+                                    <span class="dashicons dashicons-download" style="font-size:16px;"></span>
+                                    <?php esc_html_e('Sauvegarder les pages', 'mj-member'); ?>
+                                </button>
+                                <button type="button" id="mj-import-pages-btn" class="button button-secondary" style="display:inline-flex; align-items:center; gap:6px;">
+                                    <span class="dashicons dashicons-upload" style="font-size:16px;"></span>
+                                    <?php esc_html_e('Restaurer les pages', 'mj-member'); ?>
+                                </button>
+                                <span id="mj-pages-export-status" style="font-size:12px; color:#6b7280;"></span>
+                            </div>
+                            
+                            <p style="margin:0 0 16px 0; color:#6366f1; font-size:13px; display:flex; align-items:center; gap:6px;">
+                                <span class="dashicons dashicons-move" style="font-size:16px;"></span>
+                                Glissez-déposez les liens pour modifier leur ordre d'affichage.
+                            </p>
+                            <div id="mj-account-links-sortable" class="mj-account-links-sortable">
+                            <?php
+                            $link_position = 0;
+                            foreach ($account_link_settings as $link_key => $link_config) :
                                 $default_label = isset($account_link_defaults[$link_key]['label'])
                                     ? $account_link_defaults[$link_key]['label']
                                     : (isset($link_config['label']) ? $link_config['label'] : ucfirst(str_replace('_', ' ', $link_key)));
                                 $is_logout = isset($link_config['type']) && $link_config['type'] === 'logout';
-                                $is_for_animateur = isset($link_config['visibility']) && $link_config['visibility'] === 'animateur';
+                                $animateur_role = class_exists('Mj\\Member\\Classes\\MjRoles') ? \Mj\Member\Classes\MjRoles::ANIMATEUR : 'animateur';
+                                $is_for_animateur = isset($link_config['visibility']) && $link_config['visibility'] === $animateur_role;
                                 $is_for_hours_team = isset($link_config['visibility']) && $link_config['visibility'] === 'hours_team';
                                 $requires_capability = isset($link_config['requires_capability']) ? (string) $link_config['requires_capability'] : '';
                                 $editable_label = !empty($link_config['editable_label']);
@@ -779,75 +812,72 @@ function mj_settings_page() {
                                 }
                                 $dynamic_example = esc_url($dynamic_example);
                                 $is_enabled = !empty($link_config['enabled']);
+                                $current_position = isset($link_config['position']) ? (int) $link_config['position'] : $link_position;
                             ?>
-                            <div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:6px; padding:16px; margin-bottom:16px;">
-                                <h4 style="margin:0 0 12px 0; font-size:16px;">Lien&nbsp;: <?php echo esc_html($default_label); ?></h4>
-                                <p style="margin:0 0 12px 0;">
-                                    <label for="<?php echo esc_attr($field_prefix . '-enabled'); ?>">
+                            <div class="mj-account-link-item" data-link-key="<?php echo esc_attr($link_key); ?>">
+                                <input type="hidden" class="mj-account-link-position" name="mj_account_links[<?php echo esc_attr($link_key); ?>][position]" value="<?php echo esc_attr($current_position); ?>" />
+                                <div class="mj-account-link-header">
+                                    <span class="mj-account-link-handle dashicons dashicons-menu" title="Glisser pour réordonner"></span>
+                                    <label class="mj-account-link-toggle">
                                         <input type="hidden" name="mj_account_links[<?php echo esc_attr($link_key); ?>][enabled]" value="0" />
                                         <input type="checkbox" id="<?php echo esc_attr($field_prefix . '-enabled'); ?>" name="mj_account_links[<?php echo esc_attr($link_key); ?>][enabled]" value="1" <?php checked($is_enabled); ?> />
-                                        Afficher ce lien dans l'espace membre
                                     </label>
-                                </p>
-                                <p style="margin:0 0 12px 0;">
-                                    <label for="<?php echo esc_attr($field_prefix . '-label'); ?>">Libellé du lien</label><br>
-                                    <input type="text" class="regular-text" id="<?php echo esc_attr($field_prefix . '-label'); ?>" name="mj_account_links[<?php echo esc_attr($link_key); ?>][label]" value="<?php echo esc_attr($current_label); ?>" <?php echo $editable_label ? '' : 'readonly'; ?> />
-                                    <?php if (!$editable_label) : ?>
-                                        <small style="display:block; margin-top:4px; color:#6b7280;">Le libellé de ce lien est fixe pour garantir la cohérence de l'interface.</small>
+                                    <span class="mj-account-link-label<?php echo !$is_enabled ? ' is-disabled' : ''; ?>"><?php echo esc_html($current_label); ?></span>
+                                    <?php if ($is_for_animateur) : ?>
+                                        <span class="mj-account-link-badge mj-account-link-badge--animateur" title="Visible uniquement pour les animateurs">Anim.</span>
+                                    <?php elseif ($is_for_hours_team) : ?>
+                                        <span class="mj-account-link-badge mj-account-link-badge--hours" title="Visible pour l'équipe heures">Équipe</span>
                                     <?php endif; ?>
-                                </p>
-                                <div style="margin:0 0 12px 0;">
-                                    <span style="display:block; margin-bottom:6px; font-weight:600; color:#111827;">Icône du lien</span>
-                                    <div class="mj-member-menu-icon-control" data-mj-member-menu-icon>
-                                        <div class="mj-member-menu-icon-preview" data-image-url="<?php echo esc_attr($icon_preview_url); ?>">
-                                            <?php echo $icon_preview_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                                    <?php if ($requires_capability) : ?>
+                                        <span class="mj-account-link-badge mj-account-link-badge--cap" title="Requiert une capacité spécifique">🔒</span>
+                                    <?php endif; ?>
+                                    <span class="mj-account-link-position-badge">#<?php echo esc_html($current_position + 1); ?></span>
+                                    <button type="button" class="mj-account-link-expand" aria-expanded="false" title="Modifier les options">
+                                        <span class="dashicons dashicons-arrow-down-alt2"></span>
+                                    </button>
+                                </div>
+                                <div class="mj-account-link-details" hidden>
+                                    <div class="mj-account-link-details-grid">
+                                        <div class="mj-account-link-field">
+                                            <label for="<?php echo esc_attr($field_prefix . '-label'); ?>">Libellé</label>
+                                            <input type="text" id="<?php echo esc_attr($field_prefix . '-label'); ?>" name="mj_account_links[<?php echo esc_attr($link_key); ?>][label]" value="<?php echo esc_attr($current_label); ?>" <?php echo $editable_label ? '' : 'readonly'; ?> />
                                         </div>
-                                        <div class="mj-member-menu-icon-actions" style="margin-top:8px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-                                            <input type="hidden" class="mj-member-menu-icon-input" name="mj_account_links[<?php echo esc_attr($link_key); ?>][icon_id]" value="<?php echo esc_attr((string) $icon_id_value); ?>" />
-                                            <button type="button" class="button mj-member-menu-icon-select"><?php esc_html_e('Sélectionner une image', 'mj-member'); ?></button>
-                                            <button type="button" class="button-link-delete mj-member-menu-icon-remove"<?php echo $icon_id_value > 0 ? '' : ' style="display:none;"'; ?>><?php esc_html_e('Retirer', 'mj-member'); ?></button>
+                                        <div class="mj-account-link-field">
+                                            <label for="<?php echo esc_attr($field_prefix . '-page'); ?>">Page cible</label>
+                                            <?php
+                                            wp_dropdown_pages(array(
+                                                'name' => 'mj_account_links[' . $link_key . '][page_id]',
+                                                'id' => $field_prefix . '-page',
+                                                'show_option_none' => '— Dynamique —',
+                                                'option_none_value' => '0',
+                                                'selected' => $page_id_value,
+                                            ));
+                                            ?>
+                                        </div>
+                                        <div class="mj-account-link-field mj-account-link-field--icon">
+                                            <label>Icône</label>
+                                            <div class="mj-member-menu-icon-control mj-member-menu-icon-control--compact" data-mj-member-menu-icon>
+                                                <div class="mj-member-menu-icon-preview" data-image-url="<?php echo esc_attr($icon_preview_url); ?>">
+                                                    <?php echo $icon_preview_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                                                </div>
+                                                <div class="mj-member-menu-icon-actions">
+                                                    <input type="hidden" class="mj-member-menu-icon-input" name="mj_account_links[<?php echo esc_attr($link_key); ?>][icon_id]" value="<?php echo esc_attr((string) $icon_id_value); ?>" />
+                                                    <button type="button" class="button button-small mj-member-menu-icon-select"><?php esc_html_e('Choisir', 'mj-member'); ?></button>
+                                                    <button type="button" class="button-link-delete mj-member-menu-icon-remove"<?php echo $icon_id_value > 0 ? '' : ' style="display:none;"'; ?>>×</button>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                    <small style="display:block; margin-top:6px; color:#6b7280;">Affiche une petite image à gauche du libellé dans les menus Elementor et la fenêtre &laquo;&nbsp;Mon compte&nbsp;&raquo;.</small>
+                                    <?php if ($is_logout) : ?>
+                                        <p class="mj-account-link-note">La déconnexion redirige vers l'accueil.</p>
+                                    <?php endif; ?>
                                 </div>
-                                <p style="margin:0 0 12px 0;">
-                                    <label for="<?php echo esc_attr($field_prefix . '-page'); ?>">Page cible</label><br>
-                                    <?php
-                                    wp_dropdown_pages(array(
-                                        'name' => 'mj_account_links[' . $link_key . '][page_id]',
-                                        'id' => $field_prefix . '-page',
-                                        'show_option_none' => '— Dynamique —',
-                                        'option_none_value' => '0',
-                                        'selected' => $page_id_value,
-                                    ));
-                                    ?>
-                                    <small style="display:block; margin-top:4px; color:#6b7280;">Laissez &laquo;&nbsp;Dynamique&nbsp;&raquo; pour rediriger vers <code><?php echo esc_html($dynamic_example); ?></code>.</small>
-                                </p>
-                                <?php if ($is_for_animateur) : ?>
-                                    <p style="margin:0 0 8px 0; color:#0f766e; font-size:13px;">Visible uniquement pour les membres ayant le rôle d'animateur.</p>
-                                <?php elseif ($is_for_hours_team) : ?>
-                                    <p style="margin:0 0 8px 0; color:#0f766e; font-size:13px;">Visible uniquement pour les animateurs, coordinateurs et bénévoles.</p>
-                                <?php endif; ?>
-                                <?php if ($requires_capability) : ?>
-                                    <p style="margin:0 0 8px 0; color:#312e81; font-size:13px;">
-                                        <?php
-                                        $contact_cap = Config::contactCapability() ?: 'mj_manage_contact_messages';
-                                        if ($requires_capability === $contact_cap) {
-                                            esc_html_e('Visible pour les responsables des messages et les membres disposant de conversations.', 'mj-member');
-                                        } else {
-                                            printf(
-                                                esc_html__('Visible uniquement pour les utilisateurs disposant de la capacité %s.', 'mj-member'),
-                                                esc_html($requires_capability)
-                                            );
-                                        }
-                                        ?>
-                                    </p>
-                                <?php endif; ?>
-                                <?php if ($is_logout) : ?>
-                                    <p style="margin:0; color:#6b7280; font-size:13px;">La déconnexion redirige vers l'accueil après fermeture de session.</p>
-                                <?php endif; ?>
                             </div>
-                            <?php endforeach; ?>
+                            <?php
+                            $link_position++;
+                            endforeach;
+                            ?>
+                            </div>
                         </div>
                     </div>
 
@@ -1111,6 +1141,221 @@ function mj_settings_page() {
             gap: 8px;
             align-items: center;
             margin-bottom: 6px;
+        }
+        /* Styles pour le tri des liens Mon compte */
+        .mj-account-links-sortable {
+            min-height: 50px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .mj-account-link-item {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            transition: box-shadow 0.15s ease, border-color 0.15s ease;
+            user-select: none;
+        }
+        .mj-account-link-item:hover {
+            border-color: #a5b4fc;
+        }
+        .mj-account-link-item.is-dragging {
+            opacity: 0.5;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+            border-color: #6366f1;
+            cursor: grabbing;
+        }
+        .mj-account-link-item.is-drag-over-top {
+            position: relative;
+        }
+        .mj-account-link-item.is-drag-over-top::before {
+            content: '';
+            position: absolute;
+            top: -3px;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: #6366f1;
+            border-radius: 2px;
+            box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+        }
+        .mj-account-link-item.is-drag-over-bottom {
+            position: relative;
+        }
+        .mj-account-link-item.is-drag-over-bottom::after {
+            content: '';
+            position: absolute;
+            bottom: -3px;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: #6366f1;
+            border-radius: 2px;
+            box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+        }
+        .mj-account-links-sortable.is-dragging-active .mj-account-link-item:not(.is-dragging) {
+            cursor: pointer;
+        }
+        .mj-account-link-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            cursor: grab;
+        }
+        .mj-account-link-handle {
+            color: #9ca3af;
+            font-size: 16px;
+            opacity: 0.5;
+            transition: opacity 0.15s ease;
+        }
+        .mj-account-link-item:hover .mj-account-link-handle {
+            opacity: 1;
+        }
+        .mj-account-link-toggle {
+            display: flex;
+            align-items: center;
+        }
+        .mj-account-link-toggle input[type="checkbox"] {
+            margin: 0;
+        }
+        .mj-account-link-label {
+            flex: 1;
+            font-size: 13px;
+            font-weight: 500;
+            color: #1f2937;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .mj-account-link-label.is-disabled {
+            color: #9ca3af;
+            text-decoration: line-through;
+        }
+        .mj-account-link-badge {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        .mj-account-link-badge--animateur {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        .mj-account-link-badge--hours {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .mj-account-link-badge--cap {
+            background: #ede9fe;
+            color: #5b21b6;
+        }
+        .mj-account-link-position-badge {
+            background: #e0e7ff;
+            color: #4338ca;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 9999px;
+            transition: background 0.15s ease;
+        }
+        .mj-account-link-expand {
+            background: none;
+            border: none;
+            padding: 2px;
+            cursor: pointer;
+            color: #6b7280;
+            display: flex;
+            align-items: center;
+            transition: transform 0.2s ease;
+        }
+        .mj-account-link-expand:hover {
+            color: #4338ca;
+        }
+        .mj-account-link-expand[aria-expanded="true"] {
+            transform: rotate(180deg);
+        }
+        .mj-account-link-expand .dashicons {
+            font-size: 16px;
+            width: 16px;
+            height: 16px;
+        }
+        .mj-account-link-details {
+            padding: 10px 12px 12px 36px;
+            background: #f9fafb;
+            border-top: 1px solid #e5e7eb;
+        }
+        .mj-account-link-details-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 10px;
+            align-items: end;
+        }
+        .mj-account-link-field label {
+            display: block;
+            font-size: 11px;
+            font-weight: 500;
+            color: #6b7280;
+            margin-bottom: 3px;
+        }
+        .mj-account-link-field input[type="text"],
+        .mj-account-link-field select {
+            width: 100%;
+            font-size: 12px;
+            padding: 4px 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+        }
+        .mj-account-link-field--icon {
+            min-width: 100px;
+        }
+        .mj-member-menu-icon-control--compact {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .mj-member-menu-icon-control--compact .mj-member-menu-icon-preview {
+            width: 28px;
+            height: 28px;
+            min-width: 28px;
+            border-radius: 4px;
+            overflow: hidden;
+            background: #f3f4f6;
+            border: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .mj-member-menu-icon-control--compact .mj-member-menu-icon-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .mj-member-menu-icon-control--compact .mj-member-menu-icon-placeholder {
+            font-size: 9px;
+            color: #9ca3af;
+        }
+        .mj-member-menu-icon-control--compact .mj-member-menu-icon-actions {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .mj-member-menu-icon-control--compact .button-small {
+            font-size: 11px;
+            padding: 0 6px;
+            min-height: 24px;
+            line-height: 22px;
+        }
+        .mj-member-menu-icon-control--compact .button-link-delete {
+            font-size: 14px;
+            color: #dc2626;
+            padding: 0 4px;
+        }
+        .mj-account-link-note {
+            margin: 8px 0 0;
+            font-size: 11px;
+            color: #6b7280;
         }
         </style>
         <script>
@@ -1413,8 +1658,295 @@ function mj_settings_page() {
             renderCardBackPreview(cardBackImage.length && cardBackImage.attr('src') ? cardBackImage.attr('src') : '');
             refreshCardBackVisibility();
         })(jQuery);
+
+        // Drag-and-drop pour les liens Mon compte
+        (function () {
+            var sortableContainer = document.getElementById('mj-account-links-sortable');
+            if (!sortableContainer) {
+                return;
+            }
+
+            var draggedItem = null;
+            var items = sortableContainer.querySelectorAll('.mj-account-link-item');
+
+            function updatePositions() {
+                var currentItems = sortableContainer.querySelectorAll('.mj-account-link-item');
+                currentItems.forEach(function (item, index) {
+                    var positionInput = item.querySelector('.mj-account-link-position');
+                    var positionBadge = item.querySelector('.mj-account-link-position-badge');
+                    if (positionInput) {
+                        positionInput.value = index;
+                    }
+                    if (positionBadge) {
+                        positionBadge.textContent = '#' + (index + 1);
+                    }
+                });
+            }
+
+            function clearDropIndicators() {
+                sortableContainer.querySelectorAll('.mj-account-link-item').forEach(function (item) {
+                    item.classList.remove('is-drag-over-top', 'is-drag-over-bottom');
+                });
+            }
+
+            function handleDragStart(e) {
+                draggedItem = this;
+                this.classList.add('is-dragging');
+                sortableContainer.classList.add('is-dragging-active');
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', this.dataset.linkKey);
+            }
+
+            function handleDragEnd(e) {
+                this.classList.remove('is-dragging');
+                sortableContainer.classList.remove('is-dragging-active');
+                clearDropIndicators();
+                draggedItem = null;
+                updatePositions();
+            }
+
+            function handleDragOver(e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+
+                if (!draggedItem || draggedItem === this) {
+                    clearDropIndicators();
+                    return false;
+                }
+
+                var rect = this.getBoundingClientRect();
+                var midY = rect.top + rect.height / 2;
+                var isTop = e.clientY < midY;
+
+                clearDropIndicators();
+                if (isTop) {
+                    this.classList.add('is-drag-over-top');
+                } else {
+                    this.classList.add('is-drag-over-bottom');
+                }
+
+                return false;
+            }
+
+            function handleDragLeave(e) {
+                // Ne retirer l'indicateur que si on quitte vraiment l'élément
+                var rect = this.getBoundingClientRect();
+                if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+                    this.classList.remove('is-drag-over-top', 'is-drag-over-bottom');
+                }
+            }
+
+            function handleDrop(e) {
+                e.stopPropagation();
+                e.preventDefault();
+
+                if (draggedItem && draggedItem !== this) {
+                    var rect = this.getBoundingClientRect();
+                    var midY = rect.top + rect.height / 2;
+                    var insertBefore = e.clientY < midY;
+
+                    if (insertBefore) {
+                        sortableContainer.insertBefore(draggedItem, this);
+                    } else {
+                        sortableContainer.insertBefore(draggedItem, this.nextSibling);
+                    }
+                }
+
+                clearDropIndicators();
+                return false;
+            }
+
+            items.forEach(function (item) {
+                var header = item.querySelector('.mj-account-link-header');
+                if (header) {
+                    header.setAttribute('draggable', 'true');
+                    header.addEventListener('dragstart', handleDragStart.bind(item), false);
+                    header.addEventListener('dragend', handleDragEnd.bind(item), false);
+                }
+                item.addEventListener('dragover', handleDragOver, false);
+                item.addEventListener('dragleave', handleDragLeave, false);
+                item.addEventListener('drop', handleDrop, false);
+            });
+
+            // Accordéon expand/collapse
+            sortableContainer.addEventListener('click', function (e) {
+                var expandBtn = e.target.closest('.mj-account-link-expand');
+                if (!expandBtn) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+
+                var item = expandBtn.closest('.mj-account-link-item');
+                var details = item.querySelector('.mj-account-link-details');
+                var isExpanded = expandBtn.getAttribute('aria-expanded') === 'true';
+
+                expandBtn.setAttribute('aria-expanded', !isExpanded);
+                if (isExpanded) {
+                    details.hidden = true;
+                } else {
+                    details.hidden = false;
+                }
+            });
+
+            // Mise à jour du label en temps réel
+            sortableContainer.addEventListener('input', function (e) {
+                if (e.target.matches('input[name*="[label]"]')) {
+                    var item = e.target.closest('.mj-account-link-item');
+                    var labelSpan = item.querySelector('.mj-account-link-label');
+                    if (labelSpan) {
+                        labelSpan.textContent = e.target.value || '(sans nom)';
+                    }
+                }
+            });
+
+            // Toggle enabled/disabled style
+            sortableContainer.addEventListener('change', function (e) {
+                if (e.target.matches('input[type="checkbox"][name*="[enabled]"]')) {
+                    var item = e.target.closest('.mj-account-link-item');
+                    var labelSpan = item.querySelector('.mj-account-link-label');
+                    if (labelSpan) {
+                        labelSpan.classList.toggle('is-disabled', !e.target.checked);
+                    }
+                }
+            });
+
+            // Initialize positions on load
+            updatePositions();
+        })();
+
+        // Export/Import des pages Mon compte
+        (function ($) {
+            var exportBtn = document.getElementById('mj-export-pages-btn');
+            var importBtn = document.getElementById('mj-import-pages-btn');
+            var statusEl = document.getElementById('mj-pages-export-status');
+
+            function setStatus(message, type) {
+                if (!statusEl) return;
+                statusEl.textContent = message;
+                statusEl.style.color = type === 'error' ? '#dc2626' : (type === 'success' ? '#059669' : '#6b7280');
+            }
+
+            function setLoading(btn, loading) {
+                if (!btn) return;
+                btn.disabled = loading;
+                btn.style.opacity = loading ? '0.6' : '1';
+            }
+
+            if (exportBtn) {
+                exportBtn.addEventListener('click', function () {
+                    setLoading(exportBtn, true);
+                    setStatus('<?php echo esc_js(__('Sauvegarde en cours...', 'mj-member')); ?>', 'info');
+
+                    $.ajax({
+                        url: ajaxurl,
+                        type: 'POST',
+                        data: {
+                            action: 'mj_member_export_account_pages',
+                            _wpnonce: '<?php echo esc_js(wp_create_nonce('mj_member_export_pages')); ?>'
+                        },
+                        success: function (response) {
+                            setLoading(exportBtn, false);
+                            if (response.success) {
+                                var count = response.data.saved ? response.data.saved.length : 0;
+                                setStatus('✓ ' + count + ' <?php echo esc_js(__('page(s) sauvegardée(s)', 'mj-member')); ?>', 'success');
+                            } else {
+                                setStatus('✗ ' + (response.data || '<?php echo esc_js(__('Erreur', 'mj-member')); ?>'), 'error');
+                            }
+                        },
+                        error: function () {
+                            setLoading(exportBtn, false);
+                            setStatus('✗ <?php echo esc_js(__('Erreur de connexion', 'mj-member')); ?>', 'error');
+                        }
+                    });
+                });
+            }
+
+            if (importBtn) {
+                importBtn.addEventListener('click', function () {
+                    if (!confirm('<?php echo esc_js(__('Créer les pages manquantes à partir des sauvegardes ?', 'mj-member')); ?>')) {
+                        return;
+                    }
+
+                    setLoading(importBtn, true);
+                    setStatus('<?php echo esc_js(__('Restauration en cours...', 'mj-member')); ?>', 'info');
+
+                    $.ajax({
+                        url: ajaxurl,
+                        type: 'POST',
+                        data: {
+                            action: 'mj_member_import_account_pages',
+                            _wpnonce: '<?php echo esc_js(wp_create_nonce('mj_member_import_pages')); ?>'
+                        },
+                        success: function (response) {
+                            setLoading(importBtn, false);
+                            if (response.success) {
+                                var created = response.data.created ? response.data.created.length : 0;
+                                var skipped = response.data.skipped ? response.data.skipped.length : 0;
+                                setStatus('✓ ' + created + ' <?php echo esc_js(__('créée(s)', 'mj-member')); ?>, ' + skipped + ' <?php echo esc_js(__('existante(s)', 'mj-member')); ?>', 'success');
+                                if (created > 0) {
+                                    setTimeout(function () { location.reload(); }, 1500);
+                                }
+                            } else {
+                                setStatus('✗ ' + (response.data || '<?php echo esc_js(__('Erreur', 'mj-member')); ?>'), 'error');
+                            }
+                        },
+                        error: function () {
+                            setLoading(importBtn, false);
+                            setStatus('✗ <?php echo esc_js(__('Erreur de connexion', 'mj-member')); ?>', 'error');
+                        }
+                    });
+                });
+            }
+        })(jQuery);
         </script>
     </div>
     <?php
 }
 
+/**
+ * AJAX : Export des pages Mon compte vers fichiers JSON.
+ */
+add_action('wp_ajax_mj_member_export_account_pages', 'mj_member_ajax_export_account_pages');
+function mj_member_ajax_export_account_pages(): void {
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(__('Permissions insuffisantes', 'mj-member'));
+    }
+
+    if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'mj_member_export_pages')) {
+        wp_send_json_error(__('Nonce invalide', 'mj-member'));
+    }
+
+    if (!class_exists('Mj\\Member\\Classes\\MjAccountPagesExport')) {
+        require_once MJ_MEMBER_PATH . 'includes/classes/MjAccountPagesExport.php';
+    }
+
+    $result = \Mj\Member\Classes\MjAccountPagesExport::exportPages();
+
+    if ($result['success']) {
+        wp_send_json_success($result);
+    } else {
+        wp_send_json_error(implode(', ', $result['errors']));
+    }
+}
+
+/**
+ * AJAX : Import des pages Mon compte depuis fichiers JSON.
+ */
+add_action('wp_ajax_mj_member_import_account_pages', 'mj_member_ajax_import_account_pages');
+function mj_member_ajax_import_account_pages(): void {
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(__('Permissions insuffisantes', 'mj-member'));
+    }
+
+    if (!wp_verify_nonce($_POST['_wpnonce'] ?? '', 'mj_member_import_pages')) {
+        wp_send_json_error(__('Nonce invalide', 'mj-member'));
+    }
+
+    if (!class_exists('Mj\\Member\\Classes\\MjAccountPagesExport')) {
+        require_once MJ_MEMBER_PATH . 'includes/classes/MjAccountPagesExport.php';
+    }
+
+    $result = \Mj\Member\Classes\MjAccountPagesExport::importPages(false);
+
+    wp_send_json_success($result);
+}

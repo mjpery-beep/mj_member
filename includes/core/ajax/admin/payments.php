@@ -402,12 +402,12 @@ function mj_format_payment_status($status) {
         case 'paid':
         case 'succeeded':
         case 'completed':
-            return __('✅ Payé – paiement confirmé par Stripe/Webhook', 'mj-member');
+            return __('✅ Payé – paiement confirmé par Stripe', 'mj-member');
 
         case 'pending':
         case 'requires_payment_method':
         case 'requires_action':
-            return __('⏳ En attente – paiement créé, en cours de confirmation', 'mj-member');
+            return __('⏳ En attente – Effectuer le paiement', 'mj-member');
 
         case 'canceled':
         case 'cancelled':

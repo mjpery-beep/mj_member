@@ -27,7 +27,7 @@ class Mj_Member_Elementor_Account_Links_Widget extends Widget_Base {
     }
 
     public function get_categories() {
-        return array('general');
+        return array('mj-member');
     }
 
     public function get_keywords() {
@@ -615,7 +615,10 @@ class Mj_Member_Elementor_Account_Links_Widget extends Widget_Base {
 
         $member_role_key = '';
         if ($preview_mode && !$is_logged_in) {
-            $member_role_key = 'animateur';
+            // Utiliser MjRoles pour le mode aperçu
+            $member_role_key = class_exists('Mj\\Member\\Classes\\MjRoles') 
+                ? \Mj\Member\Classes\MjRoles::ANIMATEUR 
+                : 'animateur';
         } elseif ($member && isset($member->role) && $member->role !== '') {
             $member_role_key = sanitize_key((string) $member->role);
         }

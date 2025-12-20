@@ -1,10 +1,12 @@
 <?php
+use Mj\Member\Classes\MjRoles;
+
 if (!function_exists('mj_member_get_registration_type')) {
     function mj_member_get_registration_type() {
         $default = 'guardian';
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registration_type'])) {
             $type = sanitize_text_field(wp_unslash($_POST['registration_type']));
-            return $type === 'jeune' ? 'jeune' : $default;
+            return $type === MjRoles::JEUNE ? MjRoles::JEUNE : $default;
         }
         return $default;
     }
@@ -113,7 +115,7 @@ if (!function_exists('mj_member_send_guardian_registration_email')) {
 if (!function_exists('mj_process_frontend_inscription')) {
     function mj_process_frontend_inscription() {
         $registration_type = mj_member_get_registration_type();
-        $requires_guardian = ($registration_type !== 'jeune');
+        $requires_guardian = ($registration_type !== MjRoles::JEUNE);
         $min_password_length = (int) apply_filters('mj_member_min_password_length', 8);
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST' || empty($_POST['mj_frontend_nonce'])) {
@@ -215,13 +217,13 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 return array('success' => false, 'message' => "Chaque jeune doit avoir un prénom, un nom et une date de naissance.");
             }
 
-            if ($registration_type === 'jeune') {
+            if ($registration_type === MjRoles::JEUNE) {
                 if ($child['email'] === '' || !is_email($child['email'])) {
                     return array('success' => false, 'message' => "Merci de fournir une adresse email valide pour le jeune autonome.");
                 }
             }
 
-            $needs_account = ($registration_type === 'jeune') || !empty($child['is_autonomous']);
+            $needs_account = ($registration_type === MjRoles::JEUNE) || !empty($child['is_autonomous']);
             $child_login_clean = $child['user_login'] !== '' ? sanitize_user($child['user_login'], true) : '';
 
             if ($needs_account) {
@@ -259,7 +261,7 @@ if (!function_exists('mj_process_frontend_inscription')) {
             return array('success' => false, 'message' => "Ajoutez au moins un jeune avant de soumettre le formulaire.");
         }
 
-        if ($registration_type === 'jeune') {
+        if ($registration_type === MjRoles::JEUNE) {
             $first = $children[0];
             $first['is_autonomous'] = 1;
             $children = array($first);
@@ -278,7 +280,7 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 $wpdb->prepare(
                     "SELECT id, wp_user_id FROM $table_name WHERE email = %s AND role = %s LIMIT 1",
                     $guardian['email'],
-                    MjMembers::ROLE_TUTEUR
+                    MjRoles::TUTEUR
                 )
             );
             if ($existing_guardian_row) {
@@ -305,7 +307,7 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 $existing = MjMembers::search($child['email']);
                 if (!empty($existing)) {
                     foreach ($existing as $record) {
-                        if ((int) $record->id !== (int) $guardian_id && $record->role === MjMembers::ROLE_JEUNE) {
+                        if ((int) $record->id !== (int) $guardian_id && MjRoles::isJeune($record->role)) {
                             return array('success' => false, 'message' => sprintf("L'adresse email %s est déjà utilisée pour un jeune.", esc_html($child['email'])));
                         }
                     }
@@ -318,9 +320,9 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 'email'               => $child['email'],
                 'phone'               => $child['phone'],
                 'birth_date'          => $child['birth_date'],
-                'role'                => MjMembers::ROLE_JEUNE,
+                'role'                => MjRoles::JEUNE,
                 'guardian_id'         => ($requires_guardian && empty($child['is_autonomous'])) ? $guardian_id : null,
-                'is_autonomous'       => $registration_type === 'jeune' ? 1 : ($child['is_autonomous'] ? 1 : 0),
+                'is_autonomous'       => $registration_type === MjRoles::JEUNE ? 1 : ($child['is_autonomous'] ? 1 : 0),
                 'requires_payment'    => 1,
                 'photo_usage_consent' => $child['photo_usage_consent'],
                 'notes'               => $child['notes'],
@@ -342,7 +344,7 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 'id' => $member_id,
                 'email' => $child['email'],
                 'is_autonomous' => (int) $payload['is_autonomous'],
-                'credentials' => (($registration_type === 'jeune') || !empty($payload['is_autonomous']))
+                'credentials' => (($registration_type === MjRoles::JEUNE) || !empty($payload['is_autonomous']))
                     ? array('user_login' => $child['user_login'], 'user_password' => $child['user_password'])
                     : null,
             );
@@ -634,7 +636,7 @@ if (!function_exists('mj_collect_children_form_values')) {
                 'birth_date'          => '',
                 'email'               => '',
                 'phone'               => '',
-                'is_autonomous'       => $registration_type === 'jeune' ? 1 : 0,
+                'is_autonomous'       => $registration_type === MjRoles::JEUNE ? 1 : 0,
                 'photo_usage_consent' => 0,
                 'notes'               => '',
                 'user_login'          => '',
@@ -655,7 +657,7 @@ if (!function_exists('mj_collect_children_form_values')) {
                 'birth_date'          => sanitize_text_field(wp_unslash($raw_child['birth_date'] ?? '')),
                 'email'               => sanitize_email(wp_unslash($raw_child['email'] ?? '')),
                 'phone'               => sanitize_text_field(wp_unslash($raw_child['phone'] ?? '')),
-                'is_autonomous'       => ($registration_type === 'jeune') ? 1 : (!empty($raw_child['is_autonomous']) ? 1 : 0),
+                'is_autonomous'       => ($registration_type === MjRoles::JEUNE) ? 1 : (!empty($raw_child['is_autonomous']) ? 1 : 0),
                 'photo_usage_consent' => !empty($raw_child['photo_usage_consent']) ? 1 : 0,
                 'description_courte'  => sanitize_text_field(wp_unslash($raw_child['description_courte'] ?? '')),
                 'description_longue'  => sanitize_textarea_field(wp_unslash($raw_child['description_longue'] ?? '')),
@@ -673,7 +675,7 @@ if (!function_exists('mj_collect_children_form_values')) {
                 'birth_date'          => '',
                 'email'               => '',
                 'phone'               => '',
-                'is_autonomous'       => $registration_type === 'jeune' ? 1 : 0,
+                'is_autonomous'       => $registration_type === MjRoles::JEUNE ? 1 : 0,
                 'photo_usage_consent' => 0,
                 'notes'               => '',
                 'user_login'          => '',
@@ -682,7 +684,7 @@ if (!function_exists('mj_collect_children_form_values')) {
             ));
         }
 
-        if ($registration_type === 'jeune' && count($children) > 1) {
+        if ($registration_type === MjRoles::JEUNE && count($children) > 1) {
             $children = array(array_merge($children[0], array('is_autonomous' => 1)));
         }
 
@@ -1172,7 +1174,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                             <span>Je suis un tuteur et j'inscris un ou plusieurs jeunes</span>
                         </label>
                         <label class="mj-radio">
-                            <input type="radio" name="registration_type" value="jeune" <?php checked($registration_type, 'jeune'); ?> />
+                            <input type="radio" name="registration_type" value="<?php echo esc_attr(MjRoles::JEUNE); ?>" <?php checked($registration_type, MjRoles::JEUNE); ?> />
                             <span>Je suis un jeune majeur et je m'inscris moi-même</span>
                         </label>
                         <p class="mj-field-hint">Choisissez cette option si vous avez 18 ans ou plus et que vous n'avez pas de tuteur.</p>
@@ -1229,7 +1231,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                         <legend>Jeunes à inscrire</legend>
                         <div id="mj-children-wrapper">
                             <?php foreach ($children_values as $index => $values) : ?>
-                                <?php echo mj_render_child_form_block($index, $values, $index > 0, $registration_type !== 'jeune'); ?>
+                                <?php echo mj_render_child_form_block($index, $values, $index > 0, $registration_type !== MjRoles::JEUNE); ?>
                             <?php endforeach; ?>
                         </div>
                         <button type="button" class="mj-button mj-button--secondary" id="mj-add-child">+ Ajouter un jeune</button>
@@ -1313,7 +1315,7 @@ if (!function_exists('mj_member_render_registration_form')) {
         </div>
 
         <script type="text/template" id="mj-child-template">
-            <?php echo mj_render_child_form_block('__INDEX__', array(), true, $registration_type !== 'jeune'); ?>
+            <?php echo mj_render_child_form_block('__INDEX__', array(), true, $registration_type !== MjRoles::JEUNE); ?>
         </script>
 
         <style>
@@ -1872,6 +1874,9 @@ if (!function_exists('mj_member_render_registration_form')) {
 
         <script>
             (function () {
+                // Constante rôle jeune injectée depuis PHP
+                const ROLE_JEUNE = '<?php echo esc_js(MjRoles::JEUNE); ?>';
+
                 const regulationModal = document.getElementById('mj-regulation-modal');
                 const regulationBackdrop = document.querySelector('[data-mj-regulation-backdrop]');
                 const regulationTriggers = document.querySelectorAll('[data-mj-regulation-open]');
@@ -1951,8 +1956,8 @@ if (!function_exists('mj_member_render_registration_form')) {
 
                 let currentType = 'guardian';
                 const checkedRadio = document.querySelector('input[name="registration_type"]:checked');
-                if (checkedRadio && checkedRadio.value === 'jeune') {
-                    currentType = 'jeune';
+                if (checkedRadio && checkedRadio.value === ROLE_JEUNE) {
+                    currentType = ROLE_JEUNE;
                 }
 
                 function refreshChildNumbers() {
@@ -1986,7 +1991,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                     const accountSection = card.querySelector('.mj-child-card__account');
                     const accountInputs = accountSection ? accountSection.querySelectorAll('input') : [];
                     const autonomousCheckbox = card.querySelector('.mj-child-autonomous-toggle input[type="checkbox"]');
-                    const mustBeAutonomous = type === 'jeune';
+                    const mustBeAutonomous = type === ROLE_JEUNE;
                     const isAutonomous = mustBeAutonomous ? true : (autonomousCheckbox ? autonomousCheckbox.checked : false);
 
                     if (autonomousCheckbox && mustBeAutonomous && !autonomousCheckbox.checked) {
@@ -2018,14 +2023,14 @@ if (!function_exists('mj_member_render_registration_form')) {
                         return;
                     }
 
-                    if (type === 'jeune') {
+                    if (type === ROLE_JEUNE) {
                         guardianFieldset.classList.add('mj-hidden');
                     } else {
                         guardianFieldset.classList.remove('mj-hidden');
                     }
 
                     guardianFields.forEach(function (field) {
-                        if (type === 'jeune') {
+                        if (type === ROLE_JEUNE) {
                             field.dataset.previousDisabled = field.disabled ? '1' : '0';
                             field.disabled = true;
                         } else if (field.dataset.previousDisabled === '1') {
@@ -2035,7 +2040,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                         }
 
                         if (field.dataset.requiredIf === 'guardian') {
-                            if (type === 'jeune') {
+                            if (type === ROLE_JEUNE) {
                                 field.dataset.previousRequired = field.required ? '1' : '0';
                                 field.required = false;
                             } else if (field.dataset.guardianRequired === '1') {
@@ -2052,7 +2057,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                         const autonomousInput = autonomousLabel ? autonomousLabel.querySelector('input[type="checkbox"]') : null;
                         const emailField = card.querySelector('input[type="email"]');
                         if (autonomousLabel && autonomousInput) {
-                            if (type === 'jeune') {
+                            if (type === ROLE_JEUNE) {
                                 autonomousLabel.classList.add('mj-hidden');
                                 autonomousInput.checked = true;
                             } else {
@@ -2061,7 +2066,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                         }
 
                         if (emailField) {
-                            if (type === 'jeune') {
+                            if (type === ROLE_JEUNE) {
                                 emailField.required = true;
                                 emailField.setAttribute('required', 'required');
                             } else {
@@ -2074,20 +2079,20 @@ if (!function_exists('mj_member_render_registration_form')) {
                     });
 
                     if (addButton) {
-                        addButton.classList.toggle('mj-hidden', type === 'jeune');
+                        addButton.classList.toggle('mj-hidden', type === ROLE_JEUNE);
                     }
                 }
 
                 function toggleChildHeaders(type) {
-                    const hide = type === 'jeune';
+                    const hide = type === ROLE_JEUNE;
                     wrapper.querySelectorAll('.mj-child-card__header').forEach(function (header) {
                         header.classList.toggle('mj-hidden', hide);
                     });
                 }
 
                 function applyRegistrationType(type) {
-                    currentType = type === 'jeune' ? 'jeune' : 'guardian';
-                    if (currentType === 'jeune') {
+                    currentType = type === ROLE_JEUNE ? ROLE_JEUNE : 'guardian';
+                    if (currentType === ROLE_JEUNE) {
                         const cards = wrapper.querySelectorAll('.mj-child-card');
                         cards.forEach(function (card, index) {
                             if (index > 0) {
@@ -2103,7 +2108,7 @@ if (!function_exists('mj_member_render_registration_form')) {
 
                 registrationRadios.forEach(function (radio) {
                     radio.addEventListener('change', function () {
-                        applyRegistrationType(radio.value === 'jeune' ? 'jeune' : 'guardian');
+                        applyRegistrationType(radio.value === ROLE_JEUNE ? ROLE_JEUNE : 'guardian');
                     });
                 });
 

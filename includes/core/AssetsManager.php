@@ -210,7 +210,7 @@ final class AssetsManager
     public static function registerFrontAssets(): void
     {
         self::registerStyle('mj-member-components', 'css/styles.css');
-        self::registerStyle('mj-member-event-single', 'css/event-single.css', array('mj-member-components'));
+        self::registerStyle('mj-member-event-page', 'css/event-page.css', array('mj-member-components'));
         self::registerScript('mj-member-utils', 'js/utils.js', array('jquery'));
         self::registerScript('mj-member-contact-form', 'js/contact-form.js', array('jquery'));
         self::registerScript('mj-member-contact-messages', 'js/contact-messages.js', array('jquery', 'mj-member-utils'));
@@ -230,16 +230,22 @@ final class AssetsManager
         ));
 
         self::registerScript('mj-member-events-widget', 'js/events-widget.js', array('mj-member-utils'));
-        self::registerScript('mj-member-event-single-app', 'js/event-single/app.js', array('mj-member-utils', 'mj-member-preact-hooks'));
+        self::registerScript('mj-member-event-page-app', 'js/event-page/app.js', array('mj-member-utils', 'mj-member-preact-hooks'));
         self::registerScript('mj-member-event-toggles', 'js/event-toggles.js');
         self::registerScript('mj-member-animateur-account', 'js/animateur-account.js', array('jquery', 'mj-member-utils'));
         self::registerScript('mj-member-events-calendar', 'js/elementor/events-calendar.js', array('mj-member-utils'));
+        self::registerStyle('mj-member-events-calendar', 'css/events-calendar.css', array('mj-member-components'));
         self::registerScript('mj-member-upcoming-events', 'js/elementor/upcoming-events.js', array('mj-member-utils'));
         self::registerScript('mj-member-hour-encode', 'js/elementor/hour-encode.js', array('mj-member-utils'));
         self::registerScript('mj-member-photo-grimlins', 'js/elementor/photo-grimlins.js', array('mj-member-utils'));
         self::registerScript('mj-member-grimlins-gallery', 'js/elementor/grimlins-gallery.js', array('mj-member-utils'));
         self::registerScript('mj-member-idea-box', 'js/elementor/idea-box.js', array('mj-member-utils'));
         self::registerScript('mj-member-documents-manager', 'js/elementor/documents-manager.js', array('mj-member-utils'));
+        self::registerScript('mj-member-payments-overview', 'js/elementor/payments-overview.js', array('mj-member-utils'));
+        self::registerStyle('mj-member-payments-overview', 'css/payments-overview.css', array('mj-member-components'));
+        self::registerScript('mj-member-events-manager', 'js/elementor/events-manager.js', array('mj-member-utils'));
+        self::registerStyle('mj-member-event-form', 'css/event-form.css');
+        self::registerStyle('mj-member-events-manager', 'css/events-manager.css', array('mj-member-components', 'mj-member-event-form'));
         wp_register_script(
             'mj-member-preact',
             'https://unpkg.com/preact@10.19.3/dist/preact.min.js',
@@ -288,6 +294,25 @@ final class AssetsManager
 
         self::registerStyle('mj-member-notification-preferences', 'css/notification-preferences.css');
         self::registerScript('mj-member-notification-preferences', 'js/notification-preferences.js');
+
+        // Registration Manager Widget
+        self::registerStyle('mj-member-registration-manager', 'css/registration-manager.css', array('mj-member-components'));
+        self::registerScript('mj-member-regmgr-services', 'js/registration-manager/services.js', array('mj-member-utils'));
+        self::registerScript('mj-member-regmgr-hooks', 'js/registration-manager/hooks.js', array('mj-member-preact-hooks'));
+        self::registerScript('mj-member-regmgr-events', 'js/registration-manager/events.js', array('mj-member-regmgr-hooks'));
+        self::registerScript('mj-member-regmgr-registrations', 'js/registration-manager/registrations.js', array('mj-member-regmgr-hooks'));
+        self::registerScript('mj-member-regmgr-attendance', 'js/registration-manager/attendance.js', array('mj-member-regmgr-hooks'));
+        self::registerScript('mj-member-regmgr-members', 'js/registration-manager/members.js', array('mj-member-regmgr-registrations'));
+        self::registerScript('mj-member-regmgr-modals', 'js/registration-manager/modals.js', array('mj-member-regmgr-hooks'));
+        self::registerScript('mj-member-regmgr-app', 'js/registration-manager/app.js', array(
+            'mj-member-regmgr-services',
+            'mj-member-regmgr-hooks',
+            'mj-member-regmgr-events',
+            'mj-member-regmgr-registrations',
+            'mj-member-regmgr-attendance',
+            'mj-member-regmgr-members',
+            'mj-member-regmgr-modals',
+        ));
     }
 
     /**
@@ -328,6 +353,7 @@ final class AssetsManager
                 break;
 
             case 'events-calendar':
+                wp_enqueue_style('mj-member-events-calendar');
                 wp_enqueue_script('mj-member-events-calendar');
                 break;
 
@@ -397,6 +423,18 @@ final class AssetsManager
                 }
                 break;
 
+            case 'payments-overview':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-payments-overview');
+                wp_enqueue_script('mj-member-payments-overview');
+                break;
+
+            case 'events-manager':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-events-manager');
+                wp_enqueue_script('mj-member-events-manager');
+                break;
+
             case 'member-account':
                 wp_enqueue_style('mj-member-components');
                 break;
@@ -405,17 +443,32 @@ final class AssetsManager
                 wp_enqueue_style('mj-member-components');
                 break;
 
-            case 'event-single':
+            case 'event-page':
                 wp_enqueue_style('mj-member-components');
-                wp_enqueue_style('mj-member-event-single');
+                wp_enqueue_style('mj-member-event-page');
                 wp_enqueue_script('mj-member-preact');
                 wp_enqueue_script('mj-member-preact-hooks');
-                wp_enqueue_script('mj-member-event-single-app');
+                wp_enqueue_script('mj-member-event-page-app');
                 break;
 
             case 'notification-preferences':
                 wp_enqueue_style('mj-member-notification-preferences');
                 wp_enqueue_script('mj-member-notification-preferences');
+                break;
+
+            case 'registration-manager':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-registration-manager');
+                wp_enqueue_script('mj-member-preact');
+                wp_enqueue_script('mj-member-preact-hooks');
+                wp_enqueue_script('mj-member-regmgr-services');
+                wp_enqueue_script('mj-member-regmgr-hooks');
+                wp_enqueue_script('mj-member-regmgr-events');
+                wp_enqueue_script('mj-member-regmgr-registrations');
+                wp_enqueue_script('mj-member-regmgr-attendance');
+                wp_enqueue_script('mj-member-regmgr-members');
+                wp_enqueue_script('mj-member-regmgr-modals');
+                wp_enqueue_script('mj-member-regmgr-app');
                 break;
 
             default:

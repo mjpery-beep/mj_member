@@ -1,5 +1,6 @@
 <?php
 
+use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Core\AssetsManager;
 use Mj\Member\Core\Config;
 
@@ -23,6 +24,96 @@ $now = current_time('timestamp');
 $weekStartTimestamp = strtotime('monday this week', $now);
 if (!is_int($weekStartTimestamp)) {
     $weekStartTimestamp = $now;
+}
+
+// Récupérer l'emploi du temps contractuel du membre connecté
+$workSchedule = array();
+if (!$isPreview) {
+    $currentUserId = get_current_user_id();
+    if ($currentUserId > 0 && class_exists(MjMembers::class)) {
+        $memberRow = MjMembers::getByWpUserId($currentUserId);
+        if ($memberRow && !empty($memberRow->work_schedule)) {
+            $decoded = json_decode($memberRow->work_schedule, true);
+            if (is_array($decoded)) {
+                $workSchedule = $decoded;
+            }
+        }
+    }
+} else {
+    // Données fictives pour l'aperçu Elementor
+    $workSchedule = array(
+        array('day' => 'monday', 'start' => '09:00', 'end' => '17:00', 'break_minutes' => 60),
+        array('day' => 'tuesday', 'start' => '09:00', 'end' => '17:00', 'break_minutes' => 60),
+        array('day' => 'wednesday', 'start' => '13:00', 'end' => '21:00', 'break_minutes' => 0),
+        array('day' => 'thursday', 'start' => '09:00', 'end' => '17:00', 'break_minutes' => 60),
+        array('day' => 'friday', 'start' => '09:00', 'end' => '13:00', 'break_minutes' => 0),
+    );
+}
+
+// Calculer le solde cumulé d'heures
+$cumulativeBalance = null;
+if (!$isPreview && !empty($workSchedule)) {
+    $currentUserId = get_current_user_id();
+    if ($currentUserId > 0 && class_exists('\\Mj\\Member\\Classes\\MjMemberHours')) {
+        // Calculer les heures contractuelles hebdomadaires
+        $weeklyContractualMinutes = 0;
+        foreach ($workSchedule as $slot) {
+            if (empty($slot['start']) || empty($slot['end'])) {
+                continue;
+            }
+            $startParts = explode(':', $slot['start']);
+            $endParts = explode(':', $slot['end']);
+            if (count($startParts) >= 2 && count($endParts) >= 2) {
+                $startMinutes = (int) $startParts[0] * 60 + (int) $startParts[1];
+                $endMinutes = (int) $endParts[0] * 60 + (int) $endParts[1];
+                $breakMinutes = isset($slot['break_minutes']) ? (int) $slot['break_minutes'] : 0;
+                $slotMinutes = max(0, $endMinutes - $startMinutes - $breakMinutes);
+                $weeklyContractualMinutes += $slotMinutes;
+            }
+        }
+        
+        // Récupérer les stats cumulées depuis la DB
+        if ($weeklyContractualMinutes > 0 && class_exists(MjMembers::class)) {
+            $memberRow = MjMembers::getByWpUserId($currentUserId);
+            if ($memberRow && !empty($memberRow->id)) {
+                // Récupérer la première date d'entrée d'heures et le total cumulé
+                global $wpdb;
+                $hoursTable = $wpdb->prefix . 'mj_member_hours';
+                $stats = $wpdb->get_row($wpdb->prepare(
+                    "SELECT MIN(activity_date) as first_date, SUM(duration_minutes) as total_minutes FROM {$hoursTable} WHERE member_id = %d",
+                    $memberRow->id
+                ));
+                
+                if ($stats && $stats->first_date && $stats->total_minutes !== null) {
+                    $firstDate = new DateTimeImmutable($stats->first_date);
+                    $today = new DateTimeImmutable('today');
+                    $daysDiff = (int) $firstDate->diff($today)->days;
+                    $weeksDiff = max(1, ceil($daysDiff / 7));
+                    $expectedMinutes = $weeksDiff * $weeklyContractualMinutes;
+                    $actualMinutes = (int) $stats->total_minutes;
+                    
+                    $cumulativeBalance = array(
+                        'expectedMinutes' => $expectedMinutes,
+                        'actualMinutes' => $actualMinutes,
+                        'balanceMinutes' => $actualMinutes - $expectedMinutes,
+                        'firstDate' => $stats->first_date,
+                        'weeksCount' => $weeksDiff,
+                    );
+                }
+            }
+        }
+    }
+}
+
+// Données fictives pour le solde cumulé en mode preview
+if ($isPreview) {
+    $cumulativeBalance = array(
+        'expectedMinutes' => 35 * 60 * 4, // 4 semaines x 35h
+        'actualMinutes' => 35 * 60 * 4 - 180, // 3h en moins
+        'balanceMinutes' => -180,
+        'firstDate' => wp_date('Y-m-d', strtotime('-4 weeks')),
+        'weeksCount' => 4,
+    );
 }
 
 $locale = determine_locale();
@@ -207,6 +298,21 @@ $config = array(
             'tasks' => $sanitizedTasks,
         );
     }, $projectTotalsPreview),
+    'workSchedule' => array_map(static function ($slot) {
+        return array(
+            'day' => isset($slot['day']) ? sanitize_text_field((string) $slot['day']) : '',
+            'start' => isset($slot['start']) ? sanitize_text_field((string) $slot['start']) : '',
+            'end' => isset($slot['end']) ? sanitize_text_field((string) $slot['end']) : '',
+            'break_minutes' => isset($slot['break_minutes']) ? (int) $slot['break_minutes'] : 0,
+        );
+    }, $workSchedule),
+    'cumulativeBalance' => $cumulativeBalance ? array(
+        'expectedMinutes' => (int) $cumulativeBalance['expectedMinutes'],
+        'actualMinutes' => (int) $cumulativeBalance['actualMinutes'],
+        'balanceMinutes' => (int) $cumulativeBalance['balanceMinutes'],
+        'firstDate' => sanitize_text_field((string) $cumulativeBalance['firstDate']),
+        'weeksCount' => (int) $cumulativeBalance['weeksCount'],
+    ) : null,
     'labels' => array(
         'title' => __('Encodage des Heures de Travail', 'mj-member'),
         'subtitle' => __('Enregistrez et suivez vos heures de travail pour la semaine.', 'mj-member'),

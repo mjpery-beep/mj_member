@@ -187,6 +187,8 @@
                     config.commonTasks = Array.isArray(config.commonTasks) ? config.commonTasks : [];
                     config.projects = Array.isArray(config.projects) ? config.projects : [];
                     config.events = Array.isArray(config.events) ? config.events : [];
+                    config.workSchedule = Array.isArray(config.workSchedule) ? config.workSchedule : [];
+                    config.cumulativeBalance = config.cumulativeBalance && typeof config.cumulativeBalance === 'object' ? config.cumulativeBalance : null;
                     config.labels = Object.assign({
                         title: 'Encodage des Heures de Travail',
                         subtitle: '',
@@ -246,7 +248,12 @@
                         selectionDeleteSuccess: 'Plage supprimée avec succès.',
                         projectWithoutLabel: 'Sans projet',
                         selectProjectForTasks: 'Sélectionnez un projet pour afficher les tâches associées.',
-                        projectTasksEmpty: 'Aucune tâche enregistrée pour ce projet.'
+                        projectTasksEmpty: 'Aucune tâche enregistrée pour ce projet.',
+                        contractualHours: 'Heures contractuelles',
+                        weekDifference: 'Différence semaine',
+                        cumulativeDifference: 'Solde cumulé',
+                        hoursToRecover: 'à récupérer',
+                        hoursExtra: 'en plus'
                     }, config.labels && typeof config.labels === 'object' ? config.labels : {});
                     config.capabilities = Object.assign({
                         canManage: false
@@ -1169,7 +1176,7 @@
                     };
                 }
 
-                function buildMiniCalendarModel(locale, monthIso, activeWeekIso, weekTotalsMap, labels) {
+                function buildMiniCalendarModel(locale, monthIso, activeWeekIso, weekTotalsMap, labels, weekContractualMinutes) {
                     var safeLocale = locale || 'fr';
                     var monthDate = parseISODate(monthIso);
                     if (!monthDate) {
@@ -1179,6 +1186,7 @@
                     var calendarStart = startOfWeek(monthStart);
                     var activeWeek = ensureWeekStart(activeWeekIso);
                     var todayIso = toISODate(startOfDay(new Date()));
+                    var contractualMinutes = Number.isFinite(weekContractualMinutes) && weekContractualMinutes > 0 ? weekContractualMinutes : 0;
 
                     var monthLabel = capitalize(getFormatter(safeLocale, { month: 'long', year: 'numeric' }).format(monthStart));
 
@@ -1213,12 +1221,30 @@
                                 weekTotalMinutes = Math.round(candidate);
                             }
                         }
+                        
+                        // Calculer le différentiel pour cette semaine
+                        var weekDifferenceMinutes = 0;
+                        var weekDifferenceLabel = '';
+                        if (contractualMinutes > 0 && weekTotalMinutes > 0) {
+                            weekDifferenceMinutes = weekTotalMinutes - contractualMinutes;
+                            var absDiff = Math.abs(weekDifferenceMinutes);
+                            var diffLabel = formatTotalMinutes(absDiff, safeLabels);
+                            if (weekDifferenceMinutes >= 0) {
+                                weekDifferenceLabel = '+' + diffLabel;
+                            } else {
+                                weekDifferenceLabel = '-' + diffLabel;
+                            }
+                        }
+                        
                         weeks.push({
                             startIso: weekStart,
                             days: days,
                             isActive: weekStart === activeWeek,
                             totalMinutes: weekTotalMinutes,
-                            totalLabel: formatTotalMinutes(weekTotalMinutes, safeLabels)
+                            totalLabel: formatTotalMinutes(weekTotalMinutes, safeLabels),
+                            differenceMinutes: weekDifferenceMinutes,
+                            differenceLabel: weekDifferenceLabel,
+                            hasHours: weekTotalMinutes > 0
                         });
                     }
 
@@ -1228,7 +1254,8 @@
                         prevMonthIso: toISODate(startOfMonth(addMonths(monthStart, -1))),
                         nextMonthIso: toISODate(startOfMonth(addMonths(monthStart, 1))),
                         weekdayLabels: weekdayLabels,
-                        weeks: weeks
+                        weeks: weeks,
+                        weekContractualMinutes: contractualMinutes
                     };
                 }
 
@@ -2039,16 +2066,30 @@
                             if (canceled) {
                                 setEntryPreview(null);
                                 lastEntryClickBlockedRef.current = false;
+                                if (typeof props.onEntryDragEnd === 'function') {
+                                    props.onEntryDragEnd(null, {
+                                        entry: drag.entry,
+                                        original: drag.original,
+                                        mode: drag.mode,
+                                        pointerType: drag.pointerType || event.pointerType || 'pointer',
+                                        canceled: true,
+                                        clientX: event.clientX,
+                                        clientY: event.clientY
+                                    });
+                                }
                                 return;
                             }
 
                             var finalSlot = drag.lastSlot;
-                            if (drag.hasMoved && finalSlot && typeof props.onEntryDragEnd === 'function') {
-                                props.onEntryDragEnd(finalSlot, {
+                            if (typeof props.onEntryDragEnd === 'function') {
+                                props.onEntryDragEnd(drag.hasMoved ? finalSlot : null, {
                                     entry: drag.entry,
                                     original: drag.original,
                                     mode: drag.mode,
-                                    pointerType: drag.pointerType || event.pointerType || 'pointer'
+                                    pointerType: drag.pointerType || event.pointerType || 'pointer',
+                                    canceled: false,
+                                    clientX: event.clientX,
+                                    clientY: event.clientY
                                 });
                             }
 
@@ -2131,6 +2172,73 @@
                             ]);
                         });
 
+                        // Mapping des noms de jours vers les numéros de jour (0=dimanche, 1=lundi, etc.)
+                        var dayNameToWeekday = {
+                            sunday: 0,
+                            monday: 1,
+                            tuesday: 2,
+                            wednesday: 3,
+                            thursday: 4,
+                            friday: 5,
+                            saturday: 6
+                        };
+
+                        // Fonction pour calculer la position d'une plage horaire
+                        function getWorkSlotPosition(slot) {
+                            if (!slot || !slot.start || !slot.end) {
+                                return null;
+                            }
+                            var startParts = slot.start.split(':');
+                            var endParts = slot.end.split(':');
+                            if (startParts.length < 2 || endParts.length < 2) {
+                                return null;
+                            }
+                            var startMinutes = parseInt(startParts[0], 10) * 60 + parseInt(startParts[1], 10);
+                            var endMinutes = parseInt(endParts[0], 10) * 60 + parseInt(endParts[1], 10);
+                            if (endMinutes <= startMinutes) {
+                                return null;
+                            }
+                            var breakMinutes = parseInt(slot.break_minutes || 0, 10);
+                            var workMinutes = (endMinutes - startMinutes) - breakMinutes;
+                            var top = (startMinutes - rangeStart) / MINUTES_PER_PIXEL;
+                            var height = (endMinutes - startMinutes) / MINUTES_PER_PIXEL;
+                            return { top: top, height: height, startMinutes: startMinutes, endMinutes: endMinutes, workMinutes: Math.max(0, workMinutes) };
+                        }
+
+                        // Fonction pour calculer les heures contractuelles d'un jour
+                        function getDayContractualMinutes(weekday) {
+                            if (!Array.isArray(props.workSchedule) || props.workSchedule.length === 0) {
+                                return 0;
+                            }
+                            var totalMinutes = 0;
+                            props.workSchedule.forEach(function(slot) {
+                                var slotWeekday = dayNameToWeekday[slot.day];
+                                if (slotWeekday !== weekday) {
+                                    return;
+                                }
+                                var position = getWorkSlotPosition(slot);
+                                if (position && position.workMinutes > 0) {
+                                    totalMinutes += position.workMinutes;
+                                }
+                            });
+                            return totalMinutes;
+                        }
+
+                        // Calculer le total des heures contractuelles de la semaine
+                        var weekContractualMinutes = hooks.useMemo(function() {
+                            if (!Array.isArray(props.workSchedule) || props.workSchedule.length === 0) {
+                                return 0;
+                            }
+                            var total = 0;
+                            props.workSchedule.forEach(function(slot) {
+                                var position = getWorkSlotPosition(slot);
+                                if (position && position.workMinutes > 0) {
+                                    total += position.workMinutes;
+                                }
+                            });
+                            return total;
+                        }, [props.workSchedule]);
+
                         var dayColumns = props.days.map(function(day) {
                             var dayClass = 'mj-hour-encode-calendar__day';
                             if (day.isWeekend) {
@@ -2141,6 +2249,29 @@
                             }
 
                             var canvasChildren = [];
+
+                            // Afficher les plages horaires contractuelles (work schedule)
+                            if (Array.isArray(props.workSchedule) && props.workSchedule.length > 0) {
+                                props.workSchedule.forEach(function(slot, slotIndex) {
+                                    var slotWeekday = dayNameToWeekday[slot.day];
+                                    if (slotWeekday !== day.weekday) {
+                                        return;
+                                    }
+                                    var position = getWorkSlotPosition(slot);
+                                    if (!position) {
+                                        return;
+                                    }
+                                    canvasChildren.push(h('div', {
+                                        key: 'work-slot-' + slotIndex,
+                                        className: 'mj-hour-encode-calendar__work-slot',
+                                        style: {
+                                            top: position.top + 'px',
+                                            height: position.height + 'px'
+                                        },
+                                        title: 'Plage contractuelle : ' + slot.start + ' - ' + slot.end
+                                    }));
+                                });
+                            }
 
                             if (props.selectedSlot && props.selectedSlot.dayIso === day.iso) {
                                 var selectionAttrs = {
@@ -2446,6 +2577,10 @@
                                 }, mark);
                             });
 
+                            // Calculer les heures contractuelles du jour
+                            var dayContractualMinutes = getDayContractualMinutes(day.weekday);
+                            var dayContractualLabel = dayContractualMinutes > 0 ? formatTotalMinutes(dayContractualMinutes, labels) : null;
+
                             return h('div', { key: day.iso, className: dayClass }, [
                                 h('div', {
                                     className: 'mj-hour-encode-calendar__day-body'
@@ -2481,7 +2616,12 @@
                                         onTouchEnd: handleTouchEnd,
                                         onTouchCancel: handleTouchEnd
                                     }, [hourLabels].concat(canvasChildren))
-                                ])
+                                ]),
+                                dayContractualLabel ? h('div', {
+                                    className: 'mj-hour-encode-calendar__day-footer'
+                                }, [
+                                    h('span', { className: 'mj-hour-encode-calendar__day-contractual' }, dayContractualLabel)
+                                ]) : null
                             ]);
                         });
 
@@ -2587,11 +2727,27 @@
                                     }
                                 }, day.label);
                             });
+                            
+                            // Construire l'affichage du total avec différentiel
+                            var totalChildren = [week.totalLabel];
+                            if (week.hasHours && week.differenceLabel && model.weekContractualMinutes > 0) {
+                                var diffClass = 'mj-hour-encode-mini-calendar__week-diff';
+                                if (week.differenceMinutes >= 0) {
+                                    diffClass += ' is-positive';
+                                } else {
+                                    diffClass += ' is-negative';
+                                }
+                                totalChildren.push(h('span', {
+                                    key: 'diff',
+                                    className: diffClass
+                                }, week.differenceLabel));
+                            }
+                            
                             dayButtons.push(h('span', {
                                 key: 'total',
                                 className: 'mj-hour-encode-mini-calendar__week-total' + (week.isActive ? ' is-active' : ''),
                                 title: ariaLabel
-                            }, week.totalLabel));
+                            }, totalChildren));
                             return h('div', { key: week.startIso, className: weekClass }, dayButtons);
                         });
 
@@ -3098,6 +3254,18 @@
                         var taskRename = taskRenameState[0];
                         var setTaskRename = taskRenameState[1];
 
+                        var dropTargetState = hooks.useState(null);
+                        var dropTargetKey = dropTargetState[0];
+                        var setDropTargetKey = dropTargetState[1];
+
+                        var draggingTaskState = hooks.useState(null);
+                        var draggingTask = draggingTaskState[0];
+                        var setDraggingTask = draggingTaskState[1];
+
+                        var dragPositionState = hooks.useState(null);
+                        var dragPosition = dragPositionState[0];
+                        var setDragPosition = dragPositionState[1];
+
                         hooks.useEffect(function() {
                             if (projectSummaries.length === 0 && showWeekOnly) {
                                 setShowWeekOnly(false);
@@ -3135,6 +3303,63 @@
                             }
                             return filtered;
                         }, [projectSummaries, showWeekOnly, activeKey]);
+
+                        // Drag and drop pour déplacer les tâches entre projets
+                        hooks.useEffect(function() {
+                            if (!draggingTask) {
+                                setDragPosition(null);
+                                setDropTargetKey(null);
+                                return;
+                            }
+
+                            function handlePointerMove(event) {
+                                setDragPosition({ x: event.clientX, y: event.clientY });
+                                
+                                var elementUnder = document.elementFromPoint(event.clientX, event.clientY);
+                                if (elementUnder) {
+                                    var projectPill = elementUnder.closest('.mj-hour-encode-app__project-pill');
+                                    if (projectPill) {
+                                        var targetKey = projectPill.getAttribute('data-project-key');
+                                        if (targetKey && activeProject && targetKey !== activeProject.key) {
+                                            setDropTargetKey(targetKey);
+                                        } else {
+                                            setDropTargetKey(null);
+                                        }
+                                    } else {
+                                        setDropTargetKey(null);
+                                    }
+                                }
+                            }
+
+                            function handlePointerUp(event) {
+                                var elementUnder = document.elementFromPoint(event.clientX, event.clientY);
+                                if (elementUnder && draggingTask) {
+                                    var projectPill = elementUnder.closest('.mj-hour-encode-app__project-pill');
+                                    if (projectPill) {
+                                        var targetKey = projectPill.getAttribute('data-project-key');
+                                        if (targetKey && activeProject && targetKey !== activeProject.key && typeof props.onTaskMoveToProject === 'function') {
+                                            var targetProject = visibleProjectSummaries.find(function(p) {
+                                                return p.key === targetKey;
+                                            });
+                                            if (targetProject) {
+                                                props.onTaskMoveToProject(draggingTask, activeProject, targetProject);
+                                            }
+                                        }
+                                    }
+                                }
+                                setDraggingTask(null);
+                                setDragPosition(null);
+                                setDropTargetKey(null);
+                            }
+
+                            document.addEventListener('pointermove', handlePointerMove);
+                            document.addEventListener('pointerup', handlePointerUp);
+
+                            return function() {
+                                document.removeEventListener('pointermove', handlePointerMove);
+                                document.removeEventListener('pointerup', handlePointerUp);
+                            };
+                        }, [draggingTask, activeProject, visibleProjectSummaries, props.onTaskMoveToProject]);
 
                         hooks.useEffect(function() {
                             if (activeProject) {
@@ -3325,35 +3550,60 @@
                                         return null;
                                     }
                                     var isActive = activeKey === summary.key;
+                                    var isDragging = Boolean(props.draggingEntry) || Boolean(draggingTask);
+                                    var isDropTarget = dropTargetKey === summary.key;
+                                    var isCurrentProject = activeProject && activeProject.key === summary.key;
+                                    var pillClass = 'mj-hour-encode-app__project-pill';
+                                    if (isActive) {
+                                        pillClass += ' is-active';
+                                    }
+                                    if (isDragging && !isCurrentProject) {
+                                        pillClass += ' is-drop-zone';
+                                    }
+                                    if (isDropTarget && !isCurrentProject) {
+                                        pillClass += ' is-drop-target';
+                                    }
                                     return h('button', {
                                         key: summary.key,
                                         type: 'button',
-                                        className: 'mj-hour-encode-app__project-pill' + (isActive ? ' is-active' : ''),
+                                        className: pillClass,
+                                        'data-project-key': summary.key,
                                         onClick: function() {
+                                            if (draggingTask) {
+                                                return;
+                                            }
                                             if (typeof props.onProjectSelect === 'function') {
                                                 props.onProjectSelect(summary);
+                                            }
+                                        },
+                                        onPointerEnter: function() {
+                                            if ((props.draggingEntry || draggingTask) && !isCurrentProject) {
+                                                setDropTargetKey(summary.key);
+                                            }
+                                        },
+                                        onPointerLeave: function() {
+                                            if (dropTargetKey === summary.key) {
+                                                setDropTargetKey(null);
+                                            }
+                                        },
+                                        onPointerUp: function(event) {
+                                            if (draggingTask && !isCurrentProject && typeof props.onTaskMoveToProject === 'function') {
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                props.onTaskMoveToProject(draggingTask, activeProject, summary);
+                                                setDraggingTask(null);
+                                                setDropTargetKey(null);
+                                            } else if (props.draggingEntry && typeof props.onEntryMoveToProject === 'function') {
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                props.onEntryMoveToProject(props.draggingEntry, summary);
+                                                setDropTargetKey(null);
                                             }
                                         }
                                     }, [
                                         h('div', { className: 'mj-hour-encode-app__project-pill-content' }, [
                                             h('span', { className: 'mj-hour-encode-app__project-pill-name' }, summary.label),
-                                            h('div', { className: 'mj-hour-encode-app__project-pill-stats' }, statsDefinitions.map(function(definition) {
-                                                var statLabel = '';
-                                                if (definition.valueKey === 'week') {
-                                                    statLabel = summary.weekLabel;
-                                                } else if (definition.valueKey === 'month') {
-                                                    statLabel = summary.monthLabel;
-                                                } else if (definition.valueKey === 'year') {
-                                                    statLabel = summary.yearLabel;
-                                                } else {
-                                                    statLabel = summary.lifetimeLabel;
-                                                }
-                                                var statClass = 'mj-hour-encode-app__project-pill-stat mj-hour-encode-app__project-pill-stat--' + definition.valueKey;
-                                                return h('div', { key: definition.key, className: statClass }, [
-                                                    h('span', { className: 'mj-hour-encode-app__project-pill-stat-label' }, definition.label),
-                                                    h('span', { className: 'mj-hour-encode-app__project-pill-stat-value' }, statLabel)
-                                                ]);
-                                            }))
+                                            summary.lifetimeLabel ? h('span', { className: 'mj-hour-encode-app__project-pill-total' }, summary.lifetimeLabel) : null
                                         ])
                                     ]);
                                 }).filter(Boolean))
@@ -3386,29 +3636,43 @@
                                                                 error: ''
                                                             };
                                                         });
+                                                    },
+                                                    onKeyDown: function(event) {
+                                                        if (event.key === 'Enter') {
+                                                            event.preventDefault();
+                                                            submitProjectRename();
+                                                        } else if (event.key === 'Escape') {
+                                                            event.preventDefault();
+                                                            cancelProjectRename();
+                                                        }
                                                     }
                                                 }),
                                                 h('div', { className: 'mj-hour-encode-app__inline-actions' }, [
                                                     h('button', {
                                                         type: 'button',
-                                                        className: 'mj-hour-encode-app__inline-action is-primary mj-hour-encode-app__inline-action--compact',
+                                                        className: 'mj-hour-encode-app__inline-action is-confirm mj-hour-encode-app__inline-action--icon',
                                                         'aria-label': props.labels.selectionConfirm || 'Valider',
                                                         title: props.labels.selectionConfirm || 'Valider',
                                                         onClick: function(event) {
                                                             event.preventDefault();
                                                             submitProjectRename();
                                                         }
-                                                    }, 'v'),
+                                                    }, h('svg', { width: '16', height: '16', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2.5', strokeLinecap: 'round', strokeLinejoin: 'round' }, [
+                                                        h('polyline', { points: '20 6 9 17 4 12' })
+                                                    ])),
                                                     h('button', {
                                                         type: 'button',
-                                                        className: 'mj-hour-encode-app__inline-action mj-hour-encode-app__inline-action--compact',
+                                                        className: 'mj-hour-encode-app__inline-action is-cancel mj-hour-encode-app__inline-action--icon',
                                                         'aria-label': props.labels.selectionCancel || 'Annuler',
                                                         title: props.labels.selectionCancel || 'Annuler',
                                                         onClick: function(event) {
                                                             event.preventDefault();
                                                             cancelProjectRename();
                                                         }
-                                                    }, 'x')
+                                                    }, h('svg', { width: '16', height: '16', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2.5', strokeLinecap: 'round', strokeLinejoin: 'round' }, [
+                                                        h('line', { x1: '18', y1: '6', x2: '6', y2: '18' }),
+                                                        h('line', { x1: '6', y1: '6', x2: '18', y2: '18' })
+                                                    ]))
                                                 ]),
                                                 projectRename.error ? h('p', { className: 'mj-hour-encode-app__helper-text is-error' }, projectRename.error) : null
                                             ])
@@ -3459,29 +3723,43 @@
                                                                 error: ''
                                                             };
                                                         });
+                                                    },
+                                                    onKeyDown: function(event) {
+                                                        if (event.key === 'Enter') {
+                                                            event.preventDefault();
+                                                            submitTaskRename();
+                                                        } else if (event.key === 'Escape') {
+                                                            event.preventDefault();
+                                                            cancelTaskRename();
+                                                        }
                                                     }
                                                 }),
                                                 h('div', { className: 'mj-hour-encode-app__inline-actions' }, [
                                                     h('button', {
                                                         type: 'button',
-                                                        className: 'mj-hour-encode-app__inline-action is-primary mj-hour-encode-app__inline-action--compact',
+                                                        className: 'mj-hour-encode-app__inline-action is-confirm mj-hour-encode-app__inline-action--icon',
                                                         'aria-label': props.labels.selectionConfirm || 'Valider',
                                                         title: props.labels.selectionConfirm || 'Valider',
                                                         onClick: function(event) {
                                                             event.preventDefault();
                                                             submitTaskRename();
                                                         }
-                                                    }, 'v'),
+                                                    }, h('svg', { width: '16', height: '16', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2.5', strokeLinecap: 'round', strokeLinejoin: 'round' }, [
+                                                        h('polyline', { points: '20 6 9 17 4 12' })
+                                                    ])),
                                                     h('button', {
                                                         type: 'button',
-                                                        className: 'mj-hour-encode-app__inline-action mj-hour-encode-app__inline-action--compact',
+                                                        className: 'mj-hour-encode-app__inline-action is-cancel mj-hour-encode-app__inline-action--icon',
                                                         'aria-label': props.labels.selectionCancel || 'Annuler',
                                                         title: props.labels.selectionCancel || 'Annuler',
                                                         onClick: function(event) {
                                                             event.preventDefault();
                                                             cancelTaskRename();
                                                         }
-                                                    }, 'x')
+                                                    }, h('svg', { width: '16', height: '16', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2.5', strokeLinecap: 'round', strokeLinejoin: 'round' }, [
+                                                        h('line', { x1: '18', y1: '6', x2: '6', y2: '18' }),
+                                                        h('line', { x1: '6', y1: '6', x2: '18', y2: '18' })
+                                                    ]))
                                                 ]),
                                                 taskRename.error ? h('p', { className: 'mj-hour-encode-app__helper-text is-error' }, taskRename.error) : null
                                             ]);
@@ -3514,6 +3792,36 @@
                                             }
                                         }, [
                                             h('div', { className: 'mj-hour-encode-app__project-task-info' }, [
+                                                h('span', {
+                                                    className: 'mj-hour-encode-app__project-task-drag-icon' + (draggingTask && draggingTask.key === task.key ? ' is-dragging' : ''),
+                                                    'aria-hidden': 'true',
+                                                    title: props.labels.dragToMove || 'Glisser vers un projet',
+                                                    onPointerDown: function(event) {
+                                                        event.preventDefault();
+                                                        event.stopPropagation();
+                                                        setDraggingTask({
+                                                            key: task.key,
+                                                            name: task.name,
+                                                            projectKey: activeProject.key,
+                                                            projectValue: activeProject.value
+                                                        });
+                                                        setDragPosition({ x: event.clientX, y: event.clientY });
+                                                    }
+                                                }, [
+                                                    h('svg', {
+                                                        width: '16',
+                                                        height: '16',
+                                                        viewBox: '0 0 16 16',
+                                                        fill: 'currentColor'
+                                                    }, [
+                                                        h('circle', { cx: '5', cy: '4', r: '1.5' }),
+                                                        h('circle', { cx: '11', cy: '4', r: '1.5' }),
+                                                        h('circle', { cx: '5', cy: '8', r: '1.5' }),
+                                                        h('circle', { cx: '11', cy: '8', r: '1.5' }),
+                                                        h('circle', { cx: '5', cy: '12', r: '1.5' }),
+                                                        h('circle', { cx: '11', cy: '12', r: '1.5' })
+                                                    ])
+                                                ]),
                                                 h('span', {
                                                     className: 'mj-hour-encode-app__project-task-name mj-hour-encode-app__editable-label',
                                                     role: 'button',
@@ -3552,7 +3860,35 @@
                             }));
                         }
 
-                        return h('div', { className: 'mj-hour-encode-app__resources' }, cards);
+                        var dragGhost = null;
+                        if (draggingTask && dragPosition) {
+                            dragGhost = h('div', {
+                                className: 'mj-hour-encode-app__drag-ghost',
+                                style: {
+                                    position: 'fixed',
+                                    left: (dragPosition.x + 12) + 'px',
+                                    top: (dragPosition.y - 12) + 'px',
+                                    pointerEvents: 'none',
+                                    zIndex: 10000
+                                }
+                            }, [
+                                h('div', { className: 'mj-hour-encode-app__drag-ghost-content' }, [
+                                    h('span', { className: 'mj-hour-encode-app__drag-ghost-icon' }, [
+                                        h('svg', { width: '14', height: '14', viewBox: '0 0 16 16', fill: 'currentColor' }, [
+                                            h('circle', { cx: '5', cy: '4', r: '1.5' }),
+                                            h('circle', { cx: '11', cy: '4', r: '1.5' }),
+                                            h('circle', { cx: '5', cy: '8', r: '1.5' }),
+                                            h('circle', { cx: '11', cy: '8', r: '1.5' }),
+                                            h('circle', { cx: '5', cy: '12', r: '1.5' }),
+                                            h('circle', { cx: '11', cy: '12', r: '1.5' })
+                                        ])
+                                    ]),
+                                    h('span', { className: 'mj-hour-encode-app__drag-ghost-label' }, draggingTask.name)
+                                ])
+                            ]);
+                        }
+
+                        return h('div', { className: 'mj-hour-encode-app__resources' }, [cards, dragGhost]);
                     }
 
                     function HourEncodeApp(props) {
@@ -3641,6 +3977,10 @@
                         var activeMobileDayState = hooks.useState(null);
                         var activeMobileDay = activeMobileDayState[0];
                         var setActiveMobileDay = activeMobileDayState[1];
+
+                        var draggingEntryState = hooks.useState(null);
+                        var draggingEntry = draggingEntryState[0];
+                        var setDraggingEntry = draggingEntryState[1];
 
                         var fetchControllerRef = hooks.useRef(null);
                         var hasFetchedInitial = hooks.useRef(false);
@@ -3996,6 +4336,33 @@
                             return ordered;
                         }, [combinedProjectSummaries, projects, config.labels, weekStart]);
 
+                        // Calculer le total des heures contractuelles de la semaine
+                        var weekContractualMinutes = hooks.useMemo(function() {
+                            if (!Array.isArray(config.workSchedule) || config.workSchedule.length === 0) {
+                                return 0;
+                            }
+                            var total = 0;
+                            config.workSchedule.forEach(function(slot) {
+                                if (!slot || !slot.start || !slot.end) {
+                                    return;
+                                }
+                                var startParts = slot.start.split(':');
+                                var endParts = slot.end.split(':');
+                                if (startParts.length < 2 || endParts.length < 2) {
+                                    return;
+                                }
+                                var startMinutes = parseInt(startParts[0], 10) * 60 + parseInt(startParts[1], 10);
+                                var endMinutes = parseInt(endParts[0], 10) * 60 + parseInt(endParts[1], 10);
+                                if (endMinutes <= startMinutes) {
+                                    return;
+                                }
+                                var breakMinutes = parseInt(slot.break_minutes || 0, 10);
+                                var workMinutes = (endMinutes - startMinutes) - breakMinutes;
+                                total += Math.max(0, workMinutes);
+                            });
+                            return total;
+                        }, [config.workSchedule]);
+
                         var globalStatsDefinitions = hooks.useMemo(function() {
                             return [
                                 { key: 'week', label: config.labels.statsWeek || config.labels.totalWeek || 'Semaine', valueKey: 'week' },
@@ -4036,6 +4403,19 @@
                                 totals.lifetimeMinutes = Math.max(totals.yearMinutes, totals.monthMinutes, totals.weekMinutes);
                             }
 
+                            // Calculer le différentiel de la semaine (heures travaillées - heures contractuelles)
+                            var weekDifferenceMinutes = totals.weekMinutes - weekContractualMinutes;
+                            var weekDifferenceLabel = '';
+                            if (weekContractualMinutes > 0) {
+                                var absDiff = Math.abs(weekDifferenceMinutes);
+                                var diffLabel = formatTotalMinutes(absDiff, config.labels);
+                                if (weekDifferenceMinutes >= 0) {
+                                    weekDifferenceLabel = '+' + diffLabel;
+                                } else {
+                                    weekDifferenceLabel = '-' + diffLabel;
+                                }
+                            }
+
                             return {
                                 weekMinutes: totals.weekMinutes,
                                 monthMinutes: totals.monthMinutes,
@@ -4044,9 +4424,13 @@
                                 weekLabel: formatTotalMinutes(totals.weekMinutes, config.labels),
                                 monthLabel: formatTotalMinutes(totals.monthMinutes, config.labels),
                                 yearLabel: formatTotalMinutes(totals.yearMinutes, config.labels),
-                                lifetimeLabel: formatTotalMinutes(totals.lifetimeMinutes, config.labels)
+                                lifetimeLabel: formatTotalMinutes(totals.lifetimeMinutes, config.labels),
+                                weekContractualMinutes: weekContractualMinutes,
+                                weekContractualLabel: weekContractualMinutes > 0 ? formatTotalMinutes(weekContractualMinutes, config.labels) : '',
+                                weekDifferenceMinutes: weekDifferenceMinutes,
+                                weekDifferenceLabel: weekDifferenceLabel
                             };
-                        }, [projectSummaryDetails, calendarModel.totalMinutes, config.labels]);
+                        }, [projectSummaryDetails, calendarModel.totalMinutes, config.labels, weekContractualMinutes]);
 
                         hooks.useEffect(function() {
                             setProjects(function(previous) {
@@ -4200,8 +4584,8 @@
                         }, [selectedSlot, config.locale]);
 
                         var miniCalendarModel = hooks.useMemo(function() {
-                            return buildMiniCalendarModel(config.locale, calendarMonth, weekStart, weekTotalsMap, config.labels);
-                        }, [config.locale, calendarMonth, weekStart, weekTotalsMap, config.labels]);
+                            return buildMiniCalendarModel(config.locale, calendarMonth, weekStart, weekTotalsMap, config.labels, weekContractualMinutes);
+                        }, [config.locale, calendarMonth, weekStart, weekTotalsMap, config.labels, weekContractualMinutes]);
 
                         hooks.useEffect(function() {
                             var weekDate = parseISODate(weekStart);
@@ -4768,6 +5152,8 @@
                             }
                             pendingDragSubmitRef.current = null;
 
+                            setDraggingEntry(entry);
+
                             var alreadyEditing = false;
                             if (selectedSlot && selectedSlot.isEditing) {
                                 if (entry.hourId && selectedSlot.hourId && String(selectedSlot.hourId) === String(entry.hourId)) {
@@ -4853,7 +5239,38 @@
                         }
 
                         function handleEntryDragEnd(slot, meta) {
-                            updateSelectionForDrag(slot, meta, true);
+                            setDraggingEntry(null);
+
+                            if (meta && meta.canceled) {
+                                return;
+                            }
+
+                            if (meta && meta.entry && typeof meta.clientX === 'number' && typeof meta.clientY === 'number') {
+                                var elementUnderPointer = document.elementFromPoint(meta.clientX, meta.clientY);
+                                console.log('MJ Hour Encode - drag end at', meta.clientX, meta.clientY, 'element:', elementUnderPointer);
+                                if (elementUnderPointer) {
+                                    var projectPill = elementUnderPointer.closest('.mj-hour-encode-app__project-pill');
+                                    console.log('MJ Hour Encode - project pill found:', projectPill);
+                                    if (projectPill) {
+                                        var projectKey = projectPill.getAttribute('data-project-key');
+                                        console.log('MJ Hour Encode - project key:', projectKey);
+                                        if (projectKey) {
+                                            var targetProject = projectSummaryDetails.find(function(item) {
+                                                return item.key === projectKey;
+                                            });
+                                            console.log('MJ Hour Encode - target project:', targetProject);
+                                            if (targetProject) {
+                                                handleEntryMoveToProject(meta.entry, targetProject);
+                                                return;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (slot) {
+                                updateSelectionForDrag(slot, meta, true);
+                            }
                         }
 
                         function handleSelectionChange(field, value) {
@@ -5185,6 +5602,253 @@
                                             setLoading(false);
                                         });
                                 }
+                            }
+                        }
+
+                        function handleTaskMoveToProject(task, sourceProject, targetProject) {
+                            if (!task || !sourceProject || !targetProject) {
+                                return;
+                            }
+                            var taskName = normalizeProjectValue(task.name || task.key || '');
+                            var sourceProjectValue = normalizeProjectValue(sourceProject.value || sourceProject.label || '');
+                            var targetProjectValue = normalizeProjectValue(targetProject.value || targetProject.label || '');
+                            
+                            if (!taskName || targetProjectValue === sourceProjectValue) {
+                                return;
+                            }
+
+                            // Mise à jour optimiste de l'UI
+                            setEntries(function(previous) {
+                                if (!Array.isArray(previous) || previous.length === 0) {
+                                    return previous;
+                                }
+                                var changed = false;
+                                var updated = previous.map(function(item) {
+                                    if (!item || typeof item !== 'object') {
+                                        return item;
+                                    }
+                                    var itemProject = normalizeProjectValue(item.project || '');
+                                    var itemTask = normalizeProjectValue(item.task || '');
+                                    if (itemProject !== sourceProjectValue || itemTask !== taskName) {
+                                        return item;
+                                    }
+                                    changed = true;
+                                    return Object.assign({}, item, {
+                                        project: targetProjectValue
+                                    });
+                                });
+                                return changed ? updated : previous;
+                            });
+
+                            setActiveProjectKey(ensureProjectKey(targetProjectValue));
+
+                            // Appel AJAX pour déplacer la tâche vers le nouveau projet
+                            if (canRequest && config.ajax && config.ajax.url) {
+                                setLoading(true);
+                                
+                                var params = new URLSearchParams();
+                                params.append('action', 'mj_member_hour_encode_move_task_to_project');
+                                params.append('nonce', config.ajax.nonce || '');
+                                params.append('task_label', taskName);
+                                params.append('source_project', sourceProjectValue);
+                                params.append('target_project', targetProjectValue);
+
+                                fetch(config.ajax.url, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                                    },
+                                    credentials: 'same-origin',
+                                    body: params.toString()
+                                })
+                                .then(function(response) {
+                                    return response.json();
+                                })
+                                .then(function(payload) {
+                                    if (!payload || payload.success !== true) {
+                                        var message = payload && payload.data && payload.data.message ? payload.data.message : '';
+                                        throw new Error(message || 'Move task failed');
+                                    }
+                                    console.info('MJ Hour Encode - task moved:', payload.data);
+                                    return requestWeek(weekStart);
+                                })
+                                .catch(function(errorMessage) {
+                                    var message = '';
+                                    if (errorMessage) {
+                                        if (typeof errorMessage === 'string') {
+                                            message = errorMessage;
+                                        } else if (errorMessage && errorMessage.message) {
+                                            message = errorMessage.message;
+                                        }
+                                    }
+                                    if (!message) {
+                                        message = config.labels.fetchError || 'Une erreur est survenue.';
+                                    }
+                                    console.error('MJ Hour Encode - task move error', errorMessage);
+                                    setError(message);
+                                    return requestWeek(weekStart);
+                                })
+                                .finally(function() {
+                                    setLoading(false);
+                                });
+                            }
+
+                            try {
+                                window.dispatchEvent(new CustomEvent('mj-member-hour-encode:task-move-to-project', {
+                                    detail: {
+                                        weekStart: weekStart,
+                                        task: taskName,
+                                        sourceProject: sourceProjectValue,
+                                        targetProject: targetProjectValue
+                                    }
+                                }));
+                            } catch (e) {
+                                console.info('MJ Hour Encode - task moved to project', taskName, targetProjectValue);
+                            }
+                        }
+
+                        function handleEntryMoveToProject(entry, targetProject) {
+                            if (!entry || typeof entry !== 'object') {
+                                setDraggingEntry(null);
+                                return;
+                            }
+                            var targetProjectValue = normalizeProjectValue(targetProject.value || targetProject.label || '');
+                            var currentProjectValue = normalizeProjectValue(entry.project || '');
+                            if (targetProjectValue === currentProjectValue) {
+                                setDraggingEntry(null);
+                                return;
+                            }
+
+                            var entryId = entry.hourId || entry.id || null;
+                            if (!entryId) {
+                                setDraggingEntry(null);
+                                return;
+                            }
+
+                            setEntries(function(previous) {
+                                if (!Array.isArray(previous) || previous.length === 0) {
+                                    return previous;
+                                }
+                                var changed = false;
+                                var updated = previous.map(function(item) {
+                                    if (!item || typeof item !== 'object') {
+                                        return item;
+                                    }
+                                    var matches = false;
+                                    if (entry.hourId && item.hourId && String(item.hourId) === String(entry.hourId)) {
+                                        matches = true;
+                                    } else if (entry.id && item.id && String(item.id) === String(entry.id)) {
+                                        matches = true;
+                                    }
+                                    if (!matches) {
+                                        return item;
+                                    }
+                                    changed = true;
+                                    return Object.assign({}, item, {
+                                        project: targetProjectValue
+                                    });
+                                });
+                                return changed ? updated : previous;
+                            });
+
+                            setSelectedSlot(function(previous) {
+                                if (!previous) {
+                                    return previous;
+                                }
+                                var slotMatches = false;
+                                if (entry.hourId && previous.hourId && String(previous.hourId) === String(entry.hourId)) {
+                                    slotMatches = true;
+                                } else if (entry.id && previous.entryId && String(previous.entryId) === String(entry.id)) {
+                                    slotMatches = true;
+                                }
+                                if (!slotMatches) {
+                                    return previous;
+                                }
+                                return Object.assign({}, previous, {
+                                    formProject: targetProjectValue
+                                });
+                            });
+
+                            setActiveProjectKey(ensureProjectKey(targetProjectValue));
+                            setDraggingEntry(null);
+
+                            if (canRequest && config.ajax && config.ajax.url && config.ajax.updateAction) {
+                                var nonce = config.ajax.nonce || '';
+                                var startIso = entry.start || '';
+                                var endIso = entry.end || '';
+                                var startDate = parseDateTime(startIso);
+                                var endDate = parseDateTime(endIso);
+                                var dayIso = isValidDate(startDate) ? toISODate(startOfDay(startDate)) : '';
+                                var startTime = isValidDate(startDate) ? (pad(startDate.getHours()) + ':' + pad(startDate.getMinutes())) : '';
+                                var endTime = isValidDate(endDate) ? (pad(endDate.getHours()) + ':' + pad(endDate.getMinutes())) : '';
+                                var taskLabel = normalizeProjectValue(entry.task || '');
+
+                                var params = new URLSearchParams();
+                                params.append('action', config.ajax.updateAction);
+                                params.append('nonce', nonce);
+                                params.append('entry_id', String(entry.hourId || entry.id));
+                                params.append('day', dayIso);
+                                params.append('start', startTime);
+                                params.append('end', endTime);
+                                params.append('task', taskLabel);
+                                params.append('project', targetProjectValue);
+                                params.append('week', weekStart);
+
+                                setLoading(true);
+
+                                fetch(config.ajax.url, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                                    },
+                                    credentials: 'same-origin',
+                                    body: params.toString()
+                                })
+                                    .then(function(response) {
+                                        if (!response.ok) {
+                                            throw new Error('Request failed with status ' + response.status);
+                                        }
+                                        return response.json();
+                                    })
+                                    .then(function(payload) {
+                                        if (!payload || payload.success !== true) {
+                                            var message = payload && payload.data && payload.data.message ? payload.data.message : '';
+                                            throw new Error(message || 'Move entry to project failed');
+                                        }
+                                        return requestWeek(weekStart);
+                                    })
+                                    .catch(function(errorMessage) {
+                                        var message = '';
+                                        if (errorMessage) {
+                                            if (typeof errorMessage === 'string') {
+                                                message = errorMessage;
+                                            } else if (errorMessage && errorMessage.message) {
+                                                message = errorMessage.message;
+                                            }
+                                        }
+                                        if (!message) {
+                                            message = config.labels.fetchError || 'Une erreur est survenue.';
+                                        }
+                                        console.error('MJ Hour Encode - move entry to project error', errorMessage);
+                                        setError(message);
+                                        return requestWeek(weekStart);
+                                    })
+                                    .finally(function() {
+                                        setLoading(false);
+                                    });
+                            }
+
+                            try {
+                                window.dispatchEvent(new CustomEvent('mj-member-hour-encode:entry-move-to-project', {
+                                    detail: {
+                                        weekStart: weekStart,
+                                        entry: entry,
+                                        previousProject: currentProjectValue,
+                                        newProject: targetProjectValue
+                                    }
+                                }));
+                            } catch (eventError) {
+                                console.info('MJ Hour Encode - entry moved to project', entry, targetProjectValue);
                             }
                         }
 
@@ -5592,7 +6256,9 @@
 
                         var activeVisibleDayIso = visibleDays.length > 0 ? visibleDays[0].iso : null;
                         var allDaysForPicker = Array.isArray(calendarModel.days) ? calendarModel.days : [];
-                        var aggregateSummary = h('div', { className: 'mj-hour-encode-app__global-aggregates' }, globalStatsDefinitions.map(function(definition) {
+                        
+                        // Construire les items de statistiques avec le différentiel de la semaine
+                        var aggregateItems = globalStatsDefinitions.map(function(definition) {
                             var aggregateLabel = '';
                             if (definition.valueKey === 'week') {
                                 aggregateLabel = globalAggregateTotals.weekLabel;
@@ -5607,7 +6273,45 @@
                                 h('span', { className: 'mj-hour-encode-app__global-aggregate-label' }, definition.label),
                                 h('span', { className: 'mj-hour-encode-app__global-aggregate-value' }, aggregateLabel)
                             ]);
-                        }));
+                        });
+
+                        // Ajouter le différentiel de la semaine si des heures contractuelles sont définies
+                        if (globalAggregateTotals.weekContractualMinutes > 0 && globalAggregateTotals.weekDifferenceLabel) {
+                            var diffClass = 'mj-hour-encode-app__global-aggregate-item mj-hour-encode-app__global-aggregate-item--difference';
+                            if (globalAggregateTotals.weekDifferenceMinutes >= 0) {
+                                diffClass += ' is-positive';
+                            } else {
+                                diffClass += ' is-negative';
+                            }
+                            aggregateItems.push(h('div', { key: 'global-week-diff', className: diffClass }, [
+                                h('span', { className: 'mj-hour-encode-app__global-aggregate-label' }, config.labels.weekDifference || 'Différence semaine'),
+                                h('span', { className: 'mj-hour-encode-app__global-aggregate-value' }, globalAggregateTotals.weekDifferenceLabel)
+                            ]));
+                        }
+
+                        // Ajouter le solde cumulé d'heures (total à récupérer)
+                        if (config.cumulativeBalance && typeof config.cumulativeBalance.balanceMinutes === 'number') {
+                            var balanceMinutes = config.cumulativeBalance.balanceMinutes;
+                            var absBalance = Math.abs(balanceMinutes);
+                            var balanceLabel = formatTotalMinutes(absBalance, config.labels);
+                            if (balanceMinutes >= 0) {
+                                balanceLabel = '+' + balanceLabel;
+                            } else {
+                                balanceLabel = '-' + balanceLabel;
+                            }
+                            var balanceClass = 'mj-hour-encode-app__global-aggregate-item mj-hour-encode-app__global-aggregate-item--balance';
+                            if (balanceMinutes >= 0) {
+                                balanceClass += ' is-positive';
+                            } else {
+                                balanceClass += ' is-negative';
+                            }
+                            aggregateItems.push(h('div', { key: 'global-cumulative-balance', className: balanceClass }, [
+                                h('span', { className: 'mj-hour-encode-app__global-aggregate-label' }, config.labels.cumulativeDifference || 'Solde cumulé'),
+                                h('span', { className: 'mj-hour-encode-app__global-aggregate-value' }, balanceLabel)
+                            ]));
+                        }
+
+                        var aggregateSummary = h('div', { className: 'mj-hour-encode-app__global-aggregates' }, aggregateItems);
 
                         return h('div', { className: 'mj-hour-encode-app' + (loading ? ' is-loading' : '') + (isMobileLayout ? ' is-mobile-layout' : '') }, [
                             error ? h('div', { className: 'mj-hour-encode-app__error' }, error) : null,
@@ -5673,6 +6377,7 @@
                                         hasEvents: calendarHasEvents,
                                         emptyLabel: config.labels.noEvents,
                                         labels: config.labels,
+                                        workSchedule: config.workSchedule,
                                         onSlotSelect: handleSlotSelect,
                                         onEntrySelect: handleEntrySelect,
                                         onEntryDragStart: handleEntryDragStart,
@@ -5706,10 +6411,13 @@
                                 projectCatalog: projects,
                                 activeProject: activeProjectKey,
                                 labels: config.labels,
+                                draggingEntry: draggingEntry,
                                 onTaskSelect: handleChipSelect,
                                 onProjectSelect: handleProjectSelect,
                                 onProjectRename: handleProjectRename,
                                 onTaskRename: handleTaskRename,
+                                onEntryMoveToProject: handleEntryMoveToProject,
+                                onTaskMoveToProject: handleTaskMoveToProject,
                                 onCalendarNavigate: handleCalendarMonthNavigate,
                                 onCalendarWeekSelect: handleCalendarWeekSelect
                             }),

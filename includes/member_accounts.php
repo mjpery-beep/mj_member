@@ -1,6 +1,7 @@
 <?php
 
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\MjRoles;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -316,7 +317,7 @@ if (!function_exists('mj_member_can_manage_children')) {
             }
         }
 
-        $can_manage = ($role === MjMembers::ROLE_TUTEUR);
+        $can_manage = MjRoles::isTuteur($role);
 
         if (!$can_manage && $member_id > 0 && class_exists('MjMembers')) {
             static $guardian_children_presence = array();

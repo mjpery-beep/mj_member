@@ -4,6 +4,7 @@ use Mj\Member\Core\Config;
 use Mj\Member\Classes\Forms\EventFormDataMapper;
 use Mj\Member\Classes\Forms\EventFormFactory;
 use Mj\Member\Classes\Forms\EventFormOptionsBuilder;
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\Value\EventLocationData;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -182,6 +183,23 @@ if (!function_exists('mj_member_fill_schedule_form_values')) {
             $form_values['schedule_recurring_end_time'] = isset($payload_value['end_time']) ? sanitize_text_field($payload_value['end_time']) : $default_end_time;
             $form_values['schedule_range_start'] = '';
             $form_values['schedule_range_end'] = '';
+
+            // Option d'affichage des dates de début/fin (true = masquer)
+            $form_values['schedule_show_date_range'] = isset($payload_value['show_date_range']) ? !empty($payload_value['show_date_range']) : false;
+
+            // Plages horaires par jour de la semaine
+            $form_values['schedule_weekday_times'] = array();
+            if (isset($payload_value['weekday_times']) && is_array($payload_value['weekday_times'])) {
+                foreach ($payload_value['weekday_times'] as $day_key => $day_times) {
+                    $day_key = sanitize_key($day_key);
+                    if (isset($schedule_weekdays[$day_key]) && is_array($day_times)) {
+                        $form_values['schedule_weekday_times'][$day_key] = array(
+                            'start' => isset($day_times['start']) ? sanitize_text_field($day_times['start']) : '',
+                            'end' => isset($day_times['end']) ? sanitize_text_field($day_times['end']) : '',
+                        );
+                    }
+                }
+            }
         } else {
             $form_values['schedule_recurring_start_date'] = $default_start_date;
             $form_values['schedule_recurring_start_time'] = $default_start_time;
@@ -191,6 +209,8 @@ if (!function_exists('mj_member_fill_schedule_form_values')) {
             $form_values['schedule_recurring_weekdays'] = array();
             $form_values['schedule_recurring_month_ordinal'] = 'first';
             $form_values['schedule_recurring_month_weekday'] = 'saturday';
+            $form_values['schedule_weekday_times'] = array();
+            $form_values['schedule_show_date_range'] = false;
 
             if ($schedule_mode === 'series') {
                 $series_items = array();
@@ -520,7 +540,7 @@ $animateur_column_supported = function_exists('mj_member_column_exists') ? mj_me
 if (!$animateur_column_supported && $animateur_assignments_ready && function_exists('mj_member_column_exists')) {
     $animateur_column_supported = mj_member_column_exists(mj_member_get_events_table_name(), 'animateur_id');
 }
-$animateur_filters = array('role' => MjMembers::ROLE_ANIMATEUR);
+$animateur_filters = array('role' => MjRoles::ANIMATEUR);
 $animateurs_for_select = MjMembers::getAll(0, 0, 'last_name', 'ASC', '', $animateur_filters);
 if (!is_array($animateurs_for_select)) {
     $animateurs_for_select = array();
@@ -608,6 +628,7 @@ $form_values['schedule_recurring_interval'] = 1;
 $form_values['schedule_recurring_weekdays'] = array();
 $form_values['schedule_recurring_month_ordinal'] = 'first';
 $form_values['schedule_recurring_month_weekday'] = 'saturday';
+$form_values['schedule_show_date_range'] = false;
 $form_values['schedule_fixed_date'] = '';
 $form_values['schedule_fixed_start_time'] = '';
 $form_values['schedule_fixed_end_time'] = '';
@@ -909,16 +930,44 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
             if (empty($recurring_weekdays)) {
                 $errors[] = 'Selectionnez au moins un jour pour la recurrence hebdomadaire.';
             }
+
+            // Récupérer les plages horaires par jour
+            $weekday_times = array();
+            $weekday_times_input = isset($_POST['event_weekday_times']) ? $_POST['event_weekday_times'] : array();
+            if (is_array($weekday_times_input)) {
+                foreach ($weekday_times_input as $day_key => $day_times) {
+                    $day_key = sanitize_key($day_key);
+                    if (in_array($day_key, $recurring_weekdays, true) && is_array($day_times)) {
+                        $day_start = isset($day_times['start']) ? sanitize_text_field($day_times['start']) : '';
+                        $day_end = isset($day_times['end']) ? sanitize_text_field($day_times['end']) : '';
+                        if ($day_start !== '' || $day_end !== '') {
+                            $weekday_times[$day_key] = array(
+                                'start' => $day_start,
+                                'end' => $day_end,
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Option affichage des dates
+            $show_date_range = isset($_POST['event_recurring_show_date_range']) && $_POST['event_recurring_show_date_range'] === '1';
+
             $schedule_payload = array(
                 'mode' => 'recurring',
                 'frequency' => 'weekly',
                 'interval' => $recurring_interval,
                 'weekdays' => $recurring_weekdays,
+                'weekday_times' => $weekday_times,
                 'start_time' => $recurring_start_time,
                 'end_time' => $recurring_end_time,
                 'start_date' => $recurring_start_date,
+                'show_date_range' => $show_date_range,
             );
         } else {
+            // Option affichage des dates
+            $show_date_range = isset($_POST['event_recurring_show_date_range']) && $_POST['event_recurring_show_date_range'] === '1';
+
             $schedule_payload = array(
                 'mode' => 'recurring',
                 'frequency' => 'monthly',
@@ -928,6 +977,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
                 'start_time' => $recurring_start_time,
                 'end_time' => $recurring_end_time,
                 'start_date' => $recurring_start_date,
+                'show_date_range' => $show_date_range,
             );
         }
 
@@ -2613,17 +2663,29 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                         </div>
 
                         <div class="mj-recurring-section mj-recurring-weekly" style="margin-bottom:10px;">
-                            <strong>Jours concernes</strong>
-                            <div class="mj-recurring-weekdays" style="margin-top:6px;">
+                            <strong>Jours concernes et plages horaires</strong>
+                            <p class="description" style="margin-top:4px;margin-bottom:8px;">Cochez les jours souhaités et définissez les plages horaires pour chaque jour (optionnel : si vide, utilise l'horaire de la première occurrence).</p>
+                            <div class="mj-recurring-weekdays-grid" style="margin-top:6px;">
                                 <?php foreach ($schedule_weekdays as $weekday_key => $weekday_label) : ?>
-                                    <?php $weekday_checked = in_array($weekday_key, $form_values['schedule_recurring_weekdays'], true); ?>
-                                    <label style="display:inline-block; margin-right:12px;">
-                                        <input type="checkbox" name="event_recurring_weekdays[]" value="<?php echo esc_attr($weekday_key); ?>" <?php checked($weekday_checked, true); ?> />
-                                        <?php echo esc_html($weekday_label); ?>
-                                    </label>
+                                    <?php 
+                                    $weekday_checked = in_array($weekday_key, $form_values['schedule_recurring_weekdays'], true);
+                                    $weekday_start = isset($form_values['schedule_weekday_times'][$weekday_key]['start']) ? $form_values['schedule_weekday_times'][$weekday_key]['start'] : '';
+                                    $weekday_end = isset($form_values['schedule_weekday_times'][$weekday_key]['end']) ? $form_values['schedule_weekday_times'][$weekday_key]['end'] : '';
+                                    ?>
+                                    <div class="mj-weekday-row" style="display:flex; align-items:center; gap:12px; padding:8px 12px; margin-bottom:4px; background:<?php echo $weekday_checked ? '#f0f7ff' : '#f9f9f9'; ?>; border-radius:6px; border:1px solid <?php echo $weekday_checked ? '#2271b1' : '#ddd'; ?>;" data-weekday="<?php echo esc_attr($weekday_key); ?>">
+                                        <label style="display:flex; align-items:center; gap:6px; min-width:120px; cursor:pointer;">
+                                            <input type="checkbox" name="event_recurring_weekdays[]" value="<?php echo esc_attr($weekday_key); ?>" <?php checked($weekday_checked, true); ?> class="mj-weekday-checkbox" />
+                                            <span style="font-weight:500;"><?php echo esc_html($weekday_label); ?></span>
+                                        </label>
+                                        <div class="mj-weekday-times" style="display:<?php echo $weekday_checked ? 'flex' : 'none'; ?>; align-items:center; gap:8px;">
+                                            <label style="font-size:12px; color:#666;">Début</label>
+                                            <input type="time" name="event_weekday_times[<?php echo esc_attr($weekday_key); ?>][start]" value="<?php echo esc_attr($weekday_start); ?>" style="padding:4px 8px;" />
+                                            <label style="font-size:12px; color:#666;">Fin</label>
+                                            <input type="time" name="event_weekday_times[<?php echo esc_attr($weekday_key); ?>][end]" value="<?php echo esc_attr($weekday_end); ?>" style="padding:4px 8px;" />
+                                        </div>
+                                    </div>
                                 <?php endforeach; ?>
                             </div>
-                            <p class="description">Choisissez au moins un jour de la semaine.</p>
                         </div>
 
                         <div class="mj-recurring-section mj-recurring-monthly" style="margin-bottom:10px;">
@@ -2652,6 +2714,13 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                             <span class="description">(optionnel)</span>
                         </div>
                         <p class="description">Laisser vide pour poursuivre la recurrence sans date de fin.</p>
+
+                        <div style="margin-top:16px;">
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                <input type="checkbox" name="event_recurring_show_date_range" value="1" <?php checked($form_values['schedule_show_date_range'], true); ?> />
+                                <span>Masquer la période (date de début et date de fin) sur la page événement</span>
+                            </label>
+                        </div>
                     </div>
                 </td>
             </tr>

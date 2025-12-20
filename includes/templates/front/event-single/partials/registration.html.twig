@@ -18,6 +18,8 @@
 {% set has_reservations = registration.has_reservations|default(false) %}
 {% set reservations = registration.reservations|default([]) %}
 {% set capacity_total = registration.capacity_total|default(0) %}
+{% set is_free_participation = registration.is_free_participation|default(false) %}
+{% set free_participation_message = registration.free_participation_message|default('') %}
 
 <section class="mj-member-event-single__card mj-member-event-single__registration">
     <div class="mj-member-event-single__registration-header">
@@ -36,7 +38,13 @@
 
     <div class="mj-member-event-single__registration-body">
         <div class="mj-member-event-single__registration-actions">
-            {% if has_interactive %}
+            {% if is_free_participation %}
+                <div class="mj-member-event-single__registration-free-participation">
+                    <p class="mj-member-event-single__registration-free-message">
+                        {{ free_participation_message|default(__('La participation est libre : aucune inscription n\'est requise.', 'mj-member')) }}
+                    </p>
+                </div>
+            {% elseif has_interactive %}
                 <div class="mj-member-event-single__registration-interactive">
                     {% if requires_login %}
                         <p class="mj-member-event-single__registration-note">{{ __('Connecte-toi pour continuer.', 'mj-member') }}</p>

@@ -1,0 +1,864 @@
+(function () {
+    'use strict';
+
+    const globalObject = typeof window !== 'undefined' ? window : globalThis;
+    const Utils = globalObject.MjMemberUtils || {};
+
+    const domReady = typeof Utils.domReady === 'function'
+        ? Utils.domReady
+        : function (callback) {
+            if (typeof document === 'undefined') return;
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', callback);
+            } else {
+                callback();
+            }
+        };
+
+    const escapeHtml = typeof Utils.escapeHtml === 'function'
+        ? Utils.escapeHtml
+        : function (text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        };
+
+    /**
+     * Controller pour les champs de planification/récurrence
+     */
+    class ScheduleFieldsController {
+        constructor(form) {
+            this.form = form;
+            this.elements = {
+                modeRadios: form.querySelectorAll('[data-schedule-mode]'),
+                recurringSection: form.querySelector('[data-schedule-recurring-section]'),
+                frequencySelect: form.querySelector('[data-recurring-frequency]'),
+                weeklySection: form.querySelector('[data-schedule-weekly-section]'),
+                monthlySection: form.querySelector('[data-schedule-monthly-section]'),
+                weekdaySelector: form.querySelector('[data-weekday-selector]'),
+                intervalLabel: form.querySelector('[data-interval-label]'),
+                payloadInput: form.querySelector('[data-schedule-payload]'),
+            };
+            
+            this.init();
+        }
+
+        init() {
+            // Mode radios
+            this.elements.modeRadios.forEach(radio => {
+                radio.addEventListener('change', () => this.handleModeChange());
+            });
+
+            // Frequency change
+            if (this.elements.frequencySelect) {
+                this.elements.frequencySelect.addEventListener('change', () => this.handleFrequencyChange());
+            }
+
+            // Weekday checkboxes
+            if (this.elements.weekdaySelector) {
+                this.elements.weekdaySelector.querySelectorAll('[data-weekday-checkbox]').forEach(checkbox => {
+                    checkbox.addEventListener('change', (e) => this.handleWeekdayToggle(e.target));
+                });
+            }
+
+            // Initial state
+            this.handleModeChange();
+            this.handleFrequencyChange();
+        }
+
+        handleModeChange() {
+            const selectedMode = this.form.querySelector('[data-schedule-mode]:checked');
+            const mode = selectedMode ? selectedMode.value : 'fixed';
+            
+            if (this.elements.recurringSection) {
+                this.elements.recurringSection.hidden = mode !== 'recurring';
+            }
+        }
+
+        handleFrequencyChange() {
+            const frequency = this.elements.frequencySelect ? this.elements.frequencySelect.value : 'weekly';
+            
+            if (this.elements.weeklySection) {
+                this.elements.weeklySection.hidden = frequency !== 'weekly';
+            }
+            if (this.elements.monthlySection) {
+                this.elements.monthlySection.hidden = frequency !== 'monthly';
+            }
+            if (this.elements.intervalLabel) {
+                this.elements.intervalLabel.textContent = frequency === 'weekly' ? 'semaine(s)' : 'mois';
+            }
+        }
+
+        handleWeekdayToggle(checkbox) {
+            const item = checkbox.closest('[data-weekday]');
+            if (!item) return;
+            
+            const timesContainer = item.querySelector('[data-weekday-times]');
+            if (timesContainer) {
+                timesContainer.hidden = !checkbox.checked;
+            }
+        }
+
+        /**
+         * Collecte les données de planification depuis le formulaire
+         */
+        collectScheduleData() {
+            const selectedMode = this.form.querySelector('[data-schedule-mode]:checked');
+            const mode = selectedMode ? selectedMode.value : 'fixed';
+
+            if (mode !== 'recurring') {
+                return { mode: mode, payload: {} };
+            }
+
+            const frequency = this.elements.frequencySelect ? this.elements.frequencySelect.value : 'weekly';
+            const intervalInput = this.form.querySelector('[name="recurring_interval"]');
+            const interval = intervalInput ? parseInt(intervalInput.value, 10) || 1 : 1;
+
+            const payload = {
+                frequency: frequency,
+                interval: interval,
+            };
+
+            if (frequency === 'weekly') {
+                // Collecter les jours cochés et leurs horaires
+                const weekdays = [];
+                const weekday_times = {};
+
+                this.form.querySelectorAll('[name="recurring_weekdays[]"]:checked').forEach(checkbox => {
+                    const day = checkbox.value;
+                    weekdays.push(day);
+
+                    const item = checkbox.closest('[data-weekday]');
+                    if (item) {
+                        const startInput = item.querySelector('[name^="weekday_times"][name$="[start]"]');
+                        const endInput = item.querySelector('[name^="weekday_times"][name$="[end]"]');
+                        if (startInput || endInput) {
+                            weekday_times[day] = {
+                                start: startInput ? startInput.value : '',
+                                end: endInput ? endInput.value : '',
+                            };
+                        }
+                    }
+                });
+
+                payload.weekdays = weekdays;
+                payload.weekday_times = weekday_times;
+            } else {
+                // Mensuel
+                const ordinalSelect = this.form.querySelector('[name="recurring_ordinal"]');
+                const weekdaySelect = this.form.querySelector('[name="recurring_monthly_weekday"]');
+                const startTimeInput = this.form.querySelector('[name="recurring_monthly_start_time"]');
+                const endTimeInput = this.form.querySelector('[name="recurring_monthly_end_time"]');
+
+                payload.ordinal = ordinalSelect ? ordinalSelect.value : 'first';
+                payload.weekday = weekdaySelect ? weekdaySelect.value : 'saturday';
+                payload.start_time = startTimeInput ? startTimeInput.value : '';
+                payload.end_time = endTimeInput ? endTimeInput.value : '';
+            }
+
+            // Until date
+            const untilInput = this.form.querySelector('[name="recurring_until"]');
+            if (untilInput && untilInput.value) {
+                payload.until = untilInput.value;
+            }
+
+            return { mode: mode, payload: payload };
+        }
+
+        /**
+         * Hydrate le formulaire avec des données existantes
+         */
+        hydrateFromEvent(event) {
+            const scheduleMode = event.schedule_mode || 'fixed';
+            
+            // Set mode radio
+            const modeRadio = this.form.querySelector(`[data-schedule-mode][value="${scheduleMode}"]`);
+            if (modeRadio) {
+                modeRadio.checked = true;
+            }
+
+            // Parse payload
+            let payload = {};
+            if (event.schedule_payload) {
+                if (typeof event.schedule_payload === 'string') {
+                    try {
+                        payload = JSON.parse(event.schedule_payload);
+                    } catch (e) {
+                        console.warn('Invalid schedule_payload JSON', e);
+                    }
+                } else if (typeof event.schedule_payload === 'object') {
+                    payload = event.schedule_payload;
+                }
+            }
+
+            // Frequency
+            if (this.elements.frequencySelect && payload.frequency) {
+                this.elements.frequencySelect.value = payload.frequency;
+            }
+
+            // Interval
+            const intervalInput = this.form.querySelector('[name="recurring_interval"]');
+            if (intervalInput && payload.interval) {
+                intervalInput.value = payload.interval;
+            }
+
+            // Weekdays and times
+            if (payload.weekdays && Array.isArray(payload.weekdays)) {
+                // Reset all checkboxes first
+                this.form.querySelectorAll('[name="recurring_weekdays[]"]').forEach(cb => {
+                    cb.checked = false;
+                    const item = cb.closest('[data-weekday]');
+                    if (item) {
+                        const timesContainer = item.querySelector('[data-weekday-times]');
+                        if (timesContainer) timesContainer.hidden = true;
+                    }
+                });
+
+                // Check selected weekdays
+                payload.weekdays.forEach(day => {
+                    const checkbox = this.form.querySelector(`[name="recurring_weekdays[]"][value="${day}"]`);
+                    if (checkbox) {
+                        checkbox.checked = true;
+                        const item = checkbox.closest('[data-weekday]');
+                        if (item) {
+                            const timesContainer = item.querySelector('[data-weekday-times]');
+                            if (timesContainer) timesContainer.hidden = false;
+
+                            // Set times if available
+                            const dayTimes = payload.weekday_times && payload.weekday_times[day];
+                            if (dayTimes) {
+                                const startInput = item.querySelector('[name^="weekday_times"][name$="[start]"]');
+                                const endInput = item.querySelector('[name^="weekday_times"][name$="[end]"]');
+                                if (startInput && dayTimes.start) startInput.value = dayTimes.start;
+                                if (endInput && dayTimes.end) endInput.value = dayTimes.end;
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Monthly fields
+            const ordinalSelect = this.form.querySelector('[name="recurring_ordinal"]');
+            if (ordinalSelect && payload.ordinal) {
+                ordinalSelect.value = payload.ordinal;
+            }
+
+            const monthlyWeekdaySelect = this.form.querySelector('[name="recurring_monthly_weekday"]');
+            if (monthlyWeekdaySelect && payload.weekday) {
+                monthlyWeekdaySelect.value = payload.weekday;
+            }
+
+            const monthlyStartTime = this.form.querySelector('[name="recurring_monthly_start_time"]');
+            if (monthlyStartTime && payload.start_time) {
+                monthlyStartTime.value = payload.start_time;
+            }
+
+            const monthlyEndTime = this.form.querySelector('[name="recurring_monthly_end_time"]');
+            if (monthlyEndTime && payload.end_time) {
+                monthlyEndTime.value = payload.end_time;
+            }
+
+            // Until date
+            const untilInput = this.form.querySelector('[name="recurring_until"]');
+            if (untilInput && payload.until) {
+                untilInput.value = payload.until;
+            }
+
+            // Trigger UI updates
+            this.handleModeChange();
+            this.handleFrequencyChange();
+        }
+
+        /**
+         * Reset les champs de récurrence
+         */
+        reset() {
+            // Reset mode to fixed
+            const fixedRadio = this.form.querySelector('[data-schedule-mode][value="fixed"]');
+            if (fixedRadio) {
+                fixedRadio.checked = true;
+            }
+
+            // Reset frequency
+            if (this.elements.frequencySelect) {
+                this.elements.frequencySelect.value = 'weekly';
+            }
+
+            // Reset interval
+            const intervalInput = this.form.querySelector('[name="recurring_interval"]');
+            if (intervalInput) {
+                intervalInput.value = '1';
+            }
+
+            // Uncheck all weekdays and reset times
+            this.form.querySelectorAll('[name="recurring_weekdays[]"]').forEach(cb => {
+                cb.checked = false;
+                const item = cb.closest('[data-weekday]');
+                if (item) {
+                    const timesContainer = item.querySelector('[data-weekday-times]');
+                    if (timesContainer) {
+                        timesContainer.hidden = true;
+                        timesContainer.querySelectorAll('input[type="time"]').forEach(input => {
+                            input.value = '';
+                        });
+                    }
+                }
+            });
+
+            // Reset monthly fields
+            const ordinalSelect = this.form.querySelector('[name="recurring_ordinal"]');
+            if (ordinalSelect) ordinalSelect.value = 'first';
+
+            const monthlyWeekdaySelect = this.form.querySelector('[name="recurring_monthly_weekday"]');
+            if (monthlyWeekdaySelect) monthlyWeekdaySelect.value = 'saturday';
+
+            const monthlyStartTime = this.form.querySelector('[name="recurring_monthly_start_time"]');
+            if (monthlyStartTime) monthlyStartTime.value = '';
+
+            const monthlyEndTime = this.form.querySelector('[name="recurring_monthly_end_time"]');
+            if (monthlyEndTime) monthlyEndTime.value = '';
+
+            // Reset until
+            const untilInput = this.form.querySelector('[name="recurring_until"]');
+            if (untilInput) untilInput.value = '';
+
+            // Trigger UI updates
+            this.handleModeChange();
+            this.handleFrequencyChange();
+        }
+    }
+
+    class EventsManagerController {
+        constructor(container) {
+            this.container = container;
+            this.config = this.parseConfig();
+            this.events = [];
+            this.filteredEvents = [];
+            this.currentPage = 1;
+            this.totalPages = 1;
+            this.isLoading = false;
+            
+            this.elements = {
+                list: container.querySelector('[data-events-list]'),
+                loading: container.querySelector('[data-loading]'),
+                emptyState: container.querySelector('[data-empty-state]'),
+                pagination: container.querySelector('[data-pagination]'),
+                feedback: container.querySelector('[data-feedback]'),
+                searchInput: container.querySelector('[data-search-input]'),
+                filterStatus: container.querySelector('[data-filter-status]'),
+                filterType: container.querySelector('[data-filter-type]'),
+                modal: document.querySelector('[data-modal]'),
+                modalTitle: document.querySelector('[data-modal-title]'),
+                modalBody: document.querySelector('[data-modal-body]'),
+                modalClose: document.querySelectorAll('[data-modal-close]'),
+                modalOverlay: document.querySelector('[data-modal-overlay]'),
+                form: document.querySelector('[data-event-form]'),
+                formFeedback: document.querySelector('[data-form-feedback]'),
+            };
+
+            this.currentEventId = null;
+            this.searchTerm = '';
+            this.filterStatus = '';
+            this.filterType = '';
+
+            // Schedule fields controller
+            this.scheduleController = this.elements.form ? new ScheduleFieldsController(this.elements.form) : null;
+
+            this.init();
+        }
+
+        parseConfig() {
+            const configAttr = this.container.getAttribute('data-config');
+            if (!configAttr) return {};
+            try {
+                return JSON.parse(configAttr);
+            } catch (error) {
+                console.error('EventsManager: Invalid config JSON', error);
+                return {};
+            }
+        }
+
+        getString(key, fallback = '') {
+            return (this.config.strings && this.config.strings[key]) || fallback;
+        }
+
+        init() {
+            this.attachEventListeners();
+            this.loadEvents();
+        }
+
+        attachEventListeners() {
+            // Add event button
+            this.container.querySelectorAll('[data-action="add-event"]').forEach(btn => {
+                btn.addEventListener('click', () => this.openModal('add'));
+            });
+
+            // Search
+            if (this.elements.searchInput) {
+                this.elements.searchInput.addEventListener('input', (e) => {
+                    this.searchTerm = e.target.value.toLowerCase();
+                    this.applyFilters();
+                });
+            }
+
+            // Filters
+            if (this.elements.filterStatus) {
+                this.elements.filterStatus.addEventListener('change', (e) => {
+                    this.filterStatus = e.target.value;
+                    this.applyFilters();
+                });
+            }
+
+            if (this.elements.filterType) {
+                this.elements.filterType.addEventListener('change', (e) => {
+                    this.filterType = e.target.value;
+                    this.applyFilters();
+                });
+            }
+
+            // Modal close
+            this.elements.modalClose.forEach(btn => {
+                btn.addEventListener('click', () => this.closeModal());
+            });
+
+            if (this.elements.modalOverlay) {
+                this.elements.modalOverlay.addEventListener('click', () => this.closeModal());
+            }
+
+            // Form submit
+            if (this.elements.form) {
+                this.elements.form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.handleFormSubmit();
+                });
+            }
+
+            // Event delegation for list actions
+            if (this.elements.list) {
+                this.elements.list.addEventListener('click', (e) => {
+                    const editBtn = e.target.closest('[data-action="edit"]');
+                    const deleteBtn = e.target.closest('[data-action="delete"]');
+
+                    if (editBtn) {
+                        const eventId = parseInt(editBtn.dataset.eventId, 10);
+                        this.openModal('edit', eventId);
+                    } else if (deleteBtn) {
+                        const eventId = parseInt(deleteBtn.dataset.eventId, 10);
+                        this.handleDelete(eventId);
+                    }
+                });
+            }
+        }
+
+        async loadEvents() {
+            if (this.isLoading) return;
+            
+            this.isLoading = true;
+            this.showLoading(true);
+            this.clearFeedback();
+
+            try {
+                const response = await fetch(this.config.ajaxUrl, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        action: 'mj_events_manager_list',
+                        nonce: this.config.nonce,
+                        show_past: this.config.showPast ? '1' : '0',
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.data?.message || this.getString('error'));
+                }
+
+                this.events = data.data.events || [];
+                this.applyFilters();
+            } catch (error) {
+                console.error('EventsManager: Load error', error);
+                this.showFeedback(error.message, 'error');
+                this.events = [];
+                this.filteredEvents = [];
+                this.renderList();
+            } finally {
+                this.isLoading = false;
+                this.showLoading(false);
+            }
+        }
+
+        applyFilters() {
+            this.filteredEvents = this.events.filter(event => {
+                // Search filter
+                if (this.searchTerm) {
+                    const title = (event.title || '').toLowerCase();
+                    const description = (event.description || '').toLowerCase();
+                    if (!title.includes(this.searchTerm) && !description.includes(this.searchTerm)) {
+                        return false;
+                    }
+                }
+
+                // Status filter
+                if (this.filterStatus && event.status !== this.filterStatus) {
+                    return false;
+                }
+
+                // Type filter
+                if (this.filterType && event.type !== this.filterType) {
+                    return false;
+                }
+
+                return true;
+            });
+
+            this.currentPage = 1;
+            this.calculatePagination();
+            this.renderList();
+        }
+
+        calculatePagination() {
+            const perPage = this.config.perPage || 20;
+            this.totalPages = Math.ceil(this.filteredEvents.length / perPage);
+        }
+
+        renderList() {
+            if (!this.elements.list) return;
+
+            if (this.filteredEvents.length === 0) {
+                this.elements.list.innerHTML = '';
+                this.elements.emptyState.hidden = false;
+                this.elements.pagination.hidden = true;
+                return;
+            }
+
+            this.elements.emptyState.hidden = true;
+
+            const perPage = this.config.perPage || 20;
+            const start = (this.currentPage - 1) * perPage;
+            const end = start + perPage;
+            const pageEvents = this.filteredEvents.slice(start, end);
+
+            const html = pageEvents.map(event => this.renderEventCard(event)).join('');
+            this.elements.list.innerHTML = html;
+
+            this.renderPagination();
+        }
+
+        renderEventCard(event) {
+            const statusLabel = this.config.eventStatuses[event.status] || event.status;
+            const typeLabel = this.config.eventTypes[event.type] || event.type;
+            const startDate = event.start_date ? this.formatDate(event.start_date) : '—';
+            const price = event.price > 0 ? `${parseFloat(event.price).toFixed(2)} €` : this.getString('free', 'Gratuit');
+
+            return `
+                <div class="mj-events-manager-card" data-event-id="${escapeHtml(event.id)}">
+                    <div class="mj-events-manager-card__header">
+                        <h3 class="mj-events-manager-card__title">${escapeHtml(event.title)}</h3>
+                        <div class="mj-events-manager-card__badges">
+                            <span class="mj-events-manager-card__badge mj-events-manager-card__badge--status">${escapeHtml(statusLabel)}</span>
+                            <span class="mj-events-manager-card__badge mj-events-manager-card__badge--type">${escapeHtml(typeLabel)}</span>
+                        </div>
+                    </div>
+                    <div class="mj-events-manager-card__body">
+                        <div class="mj-events-manager-card__meta">
+                            <div class="mj-events-manager-card__meta-item">
+                                <span class="dashicons dashicons-calendar-alt"></span>
+                                <span>${escapeHtml(startDate)}</span>
+                            </div>
+                            <div class="mj-events-manager-card__meta-item">
+                                <span class="dashicons dashicons-tickets-alt"></span>
+                                <span>${escapeHtml(price)}</span>
+                            </div>
+                            ${event.capacity_total > 0 ? `
+                                <div class="mj-events-manager-card__meta-item">
+                                    <span class="dashicons dashicons-groups"></span>
+                                    <span>${escapeHtml(event.capacity_total)} places</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                        ${event.description ? `
+                            <p class="mj-events-manager-card__description">${escapeHtml(event.description.substring(0, 150))}${event.description.length > 150 ? '...' : ''}</p>
+                        ` : ''}
+                    </div>
+                    <div class="mj-events-manager-card__actions">
+                        <button type="button" class="mj-events-manager-card__action" data-action="edit" data-event-id="${escapeHtml(event.id)}">
+                            <span class="dashicons dashicons-edit"></span>
+                            <span>${this.getString('edit')}</span>
+                        </button>
+                        <button type="button" class="mj-events-manager-card__action mj-events-manager-card__action--danger" data-action="delete" data-event-id="${escapeHtml(event.id)}">
+                            <span class="dashicons dashicons-trash"></span>
+                            <span>${this.getString('delete')}</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        renderPagination() {
+            if (!this.elements.pagination || this.totalPages <= 1) {
+                this.elements.pagination.hidden = true;
+                return;
+            }
+
+            this.elements.pagination.hidden = false;
+
+            const buttons = [];
+            for (let i = 1; i <= this.totalPages; i++) {
+                const active = i === this.currentPage ? ' mj-events-manager-pagination__btn--active' : '';
+                buttons.push(`
+                    <button type="button" class="mj-events-manager-pagination__btn${active}" data-page="${i}">
+                        ${i}
+                    </button>
+                `);
+            }
+
+            this.elements.pagination.innerHTML = `
+                <div class="mj-events-manager-pagination">
+                    ${buttons.join('')}
+                </div>
+            `;
+
+            this.elements.pagination.querySelectorAll('[data-page]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    this.currentPage = parseInt(e.target.dataset.page, 10);
+                    this.renderList();
+                });
+            });
+        }
+
+        formatDate(dateString) {
+            try {
+                const date = new Date(dateString.replace(' ', 'T'));
+                return date.toLocaleDateString('fr-FR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                });
+            } catch (error) {
+                return dateString;
+            }
+        }
+
+        openModal(mode, eventId = null) {
+            this.currentEventId = eventId;
+            this.clearFormFeedback();
+
+            if (mode === 'add') {
+                this.elements.modalTitle.textContent = this.getString('addNew');
+                this.resetForm();
+            } else if (mode === 'edit' && eventId) {
+                this.elements.modalTitle.textContent = this.getString('edit');
+                this.loadEventToForm(eventId);
+            }
+
+            this.elements.modal.hidden = false;
+            document.body.style.overflow = 'hidden';
+        }
+
+        closeModal() {
+            this.elements.modal.hidden = true;
+            document.body.style.overflow = '';
+            this.resetForm();
+            this.currentEventId = null;
+        }
+
+        resetForm() {
+            if (this.elements.form) {
+                this.elements.form.reset();
+            }
+            // Reset schedule fields
+            if (this.scheduleController) {
+                this.scheduleController.reset();
+            }
+        }
+
+        loadEventToForm(eventId) {
+            const event = this.events.find(e => e.id === eventId);
+            if (!event || !this.elements.form) return;
+
+            const form = this.elements.form;
+            form.querySelector('[name="title"]').value = event.title || '';
+            form.querySelector('[name="type"]').value = event.type || '';
+            form.querySelector('[name="status"]').value = event.status || '';
+            form.querySelector('[name="description"]').value = event.description || '';
+            form.querySelector('[name="price"]').value = event.price || '';
+            form.querySelector('[name="capacity_total"]').value = event.capacity_total || '';
+
+            if (event.start_date) {
+                const startFormatted = this.formatDateForInput(event.start_date);
+                form.querySelector('[name="start_date"]').value = startFormatted;
+            }
+
+            if (event.end_date) {
+                const endFormatted = this.formatDateForInput(event.end_date);
+                form.querySelector('[name="end_date"]').value = endFormatted;
+            }
+
+            // Hydrate schedule fields
+            if (this.scheduleController) {
+                this.scheduleController.hydrateFromEvent(event);
+            }
+        }
+
+        formatDateForInput(dateString) {
+            try {
+                const date = new Date(dateString.replace(' ', 'T'));
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                return `${year}-${month}-${day}T${hours}:${minutes}`;
+            } catch (error) {
+                return '';
+            }
+        }
+
+        async handleFormSubmit() {
+            if (!this.elements.form) return;
+
+            const formData = new FormData(this.elements.form);
+            const action = this.currentEventId ? 'mj_events_manager_update' : 'mj_events_manager_create';
+
+            formData.append('action', action);
+            formData.append('nonce', this.config.nonce);
+
+            if (this.currentEventId) {
+                formData.append('event_id', this.currentEventId);
+            }
+
+            // Add schedule data
+            if (this.scheduleController) {
+                const scheduleData = this.scheduleController.collectScheduleData();
+                formData.set('schedule_mode', scheduleData.mode);
+                formData.set('schedule_payload', JSON.stringify(scheduleData.payload));
+            }
+
+            this.showFormFeedback(this.getString('loading'), 'loading');
+
+            try {
+                const response = await fetch(this.config.ajaxUrl, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    body: formData,
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.data?.message || this.getString('error'));
+                }
+
+                this.showFeedback(this.getString('success'), 'success');
+                this.closeModal();
+                await this.loadEvents();
+            } catch (error) {
+                console.error('EventsManager: Save error', error);
+                this.showFormFeedback(error.message, 'error');
+            }
+        }
+
+        async handleDelete(eventId) {
+            if (!confirm(this.getString('confirmDelete'))) {
+                return;
+            }
+
+            this.clearFeedback();
+
+            try {
+                const response = await fetch(this.config.ajaxUrl, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        action: 'mj_events_manager_delete',
+                        nonce: this.config.nonce,
+                        event_id: eventId,
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.data?.message || this.getString('error'));
+                }
+
+                this.showFeedback(this.getString('success'), 'success');
+                await this.loadEvents();
+            } catch (error) {
+                console.error('EventsManager: Delete error', error);
+                this.showFeedback(error.message, 'error');
+            }
+        }
+
+        showLoading(show) {
+            if (this.elements.loading) {
+                this.elements.loading.hidden = !show;
+            }
+        }
+
+        showFeedback(message, type = 'info') {
+            if (!this.elements.feedback) return;
+
+            this.elements.feedback.textContent = message;
+            this.elements.feedback.className = `mj-events-manager__feedback mj-events-manager__feedback--${type}`;
+            
+            setTimeout(() => {
+                this.clearFeedback();
+            }, 5000);
+        }
+
+        clearFeedback() {
+            if (this.elements.feedback) {
+                this.elements.feedback.textContent = '';
+                this.elements.feedback.className = 'mj-events-manager__feedback';
+            }
+        }
+
+        showFormFeedback(message, type = 'info') {
+            if (!this.elements.formFeedback) return;
+
+            this.elements.formFeedback.textContent = message;
+            this.elements.formFeedback.className = `mj-events-manager-form__feedback mj-events-manager-form__feedback--${type}`;
+        }
+
+        clearFormFeedback() {
+            if (this.elements.formFeedback) {
+                this.elements.formFeedback.textContent = '';
+                this.elements.formFeedback.className = 'mj-events-manager-form__feedback';
+            }
+        }
+    }
+
+    function bootstrap() {
+        const containers = document.querySelectorAll('[data-mj-events-manager]');
+        containers.forEach(container => {
+            if (!container.dataset.mjEventsManagerInit) {
+                container.dataset.mjEventsManagerInit = '1';
+                new EventsManagerController(container);
+            }
+        });
+    }
+
+    domReady(bootstrap);
+
+    if (typeof globalObject.MutationObserver !== 'undefined') {
+        const observer = new MutationObserver(() => {
+            bootstrap();
+        });
+        domReady(() => {
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true,
+            });
+        });
+    }
+})();

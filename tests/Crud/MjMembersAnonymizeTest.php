@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Mj\Member\Tests\Crud;
 
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\MjRoles;
 use PHPUnit\Framework\TestCase;
 use WP_Error;
 
@@ -34,7 +35,7 @@ final class MjMembersAnonymizeTest extends TestCase
 
     public function testFailsWhenUpdateReturnsFalse(): void
     {
-        $member = (object) array('id' => 51, 'role' => MjMembers::ROLE_JEUNE);
+        $member = (object) array('id' => 51, 'role' => MjRoles::JEUNE);
         $wpdb = $this->createWpdbStub($member);
         $wpdb->updateResult = false;
         $GLOBALS['wpdb'] = $wpdb;
@@ -47,7 +48,7 @@ final class MjMembersAnonymizeTest extends TestCase
     public function testAnonymizePersonalDataPersistsSanitizedValues(): void
     {
         $member_id = 73;
-        $member = (object) array('id' => $member_id, 'role' => MjMembers::ROLE_JEUNE);
+        $member = (object) array('id' => $member_id, 'role' => MjRoles::JEUNE);
         $wpdb = $this->createWpdbStub($member);
         $GLOBALS['wpdb'] = $wpdb;
         $GLOBALS['__mj_current_time'] = strtotime('2025-12-05 09:10:11');

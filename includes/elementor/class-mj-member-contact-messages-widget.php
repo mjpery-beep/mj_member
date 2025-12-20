@@ -20,11 +20,11 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
     }
 
     public function get_icon() {
-        return 'eicon-inbox';
+        return 'eicon-commenting-o';
     }
 
     public function get_categories() {
-        return array('general');
+        return array('mj-member');
     }
 
     public function get_keywords() {
@@ -519,15 +519,13 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
             return array_values($targets);
         }
 
-        $animateur_role = 'animateur';
-        $coordinateur_role = 'coordinateur';
-        if (class_exists('MjMembers')) {
-            $animateur_role = sanitize_key((string) MjMembers::ROLE_ANIMATEUR);
-            $coordinateur_role = sanitize_key((string) MjMembers::ROLE_COORDINATEUR);
-        }
-
-        $is_animateur = ($member_role === $animateur_role);
-        $is_coordinateur = ($member_role === $coordinateur_role);
+        // Utiliser MjRoles pour les vérifications de rôles
+        $is_animateur = class_exists('Mj\\Member\\Classes\\MjRoles') 
+            ? \Mj\Member\Classes\MjRoles::isAnimateur($member_role)
+            : ($member_role === \Mj\Member\Classes\MjRoles::ANIMATEUR);
+        $is_coordinateur = class_exists('Mj\\Member\\Classes\\MjRoles')
+            ? \Mj\Member\Classes\MjRoles::isCoordinateur($member_role)
+            : ($member_role === \Mj\Member\Classes\MjRoles::COORDINATEUR);
 
         if ($is_animateur || $is_coordinateur) {
             $append_target(MjContactMessages::TARGET_ANIMATEUR, $member_id);

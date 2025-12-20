@@ -1,5 +1,7 @@
 <?php
 
+use Mj\Member\Classes\MjRoles;
+
 $member = null;
 $action = isset($_GET['action']) ? sanitize_text_field($_GET['action']) : 'add';
 $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
@@ -14,7 +16,7 @@ if ($action === 'edit' && $id > 0) {
 $allowed_roles = MjMembers::getAllowedRoles();
 $role_labels = MjMembers::getRoleLabels();
 
-$current_role = $member ? $member->role : MjMembers::ROLE_JEUNE;
+$current_role = $member ? $member->role : MjRoles::JEUNE;
 if (!$member && $action === 'add') {
     $requested_role = isset($_GET['role']) ? sanitize_text_field((string) wp_unslash($_GET['role'])) : '';
     if ($requested_role !== '' && in_array($requested_role, $allowed_roles, true)) {
@@ -34,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
 
     $requested_role = isset($_POST['member_role']) ? sanitize_text_field($_POST['member_role']) : $current_role;
     if (!in_array($requested_role, $allowed_roles, true)) {
-        $requested_role = MjMembers::ROLE_JEUNE;
+        $requested_role = MjRoles::JEUNE;
     }
     $current_role = $requested_role;
 
@@ -56,11 +58,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
         'member_postal' => isset($_POST['member_postal']) ? sanitize_text_field($_POST['member_postal']) : '',
         'member_description_courte' => isset($_POST['member_description_courte']) ? sanitize_text_field($_POST['member_description_courte']) : '',
         'member_description_longue' => isset($_POST['member_description_longue']) ? wp_kses_post($_POST['member_description_longue']) : '',
+        'work_schedule' => isset($_POST['work_schedule']) ? wp_unslash($_POST['work_schedule']) : '[]',
         'status' => isset($_POST['status']) ? sanitize_text_field($_POST['status']) : MjMembers::STATUS_ACTIVE,
         'requires_payment' => $requires_payment,
         'date_last_payement' => $date_last_payement_input,
         'member_is_volunteer' => !empty($_POST['member_is_volunteer']),
-        'member_is_autonomous' => ($current_role === MjMembers::ROLE_JEUNE) ? !empty($_POST['member_is_autonomous']) : true,
+        'member_is_autonomous' => MjRoles::isJeune($current_role) ? !empty($_POST['member_is_autonomous']) : true,
         'member_newsletter_opt_in' => !empty($_POST['member_newsletter_opt_in']),
         'member_sms_opt_in' => !empty($_POST['member_sms_opt_in']),
         'member_whatsapp_opt_in' => !empty($_POST['member_whatsapp_opt_in']),
@@ -83,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
         $input_data['status'] = MjMembers::STATUS_ACTIVE;
     }
 
-    if ($current_role !== MjMembers::ROLE_JEUNE) {
+    if (!MjRoles::isJeune($current_role)) {
         $input_data['member_is_autonomous'] = true;
         $input_data['guardian_mode'] = 'existing';
         $input_data['guardian_id'] = 0;
@@ -95,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
     if ($input_data['member_first_name'] === '') {
         $validation_errors[] = 'Le prénom du membre est obligatoire.';
     }
-    if ($current_role === MjMembers::ROLE_JEUNE) {
+    if (MjRoles::isJeune($current_role)) {
         if ($input_data['member_email'] !== '' && !is_email($input_data['member_email'])) {
             $validation_errors[] = "L'email du membre n'est pas valide.";
         }
@@ -107,13 +110,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
         }
     }
 
-    if ($current_role === MjMembers::ROLE_JEUNE && !$input_data['member_is_autonomous']) {
+    if (MjRoles::isJeune($current_role) && !$input_data['member_is_autonomous']) {
         if ($input_data['guardian_mode'] === 'existing') {
             if ($input_data['guardian_id'] <= 0) {
                 $validation_errors[] = 'Merci de sélectionner un tuteur existant.';
             } else {
                 $guardian_candidate = MjMembers::getById($input_data['guardian_id']);
-                if (!$guardian_candidate || $guardian_candidate->role !== MjMembers::ROLE_TUTEUR) {
+                if (!$guardian_candidate || !MjRoles::isTuteur($guardian_candidate->role)) {
                     $validation_errors[] = 'Le tuteur sélectionné est invalide.';
                 }
             }
@@ -157,6 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
             'postal_code' => $input_data['member_postal'],
             'description_courte' => $input_data['member_description_courte'] !== '' ? $input_data['member_description_courte'] : null,
             'description_longue' => $input_data['member_description_longue'] !== '' ? $input_data['member_description_longue'] : null,
+            'work_schedule' => (MjRoles::isStaff($current_role) && $input_data['work_schedule'] !== '[]') ? $input_data['work_schedule'] : null,
             'date_last_payement' => $date_last_payement_db,
             'is_autonomous' => $input_data['member_is_autonomous'] ? 1 : 0,
             'guardian_id' => null,
@@ -165,7 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
             'whatsapp_opt_in' => !empty($input_data['member_whatsapp_opt_in']) ? 1 : 0,
         );
 
-        if ($current_role === MjMembers::ROLE_JEUNE) {
+        if (MjRoles::isJeune($current_role)) {
             if ($input_data['member_is_autonomous']) {
                 $member_payload['guardian_id'] = null;
                 $member_payload['is_autonomous'] = 1;
@@ -247,11 +251,11 @@ if ($member && !empty($member->date_last_payement) && $member->date_last_payemen
     }
 }
 
-$default_is_autonomous = ($current_role === MjMembers::ROLE_JEUNE)
+$default_is_autonomous = MjRoles::isJeune($current_role)
     ? ($member ? (bool) $member->is_autonomous : false)
     : true;
 
-$default_requires_payment = $member ? (bool) $member->requires_payment : ($current_role === MjMembers::ROLE_JEUNE);
+$default_requires_payment = $member ? (bool) $member->requires_payment : MjRoles::isJeune($current_role);
 $default_guardian_mode = $guardian ? 'existing' : 'new';
 $default_guardian_id = $guardian ? (int) $guardian->id : ($created_guardian_id ?: 0);
 
@@ -284,6 +288,7 @@ $form_defaults = array(
     'member_postal' => $extract_member_string($member, 'postal_code'),
     'member_description_courte' => $extract_member_string($member, 'description_courte'),
     'member_description_longue' => $extract_member_string($member, 'description_longue'),
+    'work_schedule' => $member && !empty($member->work_schedule) ? $member->work_schedule : '[]',
     'status' => ($extract_member_string($member, 'status') !== '') ? $extract_member_string($member, 'status') : MjMembers::STATUS_ACTIVE,
     'requires_payment' => $default_requires_payment,
     'date_last_payement' => $last_payment_value,
@@ -309,7 +314,7 @@ if ($has_validation_errors) {
     $form_values = $form_defaults;
 }
 
-$form_values['member_role'] = in_array($form_values['member_role'], $allowed_roles, true) ? $form_values['member_role'] : MjMembers::ROLE_JEUNE;
+$form_values['member_role'] = in_array($form_values['member_role'], $allowed_roles, true) ? $form_values['member_role'] : MjRoles::JEUNE;
 $form_values['status'] = in_array($form_values['status'], array(MjMembers::STATUS_ACTIVE, MjMembers::STATUS_INACTIVE), true)
     ? $form_values['status']
     : MjMembers::STATUS_ACTIVE;
@@ -328,19 +333,19 @@ if ($form_values['guardian_id'] && empty(array_filter($guardians, static functio
     return intval($candidate->id) === intval($form_values['guardian_id']);
 }))) {
     $linked_guardian = MjMembers::getById($form_values['guardian_id']);
-    if ($linked_guardian && $linked_guardian->role === MjMembers::ROLE_TUTEUR) {
+    if ($linked_guardian && MjRoles::isTuteur($linked_guardian->role)) {
         $guardians[] = $linked_guardian;
     }
 }
 
 $title = ($action === 'add') ? 'Ajouter un membre' : 'Éditer le membre';
-$member_email_required = ($form_values['member_role'] !== MjMembers::ROLE_JEUNE);
+$member_email_required = !MjRoles::isJeune($form_values['member_role']);
 ?>
 
 <div class="mj-form-container">
     <h2><?php echo esc_html($title); ?></h2>
 
-    <form method="post" class="mj-member-form">
+    <form method="post" class="mj-member-form" data-role="<?php echo esc_attr($form_values['member_role']); ?>">
         <?php wp_nonce_field('mj_member_form', 'mj_member_nonce'); ?>
 
         <div class="mj-form-section">
@@ -498,7 +503,7 @@ $member_email_required = ($form_values['member_role'] !== MjMembers::ROLE_JEUNE)
                             <option value="">— Sélectionner —</option>
                             <?php foreach ($guardians as $guardian_option) :
                                 $guardian_label = trim($guardian_option->last_name . ' ' . $guardian_option->first_name);
-                                $guardian_label = $guardian_label !== '' ? $guardian_label : 'Tuteur';
+                                $guardian_label = $guardian_label !== '' ? $guardian_label : \Mj\Member\Classes\MjRoles::getRoleLabel(\Mj\Member\Classes\MjRoles::TUTEUR);
                                 $guardian_email = !empty($guardian_option->email) ? ' — ' . $guardian_option->email : '';
                                 ?>
                                 <option value="<?php echo esc_attr($guardian_option->id); ?>" <?php selected($form_values['guardian_id'], intval($guardian_option->id)); ?>>
@@ -552,6 +557,23 @@ $member_email_required = ($form_values['member_role'] !== MjMembers::ROLE_JEUNE)
                     </td>
                 </tr>
             </table>
+        </div>
+
+        <div class="mj-form-section js-role-staff" id="work-schedule-section">
+            <h3>Emploi du temps contractuel</h3>
+            <p class="description" style="margin-bottom:15px;">Définissez les plages horaires de travail hebdomadaires (exemple: Lundi 10h-22h avec 1h de pause).</p>
+
+            <div id="work-schedule-container">
+                <!-- Les entrées seront générées par JavaScript -->
+            </div>
+
+            <button type="button" class="button" id="add-schedule-entry">+ Ajouter une plage horaire</button>
+
+            <div id="work-schedule-summary" style="margin-top:20px;padding:15px;background:#e7f3ff;border-radius:4px;display:none;">
+                <strong>Total heures/semaine :</strong> <span id="total-hours">0</span>h
+            </div>
+
+            <input type="hidden" name="work_schedule" id="work_schedule_input" value="<?php echo esc_attr($form_values['work_schedule']); ?>" />
         </div>
 
         <div class="mj-form-section">
@@ -670,27 +692,145 @@ $member_email_required = ($form_values['member_role'] !== MjMembers::ROLE_JEUNE)
 .js-guardian-new {
     display: none;
 }
+
+/* Work Schedule Section */
+.work-schedule-entry {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.work-schedule-entry select,
+.work-schedule-entry input[type="time"],
+.work-schedule-entry input[type="number"] {
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+}
+
+.work-schedule-entry select {
+    min-width: 120px;
+}
+
+.work-schedule-entry input[type="time"] {
+    width: 110px;
+}
+
+.work-schedule-entry input[type="number"] {
+    width: 80px;
+}
+
+.work-schedule-entry label {
+    font-size: 13px;
+    color: #555;
+    white-space: nowrap;
+}
+
+.work-schedule-entry .entry-hours {
+    margin-left: auto;
+    font-weight: 600;
+    color: #0073aa;
+    min-width: 60px;
+}
+
+.work-schedule-entry .break-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.work-schedule-entry .break-group label {
+    margin: 0;
+}
+
+.work-schedule-entry .break-unit {
+    font-size: 12px;
+    color: #666;
+}
+
+.work-schedule-entry .remove-entry {
+    background: #dc3545;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    padding: 6px 10px;
+    font-size: 14px;
+}
+
+.work-schedule-entry .remove-entry:hover {
+    background: #c82333;
+}
+
+.js-role-staff {
+    display: none;
+}
+
+/* Afficher la section staff si le rôle est animateur ou coordinateur */
+.mj-member-form[data-role="animateur"] .js-role-staff,
+.mj-member-form[data-role="coordinateur"] .js-role-staff {
+    display: block;
+}
 </style>
 
 <script>
 (function() {
+    // Constante de rôle centralisée (injectée depuis PHP via MjRoles)
+    const ROLE_JEUNE = '<?php echo esc_js(\Mj\Member\Classes\MjRoles::JEUNE); ?>';
+    const ROLE_ANIMATEUR = '<?php echo esc_js(\Mj\Member\Classes\MjRoles::ANIMATEUR); ?>';
+    const ROLE_COORDINATEUR = '<?php echo esc_js(\Mj\Member\Classes\MjRoles::COORDINATEUR); ?>';
+
+    const DAY_LABELS = {
+        monday: 'Lundi',
+        tuesday: 'Mardi',
+        wednesday: 'Mercredi',
+        thursday: 'Jeudi',
+        friday: 'Vendredi',
+        saturday: 'Samedi',
+        sunday: 'Dimanche'
+    };
+
+    let scheduleEntries = [];
+
+    function isStaffRole(role) {
+        return role === ROLE_ANIMATEUR || role === ROLE_COORDINATEUR;
+    }
+
     function updateRoleSections() {
         const roleSelect = document.getElementById('member_role');
-        const role = roleSelect ? roleSelect.value : 'jeune';
+        const role = roleSelect ? roleSelect.value : ROLE_JEUNE;
+        const form = document.querySelector('.mj-member-form');
         const jeuneElements = document.querySelectorAll('.js-role-jeune');
+        const staffElements = document.querySelectorAll('.js-role-staff');
         const autonomyRow = document.getElementById('autonomy-row');
         const isAutonomousCheckbox = document.getElementById('member_is_autonomous');
 
+        // Mettre à jour l'attribut data-role pour le CSS
+        if (form) {
+            form.setAttribute('data-role', role);
+        }
+
         jeuneElements.forEach(function(section) {
-            section.style.display = (role === 'jeune') ? '' : 'none';
+            section.style.display = (role === ROLE_JEUNE) ? '' : 'none';
         });
 
-        if (role !== 'jeune' && isAutonomousCheckbox) {
+        staffElements.forEach(function(section) {
+            section.style.display = isStaffRole(role) ? '' : 'none';
+        });
+
+        if (role !== ROLE_JEUNE && isAutonomousCheckbox) {
             isAutonomousCheckbox.checked = true;
         }
 
         if (autonomyRow) {
-            autonomyRow.style.display = (role === 'jeune') ? '' : 'none';
+            autonomyRow.style.display = (role === ROLE_JEUNE) ? '' : 'none';
         }
 
         updateAutonomyBlock();
@@ -699,14 +839,14 @@ $member_email_required = ($form_values['member_role'] !== MjMembers::ROLE_JEUNE)
 
     function updateGuardianMode() {
         const roleSelect = document.getElementById('member_role');
-        const role = roleSelect ? roleSelect.value : 'jeune';
+        const role = roleSelect ? roleSelect.value : ROLE_JEUNE;
         const guardianModeRow = document.getElementById('guardian-mode-row');
         const guardianBlocks = document.querySelectorAll('.js-guardian-block');
         const existingRow = document.querySelector('.js-guardian-existing');
         const newRows = document.querySelectorAll('.js-guardian-new');
         const isAutonomousCheckbox = document.getElementById('member_is_autonomous');
 
-        const isJeune = role === 'jeune';
+        const isJeune = role === ROLE_JEUNE;
         const isAutonomous = isAutonomousCheckbox ? isAutonomousCheckbox.checked : false;
 
         if (!isJeune || isAutonomous) {
@@ -734,7 +874,7 @@ $member_email_required = ($form_values['member_role'] !== MjMembers::ROLE_JEUNE)
 
     function updateAutonomyBlock() {
         const roleSelect = document.getElementById('member_role');
-        const role = roleSelect ? roleSelect.value : 'jeune';
+        const role = roleSelect ? roleSelect.value : ROLE_JEUNE;
         const isAutonomousCheckbox = document.getElementById('member_is_autonomous');
         const guardianBlocks = document.querySelectorAll('.js-guardian-block');
         const guardianId = document.getElementById('guardian_id');
@@ -744,7 +884,7 @@ $member_email_required = ($form_values['member_role'] !== MjMembers::ROLE_JEUNE)
             return;
         }
 
-        if (role !== 'jeune' || isAutonomousCheckbox.checked) {
+        if (role !== ROLE_JEUNE || isAutonomousCheckbox.checked) {
             guardianBlocks.forEach(function(row) {
                 row.style.display = 'none';
             });
@@ -762,7 +902,7 @@ $member_email_required = ($form_values['member_role'] !== MjMembers::ROLE_JEUNE)
 
     function updateEmailRequirement() {
         const roleSelect = document.getElementById('member_role');
-        const role = roleSelect ? roleSelect.value : 'jeune';
+        const role = roleSelect ? roleSelect.value : ROLE_JEUNE;
         const emailInput = document.getElementById('member_email');
         const emailLabel = document.getElementById('member_email_label');
 
@@ -770,7 +910,7 @@ $member_email_required = ($form_values['member_role'] !== MjMembers::ROLE_JEUNE)
             return;
         }
 
-        if (role === 'jeune') {
+        if (role === ROLE_JEUNE) {
             emailInput.removeAttribute('required');
             emailLabel.textContent = 'Email (optionnel)';
         } else {
@@ -794,7 +934,152 @@ $member_email_required = ($form_values['member_role'] !== MjMembers::ROLE_JEUNE)
             radio.addEventListener('change', updateGuardianMode);
         });
 
+        // Initialisation emploi du temps
+        initWorkSchedule();
+
         updateRoleSections();
     });
+
+    // ========== GESTION EMPLOI DU TEMPS ==========
+
+    function initWorkSchedule() {
+        const hiddenInput = document.getElementById('work_schedule_input');
+        const addBtn = document.getElementById('add-schedule-entry');
+        
+        if (!hiddenInput || !addBtn) return;
+
+        // Charger les entrées existantes
+        try {
+            const saved = JSON.parse(hiddenInput.value || '[]');
+            if (Array.isArray(saved)) {
+                scheduleEntries = saved;
+            }
+        } catch (e) {
+            scheduleEntries = [];
+        }
+
+        // Rendre les entrées existantes
+        renderScheduleEntries();
+
+        // Bouton ajouter
+        addBtn.addEventListener('click', function() {
+            scheduleEntries.push({
+                day: 'monday',
+                start: '09:00',
+                end: '17:00',
+                break_minutes: 60
+            });
+            renderScheduleEntries();
+        });
+    }
+
+    function renderScheduleEntries() {
+        const container = document.getElementById('work-schedule-container');
+        const summaryDiv = document.getElementById('work-schedule-summary');
+        
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        scheduleEntries.forEach(function(entry, index) {
+            const div = document.createElement('div');
+            div.className = 'work-schedule-entry';
+            div.innerHTML = `
+                <select data-field="day" data-index="${index}">
+                    ${Object.keys(DAY_LABELS).map(key => 
+                        `<option value="${key}" ${entry.day === key ? 'selected' : ''}>${DAY_LABELS[key]}</option>`
+                    ).join('')}
+                </select>
+                <label>De</label>
+                <input type="time" data-field="start" data-index="${index}" value="${entry.start || '09:00'}" />
+                <label>à</label>
+                <input type="time" data-field="end" data-index="${index}" value="${entry.end || '17:00'}" />
+                <span class="break-group">
+                    <label>Temps de midi</label>
+                    <input type="number" data-field="break_minutes" data-index="${index}" value="${entry.break_minutes || 0}" min="0" max="480" step="5" title="Durée de la pause repas en minutes" />
+                    <span class="break-unit">min</span>
+                </span>
+                <span class="entry-hours">${calcEntryHours(entry)}h</span>
+                <button type="button" class="remove-entry" data-index="${index}">✕</button>
+            `;
+            container.appendChild(div);
+        });
+
+        // Event listeners
+        container.querySelectorAll('select, input').forEach(function(el) {
+            el.addEventListener('change', function() {
+                const idx = parseInt(this.dataset.index, 10);
+                const field = this.dataset.field;
+                let value = this.value;
+                
+                if (field === 'break_minutes') {
+                    value = parseInt(value, 10) || 0;
+                }
+                
+                if (scheduleEntries[idx]) {
+                    scheduleEntries[idx][field] = value;
+                    updateScheduleData();
+                    
+                    // Mettre à jour l'affichage des heures de cette entrée
+                    const hoursSpan = this.closest('.work-schedule-entry').querySelector('.entry-hours');
+                    if (hoursSpan) {
+                        hoursSpan.textContent = calcEntryHours(scheduleEntries[idx]) + 'h';
+                    }
+                }
+            });
+        });
+
+        container.querySelectorAll('.remove-entry').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                const idx = parseInt(this.dataset.index, 10);
+                scheduleEntries.splice(idx, 1);
+                renderScheduleEntries();
+            });
+        });
+
+        updateScheduleData();
+
+        // Afficher/masquer le résumé
+        if (summaryDiv) {
+            summaryDiv.style.display = scheduleEntries.length > 0 ? '' : 'none';
+        }
+    }
+
+    function calcEntryHours(entry) {
+        if (!entry.start || !entry.end) return 0;
+        
+        const [startH, startM] = entry.start.split(':').map(Number);
+        const [endH, endM] = entry.end.split(':').map(Number);
+        
+        let startMinutes = startH * 60 + startM;
+        let endMinutes = endH * 60 + endM;
+        
+        // Gérer le cas où l'heure de fin est après minuit
+        if (endMinutes < startMinutes) {
+            endMinutes += 24 * 60;
+        }
+        
+        let totalMinutes = endMinutes - startMinutes - (entry.break_minutes || 0);
+        if (totalMinutes < 0) totalMinutes = 0;
+        
+        return Math.round(totalMinutes / 60 * 100) / 100;
+    }
+
+    function updateScheduleData() {
+        const hiddenInput = document.getElementById('work_schedule_input');
+        const totalSpan = document.getElementById('total-hours');
+        
+        if (hiddenInput) {
+            hiddenInput.value = JSON.stringify(scheduleEntries);
+        }
+        
+        if (totalSpan) {
+            let total = 0;
+            scheduleEntries.forEach(function(entry) {
+                total += calcEntryHours(entry);
+            });
+            totalSpan.textContent = Math.round(total * 100) / 100;
+        }
+    }
 })();
 </script>

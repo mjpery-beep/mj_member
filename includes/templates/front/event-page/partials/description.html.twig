@@ -1,0 +1,26 @@
+{% set content_html = description.content_html|default('') %}
+{% set has_article = description.has_article|default(false) %}
+{% set article_url = description.article_url|default('') %}
+{% set article_title = description.article_title|default('') %}
+
+{% if content_html or has_article %}
+<section class="mj-event-page__card mj-event-page__description">
+    {% if content_html %}
+        <div class="mj-event-page__description-content">
+            {{ content_html|wp_kses_post }}
+        </div>
+    {% endif %}
+
+    {% if has_article and article_url %}
+        <div class="mj-event-page__description-resource">
+            <a href="{{ article_url|esc_url }}" class="mj-event-page__resource-link">
+                <span class="mj-event-page__resource-icon" aria-hidden="true">📖</span>
+                <span class="mj-event-page__resource-text">{{ __('Voir le contenu pédagogique', 'mj-member') }}</span>
+                {% if article_title %}
+                    <span class="mj-event-page__resource-title">{{ article_title }}</span>
+                {% endif %}
+            </a>
+        </div>
+    {% endif %}
+</section>
+{% endif %}

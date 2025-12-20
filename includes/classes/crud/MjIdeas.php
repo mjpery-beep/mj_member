@@ -2,6 +2,7 @@
 
 namespace Mj\Member\Classes\Crud;
 
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\MjTools;
 use WP_Error;
 
@@ -403,8 +404,8 @@ class MjIdeas extends MjTools implements CrudRepositoryInterface
         $viewerCanDelete = false;
         if ($viewerRole !== '' && class_exists(MjMembers::class)) {
             $viewerCanDelete = in_array($viewerRole, array(
-                sanitize_key((string) MjMembers::ROLE_ANIMATEUR),
-                sanitize_key((string) MjMembers::ROLE_COORDINATEUR),
+                sanitize_key((string) MjRoles::ANIMATEUR),
+                sanitize_key((string) MjRoles::COORDINATEUR),
             ), true);
         }
 

@@ -1,4 +1,11 @@
 ## Page Event-single - Améliorations diverses
+## Spécificités techniques
+- Utilise un modèle MVC 
+- Utilise les bundles Symfony
+- Utilise Preact pour les rendu dynamique
+- Utilise Twig pour les templates 
+- Utilise au maximum les classe métier existante (CRUD, ... )
+
 
 ## Description du fonctionnement global des evénements
 ### Type d'événements

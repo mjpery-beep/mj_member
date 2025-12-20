@@ -89,6 +89,12 @@ final class HoursPage
                 'projectWithoutLabel' => $projectWithoutLabel,
                 'monthlyHoursTitle' => __('Heures encodées par mois', 'mj-member'),
                 'weeklyHoursTitle' => __('Heures encodées par semaine', 'mj-member'),
+                'averageWeeklyHours' => __('Moyenne hebdomadaire encodée', 'mj-member'),
+                'weeklyAverageMetaFallback' => __('Aucune semaine récente pour calculer la moyenne.', 'mj-member'),
+                'weeklyRequiredLabel' => __('Heures dues', 'mj-member'),
+                'weeklyExtraLabel' => __('Heures supplémentaires', 'mj-member'),
+                'weeklyExpectedLabel' => __('Heures attendues', 'mj-member'),
+                'weeklyDeficitLabel' => __('Heures manquantes', 'mj-member'),
                 'barChartEmpty' => __('Aucune donnée disponible pour cette période.', 'mj-member'),
                 'renderError' => __('Impossible d’afficher le tableau de bord pour le moment. Merci de rafraîchir la page.', 'mj-member'),
             ),
@@ -224,6 +230,7 @@ final class HoursPage
         $members = array();
         $totalMinutesFromMembers = 0;
         $totalEntriesFromMembers = 0;
+        $contractMinutesByMember = array();
 
         foreach ($memberTotals as $row) {
             $memberId = isset($row['member_id']) ? (int) $row['member_id'] : 0;
@@ -234,6 +241,9 @@ final class HoursPage
 
             $entries = isset($row['entries']) ? (int) $row['entries'] : 0;
             $label = isset($memberLabels[$memberId]['label']) ? (string) $memberLabels[$memberId]['label'] : sprintf(__('Membre #%d', 'mj-member'), $memberId);
+            $weeklyContractMinutes = isset($memberLabels[$memberId]['weekly_contract_minutes']) ? (int) $memberLabels[$memberId]['weekly_contract_minutes'] : 0;
+
+            $contractMinutesByMember[$memberId] = $weeklyContractMinutes;
 
             $members[] = array(
                 'id' => $memberId,
@@ -242,11 +252,15 @@ final class HoursPage
                 'human' => self::formatDuration($minutes),
                 'entries' => $entries,
                 'projects' => $memberProjectsMap[$memberId] ?? array(),
+                'weekly_contract_minutes' => $weeklyContractMinutes,
+                'weekly_contract_human' => self::formatDuration($weeklyContractMinutes),
             );
 
             $totalMinutesFromMembers += $minutes;
             $totalEntriesFromMembers += $entries;
         }
+
+        $aggregateWeeklyContractMinutes = (int) array_sum($contractMinutesByMember);
 
         usort($members, static function (array $a, array $b): int {
             return $b['minutes'] <=> $a['minutes'];
@@ -282,6 +296,31 @@ final class HoursPage
 
         $monthlySeries = self::prepareMonthlySeries($monthlyTotals, $monthlySeriesLimit);
         $weeklySeries = self::prepareWeeklySeries($weeklyTotals, $weeklySeriesLimit);
+        $weeklySeries = self::augmentWeeklySeriesWithExpectations($weeklySeries, $contractMinutesByMember, $aggregateWeeklyContractMinutes);
+
+        $weeklyAverageMinutes = 0;
+        $weeklyAverageWeeks = count($weeklySeries['all']);
+        $weeklyAverageMeta = '';
+        $weeklyExtraRecentMinutes = 0;
+
+        if ($weeklyAverageWeeks > 0) {
+            $sumWeeklyMinutes = 0;
+            foreach ($weeklySeries['all'] as $weekRow) {
+                $sumWeeklyMinutes += isset($weekRow['minutes']) ? (int) $weekRow['minutes'] : 0;
+                $weeklyExtraRecentMinutes += isset($weekRow['extra_minutes']) ? (int) $weekRow['extra_minutes'] : 0;
+            }
+
+            $weeklyAverageMinutes = (int) round($sumWeeklyMinutes / $weeklyAverageWeeks);
+            $weeklyAverageMeta = sprintf(
+                _n(
+                    'Moyenne calculée sur %d semaine récente',
+                    'Moyenne calculée sur %d semaines récentes',
+                    $weeklyAverageWeeks,
+                    'mj-member'
+                ),
+                $weeklyAverageWeeks
+            );
+        }
 
         $timeseries = array(
             'months' => $monthlySeries['all'],
@@ -289,6 +328,9 @@ final class HoursPage
             'months_by_member' => $monthlySeries['by_member'],
             'weeks_by_member' => $weeklySeries['by_member'],
         );
+
+        $weeklyAverageHuman = self::formatDuration($weeklyAverageMinutes);
+        $weeklyExtraRecentHuman = self::formatDuration($weeklyExtraRecentMinutes);
 
         $generatedTimestamp = current_time('timestamp');
 
@@ -303,6 +345,14 @@ final class HoursPage
                 'project_count' => count($projects),
                 'unassigned_minutes' => $unassignedMinutes,
                 'unassigned_human' => self::formatDuration($unassignedMinutes),
+                'weekly_average_minutes' => $weeklyAverageMinutes,
+                'weekly_average_human' => $weeklyAverageHuman,
+                'weekly_average_weeks' => $weeklyAverageWeeks,
+                'weekly_average_meta' => $weeklyAverageMeta,
+                'weekly_contract_minutes' => $aggregateWeeklyContractMinutes,
+                'weekly_contract_human' => self::formatDuration($aggregateWeeklyContractMinutes),
+                'weekly_extra_recent_minutes' => $weeklyExtraRecentMinutes,
+                'weekly_extra_recent_human' => $weeklyExtraRecentHuman,
             ),
             'timeseries' => $timeseries,
             'generated_at' => gmdate('c', $generatedTimestamp),
@@ -536,6 +586,53 @@ final class HoursPage
         }
 
         return array_values($series);
+    }
+
+    private static function augmentWeeklySeriesWithExpectations(array $seriesData, array $contractMinutesByMember, int $aggregateContractMinutes): array
+    {
+        $seriesData['all'] = self::applyWeeklyExpectationToSeries($seriesData['all'], $aggregateContractMinutes);
+
+        $decoratedByMember = array();
+        foreach ($seriesData['by_member'] as $memberId => $memberSeries) {
+            $expected = isset($contractMinutesByMember[$memberId]) ? (int) $contractMinutesByMember[$memberId] : 0;
+            $decoratedByMember[$memberId] = self::applyWeeklyExpectationToSeries($memberSeries, $expected);
+        }
+
+        $seriesData['by_member'] = $decoratedByMember;
+
+        return $seriesData;
+    }
+
+    private static function applyWeeklyExpectationToSeries(array $series, int $expectedMinutesPerWeek): array
+    {
+        $expectedMinutesPerWeek = max(0, $expectedMinutesPerWeek);
+
+        foreach ($series as &$item) {
+            $actual = isset($item['minutes']) ? max(0, (int) $item['minutes']) : 0;
+            $expected = $expectedMinutesPerWeek;
+            $required = $expected > 0 ? min($actual, $expected) : $actual;
+            $extra = $actual > $expected ? $actual - $expected : 0;
+            $deficit = ($expected > 0 && $actual < $expected) ? $expected - $actual : 0;
+            $difference = $actual - $expected;
+
+            $item['expected_minutes'] = $expected;
+            $item['expected_human'] = self::formatDuration($expected);
+            $item['required_minutes'] = $required;
+            $item['required_human'] = self::formatDuration($required);
+            $item['extra_minutes'] = $extra;
+            $item['extra_human'] = self::formatDuration($extra);
+            $item['deficit_minutes'] = $deficit;
+            $item['deficit_human'] = self::formatDuration($deficit);
+            $item['difference_minutes'] = $difference;
+            $item['difference_human'] = $difference === 0 ? '0 min' : sprintf(
+                '%s%s',
+                $difference > 0 ? '+' : '-',
+                self::formatDuration(abs($difference))
+            );
+        }
+        unset($item);
+
+        return $series;
     }
 
     private static function createWeekStartTimestamp(int $isoYear, int $isoWeek): ?int
@@ -872,6 +969,47 @@ final class HoursPage
         }
 
         return (int) round($delta / 60);
+    }
+
+    private static function calculateWeeklyContractMinutesFromSchedule(?string $workScheduleJson): int
+    {
+        if ($workScheduleJson === null || $workScheduleJson === '') {
+            return 0;
+        }
+
+        $decoded = json_decode($workScheduleJson, true);
+        if (!is_array($decoded)) {
+            return 0;
+        }
+
+        $total = 0;
+
+        foreach ($decoded as $slot) {
+            if (!is_array($slot)) {
+                continue;
+            }
+
+            $start = isset($slot['start']) ? (string) $slot['start'] : '';
+            $end = isset($slot['end']) ? (string) $slot['end'] : '';
+            if ($start === '' || $end === '') {
+                continue;
+            }
+
+            $duration = self::calculateDurationMinutesForSchedule($start, $end);
+            if ($duration <= 0) {
+                continue;
+            }
+
+            $breakMinutesRaw = isset($slot['break_minutes']) ? (int) $slot['break_minutes'] : 0;
+            $breakMinutes = max(0, min($duration, $breakMinutesRaw));
+            $netDuration = max(0, $duration - $breakMinutes);
+
+            if ($netDuration > 0) {
+                $total += $netDuration;
+            }
+        }
+
+        return max(0, $total);
     }
 
     public static function prepareCalendarMonth(int $memberId, ?string $monthKey = null): array
@@ -1390,7 +1528,7 @@ final class HoursPage
         global $wpdb;
         $table = MjMembers::getTableName(MjMembers::TABLE_NAME);
         $placeholders = implode(',', array_fill(0, count($memberIds), '%d'));
-        $sql = "SELECT id, first_name, last_name FROM {$table} WHERE id IN ({$placeholders})";
+        $sql = "SELECT id, first_name, last_name, work_schedule FROM {$table} WHERE id IN ({$placeholders})";
         $prepared = call_user_func_array(array($wpdb, 'prepare'), array_merge(array($sql), $memberIds));
         $rows = $wpdb->get_results($prepared);
 
@@ -1409,7 +1547,14 @@ final class HoursPage
                     $label = sprintf(__('Membre #%d', 'mj-member'), $id);
                 }
 
-                $labels[$id] = array('label' => $label);
+                $workSchedule = isset($row->work_schedule) ? (string) $row->work_schedule : '';
+                $weeklyContractMinutes = self::calculateWeeklyContractMinutesFromSchedule($workSchedule);
+
+                $labels[$id] = array(
+                    'label' => $label,
+                    'weekly_contract_minutes' => $weeklyContractMinutes,
+                    'weekly_contract_human' => self::formatDuration($weeklyContractMinutes),
+                );
             }
         }
 

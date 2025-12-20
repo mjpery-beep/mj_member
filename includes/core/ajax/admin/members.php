@@ -1,6 +1,7 @@
 <?php
 
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\Config;
 
 if (!defined('ABSPATH')) {
@@ -285,7 +286,7 @@ function mj_inline_edit_member_callback() {
                 $sanitized_email = sanitize_email($field_value);
 
                 if ($sanitized_email === '') {
-                    if ($raw_email === '' && $member->role === MjMembers::ROLE_JEUNE) {
+                    if ($raw_email === '' && MjRoles::isJeune($member->role)) {
                         $field_value = null;
                         break;
                     }
@@ -329,7 +330,7 @@ function mj_inline_edit_member_callback() {
                 if (!in_array($field_value, $allowed_roles, true)) {
                     wp_send_json_error(array('message' => 'Rôle invalide'));
                 }
-                if ($field_value !== MjMembers::ROLE_JEUNE && empty($member->email)) {
+                if ($field_value !== MjRoles::JEUNE && empty($member->email)) {
                     wp_send_json_error(array('message' => 'Ajoutez un email avant de changer le rôle.'));
                 }
                 break;

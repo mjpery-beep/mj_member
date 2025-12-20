@@ -1,0 +1,116 @@
+{% set deadline_label = sidebar.deadline_label|default('') %}
+{% set price_label = sidebar.price_label|default('') %}
+{% set age_label = sidebar.age_label|default('') %}
+{% set capacity_total = sidebar.capacity_total|default(0) %}
+{% set capacity_remaining = sidebar.capacity_remaining|default(null) %}
+{% set schedule_summary = sidebar.schedule_summary|default('') %}
+{% set display_label = sidebar.display_label|default('') %}
+{% set next_occurrence = sidebar.next_occurrence|default({}) %}
+{% set next_occurrence_label = sidebar.next_occurrence_label|default('') %}
+{% set has_multiple_occurrences = sidebar.has_multiple_occurrences|default(false) %}
+{% set occurrences = sidebar.occurrences|default([]) %}
+
+<section class="mj-event-page__card mj-event-page__details">
+
+    <dl class="mj-event-page__details-list">
+        {# Date / Prochaine date - Affichage enrichi #}
+        {% if next_occurrence.day_num %}
+            <div class="mj-event-page__detail mj-event-page__detail--date">
+                <dt class="mj-event-page__detail-label">{{ __('Prochaine date', 'mj-member') }}</dt>
+                <dd class="mj-event-page__detail-value">
+                    <div class="mj-event-page__next-date">
+                        <div class="mj-event-page__next-date-calendar">
+                            <span class="mj-event-page__next-date-day">{{ next_occurrence.day_name }}</span>
+                            <span class="mj-event-page__next-date-num">{{ next_occurrence.day_num }}</span>
+                            <span class="mj-event-page__next-date-month">{{ next_occurrence.month_name }}</span>
+                        </div>
+                        <div class="mj-event-page__next-date-info">
+                            <span class="mj-event-page__next-date-full">{{ next_occurrence.full_date }}</span>
+                            {% if next_occurrence.time_start %}
+                                <span class="mj-event-page__next-date-time">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"/>
+                                        <polyline points="12 6 12 12 16 14"/>
+                                    </svg>
+                                    {{ next_occurrence.time_start }}{% if next_occurrence.time_end %} - {{ next_occurrence.time_end }}{% endif %}
+                                </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </dd>
+            </div>
+        {% elseif display_label %}
+            <div class="mj-event-page__detail">
+                <dt class="mj-event-page__detail-label">{{ __('Date', 'mj-member') }}</dt>
+                <dd class="mj-event-page__detail-value">{{ display_label }}</dd>
+            </div>
+        {% endif %}
+
+        {# Date limite d'inscription #}
+        {% if deadline_label %}
+            <div class="mj-event-page__detail">
+                <dt class="mj-event-page__detail-label">{{ __('Inscriptions jusqu\'au', 'mj-member') }}</dt>
+                <dd class="mj-event-page__detail-value">{{ deadline_label }}</dd>
+            </div>
+        {% endif %}
+
+        {# Public / Âge #}
+        {% if age_label %}
+            <div class="mj-event-page__detail">
+                <dt class="mj-event-page__detail-label">{{ __('Public', 'mj-member') }}</dt>
+                <dd class="mj-event-page__detail-value">{{ age_label }}</dd>
+            </div>
+        {% endif %}
+
+        {# Tarif #}
+        {% if price_label %}
+            <div class="mj-event-page__detail">
+                <dt class="mj-event-page__detail-label">{{ __('Tarif', 'mj-member') }}</dt>
+                <dd class="mj-event-page__detail-value">{{ price_label }}</dd>
+            </div>
+        {% endif %}
+
+        {# Places #}
+        {% if capacity_total > 0 %}
+            <div class="mj-event-page__detail">
+                <dt class="mj-event-page__detail-label">{{ __('Places', 'mj-member') }}</dt>
+                <dd class="mj-event-page__detail-value">
+                    {% if capacity_remaining is not null %}
+                        {{ __('%d / %d disponibles', 'mj-member')|format(capacity_remaining, capacity_total) }}
+                    {% else %}
+                        {{ _n('%d place', '%d places', capacity_total, 'mj-member')|format(capacity_total) }}
+                    {% endif %}
+                </dd>
+            </div>
+        {% endif %}
+    </dl>
+
+    {# Mini calendrier des occurrences #}
+    {% if has_multiple_occurrences and occurrences|length > 0 %}
+        <div class="mj-event-page__occurrences" data-mj-event-occurrences>
+            <h4 class="mj-event-page__occurrences-title">{{ __('Dates', 'mj-member') }}</h4>
+            <ul class="mj-event-page__occurrences-list">
+                {% for occ in occurrences|slice(0, 6) %}
+                    {% set occ_classes = ['mj-event-page__occurrence'] %}
+                    {% if occ.is_past %}
+                        {% set occ_classes = occ_classes|merge(['is-past']) %}
+                    {% endif %}
+                    {% if occ.is_today %}
+                        {% set occ_classes = occ_classes|merge(['is-today']) %}
+                    {% endif %}
+                    
+                    <li class="{{ occ_classes|join(' ') }}">
+                        <span class="mj-event-page__occurrence-day">{{ occ.day_name }}</span>
+                        <span class="mj-event-page__occurrence-date">{{ occ.day_num }}</span>
+                        <span class="mj-event-page__occurrence-month">{{ occ.month_name }}</span>
+                    </li>
+                {% endfor %}
+            </ul>
+            {% if occurrences|length > 6 %}
+                <p class="mj-event-page__occurrences-more">
+                    {{ __('+ %d autres dates', 'mj-member')|format(occurrences|length - 6) }}
+                </p>
+            {% endif %}
+        </div>
+    {% endif %}
+</section>

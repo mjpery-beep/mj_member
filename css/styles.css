@@ -3138,24 +3138,6 @@ textarea.mj-contact-form__textarea {
     font-size: 0.82rem;
     color: rgba(153, 27, 27, 0.8);
 }
-.mj-member-event-single__photo-consent {
-    margin: 0.75rem 0 0;
-    display: inline-flex;
-    gap: 0.55rem;
-    align-items: flex-start;
-    font-size: 0.8rem;
-    line-height: 1.45;
-    color: rgba(71, 85, 105, 0.9);
-}
-.mj-member-event-single__photo-consent input[type="checkbox"] {
-    margin-top: 0.2rem;
-    flex-shrink: 0;
-}
-.mj-member-event-single__photo-consent-hint {
-    margin: 0.35rem 0 0;
-    font-size: 0.7rem;
-    color: rgba(100, 116, 139, 0.82);
-}
 @media (max-width: 960px) {
     .mj-event-photos-widget__upload-figure {
         grid-template-columns: minmax(0, 1fr);

@@ -1,6 +1,7 @@
 <?php
 
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\MjRoles;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -8,6 +9,9 @@ if (!defined('ABSPATH')) {
 
 /**
  * Ensure default roles have the custom capability used across the plugin.
+ * 
+ * Note: Les rôles ici sont des rôles WORDPRESS (pas MJ Member).
+ * Ils doivent correspondre aux slugs des rôles WP créés.
  */
 function mj_member_ensure_capabilities()
 {
@@ -15,12 +19,17 @@ function mj_member_ensure_capabilities()
         return;
     }
 
-    $roles = apply_filters('mj_member_capability_roles', array('administrator', 'editor'));
+    // Rôles WordPress qui auront accès à l'admin MJ Member
+    $roles = class_exists(MjRoles::class) 
+        ? MjRoles::getWordPressAdminRoles()
+        : apply_filters('mj_member_capability_roles', array('administrator', MjRoles::ANIMATEUR, MjRoles::COORDINATEUR));
+    
     $capability = Config::capability();
     $contactCapability = Config::contactCapability();
     $hoursCapability = Config::hoursCapability();
     $todosCapability = Config::todosCapability();
     $documentsCapability = Config::documentsCapability();
+    $allRoleNames = function_exists('wp_roles') && wp_roles() ? array_keys(wp_roles()->role_names) : array();
 
     foreach ($roles as $role_name) {
         $role = get_role($role_name);
@@ -32,28 +41,73 @@ function mj_member_ensure_capabilities()
         }
     }
 
+    // Ensure non-allowed roles do not keep the main capability
+    if ($capability !== '' && !empty($allRoleNames)) {
+        foreach ($allRoleNames as $role_name) {
+            if (in_array($role_name, $roles, true)) {
+                continue;
+            }
+            $role = get_role($role_name);
+            if ($role && $role->has_cap($capability)) {
+                $role->remove_cap($capability);
+            }
+        }
+    }
+
     if ($hoursCapability !== '') {
-        $hoursRoles = apply_filters('mj_member_hours_capability_roles', array('administrator', 'animateur', 'coordinateur', 'benevole'));
+        $hoursRoles = class_exists(MjRoles::class)
+            ? MjRoles::getWordPressHoursRoles()
+            : apply_filters('mj_member_hours_capability_roles', array('administrator', MjRoles::ANIMATEUR, MjRoles::COORDINATEUR));
         foreach ($hoursRoles as $role_name) {
             $role = get_role($role_name);
             if ($role && !$role->has_cap($hoursCapability)) {
                 $role->add_cap($hoursCapability);
             }
         }
+
+        // Remove hours capability from all other roles (e.g. jeune, benevole, subscriber)
+        if (!empty($allRoleNames)) {
+            foreach ($allRoleNames as $role_name) {
+                if (in_array($role_name, $hoursRoles, true)) {
+                    continue;
+                }
+                $role = get_role($role_name);
+                if ($role && $role->has_cap($hoursCapability)) {
+                    $role->remove_cap($hoursCapability);
+                }
+            }
+        }
     }
 
     if ($todosCapability !== '') {
-        $todoRoles = apply_filters('mj_member_todos_capability_roles', array('administrator', 'animateur', 'coordinateur', 'benevole'));
+        $todoRoles = class_exists(MjRoles::class)
+            ? MjRoles::getWordPressTodosRoles()
+            : apply_filters('mj_member_todos_capability_roles', array('administrator', MjRoles::ANIMATEUR, MjRoles::COORDINATEUR));
         foreach ($todoRoles as $role_name) {
             $role = get_role($role_name);
             if ($role && !$role->has_cap($todosCapability)) {
                 $role->add_cap($todosCapability);
             }
         }
+
+        // Remove todos capability from all other roles
+        if (!empty($allRoleNames)) {
+            foreach ($allRoleNames as $role_name) {
+                if (in_array($role_name, $todoRoles, true)) {
+                    continue;
+                }
+                $role = get_role($role_name);
+                if ($role && $role->has_cap($todosCapability)) {
+                    $role->remove_cap($todosCapability);
+                }
+            }
+        }
     }
 
     if ($documentsCapability !== '') {
-        $documentRoles = apply_filters('mj_member_documents_capability_roles', array('administrator', 'animateur'));
+        $documentRoles = class_exists(MjRoles::class)
+            ? MjRoles::getWordPressDocumentsRoles()
+            : apply_filters('mj_member_documents_capability_roles', array('administrator', MjRoles::ANIMATEUR));
         foreach ($documentRoles as $role_name) {
             $role = get_role($role_name);
             if ($role && !$role->has_cap($documentsCapability)) {
@@ -73,7 +127,9 @@ function mj_member_remove_capabilities()
         return;
     }
 
-    $roles = apply_filters('mj_member_capability_roles', array('administrator', 'editor'));
+    $roles = class_exists(MjRoles::class)
+        ? MjRoles::getWordPressAdminRoles()
+        : apply_filters('mj_member_capability_roles', array('administrator', MjRoles::ANIMATEUR, MjRoles::COORDINATEUR));
     $capability = Config::capability();
     $contactCapability = Config::contactCapability();
     $hoursCapability = Config::hoursCapability();
@@ -91,8 +147,21 @@ function mj_member_remove_capabilities()
     }
 
     if ($hoursCapability !== '') {
-        $hoursRoles = apply_filters('mj_member_hours_capability_roles', array('administrator', 'animateur', 'coordinateur', 'benevole'));
+        $hoursRoles = class_exists(MjRoles::class)
+            ? MjRoles::getWordPressHoursRoles()
+            : apply_filters('mj_member_hours_capability_roles', array('administrator', MjRoles::ANIMATEUR, MjRoles::COORDINATEUR));
         foreach ($hoursRoles as $role_name) {
+            $role = get_role($role_name);
+            if ($role && $role->has_cap($hoursCapability)) {
+                $role->remove_cap($hoursCapability);
+            }
+        }
+
+        $legacyHoursRoles = array(MjRoles::BENEVOLE);
+        foreach ($legacyHoursRoles as $role_name) {
+            if (in_array($role_name, $hoursRoles, true)) {
+                continue;
+            }
             $role = get_role($role_name);
             if ($role && $role->has_cap($hoursCapability)) {
                 $role->remove_cap($hoursCapability);
@@ -101,8 +170,21 @@ function mj_member_remove_capabilities()
     }
 
     if ($todosCapability !== '') {
-        $todoRoles = apply_filters('mj_member_todos_capability_roles', array('administrator', 'animateur', 'coordinateur', 'benevole'));
+        $todoRoles = class_exists(MjRoles::class)
+            ? MjRoles::getWordPressTodosRoles()
+            : apply_filters('mj_member_todos_capability_roles', array('administrator', MjRoles::ANIMATEUR, MjRoles::COORDINATEUR));
         foreach ($todoRoles as $role_name) {
+            $role = get_role($role_name);
+            if ($role && $role->has_cap($todosCapability)) {
+                $role->remove_cap($todosCapability);
+            }
+        }
+
+        $legacyTodoRoles = array(MjRoles::BENEVOLE);
+        foreach ($legacyTodoRoles as $role_name) {
+            if (in_array($role_name, $todoRoles, true)) {
+                continue;
+            }
             $role = get_role($role_name);
             if ($role && $role->has_cap($todosCapability)) {
                 $role->remove_cap($todosCapability);
@@ -111,7 +193,9 @@ function mj_member_remove_capabilities()
     }
 
     if ($documentsCapability !== '') {
-        $documentRoles = apply_filters('mj_member_documents_capability_roles', array('administrator', 'animateur'));
+        $documentRoles = class_exists(MjRoles::class)
+            ? MjRoles::getWordPressDocumentsRoles()
+            : apply_filters('mj_member_documents_capability_roles', array('administrator', MjRoles::ANIMATEUR));
         foreach ($documentRoles as $role_name) {
             $role = get_role($role_name);
             if ($role && $role->has_cap($documentsCapability)) {

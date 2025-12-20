@@ -1,0 +1,33 @@
+{% set page = view.page|default({}) %}
+{% set partials = view.partials|default({}) %}
+{% set assets = view.assets|default({}) %}
+
+<main class="{{ page.class|default('mj-event-page')|esc_attr }}" style="{{ page.style|default('')|esc_attr }}" data-event-id="{{ page.data_event_id|default(0) }}">
+    <div class="mj-event-page__wrapper">
+        {% include 'event-page/partials/hero.html.twig' with { hero: partials.hero|default({}) } only %}
+
+        <div class="mj-event-page__body">
+            <div class="mj-event-page__main">
+                {% include 'event-page/partials/description.html.twig' with { description: partials.description|default({}) } only %}
+
+                {% include 'event-page/partials/registration.html.twig' with {
+                    registration: partials.registration|default({}),
+                    sidebar: partials.sidebar|default({})
+                } only %}
+
+                {% include 'event-page/partials/location.html.twig' with { location: partials.location|default({}) } only %}
+
+                {% include 'event-page/partials/photos.html.twig' with { photos: partials.photos|default({}) } only %}
+            </div>
+
+            <aside class="mj-event-page__sidebar">
+                {% include 'event-page/partials/sidebar.html.twig' with { sidebar: partials.sidebar|default({}) } only %}
+
+                {% include 'event-page/partials/animateurs.html.twig' with {
+                    animateurs: partials.animateurs|default({}),
+                    assets: assets
+                } only %}
+            </aside>
+        </div>
+    </div>
+</main>

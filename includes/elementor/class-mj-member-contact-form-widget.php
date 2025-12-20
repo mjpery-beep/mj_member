@@ -27,7 +27,7 @@ class Mj_Member_Elementor_Contact_Form_Widget extends Widget_Base {
     }
 
     public function get_categories() {
-        return array('general');
+        return array('mj-member');
     }
 
     public function get_keywords() {
@@ -655,7 +655,7 @@ class Mj_Member_Elementor_Contact_Form_Widget extends Widget_Base {
                         'label' => $animateur_label,
                         'type' => MjContactMessages::TARGET_ANIMATEUR,
                         'reference' => 0,
-                        'role' => 'animateur',
+                        'role' => \Mj\Member\Classes\MjRoles::ANIMATEUR,
                         'role_label' => __('Équipe encadrante', 'mj-member'),
                     )),
                     mj_member_contact_format_recipient_option(array(

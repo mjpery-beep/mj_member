@@ -57,7 +57,6 @@ final class EventFormFactory
         $resolved = $this->resolveOptions($options);
 
         $builder = $this->factory->createBuilder(FormType::class, $data, array(
-            'csrf_protection' => false,
             'allow_extra_fields' => true,
         ));
 

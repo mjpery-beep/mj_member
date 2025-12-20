@@ -59,6 +59,7 @@ if (!function_exists('mj_member_todo_widget_localize')) {
         $config = array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('mj_member_todo_widget'),
+            'roles' => \Mj\Member\Classes\MjRoles::getJsConfig(),
             'hasAccess' => $hasAccess,
             'memberId' => $memberId,
             'actions' => array(

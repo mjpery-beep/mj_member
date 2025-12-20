@@ -3,6 +3,7 @@
 namespace Mj\Member\Classes;
 
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\Config;
 use WP_User;
 
@@ -72,18 +73,7 @@ class MjAccountLinks {
                 'query' => array('section' => 'animateur_events'),
                 'enabled' => true,
                 'page_id' => 0,
-                'visibility' => 'animateur',
-                'editable_label' => true,
-                'type' => 'standard',
-                'icon_id' => 0,
-            ),
-            'animateur_members' => array(
-                'label' => __('Gestion des membres', 'mj-member'),
-                'slug' => 'animateurs',
-                'query' => array('section' => 'animateur_members'),
-                'enabled' => true,
-                'page_id' => 0,
-                'visibility' => 'animateur',
+                'visibility' => MjRoles::ANIMATEUR,
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
@@ -184,6 +174,7 @@ class MjAccountLinks {
             $saved = array();
         }
 
+        $position = 0;
         foreach ($defaults as $key => $config) {
             $saved_row = isset($saved[$key]) && is_array($saved[$key]) ? $saved[$key] : array();
 
@@ -196,12 +187,41 @@ class MjAccountLinks {
                 }
             }
 
+            // Récupérer la page cible : d'abord par ID, sinon par slug (portabilité entre sites)
             $page_id = isset($saved_row['page_id']) ? (int) $saved_row['page_id'] : 0;
-            $defaults[$key]['page_id'] = $page_id > 0 ? $page_id : 0;
+            $page_slug = isset($saved_row['page_slug']) ? sanitize_title($saved_row['page_slug']) : '';
+
+            // Vérifier si la page existe par ID
+            if ($page_id > 0) {
+                $page_exists = get_post($page_id);
+                if (!$page_exists || $page_exists->post_type !== 'page') {
+                    $page_id = 0; // Page introuvable par ID
+                }
+            }
+
+            // Si pas de page trouvée par ID mais qu'on a un slug, chercher par slug
+            if ($page_id === 0 && $page_slug !== '') {
+                $page_by_slug = get_page_by_path($page_slug);
+                if ($page_by_slug && $page_by_slug->post_type === 'page') {
+                    $page_id = (int) $page_by_slug->ID;
+                }
+            }
+
+            $defaults[$key]['page_id'] = $page_id;
+            $defaults[$key]['page_slug'] = $page_slug;
 
             $icon_id = isset($saved_row['icon_id']) ? (int) $saved_row['icon_id'] : 0;
             $defaults[$key]['icon_id'] = $icon_id > 0 ? $icon_id : 0;
+
+            // Récupérer la position si sauvegardée, sinon utiliser l'ordre par défaut
+            $defaults[$key]['position'] = isset($saved_row['position']) ? (int) $saved_row['position'] : $position;
+            $position++;
         }
+
+        // Trier par position
+        uasort($defaults, static function ($a, $b) {
+            return ($a['position'] ?? 999) <=> ($b['position'] ?? 999);
+        });
 
         return $defaults;
     }
@@ -235,15 +255,9 @@ class MjAccountLinks {
             $targets[$key] = $entry;
         };
 
-        $animateur_role = 'animateur';
-        $coordinateur_role = 'coordinateur';
-        if (class_exists(MjMembers::class)) {
-            $animateur_role = sanitize_key((string) MjMembers::ROLE_ANIMATEUR);
-            $coordinateur_role = sanitize_key((string) MjMembers::ROLE_COORDINATEUR);
-        }
-
-        $isAnimateur = ($memberRole === $animateur_role);
-        $isCoordinateur = ($memberRole === $coordinateur_role);
+        // Utiliser MjRoles pour les vérifications
+        $isAnimateur = MjRoles::isAnimateur($memberRole);
+        $isCoordinateur = MjRoles::isCoordinateur($memberRole);
 
         if ($isAnimateur || $isCoordinateur) {
             $append(\MjContactMessages::TARGET_ANIMATEUR, $memberId);
@@ -323,19 +337,20 @@ class MjAccountLinks {
             $currentMemberId = (int) $currentMember->id;
         }
 
-        $animateurRole = class_exists(MjMembers::class) ? sanitize_key((string) MjMembers::ROLE_ANIMATEUR) : 'animateur';
-        $coordinateurRole = class_exists(MjMembers::class) ? sanitize_key((string) MjMembers::ROLE_COORDINATEUR) : 'coordinateur';
-        $benevoleRole = class_exists(MjMembers::class) ? sanitize_key((string) MjMembers::ROLE_BENEVOLE) : 'benevole';
-        $youthRole = class_exists(MjMembers::class) ? sanitize_key((string) MjMembers::ROLE_JEUNE) : 'jeune';
+        // Utiliser MjRoles pour les constantes de rôles
+        $animateurRole = MjRoles::ANIMATEUR;
+        $coordinateurRole = MjRoles::COORDINATEUR;
+        $benevoleRole = MjRoles::BENEVOLE;
+        $youthRole = MjRoles::JEUNE;
 
         if ($currentMember && isset($currentMember->role)) {
             $memberRole = sanitize_key((string) $currentMember->role);
-            $isAnimateur = ($memberRole === $animateurRole);
-            $isCoordinateur = ($memberRole === $coordinateurRole);
-            $isBenevole = ($memberRole === $benevoleRole);
+            $isAnimateur = MjRoles::isAnimateur($memberRole);
+            $isCoordinateur = MjRoles::isCoordinateur($memberRole);
+            $isBenevole = MjRoles::isBenevole($memberRole);
         }
 
-        $isYoungMember = ($memberRole === $youthRole);
+        $isYoungMember = MjRoles::isJeune($memberRole);
 
         $unreadExtraTargets = self::buildUnreadTargets($currentMemberId, $memberRole);
 
@@ -386,7 +401,8 @@ class MjAccountLinks {
             }
 
             $visibility = isset($config['visibility']) ? $config['visibility'] : 'all';
-            if ($visibility === 'animateur' && !$isAnimateur) {
+            // Vérifier la visibilité basée sur les rôles
+            if ($visibility === MjRoles::ANIMATEUR && !$isAnimateur) {
                 continue;
             }
 

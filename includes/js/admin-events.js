@@ -797,6 +797,35 @@
             refreshScheduleUI('frequency');
         });
 
+        // Toggle per-weekday time inputs visibility
+        function initWeekdayTimeToggles() {
+            $('.mj-weekday-row').each(function() {
+                var $row = $(this);
+                var $checkbox = $row.find('.mj-weekday-checkbox');
+                var $times = $row.find('.mj-weekday-times');
+                var isChecked = $checkbox.is(':checked');
+                $times.toggle(isChecked);
+                $row.css({
+                    'background': isChecked ? '#f0f7ff' : '#f9f9f9',
+                    'border-color': isChecked ? '#2271b1' : '#ddd'
+                });
+            });
+        }
+
+        $(document).on('change', '.mj-weekday-checkbox', function() {
+            var $row = $(this).closest('.mj-weekday-row');
+            var $times = $row.find('.mj-weekday-times');
+            var isChecked = this.checked;
+            $times.toggle(isChecked);
+            $row.css({
+                'background': isChecked ? '#f0f7ff' : '#f9f9f9',
+                'border-color': isChecked ? '#2271b1' : '#ddd'
+            });
+        });
+
+        // Initialize weekday toggles on page load
+        initWeekdayTimeToggles();
+
         var recurringInputs = recurringDateInput.add(recurringStartTimeInput).add(recurringEndTimeInput).add(recurringUntilInput);
         recurringInputs.on('change', function () {
             refreshScheduleUI('recurring');

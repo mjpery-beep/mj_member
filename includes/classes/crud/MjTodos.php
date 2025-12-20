@@ -2,6 +2,7 @@
 
 namespace Mj\Member\Classes\Crud;
 
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\MjTools;
 use Mj\Member\Classes\Value\MemberData;
 use WP_Error;
@@ -23,9 +24,9 @@ class MjTodos extends MjTools implements CrudRepositoryInterface
      * @var array<int,string>
      */
     private const ASSIGNABLE_ROLES = array(
-        MjMembers::ROLE_ANIMATEUR,
-        MjMembers::ROLE_COORDINATEUR,
-        MjMembers::ROLE_BENEVOLE,
+        MjRoles::ANIMATEUR,
+        MjRoles::COORDINATEUR,
+        MjRoles::BENEVOLE,
     );
 
     private static function table_name(): string

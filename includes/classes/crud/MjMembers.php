@@ -3,6 +3,7 @@
 namespace Mj\Member\Classes\Crud;
 
 use Mj\Member\Classes\MjTools;
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\Value\MemberData;
 use WP_Error;
 
@@ -17,11 +18,32 @@ if (class_exists(__NAMESPACE__ . '\\MjMembers')) {
 class MjMembers extends MjTools implements CrudRepositoryInterface {
 
     const TABLE_NAME = 'mj_members';
-    const ROLE_JEUNE = 'jeune';
-    const ROLE_ANIMATEUR = 'animateur';
-    const ROLE_COORDINATEUR = 'coordinateur';
-    const ROLE_BENEVOLE = 'benevole';
-    const ROLE_TUTEUR = 'tuteur';
+    
+    /**
+     * @deprecated Utiliser MjRoles::JEUNE à la place
+     */
+    const ROLE_JEUNE = MjRoles::JEUNE;
+    
+    /**
+     * @deprecated Utiliser MjRoles::ANIMATEUR à la place
+     */
+    const ROLE_ANIMATEUR = MjRoles::ANIMATEUR;
+    
+    /**
+     * @deprecated Utiliser MjRoles::COORDINATEUR à la place
+     */
+    const ROLE_COORDINATEUR = MjRoles::COORDINATEUR;
+    
+    /**
+     * @deprecated Utiliser MjRoles::BENEVOLE à la place
+     */
+    const ROLE_BENEVOLE = MjRoles::BENEVOLE;
+    
+    /**
+     * @deprecated Utiliser MjRoles::TUTEUR à la place
+     */
+    const ROLE_TUTEUR = MjRoles::TUTEUR;
+    
     const STATUS_ACTIVE = 'active';
     const STATUS_INACTIVE = 'inactive';
 
@@ -94,24 +116,18 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         );
     }
 
+    /**
+     * @deprecated Utiliser MjRoles::getAllRoles() à la place
+     */
     public static function getAllowedRoles() {
-        return array(
-            self::ROLE_JEUNE,
-            self::ROLE_ANIMATEUR,
-            self::ROLE_COORDINATEUR,
-            self::ROLE_BENEVOLE,
-            self::ROLE_TUTEUR,
-        );
+        return MjRoles::getAllRoles();
     }
 
+    /**
+     * @deprecated Utiliser MjRoles::getRoleLabels() à la place
+     */
     public static function getRoleLabels() {
-        return array(
-            self::ROLE_JEUNE => 'Jeune',
-            self::ROLE_TUTEUR => 'Tuteur',
-            self::ROLE_ANIMATEUR => 'Animateur',
-            self::ROLE_COORDINATEUR => 'Coordinateur',
-            self::ROLE_BENEVOLE => 'Bénévole',
-        );
+        return MjRoles::getRoleLabels();
     }
 
     /**
@@ -469,7 +485,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         $updates = array();
 
         $allowed_fields = array(
-            'first_name','last_name','nickname','email','phone','birth_date','role','guardian_id','is_autonomous','is_volunteer','requires_payment','address','city','postal_code','notes','description_courte','description_longue','status','date_last_payement','photo_id','photo_usage_consent','newsletter_opt_in','sms_opt_in','whatsapp_opt_in','notification_preferences','wp_user_id','card_access_key','anonymized_at'
+            'first_name','last_name','nickname','email','phone','birth_date','role','guardian_id','is_autonomous','is_volunteer','requires_payment','address','city','postal_code','notes','description_courte','description_longue','work_schedule','status','date_last_payement','photo_id','photo_usage_consent','newsletter_opt_in','sms_opt_in','whatsapp_opt_in','notification_preferences','wp_user_id','card_access_key','anonymized_at'
         );
 
         foreach ($data as $field => $value) {
@@ -546,6 +562,9 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
                     break;
                 case 'anonymized_at':
                     $updates[$field] = ($value === null || $value === '') ? null : self::sanitizeDateTime($value);
+                    break;
+                case 'work_schedule':
+                    $updates[$field] = self::sanitizeWorkSchedule($value);
                     break;
                 default:
                     $updates[$field] = $value;
@@ -699,13 +718,17 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
 
         $search = sanitize_text_field($search);
         if ($search === '') {
-            $rows = $wpdb->get_results("SELECT id, first_name, last_name, email FROM $table_name WHERE role = 'tuteur' ORDER BY last_name ASC, first_name ASC");
+            $rows = $wpdb->get_results($wpdb->prepare(
+                "SELECT id, first_name, last_name, email FROM $table_name WHERE role = %s ORDER BY last_name ASC, first_name ASC",
+                self::ROLE_TUTEUR
+            ));
             return self::hydrate_members(is_array($rows) ? $rows : array());
         }
 
         $like = '%' . $wpdb->esc_like($search) . '%';
         $rows = $wpdb->get_results($wpdb->prepare(
-            "SELECT id, first_name, last_name, email FROM $table_name WHERE role = 'tuteur' AND (first_name LIKE %s OR last_name LIKE %s OR email LIKE %s) ORDER BY last_name ASC, first_name ASC",
+            "SELECT id, first_name, last_name, email FROM $table_name WHERE role = %s AND (first_name LIKE %s OR last_name LIKE %s OR email LIKE %s) ORDER BY last_name ASC, first_name ASC",
+            self::ROLE_TUTEUR,
             $like,
             $like,
             $like
@@ -868,6 +891,62 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
 
         $user_id = intval($value);
         return $user_id > 0 ? $user_id : null;
+    }
+
+    /**
+     * Sanitize et valide les données d'emploi du temps contractuel.
+     * Format attendu: JSON array avec objets {day, start, end, break_minutes}
+     * @param mixed $value
+     * @return string|null JSON string ou null
+     */
+    private static function sanitizeWorkSchedule($value) {
+        if (empty($value)) {
+            return null;
+        }
+
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                return null;
+            }
+            $value = $decoded;
+        }
+
+        if (!is_array($value)) {
+            return null;
+        }
+
+        $valid_days = array('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday');
+        $sanitized = array();
+
+        foreach ($value as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            $day = isset($entry['day']) ? strtolower(trim($entry['day'])) : '';
+            if (!in_array($day, $valid_days, true)) {
+                continue;
+            }
+
+            $start = isset($entry['start']) ? sanitize_text_field($entry['start']) : '';
+            $end = isset($entry['end']) ? sanitize_text_field($entry['end']) : '';
+            $break_minutes = isset($entry['break_minutes']) ? absint($entry['break_minutes']) : 0;
+
+            // Validation format HH:MM
+            if (!preg_match('/^\d{1,2}:\d{2}$/', $start) || !preg_match('/^\d{1,2}:\d{2}$/', $end)) {
+                continue;
+            }
+
+            $sanitized[] = array(
+                'day' => $day,
+                'start' => $start,
+                'end' => $end,
+                'break_minutes' => $break_minutes,
+            );
+        }
+
+        return !empty($sanitized) ? wp_json_encode($sanitized) : null;
     }
 
     private static function getTableColumns() {

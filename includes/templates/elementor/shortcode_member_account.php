@@ -845,7 +845,7 @@ if (!function_exists('mj_member_render_account_component')) {
                                     ?>
                                     <article class="mj-account-child-card mj-account-child-card--<?php echo esc_attr($child_status); ?>">
                                         <div class="mj-account-child-card__header">
-                                            <h4 class="mj-account-child-card__title"><?php echo esc_html(isset($child['full_name']) ? (string) $child['full_name'] : __('Jeune', 'mj-member')); ?></h4>
+                                            <h4 class="mj-account-child-card__title"><?php echo esc_html(isset($child['full_name']) ? (string) $child['full_name'] : \Mj\Member\Classes\MjRoles::getRoleLabel(\Mj\Member\Classes\MjRoles::JEUNE)); ?></h4>
                                             <?php if ($child_label !== '') : ?>
                                                 <span class="mj-account-chip mj-account-chip--<?php echo esc_attr($child_status); ?>"><?php echo esc_html($child_label); ?></span>
                                             <?php endif; ?>

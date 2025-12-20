@@ -1,0 +1,82 @@
+{% set has_photos = photos.has_photos|default(false) %}
+{% set can_upload = photos.can_upload|default(false) %}
+{% set items = photos.items|default([]) %}
+{% set total = photos.total|default(0) %}
+{% set pending_count = photos.pending_count|default(0) %}
+
+{# Afficher la section si on a des photos OU si l'upload est possible #}
+{% if has_photos or can_upload %}
+<section class="mj-event-page__card mj-event-page__photos">
+    <div class="mj-event-page__photos-header">
+        <h2>{{ __('Souvenirs partagés', 'mj-member') }}</h2>
+        {% if total > 0 %}
+            <span class="mj-event-page__photos-count">
+                {{ _n('%d photo', '%d photos', total, 'mj-member')|format(total) }}
+            </span>
+        {% endif %}
+    </div>
+
+    {# Notice de photos en attente #}
+    {% if pending_count > 0 %}
+        <div class="mj-event-page__photos-pending" role="status">
+            <p>
+                {% if pending_count == 1 %}
+                    {{ __('Tu as une photo en attente de validation.', 'mj-member') }}
+                {% else %}
+                    {{ __('Tu as %d photos en attente de validation.', 'mj-member')|format(pending_count) }}
+                {% endif %}
+            </p>
+        </div>
+    {% endif %}
+
+    {# Grille de photos #}
+    {% if has_photos and items|length > 0 %}
+        <div class="mj-event-page__photos-grid">
+            {% for photo in items %}
+                {% set thumb = photo.thumb|default(photo.url|default('')) %}
+                {% set full = photo.full|default(photo.url|default('')) %}
+                {% set caption = photo.caption|default('') %}
+
+                {% if thumb %}
+                    <figure class="mj-event-page__photo">
+                        {% if full %}
+                            <a href="{{ full|esc_url }}" target="_blank" rel="noopener" class="mj-event-page__photo-link">
+                                <img 
+                                    src="{{ thumb|esc_url }}" 
+                                    alt="{{ caption|esc_attr }}" 
+                                    loading="lazy" 
+                                    decoding="async" 
+                                />
+                            </a>
+                        {% else %}
+                            <img 
+                                src="{{ thumb|esc_url }}" 
+                                alt="{{ caption|esc_attr }}" 
+                                loading="lazy" 
+                                decoding="async" 
+                            />
+                        {% endif %}
+                        {% if caption %}
+                            <figcaption class="mj-event-page__photo-caption">{{ caption }}</figcaption>
+                        {% endif %}
+                    </figure>
+                {% endif %}
+            {% endfor %}
+        </div>
+    {% elseif not has_photos %}
+        <p class="mj-event-page__photos-empty">
+            {{ __('Aucune photo partagée pour le moment.', 'mj-member') }}
+        </p>
+    {% endif %}
+
+    {# Bouton d'upload #}
+    {% if can_upload %}
+        <div class="mj-event-page__photos-upload" data-mj-event-photo-upload>
+            <button type="button" class="mj-event-page__btn mj-event-page__btn--secondary">
+                <span class="mj-event-page__btn-icon" aria-hidden="true">📷</span>
+                {{ __('Partager une photo', 'mj-member') }}
+            </button>
+        </div>
+    {% endif %}
+</section>
+{% endif %}

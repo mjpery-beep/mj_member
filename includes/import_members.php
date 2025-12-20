@@ -2,6 +2,7 @@
 
 use Mj\Member\Classes\Crud\MjMemberHours;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\Config;
 use Mj\Member\Core\Logger;
 
@@ -391,6 +392,18 @@ function mj_member_import_render_hours_report($report) {
 
     $fileName = isset($report['file_name']) ? (string) $report['file_name'] : '';
     $memberLabel = isset($report['member_label']) ? (string) $report['member_label'] : '';
+    $hasHeader = isset($report['has_header']) ? (bool) $report['has_header'] : true;
+    $delimiter = isset($report['delimiter']) ? (string) $report['delimiter'] : ',';
+    $columnsDetected = isset($report['columns_detected']) ? (int) $report['columns_detected'] : 0;
+
+    // Labels pour les délimiteurs
+    $delimiterLabels = array(
+        ',' => __('virgule (,)', 'mj-member'),
+        ';' => __('point-virgule (;)', 'mj-member'),
+        "\t" => __('tabulation', 'mj-member'),
+        '|' => __('pipe (|)', 'mj-member'),
+    );
+    $delimiterLabel = isset($delimiterLabels[$delimiter]) ? $delimiterLabels[$delimiter] : $delimiter;
     ?>
     <h2><?php esc_html_e('Résultat de l\'import des heures', 'mj-member'); ?></h2>
     <?php if ($memberLabel !== '') : ?>
@@ -399,20 +412,126 @@ function mj_member_import_render_hours_report($report) {
     <?php if ($fileName !== '') : ?>
         <p><strong><?php esc_html_e('Fichier traité :', 'mj-member'); ?></strong> <?php echo esc_html($fileName); ?></p>
     <?php endif; ?>
+
+    <h3><?php esc_html_e('Détails de l\'analyse', 'mj-member'); ?></h3>
+    <table class="widefat striped" style="max-width: 500px;">
+        <tbody>
+            <tr>
+                <th scope="row"><?php esc_html_e('Délimiteur détecté', 'mj-member'); ?></th>
+                <td><?php echo esc_html($delimiterLabel); ?></td>
+            </tr>
+            <tr>
+                <th scope="row"><?php esc_html_e('Colonnes détectées', 'mj-member'); ?></th>
+                <td><?php echo (int) $columnsDetected; ?></td>
+            </tr>
+            <tr>
+                <th scope="row"><?php esc_html_e('Format du fichier', 'mj-member'); ?></th>
+                <td>
+                    <?php if ($hasHeader) : ?>
+                        <?php esc_html_e('Avec ligne d\'en-tête', 'mj-member'); ?>
+                    <?php else : ?>
+                        <span style="color: #0073aa;"><?php esc_html_e('Sans en-tête (détection automatique)', 'mj-member'); ?></span>
+                    <?php endif; ?>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row"><?php esc_html_e('Mapping des colonnes', 'mj-member'); ?></th>
+                <td>
+                    <?php
+                    if (isset($report['mapping']) && is_array($report['mapping'])) {
+                        $mappingLabels = array(
+                            'date' => __('Date', 'mj-member'),
+                            'heure_debut' => __('Heure début', 'mj-member'),
+                            'heure_fin' => __('Heure fin', 'mj-member'),
+                            'intitule' => __('Intitulé', 'mj-member'),
+                            'projet' => __('Projet', 'mj-member'),
+                        );
+                        $parts = array();
+                        foreach ($report['mapping'] as $field => $index) {
+                            if (is_int($index) && !str_starts_with($field, '_debug')) {
+                                $label = isset($mappingLabels[$field]) ? $mappingLabels[$field] : $field;
+                                $parts[] = sprintf('%s → col.%d', $label, $index + 1);
+                            }
+                        }
+                        echo esc_html(implode(', ', $parts));
+                    }
+                    ?>
+                </td>
+            </tr>
+            <?php if (isset($report['mapping']['_debug_headers'])) : ?>
+            <tr>
+                <th scope="row"><?php esc_html_e('En-têtes brutes', 'mj-member'); ?></th>
+                <td><code><?php echo esc_html(implode(' | ', $report['mapping']['_debug_headers'])); ?></code></td>
+            </tr>
+            <?php endif; ?>
+            <?php if (isset($report['mapping']['_debug_normalized'])) : ?>
+            <tr>
+                <th scope="row"><?php esc_html_e('En-têtes normalisées', 'mj-member'); ?></th>
+                <td><code><?php echo esc_html(implode(' | ', $report['mapping']['_debug_normalized'])); ?></code></td>
+            </tr>
+            <?php endif; ?>
+        </tbody>
+    </table>
+
+    <h3><?php esc_html_e('Résultats', 'mj-member'); ?></h3>
     <ul>
         <li><?php printf(esc_html__('Lignes analysées : %d', 'mj-member'), isset($report['total']) ? (int) $report['total'] : 0); ?></li>
-        <li><?php printf(esc_html__('Encodages créés : %d', 'mj-member'), isset($report['created']) ? (int) $report['created'] : 0); ?></li>
-        <li><?php printf(esc_html__('Lignes ignorées : %d', 'mj-member'), isset($report['skipped']) ? (int) $report['skipped'] : 0); ?></li>
-        <li><?php printf(esc_html__('Erreurs : %d', 'mj-member'), isset($report['errors']) ? count((array) $report['errors']) : 0); ?></li>
+        <li>
+            <strong style="color: #46b450;">
+                <?php printf(esc_html__('Encodages créés : %d', 'mj-member'), isset($report['created']) ? (int) $report['created'] : 0); ?>
+            </strong>
+        </li>
+        <li><?php printf(esc_html__('Lignes ignorées (vides) : %d', 'mj-member'), isset($report['skipped']) ? (int) $report['skipped'] : 0); ?></li>
+        <li>
+            <?php if (!empty($report['errors'])) : ?>
+                <span style="color: #dc3232;">
+            <?php endif; ?>
+            <?php printf(esc_html__('Erreurs : %d', 'mj-member'), isset($report['errors']) ? count((array) $report['errors']) : 0); ?>
+            <?php if (!empty($report['errors'])) : ?>
+                </span>
+            <?php endif; ?>
+        </li>
     </ul>
 
     <?php if (!empty($report['errors'])) : ?>
         <h3><?php esc_html_e('Erreurs rencontrées', 'mj-member'); ?></h3>
-        <ol>
-            <?php foreach ((array) $report['errors'] as $error_line) : ?>
-                <li><?php echo esc_html($error_line); ?></li>
-            <?php endforeach; ?>
-        </ol>
+        <table class="widefat striped" style="margin-top: 10px;">
+            <thead>
+                <tr>
+                    <th style="width: 60px;"><?php esc_html_e('Ligne', 'mj-member'); ?></th>
+                    <th style="width: 200px;"><?php esc_html_e('Erreur', 'mj-member'); ?></th>
+                    <th><?php esc_html_e('Détails', 'mj-member'); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ((array) $report['errors'] as $error) : ?>
+                    <?php if (is_array($error)) : ?>
+                        <?php 
+                        $errorExtracted = isset($error['extracted']) ? (string) $error['extracted'] : '(non disponible)';
+                        $errorContent = isset($error['content']) ? (string) $error['content'] : '(non disponible)';
+                        ?>
+                        <tr>
+                            <td><strong><?php echo (int) $error['line']; ?></strong></td>
+                            <td style="color: #dc3232;"><?php echo esc_html($error['message']); ?></td>
+                            <td>
+                                <div style="margin-bottom: 5px;">
+                                    <strong><?php esc_html_e('Valeurs extraites :', 'mj-member'); ?></strong><br>
+                                    <code style="background: #e7f3ff; padding: 3px 6px; display: block; white-space: pre-wrap; word-break: break-all; color: #0073aa;"><?php echo esc_html($errorExtracted); ?></code>
+                                </div>
+                                <div>
+                                    <strong><?php esc_html_e('Colonnes brutes :', 'mj-member'); ?></strong><br>
+                                    <code style="background: #f0f0f0; padding: 3px 6px; display: block; white-space: pre-wrap; word-break: break-all; font-size: 11px;"><?php echo esc_html($errorContent); ?></code>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php else : ?>
+                        <tr>
+                            <td colspan="3"><?php echo esc_html($error); ?></td>
+                        </tr>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
     <?php endif; ?>
 
     <?php if (!empty($report['warnings'])) : ?>
@@ -433,18 +552,43 @@ function mj_member_import_hours_process_file($filePath, $memberId, $recordedBy, 
     }
 
     $delimiter = mj_member_import_detect_delimiter($filePath);
-    $handle = fopen($filePath, 'r');
+    
+    // Lire le contenu et convertir l'encodage si nécessaire (ANSI/Windows-1252 → UTF-8)
+    $content = file_get_contents($filePath);
+    if ($content === false) {
+        return new WP_Error('mj-import-hours-read-error', __('Impossible de lire le fichier importé.', 'mj-member'));
+    }
+    
+    // Détecter et convertir l'encodage
+    $detectedEncoding = mb_detect_encoding($content, array('UTF-8', 'Windows-1252', 'ISO-8859-1', 'ISO-8859-15'), true);
+    if ($detectedEncoding !== false && $detectedEncoding !== 'UTF-8') {
+        $content = mb_convert_encoding($content, 'UTF-8', $detectedEncoding);
+    } elseif ($detectedEncoding === false) {
+        // Fallback: essayer de convertir depuis Windows-1252 (ANSI)
+        $content = mb_convert_encoding($content, 'UTF-8', 'Windows-1252');
+    }
+    
+    // Créer un fichier temporaire avec le contenu converti
+    $tempFile = wp_tempnam('mj_import_hours_');
+    if (!$tempFile || file_put_contents($tempFile, $content) === false) {
+        return new WP_Error('mj-import-hours-temp-error', __('Impossible de créer le fichier temporaire.', 'mj-member'));
+    }
+    
+    $handle = fopen($tempFile, 'r');
     if (!$handle) {
+        @unlink($tempFile);
         return new WP_Error('mj-import-hours-open-error', __('Impossible d\'ouvrir le fichier importé.', 'mj-member'));
     }
 
-    $headerRow = fgetcsv($handle, 0, $delimiter);
-    if ($headerRow === false) {
+    $firstRow = fgetcsv($handle, 0, $delimiter);
+    if ($firstRow === false) {
         fclose($handle);
         return new WP_Error('mj-import-hours-empty-file', __('Le fichier ne contient aucune donnée.', 'mj-member'));
     }
 
-    $mapping = mj_member_import_hours_map_headers((array) $headerRow);
+    // Détecter si la première ligne contient des données ou des en-têtes
+    $isDataRow = mj_member_import_hours_is_data_row((array) $firstRow);
+    $mapping = mj_member_import_hours_map_headers((array) $firstRow, $isDataRow);
     if (is_wp_error($mapping)) {
         fclose($handle);
         return $mapping;
@@ -457,10 +601,26 @@ function mj_member_import_hours_process_file($filePath, $memberId, $recordedBy, 
         'skipped' => 0,
         'errors' => array(),
         'warnings' => array(),
+        'delimiter' => $delimiter,
+        'has_header' => !$isDataRow,
+        'columns_detected' => count($firstRow),
+        'mapping' => $mapping,
     );
 
-    $lineNumber = 1;
+    // Si la première ligne contient des données, on doit la traiter aussi
+    $rowsToProcess = array();
+    if ($isDataRow) {
+        $rowsToProcess[] = $firstRow;
+    }
+
+    // Lire les lignes suivantes
     while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
+        $rowsToProcess[] = $row;
+    }
+    fclose($handle);
+
+    $lineNumber = $isDataRow ? 0 : 1; // Ajuster le numéro de ligne pour les messages d'erreur
+    foreach ($rowsToProcess as $row) {
         $lineNumber++;
         if (mj_member_import_row_is_empty($row)) {
             $report['skipped']++;
@@ -469,34 +629,77 @@ function mj_member_import_hours_process_file($filePath, $memberId, $recordedBy, 
 
         $report['total']++;
 
+        // Construire le contenu brut de la ligne pour l'affichage des erreurs
+        // Afficher chaque colonne entre guillemets pour voir les valeurs vides
+        $rowContentParts = array();
+        foreach ($row as $i => $cell) {
+            $cellValue = trim((string) $cell);
+            // Afficher (vide) si la cellule est vide pour rendre visible
+            $displayValue = $cellValue !== '' ? $cellValue : '(vide)';
+            $rowContentParts[] = sprintf('[col%d]="%s"', $i + 1, $displayValue);
+        }
+        $rowContent = count($rowContentParts) > 0 
+            ? implode(' | ', $rowContentParts) 
+            : '(ligne vide - aucune colonne)';
+
         $dateRaw = mj_member_import_hours_get_value($row, $mapping['date']);
         $startRaw = mj_member_import_hours_get_value($row, $mapping['heure_debut']);
         $endRaw = mj_member_import_hours_get_value($row, $mapping['heure_fin']);
         $taskRaw = mj_member_import_hours_get_value($row, $mapping['intitule']);
-        $projectRaw = isset($mapping['projet']) ? mj_member_import_hours_get_value($row, $mapping['projet']) : '';
+        $projectRaw = isset($mapping['projet']) && is_int($mapping['projet']) ? mj_member_import_hours_get_value($row, $mapping['projet']) : '';
+
+        // Résumé des valeurs extraites pour le debug
+        $extractedValues = sprintf(
+            'date="%s" | début="%s" | fin="%s" | intitulé="%s" | projet="%s"',
+            $dateRaw !== '' ? $dateRaw : '(vide)',
+            $startRaw !== '' ? $startRaw : '(vide)',
+            $endRaw !== '' ? $endRaw : '(vide)',
+            $taskRaw !== '' ? $taskRaw : '(vide)',
+            $projectRaw !== '' ? $projectRaw : '(n/a)'
+        );
 
         $activityDate = mj_member_import_parse_date($dateRaw);
         if ($activityDate === null) {
-            $report['errors'][] = sprintf(__('Ligne %1$d : date invalide « %2$s ».', 'mj-member'), $lineNumber, $dateRaw);
+            $report['errors'][] = array(
+                'line' => $lineNumber,
+                'message' => sprintf(__('Date invalide « %s »', 'mj-member'), $dateRaw),
+                'content' => $rowContent,
+                'extracted' => $extractedValues,
+            );
             continue;
         }
 
         $startTime = mj_member_import_hours_parse_time($startRaw);
         $endTime = mj_member_import_hours_parse_time($endRaw);
         if ($startTime === '' || $endTime === '') {
-            $report['errors'][] = sprintf(__('Ligne %d : horaire incomplet.', 'mj-member'), $lineNumber);
+            $report['errors'][] = array(
+                'line' => $lineNumber,
+                'message' => sprintf(__('Horaire incomplet (début: « %1$s », fin: « %2$s »)', 'mj-member'), $startRaw, $endRaw),
+                'content' => $rowContent,
+                'extracted' => $extractedValues,
+            );
             continue;
         }
 
         $durationMinutes = mj_member_import_hours_calculate_duration_minutes($startTime, $endTime);
         if ($durationMinutes <= 0) {
-            $report['errors'][] = sprintf(__('Ligne %d : la durée calculée est invalide.', 'mj-member'), $lineNumber);
+            $report['errors'][] = array(
+                'line' => $lineNumber,
+                'message' => sprintf(__('Durée invalide (début: %1$s, fin: %2$s)', 'mj-member'), $startTime, $endTime),
+                'content' => $rowContent,
+                'extracted' => $extractedValues,
+            );
             continue;
         }
 
         $taskLabel = sanitize_text_field($taskRaw);
         if ($taskLabel === '') {
-            $report['errors'][] = sprintf(__('Ligne %d : intitulé manquant.', 'mj-member'), $lineNumber);
+            $report['errors'][] = array(
+                'line' => $lineNumber,
+                'message' => __('Intitulé manquant', 'mj-member'),
+                'content' => $rowContent,
+                'extracted' => $extractedValues,
+            );
             continue;
         }
 
@@ -520,19 +723,53 @@ function mj_member_import_hours_process_file($filePath, $memberId, $recordedBy, 
 
         $result = MjMemberHours::create($payload);
         if (is_wp_error($result)) {
-            $report['errors'][] = sprintf(__('Ligne %1$d : %2$s', 'mj-member'), $lineNumber, $result->get_error_message());
+            $report['errors'][] = array(
+                'line' => $lineNumber,
+                'message' => $result->get_error_message(),
+                'content' => $rowContent,
+            );
             continue;
         }
 
         $report['created']++;
     }
 
-    fclose($handle);
+    // Nettoyer le fichier temporaire
+    if (isset($tempFile) && file_exists($tempFile)) {
+        @unlink($tempFile);
+    }
 
     return $report;
 }
 
-function mj_member_import_hours_map_headers(array $headers) {
+/**
+ * Détecte si la première ligne du CSV ressemble à des données plutôt qu'à des en-têtes.
+ * Format attendu sans en-tête : date;heure_debut;heure_fin;intitule;projet
+ * Exemple : 02/10/2025;9h00;12h00;Installation wordpress;Siteweb
+ *
+ * @param array $row La première ligne du fichier CSV.
+ * @return bool True si la ligne ressemble à des données, false si c'est un en-tête.
+ */
+function mj_member_import_hours_is_data_row(array $row) {
+    if (count($row) < 4) {
+        return false;
+    }
+
+    $firstCell = isset($row[0]) ? trim((string) $row[0]) : '';
+    $secondCell = isset($row[1]) ? trim((string) $row[1]) : '';
+
+    // Vérifie si la première cellule ressemble à une date (DD/MM/YYYY, YYYY-MM-DD, etc.)
+    $looksLikeDate = preg_match('/^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}$/', $firstCell)
+        || preg_match('/^\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}$/', $firstCell);
+
+    // Vérifie si la deuxième cellule ressemble à une heure (9h00, 09:00, 9H30, etc.)
+    $looksLikeTime = preg_match('/^\d{1,2}[hH:\.]\d{0,2}$/', $secondCell)
+        || preg_match('/^\d{1,2}:\d{2}(:\d{2})?$/', $secondCell);
+
+    return $looksLikeDate && $looksLikeTime;
+}
+
+function mj_member_import_hours_map_headers(array $headers, $isDataRow = false) {
     $mapping = array(
         'date' => null,
         'heure_debut' => null,
@@ -540,6 +777,19 @@ function mj_member_import_hours_map_headers(array $headers) {
         'intitule' => null,
         'projet' => null,
     );
+
+    // Si la première ligne contient des données (pas d'en-têtes), utiliser un mapping positionnel
+    if ($isDataRow) {
+        // Format attendu : date;heure_debut;heure_fin;intitule;projet (optionnel)
+        $mapping['date'] = 0;
+        $mapping['heure_debut'] = 1;
+        $mapping['heure_fin'] = 2;
+        $mapping['intitule'] = 3;
+        if (count($headers) >= 5) {
+            $mapping['projet'] = 4;
+        }
+        return $mapping;
+    }
 
     $cleanHeaders = array();
     $normalizedHeaders = array();
@@ -549,12 +799,16 @@ function mj_member_import_hours_map_headers(array $headers) {
         $normalized = mj_member_import_hours_normalize_header($clean);
 
         $cleanHeaders[] = $clean !== '' ? $clean : __('(vide)', 'mj-member');
-        $normalizedHeaders[] = $normalized;
+        $normalizedHeaders[] = $normalized !== '' ? $normalized : __('(vide)', 'mj-member');
 
         if (array_key_exists($normalized, $mapping) && !is_int($mapping[$normalized])) {
             $mapping[$normalized] = (int) $index;
         }
     }
+
+    // Stocker les en-têtes pour le debug
+    $mapping['_debug_headers'] = $cleanHeaders;
+    $mapping['_debug_normalized'] = $normalizedHeaders;
 
     $missing = array();
     foreach (array('date', 'heure_debut', 'heure_fin', 'intitule') as $required) {
@@ -626,6 +880,7 @@ function mj_member_import_hours_normalize_header($header) {
         'heure_fin_evenement' => 'heure_fin',
 
         'intitule' => 'intitule',
+        'intitul_' => 'intitule',
         'intitule_' => 'intitule',
         'intitules' => 'intitule',
         'intitule_activite' => 'intitule',
@@ -637,6 +892,9 @@ function mj_member_import_hours_normalize_header($header) {
         'tache' => 'intitule',
         'task' => 'intitule',
         'task_label' => 'intitule',
+        'description' => 'intitule',
+        'activite' => 'intitule',
+        'activit_' => 'intitule',
 
         'projet' => 'projet',
         'project' => 'projet',
@@ -1117,7 +1375,7 @@ function mj_member_import_process($token, $duplicate_mode, $mapping_input, $avai
                 $guardian_email = sanitize_email($guardian_raw);
                 if ($guardian_email && is_email($guardian_email)) {
                     $guardian = MjMembers::getByEmail($guardian_email);
-                    if ($guardian && $guardian->role === MjMembers::ROLE_TUTEUR) {
+                    if ($guardian && MjRoles::isTuteur($guardian->role)) {
                         $guardian_id = (int) $guardian->id;
                         $payload['guardian_id'] = $guardian_id;
                     } else {
@@ -1130,10 +1388,10 @@ function mj_member_import_process($token, $duplicate_mode, $mapping_input, $avai
         }
 
         if (!isset($payload['role']) || $payload['role'] === '') {
-            $payload['role'] = MjMembers::ROLE_JEUNE;
+            $payload['role'] = MjRoles::JEUNE;
         }
 
-        if ($payload['role'] === MjMembers::ROLE_JEUNE) {
+        if (MjRoles::isJeune($payload['role'])) {
             if ($guardian_id) {
                 $payload['is_autonomous'] = 0;
             } else {
@@ -1357,16 +1615,16 @@ function mj_member_import_normalize_role($value, &$row_warnings, &$volunteer_fla
     $volunteer_flag = false;
     $normalized = strtolower(remove_accents(trim((string) $value)));
     $mapping = array(
-        'jeune' => MjMembers::ROLE_JEUNE,
-        'jeunes' => MjMembers::ROLE_JEUNE,
-        'tuteur' => MjMembers::ROLE_TUTEUR,
-        'tutrice' => MjMembers::ROLE_TUTEUR,
-        'parent' => MjMembers::ROLE_TUTEUR,
-        'parents' => MjMembers::ROLE_TUTEUR,
-        'animateur' => MjMembers::ROLE_ANIMATEUR,
-        'animatrice' => MjMembers::ROLE_ANIMATEUR,
-        'coordinateur' => MjMembers::ROLE_COORDINATEUR,
-        'coordinatrice' => MjMembers::ROLE_COORDINATEUR,
+        'jeune' => MjRoles::JEUNE,
+        'jeunes' => MjRoles::JEUNE,
+        'tuteur' => MjRoles::TUTEUR,
+        'tutrice' => MjRoles::TUTEUR,
+        'parent' => MjRoles::TUTEUR,
+        'parents' => MjRoles::TUTEUR,
+        'animateur' => MjRoles::ANIMATEUR,
+        'animatrice' => MjRoles::ANIMATEUR,
+        'coordinateur' => MjRoles::COORDINATEUR,
+        'coordinatrice' => MjRoles::COORDINATEUR,
     );
 
     if (isset($mapping[$normalized])) {
@@ -1376,11 +1634,11 @@ function mj_member_import_normalize_role($value, &$row_warnings, &$volunteer_fla
     if (in_array($normalized, array('benevole', 'benevoles'), true)) {
         $volunteer_flag = true;
         $row_warnings[] = __('Rôle "Bénévole" converti en option bénévole.', 'mj-member');
-        return MjMembers::ROLE_JEUNE;
+        return MjRoles::JEUNE;
     }
 
     $row_warnings[] = __('Role inconnu, remplace par "jeune".', 'mj-member');
-    return MjMembers::ROLE_JEUNE;
+    return MjRoles::JEUNE;
 }
 
 function mj_member_import_normalize_status($value, &$row_warnings) {

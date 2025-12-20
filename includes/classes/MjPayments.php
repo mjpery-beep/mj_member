@@ -4,7 +4,9 @@ namespace Mj\Member\Classes;
 
 use Mj\Member\Core\Logger;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\Crud\MjEventAttendance;
+use Mj\Member\Classes\Crud\MjEventRegistrations;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -49,7 +51,7 @@ class MjPayments extends MjTools {
         if (!empty($options['occurrence_list']) && is_array($options['occurrence_list'])) {
             foreach ($options['occurrence_list'] as $occurrence_entry) {
                 $normalized = '';
-                if (class_exists('MjEventAttendance')) {
+                if (class_exists(MjEventAttendance::class)) {
                     $normalized = MjEventAttendance::normalize_occurrence($occurrence_entry);
                 }
                 if ($normalized === '' && !is_scalar($occurrence_entry)) {
@@ -76,7 +78,7 @@ class MjPayments extends MjTools {
         if ($context_type === 'event') {
             if (!empty($options['event']) && is_object($options['event'])) {
                 $event = $options['event'];
-            } elseif ($event_id > 0 && class_exists('MjEvents')) {
+            } elseif ($event_id > 0 && class_exists(MjEvents::class)) {
                 $event = MjEvents::find($event_id);
             }
         }
@@ -157,10 +159,11 @@ class MjPayments extends MjTools {
                 'status' => 'pending',
                 'token' => $token,
                 'external_ref' => $checkout_session['id'],
+                'checkout_url' => $checkout_session['url'],
                 'context' => $context_type,
                 'created_at' => $now,
             ),
-            array('%d', '%d', '%d', '%d', '%f', '%s', '%s', '%s', '%s')
+            array('%d', '%d', '%d', '%d', '%f', '%s', '%s', '%s', '%s', '%s')
         );
 
         $payment_id = (int) $wpdb->insert_id;
@@ -427,6 +430,60 @@ class MjPayments extends MjTools {
         $qr_text = rawurlencode($url);
         return "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={$qr_text}&format=png&ecc=M&margin=0";
     }
+
+    /**
+     * Annuler tous les paiements en attente pour une inscription donnée.
+     * Utilisé lors de la modification d'inscription quand le prix change.
+     * 
+     * @param int $registration_id L'ID de l'inscription
+     * @return int Nombre de paiements annulés
+     */
+    public static function cancel_pending_payments_for_registration($registration_id) {
+        global $wpdb;
+        
+        $registration_id = (int) $registration_id;
+        if ($registration_id <= 0) {
+            return 0;
+        }
+        
+        $table = $wpdb->prefix . 'mj_payments';
+        
+        // Mettre à jour les paiements en 'pending' vers 'cancelled'
+        $updated = $wpdb->update(
+            $table,
+            array('status' => 'cancelled'),
+            array(
+                'registration_id' => $registration_id,
+                'status' => 'pending',
+            ),
+            array('%s'),
+            array('%d', '%s')
+        );
+        
+        return $updated !== false ? $updated : 0;
+    }
+
+    /**
+     * Récupérer le paiement en attente pour une inscription donnée.
+     * 
+     * @param int $registration_id L'ID de l'inscription
+     * @return object|null Le paiement en attente ou null
+     */
+    public static function get_pending_payment_for_registration($registration_id) {
+        global $wpdb;
+        
+        $registration_id = (int) $registration_id;
+        if ($registration_id <= 0) {
+            return null;
+        }
+        
+        $table = $wpdb->prefix . 'mj_payments';
+        
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table} WHERE registration_id = %d AND status = 'pending' ORDER BY id DESC LIMIT 1",
+            $registration_id
+        ));
+    }
     
     /**
      * Créer un paiement avec enregistrement local (ancienne méthode - QR code simple)
@@ -596,7 +653,7 @@ class MjPayments extends MjTools {
         $members_table = $wpdb->prefix . 'mj_members';
         $wpdb->update($members_table, array('date_last_payement' => $now, 'status' => 'active'), array('id' => intval($payment->member_id)), array('%s','%s'), array('%d'));
 
-        if (class_exists('MjMembers') && class_exists('MjMail')) {
+        if (class_exists(MjMembers::class) && class_exists('MjMail')) {
             $member = MjMembers::getById((int) $payment->member_id);
             if ($member) {
                 $context = array(
@@ -752,7 +809,7 @@ class MjPayments extends MjTools {
             'email' => '',
         );
 
-        if ($member_data['id'] > 0 && class_exists('MjMembers')) {
+        if ($member_data['id'] > 0 && class_exists(MjMembers::class)) {
             $member_obj = MjMembers::getById($member_data['id']);
             if ($member_obj) {
                 $member_data['name'] = self::format_member_name($member_obj);
@@ -765,7 +822,7 @@ class MjPayments extends MjTools {
         }
 
         $payer_data = null;
-        if (!empty($payment->payer_id) && class_exists('MjMembers')) {
+        if (!empty($payment->payer_id) && class_exists(MjMembers::class)) {
             $payer_obj = MjMembers::getById((int) $payment->payer_id);
             if ($payer_obj) {
                 $payer_email = isset($payer_obj->email) ? sanitize_email($payer_obj->email) : '';
@@ -778,7 +835,7 @@ class MjPayments extends MjTools {
         }
 
         $event_data = null;
-        if (!empty($payment->event_id) && class_exists('MjEvents')) {
+        if (!empty($payment->event_id) && class_exists(MjEvents::class)) {
             $event_obj = MjEvents::find((int) $payment->event_id);
             if ($event_obj) {
                 $event_start_ts = self::normalize_datetime_value(isset($event_obj->date_debut) ? $event_obj->date_debut : null);
@@ -813,12 +870,12 @@ class MjPayments extends MjTools {
         }
 
         $registration_data = null;
-        if (!empty($payment->registration_id) && class_exists('MjEventRegistrations')) {
+        if (!empty($payment->registration_id) && class_exists(MjEventRegistrations::class)) {
             $registration_obj = MjEventRegistrations::get((int) $payment->registration_id);
             if ($registration_obj) {
                 $status_key = isset($registration_obj->statut) ? sanitize_key($registration_obj->statut) : '';
                 $status_label = '';
-                if (method_exists('MjEventRegistrations', 'get_status_labels')) {
+                if (method_exists(MjEventRegistrations::class, 'get_status_labels')) {
                     $labels = MjEventRegistrations::get_status_labels();
                     if (isset($labels[$status_key])) {
                         $status_label = sanitize_text_field($labels[$status_key]);

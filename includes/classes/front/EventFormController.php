@@ -8,6 +8,7 @@ use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Forms\EventFormDataMapper;
 use Mj\Member\Classes\Forms\EventFormFactory;
 use Mj\Member\Classes\Forms\EventFormOptionsBuilder;
+use Mj\Member\Classes\MjRoles;
 use Symfony\Component\HttpFoundation\Request;
 
 if (!defined('ABSPATH')) {
@@ -30,7 +31,7 @@ final class EventFormController
             $locations = array();
         }
 
-        $animateurs = MjMembers::getAll(0, 0, 'last_name', 'ASC', '', array('role' => MjMembers::ROLE_ANIMATEUR));
+        $animateurs = MjMembers::getAll(0, 0, 'last_name', 'ASC', '', array('role' => MjRoles::ANIMATEUR));
         if (!is_array($animateurs)) {
             $animateurs = array();
         }

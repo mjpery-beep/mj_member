@@ -697,6 +697,69 @@ if (!function_exists('mj_member_ajax_register_event')) {
                     $update_messages[] = __('Inscription mise à jour.', 'mj-member');
                 }
 
+                // Gestion du paiement si les occurrences ont changé et qu'un paiement est requis
+                $payment_payload_response = null;
+                $event_price = isset($event->prix) ? (float) $event->prix : 0.0;
+                $payment_required = $event_price > 0;
+
+                if ($assignments_updated && $payment_required && class_exists('MjPayments')) {
+                    // Calculer l'ancien et le nouveau montant
+                    $old_occurrence_count = count($current_occurrences);
+                    $new_occurrence_count = count($desired_occurrences);
+                    
+                    // Si mode 'all', on compte 1 occurrence
+                    if ($current_mode !== 'custom') {
+                        $old_occurrence_count = 1;
+                    }
+                    if ($desired_assignments['mode'] !== 'custom') {
+                        $new_occurrence_count = 1;
+                    }
+                    
+                    $old_amount = round($event_price * max(1, $old_occurrence_count), 2);
+                    $new_amount = round($event_price * max(1, $new_occurrence_count), 2);
+                    
+                    // Vérifier s'il existe un paiement en attente
+                    $existing_pending_payment = MjPayments::get_pending_payment_for_registration((int) $existing_registration->id);
+                    
+                    // Si le montant a changé ou s'il n'y a pas de paiement en attente
+                    if ($old_amount !== $new_amount || !$existing_pending_payment) {
+                        // Annuler les anciens paiements en attente
+                        MjPayments::cancel_pending_payments_for_registration((int) $existing_registration->id);
+                        
+                        // Créer un nouveau paiement si montant > 0
+                        if ($new_amount > 0) {
+                            $occurrence_list = !empty($desired_occurrences) ? array_values($desired_occurrences) : array();
+                            $occurrence_mode = $desired_assignments['mode'];
+                            
+                            $new_payment = MjPayments::create_stripe_payment(
+                                $member_id,
+                                $event_price,
+                                array(
+                                    'context' => 'event',
+                                    'event_id' => (int) $event->id,
+                                    'registration_id' => (int) $existing_registration->id,
+                                    'payer_id' => (!empty($current_member->id) ? (int) $current_member->id : 0),
+                                    'event' => $event,
+                                    'occurrence_mode' => $occurrence_mode,
+                                    'occurrence_count' => $new_occurrence_count,
+                                    'occurrence_list' => $occurrence_list,
+                                )
+                            );
+                            
+                            if ($new_payment && !empty($new_payment['checkout_url'])) {
+                                $payment_payload_response = array(
+                                    'checkout_url' => $new_payment['checkout_url'],
+                                    'qr_url' => isset($new_payment['qr_url']) ? $new_payment['qr_url'] : '',
+                                    'amount' => isset($new_payment['amount_label']) ? $new_payment['amount_label'] : $new_payment['amount'],
+                                    'occurrence_mode' => $occurrence_mode,
+                                    'occurrence_count' => $new_occurrence_count,
+                                );
+                                $update_messages[] = sprintf(__('Nouveau montant : %s €', 'mj-member'), $new_payment['amount_label']);
+                            }
+                        }
+                    }
+                }
+
                 $response_payload = array(
                     'message' => implode(' ', $update_messages),
                     'registration_id' => (int) $existing_registration->id,
@@ -707,6 +770,12 @@ if (!function_exists('mj_member_ajax_register_event')) {
                         'note' => $note_updated,
                     ),
                 );
+
+                // Ajouter les infos de paiement si disponibles
+                if ($payment_payload_response) {
+                    $response_payload['payment_required'] = true;
+                    $response_payload['payment'] = $payment_payload_response;
+                }
 
                 $response_payload = mj_member_normalize_json_payload($response_payload);
 

@@ -83,6 +83,9 @@
 
         this.maxLengths = runtime && runtime.maxLengths && typeof runtime.maxLengths === 'object' ? runtime.maxLengths : {};
 
+        // Charger les constantes de rôles depuis la config PHP
+        this.roles = runtime && runtime.roles && typeof runtime.roles === 'object' ? runtime.roles : {};
+
         this.viewer = this.normalizeMember(runtime.member || {});
         if (!this.viewer.id && typeof runtime.memberId === 'number') {
             this.viewer.id = runtime.memberId;
@@ -201,7 +204,10 @@
             return false;
         }
         var role = normalizeRole(this.viewer.role);
-        return role === 'animateur' || role === 'coordinateur';
+        // Utiliser les constantes de rôles de la config PHP
+        var animateur = this.roles && this.roles.ANIMATEUR ? normalizeRole(this.roles.ANIMATEUR) : 'animateur';
+        var coordinateur = this.roles && this.roles.COORDINATEUR ? normalizeRole(this.roles.COORDINATEUR) : 'coordinateur';
+        return role === animateur || role === coordinateur;
     };
 
     IdeaBox.prototype.formatCounter = function (current, max) {

@@ -49,6 +49,7 @@ final class Bootstrap
         'includes/todos.php',
         'includes/core/ajax/front/todos.php',
         'includes/core/ajax/front/events.php',
+        'includes/core/ajax/front/EventsManagerHandlers.php',
         'includes/documents.php',
         'includes/idea_box.php',
         'includes/todos_admin.php',
@@ -61,6 +62,7 @@ final class Bootstrap
         'includes/core/ajax/admin/emails.php',
         'includes/core/ajax/admin/hours.php',
         'includes/core/ajax/admin/todos.php',
+        'includes/core/ajax/admin/registration-manager.php',
     );
 
     /** @var bool */

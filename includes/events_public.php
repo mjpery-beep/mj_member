@@ -1,6 +1,7 @@
 <?php
 
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\MjRoles;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -58,20 +59,22 @@ if (!function_exists('mj_member_normalize_json_payload')) {
                 $member = mj_member_get_current_member();
             }
 
-            $allowed_roles = array('coordinateur', 'animateur', 'benevole');
-
-            if (class_exists('MjMembers')) {
-                $allowed_roles = array(
-                    sanitize_key((string) MjMembers::ROLE_COORDINATEUR),
-                    sanitize_key((string) MjMembers::ROLE_ANIMATEUR),
-                    sanitize_key((string) MjMembers::ROLE_BENEVOLE),
-                );
+            // Utiliser MjRoles si disponible, sinon fallback
+            if (class_exists('Mj\\Member\\Classes\\MjRoles')) {
+                $allowed_roles = \Mj\Member\Classes\MjRoles::getInternalEventViewerRoles();
             } elseif (class_exists('Mj\\Member\\Classes\\Crud\\MjMembers')) {
                 $mj_members_class = 'Mj\\Member\\Classes\\Crud\\MjMembers';
                 $allowed_roles = array(
                     sanitize_key((string) $mj_members_class::ROLE_COORDINATEUR),
                     sanitize_key((string) $mj_members_class::ROLE_ANIMATEUR),
                     sanitize_key((string) $mj_members_class::ROLE_BENEVOLE),
+                );
+            } else {
+                // Fallback avec constantes MjRoles directes
+                $allowed_roles = array(
+                    \Mj\Member\Classes\MjRoles::COORDINATEUR,
+                    \Mj\Member\Classes\MjRoles::ANIMATEUR,
+                    \Mj\Member\Classes\MjRoles::BENEVOLE,
                 );
             }
 
@@ -900,7 +903,7 @@ if (!function_exists('mj_member_build_event_registration_context')) {
                 $eligible = true;
                 $ineligible_reasons = array();
 
-                if (!$allow_guardian_registration && defined('MjMembers::ROLE_TUTEUR') && $participant_role === MjMembers::ROLE_TUTEUR) {
+                if (!$allow_guardian_registration && MjRoles::isTuteur($participant_role)) {
                     $eligible = false;
                     $ineligible_reasons[] = __('Rôle tuteur non autorisé pour cet événement.', 'mj-member');
                 }
@@ -1305,16 +1308,17 @@ if (!function_exists('mj_member_prepare_event_occurrences_preview')) {
 
 if (!function_exists('mj_member_register_event_routes')) {
     function mj_member_register_event_routes() {
-        add_rewrite_tag('%mj_event_slug%', '([^&]+)');
-        add_rewrite_rule('date/([^/]+)/?$', 'index.php?mj_event_slug=$matches[1]', 'top');
+        // Route pour EventPage : /evenement/{slug}
+        add_rewrite_tag('%mj_event_page_slug%', '([^&]+)');
+        add_rewrite_rule('evenement/([^/]+)/?$', 'index.php?mj_event_page_slug=$matches[1]', 'top');
     }
     add_action('init', 'mj_member_register_event_routes', 12);
 }
 
 if (!function_exists('mj_member_event_query_vars')) {
     function mj_member_event_query_vars($vars) {
-        if (!in_array('mj_event_slug', $vars, true)) {
-            $vars[] = 'mj_event_slug';
+        if (!in_array('mj_event_page_slug', $vars, true)) {
+            $vars[] = 'mj_event_page_slug';
         }
 
         return $vars;
@@ -2817,7 +2821,7 @@ if (!function_exists('mj_member_prepare_event_page_context')) {
                     $last_name = isset($animateur_row->last_name) ? sanitize_text_field($animateur_row->last_name) : '';
                     $full_name = trim($first_name . ' ' . $last_name);
                     if ($full_name === '') {
-                        $full_name = $member_id > 0 ? sprintf(__('Membre #%d', 'mj-member'), $member_id) : __('Animateur', 'mj-member');
+                        $full_name = $member_id > 0 ? sprintf(__('Membre #%d', 'mj-member'), $member_id) : \Mj\Member\Classes\MjRoles::getRoleLabel(\Mj\Member\Classes\MjRoles::ANIMATEUR);
                     }
 
                     $role_key = isset($animateur_row->role) ? sanitize_key($animateur_row->role) : '';
@@ -2928,33 +2932,87 @@ if (!function_exists('mj_member_prepare_event_page_context')) {
     }
 }
 
-if (!function_exists('mj_member_event_template_include')) {
-    function mj_member_event_template_include($template) {
-        $slug = get_query_var('mj_event_slug');
+// -----------------------------------------------------------------------------
+// EventPage (route /evenement/{slug})
+// -----------------------------------------------------------------------------
+
+// Pré-charge l'ID de l'événement pour la barre admin (s'exécute avant admin_bar_menu)
+if (!function_exists('mj_member_event_page_preload_for_admin_bar')) {
+    function mj_member_event_page_preload_for_admin_bar() {
+        $slug = get_query_var('mj_event_page_slug');
+        if ($slug === '' || $slug === null) {
+            return;
+        }
+
+        // Charge l'événement pour avoir l'ID disponible pour la barre admin
+        $event = \Mj\Member\Classes\Crud\MjEvents::find_by_slug($slug);
+        if ($event && isset($event->id)) {
+            $GLOBALS['mj_event_page_current'] = array(
+                'id' => (int) $event->id,
+                'title' => isset($event->title) ? $event->title : '',
+            );
+        }
+    }
+    add_action('template_redirect', 'mj_member_event_page_preload_for_admin_bar', 5);
+}
+
+if (!function_exists('mj_member_event_page_template_include')) {
+    /**
+     * Filtre template_include pour la route /evenement/{slug}.
+     * Charge EventPageController et renvoie le template associé.
+     */
+    function mj_member_event_page_template_include($template) {
+        $slug = get_query_var('mj_event_page_slug');
         if ($slug === '' || $slug === null) {
             return $template;
         }
 
-        $context = mj_member_prepare_event_page_context($slug);
-        if (!$context) {
+        // Charge le controller et exécute la logique métier
+        $controller_file = Config::path() . 'includes/classes/front/EventPageController.php';
+        if (!file_exists($controller_file)) {
+            return $template;
+        }
+        require_once $controller_file;
+
+        // Récupère l'événement par slug (méthode statique)
+        $event = \Mj\Member\Classes\Crud\MjEvents::find_by_slug($slug);
+
+        if (!$event) {
+            // Événement introuvable : 404
             global $wp_query;
             $wp_query->set_404();
             status_header(404);
-            $fallback = get_404_template();
-            return $fallback ? $fallback : $template;
+            nocache_headers();
+            return get_404_template();
         }
 
-        $GLOBALS['mj_member_event_context'] = $context;
+        // Prépare le contexte pour le controller
+        $context = array(
+            'event_id' => (int) $event->id,
+            'event' => $event,
+            'slug' => $slug,
+        );
 
-        $theme_template = locate_template(array('mj-member/event-single.php'));
-        if (!empty($theme_template)) {
-            return $theme_template;
+        // Le controller expose le payload dans une globale puis renvoie le template
+        $controller = new \Mj\Member\Classes\Front\EventPageController($context);
+        $result = $controller->build();
+
+        if ($result === false) {
+            // Erreur lors de la construction
+            global $wp_query;
+            $wp_query->set_404();
+            status_header(404);
+            nocache_headers();
+            return get_404_template();
         }
 
-        return Config::path() . 'templates/event-single.php';
+        // Stocke le payload pour le template
+        $GLOBALS['mj_event_page_payload'] = $result;
+
+        return Config::path() . 'includes/templates/front/event-page/context.php';
     }
 
-    add_filter('template_include', 'mj_member_event_template_include', 99);
+    add_filter('template_include', 'mj_member_event_page_template_include', 98);
 }
 
 if (!function_exists('mj_member_event_admin_bar_edit_link')) {
@@ -2967,26 +3025,23 @@ if (!function_exists('mj_member_event_admin_bar_edit_link')) {
             return;
         }
 
-        $context = isset($GLOBALS['mj_member_event_context']) && is_array($GLOBALS['mj_member_event_context'])
-            ? $GLOBALS['mj_member_event_context']
-            : null;
+        // Cherche l'ID de l'événement depuis les différentes sources possibles
+        $event_id = 0;
+        $event_title = '';
 
-        if (!$context) {
-            $slug = get_query_var('mj_event_slug');
-            if ($slug !== '' && $slug !== null) {
-                $context = mj_member_prepare_event_page_context($slug);
+        // Source 1: pré-chargé par template_redirect (mj_event_page_current)
+        if (isset($GLOBALS['mj_event_page_current']) && is_array($GLOBALS['mj_event_page_current'])) {
+            $event_id = isset($GLOBALS['mj_event_page_current']['id']) ? (int) $GLOBALS['mj_event_page_current']['id'] : 0;
+            $event_title = isset($GLOBALS['mj_event_page_current']['title']) ? wp_strip_all_tags($GLOBALS['mj_event_page_current']['title']) : '';
+        }
+
+        // Source 2: EventPageController payload (mj_event_page_payload)
+        if ($event_id <= 0 && isset($GLOBALS['mj_event_page_payload']) && is_array($GLOBALS['mj_event_page_payload'])) {
+            $payload = $GLOBALS['mj_event_page_payload'];
+            if (isset($payload['event']['id'])) {
+                $event_id = (int) $payload['event']['id'];
+                $event_title = isset($payload['event']['title']) ? wp_strip_all_tags($payload['event']['title']) : '';
             }
-        }
-
-        if (!$context || !is_array($context)) {
-            return;
-        }
-
-        $event = isset($context['event']) && is_array($context['event']) ? $context['event'] : array();
-        $event_id = isset($event['id']) ? (int) $event['id'] : 0;
-
-        if ($event_id <= 0 && isset($context['record']) && is_object($context['record']) && isset($context['record']->id)) {
-            $event_id = (int) $context['record']->id;
         }
 
         if ($event_id <= 0) {
@@ -3002,7 +3057,6 @@ if (!function_exists('mj_member_event_admin_bar_edit_link')) {
             admin_url('admin.php')
         );
 
-        $event_title = isset($event['title']) ? wp_strip_all_tags($event['title']) : '';
         $link_label = $event_title !== ''
             ? sprintf(__('Modifier « %s »', 'mj-member'), $event_title)
             : __('Modifier cet événement', 'mj-member');

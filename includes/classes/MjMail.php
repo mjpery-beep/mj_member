@@ -394,7 +394,7 @@ use Mj\Member\Classes\Crud\MjMembers;
                     $child_name = sanitize_text_field($child_entry['name']);
                 }
                 if ($child_name === '') {
-                    $child_name = __('Jeune', 'mj-member');
+                    $child_name = \Mj\Member\Classes\MjRoles::getRoleLabel(\Mj\Member\Classes\MjRoles::JEUNE);
                 }
 
                 $amount_numeric = 0.0;
@@ -475,7 +475,7 @@ use Mj\Member\Classes\Crud\MjMembers;
             }
 
             if ($count > 0) {
-                $table_header = '<thead><tr><th style="padding:8px 10px; border:1px solid #ddd; text-align:left;">' . esc_html(__('Jeune', 'mj-member')) . '</th><th style="padding:8px 10px; border:1px solid #ddd; text-align:right;">' . esc_html(__('Montant', 'mj-member')) . '</th><th style="padding:8px 10px; border:1px solid #ddd; text-align:left;">' . esc_html(__('Lien', 'mj-member')) . '</th></tr></thead>';
+                $table_header = '<thead><tr><th style="padding:8px 10px; border:1px solid #ddd; text-align:left;">' . esc_html(\Mj\Member\Classes\MjRoles::getRoleLabel(\Mj\Member\Classes\MjRoles::JEUNE)) . '</th><th style="padding:8px 10px; border:1px solid #ddd; text-align:right;">' . esc_html(__('Montant', 'mj-member')) . '</th><th style="padding:8px 10px; border:1px solid #ddd; text-align:left;">' . esc_html(__('Lien', 'mj-member')) . '</th></tr></thead>';
                 $placeholders['{{children_payment_table}}'] = '<table style="width:100%; border-collapse:collapse; margin:10px 0;">' . $table_header . '<tbody>' . implode('', $rows) . '</tbody></table>';
                 $placeholders['{{children_payment_list}}'] = '<ul style="padding-left:20px; margin:10px 0;">' . implode('', $list_items) . '</ul>';
                 $placeholders['{{children_payment_list_plain}}'] = implode("\n", $plain_lines);
@@ -623,7 +623,7 @@ use Mj\Member\Classes\Crud\MjMembers;
         }
 
         if ($name === '') {
-            $name = __('Jeune', 'mj-member');
+            $name = \Mj\Member\Classes\MjRoles::getRoleLabel(\Mj\Member\Classes\MjRoles::JEUNE);
         }
 
         return $name;
@@ -665,7 +665,7 @@ use Mj\Member\Classes\Crud\MjMembers;
         $guardian_source = null;
         if (is_object($guardian) && isset($guardian->id) && (int) $guardian->id > 0) {
             $guardian_source = $guardian;
-        } elseif (is_object($member) && isset($member->role) && $member->role === MjMembers::ROLE_TUTEUR) {
+        } elseif (is_object($member) && isset($member->role) && MjRoles::isTuteur($member->role)) {
             $guardian_source = $member;
         }
 

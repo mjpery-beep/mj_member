@@ -438,3 +438,68 @@
 .mj-event-payment-output a {
     font-weight: 600;
 }
+/* Weekday time slots for recurring events */
+.mj-weekday-grid {
+    display: grid;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.mj-weekday-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.mj-weekday-row.is-checked {
+    background: #f0f7ff;
+    border-color: #2271b1;
+}
+
+.mj-weekday-checkbox-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 120px;
+}
+
+.mj-weekday-checkbox-wrap label {
+    font-weight: 600;
+    color: #1d2327;
+    cursor: pointer;
+}
+
+.mj-weekday-times {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.mj-weekday-row.is-checked .mj-weekday-times {
+    display: flex;
+}
+
+.mj-weekday-times label {
+    font-size: 13px;
+    color: #50575e;
+}
+
+.mj-weekday-times input[type="time"] {
+    width: 110px;
+    padding: 4px 8px;
+    border: 1px solid #8c8f94;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.mj-weekday-times input[type="time"]:focus {
+    border-color: #2271b1;
+    box-shadow: 0 0 0 1px #2271b1;
+    outline: none;
+}

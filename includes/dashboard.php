@@ -5,6 +5,7 @@ use Mj\Member\Core\Config;
 use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Crud\MjMemberHours;
+use Mj\Member\Classes\MjRoles;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -24,13 +25,38 @@ function mj_member_dashboard_page() {
     $hours_summary = mj_member_get_hours_weekly_summary();
 
     $timezone = wp_timezone();
-    $max_value = 0;
-    foreach ($series as $entry) {
-        $max_value = max($max_value, (int) $entry['registrations'], (int) $entry['payments']);
-    }
-    if ($max_value <= 0) {
-        $max_value = 1;
-    }
+
+    // Préparer les données pour les graphiques Chart.js
+    $charts_config = array(
+        'series' => $series,
+        'memberStats' => array(
+            'total' => isset($member_stats['total_members']) ? (string) $member_stats['total_members'] : '0',
+            'roles' => array_values(array_filter(isset($member_stats['roles']) ? $member_stats['roles'] : array(), function($item) {
+                return (int) $item['count'] > 0;
+            })),
+            'statuses' => array_values(array_filter(isset($member_stats['statuses']) ? $member_stats['statuses'] : array(), function($item) {
+                return (int) $item['count'] > 0;
+            })),
+            'payments' => array_values(array_filter(isset($member_stats['payments']) ? $member_stats['payments'] : array(), function($item) {
+                return (int) $item['count'] > 0;
+            })),
+            'age_brackets' => array_values(array_filter(isset($member_stats['age_brackets']) ? $member_stats['age_brackets'] : array(), function($item) {
+                return (int) $item['count'] > 0;
+            })),
+        ),
+        'eventStats' => array(
+            'total_events' => isset($event_stats['total_events']) ? (int) $event_stats['total_events'] : 0,
+            'registration_breakdown' => array_values(array_filter(isset($event_stats['registration_breakdown']) ? $event_stats['registration_breakdown'] : array(), function($item) {
+                return (int) $item['count'] > 0;
+            })),
+        ),
+    );
+
+    // Enregistrer et charger le script des graphiques
+    $script_url = plugins_url('js/admin-dashboard.js', dirname(__FILE__));
+    $script_path = plugin_dir_path(dirname(__FILE__)) . 'js/admin-dashboard.js';
+    $script_version = file_exists($script_path) ? filemtime($script_path) : MJ_MEMBER_VERSION;
+    wp_enqueue_script('mj-member-admin-dashboard', $script_url, array(), $script_version, true);
 
     $recent_amount = number_format_i18n((float) $stats['recent_payments_total'], 2);
     $recent_payments_count = number_format_i18n((int) $stats['recent_payments_count']);
@@ -76,120 +102,51 @@ function mj_member_dashboard_page() {
             </div>
         </div>
 
+        <!-- Configuration pour les graphiques Chart.js -->
+        <div id="mj-dashboard-charts-config" data-config="<?php echo esc_attr(wp_json_encode($charts_config)); ?>" style="display:none;"></div>
+
         <div class="mj-dashboard-split">
-            <div class="mj-dashboard-panel">
+            <div class="mj-dashboard-panel mj-dashboard-panel--chart">
                 <h2><?php esc_html_e('Inscriptions & paiements mensuels', 'mj-member'); ?></h2>
                 <?php if (!empty($series)) : ?>
-                    <div class="mj-dashboard-chart" role="img" aria-label="<?php esc_attr_e('Comparaison mensuelle des inscriptions et paiements', 'mj-member'); ?>">
-                        <?php foreach ($series as $entry) :
-                            $registration_percent = min(100, max(0, round(($entry['registrations'] / $max_value) * 100)));
-                            $payment_percent = min(100, max(0, round(($entry['payments'] / $max_value) * 100)));
-                            ?>
-                            <div class="mj-dashboard-chart__row">
-                                <div class="mj-dashboard-chart__label"><?php echo esc_html($entry['label']); ?></div>
-                                <div class="mj-dashboard-chart__bars">
-                                    <span class="mj-dashboard-chart__bar mj-dashboard-chart__bar--registrations" style="width: <?php echo esc_attr($registration_percent); ?>%" aria-label="<?php echo esc_attr(sprintf(__('Inscriptions : %d', 'mj-member'), (int) $entry['registrations'])); ?>"></span>
-                                    <span class="mj-dashboard-chart__bar mj-dashboard-chart__bar--payments" style="width: <?php echo esc_attr($payment_percent); ?>%" aria-label="<?php echo esc_attr(sprintf(__('Paiements : %d', 'mj-member'), (int) $entry['payments'])); ?>"></span>
-                                </div>
-                                <div class="mj-dashboard-chart__counts">
-                                    <?php
-                                    printf(
-                                        esc_html__('%1$s inscrits · %2$s paiements', 'mj-member'),
-                                        esc_html(number_format_i18n((int) $entry['registrations'])),
-                                        esc_html(number_format_i18n((int) $entry['payments']))
-                                    );
-                                    ?>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                    <p class="mj-dashboard-chart__legend">
-                        <span class="mj-dashboard-chart__legend-item mj-dashboard-chart__legend-item--registrations"><?php esc_html_e('Inscriptions', 'mj-member'); ?></span>
-                        <span class="mj-dashboard-chart__legend-item mj-dashboard-chart__legend-item--payments"><?php esc_html_e('Paiements', 'mj-member'); ?></span>
-                    </p>
+                    <div id="mj-dashboard-monthly-chart" class="mj-dashboard-chart-container" style="height: 280px;"></div>
                 <?php else : ?>
-                    <p><?php esc_html_e('Aucune donnée disponible pour la période sélectionnée.', 'mj-member'); ?></p>
+                    <p class="mj-dashboard__empty"><?php esc_html_e('Aucune donnée disponible pour la période sélectionnée.', 'mj-member'); ?></p>
                 <?php endif; ?>
             </div>
             <div class="mj-dashboard-panel mj-dashboard-panel--members">
                 <h2><?php esc_html_e('Statistiques membres', 'mj-member'); ?></h2>
                 <?php if ((int) $member_stats['total_members'] === 0) : ?>
-                    <p><?php esc_html_e('Aucune donnée membre disponible pour le moment.', 'mj-member'); ?></p>
+                    <p class="mj-dashboard__empty"><?php esc_html_e('Aucune donnée membre disponible pour le moment.', 'mj-member'); ?></p>
                 <?php else : ?>
                     <p class="mj-member-stats__summary"><?php printf(esc_html__('Total membres : %s', 'mj-member'), esc_html($members_total)); ?></p>
-                    <div class="mj-member-stats">
-                        <section class="mj-member-stats__section">
+                    <div class="mj-member-stats mj-member-stats--charts">
+                        <div class="mj-member-stats__chart-section">
                             <h3><?php esc_html_e('Répartition par rôle', 'mj-member'); ?></h3>
-                            <ul class="mj-member-stats__list">
-                                <?php foreach ($member_stats['roles'] as $role_stat) : ?>
-                                    <li>
-                                        <?php
-                                        printf(
-                                            esc_html__('%1$s : %2$s (%3$s%%)', 'mj-member'),
-                                            esc_html($role_stat['label']),
-                                            esc_html(number_format_i18n((int) $role_stat['count'])),
-                                            esc_html(number_format_i18n((int) $role_stat['percent']))
-                                        );
-                                        ?>
-                                    </li>
-                                <?php endforeach; ?>
-                            </ul>
-                        </section>
-                        <section class="mj-member-stats__section">
+                            <div id="mj-dashboard-roles-chart" class="mj-dashboard-donut-container"></div>
+                        </div>
+                        <div class="mj-member-stats__chart-section">
                             <h3><?php esc_html_e('Statut', 'mj-member'); ?></h3>
-                            <ul class="mj-member-stats__list">
-                                <?php foreach ($member_stats['statuses'] as $status_stat) : ?>
-                                    <li>
-                                        <?php
-                                        printf(
-                                            esc_html__('%1$s : %2$s (%3$s%%)', 'mj-member'),
-                                            esc_html($status_stat['label']),
-                                            esc_html(number_format_i18n((int) $status_stat['count'])),
-                                            esc_html(number_format_i18n((int) $status_stat['percent']))
-                                        );
-                                        ?>
-                                    </li>
-                                <?php endforeach; ?>
-                            </ul>
-                        </section>
-                        <section class="mj-member-stats__section">
-                            <h3><?php esc_html_e('Cotisations', 'mj-member'); ?></h3>
-                            <ul class="mj-member-stats__list">
-                                <?php foreach ($member_stats['payments'] as $payment_stat) : ?>
-                                    <li>
-                                        <?php
-                                        printf(
-                                            esc_html__('%1$s : %2$s (%3$s%%)', 'mj-member'),
-                                            esc_html($payment_stat['label']),
-                                            esc_html(number_format_i18n((int) $payment_stat['count'])),
-                                            esc_html(number_format_i18n((int) $payment_stat['percent']))
-                                        );
-                                        ?>
-                                    </li>
-                                <?php endforeach; ?>
-                            </ul>
-                        </section>
-                        <section class="mj-member-stats__section">
-                            <h3><?php esc_html_e('Tranches d\'âge', 'mj-member'); ?></h3>
-                            <ul class="mj-member-stats__list">
-                                <?php foreach ($member_stats['age_brackets'] as $age_stat) : ?>
-                                    <li>
-                                        <?php
-                                        printf(
-                                            esc_html__('%1$s : %2$s (%3$s%%)', 'mj-member'),
-                                            esc_html($age_stat['label']),
-                                            esc_html(number_format_i18n((int) $age_stat['count'])),
-                                            esc_html(number_format_i18n((int) $age_stat['percent']))
-                                        );
-                                        ?>
-                                    </li>
-                                <?php endforeach; ?>
-                            </ul>
-                        </section>
+                            <div id="mj-dashboard-statuses-chart" class="mj-dashboard-donut-container"></div>
+                        </div>
                     </div>
                 <?php endif; ?>
             </div>
         </div>
+
+        <!-- Deuxième rangée de graphiques donut -->
+        <?php if ((int) $member_stats['total_members'] > 0) : ?>
+        <div class="mj-dashboard-split mj-dashboard-split--charts">
+            <div class="mj-dashboard-panel mj-dashboard-panel--chart-small">
+                <h2><?php esc_html_e('Cotisations', 'mj-member'); ?></h2>
+                <div id="mj-dashboard-payments-chart" class="mj-dashboard-donut-container"></div>
+            </div>
+            <div class="mj-dashboard-panel mj-dashboard-panel--chart-small">
+                <h2><?php esc_html_e('Tranches d\'âge', 'mj-member'); ?></h2>
+                <div id="mj-dashboard-ages-chart" class="mj-dashboard-donut-container"></div>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <div class="mj-dashboard-panels">
             <div class="mj-dashboard-panel mj-dashboard-panel--membership">
@@ -478,7 +435,7 @@ function mj_member_get_dashboard_stats() {
     $stats['active_animateurs'] = (int) $wpdb->get_var($wpdb->prepare(
         "SELECT COUNT(*) FROM {$members_table} WHERE status = %s AND role = %s",
         MjMembers::STATUS_ACTIVE,
-        MjMembers::ROLE_ANIMATEUR
+        MjRoles::ANIMATEUR
     ));
 
     $payments_row = $wpdb->get_row($wpdb->prepare(
@@ -1339,35 +1296,51 @@ function mj_member_dashboard_styles() {
     $printed = true;
     ?>
     <style>
-        .mj-member-dashboard { max-width: 1100px; }
+        .mj-member-dashboard { max-width: 1200px; }
         .mj-dashboard-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom: 24px; }
         .mj-dashboard-card { background: #fff; border: 1px solid #dcdcde; border-radius: 10px; padding: 18px; box-shadow: 0 6px 18px rgba(0,0,0,0.05); }
         .mj-dashboard-card__metric { font-size: 2rem; font-weight: 700; margin: 8px 0 4px; color: #1d2327; }
         .mj-dashboard-card__hint { margin: 0; color: #50575e; font-size: 0.9rem; }
-        .mj-dashboard-split { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+        .mj-dashboard-split { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-bottom: 24px; }
+        .mj-dashboard-split--charts { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
         .mj-dashboard-panels { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-top: 24px; }
-        .mj-dashboard-panel { background: #fff; border: 1px solid #dcdcde; border-radius: 10px; padding: 20px; box-shadow: 0 6px 18px rgba(0,0,0,0.04); }
-        .mj-dashboard-panel h2 { margin-top: 0; }
-        .mj-dashboard-chart { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
-        .mj-dashboard-chart__row { display: grid; grid-template-columns: 110px 1fr auto; gap: 12px; align-items: center; }
-        .mj-dashboard-chart__label { font-weight: 600; color: #1d2327; }
-        .mj-dashboard-chart__bars { display: flex; gap: 6px; align-items: center; min-height: 12px; }
-        .mj-dashboard-chart__bar { display: inline-block; height: 10px; border-radius: 999px; transition: width 0.3s ease; background: rgba(37, 99, 235, 0.15); min-width: 4px; }
-        .mj-dashboard-chart__bar--registrations { background: #2563eb; }
-        .mj-dashboard-chart__bar--payments { background: #0ea5e9; }
-        .mj-dashboard-chart__counts { font-size: 0.9rem; color: #2c3338; white-space: nowrap; }
-        .mj-dashboard-chart__legend { display: flex; gap: 16px; font-size: 0.9rem; margin: 12px 0 0; }
-        .mj-dashboard-chart__legend-item { display: inline-flex; align-items: center; gap: 8px; }
-        .mj-dashboard-chart__legend-item::before { content: ''; width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
-        .mj-dashboard-chart__legend-item--registrations::before { background: #2563eb; }
-        .mj-dashboard-chart__legend-item--payments::before { background: #0ea5e9; }
+        .mj-dashboard-panel { background: #fff; border: 1px solid #dcdcde; border-radius: 10px; padding: 20px; box-shadow: 0 6px 18px rgba(0,0,0,0.04); overflow: hidden; }
+        .mj-dashboard-panel h2 { margin-top: 0; font-size: 1.15rem; }
+        .mj-dashboard-panel--chart-small { min-height: 320px; }
+        .mj-dashboard-panel--members { overflow: visible; }
+        .mj-dashboard__empty { margin: 0; color: #50575e; }
+
+        /* Chart.js containers */
+        .mj-dashboard-chart-container { position: relative; width: 100%; min-height: 280px; }
+        .mj-dashboard-donut-container { position: relative; min-height: 180px; overflow: hidden; }
+
+        /* Donut chart styling */
+        .mj-dashboard-donut { display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
+        .mj-dashboard-donut__canvas-wrapper { position: relative; width: 100%; height: 140px; max-width: 180px; margin: 0 auto; }
+        .mj-dashboard-donut__center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
+        .mj-dashboard-donut__center-value { display: block; font-size: 1.25rem; font-weight: 700; color: #1d2327; line-height: 1.2; }
+        .mj-dashboard-donut__center-label { display: block; font-size: 0.75rem; color: #64748b; margin-top: 2px; }
+        .mj-dashboard-donut__legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 120px; overflow-y: auto; }
+        .mj-dashboard-donut__legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #475569; }
+        .mj-dashboard-donut__legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+        .mj-dashboard-donut__legend-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mj-dashboard-donut__legend-value { color: #64748b; font-size: 0.75rem; white-space: nowrap; }
+
+        /* Member stats with charts */
+        .mj-member-stats--charts { display: grid; gap: 16px; }
+        .mj-member-stats__chart-section { min-width: 0; overflow: hidden; }
+        .mj-member-stats__chart-section h3 { margin: 0 0 10px; font-size: 0.9rem; color: #1d2327; font-weight: 600; }
+        @media (min-width: 700px) {
+            .mj-member-stats--charts { grid-template-columns: 1fr 1fr; }
+        }
+
         .mj-dashboard-panel--members .mj-member-stats { display: grid; gap: 18px; }
-        .mj-member-stats__summary { margin: 0 0 14px; font-weight: 600; color: #1d2327; }
+        .mj-member-stats__summary { margin: 0 0 12px; font-weight: 600; color: #1d2327; font-size: 0.9rem; }
         .mj-member-stats__section h3 { margin: 0 0 6px; font-size: 1rem; color: #1d2327; }
         .mj-member-stats__list { margin: 0; padding-left: 1.2em; color: #2c3338; }
         .mj-member-stats__list li { margin: 0 0 4px; }
         @media (min-width: 900px) {
-            .mj-dashboard-panel--members .mj-member-stats { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+            .mj-dashboard-panel--members .mj-member-stats:not(.mj-member-stats--charts) { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
         }
         .mj-dashboard-panel--membership .mj-membership-summary__intro { margin: 0 0 12px; color: #1d2327; font-weight: 600; }
         .mj-membership-summary__metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 16px; margin: 0 0 18px; padding-left: 0; list-style: none; }
@@ -1401,7 +1374,16 @@ function mj_member_dashboard_styles() {
         .mj-status-badge--active { background: #def7ec; border-color: #b7f0d7; color: #046c4e; }
         .mj-status-badge--inactive { background: #fde8e8; border-color: #f9d2d2; color: #9b1c1c; }
         .mj-status-badge--unknown { background: #f3f4f6; border-color: #e5e7eb; color: #374151; }
-        .mj-dashboard-panel--events .mj-event-stats { display: grid; gap: 18px; }
+
+        /* Event stats with chart */
+        .mj-event-stats--with-chart { display: grid; gap: 20px; }
+        .mj-event-stats__chart-section { }
+        .mj-event-stats__chart-section h3 { margin: 0 0 12px; font-size: 0.95rem; color: #1d2327; font-weight: 600; }
+        @media (min-width: 600px) {
+            .mj-event-stats--with-chart { grid-template-columns: 1fr 1fr; }
+        }
+
+        .mj-dashboard-panel--events .mj-event-stats:not(.mj-event-stats--with-chart) { display: grid; gap: 18px; }
         .mj-event-stats__summary { margin: 0 0 14px; font-weight: 600; color: #1d2327; }
         .mj-event-stats__section h3 { margin: 0 0 6px; font-size: 1rem; color: #1d2327; }
         .mj-event-stats__list { margin: 0; padding-left: 1.2em; color: #2c3338; }
@@ -1413,7 +1395,7 @@ function mj_member_dashboard_styles() {
         .mj-event-stats__table td { text-align: left; padding: 6px 0; border-bottom: 1px solid #dcdcde; }
         .mj-event-stats__table th { font-weight: 600; color: #1d2327; }
         @media (min-width: 900px) {
-            .mj-dashboard-panel--events .mj-event-stats { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+            .mj-dashboard-panel--events .mj-event-stats:not(.mj-event-stats--with-chart) { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
         }
         @media (min-width: 1100px) {
             .mj-dashboard-panel--events-upcoming { grid-column: span 2; }

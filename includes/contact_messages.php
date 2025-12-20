@@ -1,5 +1,7 @@
 <?php
 
+use Mj\Member\Classes\MjRoles;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -200,7 +202,7 @@ if (!function_exists('mj_member_get_contact_recipient_options')) {
         if (class_exists('MjMembers')) {
             $role_labels = MjMembers::getRoleLabels();
 
-            $coordinateurs = MjMembers::getAll(0, 0, 'last_name', 'ASC', '', array('role' => MjMembers::ROLE_COORDINATEUR));
+            $coordinateurs = MjMembers::getAll(0, 0, 'last_name', 'ASC', '', array('role' => MjRoles::COORDINATEUR));
             if (!empty($coordinateurs) && is_array($coordinateurs)) {
                 foreach ($coordinateurs as $index => $coordinateur) {
                     if (!isset($coordinateur->id)) {
@@ -214,8 +216,8 @@ if (!function_exists('mj_member_get_contact_recipient_options')) {
                         $full_name = sprintf(__('Coordinateur #%d', 'mj-member'), (int) $coordinateur->id);
                     }
 
-                    $role_key = isset($coordinateur->role) ? sanitize_key((string) $coordinateur->role) : MjMembers::ROLE_COORDINATEUR;
-                    $role_label = isset($role_labels[$role_key]) ? $role_labels[$role_key] : __('Coordinateur', 'mj-member');
+                    $role_key = isset($coordinateur->role) ? sanitize_key((string) $coordinateur->role) : MjRoles::COORDINATEUR;
+                    $role_label = isset($role_labels[$role_key]) ? $role_labels[$role_key] : \Mj\Member\Classes\MjRoles::getRoleLabel(\Mj\Member\Classes\MjRoles::COORDINATEUR);
 
                     $description = '';
                     if (!empty($coordinateur->description_courte)) {
@@ -241,7 +243,7 @@ if (!function_exists('mj_member_get_contact_recipient_options')) {
                 }
             }
 
-            $animateurs = MjMembers::getAll(0, 0, 'last_name', 'ASC', '', array('role' => MjMembers::ROLE_ANIMATEUR));
+            $animateurs = MjMembers::getAll(0, 0, 'last_name', 'ASC', '', array('role' => MjRoles::ANIMATEUR));
             if (!empty($animateurs) && is_array($animateurs)) {
                 foreach ($animateurs as $index => $animateur) {
                     if (!isset($animateur->id)) {
@@ -255,8 +257,8 @@ if (!function_exists('mj_member_get_contact_recipient_options')) {
                         $full_name = sprintf(__('Animateur #%d', 'mj-member'), (int) $animateur->id);
                     }
 
-                    $role_key = isset($animateur->role) ? sanitize_key((string) $animateur->role) : MjMembers::ROLE_ANIMATEUR;
-                    $role_label = isset($role_labels[$role_key]) ? $role_labels[$role_key] : __('Animateur', 'mj-member');
+                    $role_key = isset($animateur->role) ? sanitize_key((string) $animateur->role) : MjRoles::ANIMATEUR;
+                    $role_label = isset($role_labels[$role_key]) ? $role_labels[$role_key] : \Mj\Member\Classes\MjRoles::getRoleLabel(\Mj\Member\Classes\MjRoles::ANIMATEUR);
 
                     $description = '';
                     if (!empty($animateur->description_courte)) {
@@ -337,7 +339,7 @@ if (!function_exists('mj_member_parse_contact_recipient_choice')) {
             return array(
                 'type' => MjContactMessages::TARGET_COORDINATEUR,
                 'reference' => 0,
-                'label' => __('Coordinateur', 'mj-member'),
+                'label' => \Mj\Member\Classes\MjRoles::getRoleLabel(\Mj\Member\Classes\MjRoles::COORDINATEUR),
             );
         }
 

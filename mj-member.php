@@ -23,13 +23,15 @@ use Mj\Member\Core\Config;
 Config::bootstrap(__FILE__);
 
 // Charge l'autoloader Composer du plugin ou global s'il est installé (ex: /www/vendor).
-if (!class_exists('Google\\Client') && defined('ABSPATH')) {
+if (defined('ABSPATH')) {
     $pluginAutoload = __DIR__ . '/vendor/autoload.php';
     $globalAutoload = trailingslashit(ABSPATH) . 'vendor/autoload.php';
 
     if (is_readable($pluginAutoload)) {
         require_once $pluginAutoload;
-    } elseif (is_readable($globalAutoload)) {
+    }
+
+    if (!class_exists('Twig\\Environment') && is_readable($globalAutoload)) {
         require_once $globalAutoload;
     }
 }

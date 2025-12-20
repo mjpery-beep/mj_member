@@ -28,7 +28,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
     }
 
     public function get_categories() {
-        return array('general');
+        return array('mj-member');
     }
 
     public function get_keywords() {
@@ -354,7 +354,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 'date_fin' => wp_date('Y-m-d 16:00:00', $range_start + DAY_IN_SECONDS, $timezone),
                 'schedule_mode' => 'single',
                 'schedule_payload' => array(),
-                'permalink' => home_url('/evenements/stage-de-decouverte'),
+                'permalink' => home_url('/evenement/stage-de-decouverte'),
                 'accent_color' => isset($type_colors_map['stage']) ? self::normalize_hex_color_value($type_colors_map['stage']) : '',
             );
 
@@ -365,7 +365,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             $second_event['date_debut'] = wp_date('Y-m-d 18:00:00', $range_start + (int) (3 * DAY_IN_SECONDS), $timezone);
             $second_event['date_fin'] = wp_date('Y-m-d 20:00:00', $range_start + (int) (3 * DAY_IN_SECONDS), $timezone);
             $second_event['accent_color'] = isset($type_colors_map['atelier']) ? self::normalize_hex_color_value($type_colors_map['atelier']) : '';
-            $second_event['permalink'] = home_url('/evenements/atelier-numerique');
+            $second_event['permalink'] = home_url('/evenement/atelier-numerique');
 
             $events = array($default_event, $second_event);
         }
@@ -461,7 +461,14 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             }
 
             $title = isset($event['title']) ? sanitize_text_field($event['title']) : '';
-            $permalink = !empty($event['permalink']) ? esc_url($event['permalink']) : '';
+            $slug = isset($event['slug']) ? sanitize_title($event['slug']) : '';
+            $permalink = '';
+            if ($slug !== '') {
+                $permalink = esc_url(home_url('/evenement/' . rawurlencode($slug)));
+            }
+            if ($permalink === '' && !empty($event['permalink'])) {
+                $permalink = esc_url($event['permalink']);
+            }
             if ($permalink === '' && !empty($event['article_permalink'])) {
                 $permalink = esc_url($event['article_permalink']);
             }
@@ -557,6 +564,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 }
             }
 
+            // Événements multi-jours : afficher sur chaque jour avec indication de durée
             if ($is_multi_day && $event_start_day_dt && $event_end_day_dt) {
                 $clamped_start_ts = max($event_start_day_dt->getTimestamp(), $calendar_start_day_dt->getTimestamp());
                 $clamped_end_ts = min($event_end_day_dt->getTimestamp(), $calendar_end_day_dt->getTimestamp());
@@ -564,99 +572,62 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 if ($clamped_start_ts <= $clamped_end_ts) {
                     $clamped_start_day_dt = (new \DateTimeImmutable('@' . $clamped_start_ts))->setTimezone($timezone)->setTime(0, 0, 0);
                     $clamped_end_day_dt = (new \DateTimeImmutable('@' . $clamped_end_ts))->setTimezone($timezone)->setTime(0, 0, 0);
-                    $multi_event_key = 'multi:' . $event_id;
-                    $event_head_day_key = $clamped_start_day_dt->format('Y-m-d');
-                    $event_tail_day_key = $clamped_end_day_dt->format('Y-m-d');
-
-                    $segment_cursor = $clamped_start_day_dt;
-                    while ($segment_cursor->getTimestamp() <= $clamped_end_day_dt->getTimestamp()) {
-                        $segment_month_key = $segment_cursor->format('Y-m');
-                        if (!isset($months[$segment_month_key])) {
-                            $segment_cursor = $segment_cursor->modify('first day of next month')->setTime(0, 0, 0);
-                            continue;
-                        }
-
-                        $month_anchor = $segment_cursor->format('Y-m-01');
-                        $month_end_dt = (new \DateTimeImmutable($month_anchor, $timezone))->modify('last day of this month')->setTime(0, 0, 0);
-                        if ($month_end_dt->getTimestamp() > $clamped_end_day_dt->getTimestamp()) {
-                            $month_end_dt = $clamped_end_day_dt;
-                        }
-
-                        $segment_start_day_key = $segment_cursor->format('Y-m-d');
-                        $segment_end_day_key = $month_end_dt->format('Y-m-d');
-
-                        $day_iterator = $segment_cursor;
-                        while ($day_iterator->getTimestamp() <= $month_end_dt->getTimestamp()) {
-                            $day_key = $day_iterator->format('Y-m-d');
-                            $ensure_day_bucket($months, $segment_month_key, $day_key);
-                            $months[$segment_month_key]['days'][$day_key]['has_multi'] = true;
-
-                            $event_list_reference = &$months[$segment_month_key]['days'][$day_key]['events'];
-                            $already_listed = false;
-                            foreach ($event_list_reference as $existing_event_entry) {
-                                if (isset($existing_event_entry['id']) && $existing_event_entry['id'] === $multi_event_key) {
-                                    $already_listed = true;
-                                    break;
-                                }
+                    
+                    // Formater la durée (ex: "Du 15 au 18 déc.")
+                    $start_day_num = $clamped_start_day_dt->format('j');
+                    $end_day_num = $clamped_end_day_dt->format('j');
+                    $end_month_short = wp_date('M', $clamped_end_day_dt->getTimestamp(), $timezone);
+                    $time_label = sprintf(__('Du %s au %s %s', 'mj-member'), $start_day_num, $end_day_num, $end_month_short);
+                    
+                    // Parcourir chaque jour de l'événement
+                    $day_cursor = $clamped_start_day_dt;
+                    $first_day_ts = null;
+                    while ($day_cursor->getTimestamp() <= $clamped_end_day_dt->getTimestamp()) {
+                        $day_key = $day_cursor->format('Y-m-d');
+                        $month_key = $day_cursor->format('Y-m');
+                        
+                        if (isset($months[$month_key])) {
+                            $ensure_day_bucket($months, $month_key, $day_key);
+                            
+                            $event_key = 'multi:' . $event_id . ':' . $day_key;
+                            $day_ts = $day_cursor->getTimestamp();
+                            
+                            if ($first_day_ts === null) {
+                                $first_day_ts = $day_ts;
                             }
-                            if (!$already_listed) {
-                                $is_head = ($day_key === $event_head_day_key);
-                                $is_tail = ($day_key === $event_tail_day_key);
-                                $event_list_reference[] = array(
-                                    'id' => $multi_event_key,
-                                    'title' => $title,
-                                    'time' => $is_head ? __('Toute la journée', 'mj-member') : '',
-                                    'cover' => $is_head ? $primary_cover : '',
-                                    'cover_sources' => $is_head ? $cover_sources : array(),
-                                    'type_label' => $is_head ? $type_label : '',
-                                    'type_key' => $event_type_key,
-                                    'start_ts' => $day_iterator->getTimestamp(),
-                                    'is_multi' => true,
-                                    'is_multi_head' => $is_head,
-                                    'is_multi_tail' => $is_tail,
-                                    'is_multi_middle' => (!$is_head && !$is_tail),
-                                    'range_key' => $multi_event_key,
-                                    'palette' => $palette,
-                                    'permalink' => $permalink,
-                                    'accent_color' => isset($palette['base']) ? $palette['base'] : '',
-                                );
-                            }
-                            unset($event_list_reference);
-
-                            $day_iterator = $day_iterator->modify('+1 day');
+                            
+                            $months[$month_key]['days'][$day_key]['events'][] = array(
+                                'id' => $event_key,
+                                'title' => $title,
+                                'time' => $time_label,
+                                'cover' => $primary_cover,
+                                'cover_sources' => $cover_sources,
+                                'type_label' => $type_label,
+                                'type_key' => $event_type_key,
+                                'start_ts' => $day_ts,
+                                'palette' => $palette,
+                                'permalink' => $permalink,
+                                'accent_color' => isset($palette['base']) ? $palette['base'] : '',
+                            );
+                            
+                            $has_any_event = true;
                         }
-
-                        $months[$segment_month_key]['multi_events'][] = array(
-                            'event_key' => $multi_event_key,
-                            'title' => $title,
-                            'type_label' => $type_label,
-                            'type_key' => $event_type_key,
-                            'start_day' => $segment_start_day_key,
-                            'end_day' => $segment_end_day_key,
-                            'start_ts' => $event_start_dt ? $event_start_dt->getTimestamp() : $clamped_start_day_dt->getTimestamp(),
-                            'cover' => $primary_cover,
-                            'cover_sources' => $cover_sources,
-                            'permalink' => $permalink,
-                            'palette' => $palette,
-                        );
-
-                        $has_any_event = true;
-
-                        $segment_cursor = $month_end_dt->modify('+1 day')->setTime(0, 0, 0);
+                        
+                        $day_cursor = $day_cursor->modify('+1 day');
                     }
-
-                    $pointer_ts = $clamped_start_day_dt->getTimestamp();
-                    if ($highlight_next && $pointer_ts >= $now_ts) {
-                        $highlight_month_key = wp_date('Y-m', $pointer_ts, $timezone);
-                        if (isset($months[$highlight_month_key])) {
-                            if ($next_event_pointer === null || $pointer_ts < $next_event_pointer['start_ts']) {
-                                $next_event_pointer = array(
-                                    'month_key' => $highlight_month_key,
-                                    'day_key' => $clamped_start_day_dt->format('Y-m-d'),
-                                    'event_key' => $multi_event_key,
-                                    'start_ts' => $pointer_ts,
-                                );
-                            }
+                    
+                    // Highlight du prochain événement (sur le premier jour)
+                    if ($highlight_next && $first_day_ts !== null && $first_day_ts >= $now_ts) {
+                        $highlight_month_key = $clamped_start_day_dt->format('Y-m');
+                        $highlight_day_key = $clamped_start_day_dt->format('Y-m-d');
+                        $highlight_event_key = 'multi:' . $event_id . ':' . $highlight_day_key;
+                        if ($next_event_pointer === null || $first_day_ts < $next_event_pointer['start_ts']) {
+                            $next_event_pointer = array(
+                                'month_key' => $highlight_month_key,
+                                'day_key' => $highlight_day_key,
+                                'event_key' => $highlight_event_key,
+                                'start_ts' => $first_day_ts,
+                            );
                         }
                     }
                 }
@@ -823,117 +794,15 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         }
 
         $instance_id = wp_unique_id('mj-member-events-calendar-');
-        static $styles_printed = false;
-        if (!$styles_printed) {
-            $styles_printed = true;
-            echo '<style>'
-                . '.mj-member-events-calendar{display:flex;flex-direction:column;gap:20px;--mj-events-calendar-nav-bg:#0f172a;--mj-events-calendar-nav-text:#ffffff;--mj-events-calendar-accent:#2563eb;--mj-events-calendar-surface:#ffffff;--mj-events-calendar-border:#e2e8f0;--mj-events-calendar-event-bg:#f8fafc;--mj-events-calendar-event-text:#1f2937;--mj-events-calendar-event-time:#475569;--mj-events-calendar-radius:14px;}'
-                . '.mj-member-events-calendar__title{margin:0;font-size:1.6rem;font-weight:700;color:var(--mj-events-calendar-nav-bg);}'
-                . '.mj-member-events-calendar__toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--mj-events-calendar-surface);border:1px solid var(--mj-events-calendar-border);border-radius:calc(var(--mj-events-calendar-radius));padding:16px;box-shadow:0 12px 28px rgba(15,23,42,0.06);}'
-                . '.mj-member-events-calendar button:hover,.mj-member-events-calendar button:focus{background:inherit;color:inherit;text-decoration:none;}'
-                . '.mj-member-events-calendar__toolbar-left{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}'
-                . '.mj-member-events-calendar__nav-group{display:inline-flex;align-items:center;gap:12px;background:var(--mj-events-calendar-nav-bg);color:var(--mj-events-calendar-nav-text);border-radius:999px;padding:6px;}'
-                . '.mj-member-events-calendar__nav-button{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:none;border-radius:999px;background:rgba(255,255,255,0.14);color:inherit;font-size:1.2rem;font-weight:600;cursor:pointer;transition:background 0.2s ease,transform 0.2s ease;}'
-                . '.mj-member-events-calendar__nav-button:hover,.mj-member-events-calendar__nav-button:focus{background:rgba(255,255,255,0.28);transform:translateY(-1px);}'
-                . '.mj-member-events-calendar__nav-button:disabled{opacity:0.45;cursor:not-allowed;background:rgba(255,255,255,0.12);transform:none;}'
-                . '.mj-member-events-calendar__month-chip{display:inline-flex;align-items:center;gap:10px;background:#ffffff;color:var(--mj-events-calendar-nav-bg);border-radius:999px;padding:6px 16px;font-weight:600;font-size:0.95rem;min-width:140px;justify-content:center;}'
-                . '.mj-member-events-calendar__toolbar-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}'
-                . '.mj-member-events-calendar__filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}'
-                . '.mj-member-events-calendar__filter{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:#f1f5f9;color:var(--mj-events-calendar-nav-bg);font-size:0.78rem;font-weight:600;}'
-                . '.mj-member-events-calendar__filter input{margin:0;}'
-                . '.mj-member-events-calendar__today-button{display:inline-flex;align-items:center;justify-content:center;padding:9px 22px;border-radius:12px;border:1px solid var(--mj-events-calendar-border);background:#ffffff;color:var(--mj-events-calendar-nav-bg);font-weight:600;cursor:pointer;transition:background 0.2s ease,box-shadow 0.2s ease;}'
-                . '.mj-member-events-calendar__today-button:hover,.mj-member-events-calendar__today-button:focus{background:#f8fafc;box-shadow:0 4px 12px rgba(15,23,42,0.08);}'
-                . '.mj-member-events-calendar__today-button:disabled{opacity:0.6;cursor:not-allowed;box-shadow:none;}'
-                . '.mj-member-events-calendar__months{display:flex;flex-direction:column;gap:24px;}'
-                . '.mj-member-events-calendar__month{display:none;flex-direction:column;gap:16px;}'
-                . '.mj-member-events-calendar__month.is-active{display:flex;}'
-                . '.mj-member-events-calendar__month.is-next-event .mj-member-events-calendar__month-heading{color:var(--mj-events-calendar-accent);}'
-                . '.mj-member-events-calendar__month-heading{margin:0;font-size:1.2rem;font-weight:700;color:var(--mj-events-calendar-nav-bg);}'
-                . '.mj-member-events-calendar__grid-wrapper{overflow:auto;border-radius:calc(var(--mj-events-calendar-radius));box-shadow:0 10px 26px rgba(15,23,42,0.1);}'
-                . '.mj-member-events-calendar__weekday-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));background:#f1f5f9;color:var(--mj-events-calendar-nav-bg);font-weight:600;text-transform:uppercase;font-size:0.75rem;letter-spacing:0.06em;border:1px solid var(--mj-events-calendar-border);border-bottom:none;border-radius:15px 15px 0 0;overflow:hidden;}'
-                . '.mj-member-events-calendar__weekday{padding:12px;border-right:1px solid var(--mj-events-calendar-border);text-align:center;}'
-                . '.mj-member-events-calendar__weekday:last-child{border-right:none;}'
-                . '.mj-member-events-calendar__weeks{display:flex;flex-direction:column;background:var(--mj-events-calendar-surface);border:1px solid var(--mj-events-calendar-border);border-top:none;border-radius:0 0 calc(var(--mj-events-calendar-radius)) calc(var(--mj-events-calendar-radius));overflow:hidden;min-width:640px;}'
-                . '.mj-member-events-calendar__week{display:flex;flex-direction:column;border-top:1px solid var(--mj-events-calendar-border);}'
-                . '.mj-member-events-calendar__week:first-child{border-top:none;}'
-                . '.mj-member-events-calendar__week-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));background:var(--mj-events-calendar-surface);}'
-                . '.mj-member-events-calendar__day-cell{min-height:110px;border-right:1px solid var(--mj-events-calendar-border);border-bottom:1px solid var(--mj-events-calendar-border);padding:0;}'
-                . '.mj-member-events-calendar__day-cell:nth-child(7n){border-right:none;}'
-                . '.mj-member-events-calendar__week:last-child .mj-member-events-calendar__day-cell{border-bottom:none;}'
-                . '.mj-member-events-calendar__day-cell.is-padding{background:#f8fafc;}'
-                . '.mj-member-events-calendar__day{display:flex;flex-direction:column;gap:8px;min-height:110px;padding:6px;border-radius:12px;background:transparent;transition:background 0.2s ease;}'
-                . '.mj-member-events-calendar__day.has-events{background:#f4f7fe;}'
-                . '.mj-member-events-calendar__day-number{font-size:0.95rem;font-weight:700;color:var(--mj-events-calendar-nav-bg);}'
-                . '.mj-member-events-calendar__day.is-today{background:#edf3fd;}'
-                . '.mj-member-events-calendar__day.is-closure{background:#fff7f7;}'
-                . '.mj-member-events-calendar__day.is-closure .mj-member-events-calendar__day-number{color:#b91c1c;}'
-                . '.mj-member-events-calendar__day.is-filtered-empty{opacity:0.65;}'
-                . '.mj-member-events-calendar__events{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}'
-                . '.mj-member-events-calendar__event{margin-top: 0px; background:var(--mj-event-surface,var(--mj-events-calendar-event-bg));border-radius:12px;padding:0;display:flex;flex-direction:column;gap:6px;border:1px solid var(--mj-event-border,transparent);transition:background 0.2s ease,border-color 0.2s ease,box-shadow 0.2s ease;position:relative;overflow:visible;}'
-                . '.mj-member-events-calendar__event.is-next{border-color:var(--mj-event-accent,var(--mj-events-calendar-accent));background:var(--mj-event-highlight,#e5ecfd);}'
-                . '.mj-member-events-calendar__event.is-multi{margin:0;margin-left:-6px;margin-right:-6px;padding:0;border-radius:0;background:var(--mj-event-range-bg,#dce6fc);border:1px solid var(--mj-event-range-border,#c2d3f9);min-height:64px;display:flex;align-items:center;}'
-                . '.mj-member-events-calendar__event.is-multi-head{border-top-left-radius:12px;border-bottom-left-radius:12px;margin-right:-100%;position:relative;z-index:9999;}'
-                . '.mj-member-events-calendar__event.is-multi-tail{border-top-right-radius:12px;border-bottom-right-radius:12px;}'
-                . '.mj-member-events-calendar__event.is-multi-middle{border-radius:0;}'
-                . '.mj-member-events-calendar__event.is-multi:not(.is-multi-head){border-left:none;}'
-                . '.mj-member-events-calendar__event.is-multi:not(.is-multi-tail){border:0;}'
-                . '.mj-member-events-calendar__event-trigger{display:flex;align-items:center;gap:10px;background:none;border:0;padding:6px 8px;margin:0;text-align:left;width:100%;height:100%;cursor:pointer;color:var(--mj-events-calendar-event-text);text-decoration:none;}'
-                . '.mj-member-events-calendar__event:not(.is-multi) .mj-member-events-calendar__event-trigger{flex-direction:column;align-items:flex-start;padding:18px 18px 18px;gap:14px;}'
-                . '.mj-member-events-calendar__event-trigger:hover,.mj-member-events-calendar__event-trigger:focus{background:none;color:var(--mj-events-calendar-event-text);text-decoration:none;}'
-                . '.mj-member-events-calendar__event.is-multi .mj-member-events-calendar__event-trigger{width:100%;height:100%;padding:0 12px;}'
-                . '.mj-member-events-calendar__event.is-multi:not(.is-multi-head) .mj-member-events-calendar__event-trigger{justify-content:center;}'
-                . '.mj-member-events-calendar__event-thumb{width:60px;height:60px;border-radius:10px;overflow:hidden;flex-shrink:0; display:block;}'
-                . '.mj-member-events-calendar__event:not(.is-multi) .mj-member-events-calendar__event-thumb{margin-right:0;margin-bottom:0px;}'
-                . '.mj-member-events-calendar__event-thumb img{display:block;width:100%;height:100%;object-fit:cover;}'
-                . '.mj-member-events-calendar__event-copy{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0;line-height:1.2;text-decoration:none;}'
-                . '.mj-member-events-calendar__event:not(.is-multi) .mj-member-events-calendar__event-copy{padding-top: 0px;width:100%;}'
-                . '.mj-member-events-calendar__event-trigger{transition:transform 0.2s ease;text-decoration:none;}'
-                . '.mj-member-events-calendar__event-trigger:hover{transform:translateY(-1px);}'
-                . '.mj-member-events-calendar__event.is-closure .mj-member-events-calendar__event-trigger{cursor:default;}'
-                . '.mj-member-events-calendar__event.is-closure .mj-member-events-calendar__event-trigger:hover{transform:none;}'
-                . '.mj-member-events-calendar__event-title{ border: 0; background: none; padding:0; font-size:0.82rem;font-weight:600;color:var(--mj-events-calendar-event-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}'
-                . '.mj-member-events-calendar__event:not(.is-multi) .mj-member-events-calendar__event-title{position:absolute;top:1px;left:22px;transform:translateX(-18px); border-radius:0px; padding:5px 16px;box-shadow:0 10px 20px rgba(15,23,42,0.15);z-index:5;max-width:calc(100% - 0px); border: 0; background: none; padding:0;}'
-                . '.mj-member-events-calendar__event-meta{display:flex;align-items:center;gap:6px;font-size:0.7rem;color:var(--mj-events-calendar-event-time);}'
-                . '.mj-member-events-calendar__event-continuation{display:block;width:100%;height:100%;min-height:12px;border-radius:999px;background:none;border:0;}'
-                . '.mj-member-events-calendar__event-type{display:inline-flex;align-items:center;gap:4px;font-size:0.66rem;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--mj-event-pill-bg,#d8e3fb);color:var(--mj-event-pill-text,var(--mj-events-calendar-accent));text-transform:uppercase;letter-spacing:0.05em;width:fit-content;}'
-                . '.mj-member-events-calendar__event.is-range-hover{background:var(--mj-event-range-bg,#c2d3f9);border-color:var(--mj-event-accent,var(--mj-events-calendar-accent));box-shadow:0 0 0 2px var(--mj-event-pill-bg,#d8e3fb);}'
-                . '.mj-member-events-calendar__multi-event.is-range-hover{transform:translateY(-1px);}'
-                . '.mj-member-events-calendar__event[data-calendar-type="closure"]{background:#fee2e2;border-color:#fecaca;}'
-                . '.mj-member-events-calendar__event[data-calendar-type="closure"] .mj-member-events-calendar__event-type{background:#ffe4e6;color:#be123c;}'
-                . '.mj-member-events-calendar__event.is-filtered-out{display:none!important;}'
-                . '.mj-member-events-calendar__empty{margin:0;font-size:0.95rem;color:#475569;}'
-                . '.mj-member-events-calendar__mobile-list{display:none;flex-direction:column;gap:12px;}'
-                . '.mj-member-events-calendar__mobile-day{border:1px solid var(--mj-events-calendar-border);border-radius:12px;background:#ffffff;overflow:hidden;}'
-                . '.mj-member-events-calendar__mobile-day.is-filtered-empty{display:none;}'
-                . '.mj-member-events-calendar__mobile-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;font-weight:600;color:var(--mj-events-calendar-nav-bg);cursor:pointer;}'
-                . '.mj-member-events-calendar__mobile-summary::-webkit-details-marker{display:none;}'
-                . '.mj-member-events-calendar__mobile-day[open] .mj-member-events-calendar__mobile-summary{background:#edf2ff;}'
-                . '.mj-member-events-calendar__mobile-count{font-size:0.75rem;color:var(--mj-events-calendar-event-time);font-weight:500;}'
-                . '.mj-member-events-calendar__mobile-events{list-style:none;margin:0;padding:0 16px 16px;display:flex;flex-direction:column;gap:8px;}'
-                . '.mj-member-events-calendar__mobile-event{background:var(--mj-event-surface,#f8fafc);border-radius:12px;border:1px solid var(--mj-event-border,transparent);overflow:hidden;transition:transform 0.2s ease;}'
-                . '.mj-member-events-calendar__mobile-event:hover{transform:translateY(-1px);}'
-                . '.mj-member-events-calendar__mobile-link{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;color:var(--mj-events-calendar-event-text);text-decoration:none;width:100%;height:100%;}'
-                . '.mj-member-events-calendar__mobile-link:hover,.mj-member-events-calendar__mobile-link:focus{color:var(--mj-events-calendar-event-text);text-decoration:none;}'
-                . '.mj-member-events-calendar__mobile-link.is-static{cursor:default;}'
-                . '.mj-member-events-calendar__mobile-event.is-filtered-out{display:none!important;}'
-                . '.mj-member-events-calendar__mobile-pill{display:inline-flex;align-items:center;gap:4px;font-size:0.66rem;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--mj-event-pill-bg,#d8e3fb);color:var(--mj-event-pill-text,var(--mj-events-calendar-accent));text-transform:uppercase;letter-spacing:0.05em;width:fit-content;}'
-                . '.mj-member-events-calendar__mobile-title{font-size:0.9rem;font-weight:600;color:var(--mj-events-calendar-event-text);}'
-                . '.mj-member-events-calendar__mobile-meta{font-size:0.8rem;color:var(--mj-events-calendar-event-time);}'
-                . '.mj-member-events-calendar__mobile-event[data-calendar-type="closure"]{background:#fee2e2;border-color:#fecaca;}'
-                . '.mj-member-events-calendar__mobile-event[data-calendar-type="closure"] .mj-member-events-calendar__mobile-pill{background:#ffe4e6;color:#be123c;}'
-                . '.mj-member-events-calendar__mobile-body{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0;}'
-                . '.mj-member-events-calendar__event-thumb--mobile{flex-shrink:0;border-radius:10px;overflow:hidden;}'
-                . '@media (max-width:900px){.mj-member-events-calendar__event:not(.is-multi) .mj-member-events-calendar__event-trigger{padding:16px 16px 18px;gap:12px;}.mj-member-events-calendar__event:not(.is-multi) .mj-member-events-calendar__event-thumb{margin-bottom:0px;}.mj-member-events-calendar__event:not(.is-multi) .mj-member-events-calendar__event-title{ font-size:0.74rem;top:1px;left:18px;transform:translateX(-12px);max-width:calc(100% - 28px);}}
-@media (max-width:640px){.mj-member-events-calendar__toolbar{flex-direction:column;align-items:stretch;gap:14px;}.mj-member-events-calendar__toolbar-left{width:100%;justify-content:space-between;gap:12px;}.mj-member-events-calendar__nav-group{width:100%;justify-content:space-between;padding:6px 12px;}.mj-member-events-calendar__nav-button{width:32px;height:32px;}.mj-member-events-calendar__toolbar-actions{width:100%;flex-direction:column;align-items:stretch;gap:12px;}.mj-member-events-calendar__filters{width:100%;flex-direction:column;align-items:stretch;}.mj-member-events-calendar__filter{width:100%;justify-content:flex-start;}.mj-member-events-calendar__today-button{width:100%;}.mj-member-events-calendar__grid-wrapper{display:none;}.mj-member-events-calendar__mobile-list{display:flex;}}'
-                . '</style>';
-        }
 
+        // Charger les assets (CSS externe + JS)
+        AssetsManager::requirePackage('events-calendar');
+
+        $cover_width_settings = self::normalize_cover_width_settings($settings);
         $instance_thumb_styles = self::build_cover_width_style_block($instance_id, $cover_width_settings);
         if ($instance_thumb_styles !== '') {
             echo '<style>' . $instance_thumb_styles . '</style>';
         }
-
-            AssetsManager::requirePackage('events-calendar');
 
         $preferred_index = -1;
         $month_keys = array_keys($months);
@@ -1198,7 +1067,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     }
 
                     $day_classes = array('mj-member-events-calendar__day');
-                    if (!empty($events_for_day) || !empty($cell_entry['has_multi'])) {
+                    if (!empty($events_for_day)) {
                         $day_classes[] = 'has-events';
                     }
                     $today_key = wp_date('Y-m-d', $now_ts, $timezone);
@@ -1225,21 +1094,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             }
 
                             $event_classes = array('mj-member-events-calendar__event');
-                            $event_is_multi = !empty($event_entry['is_multi']);
-                            $event_is_multi_head = !empty($event_entry['is_multi_head']);
-                            $event_is_multi_tail = !empty($event_entry['is_multi_tail']);
-                            if ($event_is_multi) {
-                                $event_classes[] = 'is-multi';
-                                if ($event_is_multi_head) {
-                                    $event_classes[] = 'is-multi-head';
-                                }
-                                if ($event_is_multi_tail) {
-                                    $event_classes[] = 'is-multi-tail';
-                                }
-                                if (!$event_is_multi_head && !$event_is_multi_tail) {
-                                    $event_classes[] = 'is-multi-middle';
-                                }
-                            }
                             if (!empty($event_entry['is_closure'])) {
                                 $event_classes[] = 'is-closure';
                             }
@@ -1247,7 +1101,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 $event_classes[] = 'is-next';
                             }
 
-                            $event_range_key = isset($event_entry['range_key']) && $event_entry['range_key'] !== '' ? (string) $event_entry['range_key'] : (string) $event_entry['id'];
                             $style_attribute = self::build_event_style_attribute($event_entry);
                             $event_permalink = isset($event_entry['permalink']) ? (string) $event_entry['permalink'] : '';
                             $event_href = $event_permalink !== '' ? $event_permalink : '#';
@@ -1259,52 +1112,45 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             $is_known_type = isset($available_type_filters[$event_type_key]) || $event_type_key === 'closure';
                             $type_attributes = ' data-calendar-type-item="1" data-calendar-type="' . esc_attr($event_type_key) . '" data-calendar-type-known="' . ($is_known_type ? '1' : '0') . '"';
                             echo '<li class="' . esc_attr(implode(' ', $event_classes)) . '"' . $style_attribute . $type_attributes . '>';
-                            $trigger_attributes = ' class="mj-member-events-calendar__event-trigger"' . ($event_is_multi ? ' data-calendar-range="' . esc_attr($event_range_key) . '"' : '');
+                            $trigger_attributes = ' class="mj-member-events-calendar__event-trigger"';
                             if ($event_is_closure) {
                                 echo '<div' . $trigger_attributes . '>';
                             } else {
                                 echo '<a' . $trigger_attributes . ' href="' . esc_url($event_href) . '">';
                             }
-                            if (!$event_is_multi || $event_is_multi_head) {
-                                if (!empty($event_entry['cover'])) {
-                                    $cover_sources = array();
-                                    if (isset($event_entry['cover_sources']) && is_array($event_entry['cover_sources'])) {
-                                        $cover_sources = $event_entry['cover_sources'];
-                                    }
-                                    $fallback_cover = $event_entry['cover'];
-                                    if ($fallback_cover === '' && isset($cover_sources['fallback']) && $cover_sources['fallback'] !== '') {
-                                        $fallback_cover = $cover_sources['fallback'];
-                                    }
-                                    echo '<span class="mj-member-events-calendar__event-thumb">';
-                                    echo '<picture>';
-                                    if (!empty($cover_sources['desktop'])) {
-                                        echo '<source media="(min-width: 901px)" srcset="' . esc_url($cover_sources['desktop']) . '" />';
-                                    }
-                                    if (!empty($cover_sources['tablet'])) {
-                                        echo '<source media="(min-width: 641px)" srcset="' . esc_url($cover_sources['tablet']) . '" />';
-                                    }
-                                    if (!empty($cover_sources['mobile'])) {
-                                        echo '<source media="(max-width: 640px)" srcset="' . esc_url($cover_sources['mobile']) . '" />';
-                                    }
-                                    echo '<img src="' . esc_url($fallback_cover) . '" alt="' . esc_attr($event_entry['title']) . '" loading="lazy" />';
-                                    echo '</picture>';
-                                    echo '</span>';
+                            if (!empty($event_entry['cover'])) {
+                                $cover_sources = array();
+                                if (isset($event_entry['cover_sources']) && is_array($event_entry['cover_sources'])) {
+                                    $cover_sources = $event_entry['cover_sources'];
                                 }
-                                echo '<span class="mj-member-events-calendar__event-copy">';
-                                if (!empty($event_entry['type_label'])) {
-                                    echo '<span class="mj-member-events-calendar__event-type">' . esc_html($event_entry['type_label']) . '</span>';
+                                $fallback_cover = $event_entry['cover'];
+                                if ($fallback_cover === '' && isset($cover_sources['fallback']) && $cover_sources['fallback'] !== '') {
+                                    $fallback_cover = $cover_sources['fallback'];
                                 }
-                                echo '<span class="mj-member-events-calendar__event-title">' . esc_html($event_entry['title']) . '</span>';
-                                if (!empty($event_entry['time'])) {
-                                    echo '<span class="mj-member-events-calendar__event-meta">' . esc_html($event_entry['time']) . '</span>';
+                                echo '<span class="mj-member-events-calendar__event-thumb">';
+                                echo '<picture>';
+                                if (!empty($cover_sources['desktop'])) {
+                                    echo '<source media="(min-width: 901px)" srcset="' . esc_url($cover_sources['desktop']) . '" />';
                                 }
+                                if (!empty($cover_sources['tablet'])) {
+                                    echo '<source media="(min-width: 641px)" srcset="' . esc_url($cover_sources['tablet']) . '" />';
+                                }
+                                if (!empty($cover_sources['mobile'])) {
+                                    echo '<source media="(max-width: 640px)" srcset="' . esc_url($cover_sources['mobile']) . '" />';
+                                }
+                                echo '<img src="' . esc_url($fallback_cover) . '" alt="' . esc_attr($event_entry['title']) . '" loading="lazy" />';
+                                echo '</picture>';
                                 echo '</span>';
-                            } else {
-                                echo '<span class="mj-member-events-calendar__event-continuation" aria-hidden="true"></span>';
                             }
-                            if ($event_is_multi && !$event_is_multi_head) {
-                                echo '<span class="screen-reader-text">' . esc_html(sprintf(__('Suite de %s', 'mj-member'), $event_entry['title'])) . '</span>';
+                            echo '<span class="mj-member-events-calendar__event-copy">';
+                            if (!empty($event_entry['type_label'])) {
+                                echo '<span class="mj-member-events-calendar__event-type">' . esc_html($event_entry['type_label']) . '</span>';
                             }
+                            echo '<span class="mj-member-events-calendar__event-title">' . esc_html($event_entry['title']) . '</span>';
+                            if (!empty($event_entry['time'])) {
+                                echo '<span class="mj-member-events-calendar__event-meta">' . esc_html($event_entry['time']) . '</span>';
+                            }
+                            echo '</span>';
                             if ($event_is_closure) {
                                 echo '</div>';
                             } else {
