@@ -243,6 +243,9 @@ $config_json = wp_json_encode(array(
         'ageTooYoung' => __('Âge inférieur au minimum (%d ans).', 'mj-member'),
         'alreadyRegistered' => __('Inscrit sur une autre séance', 'mj-member'),
         'tutorNotAllowed' => __('Rôle tuteur non autorisé pour cet événement.', 'mj-member'),
+        'paymentPending' => __('Non payé', 'mj-member'),
+        'registrationPending' => __('Inscription à valider', 'mj-member'),
+        'occurrenceMissing' => __('Non inscrit à cette séance', 'mj-member'),
         
         // Onglets
         'tabRegistrations' => __('Inscriptions', 'mj-member'),

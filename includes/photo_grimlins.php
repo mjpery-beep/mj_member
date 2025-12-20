@@ -285,14 +285,14 @@ if (!function_exists('mj_member_photo_grimlins_ajax_generate')) {
             wp_send_json_error(array('message' => __('Requête invalide. Recharge la page puis réessaie.', 'mj-member')), 403);
         }
 
-        if (!is_user_logged_in()) {
-            wp_send_json_error(array('message' => __('Connecte-toi pour utiliser cette fonctionnalité.', 'mj-member')), 401);
-        }
+        $members_only_flag = isset($_POST['membersOnly']) ? (string) wp_unslash($_POST['membersOnly']) : '';
+        $enforce_limit = $members_only_flag === '1';
+        $is_logged_in = is_user_logged_in();
 
         $history_size = apply_filters('mj_member_photo_grimlins_history_size', 'medium');
 
         $member = null;
-        if (function_exists('mj_member_get_current_member')) {
+        if ($is_logged_in && function_exists('mj_member_get_current_member')) {
             $member_candidate = mj_member_get_current_member();
             if ($member_candidate && !empty($member_candidate->id)) {
                 $member = $member_candidate;
@@ -301,19 +301,22 @@ if (!function_exists('mj_member_photo_grimlins_ajax_generate')) {
 
         $member_photo_id = $member && !empty($member->photo_id) ? (int) $member->photo_id : 0;
 
+        if ($enforce_limit && !$is_logged_in) {
+            wp_send_json_error(array('message' => __('Connecte-toi pour utiliser cette fonctionnalité.', 'mj-member')), 401);
+        }
+
         if (!mj_member_photo_grimlins_is_enabled()) {
             wp_send_json_error(array('message' => __('La génération est momentanément indisponible.', 'mj-member')), 503);
         }
 
-        if (!current_user_can('read')) {
+        if ($is_logged_in && !current_user_can('read')) {
             wp_send_json_error(array('message' => __('Tu ne disposes pas des droits nécessaires.', 'mj-member')), 403);
         }
-
-        $members_only_flag = isset($_POST['membersOnly']) ? (string) wp_unslash($_POST['membersOnly']) : '';
-        $enforce_limit = $members_only_flag === '1';
         $enforce_limit = (bool) apply_filters('mj_member_photo_grimlins_enforce_member_limit', $enforce_limit, $member, get_current_user_id());
 
-        $limit = (int) apply_filters('mj_member_photo_grimlins_member_limit', 3, $member, get_current_user_id());
+        $limit = $enforce_limit
+            ? (int) apply_filters('mj_member_photo_grimlins_member_limit', 3, $member, get_current_user_id())
+            : 0;
         $existing_generations = 0;
 
         if ($enforce_limit && $limit > 0 && $member) {
@@ -492,20 +495,26 @@ if (!function_exists('mj_member_photo_grimlins_ajax_generate')) {
             }
         }
 
-        $downloadName = 'grimlins-' . get_current_user_id() . '.png';
+        $downloadName = 'grimlins-' . ($userId > 0 ? $userId : 'guest') . '.png';
 
+        $history = array();
+        $history_count = 0;
         $history_limit = $limit;
-        $history = mj_member_photo_grimlins_list_member_generations(
-            $userId,
-            array(
-                'limit' => $history_limit > 0 ? $history_limit : 20,
-                'size' => $history_size,
-                'current_attachment_id' => $member_photo_id,
-                'user_id' => $userId,
-                'member_id' => $member ? (int) $member->id : 0,
-            )
-        );
-        $history_count = count($history);
+
+        if ($is_logged_in) {
+            $history_limit = $limit;
+            $history = mj_member_photo_grimlins_list_member_generations(
+                $userId,
+                array(
+                    'limit' => $history_limit > 0 ? $history_limit : 20,
+                    'size' => $history_size,
+                    'current_attachment_id' => $member_photo_id,
+                    'user_id' => $userId,
+                    'member_id' => $member ? (int) $member->id : 0,
+                )
+            );
+            $history_count = count($history);
+        }
 
         $history_item = null;
         if (!is_wp_error($attachmentId) && $attachmentId > 0) {
@@ -537,6 +546,7 @@ if (!function_exists('mj_member_photo_grimlins_ajax_generate')) {
     }
 
     add_action('wp_ajax_mj_member_generate_grimlins', 'mj_member_photo_grimlins_ajax_generate');
+    add_action('wp_ajax_nopriv_mj_member_generate_grimlins', 'mj_member_photo_grimlins_ajax_generate');
 }
 
 if (!function_exists('mj_member_photo_grimlins_ajax_apply_avatar')) {

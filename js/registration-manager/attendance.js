@@ -239,6 +239,7 @@
         var irregular = props.irregular; // 'unpaid' | 'not-registered' | null
         var onRegularize = props.onRegularize;
         var strings = props.strings;
+        var requiresPayment = props.requiresPayment === true;
 
         var member = registration.member;
         var memberName = member 
@@ -252,15 +253,23 @@
             onStatusChange(newStatus);
         };
 
-        var irregularLabel = irregular === 'unpaid' 
-            ? 'Non payé' 
-            : irregular === 'not-registered' 
-                ? 'Non inscrit à cette séance'
-                : null;
-
+        var paymentStatus = registration.paymentStatus || 'unpaid';
         var irregularAction = null;
+        var shouldValidateRegistration = registration.status === 'en_attente'
+            || !requiresPayment
+            || paymentStatus !== 'unpaid';
+
+        var irregularLabel = null;
         if (irregular === 'unpaid') {
-            if (registration.status === 'en_attente') {
+            irregularLabel = shouldValidateRegistration
+                ? getString(strings, 'registrationPending', "Inscription à valider")
+                : getString(strings, 'paymentPending', 'Non payé');
+        } else if (irregular === 'not-registered') {
+            irregularLabel = getString(strings, 'occurrenceMissing', 'Non inscrit à cette séance');
+        }
+
+        if (irregular === 'unpaid') {
+            if (shouldValidateRegistration) {
                 irregularAction = getString(strings, 'validateRegistration', "Valider l'inscription");
             } else {
                 irregularAction = getString(strings, 'validatePayment', "Valider le paiement");
@@ -399,6 +408,19 @@
             return occ.start || occ.date || '';
         };
 
+        var requiresPayment = useMemo(function () {
+            if (!event) {
+                return false;
+            }
+            var rawPrice = typeof event.prix !== 'undefined' ? event.prix : event.price;
+            var priceValue = parseFloat(rawPrice);
+            if (!isFinite(priceValue)) {
+                priceValue = 0;
+            }
+            var freeParticipation = !!event.freeParticipation;
+            return priceValue > 0 && !freeParticipation;
+        }, [event]);
+
         // Filtrer les inscriptions par catégorie
         var categorizedRegistrations = useMemo(function () {
             var valid = [];        // Validé + inscrit à cette séance
@@ -471,7 +493,12 @@
         // Régulariser un membre
         var handleRegularize = useCallback(function (registration, irregularType) {
             if (irregularType === 'unpaid') {
-                if (registration.status === 'en_attente' && onValidateRegistration) {
+                var paymentStatus = registration.paymentStatus || 'unpaid';
+                var shouldValidateRegistration = registration.status === 'en_attente'
+                    || !requiresPayment
+                    || paymentStatus !== 'unpaid';
+
+                if (shouldValidateRegistration && onValidateRegistration) {
                     onValidateRegistration(registration);
                 } else if (onValidatePayment) {
                     onValidatePayment(registration);
@@ -479,7 +506,7 @@
             } else if (irregularType === 'not-registered' && onChangeOccurrences) {
                 onChangeOccurrences(registration);
             }
-        }, [onValidatePayment, onValidateRegistration, onChangeOccurrences]);
+        }, [onValidatePayment, onValidateRegistration, onChangeOccurrences, requiresPayment]);
 
         var totalValid = categorizedRegistrations.valid.length;
         var totalIrregular = categorizedRegistrations.unpaid.length + categorizedRegistrations.notRegistered.length;
@@ -574,6 +601,7 @@
                             onStatusChange: function (status) { handleStatusChange(reg, status); },
                             loading: isLoading,
                             strings: strings,
+                            requiresPayment: requiresPayment,
                         });
                     }),
                 ]),
@@ -602,6 +630,7 @@
                                 irregular: 'unpaid',
                                 onRegularize: handleRegularize,
                                 strings: strings,
+                                requiresPayment: requiresPayment,
                             });
                         }),
 
@@ -617,6 +646,7 @@
                                 irregular: 'not-registered',
                                 onRegularize: handleRegularize,
                                 strings: strings,
+                                requiresPayment: requiresPayment,
                             });
                         }),
                     ]),

@@ -107,30 +107,4 @@ function mj_protect_stripe_keys($result, $server, $request) {
 // Hook de désactivation du plugin
 register_deactivation_hook(__FILE__, 'mj_uninstall');
 
-/**
- * Enable debug display for administrators only.
- * This won't change WP_DEBUG constants (they are defined in wp-config.php),
- * but will enable PHP error display and reporting for users with manage_options.
- */
-add_action('init', 'mj_enable_admin_debug', 1);
-function mj_enable_admin_debug() {
-    // Only attempt when WP user system is available
-    if (!function_exists('is_user_logged_in')) return;
-
-    if (is_user_logged_in() && current_user_can('manage_options')) {
-        @ini_set('display_errors', 1);
-        @ini_set('display_startup_errors', 1);
-        error_reporting(E_ALL);
-
-        // If WP_DEBUG_LOG isn't enabled we still ensure there's a log file in wp-content
-        if (!defined('WP_DEBUG_LOG') || (defined('WP_DEBUG_LOG') && !WP_DEBUG_LOG)) {
-            @ini_set('error_log', WP_CONTENT_DIR . '/debug.log');
-        }
-
-        // Show an admin notice so it's clear that debug is on for this user
-        add_action('admin_notices', function() {
-            echo '<div class="notice notice-info is-dismissible"><p><strong>Mode debug activé :</strong> affichage des erreurs activé pour l\'administrateur courant.</p></div>';
-        });
-    }
-}
 
