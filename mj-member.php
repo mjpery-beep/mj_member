@@ -4,8 +4,14 @@
 Plugin Name: MJ Member
 Plugin URI: https://mj-pery.be
 Description: Gestion des membres avec table CRUD
-Version: 2.19.0
+Version: 1.9.7
 Author: Simon
+Author URI: https://mj-pery.be
+License: GPL2
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
+Text Domain: mj-member
+
+
 */
 // Exit if accessed directly
 if ( ! defined( 'ABSPATH' ) ) {

@@ -23,6 +23,8 @@ function mj_member_dashboard_page() {
     $membership_summary = mj_member_get_membership_due_summary();
     $recent_members = mj_member_get_recent_members();
     $hours_summary = mj_member_get_hours_weekly_summary();
+    $elementor_widgets = function_exists('mj_member_get_elementor_widgets_catalog') ? mj_member_get_elementor_widgets_catalog() : array();
+    $elementor_overview = function_exists('mj_member_get_elementor_widgets_overview') ? mj_member_get_elementor_widgets_overview() : array();
 
     $timezone = wp_timezone();
 
@@ -52,6 +54,17 @@ function mj_member_dashboard_page() {
         ),
     );
 
+    $elementor_widgets_total = isset($elementor_overview['total']) ? (int) $elementor_overview['total'] : count($elementor_widgets);
+    $elementor_widgets_active = isset($elementor_overview['active']) ? (int) $elementor_overview['active'] : 0;
+    $elementor_widgets_inactive = isset($elementor_overview['inactive']) ? (int) $elementor_overview['inactive'] : max(0, $elementor_widgets_total - $elementor_widgets_active);
+    $elementor_widgets_with_errors = isset($elementor_overview['with_errors']) ? (int) $elementor_overview['with_errors'] : 0;
+
+    // Charger la feuille de style du tableau de bord
+    $style_url = plugins_url('css/admin-dashboard.css', dirname(__FILE__));
+    $style_path = plugin_dir_path(dirname(__FILE__)) . 'css/admin-dashboard.css';
+    $style_version = file_exists($style_path) ? filemtime($style_path) : MJ_MEMBER_VERSION;
+    wp_enqueue_style('mj-member-admin-dashboard', $style_url, array(), $style_version);
+
     // Enregistrer et charger le script des graphiques
     $script_url = plugins_url('js/admin-dashboard.js', dirname(__FILE__));
     $script_path = plugin_dir_path(dirname(__FILE__)) . 'js/admin-dashboard.js';
@@ -75,6 +88,10 @@ function mj_member_dashboard_page() {
     $upcoming_events_summary = isset($event_stats['upcoming_events_summary']) ? $event_stats['upcoming_events_summary'] : array();
     $hours_summary_blocks = isset($hours_summary) ? $hours_summary : array();
     $upcoming_events_displayed = number_format_i18n(count($upcoming_events_summary));
+    $elementor_widgets_total_label = number_format_i18n($elementor_widgets_total);
+    $elementor_widgets_active_label = number_format_i18n($elementor_widgets_active);
+    $elementor_widgets_inactive_label = number_format_i18n($elementor_widgets_inactive);
+    $elementor_widgets_with_errors_label = number_format_i18n($elementor_widgets_with_errors);
     ?>
     <div class="wrap mj-member-dashboard">
         <h1><?php esc_html_e('Tableau de bord MJ Member', 'mj-member'); ?></h1>
@@ -400,6 +417,136 @@ function mj_member_dashboard_page() {
                                 </ul>
                             <?php endif; ?>
                         </section>
+                    </div>
+                <?php endif; ?>
+            </div>
+
+            <div class="mj-dashboard-panel mj-dashboard-panel--widgets">
+                <h2><?php esc_html_e('Widgets Elementor MJ', 'mj-member'); ?></h2>
+                <?php if (empty($elementor_widgets)) : ?>
+                    <p class="mj-dashboard-widgets__empty"><?php esc_html_e('Aucun widget Elementor MJ détecté.', 'mj-member'); ?></p>
+                <?php else : ?>
+                    <p class="mj-dashboard-widgets__summary">
+                        <?php printf(
+                            esc_html__('Widgets actifs : %1$s sur %2$s', 'mj-member'),
+                            esc_html($elementor_widgets_active_label),
+                            esc_html($elementor_widgets_total_label)
+                        ); ?>
+                        <?php if ($elementor_widgets_inactive > 0) : ?>
+                            <span class="mj-dashboard-widgets__badge mj-dashboard-widgets__badge--inactive"><?php printf(
+                                esc_html__('%s inactif(s)', 'mj-member'),
+                                esc_html($elementor_widgets_inactive_label)
+                            ); ?></span>
+                        <?php endif; ?>
+                        <?php if ($elementor_widgets_with_errors > 0) : ?>
+                            <span class="mj-dashboard-widgets__badge mj-dashboard-widgets__badge--degraded"><?php printf(
+                                esc_html__('%s avertissement(s)', 'mj-member'),
+                                esc_html($elementor_widgets_with_errors_label)
+                            ); ?></span>
+                        <?php endif; ?>
+                    </p>
+                    <div class="mj-dashboard-table-wrapper">
+                        <table class="mj-dashboard-widgets__table">
+                            <thead>
+                                <tr>
+                                    <th scope="col"><?php esc_html_e('Widget', 'mj-member'); ?></th>
+                                    <th scope="col"><?php esc_html_e('Icône', 'mj-member'); ?></th>
+                                    <th scope="col"><?php esc_html_e('Identifiant', 'mj-member'); ?></th>
+                                    <th scope="col"><?php esc_html_e('Catégories', 'mj-member'); ?></th>
+                                    <th scope="col"><?php esc_html_e('Description', 'mj-member'); ?></th>
+                                    <th scope="col"><?php esc_html_e('Statut', 'mj-member'); ?></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($elementor_widgets as $widget_entry) :
+                                    $widget_title = isset($widget_entry['title']) && $widget_entry['title'] !== '' ? $widget_entry['title'] : (isset($widget_entry['class']) ? $widget_entry['class'] : '');
+                                    $widget_class = isset($widget_entry['class']) ? $widget_entry['class'] : '';
+                                    $widget_slug = isset($widget_entry['slug']) ? $widget_entry['slug'] : '';
+                                    $widget_loaded = !empty($widget_entry['loaded']);
+                                    $widget_error = isset($widget_entry['error']) ? $widget_entry['error'] : '';
+                                    $widget_icon = isset($widget_entry['icon']) ? $widget_entry['icon'] : '';
+                                    $widget_description_parts = isset($widget_entry['description_parts']) && is_array($widget_entry['description_parts'])
+                                        ? $widget_entry['description_parts']
+                                        : array();
+                                    $categories_label = '-';
+                                    if (!empty($widget_entry['categories']) && is_array($widget_entry['categories'])) {
+                                        $categories_clean = array();
+                                        foreach ($widget_entry['categories'] as $category_name) {
+                                            $category_value = sanitize_text_field((string) $category_name);
+                                            if ($category_value !== '') {
+                                                $categories_clean[] = $category_value;
+                                            }
+                                        }
+                                        if (!empty($categories_clean)) {
+                                            $categories_label = implode(', ', $categories_clean);
+                                        }
+                                    }
+
+                                    $status_class = 'mj-dashboard-widgets__badge';
+                                    if ($widget_loaded && $widget_error === '') {
+                                        $status_label = __('Actif', 'mj-member');
+                                        $status_class .= ' mj-dashboard-widgets__badge--active';
+                                    } elseif ($widget_loaded && $widget_error !== '') {
+                                        $status_label = __('Actif avec avertissement', 'mj-member');
+                                        $status_class .= ' mj-dashboard-widgets__badge--degraded';
+                                    } else {
+                                        $status_label = __('Non chargé', 'mj-member');
+                                        $status_class .= ' mj-dashboard-widgets__badge--inactive';
+                                    }
+
+                                    $error_note = '';
+                                    if (is_string($widget_error) && $widget_error !== '') {
+                                        $error_note = wp_strip_all_tags($widget_error);
+                                        if (function_exists('mb_strlen') && mb_strlen($error_note, 'UTF-8') > 160) {
+                                            $error_note = mb_substr($error_note, 0, 157, 'UTF-8') . '...';
+                                        } elseif (strlen($error_note) > 160) {
+                                            $error_note = substr($error_note, 0, 157) . '...';
+                                        }
+                                    }
+
+                                    $slug_label = $widget_slug !== '' ? $widget_slug : '-';
+                                    $icon_label = $widget_icon !== '' ? $widget_icon : '';
+                                    ?>
+                                    <tr>
+                                        <td>
+                                            <strong class="mj-dashboard-widgets__title"><?php echo esc_html($widget_title); ?></strong>
+                                            <?php if ($widget_class !== '') : ?>
+                                                <div class="mj-dashboard-widgets__class"><?php echo esc_html($widget_class); ?></div>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if ($icon_label !== '') : ?>
+                                                <span class="mj-dashboard-widgets__icon">
+                                                    <i class="<?php echo esc_attr($icon_label); ?>" aria-hidden="true"></i>
+                                                    <span class="screen-reader-text"><?php echo esc_html($icon_label); ?></span>
+                                                </span>
+                                            <?php else : ?>
+                                                <span class="mj-dashboard-widgets__icon mj-dashboard-widgets__icon--placeholder">-</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td><?php echo esc_html($slug_label); ?></td>
+                                        <td><?php echo esc_html($categories_label); ?></td>
+                                        <td>
+                                            <?php if (!empty($widget_description_parts)) : ?>
+                                                <ul class="mj-dashboard-widgets__description-list">
+                                                    <?php foreach ($widget_description_parts as $description_part) : ?>
+                                                        <li><?php echo esc_html($description_part); ?></li>
+                                                    <?php endforeach; ?>
+                                                </ul>
+                                            <?php else : ?>
+                                                <span class="mj-dashboard-widgets__description-empty"><?php esc_html_e('Aucune description disponible.', 'mj-member'); ?></span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <span class="<?php echo esc_attr($status_class); ?>"><?php echo esc_html($status_label); ?></span>
+                                            <?php if ($error_note !== '') : ?>
+                                                <p class="mj-dashboard-widgets__note"><?php echo esc_html($error_note); ?></p>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
                     </div>
                 <?php endif; ?>
             </div>

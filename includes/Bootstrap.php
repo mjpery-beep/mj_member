@@ -24,6 +24,7 @@ final class Bootstrap
         'includes/data_retention.php',
         'includes/member_accounts.php',
         'includes/dashboard.php',
+        'includes/helpers/elementor-widgets.php',
         'includes/events_public.php',
         'includes/event_photos.php',
         'includes/photo_grimlins.php',
