@@ -1077,6 +1077,14 @@
             },
         ];
 
+        var occurrenceSelectionMode = 'member_choice';
+        if (eventDetails && typeof eventDetails.occurrenceSelectionMode === 'string' && eventDetails.occurrenceSelectionMode !== '') {
+            occurrenceSelectionMode = eventDetails.occurrenceSelectionMode;
+        } else if (selectedEvent && typeof selectedEvent.occurrenceSelectionMode === 'string' && selectedEvent.occurrenceSelectionMode !== '') {
+            occurrenceSelectionMode = selectedEvent.occurrenceSelectionMode;
+        }
+
+        var allowOccurrenceSelection = occurrenceSelectionMode !== 'all_occurrences';
         var eventRequiresPayment = eventDetails && eventDetails.prix > 0 && !eventDetails.freeParticipation;
 
         // Get MemberDetailPanel component
@@ -1216,6 +1224,7 @@
                                 strings: strings,
                                 config: config,
                                 eventRequiresPayment: eventRequiresPayment,
+                                allowOccurrenceSelection: allowOccurrenceSelection,
                             }),
 
                             activeTab === 'attendance' && h(AttendanceSheet, {
@@ -1227,7 +1236,7 @@
                                 onBulkAttendance: handleBulkAttendance,
                                 onValidatePayment: handleValidatePayment,
                                 onValidateRegistration: handleValidateRegistration,
-                                onChangeOccurrences: handleChangeOccurrences,
+                                onChangeOccurrences: allowOccurrenceSelection ? handleChangeOccurrences : null,
                                 strings: strings,
                                 loading: registrationsLoading,
                                 loadingMembers: loadingMembers,

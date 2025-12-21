@@ -232,6 +232,9 @@ function mj_regmgr_get_events() {
             'capacityTotal' => $event->capacity_total,
             'prix' => (float) $event->prix,
             'scheduleMode' => $event->schedule_mode ?? 'fixed',
+            'occurrenceSelectionMode' => isset($event->occurrence_selection_mode) && $event->occurrence_selection_mode !== ''
+                ? $event->occurrence_selection_mode
+                : 'member_choice',
         );
     }
 
@@ -378,6 +381,9 @@ function mj_regmgr_get_event_details() {
             'animateurs' => $animateurs,
             'frontUrl' => $front_url ?: null,
             'articleId' => !empty($event->article_id) ? (int) $event->article_id : null,
+            'occurrenceSelectionMode' => isset($event->occurrence_selection_mode) && $event->occurrence_selection_mode !== ''
+                ? $event->occurrence_selection_mode
+                : 'member_choice',
         ),
     ));
 }

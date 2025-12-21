@@ -84,6 +84,7 @@
         var strings = props.strings;
         var config = props.config;
         var eventRequiresPayment = props.eventRequiresPayment;
+        var allowOccurrenceSelection = props.allowOccurrenceSelection !== false;
 
         var _menuOpen = useState(false);
         var menuOpen = _menuOpen[0];
@@ -230,7 +231,7 @@
                     ]),
 
                     // Séances
-                    h('button', {
+                    allowOccurrenceSelection && onChangeOccurrences && h('button', {
                         type: 'button',
                         class: 'mj-regmgr-action-btn',
                         onClick: function () { onChangeOccurrences(registration); },
@@ -341,6 +342,7 @@
         var strings = props.strings;
         var config = props.config;
         var eventRequiresPayment = props.eventRequiresPayment;
+        var allowOccurrenceSelection = props.allowOccurrenceSelection !== false;
 
         // Stats rapides
         var stats = {
@@ -481,6 +483,7 @@
                         onShowQR: onShowQR,
                         onShowNotes: onShowNotes,
                         onChangeOccurrences: onChangeOccurrences,
+                        allowOccurrenceSelection: allowOccurrenceSelection,
                         strings: strings,
                         config: config,
                         eventRequiresPayment: eventRequiresPayment,
