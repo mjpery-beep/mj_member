@@ -126,6 +126,7 @@
         var needsPayment = eventRequiresPayment && registration.paymentStatus === 'unpaid';
         var isPaid = eventRequiresPayment && registration.paymentStatus === 'paid';
         var isCancelled = statusKey === 'annule';
+        var volunteerLabel = getString(strings, 'volunteerLabel', 'Bénévole');
 
         return h('div', {
             class: classNames('mj-regmgr-registration-card', {
@@ -162,10 +163,11 @@
                         ]),
                     ]),
                     member && h('div', { class: 'mj-regmgr-registration-card__meta' }, [
-                        h('span', { class: 'mj-regmgr-registration-card__role' }, member.roleLabel),
-                        member.age !== null && h('span', { class: 'mj-regmgr-registration-card__age' }, 
-                            ' • ' + member.age + ' ans'
-                        ),
+                        member.roleLabel && h('span', { class: 'mj-regmgr-registration-card__role' }, member.roleLabel),
+                        member.age !== null && h('span', { class: 'mj-regmgr-registration-card__age' }, ' • ' + member.age + ' ans'),
+                        member.isVolunteer && h('span', {
+                            class: classNames('mj-regmgr-registration-card__volunteer', 'mj-regmgr-badge', 'mj-regmgr-badge--volunteer'),
+                        }, volunteerLabel),
                     ]),
                 ]),
             ]),

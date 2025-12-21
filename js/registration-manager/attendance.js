@@ -254,6 +254,7 @@
         if (memberWhatsappOptIn && memberPhone) {
             whatsappLink = buildWhatsAppLink(memberPhone);
         }
+        var volunteerLabel = getString(strings, 'volunteerLabel', 'Bénévole');
 
         var handleClick = function (status) {
             if (loading) return;
@@ -328,6 +329,9 @@
                             member.roleLabel,
                             member.age !== null && ' • ' + member.age + ' ans',
                         ]),
+                        member && member.isVolunteer && h('span', {
+                            class: classNames('mj-att-member__badge', 'mj-att-member__badge--volunteer'),
+                        }, volunteerLabel),
                         irregularLabel && h('span', { class: 'mj-att-member__badge mj-att-member__badge--' + irregular }, irregularLabel),
                     ]),
                 ]),

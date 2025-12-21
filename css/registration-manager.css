@@ -716,6 +716,10 @@ input.mj-regmgr-search-input__field {
     background: var(--regmgr-gray-100);
     color: var(--regmgr-gray-600);
 }
+.mj-regmgr-badge--volunteer {
+    background: #ede9fe;
+    color: #5b21b6;
+}
 
 .mj-regmgr-badge--type-ponctuel {
     background: #dbeafe;
@@ -3505,9 +3509,18 @@ input.mj-regmgr-search-input__field {
 }
 
 .mj-regmgr-registration-card__meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
     font-size: 12px;
     color: var(--regmgr-gray-500);
     margin-top: 2px;
+}
+
+.mj-regmgr-registration-card__volunteer {
+    font-size: 10px;
+    letter-spacing: 0.3px;
 }
 
 .mj-regmgr-registration-card__role {
@@ -4265,6 +4278,11 @@ input.mj-regmgr-search-input__field {
     color: var(--regmgr-gray-500);
 }
 
+.mj-regmgr-member-card__volunteer {
+    font-size: 10px;
+    letter-spacing: 0.3px;
+}
+
 .mj-regmgr-member-card__role {
     padding: 2px 6px;
     border-radius: 4px;
@@ -4775,6 +4793,10 @@ input.mj-regmgr-search-input__field {
 .mj-regmgr-badge--role-externe {
     background: var(--regmgr-gray-100);
     color: var(--regmgr-gray-600);
+}
+.mj-att-member__badge--volunteer {
+    background: #ede9fe;
+    color: #5b21b6;
 }
 
 /* ============================================

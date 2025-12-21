@@ -80,6 +80,8 @@
             'not_required': '', // Ne pas afficher si pas de cotisation requise
         };
 
+        var volunteerLabel = getString(strings, 'volunteerLabel', 'Bénévole');
+
         return h('div', {
             class: classNames('mj-regmgr-member-card', {
                 'mj-regmgr-member-card--selected': isSelected,
@@ -110,6 +112,9 @@
                             'mj-regmgr-member-card__membership--unpaid': member.membershipStatus === 'unpaid',
                         })
                     }, membershipLabels[member.membershipStatus] || ''),
+                    member.isVolunteer && h('span', {
+                        class: classNames('mj-regmgr-member-card__volunteer', 'mj-regmgr-badge', 'mj-regmgr-badge--volunteer'),
+                    }, volunteerLabel),
                 ]),
             ]),
         ]);

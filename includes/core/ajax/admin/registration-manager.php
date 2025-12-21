@@ -531,6 +531,7 @@ function mj_regmgr_get_registrations() {
                 'birthDate' => $member->birth_date ?? '',
                 'subscriptionStatus' => $subscription_status,
                 'whatsappOptIn' => isset($member->whatsapp_opt_in) ? ((int) $member->whatsapp_opt_in !== 0) : true,
+                'isVolunteer' => !empty($member->is_volunteer),
             ) : null,
             'guardian' => $guardian ? array(
                 'id' => $guardian->id,
@@ -1484,6 +1485,7 @@ function mj_regmgr_get_members() {
             'requiresPayment' => $requires_payment,
             'membershipStatus' => $membership_status,
             'membershipYear' => $membership_year > 0 ? $membership_year : null,
+            'isVolunteer' => !empty($member->is_volunteer),
         );
     }
 
