@@ -1446,11 +1446,26 @@ function mj_regmgr_get_members() {
         // Check membership status
         $membership_year = !empty($member->membership_paid_year) ? (int) $member->membership_paid_year : 0;
         $membership_status = 'not_required'; // Default: no payment needed
-        
+
         if ($requires_payment) {
-            if ($membership_year >= $current_year) {
+            $last_payment = !empty($member->date_last_payement) ? $member->date_last_payement : null;
+            $last_payment_year = null;
+
+            if ($last_payment && $last_payment !== '0000-00-00 00:00:00') {
+                $timestamp = strtotime($last_payment);
+                if ($timestamp) {
+                    $last_payment_year = (int) date('Y', $timestamp);
+                }
+            }
+
+            $effective_year = $membership_year;
+            if (empty($effective_year) && $last_payment_year) {
+                $effective_year = $last_payment_year;
+            }
+
+            if ($effective_year >= $current_year) {
                 $membership_status = 'paid';
-            } elseif ($membership_year > 0) {
+            } elseif ($effective_year > 0) {
                 $membership_status = 'expired';
             } else {
                 $membership_status = 'unpaid';
@@ -1592,12 +1607,26 @@ function mj_regmgr_get_member_details() {
             // Get child membership status
             $child_requires_payment = !empty($child->requires_payment) ? true : false;
             $child_membership_year = !empty($child->membership_paid_year) ? (int) $child->membership_paid_year : 0;
+            $child_last_payment = isset($child->date_last_payement) ? $child->date_last_payement : null;
+            $child_last_payment_year = null;
+
+            if ($child_last_payment && $child_last_payment !== '0000-00-00 00:00:00') {
+                $timestamp = strtotime($child_last_payment);
+                if ($timestamp) {
+                    $child_last_payment_year = (int) date('Y', $timestamp);
+                }
+            }
+
+            $child_effective_year = $child_membership_year;
+            if (empty($child_effective_year) && $child_last_payment_year) {
+                $child_effective_year = $child_last_payment_year;
+            }
+
             $child_membership_status = 'not_required';
-            
             if ($child_requires_payment) {
-                if ($child_membership_year >= $current_year) {
+                if ($child_effective_year >= $current_year) {
                     $child_membership_status = 'paid';
-                } elseif ($child_membership_year > 0) {
+                } elseif ($child_effective_year > 0) {
                     $child_membership_status = 'expired';
                 } else {
                     $child_membership_status = 'unpaid';

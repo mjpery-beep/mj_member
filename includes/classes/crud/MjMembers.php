@@ -259,9 +259,10 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
                     array('0000-00-00 00:00:00', '')
                 );
             } elseif ($payment_filter === 'due') {
+                $current_year = (int) date('Y');
                 $builder->where_raw(
-                    '(requires_payment = 1 AND (date_last_payement IS NULL OR date_last_payement = %s OR CAST(date_last_payement AS CHAR) = %s))',
-                    array('0000-00-00 00:00:00', '')
+                    '(requires_payment = 1 AND ((date_last_payement IS NULL OR date_last_payement = %s OR CAST(date_last_payement AS CHAR) = %s) OR YEAR(date_last_payement) < %d))',
+                    array('0000-00-00 00:00:00', '', $current_year)
                 );
             } elseif ($payment_filter === 'exempt') {
                 $builder->where_raw('requires_payment = 0');
