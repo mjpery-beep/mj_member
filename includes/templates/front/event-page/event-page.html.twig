@@ -4,12 +4,21 @@
 
 <main class="{{ page.class|default('mj-event-page')|esc_attr }}" style="{{ page.style|default('')|esc_attr }}" data-event-id="{{ page.data_event_id|default(0) }}">
     <div class="mj-event-page__wrapper">
+        {% include 'event-page/partials/hero.html.twig' with { hero: partials.hero|default({}) } only %}
+
         <a class="mj-event-page__back" href="{{ '/evenements/'|esc_url }}" aria-label="Retour vers la liste des évènements">
-            <svg class="mj-event-page__back-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/><line x1="9" y1="12" x2="21" y2="12"/></svg>
+            {% set menu_icon = assets.icons.calendar|default('') %}
+            {% if menu_icon %}
+                <span class="mj-event-page__back-icon" aria-hidden="true">
+                    <img src="{{ menu_icon|esc_url }}" alt="" class="mj-member-account-menu__event-button-image" loading="lazy" decoding="async" />
+                </span>
+            {% else %}
+                <span class="mj-event-page__back-icon mj-event-page__back-icon--fallback" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/><line x1="9" y1="12" x2="21" y2="12"/></svg>
+                </span>
+            {% endif %}
             <span class="mj-event-page__back-label">Retour</span>
         </a>
-
-        {% include 'event-page/partials/hero.html.twig' with { hero: partials.hero|default({}) } only %}
 
         <div class="mj-event-page__body">
             <div class="mj-event-page__main">

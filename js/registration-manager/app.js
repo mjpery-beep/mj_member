@@ -512,8 +512,11 @@
         var membersPagination = _membersPagination[0];
         var setMembersPagination = _membersPagination[1];
 
-        // Clé localStorage pour mémoriser l'événement
-        var STORAGE_KEY = 'mj_regmgr_selected_event';
+        // Clé localStorage pour mémoriser l'événement, unique par widget pour éviter les collisions
+        var storageKey = useMemo(function () {
+            var suffix = config && config.widgetId ? config.widgetId : 'default';
+            return 'mj_regmgr_selected_event_' + suffix;
+        }, [config.widgetId]);
 
         // Charger les événements
         var loadEvents = useCallback(function (page) {
@@ -534,7 +537,7 @@
                     if (!initialEventLoaded && loadedEvents.length > 0) {
                         setInitialEventLoaded(true);
                         try {
-                            var savedId = localStorage.getItem(STORAGE_KEY);
+                            var savedId = localStorage.getItem(storageKey);
                             if (savedId) {
                                 var savedEvent = loadedEvents.find(function (e) { return e.id === parseInt(savedId, 10); });
                                 if (savedEvent) {
@@ -552,7 +555,7 @@
                         setEventsLoading(false);
                     }
                 });
-        }, [api, filter, search, config.perPage, showError, strings, initialEventLoaded]);
+        }, [api, filter, search, config.perPage, showError, strings, initialEventLoaded, storageKey]);
 
         // Charger au démarrage et quand les filtres changent
         useEffect(function () {
@@ -611,19 +614,50 @@
             
             // Mémoriser l'événement sélectionné
             try {
-                localStorage.setItem(STORAGE_KEY, String(event.id));
+                localStorage.setItem(storageKey, String(event.id));
             } catch (e) {
                 // localStorage non disponible
             }
             
             loadEventDetails(event.id);
             loadRegistrations(event.id);
-        }, [loadEventDetails, loadRegistrations]);
+        }, [loadEventDetails, loadRegistrations, storageKey]);
 
         // Retour à la liste des événements (mobile)
         var handleBackToEvents = useCallback(function () {
             setMobileShowDetails(false);
         }, []);
+
+        useEffect(function () {
+            if (sidebarMode !== 'events') {
+                return;
+            }
+            if (eventsLoading) {
+                return;
+            }
+            if (selectedEvent && selectedEvent.id) {
+                return;
+            }
+
+            try {
+                var savedId = localStorage.getItem(storageKey);
+                if (!savedId) {
+                    return;
+                }
+
+                var parsedId = parseInt(savedId, 10);
+                if (!parsedId || isNaN(parsedId)) {
+                    return;
+                }
+
+                var matchingEvent = events.find(function (evt) { return evt.id === parsedId; });
+                if (matchingEvent) {
+                    handleSelectEvent(matchingEvent);
+                }
+            } catch (e) {
+                // localStorage non disponible
+            }
+        }, [sidebarMode, eventsLoading, selectedEvent, events, handleSelectEvent, storageKey]);
 
         // ============================================
         // MEMBERS MODE FUNCTIONS
@@ -725,8 +759,8 @@
         }, []);
 
         // Sauvegarder une note de membre (mode membres)
-        var handleSaveMemberNote = useCallback(function (memberId, content) {
-            return api.saveMemberNote(memberId, content)
+        var handleSaveMemberNote = useCallback(function (memberId, content, noteId) {
+            return api.saveMemberNote(memberId, content, noteId)
                 .then(function (data) {
                     showSuccess(data.message || 'Note enregistrée');
                     loadMemberNotesForPanel(memberId);
@@ -754,6 +788,68 @@
                     showError(err.message);
                 });
         }, [api, showSuccess, showError, selectedMember, loadMemberNotesForPanel]);
+
+        var handleUpdateMemberIdea = useCallback(function (memberId, ideaId, data) {
+            return api.updateMemberIdea(ideaId, memberId, data)
+                .then(function (result) {
+                    showSuccess(result.message || 'Idée mise à jour');
+                    loadMemberDetails(memberId);
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err.message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails]);
+
+        var handleUpdateMemberPhoto = useCallback(function (memberId, photoId, data) {
+            return api.updateMemberPhoto(photoId, memberId, data)
+                .then(function (result) {
+                    showSuccess(result.message || 'Photo mise à jour');
+                    loadMemberDetails(memberId);
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err.message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails]);
+
+        var handleDeleteMemberPhoto = useCallback(function (memberId, photoId) {
+            return api.deleteMemberPhoto(photoId, memberId)
+                .then(function (result) {
+                    showSuccess(result.message || 'Photo supprimée');
+                    loadMemberDetails(memberId);
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err.message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails]);
+
+        var handleDeleteMemberMessage = useCallback(function (memberId, messageId) {
+            return api.deleteMemberMessage(messageId, memberId)
+                .then(function (result) {
+                    showSuccess(result.message || 'Message supprimé');
+                    loadMemberDetails(memberId);
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err.message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails]);
+
+        var handleViewMemberFromRegistration = useCallback(function (member) {
+            if (!member || !member.id) {
+                return;
+            }
+            setSidebarMode('members');
+            setSelectedEvent(null);
+            setEventDetails(null);
+            handleSelectMember(member);
+        }, [handleSelectMember, setSelectedEvent, setEventDetails]);
 
         // Mettre à jour un membre
         var handleUpdateMember = useCallback(function (memberId, data) {
@@ -1227,6 +1323,7 @@
                                 onShowQR: handleShowQR,
                                 onShowNotes: handleShowNotes,
                                 onChangeOccurrences: handleChangeOccurrences,
+                                onViewMember: handleViewMemberFromRegistration,
                                 strings: strings,
                                 config: config,
                                 eventRequiresPayment: eventRequiresPayment,
@@ -1276,6 +1373,10 @@
                             onUpdateMember: handleUpdateMember,
                             onPayMembershipOnline: handlePayMembershipOnline,
                             onMarkMembershipPaid: handleMarkMembershipPaid,
+                            onUpdateIdea: handleUpdateMemberIdea,
+                            onUpdatePhoto: handleUpdateMemberPhoto,
+                            onDeletePhoto: handleDeleteMemberPhoto,
+                            onDeleteMessage: handleDeleteMemberMessage,
                         }),
                     ]),
                 ]),

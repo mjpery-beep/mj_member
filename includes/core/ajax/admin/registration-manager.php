@@ -48,6 +48,10 @@ add_action('wp_ajax_mj_regmgr_update_member', 'mj_regmgr_update_member');
 add_action('wp_ajax_mj_regmgr_get_member_registrations', 'mj_regmgr_get_member_registrations');
 add_action('wp_ajax_mj_regmgr_mark_membership_paid', 'mj_regmgr_mark_membership_paid');
 add_action('wp_ajax_mj_regmgr_create_membership_payment_link', 'mj_regmgr_create_membership_payment_link');
+add_action('wp_ajax_mj_regmgr_update_member_idea', 'mj_regmgr_update_member_idea');
+add_action('wp_ajax_mj_regmgr_update_member_photo', 'mj_regmgr_update_member_photo');
+add_action('wp_ajax_mj_regmgr_delete_member_photo', 'mj_regmgr_delete_member_photo');
+add_action('wp_ajax_mj_regmgr_delete_member_message', 'mj_regmgr_delete_member_message');
 
 /**
  * Verify nonce and check user permissions
@@ -1610,6 +1614,8 @@ function mj_regmgr_get_member_details() {
     }
 
     // Collect latest approved event photos for this member
+    $photo_status_labels = MjEventPhotos::get_status_labels();
+
     $photos = MjEventPhotos::query(array(
         'member_id' => $member_id,
         'status' => MjEventPhotos::STATUS_APPROVED,
@@ -1645,6 +1651,8 @@ function mj_regmgr_get_member_details() {
                 }
             }
 
+            $status_key = isset($photo->status) ? (string) $photo->status : MjEventPhotos::STATUS_APPROVED;
+
             $member['photos'][] = array(
                 'id' => (int) $photo->id,
                 'eventId' => isset($photo->event_id) ? (int) $photo->event_id : 0,
@@ -1653,6 +1661,8 @@ function mj_regmgr_get_member_details() {
                 'thumbnailUrl' => $thumbnail ?: '',
                 'fullUrl' => $full ?: $thumbnail ?: '',
                 'createdAt' => isset($photo->created_at) ? (string) $photo->created_at : '',
+                'status' => $status_key,
+                'statusLabel' => isset($photo_status_labels[$status_key]) ? (string) $photo_status_labels[$status_key] : $status_key,
             );
         }
     }
@@ -1812,6 +1822,332 @@ function mj_regmgr_update_member() {
 
     wp_send_json_success(array(
         'message' => __('Membre mis à jour avec succès.', 'mj-member'),
+    ));
+}
+
+/**
+ * Update a member idea
+ */
+function mj_regmgr_update_member_idea() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) {
+        return;
+    }
+
+    $idea_id = isset($_POST['ideaId']) ? (int) $_POST['ideaId'] : 0;
+    $member_id = isset($_POST['memberId']) ? (int) $_POST['memberId'] : 0;
+
+    if ($idea_id <= 0 || $member_id <= 0) {
+        wp_send_json_error(array('message' => __('Identifiant d\'idée ou de membre invalide.', 'mj-member')));
+        return;
+    }
+
+    $payload = isset($_POST['data']) ? $_POST['data'] : array();
+    if (is_string($payload)) {
+        $decoded = json_decode(stripslashes($payload), true);
+        $payload = is_array($decoded) ? $decoded : array();
+    }
+
+    if (empty($payload) || !is_array($payload)) {
+        wp_send_json_error(array('message' => __('Aucune donnée fournie pour la mise à jour.', 'mj-member')));
+        return;
+    }
+
+    $idea = MjIdeas::get($idea_id);
+    if (!$idea) {
+        wp_send_json_error(array('message' => __('Idée introuvable.', 'mj-member')));
+        return;
+    }
+
+    if ((int) ($idea['member_id'] ?? 0) !== $member_id) {
+        wp_send_json_error(array('message' => __('Cette idée n\'est pas associée à ce membre.', 'mj-member')));
+        return;
+    }
+
+    $update = array();
+
+    if (array_key_exists('title', $payload)) {
+        $update['title'] = sanitize_text_field(wp_unslash((string) $payload['title']));
+    }
+
+    if (array_key_exists('content', $payload)) {
+        $update['content'] = sanitize_textarea_field(wp_unslash((string) $payload['content']));
+    }
+
+    if (array_key_exists('status', $payload)) {
+        $status = sanitize_key($payload['status']);
+        if (!in_array($status, MjIdeas::statuses(), true)) {
+            wp_send_json_error(array('message' => __('Statut d\'idée invalide.', 'mj-member')));
+            return;
+        }
+        $update['status'] = $status;
+    }
+
+    if (empty($update)) {
+        wp_send_json_error(array('message' => __('Aucune donnée à mettre à jour.', 'mj-member')));
+        return;
+    }
+
+    $result = MjIdeas::update($idea_id, $update);
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+        return;
+    }
+
+    $updated = MjIdeas::get($idea_id);
+    if (!$updated) {
+        wp_send_json_success(array(
+            'message' => __('Idée mise à jour.', 'mj-member'),
+        ));
+        return;
+    }
+
+    $response = array(
+        'id' => (int) ($updated['id'] ?? $idea_id),
+        'title' => isset($updated['title']) ? (string) $updated['title'] : '',
+        'content' => isset($updated['content']) ? (string) $updated['content'] : '',
+        'status' => isset($updated['status']) ? (string) $updated['status'] : MjIdeas::STATUS_PUBLISHED,
+        'voteCount' => isset($updated['vote_count']) ? (int) $updated['vote_count'] : 0,
+        'createdAt' => isset($updated['created_at']) ? (string) $updated['created_at'] : '',
+        'updatedAt' => isset($updated['updated_at']) ? (string) $updated['updated_at'] : '',
+    );
+
+    wp_send_json_success(array(
+        'message' => __('Idée mise à jour.', 'mj-member'),
+        'idea' => $response,
+    ));
+}
+
+/**
+ * Update a member photo (caption or status)
+ */
+function mj_regmgr_update_member_photo() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) {
+        return;
+    }
+
+    $photo_id = isset($_POST['photoId']) ? (int) $_POST['photoId'] : 0;
+    $member_id = isset($_POST['memberId']) ? (int) $_POST['memberId'] : 0;
+
+    if ($photo_id <= 0 || $member_id <= 0) {
+        wp_send_json_error(array('message' => __('Identifiant de photo ou de membre invalide.', 'mj-member')));
+        return;
+    }
+
+    $payload = isset($_POST['data']) ? $_POST['data'] : array();
+    if (is_string($payload)) {
+        $decoded = json_decode(stripslashes($payload), true);
+        $payload = is_array($decoded) ? $decoded : array();
+    }
+
+    if (empty($payload) || !is_array($payload)) {
+        wp_send_json_error(array('message' => __('Aucune donnée fournie pour la mise à jour.', 'mj-member')));
+        return;
+    }
+
+    $photo = MjEventPhotos::get($photo_id);
+    if (!$photo) {
+        wp_send_json_error(array('message' => __('Photo introuvable.', 'mj-member')));
+        return;
+    }
+
+    if ((int) ($photo->member_id ?? 0) !== $member_id) {
+        wp_send_json_error(array('message' => __('Cette photo n\'est pas associée à ce membre.', 'mj-member')));
+        return;
+    }
+
+    $update = array();
+
+    if (array_key_exists('caption', $payload)) {
+        $caption = sanitize_textarea_field(wp_unslash((string) $payload['caption']));
+        $update['caption'] = $caption;
+    }
+
+    if (array_key_exists('status', $payload)) {
+        $status = sanitize_key($payload['status']);
+        $status_labels = MjEventPhotos::get_status_labels();
+        if (!array_key_exists($status, $status_labels)) {
+            wp_send_json_error(array('message' => __('Statut photo invalide.', 'mj-member')));
+            return;
+        }
+        $update['status'] = $status;
+        $update['reviewed_at'] = current_time('mysql');
+        $update['reviewed_by'] = get_current_user_id();
+    }
+
+    if (empty($update)) {
+        wp_send_json_error(array('message' => __('Aucune donnée à mettre à jour.', 'mj-member')));
+        return;
+    }
+
+    $result = MjEventPhotos::update($photo_id, $update);
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+        return;
+    }
+
+    $updated = MjEventPhotos::get($photo_id);
+
+    $photo_payload = array('id' => $photo_id);
+    if ($updated) {
+        $attachment_id = isset($updated->attachment_id) ? (int) $updated->attachment_id : 0;
+        $thumbnail = $attachment_id > 0 ? wp_get_attachment_image_url($attachment_id, 'medium') : '';
+        if (!$thumbnail && $attachment_id > 0) {
+            $thumbnail = wp_get_attachment_url($attachment_id);
+        }
+        $full = $attachment_id > 0 ? wp_get_attachment_image_url($attachment_id, 'large') : '';
+        if (!$full && $attachment_id > 0) {
+            $full = wp_get_attachment_url($attachment_id);
+        }
+
+        $event_title = '';
+        if (!empty($updated->event_id)) {
+            $event = MjEvents::find((int) $updated->event_id);
+            if ($event) {
+                $event_title = isset($event->title) ? (string) $event->title : '';
+            }
+        }
+
+        $status_labels = MjEventPhotos::get_status_labels();
+        $status_key = isset($updated->status) ? (string) $updated->status : MjEventPhotos::STATUS_APPROVED;
+
+        $photo_payload = array(
+            'id' => (int) $updated->id,
+            'eventId' => isset($updated->event_id) ? (int) $updated->event_id : 0,
+            'eventTitle' => $event_title,
+            'caption' => isset($updated->caption) ? (string) $updated->caption : '',
+            'status' => $status_key,
+            'statusLabel' => isset($status_labels[$status_key]) ? (string) $status_labels[$status_key] : $status_key,
+            'thumbnailUrl' => $thumbnail ?: '',
+            'fullUrl' => $full ?: $thumbnail ?: '',
+            'createdAt' => isset($updated->created_at) ? (string) $updated->created_at : '',
+        );
+    }
+
+    wp_send_json_success(array(
+        'message' => __('Photo mise à jour.', 'mj-member'),
+        'photo' => $photo_payload,
+    ));
+}
+
+/**
+ * Delete a member photo
+ */
+function mj_regmgr_delete_member_photo() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) {
+        return;
+    }
+
+    $photo_id = isset($_POST['photoId']) ? (int) $_POST['photoId'] : 0;
+    $member_id = isset($_POST['memberId']) ? (int) $_POST['memberId'] : 0;
+
+    if ($photo_id <= 0 || $member_id <= 0) {
+        wp_send_json_error(array('message' => __('Identifiant de photo ou de membre invalide.', 'mj-member')));
+        return;
+    }
+
+    $photo = MjEventPhotos::get($photo_id);
+    if (!$photo) {
+        wp_send_json_error(array('message' => __('Photo introuvable.', 'mj-member')));
+        return;
+    }
+
+    if ((int) ($photo->member_id ?? 0) !== $member_id) {
+        wp_send_json_error(array('message' => __('Cette photo n\'est pas associée à ce membre.', 'mj-member')));
+        return;
+    }
+
+    $result = MjEventPhotos::delete($photo_id);
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+        return;
+    }
+
+    wp_send_json_success(array(
+        'message' => __('Photo supprimée.', 'mj-member'),
+        'photoId' => $photo_id,
+    ));
+}
+
+/**
+ * Delete a member contact message
+ */
+function mj_regmgr_delete_member_message() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) {
+        return;
+    }
+
+    $message_id = isset($_POST['messageId']) ? (int) $_POST['messageId'] : 0;
+    $member_id = isset($_POST['memberId']) ? (int) $_POST['memberId'] : 0;
+
+    if ($message_id <= 0 || $member_id <= 0) {
+        wp_send_json_error(array('message' => __('Identifiant de message ou de membre invalide.', 'mj-member')));
+        return;
+    }
+
+    $message = MjContactMessages::get($message_id);
+    if (!$message) {
+        wp_send_json_error(array('message' => __('Message introuvable.', 'mj-member')));
+        return;
+    }
+
+    $member = MjMembers::getById($member_id);
+    if (!$member) {
+        wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
+        return;
+    }
+
+    $linked_member_id = 0;
+    if (!empty($message->meta)) {
+        $meta = json_decode($message->meta, true);
+        if (is_array($meta)) {
+            if (isset($meta['member_id'])) {
+                $linked_member_id = (int) $meta['member_id'];
+            } elseif (isset($meta['member']['id'])) {
+                $linked_member_id = (int) $meta['member']['id'];
+            }
+        }
+        if ($linked_member_id === 0 && is_string($message->meta)) {
+            if (preg_match('/"member_id"\s*:\s*"?(\d+)/', $message->meta, $matches)) {
+                $linked_member_id = (int) $matches[1];
+            }
+        }
+    }
+
+    $target_reference = isset($message->target_reference) ? (int) $message->target_reference : 0;
+    $sender_email = isset($message->sender_email) ? (string) $message->sender_email : '';
+    $member_email = isset($member->email) ? (string) $member->email : '';
+
+    $belongs_to_member = false;
+    if ($linked_member_id === $member_id) {
+        $belongs_to_member = true;
+    } elseif ($target_reference === $member_id) {
+        $belongs_to_member = true;
+    } elseif ($member_email !== '' && $sender_email !== '' && strcasecmp($member_email, $sender_email) === 0) {
+        $belongs_to_member = true;
+    }
+
+    if (!$belongs_to_member) {
+        wp_send_json_error(array('message' => __('Ce message n\'est pas associé à ce membre.', 'mj-member')));
+        return;
+    }
+
+    MjContactMessages::record_activity($message_id, 'deleted', array(
+        'user_id' => get_current_user_id(),
+    ));
+
+    $result = MjContactMessages::delete($message_id);
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+        return;
+    }
+
+    wp_send_json_success(array(
+        'message' => __('Message supprimé.', 'mj-member'),
+        'messageId' => $message_id,
     ));
 }
 

@@ -293,6 +293,48 @@
             },
 
             /**
+             * Met à jour une idée liée à un membre
+             */
+            updateMemberIdea: function (ideaId, memberId, data) {
+                return post('mj_regmgr_update_member_idea', {
+                    ideaId: ideaId,
+                    memberId: memberId,
+                    data: data,
+                });
+            },
+
+            /**
+             * Met à jour une photo partagée par un membre
+             */
+            updateMemberPhoto: function (photoId, memberId, data) {
+                return post('mj_regmgr_update_member_photo', {
+                    photoId: photoId,
+                    memberId: memberId,
+                    data: data,
+                });
+            },
+
+            /**
+             * Supprime une photo partagée par un membre
+             */
+            deleteMemberPhoto: function (photoId, memberId) {
+                return post('mj_regmgr_delete_member_photo', {
+                    photoId: photoId,
+                    memberId: memberId,
+                });
+            },
+
+            /**
+             * Supprime un message lié au membre
+             */
+            deleteMemberMessage: function (messageId, memberId) {
+                return post('mj_regmgr_delete_member_message', {
+                    messageId: messageId,
+                    memberId: memberId,
+                });
+            },
+
+            /**
              * Récupère l'historique d'inscriptions d'un membre
              */
             getMemberRegistrations: function (memberId) {

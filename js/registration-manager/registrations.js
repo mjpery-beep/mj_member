@@ -87,6 +87,7 @@
         var eventRequiresPayment = props.eventRequiresPayment;
         var allowOccurrenceSelection = props.allowOccurrenceSelection !== false;
         var eventRequiresValidation = props.eventRequiresValidation !== false;
+        var onViewMember = props.onViewMember;
 
         var _menuOpen = useState(false);
         var menuOpen = _menuOpen[0];
@@ -137,7 +138,29 @@
             h('div', { class: 'mj-regmgr-registration-card__member' }, [
                 h(MemberAvatar, { member: member, showStatus: true }),
                 h('div', { class: 'mj-regmgr-registration-card__info' }, [
-                    h('div', { class: 'mj-regmgr-registration-card__name' }, memberName),
+                    h('div', { class: 'mj-regmgr-registration-card__name-row' }, [
+                        h('div', { class: 'mj-regmgr-registration-card__name' }, memberName),
+                        onViewMember && member && member.id && h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--ghost mj-btn--small mj-regmgr-registration-card__view-member',
+                            onClick: function () { onViewMember(member); },
+                            title: getString(strings, 'viewMemberProfile', 'Ouvrir la fiche membre'),
+                        }, [
+                            h('svg', {
+                                width: 12,
+                                height: 12,
+                                viewBox: '0 0 24 24',
+                                fill: 'none',
+                                stroke: 'currentColor',
+                                'stroke-width': 2,
+                            }, [
+                                h('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
+                                h('polyline', { points: '15 3 21 3 21 9' }),
+                                h('line', { x1: 10, y1: 14, x2: 21, y2: 3 }),
+                            ]),
+                            h('span', { class: 'mj-regmgr-registration-card__view-member-label' }, getString(strings, 'openMember', 'Fiche')),
+                        ]),
+                    ]),
                     member && h('div', { class: 'mj-regmgr-registration-card__meta' }, [
                         h('span', { class: 'mj-regmgr-registration-card__role' }, member.roleLabel),
                         member.age !== null && h('span', { class: 'mj-regmgr-registration-card__age' }, 
@@ -374,6 +397,7 @@
         var eventRequiresPayment = props.eventRequiresPayment;
         var allowOccurrenceSelection = props.allowOccurrenceSelection !== false;
         var eventRequiresValidation = props.eventRequiresValidation !== false;
+        var onViewMember = props.onViewMember;
 
         // Stats rapides
         var stats = {
@@ -519,6 +543,7 @@
                         onShowQR: onShowQR,
                         onShowNotes: onShowNotes,
                         onChangeOccurrences: onChangeOccurrences,
+                        onViewMember: onViewMember,
                         allowOccurrenceSelection: allowOccurrenceSelection,
                         strings: strings,
                         config: config,

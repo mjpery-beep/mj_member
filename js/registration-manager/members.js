@@ -199,6 +199,10 @@
         var onUpdateMember = props.onUpdateMember;
         var onPayMembershipOnline = props.onPayMembershipOnline;
         var onMarkMembershipPaid = props.onMarkMembershipPaid;
+        var onUpdateIdea = typeof props.onUpdateIdea === 'function' ? props.onUpdateIdea : null;
+        var onUpdatePhoto = typeof props.onUpdatePhoto === 'function' ? props.onUpdatePhoto : null;
+        var onDeletePhoto = typeof props.onDeletePhoto === 'function' ? props.onDeletePhoto : null;
+        var onDeleteMessage = typeof props.onDeleteMessage === 'function' ? props.onDeleteMessage : null;
 
         var _editMode = useState(false);
         var editMode = _editMode[0];
@@ -224,6 +228,50 @@
         var paymentProcessing = _paymentProcessing[0];
         var setPaymentProcessing = _paymentProcessing[1];
 
+        var _editingNoteId = useState(null);
+        var editingNoteId = _editingNoteId[0];
+        var setEditingNoteId = _editingNoteId[1];
+
+        var _editingNoteContent = useState('');
+        var editingNoteContent = _editingNoteContent[0];
+        var setEditingNoteContent = _editingNoteContent[1];
+
+        var _editingNoteSaving = useState(false);
+        var editingNoteSaving = _editingNoteSaving[0];
+        var setEditingNoteSaving = _editingNoteSaving[1];
+
+        var _editingIdeaId = useState(null);
+        var editingIdeaId = _editingIdeaId[0];
+        var setEditingIdeaId = _editingIdeaId[1];
+
+        var _ideaDraft = useState({ title: '', content: '', status: 'published' });
+        var ideaDraft = _ideaDraft[0];
+        var setIdeaDraft = _ideaDraft[1];
+
+        var _ideaSaving = useState(false);
+        var ideaSaving = _ideaSaving[0];
+        var setIdeaSaving = _ideaSaving[1];
+
+        var _editingPhotoId = useState(null);
+        var editingPhotoId = _editingPhotoId[0];
+        var setEditingPhotoId = _editingPhotoId[1];
+
+        var _photoDraft = useState({ caption: '', status: 'approved' });
+        var photoDraft = _photoDraft[0];
+        var setPhotoDraft = _photoDraft[1];
+
+        var _photoDeletingId = useState(null);
+        var photoDeletingId = _photoDeletingId[0];
+        var setPhotoDeletingId = _photoDeletingId[1];
+
+        var _messageDeletingId = useState(null);
+        var messageDeletingId = _messageDeletingId[0];
+        var setMessageDeletingId = _messageDeletingId[1];
+
+        var _photoSaving = useState(false);
+        var photoSaving = _photoSaving[0];
+        var setPhotoSaving = _photoSaving[1];
+
         // Reset edit data when member changes
         useEffect(function () {
             if (member) {
@@ -247,6 +295,15 @@
                     photoUsageConsent: !!member.photoUsageConsent,
                 });
                 setEditMode(false);
+                setEditingNoteId(null);
+                setEditingNoteContent('');
+                setEditingNoteSaving(false);
+                setEditingIdeaId(null);
+                setIdeaDraft({ title: '', content: '', status: 'published' });
+                setIdeaSaving(false);
+                setEditingPhotoId(null);
+                setPhotoDraft({ caption: '', status: 'approved' });
+                setPhotoSaving(false);
             }
         }, [member ? member.id : null]);
 
@@ -283,6 +340,31 @@
             'inactive': 'Inactif',
         };
 
+        var ideaStatusLabels = {
+            'published': 'Publié',
+            'archived': 'Archivé',
+        };
+
+        var ideaStatusClasses = {
+            'published': 'mj-regmgr-badge--success',
+            'archived': 'mj-regmgr-badge--secondary',
+        };
+
+        var photoStatusLabels = {
+            'approved': 'Validée',
+            'pending': 'En attente',
+            'rejected': 'Refusée',
+        };
+
+        var photoStatusClasses = {
+            'approved': 'mj-regmgr-badge--success',
+            'pending': 'mj-regmgr-badge--warning',
+            'rejected': 'mj-regmgr-badge--danger',
+        };
+
+        var communicationEnabledLabel = getString(strings, 'communicationEnabled', 'Activé');
+        var communicationDisabledLabel = getString(strings, 'communicationDisabled', 'Désactivé');
+
         var handleFieldChange = function (field) {
             return function (e) {
                 var newData = Object.assign({}, editData);
@@ -313,6 +395,154 @@
                 })
                 .finally(function () {
                     setSavingNote(false);
+                });
+        };
+
+        var handleNoteEditStart = function (note) {
+            if (!note || !note.canEdit) {
+                return;
+            }
+            setEditingNoteId(note.id);
+            setEditingNoteContent(note.content || '');
+        };
+
+        var handleNoteEditCancel = function () {
+            setEditingNoteId(null);
+            setEditingNoteContent('');
+            setEditingNoteSaving(false);
+        };
+
+        var handleUpdateNote = function () {
+            if (!onSaveNote || !editingNoteId || !member) {
+                return;
+            }
+            var trimmed = editingNoteContent ? editingNoteContent.trim() : '';
+            if (!trimmed) {
+                return;
+            }
+            setEditingNoteSaving(true);
+            Promise.resolve(onSaveNote(member.id, trimmed, editingNoteId))
+                .then(function () {
+                    handleNoteEditCancel();
+                })
+                .finally(function () {
+                    setEditingNoteSaving(false);
+                });
+        };
+
+        var handleIdeaEditStart = function (idea) {
+            if (!idea) {
+                return;
+            }
+            setEditingIdeaId(idea.id);
+            setIdeaDraft({
+                title: idea.title || '',
+                content: idea.content || '',
+                status: idea.status || 'published',
+            });
+        };
+
+        var handleIdeaEditCancel = function () {
+            setEditingIdeaId(null);
+            setIdeaDraft({ title: '', content: '', status: 'published' });
+            setIdeaSaving(false);
+        };
+
+        var handleSaveIdea = function () {
+            if (!onUpdateIdea || !editingIdeaId || !member) {
+                return;
+            }
+            var title = ideaDraft.title ? ideaDraft.title.trim() : '';
+            var content = ideaDraft.content ? ideaDraft.content.trim() : '';
+            if (!title || !content) {
+                return;
+            }
+            var payload = {
+                title: title,
+                content: content,
+                status: ideaDraft.status || 'published',
+            };
+            setIdeaSaving(true);
+            Promise.resolve(onUpdateIdea(member.id, editingIdeaId, payload))
+                .then(function () {
+                    handleIdeaEditCancel();
+                })
+                .finally(function () {
+                    setIdeaSaving(false);
+                });
+        };
+
+        var handlePhotoEditStart = function (photo) {
+            if (!photo) {
+                return;
+            }
+            setEditingPhotoId(photo.id);
+            setPhotoDraft({
+                caption: photo.caption || '',
+                status: photo.status || 'approved',
+            });
+        };
+
+        var handlePhotoEditCancel = function () {
+            setEditingPhotoId(null);
+            setPhotoDraft({ caption: '', status: 'approved' });
+            setPhotoSaving(false);
+        };
+
+        var handleSavePhoto = function () {
+            if (!onUpdatePhoto || !editingPhotoId || !member) {
+                return;
+            }
+            var payload = {
+                caption: photoDraft.caption ? photoDraft.caption.trim() : '',
+                status: photoDraft.status || 'approved',
+            };
+            setPhotoSaving(true);
+            Promise.resolve(onUpdatePhoto(member.id, editingPhotoId, payload))
+                .then(function () {
+                    handlePhotoEditCancel();
+                })
+                .finally(function () {
+                    setPhotoSaving(false);
+                });
+        };
+
+        var handleDeletePhoto = function (photo) {
+            if (!onDeletePhoto || !member || !member.id || !photo || !photo.id) {
+                return;
+            }
+            if (!window.confirm('Supprimer cette photo ?')) {
+                return;
+            }
+            setPhotoDeletingId(photo.id);
+            Promise.resolve(onDeletePhoto(member.id, photo.id))
+                .then(function () {
+                    if (editingPhotoId === photo.id) {
+                        handlePhotoEditCancel();
+                    }
+                })
+                .catch(function () {
+                    // Notification already gérée en amont
+                })
+                .finally(function () {
+                    setPhotoDeletingId(null);
+                });
+        };
+
+        var handleDeleteMessage = function (message) {
+            if (!onDeleteMessage || !member || !member.id || !message || !message.id) {
+                return;
+            }
+            if (!window.confirm('Supprimer ce message ?')) {
+                return;
+            }
+            setMessageDeletingId(message.id);
+            Promise.resolve(onDeleteMessage(member.id, message.id))
+                .catch(function () {
+                    // Gestion des erreurs dans le handler parent
+                })
+                .finally(function () {
+                    setMessageDeletingId(null);
                 });
         };
 
@@ -662,97 +892,96 @@
                 // Section Cotisation & Statut
                 h('div', { class: 'mj-regmgr-member-detail__section' }, [
                     h('h2', { class: 'mj-regmgr-member-detail__section-title' }, 'Cotisation & Statut'),
-                    h('div', { class: 'mj-regmgr-member-detail__status-grid' }, [
-                        // Statut du compte
-                        h('div', { class: 'mj-regmgr-member-detail__status-card' }, [
-                            h('div', { class: 'mj-regmgr-member-detail__status-label' }, 'Statut du compte'),
-                            h('span', { 
-                                class: classNames('mj-regmgr-badge', {
-                                    'mj-regmgr-badge--success': member.status === 'active',
-                                    'mj-regmgr-badge--secondary': member.status !== 'active',
-                                })
-                            }, statusLabels[member.status] || member.status || 'Actif'),
-                        ]),
-                        // Cotisation
-                        h('div', { class: 'mj-regmgr-member-detail__status-card mj-regmgr-member-detail__status-card--wide' }, [
-                            h('div', { class: 'mj-regmgr-member-detail__status-label' }, 'Cotisation'),
-                            h('div', { class: 'mj-regmgr-member-detail__membership-row' }, [
-                                h('span', { 
+                    h('div', { class: 'mj-regmgr-member-detail__membership' }, [
+                        h('div', { class: 'mj-regmgr-member-detail__membership-main' }, [
+                            h('div', { class: 'mj-regmgr-member-detail__membership-item' }, [
+                                h('span', { class: 'mj-regmgr-member-detail__status-label' }, 'Statut du compte'),
+                                h('span', {
                                     class: classNames('mj-regmgr-badge', {
-                                        'mj-regmgr-badge--success': member.membershipStatus === 'paid',
-                                        'mj-regmgr-badge--warning': member.membershipStatus === 'expired',
-                                        'mj-regmgr-badge--danger': member.membershipStatus === 'unpaid',
-                                        'mj-regmgr-badge--secondary': member.membershipStatus === 'not_required',
-                                    })
-                                }, [
-                                    membershipLabels[member.membershipStatus] || 'Inconnu',
-                                    member.membershipYear && member.membershipStatus === 'paid' && ' (' + member.membershipYear + ')',
-                                ]),
-                                // Boutons de paiement si cotisation requise et non payée
-                                member.requiresPayment && member.membershipStatus !== 'paid' && h('div', { class: 'mj-regmgr-member-detail__membership-actions' }, [
-                                    h('button', {
-                                        type: 'button',
-                                        class: 'mj-btn mj-btn--small mj-btn--primary',
-                                        onClick: function () { setShowPaymentModal(true); },
-                                        disabled: paymentProcessing,
+                                        'mj-regmgr-badge--success': member.status === 'active',
+                                        'mj-regmgr-badge--secondary': member.status !== 'active',
+                                    }),
+                                }, statusLabels[member.status] || member.status || 'Actif'),
+                            ]),
+                            h('div', { class: 'mj-regmgr-member-detail__membership-item mj-regmgr-member-detail__membership-item--subscription' }, [
+                                h('span', { class: 'mj-regmgr-member-detail__status-label' }, 'Cotisation'),
+                                h('div', { class: 'mj-regmgr-member-detail__membership-info' }, [
+                                    h('span', {
+                                        class: classNames('mj-regmgr-badge', {
+                                            'mj-regmgr-badge--success': member.membershipStatus === 'paid',
+                                            'mj-regmgr-badge--warning': member.membershipStatus === 'expired',
+                                            'mj-regmgr-badge--danger': member.membershipStatus === 'unpaid',
+                                            'mj-regmgr-badge--secondary': member.membershipStatus === 'not_required',
+                                        }),
                                     }, [
-                                        h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                                            h('rect', { x: 1, y: 4, width: 22, height: 16, rx: 2, ry: 2 }),
-                                            h('line', { x1: 1, y1: 10, x2: 23, y2: 10 }),
-                                        ]),
-                                        ' Payer',
+                                        membershipLabels[member.membershipStatus] || 'Inconnu',
+                                        member.membershipYear && member.membershipStatus === 'paid' && ' (' + member.membershipYear + ')',
                                     ]),
-                                    h('button', {
-                                        type: 'button',
-                                        class: 'mj-btn mj-btn--small mj-btn--secondary',
-                                        onClick: function () {
-                                            if (confirm('Confirmer que la cotisation a été payée en main propre ?')) {
-                                                setPaymentProcessing(true);
-                                                onMarkMembershipPaid(member.id, 'cash')
-                                                    .finally(function () { setPaymentProcessing(false); });
-                                            }
-                                        },
-                                        disabled: paymentProcessing,
-                                    }, paymentProcessing ? 'Traitement...' : 'Payé en main propre'),
+                                    member.requiresPayment && member.membershipStatus !== 'paid' && h('div', { class: 'mj-regmgr-member-detail__membership-actions' }, [
+                                        h('button', {
+                                            type: 'button',
+                                            class: 'mj-btn mj-btn--small mj-btn--primary',
+                                            onClick: function () { setShowPaymentModal(true); },
+                                            disabled: paymentProcessing,
+                                        }, [
+                                            h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                h('rect', { x: 1, y: 4, width: 22, height: 16, rx: 2, ry: 2 }),
+                                                h('line', { x1: 1, y1: 10, x2: 23, y2: 10 }),
+                                            ]),
+                                            ' Payer',
+                                        ]),
+                                        h('button', {
+                                            type: 'button',
+                                            class: 'mj-btn mj-btn--small mj-btn--secondary',
+                                            onClick: function () {
+                                                if (confirm('Confirmer que la cotisation a été payée en main propre ?')) {
+                                                    setPaymentProcessing(true);
+                                                    onMarkMembershipPaid(member.id, 'cash')
+                                                        .finally(function () { setPaymentProcessing(false); });
+                                                }
+                                            },
+                                            disabled: paymentProcessing,
+                                        }, paymentProcessing ? 'Traitement...' : 'Payé en main propre'),
+                                    ]),
                                 ]),
                             ]),
+                            communicationChips.length > 0 && h('div', { class: 'mj-regmgr-member-detail__membership-item mj-regmgr-member-detail__membership-item--communication' }, [
+                                h('span', { class: 'mj-regmgr-member-detail__status-label' }, 'Communication'),
+                                h('ul', { class: 'mj-regmgr-communication-list' }, communicationChips.map(function (chip) {
+                                    return h('li', {
+                                        key: chip.key,
+                                        class: classNames('mj-regmgr-communication-item', {
+                                            'mj-regmgr-communication-item--disabled': !chip.enabled,
+                                        }),
+                                    }, [
+                                        h('span', { class: 'mj-regmgr-communication-item__label' }, chip.label),
+                                        h('span', { class: 'mj-regmgr-communication-item__state' }, chip.enabled ? communicationEnabledLabel : communicationDisabledLabel),
+                                    ]);
+                                })),
+                            ]),
                         ]),
-                        // Numéro de membre
-                        member.membershipNumber && h('div', { class: 'mj-regmgr-member-detail__status-card' }, [
-                            h('div', { class: 'mj-regmgr-member-detail__status-label' }, 'N° de membre'),
-                            h('span', { class: 'mj-regmgr-member-detail__status-value' }, member.membershipNumber),
-                        ]),
-                        // Date d'inscription
-                        member.dateInscription && h('div', { class: 'mj-regmgr-member-detail__status-card' }, [
-                            h('div', { class: 'mj-regmgr-member-detail__status-label' }, 'Inscrit depuis'),
-                            h('span', { class: 'mj-regmgr-member-detail__status-value' }, formatDate(member.dateInscription)),
-                        ]),
-                        // Bénévole
-                        member.isVolunteer && h('div', { class: 'mj-regmgr-member-detail__status-card' }, [
-                            h('div', { class: 'mj-regmgr-member-detail__status-label' }, 'Bénévole'),
-                            h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--info' }, 'Oui'),
-                        ]),
-                        // Autonome
-                        member.role === 'jeune' && h('div', { class: 'mj-regmgr-member-detail__status-card' }, [
-                            h('div', { class: 'mj-regmgr-member-detail__status-label' }, 'Autonome'),
-                            h('span', { 
-                                class: classNames('mj-regmgr-badge', {
-                                    'mj-regmgr-badge--info': member.isAutonomous,
-                                    'mj-regmgr-badge--secondary': !member.isAutonomous,
-                                })
-                            }, member.isAutonomous ? 'Oui' : 'Non'),
-                        ]),
-                        communicationChips.length > 0 && h('div', { class: 'mj-regmgr-member-detail__status-card mj-regmgr-member-detail__status-card--wide' }, [
-                            h('div', { class: 'mj-regmgr-member-detail__status-label' }, 'Communication'),
-                            h('div', { class: 'mj-regmgr-member-detail__chips' }, communicationChips.map(function (chip) {
-                                return h('span', {
-                                    key: chip.key,
-                                    class: classNames('mj-regmgr-chip', {
-                                        'mj-regmgr-chip--enabled': chip.enabled,
-                                        'mj-regmgr-chip--disabled': !chip.enabled,
+                        h('aside', { class: 'mj-regmgr-member-detail__membership-meta' }, [
+                            member.membershipNumber && h('div', { class: 'mj-regmgr-member-detail__meta-row' }, [
+                                h('span', { class: 'mj-regmgr-member-detail__meta-label' }, 'N° de membre'),
+                                h('span', { class: 'mj-regmgr-member-detail__meta-value' }, member.membershipNumber),
+                            ]),
+                            member.dateInscription && h('div', { class: 'mj-regmgr-member-detail__meta-row' }, [
+                                h('span', { class: 'mj-regmgr-member-detail__meta-label' }, 'Inscrit depuis'),
+                                h('span', { class: 'mj-regmgr-member-detail__meta-value' }, formatDate(member.dateInscription)),
+                            ]),
+                            member.isVolunteer && h('div', { class: 'mj-regmgr-member-detail__meta-row' }, [
+                                h('span', { class: 'mj-regmgr-member-detail__meta-label' }, 'Bénévole'),
+                                h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--info' }, 'Oui'),
+                            ]),
+                            member.role === 'jeune' && h('div', { class: 'mj-regmgr-member-detail__meta-row' }, [
+                                h('span', { class: 'mj-regmgr-member-detail__meta-label' }, 'Autonome'),
+                                h('span', {
+                                    class: classNames('mj-regmgr-badge', {
+                                        'mj-regmgr-badge--info': member.isAutonomous,
+                                        'mj-regmgr-badge--secondary': !member.isAutonomous,
                                     }),
-                                }, chip.label);
-                            })),
+                                }, member.isAutonomous ? 'Oui' : 'Non'),
+                            ]),
                         ]),
                     ]),
                 ]),
@@ -763,15 +992,98 @@
                 ]),
 
                 memberPhotos.length > 0 && h('div', { class: 'mj-regmgr-member-detail__section' }, [
-                    h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberPhotos', 'Photos partagées')), 
+                    h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberPhotos', 'Photos partagées')),
                     h('div', { class: 'mj-regmgr-member-detail__photos' }, memberPhotos.map(function (photo) {
-                        return h('figure', { key: photo.id, class: 'mj-regmgr-member-photo' }, [
-                            h('a', { href: photo.fullUrl || photo.thumbnailUrl, target: '_blank', rel: 'noreferrer', class: 'mj-regmgr-member-photo__link' }, [
-                                h('img', { src: photo.thumbnailUrl, alt: photo.caption || '', loading: 'lazy' }),
+                        var statusKey = photo.status || 'approved';
+                        var statusLabel = photo.statusLabel || photoStatusLabels[statusKey] || statusKey;
+                        var isEditingPhoto = editingPhotoId === photo.id;
+                        return h('div', {
+                            key: photo.id,
+                            class: classNames('mj-regmgr-member-photo', {
+                                'mj-regmgr-member-photo--editing': isEditingPhoto,
+                            }),
+                        }, [
+                            h('figure', { class: 'mj-regmgr-member-photo__figure' }, [
+                                h('a', {
+                                    href: photo.fullUrl || photo.thumbnailUrl,
+                                    target: '_blank',
+                                    rel: 'noreferrer',
+                                    class: 'mj-regmgr-member-photo__link',
+                                }, [
+                                    h('img', { src: photo.thumbnailUrl, alt: photo.caption || '', loading: 'lazy' }),
+                                ]),
+                                h('figcaption', { class: 'mj-regmgr-member-photo__caption' }, [
+                                    photo.eventTitle && h('span', { class: 'mj-regmgr-member-photo__event' }, photo.eventTitle),
+                                    !isEditingPhoto && photo.caption && h('span', { class: 'mj-regmgr-member-photo__text' }, photo.caption),
+                                ]),
                             ]),
-                            h('figcaption', { class: 'mj-regmgr-member-photo__caption' }, [
-                                photo.eventTitle && h('span', { class: 'mj-regmgr-member-photo__event' }, photo.eventTitle),
-                                photo.caption && h('span', { class: 'mj-regmgr-member-photo__text' }, photo.caption),
+                            h('div', { class: 'mj-regmgr-member-photo__meta' }, [
+                                    h('span', {
+                                        class: classNames('mj-regmgr-badge', photoStatusClasses[statusKey] || ''),
+                                    }, statusLabel),
+                                onUpdatePhoto && !isEditingPhoto && h('button', {
+                                    type: 'button',
+                                    class: 'mj-btn mj-btn--icon mj-btn--ghost mj-btn--small',
+                                    onClick: function () { handlePhotoEditStart(photo); },
+                                    title: 'Modifier',
+                                    disabled: photoDeletingId === photo.id,
+                                }, [
+                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                        h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
+                                        h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+                                    ]),
+                                ]),
+                                onDeletePhoto && !isEditingPhoto && h('button', {
+                                    type: 'button',
+                                    class: 'mj-btn mj-btn--ghost mj-btn--danger mj-btn--small',
+                                    onClick: function () { handleDeletePhoto(photo); },
+                                    disabled: photoDeletingId === photo.id,
+                                }, photoDeletingId === photo.id ? 'Suppression...' : 'Supprimer'),
+                            ]),
+                            isEditingPhoto && h('div', { class: 'mj-regmgr-member-photo__edit' }, [
+                                h('label', { class: 'mj-regmgr-member-photo__edit-label' }, 'Légende'),
+                                h('textarea', {
+                                    class: 'mj-regmgr-textarea',
+                                    rows: 3,
+                                    value: photoDraft.caption,
+                                    onInput: function (e) {
+                                        var value = e.target.value;
+                                        setPhotoDraft(function (prev) {
+                                            var next = prev ? Object.assign({}, prev) : {};
+                                            next.caption = value;
+                                            return next;
+                                        });
+                                    },
+                                }),
+                                h('label', { class: 'mj-regmgr-member-photo__edit-label' }, 'Statut'),
+                                h('select', {
+                                    class: 'mj-regmgr-select',
+                                    value: photoDraft.status,
+                                    onChange: function (e) {
+                                        var value = e.target.value;
+                                        setPhotoDraft(function (prev) {
+                                            var next = prev ? Object.assign({}, prev) : {};
+                                            next.status = value;
+                                            return next;
+                                        });
+                                    },
+                                }, Object.keys(photoStatusLabels).map(function (key) {
+                                    return h('option', { key: key, value: key }, photoStatusLabels[key]);
+                                })),
+                                h('div', { class: 'mj-regmgr-member-photo__edit-actions' }, [
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--secondary mj-btn--small',
+                                        onClick: handlePhotoEditCancel,
+                                        disabled: photoSaving,
+                                    }, 'Annuler'),
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                                        onClick: handleSavePhoto,
+                                        disabled: photoSaving,
+                                    }, photoSaving ? 'Enregistrement...' : 'Enregistrer'),
+                                ]),
                             ]),
                         ]);
                     })),
@@ -784,13 +1096,98 @@
                 memberIdeas.length > 0 && h('div', { class: 'mj-regmgr-member-detail__section' }, [
                     h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberIdeas', 'Idées proposées')),
                     h('div', { class: 'mj-regmgr-member-detail__ideas' }, memberIdeas.map(function (idea) {
-                        return h('article', { key: idea.id, class: 'mj-regmgr-member-idea' }, [
+                        var statusKey = idea.status || 'published';
+                        var statusLabel = ideaStatusLabels[statusKey] || statusKey;
+                        var isEditingIdea = editingIdeaId === idea.id;
+                        return h('article', {
+                            key: idea.id,
+                            class: classNames('mj-regmgr-member-idea', {
+                                'mj-regmgr-member-idea--editing': isEditingIdea,
+                            }),
+                        }, [
                             h('header', { class: 'mj-regmgr-member-idea__header' }, [
-                                h('h2', { class: 'mj-regmgr-member-idea__title' }, idea.title || 'Idée'),
-                                idea.voteCount >= 0 && h('span', { class: 'mj-regmgr-member-idea__votes' }, idea.voteCount + ' ❤'),
+                                h('div', { class: 'mj-regmgr-member-idea__heading' }, [
+                                    h('span', {
+                                        class: classNames('mj-regmgr-badge mj-regmgr-badge--sm', ideaStatusClasses[statusKey] || ''),
+                                    }, statusLabel),
+                                    !isEditingIdea && h('h2', { class: 'mj-regmgr-member-idea__title' }, idea.title || 'Idée'),
+                                    !isEditingIdea && idea.voteCount >= 0 && h('span', { class: 'mj-regmgr-member-idea__votes' }, idea.voteCount + ' ❤'),
+                                ]),
+                                onUpdateIdea && !isEditingIdea && h('button', {
+                                    type: 'button',
+                                    class: 'mj-btn mj-btn--icon mj-btn--ghost mj-btn--small',
+                                    onClick: function () { handleIdeaEditStart(idea); },
+                                    title: 'Modifier',
+                                }, [
+                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                        h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
+                                        h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+                                    ]),
+                                ]),
                             ]),
-                            idea.content && h('p', { class: 'mj-regmgr-member-idea__content' }, idea.content),
-                            idea.createdAt && h('p', { class: 'mj-regmgr-member-idea__meta' }, formatDate(idea.createdAt)),
+                            !isEditingIdea && h(Fragment, null, [
+                                idea.content && h('p', { class: 'mj-regmgr-member-idea__content' }, idea.content),
+                                idea.createdAt && h('p', { class: 'mj-regmgr-member-idea__meta' }, formatDate(idea.createdAt)),
+                            ]),
+                            isEditingIdea && h('div', { class: 'mj-regmgr-member-idea__edit' }, [
+                                h('label', { class: 'mj-regmgr-member-idea__edit-label' }, 'Titre'),
+                                h('input', {
+                                    type: 'text',
+                                    class: 'mj-regmgr-input',
+                                    value: ideaDraft.title,
+                                    onInput: function (e) {
+                                        var value = e.target.value;
+                                        setIdeaDraft(function (prev) {
+                                            var next = prev ? Object.assign({}, prev) : {};
+                                            next.title = value;
+                                            return next;
+                                        });
+                                    },
+                                }),
+                                h('label', { class: 'mj-regmgr-member-idea__edit-label' }, 'Description'),
+                                h('textarea', {
+                                    class: 'mj-regmgr-textarea',
+                                    rows: 4,
+                                    value: ideaDraft.content,
+                                    onInput: function (e) {
+                                        var value = e.target.value;
+                                        setIdeaDraft(function (prev) {
+                                            var next = prev ? Object.assign({}, prev) : {};
+                                            next.content = value;
+                                            return next;
+                                        });
+                                    },
+                                }),
+                                h('label', { class: 'mj-regmgr-member-idea__edit-label' }, 'Statut'),
+                                h('select', {
+                                    class: 'mj-regmgr-select',
+                                    value: ideaDraft.status,
+                                    onChange: function (e) {
+                                        var value = e.target.value;
+                                        setIdeaDraft(function (prev) {
+                                            var next = prev ? Object.assign({}, prev) : {};
+                                            next.status = value;
+                                            return next;
+                                        });
+                                    },
+                                }, Object.keys(ideaStatusLabels).map(function (key) {
+                                    return h('option', { key: key, value: key }, ideaStatusLabels[key]);
+                                })),
+                                h('div', { class: 'mj-regmgr-member-idea__edit-actions' }, [
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--secondary mj-btn--small',
+                                        onClick: handleIdeaEditCancel,
+                                        disabled: ideaSaving,
+                                    }, 'Annuler'),
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                                        onClick: handleSaveIdea,
+                                        disabled: ideaSaving || !ideaDraft.title || !ideaDraft.title.trim() || !ideaDraft.content || !ideaDraft.content.trim(),
+                                    }, ideaSaving ? 'Enregistrement...' : 'Enregistrer'),
+                                ]),
+                            ]),
                         ]);
                     })),
                 ]),
@@ -835,13 +1232,19 @@
                                     ]);
                                 })),
                             ]),
-                            contactMessageViewUrl && h('div', { class: 'mj-regmgr-member-message__actions' }, [
-                                h('a', {
+                            (contactMessageViewUrl || onDeleteMessage) && h('div', { class: 'mj-regmgr-member-message__actions' }, [
+                                contactMessageViewUrl && h('a', {
                                     href: contactMessageViewUrl + message.id,
                                     class: 'mj-btn mj-btn--secondary mj-btn--small',
                                     target: '_blank',
                                     rel: 'noreferrer',
                                 }, getString(strings, 'viewMessage', 'Ouvrir le message')),
+                                onDeleteMessage && h('button', {
+                                    type: 'button',
+                                    class: 'mj-btn mj-btn--ghost mj-btn--danger mj-btn--small',
+                                    onClick: function () { handleDeleteMessage(message); },
+                                    disabled: messageDeletingId === message.id,
+                                }, messageDeletingId === message.id ? 'Suppression...' : 'Supprimer'),
                             ]),
                         ]);
                     })),
@@ -877,23 +1280,71 @@
                     // Liste des notes
                     notes.length > 0 && h('div', { class: 'mj-regmgr-member-detail__notes' }, 
                         notes.map(function (note) {
+                            var isEditing = editingNoteId === note.id;
                             return h('div', { key: note.id, class: 'mj-regmgr-note-card' }, [
                                 h('div', { class: 'mj-regmgr-note-card__header' }, [
                                     h('span', { class: 'mj-regmgr-note-card__author' }, note.authorName || 'Anonyme'),
                                     h('span', { class: 'mj-regmgr-note-card__date' }, formatDate(note.createdAt)),
-                                    h('button', {
-                                        type: 'button',
-                                        class: 'mj-btn mj-btn--icon mj-btn--ghost mj-btn--danger',
-                                        onClick: function () { onDeleteNote(note.id); },
-                                        title: 'Supprimer',
-                                    }, [
-                                        h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                                            h('polyline', { points: '3 6 5 6 21 6' }),
-                                            h('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' }),
+                                    h('div', { class: 'mj-regmgr-note-card__actions' }, [
+                                        note.canEdit && !isEditing && h('button', {
+                                            type: 'button',
+                                            class: 'mj-btn mj-btn--icon mj-btn--ghost',
+                                            onClick: function () { handleNoteEditStart(note); },
+                                            title: 'Modifier',
+                                        }, [
+                                            h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
+                                                h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+                                            ]),
+                                        ]),
+                                        isEditing && h('button', {
+                                            type: 'button',
+                                            class: 'mj-btn mj-btn--icon mj-btn--ghost',
+                                            onClick: handleNoteEditCancel,
+                                            title: 'Annuler',
+                                        }, [
+                                            h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                h('line', { x1: 18, y1: 6, x2: 6, y2: 18 }),
+                                                h('line', { x1: 6, y1: 6, x2: 18, y2: 18 }),
+                                            ]),
+                                        ]),
+                                        h('button', {
+                                            type: 'button',
+                                            class: 'mj-btn mj-btn--icon mj-btn--ghost mj-btn--danger',
+                                            onClick: function () { onDeleteNote(note.id); },
+                                            title: 'Supprimer',
+                                        }, [
+                                            h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                h('polyline', { points: '3 6 5 6 21 6' }),
+                                                h('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' }),
+                                            ]),
                                         ]),
                                     ]),
                                 ]),
-                                h('div', { class: 'mj-regmgr-note-card__content' }, note.content),
+                                isEditing
+                                    ? h('div', { class: 'mj-regmgr-note-card__editor' }, [
+                                        h('textarea', {
+                                            class: 'mj-regmgr-textarea',
+                                            rows: 3,
+                                            value: editingNoteContent,
+                                            onInput: function (e) { setEditingNoteContent(e.target.value); },
+                                        }),
+                                        h('div', { class: 'mj-regmgr-note-card__editor-actions' }, [
+                                            h('button', {
+                                                type: 'button',
+                                                class: 'mj-btn mj-btn--secondary mj-btn--small',
+                                                onClick: handleNoteEditCancel,
+                                                disabled: editingNoteSaving,
+                                            }, 'Annuler'),
+                                            h('button', {
+                                                type: 'button',
+                                                class: 'mj-btn mj-btn--primary mj-btn--small',
+                                                onClick: handleUpdateNote,
+                                                disabled: editingNoteSaving || !editingNoteContent.trim(),
+                                            }, editingNoteSaving ? 'Enregistrement...' : 'Enregistrer'),
+                                        ]),
+                                    ])
+                                    : h('div', { class: 'mj-regmgr-note-card__content' }, note.content),
                             ]);
                         })
                     ),
