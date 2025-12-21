@@ -1403,12 +1403,19 @@ input.mj-regmgr-search-input__field {
     min-width: 0;
 }
 
+.mj-att-member__name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .mj-att-member__name {
     font-weight: 600;
     color: var(--regmgr-gray-900);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex: 1;
 }
 
 .mj-att-member__meta {
@@ -1461,6 +1468,21 @@ input.mj-regmgr-search-input__field {
     color: var(--regmgr-gray-400);
     cursor: pointer;
     transition: all var(--regmgr-transition);
+}
+
+.mj-att-member__view-member {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.mj-att-member__view-member svg {
+    flex-shrink: 0;
+}
+
+.mj-att-member__view-member-label {
+    font-size: 12px;
 }
 
 .mj-att-btn:hover {

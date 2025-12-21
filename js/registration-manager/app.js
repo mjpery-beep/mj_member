@@ -512,11 +512,19 @@
         var membersPagination = _membersPagination[0];
         var setMembersPagination = _membersPagination[1];
 
-        // Clé localStorage pour mémoriser l'événement, unique par widget pour éviter les collisions
+        // Clés localStorage pour mémoriser les sélections, uniques par widget pour éviter les collisions
         var storageKey = useMemo(function () {
             var suffix = config && config.widgetId ? config.widgetId : 'default';
             return 'mj_regmgr_selected_event_' + suffix;
         }, [config.widgetId]);
+
+        var memberStorageKey = useMemo(function () {
+            var suffix = config && config.widgetId ? config.widgetId : 'default';
+            return 'mj_regmgr_selected_member_' + suffix;
+        }, [config.widgetId]);
+
+        var lastSelectedEventIdRef = useRef(null);
+        var lastSelectedMemberIdRef = useRef(null);
 
         // Charger les événements
         var loadEvents = useCallback(function (page) {
@@ -613,6 +621,7 @@
             setMobileShowDetails(true); // Afficher les détails sur mobile
             
             // Mémoriser l'événement sélectionné
+            lastSelectedEventIdRef.current = event.id;
             try {
                 localStorage.setItem(storageKey, String(event.id));
             } catch (e) {
@@ -640,14 +649,17 @@
             }
 
             try {
-                var savedId = localStorage.getItem(storageKey);
-                if (!savedId) {
-                    return;
-                }
-
-                var parsedId = parseInt(savedId, 10);
+                var parsedId = lastSelectedEventIdRef.current;
                 if (!parsedId || isNaN(parsedId)) {
-                    return;
+                    var savedId = localStorage.getItem(storageKey);
+                    if (!savedId) {
+                        return;
+                    }
+                    parsedId = parseInt(savedId, 10);
+                    if (!parsedId || isNaN(parsedId)) {
+                        return;
+                    }
+                    lastSelectedEventIdRef.current = parsedId;
                 }
 
                 var matchingEvent = events.find(function (evt) { return evt.id === parsedId; });
@@ -739,10 +751,51 @@
             setMemberRegistrations([]);
             setMobileShowDetails(true);
 
+            lastSelectedMemberIdRef.current = member.id;
+            try {
+                localStorage.setItem(memberStorageKey, String(member.id));
+            } catch (e) {
+                // localStorage non disponible
+            }
+
             loadMemberDetails(member.id);
             loadMemberNotesForPanel(member.id);
             loadMemberRegistrationsHistory(member.id);
-        }, [loadMemberDetails, loadMemberNotesForPanel, loadMemberRegistrationsHistory]);
+        }, [loadMemberDetails, loadMemberNotesForPanel, loadMemberRegistrationsHistory, memberStorageKey]);
+
+        useEffect(function () {
+            if (sidebarMode !== 'members') {
+                return;
+            }
+            if (membersLoading) {
+                return;
+            }
+            if (selectedMember && selectedMember.id) {
+                return;
+            }
+
+            try {
+                var parsedId = lastSelectedMemberIdRef.current;
+                if (!parsedId || isNaN(parsedId)) {
+                    var savedId = localStorage.getItem(memberStorageKey);
+                    if (!savedId) {
+                        return;
+                    }
+                    parsedId = parseInt(savedId, 10);
+                    if (!parsedId || isNaN(parsedId)) {
+                        return;
+                    }
+                    lastSelectedMemberIdRef.current = parsedId;
+                }
+
+                var matchingMember = membersList.find(function (m) { return m.id === parsedId; });
+                if (matchingMember) {
+                    handleSelectMember(matchingMember);
+                }
+            } catch (e) {
+                // localStorage non disponible
+            }
+        }, [sidebarMode, membersLoading, selectedMember, membersList, handleSelectMember, memberStorageKey]);
 
         // Changer de mode sidebar
         var handleSidebarModeChange = useCallback(function (mode) {
@@ -1341,6 +1394,7 @@
                                 onValidatePayment: handleValidatePayment,
                                 onValidateRegistration: eventRequiresValidation ? handleValidateRegistration : null,
                                 onChangeOccurrences: allowOccurrenceSelection ? handleChangeOccurrences : null,
+                                onViewMember: handleViewMemberFromRegistration,
                                 strings: strings,
                                 loading: registrationsLoading,
                                 loadingMembers: loadingMembers,

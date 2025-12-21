@@ -242,6 +242,7 @@
         var strings = props.strings;
         var requiresPayment = props.requiresPayment === true;
         var requiresValidation = props.requiresValidation !== false;
+        var onViewMember = props.onViewMember;
 
         var member = registration.member;
         var memberName = member 
@@ -299,7 +300,29 @@
             h('div', { class: 'mj-att-member__info' }, [
                 h(MemberAvatar, { member: member, size: 'medium' }),
                 h('div', { class: 'mj-att-member__details' }, [
-                    h('span', { class: 'mj-att-member__name' }, memberName),
+                    h('div', { class: 'mj-att-member__name-row' }, [
+                        h('span', { class: 'mj-att-member__name' }, memberName),
+                        onViewMember && member && member.id && h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--ghost mj-btn--small mj-att-member__view-member',
+                            onClick: function () { onViewMember(member); },
+                            title: getString(strings, 'viewMemberProfile', 'Ouvrir la fiche membre'),
+                        }, [
+                            h('svg', {
+                                width: 12,
+                                height: 12,
+                                viewBox: '0 0 24 24',
+                                fill: 'none',
+                                stroke: 'currentColor',
+                                'stroke-width': 2,
+                            }, [
+                                h('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
+                                h('polyline', { points: '15 3 21 3 21 9' }),
+                                h('line', { x1: 10, y1: 14, x2: 21, y2: 3 }),
+                            ]),
+                            h('span', { class: 'mj-att-member__view-member-label' }, getString(strings, 'openMember', 'Fiche')),
+                        ]),
+                    ]),
                     h('div', { class: 'mj-att-member__meta-row' }, [
                         member && h('span', { class: 'mj-att-member__meta' }, [
                             member.roleLabel,
@@ -396,6 +419,7 @@
         var onValidatePayment = props.onValidatePayment;
         var onValidateRegistration = props.onValidateRegistration;
         var onChangeOccurrences = props.onChangeOccurrences;
+        var onViewMember = props.onViewMember;
         var strings = props.strings;
         var loading = props.loading;
         var loadingMembers = props.loadingMembers || {};
@@ -629,6 +653,7 @@
                             strings: strings,
                             requiresPayment: requiresPayment,
                             requiresValidation: requiresValidation,
+                            onViewMember: onViewMember,
                         });
                     }),
                 ]),
@@ -659,6 +684,7 @@
                                 strings: strings,
                                 requiresPayment: requiresPayment,
                                 requiresValidation: requiresValidation,
+                                onViewMember: onViewMember,
                             });
                         }),
 
@@ -676,6 +702,7 @@
                                 strings: strings,
                                 requiresPayment: requiresPayment,
                                 requiresValidation: requiresValidation,
+                                onViewMember: onViewMember,
                             });
                         }),
                     ]),
