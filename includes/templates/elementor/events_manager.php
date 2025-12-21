@@ -27,6 +27,13 @@ if ($is_preview) {
             'price' => number_format_i18n(25, 0) . ' €',
             'capacity' => sprintf(_n('%d place', '%d places', 20, 'mj-member'), 20),
             'description' => __('Atelier immersif de deux jours pour les 8-12 ans avec restitution scénique.', 'mj-member'),
+            'schedule_type' => 'range',
+            'schedule_range' => sprintf(
+                __('%1$s • %2$s - %3$s', 'mj-member'),
+                wp_date('d/m/Y', $now_timestamp + DAY_IN_SECONDS),
+                wp_date('H:i', $now_timestamp + DAY_IN_SECONDS),
+                wp_date('H:i', $now_timestamp + DAY_IN_SECONDS + 3 * HOUR_IN_SECONDS)
+            ),
         ],
         [
             'title' => __('Atelier découverte Hip-Hop', 'mj-member'),
@@ -36,6 +43,21 @@ if ($is_preview) {
             'price' => __('Gratuit', 'mj-member'),
             'capacity' => sprintf(_n('%d place', '%d places', 12, 'mj-member'), 12),
             'description' => __('Session d\'initiation aux bases du breakdance encadrée par un intervenant MJ.', 'mj-member'),
+            'schedule_type' => 'recurring',
+            'schedule_days' => [
+                [
+                    'day' => __('Mercredi', 'mj-member'),
+                    'time' => '14:00 - 16:00',
+                ],
+                [
+                    'day' => __('Samedi', 'mj-member'),
+                    'time' => '10:30 - 12:00',
+                ],
+            ],
+            'schedule_until' => sprintf(
+                __('Jusqu\'au %s', 'mj-member'),
+                wp_date('d/m/Y', $now_timestamp + 90 * DAY_IN_SECONDS)
+            ),
         ],
     ];
     ?>
@@ -88,6 +110,31 @@ if ($is_preview) {
                                     <span><?php echo esc_html($preview_event['capacity']); ?></span>
                                 </div>
                             </div>
+                            <?php if (!empty($preview_event['schedule_type'])) : ?>
+                                <div class="mj-events-manager-card__schedule">
+                                    <div class="mj-events-manager-card__schedule-title"><?php esc_html_e('Planification', 'mj-member'); ?></div>
+                                    <?php if ($preview_event['schedule_type'] === 'range' && !empty($preview_event['schedule_range'])) : ?>
+                                        <p class="mj-events-manager-card__schedule-range"><?php echo esc_html($preview_event['schedule_range']); ?></p>
+                                    <?php elseif ($preview_event['schedule_type'] === 'recurring' && !empty($preview_event['schedule_days']) && is_array($preview_event['schedule_days'])) : ?>
+                                        <ul class="mj-events-manager-card__schedule-list">
+                                            <?php foreach ($preview_event['schedule_days'] as $day_item) : ?>
+                                                <?php if (empty($day_item['day']) && empty($day_item['time'])) { continue; } ?>
+                                                <li class="mj-events-manager-card__schedule-item">
+                                                    <?php if (!empty($day_item['day'])) : ?>
+                                                        <span class="mj-events-manager-card__schedule-day"><?php echo esc_html($day_item['day']); ?></span>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($day_item['time'])) : ?>
+                                                        <span class="mj-events-manager-card__schedule-time"><?php echo esc_html($day_item['time']); ?></span>
+                                                    <?php endif; ?>
+                                                </li>
+                                            <?php endforeach; ?>
+                                        </ul>
+                                        <?php if (!empty($preview_event['schedule_until'])) : ?>
+                                            <div class="mj-events-manager-card__schedule-footer"><?php echo esc_html($preview_event['schedule_until']); ?></div>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
                             <p class="mj-events-manager-card__description"><?php echo esc_html($preview_event['description']); ?></p>
                         </div>
                         <div class="mj-events-manager-card__actions">
@@ -153,6 +200,22 @@ $config_json = wp_json_encode([
     'eventTypes' => $event_types,
     'eventStatuses' => $event_statuses,
     'eventCategories' => $event_categories,
+    'weekdayLabels' => [
+        'monday' => __('Lundi', 'mj-member'),
+        'tuesday' => __('Mardi', 'mj-member'),
+        'wednesday' => __('Mercredi', 'mj-member'),
+        'thursday' => __('Jeudi', 'mj-member'),
+        'friday' => __('Vendredi', 'mj-member'),
+        'saturday' => __('Samedi', 'mj-member'),
+        'sunday' => __('Dimanche', 'mj-member'),
+    ],
+    'ordinals' => [
+        'first' => __('1er', 'mj-member'),
+        'second' => __('2e', 'mj-member'),
+        'third' => __('3e', 'mj-member'),
+        'fourth' => __('4e', 'mj-member'),
+        'last' => __('Dernier', 'mj-member'),
+    ],
     'strings' => [
         'addNew' => __('Créer un événement', 'mj-member'),
         'edit' => __('Modifier', 'mj-member'),
@@ -172,6 +235,11 @@ $config_json = wp_json_encode([
         'sortNewest' => __('Plus récents', 'mj-member'),
         'sortOldest' => __('Plus anciens', 'mj-member'),
         'sortTitle' => __('Titre', 'mj-member'),
+        'scheduleTitle' => __('Planification', 'mj-member'),
+        'scheduleAllDay' => __('Toute la journée', 'mj-member'),
+        'scheduleUntilPrefix' => __('Jusqu\'au', 'mj-member'),
+        'scheduleFallback' => __('Planification non renseignée.', 'mj-member'),
+        'scheduleMonthlyPattern' => __('Chaque %1$s %2$s', 'mj-member'),
     ],
 ]);
 ?>

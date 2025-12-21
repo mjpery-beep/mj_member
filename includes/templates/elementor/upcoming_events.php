@@ -22,6 +22,15 @@ if ($columns < 2) {
 if ($columns > 5) {
     $columns = 5;
 }
+$items_per_column = isset($template_data['items_per_column']) ? (int) $template_data['items_per_column'] : 2;
+if ($items_per_column <= 0) {
+    $items_per_column = 1;
+}
+$max_items_limit = isset($template_data['max_items']) ? (int) $template_data['max_items'] : 0;
+if ($max_items_limit <= 0) {
+    $max_items_limit = count($events);
+}
+$max_items_requested = isset($template_data['max_items_requested']) ? (int) $template_data['max_items_requested'] : $max_items_limit;
 $slides_per_view = isset($template_data['slides_per_view']) ? max(1, (int) $template_data['slides_per_view']) : 1;
 $autoplay = !empty($template_data['autoplay']);
 $autoplay_delay = isset($template_data['autoplay_delay']) ? max(2, (int) $template_data['autoplay_delay']) : 6;
@@ -39,6 +48,7 @@ $root_classes = array_map('sanitize_html_class', array_unique(array_filter($root
 $style_tokens = array();
 if ($layout === 'grid') {
     $style_tokens[] = '--mj-upcoming-columns: ' . $columns;
+    $style_tokens[] = '--mj-upcoming-rows: ' . $items_per_column;
 }
 if ($layout === 'slider') {
     $style_tokens[] = '--mj-upcoming-slides: ' . $slides_per_view;
@@ -50,6 +60,8 @@ $config = array(
     'slidesPerView' => $slides_per_view,
     'autoplay' => $autoplay,
     'autoplayDelay' => max(2000, $autoplay_delay * 1000),
+    'itemsPerColumn' => $items_per_column,
+    'maxItems' => $max_items_limit,
 );
 $config_attribute = esc_attr(wp_json_encode($config));
 
@@ -85,6 +97,9 @@ $root_attributes = array(
     'data-mj-upcoming-events="' . esc_attr($instance_id) . '"',
     'data-layout="' . esc_attr($layout) . '"',
     'data-config="' . $config_attribute . '"',
+    'data-items-per-column="' . esc_attr($items_per_column) . '"',
+    'data-max-items="' . esc_attr($max_items_limit) . '"',
+    'data-max-items-requested="' . esc_attr($max_items_requested) . '"',
 );
 if ($style_attribute !== '') {
     $root_attributes[] = 'style="' . esc_attr($style_attribute) . '"';
@@ -286,6 +301,211 @@ $render_event_card = static function ($event, $args = array()) use ($contact_lin
 };
 
 ?>
+<?php if (class_exists('\\Elementor\\Plugin') && \Elementor\Plugin::$instance->editor->is_edit_mode()) : ?>
+    <?php if (!defined('MJ_MEMBER_UPCOMING_EVENTS_EDITOR_STYLES')) : ?>
+        <?php define('MJ_MEMBER_UPCOMING_EVENTS_EDITOR_STYLES', true); ?>
+        <style>
+            .mj-upcoming-events {
+                --mj-upcoming-accent: #2563eb;
+                --mj-upcoming-surface: #ffffff;
+                --mj-upcoming-border: rgba(15, 23, 42, 0.08);
+                --mj-upcoming-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
+                --mj-upcoming-radius: 20px;
+                --mj-upcoming-gap: 24px;
+                --mj-upcoming-columns: 3;
+                --mj-upcoming-slides: 1;
+                display: flex;
+                flex-direction: column;
+                gap: 28px;
+                color: #0f172a;
+            }
+
+            .mj-upcoming-events__title {
+                margin: 0;
+                font-size: 1.58rem;
+                font-weight: 700;
+                color: #0f172a;
+                letter-spacing: -0.01em;
+            }
+
+            .mj-upcoming-events__empty {
+                margin: 0;
+                font-size: 1rem;
+                color: #475569;
+            }
+
+            .mj-upcoming-events__list {
+                display: flex;
+                flex-direction: column;
+                gap: var(--mj-upcoming-gap, 24px);
+            }
+
+            .mj-upcoming-events.layout-grid .mj-upcoming-events__list {
+                display: grid;
+                gap: var(--mj-upcoming-gap, 24px);
+                grid-template-columns: repeat(var(--mj-upcoming-columns, 3), minmax(0, 1fr));
+            }
+
+            .mj-upcoming-events__item {
+                position: relative;
+                display: flex;
+                flex-direction: column;
+                min-height: 100%;
+                border-radius: var(--mj-upcoming-radius, 20px);
+                background: var(--mj-upcoming-surface, #ffffff);
+                border: 1px solid var(--mj-upcoming-border, rgba(15, 23, 42, 0.08));
+                box-shadow: var(--mj-upcoming-shadow, 0 16px 32px rgba(15, 23, 42, 0.12));
+                overflow: hidden;
+                transition: transform 0.3s ease, box-shadow 0.3s ease;
+            }
+
+            .mj-upcoming-events__visual {
+                position: relative;
+                padding-bottom: 60%;
+                background-color: rgba(15, 23, 42, 0.06);
+                background-size: cover;
+                background-position: center;
+                overflow: hidden;
+            }
+
+            .mj-upcoming-events__visual-img {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+
+            .mj-upcoming-events__badge {
+                position: absolute;
+                top: 14px;
+                right: 14px;
+                display: inline-flex;
+                align-items: center;
+                padding: 6px 14px;
+                border-radius: 999px;
+                font-size: 0.72rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.12em;
+                color: #ffffff;
+                background: var(--mj-upcoming-accent, #2563eb);
+            }
+
+            .mj-upcoming-events__body {
+                display: flex;
+                flex-direction: column;
+                gap: 18px;
+                padding: 26px 28px 30px;
+            }
+
+            .mj-upcoming-events__item-title {
+                margin: 0;
+                font-size: 1.22rem;
+                font-weight: 700;
+                color: #0f172a;
+                line-height: 1.3;
+                letter-spacing: -0.01em;
+            }
+
+            .mj-upcoming-events__item-title a {
+                color: inherit;
+                text-decoration: none;
+            }
+
+            .mj-upcoming-events__meta {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .mj-upcoming-events__meta-item {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                font-size: 0.98rem;
+                color: #475569;
+            }
+
+            .mj-upcoming-events__price {
+                font-size: 1rem;
+                font-weight: 600;
+                color: #0f172a;
+            }
+
+            .mj-upcoming-events__excerpt {
+                margin: 0;
+                font-size: 0.95rem;
+                color: #475569;
+            }
+
+            .mj-upcoming-events__location {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 14px 16px;
+                border-radius: 14px;
+                background: rgba(15, 23, 42, 0.05);
+            }
+
+            .mj-upcoming-events__location-text {
+                display: flex;
+                flex-direction: column;
+                font-size: 0.9rem;
+                color: #1f2937;
+            }
+
+            .mj-upcoming-events__cta {
+                margin-top: auto;
+            }
+
+            .mj-upcoming-events__link {
+                display: inline-flex;
+                align-items: center;
+                gap: 10px;
+                font-weight: 600;
+                text-decoration: none;
+                color: var(--mj-upcoming-accent, #2563eb);
+            }
+
+            .mj-upcoming-events__contact {
+                display: flex;
+                gap: 10px;
+                margin-top: 16px;
+            }
+
+            .mj-upcoming-events__contact-link {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 14px;
+                border-radius: 10px;
+                background: rgba(37, 99, 235, 0.12);
+                color: var(--mj-upcoming-accent, #2563eb);
+                text-decoration: none;
+                font-size: 0.9rem;
+            }
+
+            .mj-upcoming-events__footer {
+                display: flex;
+                justify-content: center;
+                padding-top: 12px;
+            }
+
+            .mj-upcoming-events__view-more {
+                display: inline-flex;
+                align-items: center;
+                gap: 10px;
+                padding: 12px 26px;
+                border-radius: 999px;
+                background: var(--mj-upcoming-accent, #2563eb);
+                color: #ffffff;
+                text-decoration: none;
+                font-weight: 600;
+            }
+        </style>
+    <?php endif; ?>
+<?php endif; ?>
 <div <?php echo implode(' ', $root_attributes); ?>>
     <?php if ($display_title && $title !== '') : ?>
         <h3 class="mj-upcoming-events__title"><?php echo esc_html($title); ?></h3>

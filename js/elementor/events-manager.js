@@ -337,6 +337,29 @@
             this.currentPage = 1;
             this.totalPages = 1;
             this.isLoading = false;
+
+            this.locale = (typeof document !== 'undefined' && document.documentElement && document.documentElement.lang)
+                ? document.documentElement.lang
+                : 'fr-FR';
+            this.weekdayOrder = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+            this.weekdayLabels = Object.assign({
+                monday: 'Lundi',
+                tuesday: 'Mardi',
+                wednesday: 'Mercredi',
+                thursday: 'Jeudi',
+                friday: 'Vendredi',
+                saturday: 'Samedi',
+                sunday: 'Dimanche',
+            }, this.config.weekdayLabels || {});
+            this.ordinalLabels = Object.assign({
+                first: '1er',
+                second: '2e',
+                third: '3e',
+                fourth: '4e',
+                last: 'Dernier',
+            }, this.config.ordinals || {});
+
+            this.initFormatters();
             
             this.elements = {
                 list: container.querySelector('[data-events-list]'),
@@ -365,6 +388,28 @@
             this.scheduleController = this.elements.form ? new ScheduleFieldsController(this.elements.form) : null;
 
             this.init();
+        }
+
+        initFormatters() {
+            const locale = this.locale || 'fr-FR';
+            try {
+                this.dateFormatter = new Intl.DateTimeFormat(locale, {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                });
+            } catch (error) {
+                this.dateFormatter = null;
+            }
+
+            try {
+                this.timeFormatter = new Intl.DateTimeFormat(locale, {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                });
+            } catch (error) {
+                this.timeFormatter = null;
+            }
         }
 
         parseConfig() {
@@ -553,6 +598,7 @@
             const typeLabel = this.config.eventTypes[event.type] || event.type;
             const startDate = event.start_date ? this.formatDate(event.start_date) : '—';
             const price = event.price > 0 ? `${parseFloat(event.price).toFixed(2)} €` : this.getString('free', 'Gratuit');
+            const scheduleMarkup = this.renderSchedule(event);
 
             return `
                 <div class="mj-events-manager-card" data-event-id="${escapeHtml(event.id)}">
@@ -580,6 +626,7 @@
                                 </div>
                             ` : ''}
                         </div>
+                            ${scheduleMarkup}
                         ${event.description ? `
                             <p class="mj-events-manager-card__description">${escapeHtml(event.description.substring(0, 150))}${event.description.length > 150 ? '...' : ''}</p>
                         ` : ''}
@@ -628,6 +675,298 @@
                     this.renderList();
                 });
             });
+        }
+
+        renderSchedule(event) {
+            if (!event) {
+                return '';
+            }
+
+            const mode = (event.schedule_mode || '').toLowerCase();
+            if (mode === 'recurring') {
+                const schedule = this.buildRecurringSchedule(event);
+                if (!schedule || (!schedule.items || schedule.items.length === 0) && !schedule.until) {
+                    return '';
+                }
+
+                if (!schedule.items || schedule.items.length === 0) {
+                    const fallback = this.getString('scheduleFallback', 'Planification non renseignée.');
+                    return `
+                        <div class="mj-events-manager-card__schedule">
+                            <div class="mj-events-manager-card__schedule-title">${escapeHtml(this.getString('scheduleTitle', 'Planification'))}</div>
+                            <p class="mj-events-manager-card__schedule-empty">${escapeHtml(fallback)}</p>
+                        </div>
+                    `;
+                }
+
+                const itemsHtml = schedule.items.map(item => `
+                    <li class="mj-events-manager-card__schedule-item">
+                        ${item.day ? `<span class="mj-events-manager-card__schedule-day">${escapeHtml(item.day)}</span>` : ''}
+                        ${item.time ? `<span class="mj-events-manager-card__schedule-time">${escapeHtml(item.time)}</span>` : ''}
+                    </li>
+                `).join('');
+
+                const footer = schedule.until
+                    ? `<div class="mj-events-manager-card__schedule-footer">${escapeHtml(schedule.until)}</div>`
+                    : '';
+
+                return `
+                    <div class="mj-events-manager-card__schedule">
+                        <div class="mj-events-manager-card__schedule-title">${escapeHtml(this.getString('scheduleTitle', 'Planification'))}</div>
+                        <ul class="mj-events-manager-card__schedule-list">
+                            ${itemsHtml}
+                        </ul>
+                        ${footer}
+                    </div>
+                `;
+            }
+
+            const rangeLabel = this.formatScheduleRange(event.start_date, event.end_date);
+            if (rangeLabel) {
+                return `
+                    <div class="mj-events-manager-card__schedule">
+                        <div class="mj-events-manager-card__schedule-title">${escapeHtml(this.getString('scheduleTitle', 'Planification'))}</div>
+                        <p class="mj-events-manager-card__schedule-range">${escapeHtml(rangeLabel)}</p>
+                    </div>
+                `;
+            }
+
+            return '';
+        }
+
+        formatScheduleRange(startValue, endValue) {
+            const startDate = this.parseDate(startValue);
+            if (!startDate) {
+                return '';
+            }
+
+            const startDateLabel = this.formatDateForDisplay(startDate);
+            const startTimeLabel = this.formatTimeForDisplay(startDate);
+
+            const endDate = this.parseDate(endValue);
+            if (!endDate) {
+                return startTimeLabel
+                    ? `${startDateLabel} • ${startTimeLabel}`
+                    : startDateLabel;
+            }
+
+            const endDateLabel = this.formatDateForDisplay(endDate);
+            const endTimeLabel = this.formatTimeForDisplay(endDate);
+            const sameDay = startDate.toDateString() === endDate.toDateString();
+
+            if (sameDay) {
+                if (startTimeLabel && endTimeLabel) {
+                    return `${startDateLabel} • ${startTimeLabel} - ${endTimeLabel}`;
+                }
+                if (startTimeLabel) {
+                    return `${startDateLabel} • ${startTimeLabel}`;
+                }
+                return `${startDateLabel}`;
+            }
+
+            const firstPart = startTimeLabel ? `${startDateLabel} • ${startTimeLabel}` : startDateLabel;
+            const secondPart = endTimeLabel ? `${endDateLabel} • ${endTimeLabel}` : endDateLabel;
+            return `${firstPart} → ${secondPart}`;
+        }
+
+        buildRecurringSchedule(event) {
+            const payload = this.parseSchedulePayload(event && event.schedule_payload);
+            if (!payload || typeof payload !== 'object') {
+                return { items: [], until: '' };
+            }
+
+            const frequency = (payload.frequency || 'weekly').toLowerCase();
+            const items = [];
+
+            if (frequency === 'monthly') {
+                const ordinalKey = (payload.ordinal || 'first').toLowerCase();
+                const weekdayKey = (payload.weekday || 'monday').toLowerCase();
+                const ordinalLabel = this.ordinalLabels[ordinalKey] || payload.ordinal || ordinalKey;
+                const weekdayLabel = this.weekdayLabels[weekdayKey] || payload.weekday || weekdayKey;
+                const pattern = this.getString('scheduleMonthlyPattern', 'Chaque %1$s %2$s')
+                    .replace('%1$s', ordinalLabel)
+                    .replace('%2$s', weekdayLabel);
+
+                const startLabel = this.formatPlainTime(payload.start_time);
+                const endLabel = this.formatPlainTime(payload.end_time);
+                let timeLabel = '';
+                if (startLabel && endLabel) {
+                    timeLabel = `${startLabel} - ${endLabel}`;
+                } else if (startLabel || endLabel) {
+                    timeLabel = startLabel || endLabel;
+                } else {
+                    timeLabel = this.getString('scheduleAllDay', 'Toute la journée');
+                }
+
+                items.push({
+                    day: pattern,
+                    time: timeLabel,
+                });
+            } else {
+                const weekdays = Array.isArray(payload.weekdays)
+                    ? payload.weekdays.map(value => String(value).toLowerCase())
+                    : [];
+                const rawWeekdayTimes = (payload.weekday_times && typeof payload.weekday_times === 'object') ? payload.weekday_times : {};
+                const weekdayTimes = {};
+                Object.keys(rawWeekdayTimes).forEach(key => {
+                    const normalizedKey = String(key).toLowerCase();
+                    weekdayTimes[normalizedKey] = rawWeekdayTimes[key];
+                });
+
+                this.weekdayOrder.forEach(weekdayKey => {
+                    const isSelected = weekdays.includes(weekdayKey) || Object.prototype.hasOwnProperty.call(weekdayTimes, weekdayKey);
+                    if (!isSelected) {
+                        return;
+                    }
+
+                    const times = weekdayTimes[weekdayKey] || {};
+                    const startLabel = this.formatPlainTime(times.start || payload.start_time || '');
+                    const endLabel = this.formatPlainTime(times.end || payload.end_time || '');
+                    let timeLabel = '';
+
+                    if (startLabel && endLabel) {
+                        timeLabel = `${startLabel} - ${endLabel}`;
+                    } else if (startLabel || endLabel) {
+                        timeLabel = startLabel || endLabel;
+                    } else {
+                        timeLabel = this.getString('scheduleAllDay', 'Toute la journée');
+                    }
+
+                    items.push({
+                        day: this.weekdayLabels[weekdayKey] || weekdayKey,
+                        time: timeLabel,
+                    });
+                });
+
+                if (items.length === 0) {
+                    const startLabel = this.formatPlainTime(payload.start_time);
+                    const endLabel = this.formatPlainTime(payload.end_time);
+                    if (startLabel || endLabel) {
+                        items.push({
+                            day: '',
+                            time: startLabel && endLabel ? `${startLabel} - ${endLabel}` : (startLabel || endLabel),
+                        });
+                    }
+                }
+            }
+
+            return {
+                items,
+                until: typeof payload.until === 'string' ? this.buildUntilLabel(payload.until) : '',
+            };
+        }
+
+        parseSchedulePayload(payload) {
+            if (!payload) {
+                return {};
+            }
+
+            if (typeof payload === 'string') {
+                const trimmed = payload.trim();
+                if (trimmed === '') {
+                    return {};
+                }
+                try {
+                    const parsed = JSON.parse(trimmed);
+                    return parsed && typeof parsed === 'object' ? parsed : {};
+                } catch (error) {
+                    return {};
+                }
+            }
+
+            if (typeof payload === 'object') {
+                return payload;
+            }
+
+            return {};
+        }
+
+        parseDate(value) {
+            if (!value || typeof value !== 'string') {
+                return null;
+            }
+
+            let normalized = value.trim();
+            if (normalized === '' || normalized === '0000-00-00 00:00:00' || normalized === '0000-00-00') {
+                return null;
+            }
+
+            if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+                normalized = `${normalized}T00:00:00`;
+            } else if (normalized.indexOf(' ') !== -1 && normalized.indexOf('T') === -1) {
+                normalized = normalized.replace(' ', 'T');
+            }
+
+            const date = new Date(normalized);
+            if (Number.isNaN(date.getTime())) {
+                return null;
+            }
+
+            return date;
+        }
+
+        formatDateForDisplay(date) {
+            if (!(date instanceof Date)) {
+                return '';
+            }
+
+            if (this.dateFormatter) {
+                return this.dateFormatter.format(date);
+            }
+
+            return date.toLocaleDateString(this.locale || undefined, {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+            });
+        }
+
+        formatTimeForDisplay(date) {
+            if (!(date instanceof Date)) {
+                return '';
+            }
+
+            if (this.timeFormatter) {
+                return this.timeFormatter.format(date);
+            }
+
+            return date.toLocaleTimeString(this.locale || undefined, {
+                hour: '2-digit',
+                minute: '2-digit',
+            });
+        }
+
+        formatPlainTime(value) {
+            if (!value || typeof value !== 'string') {
+                return '';
+            }
+
+            const trimmed = value.trim();
+            if (trimmed === '') {
+                return '';
+            }
+
+            const segments = trimmed.split(':');
+            const hours = parseInt(segments[0], 10);
+            if (Number.isNaN(hours)) {
+                return trimmed;
+            }
+            const minutes = segments.length > 1 ? parseInt(segments[1], 10) : 0;
+            const seconds = segments.length > 2 ? parseInt(segments[2], 10) : 0;
+
+            const baseDate = new Date();
+            baseDate.setHours(hours, minutes, seconds, 0);
+            return this.formatTimeForDisplay(baseDate);
+        }
+
+        buildUntilLabel(value) {
+            const date = this.parseDate(value);
+            if (!date) {
+                return '';
+            }
+
+            const prefix = this.getString('scheduleUntilPrefix', "Jusqu'au");
+            return `${prefix} ${this.formatDateForDisplay(date)}`;
         }
 
         formatDate(dateString) {

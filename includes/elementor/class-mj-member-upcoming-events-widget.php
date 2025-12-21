@@ -38,6 +38,10 @@ class Mj_Member_Elementor_Upcoming_Events_Widget extends Widget_Base {
         return array('mj', 'evenement', 'events', 'agenda', 'slider', 'liste');
     }
 
+    public function get_style_depends() {
+        return array('mj-member-components', 'mj-member-events-manager', 'mj-member-event-form');
+    }
+
     public function get_script_depends() {
         return array('mj-member-upcoming-events');
     }
@@ -105,6 +109,19 @@ class Mj_Member_Elementor_Upcoming_Events_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'items_per_column',
+            array(
+                'label' => __('Nombre par colonne', 'mj-member'),
+                'type' => Controls_Manager::NUMBER,
+                'min' => 1,
+                'max' => 12,
+                'step' => 1,
+                'default' => 2,
+                'condition' => array('layout' => 'grid'),
+            )
+        );
+
+        $this->add_control(
             'slides_per_view',
             array(
                 'label' => __('Éléments visibles (slider)', 'mj-member'),
@@ -120,7 +137,7 @@ class Mj_Member_Elementor_Upcoming_Events_Widget extends Widget_Base {
         $this->add_control(
             'max_items',
             array(
-                'label' => __('Nombre d’événements', 'mj-member'),
+                'label' => __('Nombre maximum', 'mj-member'),
                 'type' => Controls_Manager::NUMBER,
                 'min' => 1,
                 'max' => 12,
@@ -551,16 +568,45 @@ class Mj_Member_Elementor_Upcoming_Events_Widget extends Widget_Base {
         $settings = $this->get_settings_for_display();
         $this->apply_visibility_to_wrapper($settings, 'mj-member-upcoming-events-widget');
 
+        if (function_exists('wp_enqueue_style')) {
+            wp_enqueue_style('mj-member-components');
+            wp_enqueue_style('mj-member-event-form');
+            wp_enqueue_style('mj-member-events-manager');
+        }
+
         $layout = isset($settings['layout']) ? sanitize_key($settings['layout']) : 'list';
         if (!in_array($layout, array('list', 'grid', 'slider'), true)) {
             $layout = 'list';
         }
+
+        $columns = isset($settings['columns']) ? (int) $settings['columns'] : 3;
+        if ($columns < 2) {
+            $columns = 2;
+        }
+        $columns = min($columns, 5);
+
+        $items_per_column = isset($settings['items_per_column']) ? (int) $settings['items_per_column'] : 2;
+        if ($items_per_column <= 0) {
+            $items_per_column = 1;
+        }
+        $items_per_column = min($items_per_column, 12);
 
         $max_items = isset($settings['max_items']) ? (int) $settings['max_items'] : 4;
         if ($max_items <= 0) {
             $max_items = 4;
         }
         $max_items = min($max_items, 20);
+
+        $effective_limit = $max_items;
+        if ($layout === 'grid') {
+            $grid_cap = $columns * $items_per_column;
+            if ($grid_cap > 0) {
+                $effective_limit = min($max_items, $grid_cap);
+            }
+        }
+        if ($effective_limit <= 0) {
+            $effective_limit = 1;
+        }
 
         $order = isset($settings['order']) ? strtoupper((string) $settings['order']) : 'ASC';
         if (!in_array($order, array('ASC', 'DESC'), true)) {
@@ -585,7 +631,7 @@ class Mj_Member_Elementor_Upcoming_Events_Widget extends Widget_Base {
         }
 
         $query_args = array(
-            'limit' => $max_items,
+            'limit' => $effective_limit,
             'order' => $order,
             'orderby' => $orderby,
         );
@@ -597,6 +643,10 @@ class Mj_Member_Elementor_Upcoming_Events_Widget extends Widget_Base {
         $events = function_exists('mj_member_get_upcoming_events')
             ? mj_member_get_upcoming_events($query_args)
             : array();
+
+        if ($effective_limit > 0 && !empty($events) && count($events) > $effective_limit) {
+            $events = array_slice($events, 0, $effective_limit);
+        }
 
         $type_labels = method_exists('MjEvents', 'get_type_labels') ? MjEvents::get_type_labels() : array();
 
@@ -625,7 +675,7 @@ class Mj_Member_Elementor_Upcoming_Events_Widget extends Widget_Base {
 
         $is_preview = $this->is_elementor_preview_mode();
         if ($is_preview && empty($events)) {
-            $events = $this->build_preview_events($max_items, $type_labels);
+            $events = $this->build_preview_events($effective_limit, $type_labels);
         }
 
         $prepared_events = array();
@@ -818,12 +868,6 @@ class Mj_Member_Elementor_Upcoming_Events_Widget extends Widget_Base {
             $view_more_alignment = 'center';
         }
 
-        $columns = isset($settings['columns']) ? (int) $settings['columns'] : 3;
-        if ($columns < 2) {
-            $columns = 2;
-        }
-        $columns = min($columns, 5);
-
         $slides_per_view = isset($settings['slides_per_view']) ? (int) $settings['slides_per_view'] : 1;
         if ($slides_per_view <= 0) {
             $slides_per_view = 1;
@@ -909,9 +953,12 @@ class Mj_Member_Elementor_Upcoming_Events_Widget extends Widget_Base {
             'events' => $prepared_events,
             'empty_message' => $empty_message,
             'columns' => $columns,
+            'items_per_column' => $items_per_column,
             'slides_per_view' => $slides_per_view,
             'autoplay' => $autoplay,
             'autoplay_delay' => $autoplay_delay,
+            'max_items' => $effective_limit,
+            'max_items_requested' => $max_items,
             'view_more' => array(
                 'enabled' => $view_more_enabled && $view_more_url !== '',
                 'label' => $view_more_label,
