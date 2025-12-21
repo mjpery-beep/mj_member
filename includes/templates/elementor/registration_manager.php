@@ -391,6 +391,12 @@ $config_json = wp_json_encode(array(
         'filterPast' => __('Passés', 'mj-member'),
         'filterDraft' => __('Brouillons', 'mj-member'),
         'filterInternal' => __('Internes', 'mj-member'),
+
+        // Filtres membres
+        'filterJeune' => __('Jeunes', 'mj-member'),
+        'filterAnimateur' => __('Animateurs', 'mj-member'),
+        'filterParent' => __('Parents', 'mj-member'),
+        'filterMembershipDue' => __('Cotisation à régulariser', 'mj-member'),
         
         // Événements
         'noEvents' => __('Aucun événement trouvé.', 'mj-member'),

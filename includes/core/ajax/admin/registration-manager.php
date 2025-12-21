@@ -1408,6 +1408,11 @@ function mj_regmgr_get_members() {
 
     // Build filters array
     $filters = array();
+
+    if ($filter === 'membership_due') {
+        $filters['payment'] = 'due';
+    }
+
     if ($filter !== 'all') {
         $normalized_filter = MjRoles::normalize($filter);
         if (in_array($normalized_filter, array('jeune', 'animateur', 'tuteur', 'benevole', 'coordinateur'), true)) {

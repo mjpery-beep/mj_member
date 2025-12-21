@@ -272,6 +272,7 @@
             { key: 'jeune', label: getString(strings, 'filterJeune', 'Jeunes') },
             { key: 'animateur', label: getString(strings, 'filterAnimateur', 'Animateurs') },
             { key: 'parent', label: getString(strings, 'filterParent', 'Parents') },
+            { key: 'membership_due', label: getString(strings, 'filterMembershipDue', 'Cotisation à régulariser') },
         ];
 
         var currentFilters = sidebarMode === 'events' ? eventFilters : memberFilters;

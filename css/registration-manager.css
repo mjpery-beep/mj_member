@@ -175,7 +175,6 @@ input.mj-regmgr-search-input__field {
 
 .mj-regmgr-sidebar__header {
     padding: 0;
-    border-bottom: 1px solid var(--regmgr-gray-200);
 }
 
 /* Mode tabs (Événements / Membres) */
@@ -812,12 +811,12 @@ input.mj-regmgr-search-input__field {
 .mj-regmgr-tabs {
     display: flex;
     gap: 8px;
-    padding: 12px 16px;
+    padding: 8px 16px;
     background: var(--regmgr-gray-100);
     border-bottom: 1px solid var(--regmgr-gray-200);
     border-left: 0;
     border-radius: 15px;
-    margin: 5px;
+    margin-left: 15px;
 }
 
 .mj-regmgr-tab {
