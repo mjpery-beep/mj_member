@@ -246,7 +246,13 @@ $is_pending_active = !$is_confirmed_active;
                                         <div class="mj-payments-overview__actions">
                                             <?php if ($checkout_url !== '') : ?>
                                                 <a href="<?php echo esc_url($checkout_url); ?>" class="mj-payments-overview__pay-btn" target="_blank" rel="noopener">
-                                                    <?php esc_html_e('Payer maintenant', 'mj-member'); ?>
+                                                    <svg class="mj-payments-overview__pay-btn-icon mj-payments-overview__pay-btn-icon--leading" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                                        <path d="M3 5h18a1 1 0 0 1 1 1v3H2V6a1 1 0 0 1 1-1zm-1 6h20v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-7zm4 5h4v-2H6v2z" />
+                                                    </svg>
+                                                    <span class="mj-payments-overview__pay-btn-label"><?php esc_html_e('Payer maintenant', 'mj-member'); ?></span>
+                                                    <svg class="mj-payments-overview__pay-btn-icon mj-payments-overview__pay-btn-icon--trailing" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                                        <path d="M5 12h10.586l-3.293-3.293 1.414-1.414L19.414 12l-5.707 5.707-1.414-1.414L15.586 13H5z" />
+                                                    </svg>
                                                 </a>
                                             <?php endif; ?>
                                             <?php if ($qr_url !== '') : ?>
