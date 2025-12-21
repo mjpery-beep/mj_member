@@ -17,15 +17,103 @@ $show_past = !empty($settings['show_past_events']) && $settings['show_past_event
 $per_page = !empty($settings['events_per_page']) ? (int) $settings['events_per_page'] : 20;
 
 if ($is_preview) {
+    $now_timestamp = current_time('timestamp');
+    $preview_events = [
+        [
+            'title' => __('Stage vacances - Arts créatifs', 'mj-member'),
+            'status' => __('Actif', 'mj-member'),
+            'type' => __('Stage', 'mj-member'),
+            'date' => wp_date('d/m/Y H:i', $now_timestamp + DAY_IN_SECONDS),
+            'price' => number_format_i18n(25, 0) . ' €',
+            'capacity' => sprintf(_n('%d place', '%d places', 20, 'mj-member'), 20),
+            'description' => __('Atelier immersif de deux jours pour les 8-12 ans avec restitution scénique.', 'mj-member'),
+        ],
+        [
+            'title' => __('Atelier découverte Hip-Hop', 'mj-member'),
+            'status' => __('Brouillon', 'mj-member'),
+            'type' => __('Atelier', 'mj-member'),
+            'date' => wp_date('d/m/Y H:i', $now_timestamp + 3 * DAY_IN_SECONDS),
+            'price' => __('Gratuit', 'mj-member'),
+            'capacity' => sprintf(_n('%d place', '%d places', 12, 'mj-member'), 12),
+            'description' => __('Session d\'initiation aux bases du breakdance encadrée par un intervenant MJ.', 'mj-member'),
+        ],
+    ];
     ?>
-    <div class="mj-events-manager" data-widget-id="<?php echo esc_attr($widget_id); ?>">
-        <div class="mj-events-manager__preview">
-            <div class="mj-events-manager__preview-icon">
-                <span class="dashicons dashicons-calendar-alt"></span>
-            </div>
-            <h3><?php echo esc_html($title); ?></h3>
-            <p><?php esc_html_e('Aperçu du widget de gestion d\'événements (visible uniquement pour les animateurs et coordinateurs en production).', 'mj-member'); ?></p>
+    <div class="mj-events-manager mj-events-manager--preview" data-widget-id="<?php echo esc_attr($widget_id); ?>">
+        <div class="mj-events-manager__header">
+            <h2 class="mj-events-manager__title"><?php echo esc_html($title); ?></h2>
+            <button type="button" class="mj-events-manager__add-btn" disabled>
+                <span class="dashicons dashicons-plus-alt2"></span>
+                <span><?php esc_html_e('Créer un événement', 'mj-member'); ?></span>
+            </button>
         </div>
+
+        <div class="mj-events-manager__toolbar">
+            <div class="mj-events-manager__search">
+                <input type="text" class="mj-events-manager__search-input" placeholder="<?php esc_attr_e('Rechercher...', 'mj-member'); ?>" disabled />
+            </div>
+            <div class="mj-events-manager__filters">
+                <select class="mj-events-manager__filter-select" disabled>
+                    <option><?php esc_html_e('Tous les statuts', 'mj-member'); ?></option>
+                </select>
+                <select class="mj-events-manager__filter-select" disabled>
+                    <option><?php esc_html_e('Tous les types', 'mj-member'); ?></option>
+                </select>
+            </div>
+        </div>
+
+        <div class="mj-events-manager__content">
+            <div class="mj-events-manager__list">
+                <?php foreach ($preview_events as $index => $preview_event) : ?>
+                    <div class="mj-events-manager-card" data-event-id="preview-<?php echo esc_attr((string) $index); ?>">
+                        <div class="mj-events-manager-card__header">
+                            <h3 class="mj-events-manager-card__title"><?php echo esc_html($preview_event['title']); ?></h3>
+                            <div class="mj-events-manager-card__badges">
+                                <span class="mj-events-manager-card__badge mj-events-manager-card__badge--status"><?php echo esc_html($preview_event['status']); ?></span>
+                                <span class="mj-events-manager-card__badge mj-events-manager-card__badge--type"><?php echo esc_html($preview_event['type']); ?></span>
+                            </div>
+                        </div>
+                        <div class="mj-events-manager-card__body">
+                            <div class="mj-events-manager-card__meta">
+                                <div class="mj-events-manager-card__meta-item">
+                                    <span class="dashicons dashicons-calendar-alt"></span>
+                                    <span><?php echo esc_html($preview_event['date']); ?></span>
+                                </div>
+                                <div class="mj-events-manager-card__meta-item">
+                                    <span class="dashicons dashicons-tickets-alt"></span>
+                                    <span><?php echo esc_html($preview_event['price']); ?></span>
+                                </div>
+                                <div class="mj-events-manager-card__meta-item">
+                                    <span class="dashicons dashicons-groups"></span>
+                                    <span><?php echo esc_html($preview_event['capacity']); ?></span>
+                                </div>
+                            </div>
+                            <p class="mj-events-manager-card__description"><?php echo esc_html($preview_event['description']); ?></p>
+                        </div>
+                        <div class="mj-events-manager-card__actions">
+                            <button type="button" class="mj-events-manager-card__action" disabled>
+                                <span class="dashicons dashicons-edit"></span>
+                                <span><?php esc_html_e('Modifier', 'mj-member'); ?></span>
+                            </button>
+                            <button type="button" class="mj-events-manager-card__action mj-events-manager-card__action--danger" disabled>
+                                <span class="dashicons dashicons-trash"></span>
+                                <span><?php esc_html_e('Supprimer', 'mj-member'); ?></span>
+                            </button>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+
+            <div class="mj-events-manager__pagination">
+                <div class="mj-events-manager-pagination">
+                    <button type="button" class="mj-events-manager-pagination__btn mj-events-manager-pagination__btn--active" disabled>1</button>
+                    <button type="button" class="mj-events-manager-pagination__btn" disabled>2</button>
+                    <button type="button" class="mj-events-manager-pagination__btn" disabled>3</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="mj-events-manager__feedback" aria-live="polite"><?php esc_html_e('Mode aperçu Elementor - interactions désactivées.', 'mj-member'); ?></div>
     </div>
     <?php
     return;

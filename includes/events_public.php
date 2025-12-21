@@ -1565,7 +1565,9 @@ if (!function_exists('mj_member_get_public_events')) {
 
         $now_value = isset($args['now']) ? sanitize_text_field($args['now']) : current_time('mysql');
         if (!$include_past_events) {
-            $where_fragments[] = '(events.date_fin >= %s OR (events.schedule_mode = %s AND (events.recurrence_until IS NULL OR events.recurrence_until = "" OR events.recurrence_until = "0000-00-00 00:00:00" OR events.recurrence_until >= %s)))';
+            $normalized_date_fin = "CASE WHEN events.date_fin IS NULL OR CAST(events.date_fin AS CHAR) = '' OR CAST(events.date_fin AS CHAR) = '0000-00-00 00:00:00' THEN '9999-12-31 23:59:59' ELSE CAST(events.date_fin AS CHAR) END";
+            $normalized_recurrence = "CASE WHEN events.recurrence_until IS NULL OR CAST(events.recurrence_until AS CHAR) = '' OR CAST(events.recurrence_until AS CHAR) = '0000-00-00 00:00:00' THEN '9999-12-31 23:59:59' ELSE CAST(events.recurrence_until AS CHAR) END";
+            $where_fragments[] = "({$normalized_date_fin} >= %s OR (events.schedule_mode = %s AND {$normalized_recurrence} >= %s))";
             $where_params[] = $now_value;
             $where_params[] = 'recurring';
             $where_params[] = $now_value;
@@ -2347,7 +2349,7 @@ if (!function_exists('mj_member_build_event_permalink')) {
             return '';
         }
 
-        return home_url('/date/' . rawurlencode($slug));
+        return home_url('/evenement/' . rawurlencode($slug));
     }
 }
 
