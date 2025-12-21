@@ -7,6 +7,10 @@ use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\Crud\MjEventAttendance;
 use Mj\Member\Classes\Crud\MjEventRegistrations;
+use function sanitize_key;
+use function sanitize_text_field;
+use function sanitize_email;
+use function trim;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -35,6 +39,27 @@ class MjPayments extends MjTools {
         $context_type = isset($options['context']) ? sanitize_key($options['context']) : 'membership';
         if ($context_type === '') {
             $context_type = 'membership';
+        }
+
+        if ($context_type === 'membership' && (empty($options['force_new']) || !$options['force_new'])) {
+            $existing_payment = self::get_pending_membership_payment($member_id);
+            if ($existing_payment && !empty($existing_payment->checkout_url) && !empty($existing_payment->external_ref)) {
+                $amount_existing = isset($existing_payment->amount) ? (float) $existing_payment->amount : (float) $amount;
+
+                return array(
+                    'payment_id' => isset($existing_payment->id) ? (int) $existing_payment->id : 0,
+                    'token' => isset($existing_payment->token) ? (string) $existing_payment->token : '',
+                    'stripe_session_id' => (string) $existing_payment->external_ref,
+                    'checkout_url' => (string) $existing_payment->checkout_url,
+                    'qr_url' => self::generate_qr_code((string) $existing_payment->checkout_url),
+                    'amount' => number_format($amount_existing, 2),
+                    'amount_label' => number_format_i18n($amount_existing, 2),
+                    'amount_raw' => $amount_existing,
+                    'occurrence_mode' => 'all',
+                    'occurrence_count' => 1,
+                    'occurrence_list' => array(),
+                );
+            }
         }
 
         $event_id = isset($options['event_id']) ? (int) $options['event_id'] : 0;
@@ -461,6 +486,67 @@ class MjPayments extends MjTools {
         );
         
         return $updated !== false ? $updated : 0;
+    }
+
+    /**
+     * Récupère le paiement de cotisation en attente le plus récent pour un membre.
+     *
+     * @param int $member_id
+     * @return object|null
+     */
+    public static function get_pending_membership_payment($member_id) {
+        global $wpdb;
+
+        $member_id = (int) $member_id;
+        if ($member_id <= 0) {
+            return null;
+        }
+
+        $table = $wpdb->prefix . 'mj_payments';
+
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT * FROM {$table}
+                 WHERE member_id = %d
+                   AND (event_id IS NULL OR event_id = 0)
+                   AND (registration_id IS NULL OR registration_id = 0)
+                 ORDER BY id DESC
+                 LIMIT 10",
+                $member_id
+            )
+        );
+
+        if (empty($rows)) {
+            return null;
+        }
+
+        $allowed_contexts = array('membership', 'membership_renewal', 'membership-renewal', 'membership_fee', 'membershipfee', 'adhesion');
+        $pending_statuses = array('pending', 'requires_payment_method', 'requires_action', 'processing', 'incomplete', 'open', 'awaiting', 'awaiting_payment', 'unpaid');
+
+        foreach ($rows as $row) {
+            $status = isset($row->status) ? \sanitize_key((string) $row->status) : '';
+            if ($status === '') {
+                continue;
+            }
+
+            if (!in_array($status, $pending_statuses, true)) {
+                continue;
+            }
+
+            $context = isset($row->context) ? \sanitize_key((string) $row->context) : '';
+            if ($context !== '' && !in_array($context, $allowed_contexts, true)) {
+                continue;
+            }
+
+            $checkout_url = isset($row->checkout_url) ? \trim((string) $row->checkout_url) : '';
+            if ($checkout_url === '') {
+                continue;
+            }
+
+            return $row;
+        }
+
+        return null;
     }
 
     /**

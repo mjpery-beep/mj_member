@@ -1,7 +1,9 @@
 <?php
 
 use Mj\Member\Core\Config;
+use Mj\Member\Core\Logger;
 use Mj\Member\Classes\MjRoles;
+use Mj\Member\Classes\MjPayments;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -699,7 +701,25 @@ if (!function_exists('mj_member_handle_payment_link_request')) {
             exit;
         }
 
-        $payment = MjPayments::create_stripe_payment($member->id, $amount);
+        try {
+            $existing_payment = MjPayments::get_pending_membership_payment($member->id);
+
+            if ($existing_payment && !empty($existing_payment->checkout_url)) {
+                wp_safe_redirect(esc_url_raw($existing_payment->checkout_url));
+                exit;
+            }
+
+            $payment = MjPayments::create_stripe_payment($member->id, $amount);
+        } catch (Throwable $exception) {
+            Logger::error('Membership payment form failure', array(
+                'member_id' => isset($member->id) ? (int) $member->id : 0,
+                'exception' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ), 'payments');
+            wp_safe_redirect(add_query_arg('mj_member_payment_error', 'stripe', $redirect_to));
+            exit;
+        }
+
         if ($payment && !empty($payment['checkout_url'])) {
             wp_safe_redirect(esc_url_raw($payment['checkout_url']));
             exit;
@@ -738,8 +758,24 @@ if (!function_exists('mj_member_ajax_create_payment_link')) {
             wp_send_json_error(array('message' => __('Le module de paiement n\'est pas disponible.', 'mj-member')), 500);
         }
 
-        $amount = (float) apply_filters('mj_member_membership_amount', (float) get_option('mj_annual_fee', '2.00'), $member);
-        $payment = MjPayments::create_stripe_payment($member->id, $amount);
+        try {
+            $existing_payment = MjPayments::get_pending_membership_payment($member->id);
+            if ($existing_payment && !empty($existing_payment->checkout_url)) {
+                wp_send_json_success(array(
+                    'redirect_url' => esc_url_raw($existing_payment->checkout_url),
+                ));
+            }
+
+            $amount = (float) apply_filters('mj_member_membership_amount', (float) get_option('mj_annual_fee', '2.00'), $member);
+            $payment = MjPayments::create_stripe_payment($member->id, $amount);
+        } catch (Throwable $exception) {
+            Logger::error('Membership payment ajax failure', array(
+                'member_id' => isset($member->id) ? (int) $member->id : 0,
+                'exception' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ), 'payments');
+            wp_send_json_error(array('message' => __('Impossible de générer le lien de paiement.', 'mj-member')), 500);
+        }
 
         if (!$payment || empty($payment['checkout_url'])) {
             wp_send_json_error(array('message' => __('Impossible de générer le lien de paiement.', 'mj-member')), 500);

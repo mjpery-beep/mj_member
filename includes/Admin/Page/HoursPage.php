@@ -22,6 +22,7 @@ final class HoursPage
         return 'mj_member_hours';
     }
 
+    
     public static function render(): void
     {
         $capability = Config::hoursCapability();
@@ -95,6 +96,7 @@ final class HoursPage
                 'weeklyExtraLabel' => __('Heures supplémentaires', 'mj-member'),
                 'weeklyExpectedLabel' => __('Heures attendues', 'mj-member'),
                 'weeklyDeficitLabel' => __('Heures manquantes', 'mj-member'),
+                'weeklyBalanceNetLabel' => __('Solde cumulé', 'mj-member'),
                 'barChartEmpty' => __('Aucune donnée disponible pour cette période.', 'mj-member'),
                 'renderError' => __('Impossible d’afficher le tableau de bord pour le moment. Merci de rafraîchir la page.', 'mj-member'),
             ),
@@ -298,6 +300,32 @@ final class HoursPage
         $weeklySeries = self::prepareWeeklySeries($weeklyTotals, $weeklySeriesLimit);
         $weeklySeries = self::augmentWeeklySeriesWithExpectations($weeklySeries, $contractMinutesByMember, $aggregateWeeklyContractMinutes);
 
+        $weeklyBalanceByMember = array();
+        if (isset($weeklySeries['by_member']) && is_array($weeklySeries['by_member'])) {
+            foreach ($weeklySeries['by_member'] as $memberId => $memberRows) {
+                $memberId = (int) $memberId;
+                if ($memberId <= 0) {
+                    continue;
+                }
+                $weeklyBalanceByMember[$memberId] = self::sumWeeklyDifferenceMinutes(is_array($memberRows) ? $memberRows : array());
+            }
+        }
+
+        foreach ($members as &$memberRow) {
+            $memberId = isset($memberRow['id']) ? (int) $memberRow['id'] : 0;
+            if ($memberId <= 0) {
+                continue;
+            }
+
+            $balanceMinutes = $weeklyBalanceByMember[$memberId] ?? 0;
+            $memberRow['weekly_balance_minutes'] = $balanceMinutes;
+            $memberRow['weekly_balance_human'] = self::formatSignedDuration($balanceMinutes);
+        }
+        unset($memberRow);
+
+        $aggregateWeeklyBalanceMinutes = self::sumWeeklyDifferenceMinutes($weeklySeries['all'] ?? array());
+        $aggregateWeeklyBalanceHuman = self::formatSignedDuration($aggregateWeeklyBalanceMinutes);
+
         $weeklyAverageMinutes = 0;
         $weeklyAverageWeeks = count($weeklySeries['all']);
         $weeklyAverageMeta = '';
@@ -353,6 +381,8 @@ final class HoursPage
                 'weekly_contract_human' => self::formatDuration($aggregateWeeklyContractMinutes),
                 'weekly_extra_recent_minutes' => $weeklyExtraRecentMinutes,
                 'weekly_extra_recent_human' => $weeklyExtraRecentHuman,
+                'weekly_balance_minutes' => $aggregateWeeklyBalanceMinutes,
+                'weekly_balance_human' => $aggregateWeeklyBalanceHuman,
             ),
             'timeseries' => $timeseries,
             'generated_at' => gmdate('c', $generatedTimestamp),
@@ -635,6 +665,39 @@ final class HoursPage
         return $series;
     }
 
+    private static function sumWeeklyDifferenceMinutes(array $series): int
+    {
+        $sum = 0;
+
+        foreach ($series as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            if (isset($row['difference_minutes'])) {
+                $sum += (int) $row['difference_minutes'];
+                continue;
+            }
+
+            $actual = isset($row['minutes']) ? (int) $row['minutes'] : 0;
+            $expected = isset($row['expected_minutes']) ? (int) $row['expected_minutes'] : 0;
+            $sum += $actual - $expected;
+        }
+
+        return $sum;
+    }
+
+    private static function formatSignedDuration(int $minutes): string
+    {
+        if ($minutes === 0) {
+            return self::formatDuration(0);
+        }
+
+        $sign = $minutes > 0 ? '+' : '-';
+
+        return sprintf('%s%s', $sign, self::formatDuration(abs($minutes)));
+    }
+
     private static function createWeekStartTimestamp(int $isoYear, int $isoWeek): ?int
     {
         if ($isoYear <= 0 || $isoWeek <= 0) {
@@ -666,7 +729,7 @@ final class HoursPage
     private static function formatWeekShortLabel(int $isoWeek): string
     {
         $weekNumber = sprintf('%02d', max(1, min($isoWeek, 53)));
-        return sprintf(__('Sem. %1$s', 'mj-member'), $weekNumber);
+        return $weekNumber;
     }
 
     public static function formatDate(?string $date): string

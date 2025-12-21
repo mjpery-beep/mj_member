@@ -144,6 +144,61 @@ function ensureChartJs() {
     return chartJsReadyPromise;
 }
 
+function useChartJs(canvasRef, chartType, chartData, chartOptions) {
+    var chartStateRef = useRef({ chart: null });
+
+    useEffect(function () {
+        var isActive = true;
+        var state = chartStateRef.current;
+
+        function destroyChart() {
+            if (state.chart) {
+                try {
+                    state.chart.destroy();
+                } catch (_) {
+                    // ignore destruction errors
+                }
+                state.chart = null;
+            }
+        }
+
+        if (!canvasRef || !canvasRef.current || !chartType || !chartData) {
+            destroyChart();
+            return function () {
+                isActive = false;
+                destroyChart();
+            };
+        }
+
+        ensureChartJs().then(function (Chart) {
+            if (!isActive || !canvasRef.current) {
+                return;
+            }
+
+            destroyChart();
+
+            try {
+                state.chart = new Chart(canvasRef.current, {
+                    type: chartType,
+                    data: chartData,
+                    options: chartOptions || {},
+                });
+            } catch (error) {
+                console.error('MJ Member Hours dashboard failed to render chart', error);
+            }
+        }).catch(function (error) {
+            if (isActive) {
+                console.error('MJ Member Hours dashboard failed to initialize Chart.js', error);
+            }
+        });
+
+        return function () {
+            isActive = false;
+            destroyChart();
+        };
+    }, [canvasRef, chartType, chartData, chartOptions]);
+}
+
 function parseConfig(raw) {
     if (typeof raw !== 'string' || raw === '') {
         return {};
@@ -198,115 +253,14 @@ function formatMinutesToHoursLabel(minutes) {
     return parts.join(' ');
 }
 
-function useChartJs(canvasRef, chartType, chartData, chartOptions) {
-    useEffect(function () {
-        var chartInstance = null;
-        var isMounted = true;
-
-        if (!canvasRef || typeof canvasRef !== 'object') {
-            return undefined;
-        }
-
-        if (!chartType || !chartData) {
-            return function () {
-                isMounted = false;
-            };
-        }
-
-        ensureChartJs()
-            .then(function (ChartConstructor) {
-                if (!isMounted || !canvasRef.current || !chartData) {
-                    return;
-                }
-
-                var context = canvasRef.current.getContext('2d');
-                if (!context) {
-                    return;
-                }
-
-                chartInstance = new ChartConstructor(context, {
-                    type: chartType,
-                    data: chartData,
-                    options: chartOptions || {},
-                });
-            })
-            .catch(function (error) {
-                console.error('MJ Member Hours dashboard failed to initialise Chart.js', error);
-            });
-
-        return function () {
-            isMounted = false;
-            if (chartInstance) {
-                chartInstance.destroy();
-                chartInstance = null;
-            }
-        };
-    }, [canvasRef, chartType, chartData, chartOptions]);
-}
-
-function SummaryCards({ totals, i18n }) {
-    const cards = [];
-
-    cards.push({
-        key: 'total-hours',
-        title: i18n.totalHours,
-        value: totals.human || '0',
-        meta: totals.entries ? `${totals.entries} ${i18n.entriesLabel}` : null,
-    });
-
-    if (typeof totals.weekly_average_minutes === 'number' && !Number.isNaN(totals.weekly_average_minutes)) {
-        var averageMeta = typeof totals.weekly_average_meta === 'string' ? totals.weekly_average_meta : '';
-        if (averageMeta === '' && typeof i18n.weeklyAverageMetaFallback === 'string') {
-            averageMeta = i18n.weeklyAverageMetaFallback;
-        }
-
-        cards.push({
-            key: 'weekly-average',
-            title: i18n.averageWeeklyHours || 'Moyenne hebdomadaire encodée',
-            value: totals.weekly_average_human || '0',
-            meta: averageMeta !== '' ? averageMeta : null,
-        });
+function formatSignedMinutesToHoursLabel(minutes) {
+    var value = Number(minutes);
+    if (!Number.isFinite(value) || value === 0) {
+        return '0 min';
     }
 
-    cards.push({
-        key: 'members-count',
-        title: i18n.membersCount,
-        value: String(totals.member_count || 0),
-        meta: null,
-    });
-
-    cards.push({
-        key: 'projects-count',
-        title: i18n.projectsCount,
-        value: String(totals.project_count || 0),
-        meta: null,
-    });
-
-    cards.push({
-        key: 'unassigned',
-        title: i18n.unassignedHours,
-        value: totals.unassigned_human || '0',
-        meta: (function () {
-            var totalBase = Math.max(totals.minutes || 0, 0);
-            if (totalBase <= 0) {
-                return '0%';
-            }
-            var percent = ((totals.unassigned_minutes || 0) / totalBase) * 100;
-            return formatPercentage(percent);
-        }()),
-    });
-
-    return (
-        h('div', { className: 'mj-hours-dashboard__summary' },
-            cards.map(function (card) {
-                return h('div', { key: card.key, className: 'mj-hours-dashboard-card' },
-                    h('p', { className: 'mj-hours-dashboard-card__title' }, card.title || ''),
-                    h('p', { className: 'mj-hours-dashboard-card__value' }, card.value || '0'),
-                    card.meta ? h('p', { className: 'mj-hours-dashboard-card__meta' }, card.meta) : null,
-                );
-            })
-        )
-    );
+    var sign = value > 0 ? '+' : '-';
+    return sign + formatMinutesToHoursLabel(Math.abs(value));
 }
 
 function DonutChart({ title, items, totalMinutes, centerLabel, centerValue, i18n, emptyLabel, wrap = true, headingLevel = 'h2' }) {
@@ -581,6 +535,91 @@ function BarChart({ title, subtitle, items, i18n, emptyLabel }) {
     );
 }
 
+
+function SummaryCards({ totals, i18n }) {
+    var safeTotals = totals || {};
+    var safeI18n = i18n || {};
+
+    var totalEntries = Number.isFinite(safeTotals.entries) ? safeTotals.entries : 0;
+    var entriesLabel = safeI18n.entriesLabel || '';
+    var entriesMeta = totalEntries > 0 && entriesLabel
+        ? totalEntries + ' ' + entriesLabel
+        : '';
+
+    var membersCount = Number.isFinite(safeTotals.member_count) ? safeTotals.member_count : 0;
+    var projectsCount = Number.isFinite(safeTotals.project_count) ? safeTotals.project_count : 0;
+    var projectsLabel = safeI18n.projectsCount || '';
+    var membersMeta = projectsCount > 0 && projectsLabel
+        ? projectsCount + ' ' + projectsLabel
+        : '';
+
+    var weeklyAverageMeta = (safeTotals.weekly_average_meta && safeTotals.weekly_average_meta !== '')
+        ? safeTotals.weekly_average_meta
+        : (safeI18n.weeklyAverageMetaFallback || '');
+
+    var balanceExtraHuman = (typeof safeTotals.weekly_extra_recent_human === 'string')
+        ? safeTotals.weekly_extra_recent_human
+        : '';
+    var balanceExtraLabel = safeI18n.weeklyExtraLabel || '';
+    var balanceMeta = balanceExtraHuman && balanceExtraLabel
+        ? balanceExtraLabel + ' : ' + balanceExtraHuman
+        : '';
+
+    var expectedLabel = safeI18n.weeklyExpectedLabel || safeI18n.weeklyRequiredLabel || '';
+
+    var cards = [
+        {
+            key: 'total-hours',
+            title: safeI18n.totalHours || 'Heures totales encodées',
+            value: typeof safeTotals.human === 'string' ? safeTotals.human : '0 min',
+            meta: entriesMeta,
+        },
+        {
+            key: 'members-count',
+            title: safeI18n.membersCount || 'Membres',
+            value: membersCount > 0 ? String(membersCount) : '0',
+            meta: membersMeta,
+        },
+        {
+            key: 'weekly-average',
+            title: safeI18n.averageWeeklyHours || 'Moyenne hebdomadaire encodée',
+            value: typeof safeTotals.weekly_average_human === 'string' ? safeTotals.weekly_average_human : '0 min',
+            meta: weeklyAverageMeta,
+        },
+        {
+            key: 'weekly-expected',
+            title: expectedLabel || 'Heures attendues',
+            value: typeof safeTotals.weekly_contract_human === 'string' ? safeTotals.weekly_contract_human : '0 min',
+            meta: balanceMeta,
+        },
+        {
+            key: 'weekly-balance',
+            title: safeI18n.weeklyBalanceNetLabel || 'Solde cumulé',
+            value: typeof safeTotals.weekly_balance_human === 'string' ? safeTotals.weekly_balance_human : '0 min',
+            meta: balanceMeta,
+        },
+    ];
+
+    var filteredCards = cards.filter(function (card) {
+        return card && typeof card.title === 'string' && card.title !== '';
+    });
+
+    if (filteredCards.length === 0) {
+        return null;
+    }
+
+    return h('div', { className: 'mj-hours-dashboard__summary' },
+        filteredCards.map(function (card) {
+            return h('article', { key: card.key, className: 'mj-hours-dashboard-card' },
+                h('p', { className: 'mj-hours-dashboard-card__title' }, card.title),
+                h('p', { className: 'mj-hours-dashboard-card__value' }, card.value || '0'),
+                card.meta ? h('p', { className: 'mj-hours-dashboard-card__meta' }, card.meta) : null,
+            );
+        })
+    );
+}
+
+
 function MemberSelector({ members, selectedId, onChange, label, helper }) {
     if (!Array.isArray(members) || members.length === 0) {
         return null;
@@ -670,6 +709,16 @@ function DashboardApp({ config }) {
     var memberContractHuman = selectedMember ? (selectedMember.weekly_contract_human || '') : '';
     var totalContractMinutes = Math.max(totals.weekly_contract_minutes || 0, 0);
     var totalContractHuman = totals.weekly_contract_human || '';
+    var memberBalanceMinutes = selectedMember ? Number(selectedMember.weekly_balance_minutes || 0) : 0;
+    if (!Number.isFinite(memberBalanceMinutes)) {
+        memberBalanceMinutes = 0;
+    }
+    var totalBalanceMinutes = Number(totals.weekly_balance_minutes || 0);
+    if (!Number.isFinite(totalBalanceMinutes)) {
+        totalBalanceMinutes = 0;
+    }
+    var memberBalanceHuman = selectedMember ? (selectedMember.weekly_balance_human || formatSignedMinutesToHoursLabel(memberBalanceMinutes)) : '';
+    var totalBalanceHuman = totals.weekly_balance_human || formatSignedMinutesToHoursLabel(totalBalanceMinutes);
 
     var donutItems;
     var donutTotalMinutes;
@@ -724,6 +773,12 @@ function DashboardApp({ config }) {
         if (totalContractMinutes > 0 && expectedLabelShort && totalContractHuman) {
             weeklySubtitle += ' · ' + expectedLabelShort + ' : ' + totalContractHuman;
         }
+    }
+
+    var balanceLabel = i18n.weeklyBalanceNetLabel || '';
+    var balanceHuman = selectedMember ? memberBalanceHuman : totalBalanceHuman;
+    if (balanceLabel && balanceHuman) {
+        weeklySubtitle += ' · ' + balanceLabel + ' : ' + balanceHuman;
     }
 
     var baseProjectsTitle = i18n.projectsDonutTitle || '';

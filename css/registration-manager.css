@@ -51,6 +51,52 @@
     padding: 1.5rem;
 }
 
+.mj-registration-manager__boot-loader {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px;
+    color: var(--regmgr-gray-600);
+    font-family: var(--regmgr-font-family);
+    text-align: center;
+}
+
+.mj-registration-manager__boot-text {
+    margin: 0;
+    font-size: 14px;
+}
+
+.mj-registration-manager__boot-spinner {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 3px solid var(--regmgr-gray-200);
+    border-top-color: var(--regmgr-primary);
+    animation: mj-registration-manager-boot-spin 1s linear infinite;
+}
+
+@keyframes mj-registration-manager-boot-spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.mj-registration-manager--booting .mj-registration-manager__boot-loader {
+    display: flex;
+}
+
+.mj-registration-manager--booting .mj-registration-manager__layout {
+    display: none;
+}
+
+.mj-registration-manager--ready .mj-registration-manager__boot-loader {
+    display: none;
+}
+
 .mj-regmgr *,
 .mj-regmgr *::before,
 .mj-regmgr *::after {

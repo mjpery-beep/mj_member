@@ -1344,6 +1344,11 @@
             }
 
             render(h(RegistrationManagerApp, { config: config }), container);
+
+            if (container.classList) {
+                container.classList.remove('mj-registration-manager--booting');
+                container.classList.add('mj-registration-manager--ready');
+            }
         });
     }
 

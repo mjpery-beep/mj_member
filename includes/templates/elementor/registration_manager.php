@@ -19,7 +19,16 @@ use Mj\Member\Core\Config;
 
 $settings = $this->get_settings_for_display();
 $widget_id = 'mj-registration-manager-' . $this->get_id();
-$is_preview = \Elementor\Plugin::$instance->editor->is_edit_mode();
+
+$elementor_plugin = \Elementor\Plugin::$instance;
+$editor_is_edit = isset($elementor_plugin->editor) && method_exists($elementor_plugin->editor, 'is_edit_mode')
+    ? (bool) $elementor_plugin->editor->is_edit_mode()
+    : false;
+$preview_is_active = isset($elementor_plugin->preview) && method_exists($elementor_plugin->preview, 'is_preview_mode')
+    ? (bool) $elementor_plugin->preview->is_preview_mode()
+    : false;
+$settings_preview_flag = !empty($settings['__is_preview_mode']);
+$is_preview = $editor_is_edit || $preview_is_active || $settings_preview_flag;
 
 AssetsManager::requirePackage('registration-manager');
 
@@ -34,21 +43,226 @@ $allow_create_member = !empty($settings['allow_create_member']) && $settings['al
 
 // Aperçu Elementor
 if ($is_preview) {
+    $preview_events = array(
+        array(
+            'title' => __('Atelier sérigraphie', 'mj-member'),
+            'date' => __('Samedi 12 avril · 10h-12h', 'mj-member'),
+            'registrations' => '12/20',
+            'price' => '8',
+            'type_label' => __('Atelier', 'mj-member'),
+            'type_class' => 'atelier',
+            'status_label' => __('Ouvert', 'mj-member'),
+            'status_class' => 'published',
+            'accent' => '#2563eb',
+        ),
+        array(
+            'title' => __('Sortie parc aventure', 'mj-member'),
+            'date' => __('Mercredi 23 avril · 14h-17h', 'mj-member'),
+            'registrations' => '18/18',
+            'price' => '12',
+            'type_label' => __('Sortie', 'mj-member'),
+            'type_class' => 'ponctuel',
+            'status_label' => __('Complet', 'mj-member'),
+            'status_class' => 'full',
+            'accent' => '#f59e0b',
+        ),
+        array(
+            'title' => __('Stage vidéo', 'mj-member'),
+            'date' => __('Du 6 au 8 mai', 'mj-member'),
+            'registrations' => '5/12',
+            'price' => '0',
+            'type_label' => __('Stage', 'mj-member'),
+            'type_class' => 'serie_dates',
+            'status_label' => __('Brouillon', 'mj-member'),
+            'status_class' => 'draft',
+            'accent' => '#a855f7',
+        ),
+    );
+
+    $preview_participants = array(
+        array(
+            'name' => 'Léa Martin',
+            'email' => 'lea.martin@example.com',
+            'initials' => 'LM',
+            'role_class' => 'jeune',
+            'status_label' => __('Validée', 'mj-member'),
+            'status_class' => 'status-valide',
+            'payment_label' => __('Réglé', 'mj-member'),
+            'payment_class' => 'paid',
+        ),
+        array(
+            'name' => 'Mathis Leroy',
+            'email' => 'mathis.leroy@example.com',
+            'initials' => 'ML',
+            'role_class' => 'jeune',
+            'status_label' => __('En attente', 'mj-member'),
+            'status_class' => 'status-en_attente',
+            'payment_label' => __('À encaisser', 'mj-member'),
+            'payment_class' => 'pending',
+        ),
+        array(
+            'name' => 'Sophie Bernard',
+            'email' => 'sophie.bernard@example.com',
+            'initials' => 'SB',
+            'role_class' => 'benevole',
+            'status_label' => __('Validée', 'mj-member'),
+            'status_class' => 'status-valide',
+            'payment_label' => __('Non requis', 'mj-member'),
+            'payment_class' => 'paid',
+        ),
+    );
     ?>
     <div class="mj-registration-manager mj-registration-manager--preview" data-widget-id="<?php echo esc_attr($widget_id); ?>">
-        <div class="mj-registration-manager__preview">
-            <div class="mj-registration-manager__preview-icon">
-                <span class="dashicons dashicons-groups"></span>
-            </div>
-            <h3><?php echo esc_html($title); ?></h3>
-            <p><?php esc_html_e('Le gestionnaire d\'inscriptions est visible uniquement pour les animateurs, bénévoles et coordinateurs en production.', 'mj-member'); ?></p>
-            <div class="mj-registration-manager__preview-features">
-                <ul>
-                    <li><?php esc_html_e('Liste des événements avec filtres', 'mj-member'); ?></li>
-                    <li><?php esc_html_e('Gestion des inscrits', 'mj-member'); ?></li>
-                    <li><?php esc_html_e('Feuille de présence', 'mj-member'); ?></li>
-                    <li><?php esc_html_e('Validation des paiements', 'mj-member'); ?></li>
-                </ul>
+        <div class="mj-registration-manager__preview-note">
+            <?php esc_html_e('Aperçu statique : les données affichées sont fictives. Le widget final charge ses informations après publication.', 'mj-member'); ?>
+        </div>
+        <div class="mj-regmgr mj-regmgr--preview" aria-hidden="true">
+            <div class="mj-regmgr__layout">
+                <aside class="mj-regmgr-sidebar" aria-label="<?php esc_attr_e('Aperçu de la liste des événements', 'mj-member'); ?>">
+                    <div class="mj-regmgr-sidebar__header">
+                        <div class="mj-regmgr-sidebar__mode-tabs" role="tablist">
+                            <button type="button" class="mj-regmgr-sidebar__mode-tab mj-regmgr-sidebar__mode-tab--active" role="tab" aria-selected="true" disabled>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                                </svg>
+                                <span><?php esc_html_e('Événements', 'mj-member'); ?></span>
+                            </button>
+                            <button type="button" class="mj-regmgr-sidebar__mode-tab" role="tab" aria-selected="false" disabled>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                    <circle cx="9" cy="7" r="4"></circle>
+                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                </svg>
+                                <span><?php esc_html_e('Membres', 'mj-member'); ?></span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mj-regmgr-sidebar__search">
+                        <div class="mj-regmgr-search-input">
+                            <svg class="mj-regmgr-search-input__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            <input type="text" class="mj-regmgr-search-input__field" placeholder="<?php esc_attr_e('Rechercher un événement...', 'mj-member'); ?>" disabled />
+                        </div>
+                    </div>
+                    <div class="mj-regmgr-sidebar__filters">
+                        <div class="mj-regmgr-filter-tabs" role="tablist">
+                            <button type="button" class="mj-regmgr-filter-tab mj-regmgr-filter-tab--active" role="tab" aria-selected="true" disabled><?php esc_html_e('Assignés', 'mj-member'); ?></button>
+                            <button type="button" class="mj-regmgr-filter-tab" role="tab" aria-selected="false" disabled><?php esc_html_e('À venir', 'mj-member'); ?></button>
+                            <button type="button" class="mj-regmgr-filter-tab" role="tab" aria-selected="false" disabled><?php esc_html_e('Passés', 'mj-member'); ?></button>
+                            <button type="button" class="mj-regmgr-filter-tab" role="tab" aria-selected="false" disabled><?php esc_html_e('Brouillons', 'mj-member'); ?></button>
+                            <button type="button" class="mj-regmgr-filter-tab" role="tab" aria-selected="false" disabled><?php esc_html_e('Internes', 'mj-member'); ?></button>
+                        </div>
+                    </div>
+                    <div class="mj-regmgr-sidebar__list">
+                        <div class="mj-regmgr-events-list">
+                            <?php foreach ($preview_events as $index => $event) : ?>
+                                <div class="mj-regmgr-event-card<?php echo $index === 0 ? ' mj-regmgr-event-card--selected' : ''; ?>">
+                                    <?php if (!empty($event['accent'])) : ?>
+                                        <div class="mj-regmgr-event-card__accent" style="background-color: <?php echo esc_attr($event['accent']); ?>"></div>
+                                    <?php endif; ?>
+                                    <div class="mj-regmgr-event-card__content">
+                                        <div class="mj-regmgr-event-card__header">
+                                            <span class="mj-regmgr-event-card__type mj-regmgr-event-card__type--<?php echo esc_attr($event['type_class']); ?>"><?php echo esc_html($event['type_label']); ?></span>
+                                            <span class="mj-regmgr-event-card__status mj-regmgr-event-card__status--<?php echo esc_attr($event['status_class']); ?>"><?php echo esc_html($event['status_label']); ?></span>
+                                        </div>
+                                        <h2 class="mj-regmgr-event-card__title"><?php echo esc_html($event['title']); ?></h2>
+                                        <div class="mj-regmgr-event-card__date">
+                                            <svg class="mj-regmgr-event-card__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                                <line x1="16" y1="2" x2="16" y2="6"></line>
+                                                <line x1="8" y1="2" x2="8" y2="6"></line>
+                                                <line x1="3" y1="10" x2="21" y2="10"></line>
+                                            </svg>
+                                            <span><?php echo esc_html($event['date']); ?></span>
+                                        </div>
+                                        <div class="mj-regmgr-event-card__footer">
+                                            <div class="mj-regmgr-event-card__registrations">
+                                                <svg class="mj-regmgr-event-card__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                                    <circle cx="9" cy="7" r="4"></circle>
+                                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                                </svg>
+                                                <span><?php echo esc_html($event['registrations']); ?></span>
+                                            </div>
+                                            <?php if (!empty($event['price']) && $event['price'] !== '0') : ?>
+                                                <div class="mj-regmgr-event-card__price"><?php echo esc_html($event['price']); ?> €</div>
+                                            <?php else : ?>
+                                                <div class="mj-regmgr-event-card__price mj-regmgr-event-card__price--free"><?php esc_html_e('Gratuit', 'mj-member'); ?></div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                </aside>
+                <main class="mj-regmgr__main" aria-label="<?php esc_attr_e('Aperçu de la gestion des inscriptions', 'mj-member'); ?>">
+                    <div class="mj-regmgr-tabs" role="tablist">
+                        <button type="button" class="mj-regmgr-tab mj-regmgr-tab--active" role="tab" aria-selected="true" disabled>
+                            <span><?php esc_html_e('Inscriptions', 'mj-member'); ?></span>
+                            <span class="mj-regmgr-tab__badge">8</span>
+                        </button>
+                        <button type="button" class="mj-regmgr-tab" role="tab" aria-selected="false" disabled>
+                            <span><?php esc_html_e('Présence', 'mj-member'); ?></span>
+                            <span class="mj-regmgr-tab__badge">3</span>
+                        </button>
+                        <button type="button" class="mj-regmgr-tab" role="tab" aria-selected="false" disabled>
+                            <span><?php esc_html_e('Détails', 'mj-member'); ?></span>
+                        </button>
+                    </div>
+                    <div class="mj-regmgr__tab-content">
+                        <div class="mj-regmgr-registrations">
+                            <div class="mj-regmgr-registrations__header">
+                                <div class="mj-regmgr-registrations__title">
+                                    <h3><?php esc_html_e('Liste des inscrits', 'mj-member'); ?></h3>
+                                    <span class="mj-regmgr-registrations__count">(8)</span>
+                                </div>
+                                <button type="button" class="mj-btn mj-btn--primary" disabled>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                        <circle cx="8.5" cy="7" r="4"></circle>
+                                        <line x1="20" y1="8" x2="20" y2="14"></line>
+                                        <line x1="23" y1="11" x2="17" y2="11"></line>
+                                    </svg>
+                                    <span><?php esc_html_e('Ajouter un participant', 'mj-member'); ?></span>
+                                </button>
+                            </div>
+                            <div class="mj-regmgr-registrations__list">
+                                <?php foreach ($preview_participants as $participant) : ?>
+                                    <div class="mj-regmgr-reg-card">
+                                        <div class="mj-regmgr-avatar mj-regmgr-avatar--role-<?php echo esc_attr($participant['role_class']); ?>">
+                                            <?php echo esc_html($participant['initials']); ?>
+                                        </div>
+                                        <div class="mj-regmgr-reg-card__info">
+                                            <div class="mj-regmgr-reg-card__name"><?php echo esc_html($participant['name']); ?></div>
+                                            <div class="mj-regmgr-reg-card__email"><?php echo esc_html($participant['email']); ?></div>
+                                        </div>
+                                        <div class="mj-regmgr-reg-card__status">
+                                            <span class="mj-regmgr-badge mj-regmgr-badge--<?php echo esc_attr($participant['status_class']); ?>"><?php echo esc_html($participant['status_label']); ?></span>
+                                            <span class="mj-regmgr-reg-card__payment mj-regmgr-reg-card__payment--<?php echo esc_attr($participant['payment_class']); ?>">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                                                    <line x1="1" y1="10" x2="23" y2="10"></line>
+                                                </svg>
+                                                <span><?php echo esc_html($participant['payment_label']); ?></span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <p class="mj-regmgr-registrations__empty">
+                                <?php esc_html_e('Les actions (validation, paiements, notes) seront disponibles en front-office.', 'mj-member'); ?>
+                            </p>
+                        </div>
+                    </div>
+                </main>
             </div>
         </div>
     </div>
@@ -261,11 +475,16 @@ $config_json = wp_json_encode(array(
 ));
 ?>
 
-<div class="mj-registration-manager" 
+<div class="mj-registration-manager mj-registration-manager--booting" 
      id="<?php echo esc_attr($widget_id); ?>"
      data-widget-id="<?php echo esc_attr($widget_id); ?>" 
      data-mj-registration-manager 
      data-config="<?php echo esc_attr($config_json); ?>">
+
+    <div class="mj-registration-manager__boot-loader" data-boot-loader>
+        <div class="mj-registration-manager__boot-spinner" aria-hidden="true"></div>
+        <p class="mj-registration-manager__boot-text"><?php esc_html_e('Chargement du gestionnaire...', 'mj-member'); ?></p>
+    </div>
     
     <div class="mj-registration-manager__layout">
         <!-- Sidebar avec liste des événements -->
