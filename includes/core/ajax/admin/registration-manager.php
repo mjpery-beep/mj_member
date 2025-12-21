@@ -10,6 +10,9 @@ use Mj\Member\Classes\Crud\MjEventRegistrations;
 use Mj\Member\Classes\Crud\MjEventAttendance;
 use Mj\Member\Classes\Crud\MjEventOccurrences;
 use Mj\Member\Classes\Crud\MjEventAnimateurs;
+use Mj\Member\Classes\Crud\MjEventPhotos;
+use Mj\Member\Classes\Crud\MjContactMessages;
+use Mj\Member\Classes\Crud\MjIdeas;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\MjEventSchedule;
 use Mj\Member\Classes\MjRoles;
@@ -126,6 +129,35 @@ function mj_regmgr_get_member_avatar_url($member_id) {
     }
 
     return '';
+}
+
+/**
+ * Normalize a boolean-like value coming from the frontend payload.
+ *
+ * @param mixed $value Raw value
+ * @param bool $default Fallback when value cannot be interpreted
+ * @return bool
+ */
+function mj_regmgr_to_bool($value, $default = false) {
+    if (is_bool($value)) {
+        return $value;
+    }
+
+    if (is_int($value) || is_float($value)) {
+        return (int) $value === 1;
+    }
+
+    if (is_string($value)) {
+        $normalized = strtolower(trim($value));
+        if (in_array($normalized, array('1', 'true', 'yes', 'on'), true)) {
+            return true;
+        }
+        if (in_array($normalized, array('0', 'false', 'no', 'off', ''), true)) {
+            return false;
+        }
+    }
+
+    return $default;
 }
 
 /**
@@ -1506,6 +1538,7 @@ function mj_regmgr_get_member_details() {
         'roleLabel' => $role_labels[$role] ?? ucfirst($role),
         'birthDate' => $memberData->birth_date ?? null,
         'address' => $address,
+        'addressLine' => $memberData->address ?? '',
         'city' => $memberData->city ?? '',
         'postalCode' => $memberData->postal_code ?? '',
         'avatarUrl' => mj_regmgr_get_member_avatar_url((int) $memberData->id),
@@ -1522,6 +1555,13 @@ function mj_regmgr_get_member_details() {
         'isAutonomous' => !empty($memberData->is_autonomous),
         'isVolunteer' => !empty($memberData->is_volunteer),
         'guardianId' => $memberData->guardian_id ?? null,
+        'descriptionShort' => $memberData->description_courte ?? '',
+        'descriptionLong' => $memberData->description_longue ?? '',
+        'newsletterOptIn' => isset($memberData->newsletter_opt_in) ? !empty($memberData->newsletter_opt_in) : true,
+        'smsOptIn' => isset($memberData->sms_opt_in) ? !empty($memberData->sms_opt_in) : true,
+        'whatsappOptIn' => isset($memberData->whatsapp_opt_in) ? !empty($memberData->whatsapp_opt_in) : true,
+        'photoUsageConsent' => (bool) $memberData->get('photo_usage_consent', 0),
+        'photoId' => $memberData->get('photo_id', null),
     );
 
     // Add guardian info if exists
@@ -1565,6 +1605,113 @@ function mj_regmgr_get_member_details() {
                 'requiresPayment' => $child_requires_payment,
                 'membershipStatus' => $child_membership_status,
                 'membershipYear' => $child_membership_year > 0 ? $child_membership_year : null,
+            );
+        }
+    }
+
+    // Collect latest approved event photos for this member
+    $photos = MjEventPhotos::query(array(
+        'member_id' => $member_id,
+        'status' => MjEventPhotos::STATUS_APPROVED,
+        'per_page' => 12,
+        'paged' => 1,
+        'orderby' => 'created_at',
+        'order' => 'DESC',
+    ));
+
+    if (!empty($photos)) {
+        $member['photos'] = array();
+        foreach ($photos as $photo) {
+            $attachment_id = isset($photo->attachment_id) ? (int) $photo->attachment_id : 0;
+            if ($attachment_id <= 0) {
+                continue;
+            }
+
+            $thumbnail = wp_get_attachment_image_url($attachment_id, 'medium');
+            if (!$thumbnail) {
+                $thumbnail = wp_get_attachment_url($attachment_id);
+            }
+
+            $full = wp_get_attachment_image_url($attachment_id, 'large');
+            if (!$full) {
+                $full = wp_get_attachment_url($attachment_id);
+            }
+
+            $eventTitle = '';
+            if (!empty($photo->event_id)) {
+                $event = MjEvents::find((int) $photo->event_id);
+                if ($event) {
+                    $eventTitle = $event->title ?? '';
+                }
+            }
+
+            $member['photos'][] = array(
+                'id' => (int) $photo->id,
+                'eventId' => isset($photo->event_id) ? (int) $photo->event_id : 0,
+                'eventTitle' => $eventTitle,
+                'caption' => isset($photo->caption) ? (string) $photo->caption : '',
+                'thumbnailUrl' => $thumbnail ?: '',
+                'fullUrl' => $full ?: $thumbnail ?: '',
+                'createdAt' => isset($photo->created_at) ? (string) $photo->created_at : '',
+            );
+        }
+    }
+
+    // Fetch idea suggestions created by the member
+    $ideas = MjIdeas::get_all(array(
+        'member_id' => $member_id,
+        'statuses' => array(MjIdeas::STATUS_PUBLISHED, MjIdeas::STATUS_ARCHIVED),
+        'limit' => 25,
+        'orderby' => 'created_at',
+        'order' => 'DESC',
+    ));
+
+    if (!empty($ideas)) {
+        $member['ideas'] = array();
+        foreach ($ideas as $idea) {
+            $member['ideas'][] = array(
+                'id' => isset($idea['id']) ? (int) $idea['id'] : 0,
+                'title' => isset($idea['title']) ? (string) $idea['title'] : '',
+                'content' => isset($idea['content']) ? (string) $idea['content'] : '',
+                'status' => isset($idea['status']) ? (string) $idea['status'] : '',
+                'voteCount' => isset($idea['vote_count']) ? (int) $idea['vote_count'] : 0,
+                'createdAt' => isset($idea['created_at']) ? (string) $idea['created_at'] : '',
+            );
+        }
+    }
+
+    // Retrieve latest contact messages linked to the member
+    $messages = MjContactMessages::get_all(array(
+        'member_id' => $member_id,
+        'per_page' => 20,
+        'paged' => 1,
+        'orderby' => 'created_at',
+        'order' => 'DESC',
+    ));
+
+    if (!empty($messages)) {
+        $member['messages'] = array();
+        foreach ($messages as $message) {
+            $activity_log = array();
+            if (!empty($message->activity_log)) {
+                $decoded = json_decode($message->activity_log, true);
+                if (is_array($decoded)) {
+                    $activity_log = $decoded;
+                }
+            }
+
+            $member['messages'][] = array(
+                'id' => (int) $message->id,
+                'senderName' => isset($message->sender_name) ? (string) $message->sender_name : '',
+                'senderEmail' => isset($message->sender_email) ? (string) $message->sender_email : '',
+                'subject' => isset($message->subject) ? (string) $message->subject : '',
+                'message' => isset($message->message) ? wp_kses_post($message->message) : '',
+                'status' => isset($message->status) ? (string) $message->status : '',
+                'isRead' => !empty($message->is_read),
+                'assignedTo' => isset($message->assigned_to) ? (int) $message->assigned_to : 0,
+                'targetType' => isset($message->target_type) ? (string) $message->target_type : '',
+                'createdAt' => isset($message->created_at) ? (string) $message->created_at : '',
+                'activityLog' => $activity_log,
             );
         }
     }
@@ -1613,6 +1760,42 @@ function mj_regmgr_update_member() {
     }
     if (isset($data['birthDate'])) {
         $update_data['birth_date'] = sanitize_text_field($data['birthDate']);
+    }
+    if (array_key_exists('nickname', $data)) {
+        $update_data['nickname'] = sanitize_text_field($data['nickname']);
+    }
+    if (array_key_exists('addressLine', $data)) {
+        $update_data['address'] = sanitize_text_field($data['addressLine']);
+    }
+    if (array_key_exists('city', $data)) {
+        $update_data['city'] = sanitize_text_field($data['city']);
+    }
+    if (array_key_exists('postalCode', $data)) {
+        $update_data['postal_code'] = sanitize_text_field($data['postalCode']);
+    }
+    if (array_key_exists('isVolunteer', $data)) {
+        $update_data['is_volunteer'] = mj_regmgr_to_bool($data['isVolunteer']) ? 1 : 0;
+    }
+    if (array_key_exists('isAutonomous', $data)) {
+        $update_data['is_autonomous'] = mj_regmgr_to_bool($data['isAutonomous']) ? 1 : 0;
+    }
+    if (array_key_exists('descriptionShort', $data)) {
+        $update_data['description_courte'] = wp_kses_post($data['descriptionShort']);
+    }
+    if (array_key_exists('descriptionLong', $data)) {
+        $update_data['description_longue'] = wp_kses_post($data['descriptionLong']);
+    }
+    if (array_key_exists('newsletterOptIn', $data)) {
+        $update_data['newsletter_opt_in'] = mj_regmgr_to_bool($data['newsletterOptIn'], true) ? 1 : 0;
+    }
+    if (array_key_exists('smsOptIn', $data)) {
+        $update_data['sms_opt_in'] = mj_regmgr_to_bool($data['smsOptIn'], true) ? 1 : 0;
+    }
+    if (array_key_exists('whatsappOptIn', $data)) {
+        $update_data['whatsapp_opt_in'] = mj_regmgr_to_bool($data['whatsappOptIn'], true) ? 1 : 0;
+    }
+    if (array_key_exists('photoUsageConsent', $data)) {
+        $update_data['photo_usage_consent'] = mj_regmgr_to_bool($data['photoUsageConsent']) ? 1 : 0;
     }
 
     if (empty($update_data)) {

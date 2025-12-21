@@ -230,9 +230,21 @@
                 setEditData({
                     firstName: member.firstName || '',
                     lastName: member.lastName || '',
+                    nickname: member.nickname || '',
                     email: member.email || '',
                     phone: member.phone || '',
                     birthDate: member.birthDate || '',
+                    addressLine: member.addressLine || '',
+                    city: member.city || '',
+                    postalCode: member.postalCode || '',
+                    isVolunteer: !!member.isVolunteer,
+                    isAutonomous: !!member.isAutonomous,
+                    descriptionShort: member.descriptionShort || '',
+                    descriptionLong: member.descriptionLong || '',
+                    newsletterOptIn: typeof member.newsletterOptIn === 'boolean' ? member.newsletterOptIn : true,
+                    smsOptIn: typeof member.smsOptIn === 'boolean' ? member.smsOptIn : true,
+                    whatsappOptIn: typeof member.whatsappOptIn === 'boolean' ? member.whatsappOptIn : true,
+                    photoUsageConsent: !!member.photoUsageConsent,
                 });
                 setEditMode(false);
             }
@@ -279,6 +291,14 @@
             };
         };
 
+        var handleBooleanChange = function (field) {
+            return function (e) {
+                var newData = Object.assign({}, editData);
+                newData[field] = !!e.target.checked;
+                setEditData(newData);
+            };
+        };
+
         var handleSave = function () {
             onUpdateMember(member.id, editData);
             setEditMode(false);
@@ -314,6 +334,66 @@
         if (memberWhatsappOptIn && memberPhone) {
             whatsappLink = buildWhatsAppLink(memberPhone);
         }
+
+        var addressParts = [];
+        if (member.addressLine) {
+            addressParts.push(member.addressLine);
+        }
+        var cityLineParts = [];
+        if (member.postalCode) {
+            cityLineParts.push(member.postalCode);
+        }
+        if (member.city) {
+            cityLineParts.push(member.city);
+        }
+        var cityLine = cityLineParts.join(' ');
+        if (cityLine) {
+            addressParts.push(cityLine);
+        }
+        var addressDisplay = addressParts.join(' · ');
+
+        var memberPhotos = Array.isArray(member.photos) ? member.photos : [];
+        var memberIdeas = Array.isArray(member.ideas) ? member.ideas : [];
+        var memberMessages = Array.isArray(member.messages) ? member.messages : [];
+
+        var newsletterLabel = getString(strings, 'chipNewsletter', 'Newsletter');
+        var smsLabel = getString(strings, 'chipSMS', 'SMS');
+        var whatsappLabel = getString(strings, 'chipWhatsapp', 'WhatsApp');
+        var photoConsentLabel = getString(strings, 'chipPhotoConsent', 'Consentement photo');
+
+        var messageStatusLabels = {
+            'nouveau': 'Nouveau',
+            'en_cours': 'En cours',
+            'resolu': 'Résolu',
+            'archive': 'Archivé',
+        };
+        var messageStatusClasses = {
+            'nouveau': 'mj-regmgr-badge--warning',
+            'en_cours': 'mj-regmgr-badge--info',
+            'resolu': 'mj-regmgr-badge--success',
+            'archive': 'mj-regmgr-badge--secondary',
+        };
+
+        var communicationChips = [];
+        if (typeof member.newsletterOptIn !== 'undefined') {
+            communicationChips.push({ key: 'newsletter', label: newsletterLabel, enabled: !!member.newsletterOptIn });
+        }
+        if (typeof member.smsOptIn !== 'undefined') {
+            communicationChips.push({ key: 'sms', label: smsLabel, enabled: !!member.smsOptIn });
+        }
+        if (typeof member.whatsappOptIn !== 'undefined') {
+            communicationChips.push({ key: 'whatsapp', label: whatsappLabel, enabled: !!member.whatsappOptIn });
+        }
+        if (typeof member.photoUsageConsent !== 'undefined') {
+            communicationChips.push({ key: 'photo', label: photoConsentLabel, enabled: !!member.photoUsageConsent });
+        }
+
+        var contactMessageViewUrl = typeof config.contactMessageViewUrl === 'string' ? config.contactMessageViewUrl : '';
+        var contactMessageListUrl = typeof config.contactMessageListUrl === 'string' ? config.contactMessageListUrl : '';
+
+        var hasMemberBio = (member.descriptionShort && member.descriptionShort.trim() !== '') || (member.descriptionLong && member.descriptionLong.trim() !== '');
+        var profileTitle = getString(strings, 'memberProfile', 'Profil');
+        var messageHistoryLabel = getString(strings, 'messageHistory', 'Historique');
 
         return h('div', { class: 'mj-regmgr-member-detail' }, [
             // Header avec avatar
@@ -384,6 +464,15 @@
                                 }),
                             ]),
                             h('div', { class: 'mj-regmgr-form-group' }, [
+                                h('label', null, 'Surnom'),
+                                h('input', {
+                                    type: 'text',
+                                    class: 'mj-regmgr-input',
+                                    value: editData.nickname || '',
+                                    onInput: handleFieldChange('nickname'),
+                                }),
+                            ]),
+                            h('div', { class: 'mj-regmgr-form-group' }, [
                                 h('label', null, 'Email'),
                                 h('input', {
                                     type: 'email',
@@ -410,6 +499,99 @@
                                     onInput: handleFieldChange('birthDate'),
                                 }),
                             ]),
+                            h('div', { class: 'mj-regmgr-form-group' }, [
+                                h('label', null, 'Adresse'),
+                                h('input', {
+                                    type: 'text',
+                                    class: 'mj-regmgr-input',
+                                    value: editData.addressLine || '',
+                                    onInput: handleFieldChange('addressLine'),
+                                }),
+                            ]),
+                            h('div', { class: 'mj-regmgr-form-group' }, [
+                                h('label', null, 'Code postal'),
+                                h('input', {
+                                    type: 'text',
+                                    class: 'mj-regmgr-input',
+                                    value: editData.postalCode || '',
+                                    onInput: handleFieldChange('postalCode'),
+                                }),
+                            ]),
+                            h('div', { class: 'mj-regmgr-form-group' }, [
+                                h('label', null, 'Ville'),
+                                h('input', {
+                                    type: 'text',
+                                    class: 'mj-regmgr-input',
+                                    value: editData.city || '',
+                                    onInput: handleFieldChange('city'),
+                                }),
+                            ]),
+                            h('div', { class: 'mj-regmgr-form-group mj-regmgr-form-group--checkbox' }, [
+                                h('label', null, 'Bénévole'),
+                                h('input', {
+                                    type: 'checkbox',
+                                    checked: !!editData.isVolunteer,
+                                    onChange: handleBooleanChange('isVolunteer'),
+                                }),
+                            ]),
+                            h('div', { class: 'mj-regmgr-form-group mj-regmgr-form-group--checkbox' }, [
+                                h('label', null, 'Autonome'),
+                                h('input', {
+                                    type: 'checkbox',
+                                    checked: !!editData.isAutonomous,
+                                    onChange: handleBooleanChange('isAutonomous'),
+                                }),
+                            ]),
+                            h('div', { class: 'mj-regmgr-form-group mj-regmgr-form-group--checkbox' }, [
+                                h('label', null, 'Newsletter'),
+                                h('input', {
+                                    type: 'checkbox',
+                                    checked: !!editData.newsletterOptIn,
+                                    onChange: handleBooleanChange('newsletterOptIn'),
+                                }),
+                            ]),
+                            h('div', { class: 'mj-regmgr-form-group mj-regmgr-form-group--checkbox' }, [
+                                h('label', null, 'SMS'),
+                                h('input', {
+                                    type: 'checkbox',
+                                    checked: !!editData.smsOptIn,
+                                    onChange: handleBooleanChange('smsOptIn'),
+                                }),
+                            ]),
+                            h('div', { class: 'mj-regmgr-form-group mj-regmgr-form-group--checkbox' }, [
+                                h('label', null, 'WhatsApp'),
+                                h('input', {
+                                    type: 'checkbox',
+                                    checked: !!editData.whatsappOptIn,
+                                    onChange: handleBooleanChange('whatsappOptIn'),
+                                }),
+                            ]),
+                            h('div', { class: 'mj-regmgr-form-group mj-regmgr-form-group--checkbox' }, [
+                                h('label', null, 'Consentement photo'),
+                                h('input', {
+                                    type: 'checkbox',
+                                    checked: !!editData.photoUsageConsent,
+                                    onChange: handleBooleanChange('photoUsageConsent'),
+                                }),
+                            ]),
+                            h('div', { class: 'mj-regmgr-form-group mj-regmgr-form-group--textarea' }, [
+                                h('label', null, getString(strings, 'memberBioShort', 'Bio courte')),
+                                h('textarea', {
+                                    class: 'mj-regmgr-textarea',
+                                    rows: 2,
+                                    value: editData.descriptionShort || '',
+                                    onInput: handleFieldChange('descriptionShort'),
+                                }),
+                            ]),
+                            h('div', { class: 'mj-regmgr-form-group mj-regmgr-form-group--textarea' }, [
+                                h('label', null, getString(strings, 'memberBioLong', 'Bio détaillée')),
+                                h('textarea', {
+                                    class: 'mj-regmgr-textarea',
+                                    rows: 4,
+                                    value: editData.descriptionLong || '',
+                                    onInput: handleFieldChange('descriptionLong'),
+                                }),
+                            ]),
                         ]),
                         h('div', { class: 'mj-regmgr-member-detail__actions' }, [
                             h('button', {
@@ -433,11 +615,24 @@
                                 ]),
                                 h('span', null, member.email),
                             ]),
+                            member.nickname && h('div', { class: 'mj-regmgr-member-detail__row' }, [
+                                h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                    h('path', { d: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2' }),
+                                ]),
+                                h('span', null, member.nickname),
+                            ]),
                             member.phone && h('div', { class: 'mj-regmgr-member-detail__row' }, [
                                 h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
                                     h('path', { d: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z' }),
                                 ]),
                                 h('span', null, member.phone),
+                            ]),
+                            addressDisplay && h('div', { class: 'mj-regmgr-member-detail__row' }, [
+                                h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                    h('path', { d: 'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z' }),
+                                    h('circle', { cx: 12, cy: 10, r: 3 }),
+                                ]),
+                                h('span', null, addressDisplay),
                             ]),
                             (member.birthDate || age !== null) && h('div', { class: 'mj-regmgr-member-detail__row' }, [
                                 h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
@@ -450,13 +645,6 @@
                                     member.birthDate && formatDate(member.birthDate),
                                     age !== null && ' (' + age + ' ans)',
                                 ]),
-                            ]),
-                            member.address && h('div', { class: 'mj-regmgr-member-detail__row' }, [
-                                h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                                    h('path', { d: 'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z' }),
-                                    h('circle', { cx: 12, cy: 10, r: 3 }),
-                                ]),
-                                h('span', null, member.address),
                             ]),
                             member.guardianName && h('div', { class: 'mj-regmgr-member-detail__row' }, [
                                 h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
@@ -554,7 +742,113 @@
                                 })
                             }, member.isAutonomous ? 'Oui' : 'Non'),
                         ]),
+                        communicationChips.length > 0 && h('div', { class: 'mj-regmgr-member-detail__status-card mj-regmgr-member-detail__status-card--wide' }, [
+                            h('div', { class: 'mj-regmgr-member-detail__status-label' }, 'Communication'),
+                            h('div', { class: 'mj-regmgr-member-detail__chips' }, communicationChips.map(function (chip) {
+                                return h('span', {
+                                    key: chip.key,
+                                    class: classNames('mj-regmgr-chip', {
+                                        'mj-regmgr-chip--enabled': chip.enabled,
+                                        'mj-regmgr-chip--disabled': !chip.enabled,
+                                    }),
+                                }, chip.label);
+                            })),
+                        ]),
                     ]),
+                ]),
+                hasMemberBio && h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                    h('h2', { class: 'mj-regmgr-member-detail__section-title' }, profileTitle),
+                    member.descriptionShort && h('p', { class: 'mj-regmgr-member-detail__bio-short' }, member.descriptionShort),
+                    member.descriptionLong && h('div', { class: 'mj-regmgr-member-detail__bio-long', dangerouslySetInnerHTML: { __html: member.descriptionLong } }),
+                ]),
+
+                memberPhotos.length > 0 && h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                    h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberPhotos', 'Photos partagées')), 
+                    h('div', { class: 'mj-regmgr-member-detail__photos' }, memberPhotos.map(function (photo) {
+                        return h('figure', { key: photo.id, class: 'mj-regmgr-member-photo' }, [
+                            h('a', { href: photo.fullUrl || photo.thumbnailUrl, target: '_blank', rel: 'noreferrer', class: 'mj-regmgr-member-photo__link' }, [
+                                h('img', { src: photo.thumbnailUrl, alt: photo.caption || '', loading: 'lazy' }),
+                            ]),
+                            h('figcaption', { class: 'mj-regmgr-member-photo__caption' }, [
+                                photo.eventTitle && h('span', { class: 'mj-regmgr-member-photo__event' }, photo.eventTitle),
+                                photo.caption && h('span', { class: 'mj-regmgr-member-photo__text' }, photo.caption),
+                            ]),
+                        ]);
+                    })),
+                ]),
+                memberPhotos.length === 0 && h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                    h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberPhotos', 'Photos partagées')),
+                    h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoPhotos', 'Aucune photo validée pour ce membre.')),
+                ]),
+
+                memberIdeas.length > 0 && h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                    h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberIdeas', 'Idées proposées')),
+                    h('div', { class: 'mj-regmgr-member-detail__ideas' }, memberIdeas.map(function (idea) {
+                        return h('article', { key: idea.id, class: 'mj-regmgr-member-idea' }, [
+                            h('header', { class: 'mj-regmgr-member-idea__header' }, [
+                                h('h2', { class: 'mj-regmgr-member-idea__title' }, idea.title || 'Idée'),
+                                idea.voteCount >= 0 && h('span', { class: 'mj-regmgr-member-idea__votes' }, idea.voteCount + ' ❤'),
+                            ]),
+                            idea.content && h('p', { class: 'mj-regmgr-member-idea__content' }, idea.content),
+                            idea.createdAt && h('p', { class: 'mj-regmgr-member-idea__meta' }, formatDate(idea.createdAt)),
+                        ]);
+                    })),
+                ]),
+                memberIdeas.length === 0 && h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                    h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberIdeas', 'Idées proposées')),
+                    h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoIdeas', 'Aucune idée proposée pour le moment.')),
+                ]),
+
+                memberMessages.length > 0 && h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                    h('div', { class: 'mj-regmgr-member-detail__section-header' }, [
+                        h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberMessages', 'Messages reçus')),
+                        contactMessageListUrl && h('a', {
+                            href: contactMessageListUrl,
+                            target: '_blank',
+                            rel: 'noreferrer',
+                            class: 'mj-btn mj-btn--ghost mj-btn--small',
+                        }, getString(strings, 'viewAllMessages', 'Voir tous les messages')),
+                    ]),
+                    h('div', { class: 'mj-regmgr-member-detail__messages' }, memberMessages.map(function (message) {
+                        var status = message.status || '';
+                        return h('article', { key: message.id, class: 'mj-regmgr-member-message' }, [
+                            h('header', { class: 'mj-regmgr-member-message__header' }, [
+                                h('h2', { class: 'mj-regmgr-member-message__subject' }, message.subject || '(Sans objet)'),
+                                h('span', {
+                                    class: classNames('mj-regmgr-badge mj-regmgr-badge--sm', messageStatusClasses[status] || 'mj-regmgr-badge--secondary'),
+                                }, messageStatusLabels[status] || status || 'N/A'),
+                            ]),
+                            h('p', { class: 'mj-regmgr-member-message__meta' }, [
+                                message.senderName || message.senderEmail || 'Anonyme',
+                                message.createdAt ? ' · ' + formatDate(message.createdAt) : '',
+                            ]),
+                            message.message && h('div', {
+                                class: 'mj-regmgr-member-message__content',
+                                dangerouslySetInnerHTML: { __html: message.message },
+                            }),
+                            message.activityLog && message.activityLog.length > 0 && h('details', { class: 'mj-regmgr-member-message__activity' }, [
+                                h('summary', null, messageHistoryLabel),
+                                h('ul', null, message.activityLog.map(function (entry, index) {
+                                    return h('li', { key: index }, [
+                                        entry.date ? formatDate(entry.date) + ' · ' : '',
+                                        entry.note || '',
+                                    ]);
+                                })),
+                            ]),
+                            contactMessageViewUrl && h('div', { class: 'mj-regmgr-member-message__actions' }, [
+                                h('a', {
+                                    href: contactMessageViewUrl + message.id,
+                                    class: 'mj-btn mj-btn--secondary mj-btn--small',
+                                    target: '_blank',
+                                    rel: 'noreferrer',
+                                }, getString(strings, 'viewMessage', 'Ouvrir le message')),
+                            ]),
+                        ]);
+                    })),
+                ]),
+                memberMessages.length === 0 && h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                    h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberMessages', 'Messages reçus')),
+                    h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoMessages', 'Aucun échange trouvé pour ce membre.')),
                 ]),
 
                 // Section notes
