@@ -418,6 +418,7 @@ $config_json = wp_json_encode(array(
         'validatePayment' => __('Valider le paiement', 'mj-member'),
         'paymentQRCode' => __('QR Code de paiement', 'mj-member'),
         'showQRCode' => __('Afficher QR Code', 'mj-member'),
+        'contactWhatsapp' => __('Contacter sur WhatsApp', 'mj-member'),
         
         // Présence
         'attendanceSheet' => __('Feuille de présence', 'mj-member'),

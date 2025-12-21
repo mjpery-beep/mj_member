@@ -1424,6 +1424,32 @@ input.mj-regmgr-search-input__field {
     flex-shrink: 0;
 }
 
+.mj-att-member__contact {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(37, 211, 102, 0.08);
+    color: #25d366;
+    text-decoration: none;
+    border: 2px solid transparent;
+    transition: all var(--regmgr-transition);
+}
+
+.mj-att-member__contact:hover,
+.mj-att-member__contact:focus {
+    background: #25d366;
+    color: #fff;
+    outline: none;
+}
+
+.mj-att-member__contact-icon {
+    width: 28px;
+    height: 28px;
+}
+
 /* Attendance Buttons */
 .mj-att-btn {
     display: flex;
@@ -2058,6 +2084,7 @@ input.mj-regmgr-search-input__field {
 
 .mj-btn--secondary:hover {
     background: var(--regmgr-gray-50);
+    color: var(--regmgr-gray-900);
     border-color: var(--regmgr-gray-400);
 }
 
@@ -3553,6 +3580,23 @@ input.mj-regmgr-search-input__field {
     color: #fff;
 }
 
+.mj-regmgr-action-btn--whatsapp {
+    border: none;
+    background: transparent;
+    padding: 0;
+    color: #25d366;
+}
+
+.mj-regmgr-action-btn--whatsapp:hover {
+    background: transparent;
+    color: #1da851;
+}
+
+.mj-regmgr-action-btn__icon--whatsapp {
+    width: 28px;
+    height: 28px;
+}
+
 .mj-regmgr-action-btn--has-badge {
     border-color: var(--regmgr-primary);
     color: var(--regmgr-primary);
@@ -4243,6 +4287,37 @@ input.mj-regmgr-search-input__field {
 
 .mj-regmgr-member-detail__identity {
     flex: 1;
+}
+
+.mj-regmgr-member-detail__header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.mj-regmgr-member-detail__contact {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(37, 211, 102, 0.08);
+    color: #25d366;
+    text-decoration: none;
+    transition: all var(--regmgr-transition);
+}
+
+.mj-regmgr-member-detail__contact:hover,
+.mj-regmgr-member-detail__contact:focus {
+    background: #25d366;
+    color: #fff;
+    outline: none;
+}
+
+.mj-regmgr-member-detail__contact-icon {
+    width: 28px;
+    height: 28px;
 }
 
 .mj-regmgr-member-detail__name {

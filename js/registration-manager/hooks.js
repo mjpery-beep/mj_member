@@ -145,6 +145,26 @@
         return fallback || key;
     }
 
+    /**
+     * Construit un lien WhatsApp à partir d'un numéro
+     */
+    function buildWhatsAppLink(phone) {
+        if (!phone || typeof phone !== 'string') {
+            return '';
+        }
+
+        var digits = phone.replace(/\D+/g, '');
+        if (!digits || digits.length < 6) {
+            return '';
+        }
+
+        if (digits.indexOf('00') === 0) {
+            digits = digits.slice(2);
+        }
+
+        return 'https://wa.me/' + digits;
+    }
+
     // ============================================
     // HOOKS PERSONNALISÉS
     // ============================================
@@ -431,6 +451,7 @@
         debounce: debounce,
         classNames: classNames,
         getString: getString,
+        buildWhatsAppLink: buildWhatsAppLink,
 
         // Hooks
         useAsync: useAsync,

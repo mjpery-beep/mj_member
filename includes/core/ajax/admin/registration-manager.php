@@ -494,6 +494,7 @@ function mj_regmgr_get_registrations() {
                 'age' => $age,
                 'birthDate' => $member->birth_date ?? '',
                 'subscriptionStatus' => $subscription_status,
+                'whatsappOptIn' => isset($member->whatsapp_opt_in) ? ((int) $member->whatsapp_opt_in !== 0) : true,
             ) : null,
             'guardian' => $guardian ? array(
                 'id' => $guardian->id,
@@ -501,6 +502,7 @@ function mj_regmgr_get_registrations() {
                 'lastName' => $guardian->last_name,
                 'email' => $guardian->email ?? '',
                 'phone' => $guardian->phone ?? '',
+                'whatsappOptIn' => isset($guardian->whatsapp_opt_in) ? ((int) $guardian->whatsapp_opt_in !== 0) : true,
             ) : null,
             'attendance' => $attendance,
             'assignedOccurrences' => $assigned_occurrences,
