@@ -1408,8 +1408,11 @@ function mj_regmgr_get_members() {
 
     // Build filters array
     $filters = array();
-    if ($filter !== 'all' && in_array($filter, array('jeune', 'animateur', 'tuteur', 'benevole', 'coordinateur'))) {
-        $filters['role'] = $filter;
+    if ($filter !== 'all') {
+        $normalized_filter = MjRoles::normalize($filter);
+        if (in_array($normalized_filter, array('jeune', 'animateur', 'tuteur', 'benevole', 'coordinateur'), true)) {
+            $filters['role'] = $normalized_filter;
+        }
     }
 
     // Get total count
