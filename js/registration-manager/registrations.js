@@ -85,6 +85,7 @@
         var config = props.config;
         var eventRequiresPayment = props.eventRequiresPayment;
         var allowOccurrenceSelection = props.allowOccurrenceSelection !== false;
+        var eventRequiresValidation = props.eventRequiresValidation !== false;
 
         var _menuOpen = useState(false);
         var menuOpen = _menuOpen[0];
@@ -108,10 +109,14 @@
             action();
         }, []);
 
-        var needsValidation = registration.status === 'en_attente';
+        var statusKey = registration.status;
+        var needsValidation = eventRequiresValidation && statusKey === 'en_attente';
+        var displayStatus = !eventRequiresValidation && statusKey === 'en_attente'
+            ? 'valide'
+            : statusKey;
         var needsPayment = eventRequiresPayment && registration.paymentStatus === 'unpaid';
         var isPaid = eventRequiresPayment && registration.paymentStatus === 'paid';
-        var isCancelled = registration.status === 'annule';
+        var isCancelled = statusKey === 'annule';
 
         return h('div', {
             class: classNames('mj-regmgr-registration-card', {
@@ -138,8 +143,8 @@
             h('div', { class: 'mj-regmgr-registration-card__statuses' }, [
                 // Statut inscription
                 h('span', {
-                    class: classNames('mj-regmgr-badge', 'mj-regmgr-badge--status-' + registration.status),
-                }, statusLabels[registration.status] || registration.status),
+                    class: classNames('mj-regmgr-badge', 'mj-regmgr-badge--status-' + displayStatus),
+                }, statusLabels[displayStatus] || displayStatus),
 
                 // Statut paiement
                 eventRequiresPayment && h('span', {
@@ -174,7 +179,7 @@
                 // Actions principales (toujours visibles)
                 h('div', { class: 'mj-regmgr-registration-card__actions-main' }, [
                     // Valider inscription
-                    needsValidation && h('button', {
+                    needsValidation && typeof onValidate === 'function' && h('button', {
                         type: 'button',
                         class: 'mj-regmgr-action-btn mj-regmgr-action-btn--success',
                         onClick: function () { onValidate(registration); },
@@ -343,12 +348,18 @@
         var config = props.config;
         var eventRequiresPayment = props.eventRequiresPayment;
         var allowOccurrenceSelection = props.allowOccurrenceSelection !== false;
+        var eventRequiresValidation = props.eventRequiresValidation !== false;
 
         // Stats rapides
         var stats = {
             total: registrations.length,
-            pending: registrations.filter(function (r) { return r.status === 'en_attente'; }).length,
-            confirmed: registrations.filter(function (r) { return r.status === 'valide'; }).length,
+            pending: eventRequiresValidation ? registrations.filter(function (r) { return r.status === 'en_attente'; }).length : 0,
+            confirmed: registrations.filter(function (r) {
+                if (r.status === 'valide') {
+                    return true;
+                }
+                return !eventRequiresValidation && r.status === 'en_attente';
+            }).length,
             cancelled: registrations.filter(function (r) { return r.status === 'annule'; }).length,
             unpaid: eventRequiresPayment ? registrations.filter(function (r) { return r.paymentStatus === 'unpaid' && r.status !== 'annule'; }).length : 0,
             paid: eventRequiresPayment ? registrations.filter(function (r) { return r.paymentStatus === 'paid'; }).length : 0,
@@ -487,6 +498,7 @@
                         strings: strings,
                         config: config,
                         eventRequiresPayment: eventRequiresPayment,
+                        eventRequiresValidation: eventRequiresValidation,
                     });
                 })
             ),

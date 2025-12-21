@@ -240,6 +240,7 @@
         var onRegularize = props.onRegularize;
         var strings = props.strings;
         var requiresPayment = props.requiresPayment === true;
+        var requiresValidation = props.requiresValidation !== false;
 
         var member = registration.member;
         var memberName = member 
@@ -255,9 +256,9 @@
 
         var paymentStatus = registration.paymentStatus || 'unpaid';
         var irregularAction = null;
-        var shouldValidateRegistration = registration.status === 'en_attente'
-            || !requiresPayment
-            || paymentStatus !== 'unpaid';
+        var canValidateRegistration = requiresValidation && registration.status === 'en_attente';
+        var shouldValidateRegistration = canValidateRegistration
+            || (requiresValidation && (!requiresPayment || paymentStatus !== 'unpaid'));
 
         var irregularLabel = null;
         if (irregular === 'unpaid') {
@@ -375,6 +376,7 @@
         var strings = props.strings;
         var loading = props.loading;
         var loadingMembers = props.loadingMembers || {};
+        var requiresValidation = props.eventRequiresValidation !== false;
 
         var _selectedOccurrence = useState('');
         var selectedOccurrence = _selectedOccurrence[0];
@@ -431,7 +433,8 @@
             var hasMultipleOccurrences = occurrences.length > 1;
 
             registrations.forEach(function (reg) {
-                var isValidated = reg.status === 'valide';
+                var isValidated = reg.status === 'valide'
+                    || (!requiresValidation && reg.status === 'en_attente');
                 
                 // Vérifier si inscrit à cette occurrence
                 var isRegisteredToOccurrence = true;
@@ -453,7 +456,7 @@
             });
 
             return { valid: valid, unpaid: unpaid, notRegistered: notRegistered };
-        }, [registrations, selectedOccurrence, occurrences]);
+        }, [registrations, selectedOccurrence, occurrences, requiresValidation]);
 
         // Obtenir le statut de présence
         var getAttendanceStatus = useCallback(function (memberId) {
@@ -494,19 +497,19 @@
         var handleRegularize = useCallback(function (registration, irregularType) {
             if (irregularType === 'unpaid') {
                 var paymentStatus = registration.paymentStatus || 'unpaid';
-                var shouldValidateRegistration = registration.status === 'en_attente'
-                    || !requiresPayment
-                    || paymentStatus !== 'unpaid';
+                var canValidateRegistration = requiresValidation && registration.status === 'en_attente';
+                var shouldValidateRegistration = canValidateRegistration
+                    || (requiresValidation && (!requiresPayment || paymentStatus !== 'unpaid'));
 
-                if (shouldValidateRegistration && onValidateRegistration) {
+                if (shouldValidateRegistration && typeof onValidateRegistration === 'function') {
                     onValidateRegistration(registration);
-                } else if (onValidatePayment) {
+                } else if (typeof onValidatePayment === 'function') {
                     onValidatePayment(registration);
                 }
             } else if (irregularType === 'not-registered' && onChangeOccurrences) {
                 onChangeOccurrences(registration);
             }
-        }, [onValidatePayment, onValidateRegistration, onChangeOccurrences, requiresPayment]);
+        }, [onValidatePayment, onValidateRegistration, onChangeOccurrences, requiresPayment, requiresValidation]);
 
         var totalValid = categorizedRegistrations.valid.length;
         var totalIrregular = categorizedRegistrations.unpaid.length + categorizedRegistrations.notRegistered.length;
@@ -602,6 +605,7 @@
                             loading: isLoading,
                             strings: strings,
                             requiresPayment: requiresPayment,
+                            requiresValidation: requiresValidation,
                         });
                     }),
                 ]),
@@ -631,6 +635,7 @@
                                 onRegularize: handleRegularize,
                                 strings: strings,
                                 requiresPayment: requiresPayment,
+                                requiresValidation: requiresValidation,
                             });
                         }),
 
@@ -647,6 +652,7 @@
                                 onRegularize: handleRegularize,
                                 strings: strings,
                                 requiresPayment: requiresPayment,
+                                requiresValidation: requiresValidation,
                             });
                         }),
                     ]),

@@ -1086,6 +1086,12 @@
 
         var allowOccurrenceSelection = occurrenceSelectionMode !== 'all_occurrences';
         var eventRequiresPayment = eventDetails && eventDetails.prix > 0 && !eventDetails.freeParticipation;
+        var eventRequiresValidation = true;
+        if (eventDetails && typeof eventDetails.requiresValidation !== 'undefined') {
+            eventRequiresValidation = !!eventDetails.requiresValidation;
+        } else if (selectedEvent && typeof selectedEvent.requiresValidation !== 'undefined') {
+            eventRequiresValidation = !!selectedEvent.requiresValidation;
+        }
 
         // Get MemberDetailPanel component
         var MembersComps = window.MjRegMgrMembers;
@@ -1213,7 +1219,7 @@
                                 registrations: registrations,
                                 loading: registrationsLoading,
                                 onAddParticipant: function () { addParticipantModal.open(); },
-                                onValidate: handleValidateRegistration,
+                                onValidate: eventRequiresValidation ? handleValidateRegistration : null,
                                 onCancel: handleCancelRegistration,
                                 onDelete: handleDeleteRegistration,
                                 onValidatePayment: handleValidatePayment,
@@ -1225,6 +1231,7 @@
                                 config: config,
                                 eventRequiresPayment: eventRequiresPayment,
                                 allowOccurrenceSelection: allowOccurrenceSelection,
+                                eventRequiresValidation: eventRequiresValidation,
                             }),
 
                             activeTab === 'attendance' && h(AttendanceSheet, {
@@ -1235,11 +1242,12 @@
                                 onUpdateAttendance: handleUpdateAttendance,
                                 onBulkAttendance: handleBulkAttendance,
                                 onValidatePayment: handleValidatePayment,
-                                onValidateRegistration: handleValidateRegistration,
+                                onValidateRegistration: eventRequiresValidation ? handleValidateRegistration : null,
                                 onChangeOccurrences: allowOccurrenceSelection ? handleChangeOccurrences : null,
                                 strings: strings,
                                 loading: registrationsLoading,
                                 loadingMembers: loadingMembers,
+                                eventRequiresValidation: eventRequiresValidation,
                             }),
 
                             activeTab === 'details' && h(EventDetailPanel, {
