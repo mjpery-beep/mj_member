@@ -538,8 +538,6 @@
         var setCoverPreview = _coverPreview[1];
 
         var mediaFrameRef = useRef(null);
-        var accentTouchedRef = useRef(initialValues && initialValues.event_accent_color ? initialValues.event_accent_color !== '' : false);
-        var accentLastRef = useRef(initialValues && initialValues.event_accent_color ? initialValues.event_accent_color : '');
         var previousTypeRef = useRef(initialValues && initialValues.event_type ? initialValues.event_type : '');
         var typeDefaultColors = useMemo(function () {
             var map = {};
@@ -582,8 +580,6 @@
                 setSeriesItems([]);
                 setIsDirty(false);
                 setCoverPreview('');
-                accentTouchedRef.current = false;
-                accentLastRef.current = '';
                 previousTypeRef.current = '';
                 return;
             }
@@ -595,8 +591,6 @@
             setIsDirty(false);
             var nextCover = eventSummary && eventSummary.coverUrl ? eventSummary.coverUrl : '';
             setCoverPreview(nextCover);
-            accentTouchedRef.current = !!(nextValues.event_accent_color && nextValues.event_accent_color !== '');
-            accentLastRef.current = nextValues.event_accent_color || '';
             previousTypeRef.current = nextValues.event_type || '';
         }, [data, eventSummary]);
 
@@ -619,42 +613,19 @@
             }
             previousTypeRef.current = currentType;
 
-            if (!accentTouchedRef.current) {
-                accentLastRef.current = formState.event_accent_color || '';
-                return;
-            }
-
-            var manualAccent = accentLastRef.current || '';
-            var currentAccent = formState.event_accent_color || '';
             var defaultAccent = '';
             if (typeDefaultColors && Object.prototype.hasOwnProperty.call(typeDefaultColors, currentType)) {
                 defaultAccent = typeDefaultColors[currentType] || '';
             }
 
-            var normalizeForCompare = function (value) {
-                if (typeof value !== 'string') {
-                    return '';
-                }
-                var normalized = normalizeHexColor(value);
-                var candidate = normalized !== '' ? normalized : value;
-                return candidate.trim().toLowerCase();
-            };
+            var normalizedDefault = defaultAccent ? normalizeHexColor(defaultAccent) || defaultAccent : '';
+            var currentAccent = formState.event_accent_color || '';
+            var normalizedCurrent = currentAccent ? normalizeHexColor(currentAccent) || currentAccent : '';
 
-            var currentComparable = normalizeForCompare(currentAccent);
-            var manualComparable = normalizeForCompare(manualAccent);
-            var defaultComparable = normalizeForCompare(defaultAccent);
-
-            if (defaultComparable && currentComparable === defaultComparable && manualComparable !== defaultComparable) {
-                if (manualAccent !== formState.event_accent_color) {
-                    updateFormValue('event_accent_color', manualAccent);
-                }
-                return;
+            if (normalizedDefault !== normalizedCurrent) {
+                updateFormValue('event_accent_color', normalizedDefault);
             }
-
-            if (!defaultComparable && manualComparable === '' && currentComparable !== manualComparable) {
-                updateFormValue('event_accent_color', manualAccent);
-            }
-        }, [formState.event_type, formState.event_accent_color, typeDefaultColors, updateFormValue]);
+        }, [formState.event_type, typeDefaultColors, updateFormValue, formState.event_accent_color]);
 
         var updateFormValue = useCallback(function (key, value) {
             setFormState(function (prev) {
@@ -764,12 +735,6 @@
             } else {
                 updateFormValue(key, parsed);
             }
-        }, [updateFormValue]);
-
-        var handleAccentChange = useCallback(function (value) {
-            accentTouchedRef.current = true;
-            accentLastRef.current = value;
-            updateFormValue('event_accent_color', value);
         }, [updateFormValue]);
 
         var handleSelectCover = useCallback(function () {
@@ -996,12 +961,12 @@
                                 h('input', {
                                     type: 'color',
                                     value: normalizeHexColor(formState.event_accent_color || '') || '#000000',
-                                    onChange: function (e) { handleAccentChange(e.target.value); },
+                                    onChange: function (e) { updateFormValue('event_accent_color', e.target.value); },
                                 }),
                                 h('input', {
                                     type: 'text',
                                     value: formState.event_accent_color || '',
-                                    onChange: function (e) { handleAccentChange(e.target.value); },
+                                    onChange: function (e) { updateFormValue('event_accent_color', e.target.value); },
                                     placeholder: '#123456',
                                 }),
                             ]),
@@ -1044,6 +1009,39 @@
                                 onChange: function (e) { handleNumberChange('event_cover_id', e.target.value); },
                                 min: '0',
                             }),
+                        ]),
+                    ]),
+                ]),
+
+                h('div', { class: 'mj-regmgr-event-editor__section' }, [
+                    h('div', { class: 'mj-regmgr-event-editor__section-header' }, [
+                        h('h2', null, getString(strings, 'articlesSection', 'Contenu lie')),
+                        h('p', { class: 'mj-regmgr-event-editor__section-hint' }, getString(strings, 'articlesSectionHint', 'Liez un article ou une categorie pour completer la fiche evenement.')),
+                    ]),
+                    h('div', { class: 'mj-regmgr-form-grid' }, [
+                        h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', null, getString(strings, 'articleCategory', 'Categorie d\'article')),
+                            h('select', {
+                                value: formState.event_article_cat || 0,
+                                onChange: function (e) { updateFormValue('event_article_cat', parseInt(e.target.value, 10) || 0); },
+                            }, [
+                                h('option', { value: 0 }, getString(strings, 'noCategory', 'Non defini')),
+                                Object.keys(initialOptions.article_categories || {}).map(function (key) {
+                                    return h('option', { key: key, value: key }, initialOptions.article_categories[key]);
+                                }),
+                            ]),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', null, getString(strings, 'article', 'Article')),
+                            h('select', {
+                                value: formState.event_article_id || 0,
+                                onChange: function (e) { updateFormValue('event_article_id', parseInt(e.target.value, 10) || 0); },
+                            }, [
+                                h('option', { value: 0 }, getString(strings, 'noArticle', 'Aucun article')),
+                                Object.keys(initialOptions.articles || {}).map(function (key) {
+                                    return h('option', { key: key, value: key }, initialOptions.articles[key]);
+                                }),
+                            ]),
                         ]),
                     ]),
                 ]),
@@ -1264,39 +1262,8 @@
                     ]),
                 ]),
 
-                h('div', { class: 'mj-regmgr-event-editor__section' }, [
-                    h('div', { class: 'mj-regmgr-event-editor__section-header' }, [
-                        h('h2', null, getString(strings, 'articlesSection', 'Contenu lie')),
-                        h('p', { class: 'mj-regmgr-event-editor__section-hint' }, getString(strings, 'articlesSectionHint', 'Liez un article ou une categorie pour completer la fiche evenement.')),
-                    ]),
-                    h('div', { class: 'mj-regmgr-form-grid' }, [
-                        h('div', { class: 'mj-regmgr-form-field' }, [
-                            h('label', null, getString(strings, 'articleCategory', 'Categorie d\'article')),
-                            h('select', {
-                                value: formState.event_article_cat || 0,
-                                onChange: function (e) { updateFormValue('event_article_cat', parseInt(e.target.value, 10) || 0); },
-                            }, [
-                                h('option', { value: 0 }, getString(strings, 'noCategory', 'Non defini')),
-                                Object.keys(initialOptions.article_categories || {}).map(function (key) {
-                                    return h('option', { key: key, value: key }, initialOptions.article_categories[key]);
-                                }),
-                            ]),
-                        ]),
-                        h('div', { class: 'mj-regmgr-form-field' }, [
-                            h('label', null, getString(strings, 'article', 'Article')),
-                            h('select', {
-                                value: formState.event_article_id || 0,
-                                onChange: function (e) { updateFormValue('event_article_id', parseInt(e.target.value, 10) || 0); },
-                            }, [
-                                h('option', { value: 0 }, getString(strings, 'noArticle', 'Aucun article')),
-                                Object.keys(initialOptions.articles || {}).map(function (key) {
-                                    return h('option', { key: key, value: key }, initialOptions.articles[key]);
-                                }),
-                            ]),
-                        ]),
-                    ]),
-                ]),
             ]),
+
         ]);
     }
 
