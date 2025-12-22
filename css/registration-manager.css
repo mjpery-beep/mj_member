@@ -5317,12 +5317,15 @@ input.mj-regmgr-search-input__field {
     color: var(--regmgr-gray-500);
 }
 
-.mj-regmgr-event-editor .mj-regmgr-form-grid {
+.mj-regmgr-event-editor .mj-regmgr-form-grid,
+.mj-regmgr-member-editor .mj-regmgr-form-grid {
     gap: 18px;
 }
 
 .mj-regmgr-event-editor .mj-regmgr-form-field label,
-.mj-regmgr-event-editor .mj-regmgr-form-label {
+.mj-regmgr-event-editor .mj-regmgr-form-label,
+.mj-regmgr-member-editor .mj-regmgr-form-field label,
+.mj-regmgr-member-editor .mj-regmgr-form-label {
     font-size: 13px;
     font-weight: 600;
     color: var(--regmgr-gray-700);
@@ -5333,7 +5336,13 @@ input.mj-regmgr-search-input__field {
 .mj-regmgr-event-editor input[type='date'],
 .mj-regmgr-event-editor input[type='time'],
 .mj-regmgr-event-editor select,
-.mj-regmgr-event-editor textarea {
+.mj-regmgr-event-editor textarea,
+.mj-regmgr-member-editor input[type='text'],
+.mj-regmgr-member-editor input[type='number'],
+.mj-regmgr-member-editor input[type='date'],
+.mj-regmgr-member-editor input[type='time'],
+.mj-regmgr-member-editor select,
+.mj-regmgr-member-editor textarea {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--regmgr-gray-200);
@@ -5347,13 +5356,20 @@ input.mj-regmgr-search-input__field {
 .mj-regmgr-event-editor input[type='date']:focus,
 .mj-regmgr-event-editor input[type='time']:focus,
 .mj-regmgr-event-editor select:focus,
-.mj-regmgr-event-editor textarea:focus {
+.mj-regmgr-event-editor textarea:focus,
+.mj-regmgr-member-editor input[type='text']:focus,
+.mj-regmgr-member-editor input[type='number']:focus,
+.mj-regmgr-member-editor input[type='date']:focus,
+.mj-regmgr-member-editor input[type='time']:focus,
+.mj-regmgr-member-editor select:focus,
+.mj-regmgr-member-editor textarea:focus {
     outline: none;
     border-color: var(--regmgr-primary);
     box-shadow: 0 0 0 3px var(--regmgr-primary-light);
 }
 
-.mj-regmgr-event-editor .mj-regmgr-field-hint {
+.mj-regmgr-event-editor .mj-regmgr-field-hint,
+.mj-regmgr-member-editor .mj-regmgr-field-hint {
     margin-top: 4px;
 }
 
@@ -5378,7 +5394,9 @@ input.mj-regmgr-search-input__field {
 }
 
 .mj-regmgr-event-editor .mj-regmgr-form-field--checkbox,
-.mj-regmgr-event-editor .mj-regmgr-form-field--checkbox-row {
+.mj-regmgr-event-editor .mj-regmgr-form-field--checkbox-row,
+.mj-regmgr-member-editor .mj-regmgr-form-field--checkbox,
+.mj-regmgr-member-editor .mj-regmgr-form-field--checkbox-row {
     background: #fff;
     border: 1px solid var(--regmgr-gray-200);
     border-radius: var(--regmgr-radius);

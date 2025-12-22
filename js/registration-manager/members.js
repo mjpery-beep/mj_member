@@ -277,28 +277,33 @@
         var photoSaving = _photoSaving[0];
         var setPhotoSaving = _photoSaving[1];
 
+        var buildInitialEditData = function (sourceMember) {
+            var base = sourceMember || {};
+            return {
+                firstName: base.firstName || '',
+                lastName: base.lastName || '',
+                nickname: base.nickname || '',
+                email: base.email || '',
+                phone: base.phone || '',
+                birthDate: base.birthDate || '',
+                addressLine: base.addressLine || '',
+                city: base.city || '',
+                postalCode: base.postalCode || '',
+                isVolunteer: !!base.isVolunteer,
+                isAutonomous: !!base.isAutonomous,
+                descriptionShort: base.descriptionShort || '',
+                descriptionLong: base.descriptionLong || '',
+                newsletterOptIn: typeof base.newsletterOptIn === 'boolean' ? base.newsletterOptIn : true,
+                smsOptIn: typeof base.smsOptIn === 'boolean' ? base.smsOptIn : true,
+                whatsappOptIn: typeof base.whatsappOptIn === 'boolean' ? base.whatsappOptIn : true,
+                photoUsageConsent: !!base.photoUsageConsent,
+            };
+        };
+
         // Reset edit data when member changes
         useEffect(function () {
             if (member) {
-                setEditData({
-                    firstName: member.firstName || '',
-                    lastName: member.lastName || '',
-                    nickname: member.nickname || '',
-                    email: member.email || '',
-                    phone: member.phone || '',
-                    birthDate: member.birthDate || '',
-                    addressLine: member.addressLine || '',
-                    city: member.city || '',
-                    postalCode: member.postalCode || '',
-                    isVolunteer: !!member.isVolunteer,
-                    isAutonomous: !!member.isAutonomous,
-                    descriptionShort: member.descriptionShort || '',
-                    descriptionLong: member.descriptionLong || '',
-                    newsletterOptIn: typeof member.newsletterOptIn === 'boolean' ? member.newsletterOptIn : true,
-                    smsOptIn: typeof member.smsOptIn === 'boolean' ? member.smsOptIn : true,
-                    whatsappOptIn: typeof member.whatsappOptIn === 'boolean' ? member.whatsappOptIn : true,
-                    photoUsageConsent: !!member.photoUsageConsent,
-                });
+                setEditData(buildInitialEditData(member));
                 setEditMode(false);
                 setEditingNoteId(null);
                 setEditingNoteContent('');
@@ -629,6 +634,7 @@
         var hasMemberBio = (member.descriptionShort && member.descriptionShort.trim() !== '') || (member.descriptionLong && member.descriptionLong.trim() !== '');
         var profileTitle = getString(strings, 'memberProfile', 'Profil');
         var messageHistoryLabel = getString(strings, 'messageHistory', 'Historique');
+        var fieldIdPrefix = 'member-edit-' + (member && member.id ? member.id : 'current') + '-';
 
         return h('div', { class: 'mj-regmgr-member-detail' }, [
             // Header avec avatar
@@ -678,167 +684,200 @@
                     h('h2', { class: 'mj-regmgr-member-detail__section-title' }, 'Informations'),
 
                     editMode ? [
-                        // Mode édition
-                        h('div', { class: 'mj-regmgr-form-grid' }, [
-                            h('div', { class: 'mj-regmgr-form-group' }, [
-                                h('label', null, 'Prénom'),
-                                h('input', {
-                                    type: 'text',
-                                    class: 'mj-regmgr-input',
-                                    value: editData.firstName,
-                                    onInput: handleFieldChange('firstName'),
-                                }),
+                        h('div', { class: 'mj-regmgr-event-editor__section mj-regmgr-member-editor' }, [
+                            h('div', { class: 'mj-regmgr-form-grid' }, [
+                                h('div', { class: 'mj-regmgr-form-field' }, [
+                                    h('label', { htmlFor: fieldIdPrefix + 'first-name' }, 'Prénom'),
+                                    h('input', {
+                                        id: fieldIdPrefix + 'first-name',
+                                        type: 'text',
+                                        class: 'mj-regmgr-input',
+                                        value: editData.firstName,
+                                        onInput: handleFieldChange('firstName'),
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field' }, [
+                                    h('label', { htmlFor: fieldIdPrefix + 'last-name' }, 'Nom'),
+                                    h('input', {
+                                        id: fieldIdPrefix + 'last-name',
+                                        type: 'text',
+                                        class: 'mj-regmgr-input',
+                                        value: editData.lastName,
+                                        onInput: handleFieldChange('lastName'),
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field' }, [
+                                    h('label', { htmlFor: fieldIdPrefix + 'nickname' }, 'Surnom'),
+                                    h('input', {
+                                        id: fieldIdPrefix + 'nickname',
+                                        type: 'text',
+                                        class: 'mj-regmgr-input',
+                                        value: editData.nickname || '',
+                                        onInput: handleFieldChange('nickname'),
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field' }, [
+                                    h('label', { htmlFor: fieldIdPrefix + 'email' }, 'Email'),
+                                    h('input', {
+                                        id: fieldIdPrefix + 'email',
+                                        type: 'email',
+                                        class: 'mj-regmgr-input',
+                                        value: editData.email,
+                                        onInput: handleFieldChange('email'),
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field' }, [
+                                    h('label', { htmlFor: fieldIdPrefix + 'phone' }, 'Téléphone'),
+                                    h('input', {
+                                        id: fieldIdPrefix + 'phone',
+                                        type: 'tel',
+                                        class: 'mj-regmgr-input',
+                                        value: editData.phone,
+                                        onInput: handleFieldChange('phone'),
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field' }, [
+                                    h('label', { htmlFor: fieldIdPrefix + 'birth-date' }, 'Date de naissance'),
+                                    h('input', {
+                                        id: fieldIdPrefix + 'birth-date',
+                                        type: 'date',
+                                        class: 'mj-regmgr-input',
+                                        value: editData.birthDate,
+                                        onInput: handleFieldChange('birthDate'),
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
+                                    h('label', { htmlFor: fieldIdPrefix + 'address' }, 'Adresse'),
+                                    h('input', {
+                                        id: fieldIdPrefix + 'address',
+                                        type: 'text',
+                                        class: 'mj-regmgr-input',
+                                        value: editData.addressLine || '',
+                                        onInput: handleFieldChange('addressLine'),
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field' }, [
+                                    h('label', { htmlFor: fieldIdPrefix + 'postal-code' }, 'Code postal'),
+                                    h('input', {
+                                        id: fieldIdPrefix + 'postal-code',
+                                        type: 'text',
+                                        class: 'mj-regmgr-input',
+                                        value: editData.postalCode || '',
+                                        onInput: handleFieldChange('postalCode'),
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field' }, [
+                                    h('label', { htmlFor: fieldIdPrefix + 'city' }, 'Ville'),
+                                    h('input', {
+                                        id: fieldIdPrefix + 'city',
+                                        type: 'text',
+                                        class: 'mj-regmgr-input',
+                                        value: editData.city || '',
+                                        onInput: handleFieldChange('city'),
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--checkbox' }, [
+                                    h('label', { class: 'mj-regmgr-checkbox' }, [
+                                        h('input', {
+                                            id: fieldIdPrefix + 'is-volunteer',
+                                            type: 'checkbox',
+                                            checked: !!editData.isVolunteer,
+                                            onChange: handleBooleanChange('isVolunteer'),
+                                        }),
+                                        h('span', null, 'Bénévole'),
+                                    ]),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--checkbox' }, [
+                                    h('label', { class: 'mj-regmgr-checkbox' }, [
+                                        h('input', {
+                                            id: fieldIdPrefix + 'is-autonomous',
+                                            type: 'checkbox',
+                                            checked: !!editData.isAutonomous,
+                                            onChange: handleBooleanChange('isAutonomous'),
+                                        }),
+                                        h('span', null, 'Autonome'),
+                                    ]),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--checkbox' }, [
+                                    h('label', { class: 'mj-regmgr-checkbox' }, [
+                                        h('input', {
+                                            id: fieldIdPrefix + 'newsletter-optin',
+                                            type: 'checkbox',
+                                            checked: !!editData.newsletterOptIn,
+                                            onChange: handleBooleanChange('newsletterOptIn'),
+                                        }),
+                                        h('span', null, 'Newsletter'),
+                                    ]),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--checkbox' }, [
+                                    h('label', { class: 'mj-regmgr-checkbox' }, [
+                                        h('input', {
+                                            id: fieldIdPrefix + 'sms-optin',
+                                            type: 'checkbox',
+                                            checked: !!editData.smsOptIn,
+                                            onChange: handleBooleanChange('smsOptIn'),
+                                        }),
+                                        h('span', null, 'SMS'),
+                                    ]),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--checkbox' }, [
+                                    h('label', { class: 'mj-regmgr-checkbox' }, [
+                                        h('input', {
+                                            id: fieldIdPrefix + 'whatsapp-optin',
+                                            type: 'checkbox',
+                                            checked: !!editData.whatsappOptIn,
+                                            onChange: handleBooleanChange('whatsappOptIn'),
+                                        }),
+                                        h('span', null, 'WhatsApp'),
+                                    ]),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--checkbox' }, [
+                                    h('label', { class: 'mj-regmgr-checkbox' }, [
+                                        h('input', {
+                                            id: fieldIdPrefix + 'photo-consent',
+                                            type: 'checkbox',
+                                            checked: !!editData.photoUsageConsent,
+                                            onChange: handleBooleanChange('photoUsageConsent'),
+                                        }),
+                                        h('span', null, 'Consentement photo'),
+                                    ]),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
+                                    h('label', { htmlFor: fieldIdPrefix + 'bio-short' }, getString(strings, 'memberBioShort', 'Bio courte')),
+                                    h('textarea', {
+                                        id: fieldIdPrefix + 'bio-short',
+                                        class: 'mj-regmgr-textarea',
+                                        rows: 3,
+                                        value: editData.descriptionShort || '',
+                                        onInput: handleFieldChange('descriptionShort'),
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
+                                    h('label', { htmlFor: fieldIdPrefix + 'bio-long' }, getString(strings, 'memberBioLong', 'Bio détaillée')),
+                                    h('textarea', {
+                                        id: fieldIdPrefix + 'bio-long',
+                                        class: 'mj-regmgr-textarea',
+                                        rows: 4,
+                                        value: editData.descriptionLong || '',
+                                        onInput: handleFieldChange('descriptionLong'),
+                                    }),
+                                ]),
                             ]),
-                            h('div', { class: 'mj-regmgr-form-group' }, [
-                                h('label', null, 'Nom'),
-                                h('input', {
-                                    type: 'text',
-                                    class: 'mj-regmgr-input',
-                                    value: editData.lastName,
-                                    onInput: handleFieldChange('lastName'),
-                                }),
+                            h('div', { class: 'mj-regmgr-event-editor__actions mj-regmgr-member-editor__actions' }, [
+                                h('button', {
+                                    type: 'button',
+                                    class: 'mj-btn mj-btn--secondary',
+                                    onClick: function () {
+                                        setEditData(buildInitialEditData(member));
+                                        setEditMode(false);
+                                    },
+                                }, getString(strings, 'cancel', 'Annuler')),
+                                h('button', {
+                                    type: 'button',
+                                    class: 'mj-btn mj-btn--primary',
+                                    onClick: handleSave,
+                                }, getString(strings, 'save', 'Enregistrer')),
                             ]),
-                            h('div', { class: 'mj-regmgr-form-group' }, [
-                                h('label', null, 'Surnom'),
-                                h('input', {
-                                    type: 'text',
-                                    class: 'mj-regmgr-input',
-                                    value: editData.nickname || '',
-                                    onInput: handleFieldChange('nickname'),
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-form-group' }, [
-                                h('label', null, 'Email'),
-                                h('input', {
-                                    type: 'email',
-                                    class: 'mj-regmgr-input',
-                                    value: editData.email,
-                                    onInput: handleFieldChange('email'),
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-form-group' }, [
-                                h('label', null, 'Téléphone'),
-                                h('input', {
-                                    type: 'tel',
-                                    class: 'mj-regmgr-input',
-                                    value: editData.phone,
-                                    onInput: handleFieldChange('phone'),
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-form-group' }, [
-                                h('label', null, 'Date de naissance'),
-                                h('input', {
-                                    type: 'date',
-                                    class: 'mj-regmgr-input',
-                                    value: editData.birthDate,
-                                    onInput: handleFieldChange('birthDate'),
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-form-group' }, [
-                                h('label', null, 'Adresse'),
-                                h('input', {
-                                    type: 'text',
-                                    class: 'mj-regmgr-input',
-                                    value: editData.addressLine || '',
-                                    onInput: handleFieldChange('addressLine'),
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-form-group' }, [
-                                h('label', null, 'Code postal'),
-                                h('input', {
-                                    type: 'text',
-                                    class: 'mj-regmgr-input',
-                                    value: editData.postalCode || '',
-                                    onInput: handleFieldChange('postalCode'),
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-form-group' }, [
-                                h('label', null, 'Ville'),
-                                h('input', {
-                                    type: 'text',
-                                    class: 'mj-regmgr-input',
-                                    value: editData.city || '',
-                                    onInput: handleFieldChange('city'),
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-form-group mj-regmgr-form-group--checkbox' }, [
-                                h('label', null, 'Bénévole'),
-                                h('input', {
-                                    type: 'checkbox',
-                                    checked: !!editData.isVolunteer,
-                                    onChange: handleBooleanChange('isVolunteer'),
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-form-group mj-regmgr-form-group--checkbox' }, [
-                                h('label', null, 'Autonome'),
-                                h('input', {
-                                    type: 'checkbox',
-                                    checked: !!editData.isAutonomous,
-                                    onChange: handleBooleanChange('isAutonomous'),
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-form-group mj-regmgr-form-group--checkbox' }, [
-                                h('label', null, 'Newsletter'),
-                                h('input', {
-                                    type: 'checkbox',
-                                    checked: !!editData.newsletterOptIn,
-                                    onChange: handleBooleanChange('newsletterOptIn'),
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-form-group mj-regmgr-form-group--checkbox' }, [
-                                h('label', null, 'SMS'),
-                                h('input', {
-                                    type: 'checkbox',
-                                    checked: !!editData.smsOptIn,
-                                    onChange: handleBooleanChange('smsOptIn'),
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-form-group mj-regmgr-form-group--checkbox' }, [
-                                h('label', null, 'WhatsApp'),
-                                h('input', {
-                                    type: 'checkbox',
-                                    checked: !!editData.whatsappOptIn,
-                                    onChange: handleBooleanChange('whatsappOptIn'),
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-form-group mj-regmgr-form-group--checkbox' }, [
-                                h('label', null, 'Consentement photo'),
-                                h('input', {
-                                    type: 'checkbox',
-                                    checked: !!editData.photoUsageConsent,
-                                    onChange: handleBooleanChange('photoUsageConsent'),
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-form-group mj-regmgr-form-group--textarea' }, [
-                                h('label', null, getString(strings, 'memberBioShort', 'Bio courte')),
-                                h('textarea', {
-                                    class: 'mj-regmgr-textarea',
-                                    rows: 2,
-                                    value: editData.descriptionShort || '',
-                                    onInput: handleFieldChange('descriptionShort'),
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-form-group mj-regmgr-form-group--textarea' }, [
-                                h('label', null, getString(strings, 'memberBioLong', 'Bio détaillée')),
-                                h('textarea', {
-                                    class: 'mj-regmgr-textarea',
-                                    rows: 4,
-                                    value: editData.descriptionLong || '',
-                                    onInput: handleFieldChange('descriptionLong'),
-                                }),
-                            ]),
-                        ]),
-                        h('div', { class: 'mj-regmgr-member-detail__actions' }, [
-                            h('button', {
-                                type: 'button',
-                                class: 'mj-btn mj-btn--secondary',
-                                onClick: function () { setEditMode(false); },
-                            }, 'Annuler'),
-                            h('button', {
-                                type: 'button',
-                                class: 'mj-btn mj-btn--primary',
-                                onClick: handleSave,
-                            }, 'Enregistrer'),
                         ]),
                     ] : [
                         // Mode lecture
