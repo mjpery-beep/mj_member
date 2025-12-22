@@ -303,6 +303,7 @@ final class AssetsManager
         self::registerScript('mj-member-regmgr-registrations', 'js/registration-manager/registrations.js', array('mj-member-regmgr-hooks'));
         self::registerScript('mj-member-regmgr-attendance', 'js/registration-manager/attendance.js', array('mj-member-regmgr-hooks'));
         self::registerScript('mj-member-regmgr-members', 'js/registration-manager/members.js', array('mj-member-regmgr-registrations'));
+        self::registerScript('mj-member-regmgr-event-editor', 'js/registration-manager/event-editor.js', array('mj-member-regmgr-hooks'));
         self::registerScript('mj-member-regmgr-modals', 'js/registration-manager/modals.js', array('mj-member-regmgr-hooks'));
         self::registerScript('mj-member-regmgr-app', 'js/registration-manager/app.js', array(
             'mj-member-regmgr-services',
@@ -311,6 +312,7 @@ final class AssetsManager
             'mj-member-regmgr-registrations',
             'mj-member-regmgr-attendance',
             'mj-member-regmgr-members',
+            'mj-member-regmgr-event-editor',
             'mj-member-regmgr-modals',
         ));
     }
@@ -459,6 +461,9 @@ final class AssetsManager
             case 'registration-manager':
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-registration-manager');
+                if (function_exists('wp_enqueue_media')) {
+                    wp_enqueue_media();
+                }
                 wp_enqueue_script('mj-member-preact');
                 wp_enqueue_script('mj-member-preact-hooks');
                 wp_enqueue_script('mj-member-regmgr-services');
@@ -467,6 +472,7 @@ final class AssetsManager
                 wp_enqueue_script('mj-member-regmgr-registrations');
                 wp_enqueue_script('mj-member-regmgr-attendance');
                 wp_enqueue_script('mj-member-regmgr-members');
+                wp_enqueue_script('mj-member-regmgr-event-editor');
                 wp_enqueue_script('mj-member-regmgr-modals');
                 wp_enqueue_script('mj-member-regmgr-app');
                 break;

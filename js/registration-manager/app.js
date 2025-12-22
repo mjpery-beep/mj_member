@@ -30,6 +30,8 @@
     var RegComps = global.MjRegMgrRegistrations;
     var AttendanceComps = global.MjRegMgrAttendance;
     var Modals = global.MjRegMgrModals;
+    var EventEditorModule = global.MjRegMgrEventEditor;
+    var EventEditor = EventEditorModule ? EventEditorModule.EventEditor : null;
 
     if (!Services || !Utils || !EventsComps || !RegComps || !AttendanceComps || !Modals) {
         console.warn('[MjRegMgr] Modules manquants');
@@ -379,7 +381,113 @@
 
         // API Service
         var api = useMemo(function () {
-            return Services.createApiService(config);
+            var service = Services.createApiService(config);
+
+            if (!service || typeof service !== 'object') {
+                return service;
+            }
+
+            // Runtime shim for browsers that still run the legacy services.js snapshot.
+
+            function appendNestedValue(formData, baseKey, value) {
+                if (value === undefined || value === null) {
+                    return;
+                }
+
+                if (Array.isArray(value)) {
+                    if (value.length === 0) {
+                        formData.append(baseKey + '[]', '');
+                        return;
+                    }
+                    value.forEach(function (item, index) {
+                        appendNestedValue(formData, baseKey + '[' + index + ']', item);
+                    });
+                    return;
+                }
+
+                if (typeof value === 'object') {
+                    Object.keys(value).forEach(function (subKey) {
+                        appendNestedValue(formData, baseKey + '[' + subKey + ']', value[subKey]);
+                    });
+                    return;
+                }
+
+                if (typeof value === 'boolean') {
+                    formData.append(baseKey, value ? '1' : '0');
+                    return;
+                }
+
+                formData.append(baseKey, value);
+            }
+
+            function fallbackPost(action, payload) {
+                var formData = new FormData();
+                formData.append('action', action);
+                formData.append('nonce', config.nonce || '');
+
+                Object.keys(payload || {}).forEach(function (key) {
+                    var value = payload[key];
+                    if (value === undefined || value === null) {
+                        return;
+                    }
+                    if (key === 'form' || key === 'meta') {
+                        appendNestedValue(formData, key, value);
+                        return;
+                    }
+                    if (Array.isArray(value)) {
+                        value.forEach(function (item, index) {
+                            formData.append(key + '[' + index + ']', item);
+                        });
+                        return;
+                    }
+                    if (typeof value === 'object') {
+                        formData.append(key, JSON.stringify(value));
+                        return;
+                    }
+                    formData.append(key, value);
+                });
+
+                return fetch(config.ajaxUrl, {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin',
+                })
+                    .then(function (response) {
+                        if (!response.ok) {
+                            throw new Error('HTTP ' + response.status);
+                        }
+                        return response.json();
+                    })
+                    .then(function (result) {
+                        if (!result || !result.success) {
+                            var message = result && result.data && result.data.message ? result.data.message : 'Erreur inconnue';
+                            var error = new Error(message);
+                            if (result && result.data) {
+                                error.data = result.data;
+                            }
+                            throw error;
+                        }
+                        return result.data;
+                    });
+            }
+
+            if (typeof service.getEventEditor !== 'function') {
+                service.getEventEditor = function (eventId) {
+                    return fallbackPost('mj_regmgr_get_event_editor', { eventId: eventId });
+                };
+            }
+
+            if (typeof service.updateEvent !== 'function') {
+                service.updateEvent = function (eventId, form, meta) {
+                    return fallbackPost('mj_regmgr_update_event', {
+                        eventId: eventId,
+                        form: form,
+                        meta: meta || {},
+                    });
+                };
+            }
+
+            return service;
         }, [config.ajaxUrl, config.nonce]);
 
         // Toast notifications
@@ -388,6 +496,37 @@
         var showSuccess = toastsHook.success;
         var showError = toastsHook.error;
         var removeToast = toastsHook.removeToast;
+
+        function collectErrorMessages(error, fallbackMessage) {
+            var messages = [];
+            if (!error) {
+                if (fallbackMessage) {
+                    messages.push(fallbackMessage);
+                }
+                return messages;
+            }
+            var data = error.data || null;
+            if (data) {
+                if (Array.isArray(data.errors)) {
+                    messages = data.errors.slice();
+                } else if (Array.isArray(data.messages)) {
+                    messages = data.messages.slice();
+                } else if (typeof data.message === 'string' && data.message !== '') {
+                    messages = [data.message];
+                }
+            }
+            if (messages.length === 0) {
+                if (Array.isArray(error.errors)) {
+                    messages = error.errors.slice();
+                } else if (typeof error.message === 'string' && error.message !== '') {
+                    messages = [error.message];
+                }
+            }
+            if (messages.length === 0 && fallbackMessage) {
+                messages = [fallbackMessage];
+            }
+            return messages;
+        }
 
         // Modals
         var addParticipantModal = useModal();
@@ -461,6 +600,26 @@
         var qrLoading = _qrLoading[0];
         var setQrLoading = _qrLoading[1];
 
+        var _eventEditorData = useState(null);
+        var eventEditorData = _eventEditorData[0];
+        var setEventEditorData = _eventEditorData[1];
+
+        var _eventEditorSummary = useState(null);
+        var eventEditorSummary = _eventEditorSummary[0];
+        var setEventEditorSummary = _eventEditorSummary[1];
+
+        var _eventEditorLoading = useState(false);
+        var eventEditorLoading = _eventEditorLoading[0];
+        var setEventEditorLoading = _eventEditorLoading[1];
+
+        var _eventEditorSaving = useState(false);
+        var eventEditorSaving = _eventEditorSaving[0];
+        var setEventEditorSaving = _eventEditorSaving[1];
+
+        var _eventEditorErrors = useState([]);
+        var eventEditorErrors = _eventEditorErrors[0];
+        var setEventEditorErrors = _eventEditorErrors[1];
+
         var _initialEventLoaded = useState(false);
         var initialEventLoaded = _initialEventLoaded[0];
         var setInitialEventLoaded = _initialEventLoaded[1];
@@ -525,6 +684,7 @@
 
         var lastSelectedEventIdRef = useRef(null);
         var lastSelectedMemberIdRef = useRef(null);
+        var eventEditorLoadedRef = useRef(null);
 
         // Charger les événements
         var loadEvents = useCallback(function (page) {
@@ -583,6 +743,73 @@
                 });
         }, [api, showError]);
 
+        var loadEventEditor = useCallback(function (eventId) {
+            if (!EventEditor) {
+                return Promise.resolve();
+            }
+            setEventEditorLoading(true);
+            setEventEditorErrors([]);
+            return api.getEventEditor(eventId)
+                .then(function (data) {
+                    setEventEditorLoading(false);
+                    setEventEditorErrors([]);
+                    if (lastSelectedEventIdRef.current !== eventId) {
+                        return data;
+                    }
+                    if (data && data.form) {
+                        setEventEditorData({
+                            values: data.form.values || {},
+                            options: data.form.options || {},
+                            meta: data.form.meta || {},
+                        });
+                    } else {
+                        setEventEditorData(null);
+                    }
+                    if (data && data.event) {
+                        setEventEditorSummary(data.event);
+                        setSelectedEvent(function (prev) {
+                            if (!prev) {
+                                return data.event;
+                            }
+                            if (prev.id !== data.event.id) {
+                                return prev;
+                            }
+                            return Object.assign({}, prev, data.event);
+                        });
+                        setEvents(function (prev) {
+                            if (!prev) {
+                                return prev;
+                            }
+                            return prev.map(function (evt) {
+                                if (evt.id === data.event.id) {
+                                    return Object.assign({}, evt, data.event);
+                                }
+                                return evt;
+                            });
+                        });
+                    } else {
+                        setEventEditorSummary(null);
+                    }
+                    eventEditorLoadedRef.current = eventId;
+                    return data;
+                })
+                .catch(function (err) {
+                    setEventEditorLoading(false);
+                    if (lastSelectedEventIdRef.current !== eventId) {
+                        return null;
+                    }
+                    if (err && err.aborted) {
+                        return null;
+                    }
+                    var fallback = getString(strings, 'error', 'Erreur');
+                    var messages = collectErrorMessages(err, fallback);
+                    setEventEditorErrors(messages);
+                    showError(err && err.message ? err.message : fallback);
+                    eventEditorLoadedRef.current = null;
+                    return null;
+                });
+            }, [api, showError, strings]);
+
         // Charger les inscriptions
         var loadRegistrations = useCallback(function (eventId) {
             setRegistrationsLoading(true);
@@ -617,6 +844,12 @@
             setEventDetails(null);
             setRegistrations([]);
             setAttendanceMap({});
+            setEventEditorData(null);
+            setEventEditorSummary(null);
+            setEventEditorErrors([]);
+            setEventEditorLoading(false);
+            setEventEditorSaving(false);
+            eventEditorLoadedRef.current = null;
             setActiveTab('registrations');
             setMobileShowDetails(true); // Afficher les détails sur mobile
             
@@ -631,6 +864,82 @@
             loadEventDetails(event.id);
             loadRegistrations(event.id);
         }, [loadEventDetails, loadRegistrations, storageKey]);
+
+        var handleReloadEventEditor = useCallback(function () {
+            if (!selectedEvent || !selectedEvent.id) {
+                return Promise.resolve();
+            }
+            return loadEventEditor(selectedEvent.id);
+        }, [selectedEvent, loadEventEditor]);
+
+        var handleSubmitEventEditor = useCallback(function (form, meta) {
+            if (!selectedEvent || !selectedEvent.id) {
+                return Promise.resolve();
+            }
+            var targetEventId = selectedEvent.id;
+            setEventEditorSaving(true);
+            setEventEditorErrors([]);
+            return api.updateEvent(targetEventId, form, meta || {})
+                .then(function (data) {
+                    setEventEditorSaving(false);
+                    setEventEditorErrors([]);
+                    if (lastSelectedEventIdRef.current !== targetEventId) {
+                        return data;
+                    }
+                    if (data && data.form) {
+                        setEventEditorData({
+                            values: data.form.values || {},
+                            options: data.form.options || {},
+                            meta: data.form.meta || {},
+                        });
+                    }
+                    if (data && data.event) {
+                        setEventEditorSummary(data.event);
+                        setSelectedEvent(function (prev) {
+                            if (!prev) {
+                                return data.event;
+                            }
+                            if (prev.id !== data.event.id) {
+                                return prev;
+                            }
+                            return Object.assign({}, prev, data.event);
+                        });
+                        setEvents(function (prev) {
+                            if (!prev) {
+                                return prev;
+                            }
+                            return prev.map(function (evt) {
+                                if (evt.id === data.event.id) {
+                                    return Object.assign({}, evt, data.event);
+                                }
+                                return evt;
+                            });
+                        });
+                    }
+                    eventEditorLoadedRef.current = targetEventId;
+                    showSuccess(data && data.message ? data.message : getString(strings, 'success', 'Opération réussie'));
+                    loadEventDetails(targetEventId);
+                    return data;
+                })
+                .catch(function (err) {
+                    setEventEditorSaving(false);
+                    if (lastSelectedEventIdRef.current !== targetEventId) {
+                        return Promise.reject(err);
+                    }
+                    if (err && err.aborted) {
+                        return Promise.reject(err);
+                    }
+                    var fallback = getString(strings, 'error', 'Erreur');
+                    var messages = collectErrorMessages(err, fallback);
+                    setEventEditorErrors(messages);
+                    if (err && err.message) {
+                        showError(err.message);
+                    } else {
+                        showError(fallback);
+                    }
+                    return Promise.reject(err);
+                });
+        }, [selectedEvent, api, showSuccess, showError, strings, loadEventDetails]);
 
         // Retour à la liste des événements (mobile)
         var handleBackToEvents = useCallback(function () {
@@ -670,6 +979,28 @@
                 // localStorage non disponible
             }
         }, [sidebarMode, eventsLoading, selectedEvent, events, handleSelectEvent, storageKey]);
+
+        useEffect(function () {
+            if (sidebarMode !== 'events') {
+                return;
+            }
+            if (activeTab !== 'editor') {
+                return;
+            }
+            if (!EventEditor) {
+                return;
+            }
+            if (!selectedEvent || !selectedEvent.id) {
+                return;
+            }
+            if (eventEditorLoading || eventEditorSaving) {
+                return;
+            }
+            if (eventEditorLoadedRef.current === selectedEvent.id && eventEditorData) {
+                return;
+            }
+            loadEventEditor(selectedEvent.id);
+        }, [sidebarMode, activeTab, selectedEvent, eventEditorLoading, eventEditorSaving, eventEditorData, loadEventEditor]);
 
         // ============================================
         // MEMBERS MODE FUNCTIONS
@@ -808,6 +1139,13 @@
             } else {
                 setSelectedEvent(null);
                 setEventDetails(null);
+                lastSelectedEventIdRef.current = null;
+                eventEditorLoadedRef.current = null;
+                setEventEditorData(null);
+                setEventEditorSummary(null);
+                setEventEditorErrors([]);
+                setEventEditorLoading(false);
+                setEventEditorSaving(false);
             }
         }, []);
 
@@ -1226,6 +1564,13 @@
             },
         ];
 
+        if (EventEditor) {
+            tabs.push({
+                key: 'editor',
+                label: getString(strings, 'tabEditor', 'Éditer'),
+            });
+        }
+
         var occurrenceSelectionMode = 'member_choice';
         if (eventDetails && typeof eventDetails.occurrenceSelectionMode === 'string' && eventDetails.occurrenceSelectionMode !== '') {
             occurrenceSelectionMode = eventDetails.occurrenceSelectionMode;
@@ -1409,6 +1754,17 @@
                                 strings: strings,
                                 config: config,
                                 loading: registrationsLoading || !eventDetails,
+                            }),
+
+                            activeTab === 'editor' && EventEditor && h(EventEditor, {
+                                data: eventEditorData,
+                                eventSummary: eventEditorSummary || selectedEvent,
+                                loading: eventEditorLoading,
+                                saving: eventEditorSaving,
+                                errors: eventEditorErrors,
+                                onSubmit: handleSubmitEventEditor,
+                                onReload: handleReloadEventEditor,
+                                strings: strings,
                             }),
                         ]),
                     ]),

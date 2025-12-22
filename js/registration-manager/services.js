@@ -27,6 +27,36 @@
             }
         }
 
+        function appendNested(formData, baseKey, value) {
+            if (value === undefined || value === null) {
+                return;
+            }
+
+            if (Array.isArray(value)) {
+                value.forEach(function (item, index) {
+                    appendNested(formData, baseKey + '[' + index + ']', item);
+                });
+                if (value.length === 0) {
+                    formData.append(baseKey + '[]', '');
+                }
+                return;
+            }
+
+            if (typeof value === 'object') {
+                Object.keys(value).forEach(function (subKey) {
+                    appendNested(formData, baseKey + '[' + subKey + ']', value[subKey]);
+                });
+                return;
+            }
+
+            if (typeof value === 'boolean') {
+                formData.append(baseKey, value ? '1' : '0');
+                return;
+            }
+
+            formData.append(baseKey, value);
+        }
+
         /**
          * Effectue une requête POST AJAX
          * @param {string} action - Action WordPress AJAX
@@ -53,7 +83,9 @@
                 if (value === undefined || value === null) {
                     return;
                 }
-                if (Array.isArray(value)) {
+                if (key === 'form' || key === 'meta') {
+                    appendNested(formData, key, value);
+                } else if (Array.isArray(value)) {
                     // Check if it's an array of objects
                     if (value.length > 0 && typeof value[0] === 'object') {
                         // Send as JSON string for arrays of objects
@@ -96,7 +128,11 @@
                         var message = result.data && result.data.message 
                             ? result.data.message 
                             : 'Erreur inconnue';
-                        throw new Error(message);
+                        var error = new Error(message);
+                        if (result.data) {
+                            error.data = result.data;
+                        }
+                        throw error;
                     }
                     return result.data;
                 })
@@ -124,6 +160,24 @@
              */
             getEventDetails: function (eventId) {
                 return post('mj_regmgr_get_event_details', { eventId: eventId }, 'event-' + eventId);
+            },
+
+            /**
+             * Récupère les données pour l'éditeur d'événement
+             */
+            getEventEditor: function (eventId) {
+                return post('mj_regmgr_get_event_editor', { eventId: eventId }, 'event-editor-' + eventId);
+            },
+
+            /**
+             * Met à jour un événement
+             */
+            updateEvent: function (eventId, form, meta) {
+                return post('mj_regmgr_update_event', {
+                    eventId: eventId,
+                    form: form,
+                    meta: meta || {},
+                });
             },
 
             /**
