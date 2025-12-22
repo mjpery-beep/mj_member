@@ -47,6 +47,7 @@
     var RegistrationsList = RegComps.RegistrationsList;
     var AttendanceSheet = AttendanceComps.AttendanceSheet;
     var AddParticipantModal = Modals.AddParticipantModal;
+    var CreateEventModal = Modals.CreateEventModal;
     var CreateMemberModal = Modals.CreateMemberModal;
     var MemberNotesModal = Modals.MemberNotesModal;
     var QRCodeModal = Modals.QRCodeModal;
@@ -529,6 +530,7 @@
         }
 
         // Modals
+        var createEventModal = useModal();
         var addParticipantModal = useModal();
         var createMemberModal = useModal();
         var notesModal = useModal();
@@ -539,6 +541,10 @@
         var _events = useState([]);
         var events = _events[0];
         var setEvents = _events[1];
+
+        var _creatingEvent = useState(false);
+        var creatingEvent = _creatingEvent[0];
+        var setCreatingEvent = _creatingEvent[1];
 
         var _eventsLoading = useState(true);
         var eventsLoading = _eventsLoading[0];
@@ -864,6 +870,77 @@
             loadEventDetails(event.id);
             loadRegistrations(event.id);
         }, [loadEventDetails, loadRegistrations, storageKey]);
+
+        var openCreateEventModal = useCallback(function () {
+            if (creatingEvent) {
+                return;
+            }
+            createEventModal.open();
+        }, [creatingEvent, createEventModal]);
+
+        var handleCloseCreateEventModal = useCallback(function () {
+            if (creatingEvent) {
+                return;
+            }
+            createEventModal.close();
+        }, [creatingEvent, createEventModal]);
+
+        var handleCreateEvent = useCallback(function (payload) {
+            var safePayload = payload || {};
+            var title = typeof safePayload.title === 'string' ? safePayload.title.trim() : '';
+            if (!title) {
+                return Promise.reject(new Error(getString(strings, 'createEventTitleRequired', 'Le titre est obligatoire.')));
+            }
+
+            var type = typeof safePayload.type === 'string' ? safePayload.type : '';
+            setCreatingEvent(true);
+
+            return api.createEvent({
+                title: title,
+                type: type,
+            })
+                .then(function (data) {
+                    setCreatingEvent(false);
+
+                    var createdEvent = data && data.event ? data.event : null;
+                    if (createdEvent) {
+                        setEvents(function (prev) {
+                            if (!Array.isArray(prev)) {
+                                return [createdEvent];
+                            }
+                            var without = prev.filter(function (evt) {
+                                return evt && evt.id !== createdEvent.id;
+                            });
+                            without.unshift(createdEvent);
+                            return without;
+                        });
+
+                        var shouldReload = filter === 'draft' && search === '';
+                        if (search !== '') {
+                            setSearch('');
+                            shouldReload = false;
+                        }
+                        if (filter !== 'draft') {
+                            setFilter('draft');
+                            shouldReload = false;
+                        }
+                        if (shouldReload) {
+                            loadEvents(1);
+                        }
+
+                        handleSelectEvent(createdEvent);
+                        setActiveTab('editor');
+                    }
+
+                    showSuccess(data && data.message ? data.message : getString(strings, 'createEventSuccess', 'Brouillon créé.'));
+                    createEventModal.close();
+                    return data;
+                })
+                .catch(function (error) {
+                    setCreatingEvent(false);
+                    throw error;
+                });
+        }, [api, filter, search, loadEvents, handleSelectEvent, setActiveTab, showSuccess, createEventModal, strings, setEvents, setFilter, setSearch]);
 
         var handleReloadEventEditor = useCallback(function () {
             if (!selectedEvent || !selectedEvent.id) {
@@ -1626,6 +1703,10 @@
                     onLoadMore: function () { loadEvents(pagination.page + 1); },
                     hasMore: pagination.page < pagination.totalPages,
                     loadingMore: false,
+                    createEventUrl: config.adminAddEventUrl || '',
+                    canCreateEvent: !!config.canCreateEvent,
+                    onCreateEvent: openCreateEventModal,
+                    createEventLoading: creatingEvent,
 
                     // Members props
                     members: membersList,
@@ -1793,6 +1874,14 @@
             ]),
 
             // Modals
+            h(CreateEventModal, {
+                isOpen: createEventModal.isOpen,
+                onClose: handleCloseCreateEventModal,
+                onCreate: handleCreateEvent,
+                strings: strings,
+                submitting: creatingEvent,
+            }),
+
             h(AddParticipantModal, {
                 isOpen: addParticipantModal.isOpen,
                 onClose: addParticipantModal.close,

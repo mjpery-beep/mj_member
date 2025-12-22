@@ -231,6 +231,17 @@ input.mj-regmgr-search-input__field {
     padding: 12px;
 }
 
+.mj-regmgr-sidebar__actions {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mj-regmgr-sidebar__actions .mj-btn {
+    width: 100%;
+}
+
 .mj-regmgr-search-input {
     position: relative;
     display: flex;
@@ -2146,6 +2157,11 @@ input.mj-regmgr-search-input__field {
 .mj-btn--sm {
     padding: 6px 10px;
     font-size: 12px;
+}
+
+.mj-btn--block {
+    display: flex;
+    width: 100%;
 }
 
 .mj-btn--icon {

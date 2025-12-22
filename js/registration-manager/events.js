@@ -239,6 +239,10 @@
         var onLoadMore = props.onLoadMore;
         var hasMore = props.hasMore;
         var loadingMore = props.loadingMore;
+        var createEventUrl = props.createEventUrl;
+        var onCreateEvent = typeof props.onCreateEvent === 'function' ? props.onCreateEvent : null;
+        var createEventLoading = !!props.createEventLoading;
+        var canCreateEvent = !!props.canCreateEvent && (onCreateEvent || (typeof createEventUrl === 'string' && createEventUrl !== ''));
 
         // Props for members mode
         var sidebarMode = props.sidebarMode || 'events';
@@ -320,6 +324,57 @@
                         h('span', null, 'Membres'),
                     ]),
                 ]),
+            ]),
+
+            sidebarMode === 'events' && canCreateEvent && h('div', { class: 'mj-regmgr-sidebar__actions' }, [
+                onCreateEvent
+                    ? h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--primary mj-btn--block',
+                        onClick: function () {
+                            if (createEventLoading) {
+                                return;
+                            }
+                            onCreateEvent();
+                        },
+                        disabled: createEventLoading,
+                        'aria-busy': createEventLoading ? 'true' : 'false',
+                    }, [
+                        h('svg', {
+                            width: 16,
+                            height: 16,
+                            viewBox: '0 0 24 24',
+                            fill: 'none',
+                            stroke: 'currentColor',
+                            'stroke-width': 2,
+                        }, [
+                            h('line', { x1: 12, y1: 5, x2: 12, y2: 19 }),
+                            h('line', { x1: 5, y1: 12, x2: 19, y2: 12 }),
+                        ]),
+                        h('span', null, createEventLoading
+                            ? getString(strings, 'creatingEvent', 'Création...')
+                            : getString(strings, 'addEvent', 'Ajouter un événement')
+                        ),
+                    ])
+                    : h('a', {
+                        href: createEventUrl,
+                        target: '_blank',
+                        rel: 'noopener noreferrer',
+                        class: 'mj-btn mj-btn--primary mj-btn--block',
+                    }, [
+                        h('svg', {
+                            width: 16,
+                            height: 16,
+                            viewBox: '0 0 24 24',
+                            fill: 'none',
+                            stroke: 'currentColor',
+                            'stroke-width': 2,
+                        }, [
+                            h('line', { x1: 12, y1: 5, x2: 12, y2: 19 }),
+                            h('line', { x1: 5, y1: 12, x2: 19, y2: 12 }),
+                        ]),
+                        h('span', null, getString(strings, 'addEvent', 'Ajouter un événement')),
+                    ]),
             ]),
 
             // Recherche

@@ -31,6 +31,7 @@ add_action('wp_ajax_mj_regmgr_get_events', 'mj_regmgr_get_events');
 add_action('wp_ajax_mj_regmgr_get_event_details', 'mj_regmgr_get_event_details');
 add_action('wp_ajax_mj_regmgr_get_event_editor', 'mj_regmgr_get_event_editor');
 add_action('wp_ajax_mj_regmgr_update_event', 'mj_regmgr_update_event');
+add_action('wp_ajax_mj_regmgr_create_event', 'mj_regmgr_create_event');
 add_action('wp_ajax_mj_regmgr_get_registrations', 'mj_regmgr_get_registrations');
 add_action('wp_ajax_mj_regmgr_search_members', 'mj_regmgr_search_members');
 add_action('wp_ajax_mj_regmgr_add_registration', 'mj_regmgr_add_registration');
@@ -171,6 +172,65 @@ function mj_regmgr_to_bool($value, $default = false) {
 }
 
 /**
+ * Prépare les données d'un événement pour la sidebar.
+ *
+ * @param object|null $event
+ * @param array<string,string>|null $type_labels
+ * @param array<string,string>|null $status_labels
+ * @return array<string,mixed>|null
+ */
+function mj_regmgr_build_event_sidebar_item($event, $type_labels = null, $status_labels = null) {
+    if (!$event || !isset($event->id)) {
+        return null;
+    }
+
+    if ($type_labels === null) {
+        $type_labels = MjEvents::get_type_labels();
+    }
+
+    if ($status_labels === null) {
+        $status_labels = MjEvents::get_status_labels();
+    }
+
+    $event_id = (int) $event->id;
+    $type_key = isset($event->type) ? sanitize_key((string) $event->type) : '';
+    $status_key = isset($event->status) ? sanitize_key((string) $event->status) : '';
+
+    $schedule_mode = isset($event->schedule_mode) ? sanitize_key((string) $event->schedule_mode) : 'fixed';
+    if ($schedule_mode === '') {
+        $schedule_mode = 'fixed';
+    }
+
+    $occurrence_mode = isset($event->occurrence_selection_mode) ? sanitize_key((string) $event->occurrence_selection_mode) : 'member_choice';
+    if (!in_array($occurrence_mode, array('member_choice', 'all_occurrences'), true)) {
+        $occurrence_mode = 'member_choice';
+    }
+
+    $registrations_count = MjEventRegistrations::count(array('event_id' => $event_id));
+
+    return array(
+        'id' => $event_id,
+        'title' => isset($event->title) ? (string) $event->title : '',
+        'type' => $type_key,
+        'typeLabel' => isset($type_labels[$type_key]) ? $type_labels[$type_key] : ($type_key !== '' ? $type_key : ''),
+        'status' => $status_key,
+        'statusLabel' => isset($status_labels[$status_key]) ? $status_labels[$status_key] : ($status_key !== '' ? $status_key : ''),
+        'dateDebut' => isset($event->date_debut) ? (string) $event->date_debut : '',
+        'dateFin' => isset($event->date_fin) ? (string) $event->date_fin : '',
+        'dateDebutFormatted' => mj_regmgr_format_date(isset($event->date_debut) ? $event->date_debut : ''),
+        'dateFinFormatted' => mj_regmgr_format_date(isset($event->date_fin) ? $event->date_fin : ''),
+        'coverId' => isset($event->cover_id) ? (int) $event->cover_id : 0,
+        'coverUrl' => mj_regmgr_get_event_cover_url($event, 'thumbnail'),
+        'accentColor' => isset($event->accent_color) ? (string) $event->accent_color : '',
+        'registrationsCount' => $registrations_count,
+        'capacityTotal' => isset($event->capacity_total) ? (int) $event->capacity_total : 0,
+        'prix' => isset($event->prix) ? (float) $event->prix : 0.0,
+        'scheduleMode' => $schedule_mode,
+        'occurrenceSelectionMode' => $occurrence_mode,
+    );
+}
+
+/**
  * Get events list
  */
 function mj_regmgr_get_events() {
@@ -254,30 +314,10 @@ function mj_regmgr_get_events() {
 
     $events_data = array();
     foreach ($events as $event) {
-        $registrations_count = MjEventRegistrations::count(array('event_id' => $event->id));
-        
-        $events_data[] = array(
-            'id' => $event->id,
-            'title' => $event->title,
-            'type' => $event->type,
-            'typeLabel' => isset($type_labels[$event->type]) ? $type_labels[$event->type] : $event->type,
-            'status' => $event->status,
-            'statusLabel' => isset($status_labels[$event->status]) ? $status_labels[$event->status] : $event->status,
-            'dateDebut' => $event->date_debut,
-            'dateFin' => $event->date_fin,
-            'dateDebutFormatted' => mj_regmgr_format_date($event->date_debut),
-            'dateFinFormatted' => mj_regmgr_format_date($event->date_fin),
-            'coverId' => $event->cover_id,
-            'coverUrl' => mj_regmgr_get_event_cover_url($event, 'thumbnail'),
-            'accentColor' => $event->accent_color,
-            'registrationsCount' => $registrations_count,
-            'capacityTotal' => $event->capacity_total,
-            'prix' => (float) $event->prix,
-            'scheduleMode' => $event->schedule_mode ?? 'fixed',
-            'occurrenceSelectionMode' => isset($event->occurrence_selection_mode) && $event->occurrence_selection_mode !== ''
-                ? $event->occurrence_selection_mode
-                : 'member_choice',
-        );
+        $formatted = mj_regmgr_build_event_sidebar_item($event, $type_labels, $status_labels);
+        if ($formatted !== null) {
+            $events_data[] = $formatted;
+        }
     }
 
     wp_send_json_success(array(
@@ -657,6 +697,71 @@ function mj_regmgr_update_event() {
             'options' => $updated_options,
             'meta' => $response_meta,
         ),
+    ));
+}
+
+/**
+ * Create a new draft event
+ */
+function mj_regmgr_create_event() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) {
+        return;
+    }
+
+    if (!current_user_can(Config::capability())) {
+        wp_send_json_error(array('message' => __('Permissions insuffisantes pour créer un événement.', 'mj-member')), 403);
+        return;
+    }
+
+    $raw_title = isset($_POST['title']) ? wp_unslash($_POST['title']) : '';
+    $title = sanitize_text_field($raw_title);
+    $title = trim($title);
+
+    if ($title === '') {
+        wp_send_json_error(array('message' => __('Le titre est requis.', 'mj-member')), 400);
+        return;
+    }
+
+    $type = isset($_POST['type']) ? sanitize_key(wp_unslash($_POST['type'])) : '';
+    $type_labels = MjEvents::get_type_labels();
+    if ($type === '' || !isset($type_labels[$type])) {
+        $type = MjEvents::TYPE_STAGE;
+    }
+
+    $defaults = MjEvents::get_default_values();
+    $defaults['title'] = $title;
+    $defaults['type'] = $type;
+    $defaults['status'] = MjEvents::STATUS_DRAFT;
+    $defaults['accent_color'] = MjEvents::get_default_color_for_type($type);
+
+    if (!empty($auth['member_id'])) {
+        $defaults['animateur_id'] = (int) $auth['member_id'];
+    }
+
+    $event_id = MjEvents::create($defaults);
+    if (is_wp_error($event_id)) {
+        wp_send_json_error(array('message' => $event_id->get_error_message()), 500);
+        return;
+    }
+
+    $member_id = isset($auth['member_id']) ? (int) $auth['member_id'] : 0;
+    if ($member_id > 0 && class_exists(MjEventAnimateurs::class)) {
+        MjEventAnimateurs::sync_for_event($event_id, array($member_id));
+    }
+
+    $event = MjEvents::find($event_id);
+    if (!$event) {
+        wp_send_json_error(array('message' => __('Événement introuvable après création.', 'mj-member')), 500);
+        return;
+    }
+
+    $status_labels = MjEvents::get_status_labels();
+    $event_data = mj_regmgr_build_event_sidebar_item($event, $type_labels, $status_labels);
+
+    wp_send_json_success(array(
+        'event' => $event_data,
+        'message' => __('Événement brouillon créé. Complétez les informations avant publication.', 'mj-member'),
     ));
 }
 

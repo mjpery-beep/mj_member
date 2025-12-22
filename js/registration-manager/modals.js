@@ -393,6 +393,107 @@
     // CREATE MEMBER MODAL
     // ============================================
 
+    function CreateEventModal(props) {
+        var isOpen = props.isOpen;
+        var onClose = props.onClose;
+        var onCreate = props.onCreate;
+        var strings = props.strings;
+        var submitting = !!props.submitting;
+
+        var _title = useState('');
+        var title = _title[0];
+        var setTitle = _title[1];
+
+        var _error = useState('');
+        var error = _error[0];
+        var setError = _error[1];
+
+        useEffect(function () {
+            if (isOpen) {
+                setTitle('');
+                setError('');
+            }
+        }, [isOpen]);
+
+        var handleSubmit = useCallback(function (e) {
+            if (e && typeof e.preventDefault === 'function') {
+                e.preventDefault();
+            }
+            if (submitting) {
+                return;
+            }
+
+            var trimmed = title.trim();
+            if (!trimmed) {
+                setError(getString(strings, 'createEventTitleRequired', 'Le titre est obligatoire.'));
+                return;
+            }
+
+            setError('');
+
+            var result = onCreate ? onCreate({ title: trimmed }) : null;
+            if (result && typeof result.then === 'function') {
+                result.catch(function (err) {
+                    var message = err && err.message ? err.message : getString(strings, 'createEventError', 'Impossible de créer cet événement.');
+                    setError(message);
+                });
+            }
+        }, [title, submitting, onCreate, strings]);
+
+        var footer = h(Fragment, null, [
+            h('button', {
+                type: 'button',
+                class: 'mj-btn mj-btn--secondary',
+                onClick: onClose,
+                disabled: submitting,
+            }, getString(strings, 'cancel', 'Annuler')),
+            h('button', {
+                type: 'submit',
+                form: 'create-event-form',
+                class: 'mj-btn mj-btn--primary',
+                disabled: submitting || !title.trim(),
+            }, submitting
+                ? getString(strings, 'creatingEvent', 'Création...')
+                : getString(strings, 'createEventSubmit', 'Créer le brouillon')
+            ),
+        ]);
+
+        return h(Modal, {
+            isOpen: isOpen,
+            onClose: onClose,
+            title: getString(strings, 'createEventModalTitle', 'Créer un événement'),
+            size: 'small',
+            footer: footer,
+        }, [
+            h('form', {
+                id: 'create-event-form',
+                class: 'mj-regmgr-form',
+                onSubmit: handleSubmit,
+            }, [
+                error && h('div', { class: 'mj-regmgr-alert mj-regmgr-alert--error' }, error),
+
+                h('div', { class: 'mj-regmgr-form__group' }, [
+                    h('label', { for: 'create-event-title' }, getString(strings, 'createEventTitleLabel', 'Titre du brouillon') + ' *'),
+                    h('input', {
+                        type: 'text',
+                        id: 'create-event-title',
+                        class: 'mj-regmgr-input',
+                        value: title,
+                        onInput: function (e) {
+                            setTitle(e.target.value);
+                            if (error) {
+                                setError('');
+                            }
+                        },
+                        disabled: submitting,
+                        placeholder: getString(strings, 'createEventTitlePlaceholder', 'Ex: Atelier découverte'),
+                        autoFocus: true,
+                    }),
+                ]),
+            ]),
+        ]);
+    }
+
     function CreateMemberModal(props) {
         var isOpen = props.isOpen;
         var onClose = props.onClose;
@@ -1037,6 +1138,7 @@
     global.MjRegMgrModals = {
         Modal: Modal,
         AddParticipantModal: AddParticipantModal,
+        CreateEventModal: CreateEventModal,
         CreateMemberModal: CreateMemberModal,
         MemberNotesModal: MemberNotesModal,
         QRCodeModal: QRCodeModal,

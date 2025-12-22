@@ -330,6 +330,7 @@ $age_ranges = array(
 
 // URL de l'admin pour le bouton modifier
 $admin_edit_url = admin_url('admin.php?page=mj_events&action=edit&event=');
+$admin_add_url = admin_url('admin.php?page=mj_events&action=add');
 $admin_member_url = admin_url('admin.php?page=mj_members&action=edit&member=');
 
 // Prix de la cotisation
@@ -359,7 +360,9 @@ $config_json = wp_json_encode(array(
     'allowManualPayment' => $allow_manual_payment,
     'allowDeleteRegistration' => $allow_delete_registration,
     'allowCreateMember' => $allow_create_member,
+    'canCreateEvent' => current_user_can(Config::capability()),
     'adminEditUrl' => $admin_edit_url,
+    'adminAddEventUrl' => $admin_add_url,
     'adminMemberUrl' => $admin_member_url,
     'contactMessageListUrl' => admin_url('admin.php?page=mj_contact_messages'),
     'contactMessageViewUrl' => admin_url('admin.php?page=mj_contact_messages&action=view&message='),
@@ -402,6 +405,7 @@ $config_json = wp_json_encode(array(
         'noEvents' => __('Aucun événement trouvé.', 'mj-member'),
         'eventDetails' => __('Détails de l\'événement', 'mj-member'),
         'editEvent' => __('Modifier l\'événement', 'mj-member'),
+        'addEvent' => __('Ajouter un événement', 'mj-member'),
         'eventDate' => __('Date', 'mj-member'),
         'eventLocation' => __('Lieu', 'mj-member'),
         'eventCapacity' => __('Capacité', 'mj-member'),
@@ -459,6 +463,14 @@ $config_json = wp_json_encode(array(
         'searchMember' => __('Rechercher un membre...', 'mj-member'),
         'filterByAge' => __('Filtrer par âge', 'mj-member'),
         'filterBySubscription' => __('Filtrer par cotisation', 'mj-member'),
+        'creatingEvent' => __('Création en cours...', 'mj-member'),
+        'createEventModalTitle' => __('Créer un événement', 'mj-member'),
+        'createEventTitleLabel' => __('Titre du brouillon', 'mj-member'),
+        'createEventTitlePlaceholder' => __('Ex: Atelier découverte', 'mj-member'),
+        'createEventSubmit' => __('Créer le brouillon', 'mj-member'),
+        'createEventSuccess' => __('Événement brouillon créé. Complétez les informations avant publication.', 'mj-member'),
+        'createEventError' => __('Impossible de créer cet événement.', 'mj-member'),
+        'createEventTitleRequired' => __('Le titre est requis.', 'mj-member'),
         'subscriptionActive' => __('Cotisation active', 'mj-member'),
         'subscriptionExpired' => __('Cotisation expirée', 'mj-member'),
         'subscriptionNone' => __('Aucune cotisation', 'mj-member'),

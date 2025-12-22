@@ -181,6 +181,17 @@
             },
 
             /**
+             * Crée un nouvel événement en brouillon
+             */
+            createEvent: function (params) {
+                var payload = params || {};
+                return post('mj_regmgr_create_event', {
+                    title: payload.title || '',
+                    type: payload.type || '',
+                });
+            },
+
+            /**
              * Récupère les inscriptions d'un événement
              */
             getRegistrations: function (eventId) {
