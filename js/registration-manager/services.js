@@ -192,6 +192,15 @@
             },
 
             /**
+             * Supprime un événement
+             */
+            deleteEvent: function (eventId) {
+                return post('mj_regmgr_delete_event', {
+                    eventId: eventId,
+                });
+            },
+
+            /**
              * Récupère les inscriptions d'un événement
              */
             getRegistrations: function (eventId) {

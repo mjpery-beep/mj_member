@@ -32,6 +32,7 @@ add_action('wp_ajax_mj_regmgr_get_event_details', 'mj_regmgr_get_event_details')
 add_action('wp_ajax_mj_regmgr_get_event_editor', 'mj_regmgr_get_event_editor');
 add_action('wp_ajax_mj_regmgr_update_event', 'mj_regmgr_update_event');
 add_action('wp_ajax_mj_regmgr_create_event', 'mj_regmgr_create_event');
+add_action('wp_ajax_mj_regmgr_delete_event', 'mj_regmgr_delete_event');
 add_action('wp_ajax_mj_regmgr_get_registrations', 'mj_regmgr_get_registrations');
 add_action('wp_ajax_mj_regmgr_search_members', 'mj_regmgr_search_members');
 add_action('wp_ajax_mj_regmgr_add_registration', 'mj_regmgr_add_registration');
@@ -762,6 +763,44 @@ function mj_regmgr_create_event() {
     wp_send_json_success(array(
         'event' => $event_data,
         'message' => __('Événement brouillon créé. Complétez les informations avant publication.', 'mj-member'),
+    ));
+}
+
+/**
+ * Delete an event and its dependencies
+ */
+function mj_regmgr_delete_event() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) {
+        return;
+    }
+
+    $event_id = isset($_POST['eventId']) ? (int) $_POST['eventId'] : 0;
+    if ($event_id <= 0) {
+        wp_send_json_error(array('message' => __('ID événement invalide.', 'mj-member')));
+        return;
+    }
+
+    if (!$auth['is_coordinateur'] && !current_user_can(Config::capability())) {
+        wp_send_json_error(array('message' => __('Permissions insuffisantes pour supprimer cet événement.', 'mj-member')), 403);
+        return;
+    }
+
+    $event = MjEvents::find($event_id);
+    if (!$event) {
+        wp_send_json_error(array('message' => __('Événement introuvable.', 'mj-member')), 404);
+        return;
+    }
+
+    $result = MjEvents::delete($event_id);
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()), 500);
+        return;
+    }
+
+    wp_send_json_success(array(
+        'eventId' => $event_id,
+        'message' => __('Événement supprimé.', 'mj-member'),
     ));
 }
 

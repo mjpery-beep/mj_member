@@ -65,6 +65,9 @@
         var attendanceMap = props.attendanceMap || {};
         var occurrences = props.occurrences || [];
         var loading = props.loading;
+        var deletingEvent = props.deletingEvent;
+        var onDeleteEvent = props.onDeleteEvent;
+        var canDeleteEvent = props.canDeleteEvent !== undefined ? props.canDeleteEvent : (config && config.canDeleteEvent);
 
         if (!event || loading) {
             return h('div', { class: 'mj-regmgr-event-detail mj-regmgr-event-detail--loading' }, [
@@ -301,17 +304,24 @@
                         'Voir sur le site',
                     ]),
 
-                    // Bouton modifier
-                    config.adminEditUrl && h('a', {
-                        href: config.adminEditUrl + event.id,
-                        target: '_blank',
-                        class: 'mj-btn mj-btn--secondary',
+                    // Bouton suppression
+                    canDeleteEvent && typeof onDeleteEvent === 'function' && h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--danger',
+                        onClick: function () { onDeleteEvent(event); },
+                        disabled: !!deletingEvent,
+                        'aria-disabled': deletingEvent ? 'true' : undefined,
                     }, [
                         h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                            h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
-                            h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+                            h('polyline', { points: '3 6 5 6 21 6' }),
+                            h('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6' }),
+                            h('path', { d: 'M10 11v6' }),
+                            h('path', { d: 'M14 11v6' }),
+                            h('path', { d: 'M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2' }),
                         ]),
-                        getString(strings, 'editEvent', 'Modifier'),
+                        deletingEvent
+                            ? getString(strings, 'deleteEventLoading', 'Suppression...')
+                            : getString(strings, 'deleteEvent', 'Supprimer'),
                     ]),
                 ]),
             ]),
@@ -488,6 +498,14 @@
                 };
             }
 
+            if (typeof service.deleteEvent !== 'function') {
+                service.deleteEvent = function (eventId) {
+                    return fallbackPost('mj_regmgr_delete_event', {
+                        eventId: eventId,
+                    });
+                };
+            }
+
             return service;
         }, [config.ajaxUrl, config.nonce]);
 
@@ -545,6 +563,10 @@
         var _creatingEvent = useState(false);
         var creatingEvent = _creatingEvent[0];
         var setCreatingEvent = _creatingEvent[1];
+
+        var _deletingEvent = useState(false);
+        var deletingEvent = _deletingEvent[0];
+        var setDeletingEvent = _deletingEvent[1];
 
         var _eventsLoading = useState(true);
         var eventsLoading = _eventsLoading[0];
@@ -941,6 +963,84 @@
                     throw error;
                 });
         }, [api, filter, search, loadEvents, handleSelectEvent, setActiveTab, showSuccess, createEventModal, strings, setEvents, setFilter, setSearch]);
+
+        var handleDeleteEvent = useCallback(function (target) {
+            if (deletingEvent) {
+                return;
+            }
+
+            var eventId = 0;
+            if (target && typeof target === 'object') {
+                eventId = target.id || 0;
+            } else {
+                eventId = target;
+            }
+
+            eventId = parseInt(eventId, 10);
+            if (!eventId || eventId <= 0) {
+                return;
+            }
+
+            var confirmMessage = getString(strings, 'deleteEventConfirm', 'Voulez-vous vraiment supprimer cet événement ? Cette action est irréversible.');
+            if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) {
+                return;
+            }
+
+            setDeletingEvent(true);
+
+            api.deleteEvent(eventId)
+                .then(function () {
+                    showSuccess(getString(strings, 'eventDeleted', 'Événement supprimé.'));
+
+                    var nextEvent = null;
+                    setEvents(function (prev) {
+                        if (!Array.isArray(prev) || prev.length === 0) {
+                            return prev;
+                        }
+                        var updated = prev.filter(function (evt) {
+                            return evt && evt.id !== eventId;
+                        });
+                        if (!nextEvent && updated.length > 0) {
+                            nextEvent = updated[0];
+                        }
+                        return updated;
+                    });
+
+                    if (selectedEvent && selectedEvent.id === eventId) {
+                        setSelectedEvent(null);
+                        setEventDetails(null);
+                        setRegistrations([]);
+                        setAttendanceMap({});
+                        setEventEditorData(null);
+                        setEventEditorSummary(null);
+                        setEventEditorErrors([]);
+                        setEventEditorLoading(false);
+                        setEventEditorSaving(false);
+                        eventEditorLoadedRef.current = null;
+                        setActiveTab('registrations');
+                        setMobileShowDetails(false);
+                        try {
+                            localStorage.removeItem(storageKey);
+                        } catch (e) {
+                            // localStorage non disponible
+                        }
+                        if (nextEvent) {
+                            handleSelectEvent(nextEvent);
+                        }
+                    }
+
+                    loadEvents(Math.max(1, pagination.page || 1));
+                    setDeletingEvent(false);
+                })
+                .catch(function (err) {
+                    if (err && err.aborted) {
+                        setDeletingEvent(false);
+                        return;
+                    }
+                    showError(err && err.message ? err.message : getString(strings, 'error', 'Erreur'));
+                    setDeletingEvent(false);
+                });
+        }, [deletingEvent, strings, api, showSuccess, setEvents, selectedEvent, handleSelectEvent, loadEvents, pagination.page, storageKey, showError]);
 
         var handleReloadEventEditor = useCallback(function () {
             if (!selectedEvent || !selectedEvent.id) {
@@ -1835,6 +1935,9 @@
                                 strings: strings,
                                 config: config,
                                 loading: registrationsLoading || !eventDetails,
+                                onDeleteEvent: handleDeleteEvent,
+                                canDeleteEvent: config.canDeleteEvent,
+                                deletingEvent: deletingEvent,
                             }),
 
                             activeTab === 'editor' && EventEditor && h(EventEditor, {
