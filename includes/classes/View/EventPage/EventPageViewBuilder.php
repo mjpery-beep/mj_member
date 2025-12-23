@@ -57,6 +57,10 @@ final class EventPageViewBuilder
             ? $this->model['event']
             : array();
 
+        $user = isset($this->model['user']) && is_array($this->model['user'])
+            ? $this->model['user']
+            : array();
+
         $accentColor = isset($event['accent_color']) ? (string) $event['accent_color'] : '';
 
         $cssVars = array();
@@ -78,11 +82,25 @@ final class EventPageViewBuilder
             $classes[] = 'mj-event-page--status-' . sanitize_html_class($event['status']);
         }
 
+        $canEdit = !empty($user['is_animateur']);
+        $eventId = isset($event['id']) ? (int) $event['id'] : 0;
+
+        $editUrl = '';
+        if ($canEdit && $eventId > 0) {
+            $editUrl = add_query_arg(
+                'event_id',
+                $eventId,
+                home_url('/mon-compte/gestion-evenement/')
+            );
+        }
+
         return array(
             'class' => implode(' ', $classes),
             'style' => !empty($styleTokens) ? implode(';', $styleTokens) . ';' : '',
             'data_event_id' => isset($event['id']) ? (int) $event['id'] : 0,
             'title' => isset($event['title']) ? (string) $event['title'] : '',
+            'can_edit' => $canEdit && $editUrl !== '',
+            'edit_url' => $editUrl,
         );
     }
 
@@ -180,7 +198,25 @@ final class EventPageViewBuilder
             ? $this->model['schedule']
             : array();
 
-        $isOpen = !empty($registration['is_open']);
+        $mode = isset($schedule['mode']) ? (string) $schedule['mode'] : '';
+        $occurrences = isset($schedule['occurrences']) && is_array($schedule['occurrences'])
+            ? $schedule['occurrences']
+            : array();
+
+        $hasFutureOccurrence = false;
+        $now = current_time('timestamp');
+
+        foreach ($occurrences as $occurrence) {
+            $timestamp = isset($occurrence['timestamp']) ? (int) $occurrence['timestamp'] : 0;
+            if ($timestamp >= $now) {
+                $hasFutureOccurrence = true;
+                break;
+            }
+        }
+
+        $isFixedPast = $mode === 'fixed' && !$hasFutureOccurrence && !empty($occurrences);
+
+        $isOpen = !empty($registration['is_open']) && !$isFixedPast;
         $isFreeParticipation = !empty($registration['is_free_participation']);
         $requiresLogin = !empty($registration['requires_login']);
         $hasReservations = !empty($registration['has_reservations']);
@@ -227,6 +263,7 @@ final class EventPageViewBuilder
             'config_json' => $configJson,
             'allows_selection' => !empty($schedule['allows_selection']),
             'has_multiple_occurrences' => !empty($schedule['has_multiple_occurrences']),
+            'is_past' => $isFixedPast,
             'user' => array(
                 'is_logged_in' => !empty($user['is_logged_in']),
                 'can_register' => !empty($user['can_register']),

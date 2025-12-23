@@ -390,6 +390,27 @@
         var config = props.config;
         var strings = config.strings || {};
 
+        var prefillEventId = useMemo(function () {
+            if (!config || config.prefillEventId === undefined || config.prefillEventId === null) {
+                return null;
+            }
+            var parsed = parseInt(config.prefillEventId, 10);
+            if (isNaN(parsed) || parsed <= 0) {
+                return null;
+            }
+            return parsed;
+        }, [config.prefillEventId]);
+
+        var initialFilterValue = useMemo(function () {
+            var fallback = typeof config.defaultFilter === 'string' && config.defaultFilter !== ''
+                ? config.defaultFilter
+                : 'assigned';
+            if (prefillEventId && fallback !== 'all') {
+                return 'all';
+            }
+            return fallback;
+        }, [config.defaultFilter, prefillEventId]);
+
         // API Service
         var api = useMemo(function () {
             var service = Services.createApiService(config);
@@ -572,7 +593,7 @@
         var eventsLoading = _eventsLoading[0];
         var setEventsLoading = _eventsLoading[1];
 
-        var _filter = useState(config.defaultFilter || 'assigned');
+        var _filter = useState(initialFilterValue);
         var filter = _filter[0];
         var setFilter = _filter[1];
 
@@ -710,6 +731,7 @@
             return 'mj_regmgr_selected_member_' + suffix;
         }, [config.widgetId]);
 
+        var prefillHandledRef = useRef(prefillEventId === null);
         var lastSelectedEventIdRef = useRef(null);
         var lastSelectedMemberIdRef = useRef(null);
         var eventEditorLoadedRef = useRef(null);
@@ -732,16 +754,37 @@
                     // Restaurer l'événement mémorisé au premier chargement
                     if (!initialEventLoaded && loadedEvents.length > 0) {
                         setInitialEventLoaded(true);
-                        try {
-                            var savedId = localStorage.getItem(storageKey);
-                            if (savedId) {
-                                var savedEvent = loadedEvents.find(function (e) { return e.id === parseInt(savedId, 10); });
-                                if (savedEvent) {
-                                    handleSelectEvent(savedEvent);
-                                }
+                        var restored = false;
+
+                        if (!prefillHandledRef.current && prefillEventId) {
+                            var targetEvent = loadedEvents.find(function (evt) {
+                                return evt && evt.id === prefillEventId;
+                            });
+                            prefillHandledRef.current = true;
+                            if (targetEvent) {
+                                handleSelectEvent(targetEvent);
+                                restored = true;
                             }
-                        } catch (e) {
-                            // localStorage non disponible
+                        }
+
+                        if (!restored) {
+                            try {
+                                var savedId = localStorage.getItem(storageKey);
+                                if (savedId) {
+                                    var savedParsed = parseInt(savedId, 10);
+                                    if (!isNaN(savedParsed)) {
+                                        var savedEvent = loadedEvents.find(function (e) {
+                                            return e && e.id === savedParsed;
+                                        });
+                                        if (savedEvent) {
+                                            handleSelectEvent(savedEvent);
+                                            restored = true;
+                                        }
+                                    }
+                                }
+                            } catch (e) {
+                                // localStorage non disponible
+                            }
                         }
                     }
                 })
@@ -751,7 +794,7 @@
                         setEventsLoading(false);
                     }
                 });
-        }, [api, filter, search, config.perPage, showError, strings, initialEventLoaded, storageKey]);
+        }, [api, filter, search, config.perPage, showError, strings, initialEventLoaded, storageKey, prefillEventId]);
 
         // Charger au démarrage et quand les filtres changent
         useEffect(function () {

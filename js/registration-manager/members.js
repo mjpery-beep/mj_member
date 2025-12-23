@@ -1460,11 +1460,48 @@
                                 'en_attente': 'mj-regmgr-badge--warning',
                                 'annule': 'mj-regmgr-badge--danger',
                             };
+
+                            var sessions = Array.isArray(reg.occurrenceDetails) ? reg.occurrenceDetails : [];
+                            var coversAllSessions = !!reg.coversAllOccurrences;
+                            var totalOccurrences = typeof reg.totalOccurrences === 'number' ? reg.totalOccurrences : 0;
+                            var sessionsLabel = getString(strings, 'sessions', 'Séances');
+                            var allSessionsLabel = getString(strings, 'allSessions', 'Toutes les séances');
+                            var noSessionsLabel = getString(strings, 'noSessionsAssigned', 'Aucune séance assignée');
+
+                            var sessionsContent = null;
+
+                            if (sessions.length > 0) {
+                                sessionsContent = h('div', { class: 'mj-regmgr-registration-item__sessions' }, [
+                                    h('span', { class: 'mj-regmgr-registration-item__sessions-label' }, sessionsLabel + ' :'),
+                                    h('div', { class: 'mj-regmgr-registration-item__sessions-list' },
+                                        sessions.map(function (session, idx) {
+                                            var chipClasses = classNames('mj-regmgr-session-chip', {
+                                                'mj-regmgr-session-chip--past': !!session.isPast,
+                                            });
+                                            var key = session.start ? 'session-' + session.start : 'session-' + idx;
+                                            var label = session.label || (session.start ? formatDate(session.start) : '');
+                                            return h('span', { key: key, class: chipClasses }, label);
+                                        })
+                                    ),
+                                ]);
+                            } else if (coversAllSessions && totalOccurrences > 0) {
+                                sessionsContent = h('div', { class: 'mj-regmgr-registration-item__sessions' }, [
+                                    h('span', { class: 'mj-regmgr-registration-item__sessions-label' }, sessionsLabel + ' :'),
+                                    h('span', { class: 'mj-regmgr-registration-item__sessions-placeholder' }, allSessionsLabel),
+                                ]);
+                            } else if (!coversAllSessions && totalOccurrences > 0) {
+                                sessionsContent = h('div', { class: 'mj-regmgr-registration-item__sessions' }, [
+                                    h('span', { class: 'mj-regmgr-registration-item__sessions-label' }, sessionsLabel + ' :'),
+                                    h('span', { class: 'mj-regmgr-registration-item__sessions-placeholder' }, noSessionsLabel),
+                                ]);
+                            }
+
                             return h('div', { key: reg.id, class: 'mj-regmgr-registration-item' }, [
                                 h('div', { class: 'mj-regmgr-registration-item__info' }, [
                                     h('span', { class: 'mj-regmgr-registration-item__event' }, reg.eventTitle || 'Événement'),
                                     h('span', { class: 'mj-regmgr-registration-item__date' }, formatDate(reg.createdAt)),
-                                ]),
+                                    sessionsContent,
+                                ].filter(Boolean)),
                                 h('span', { 
                                     class: classNames('mj-regmgr-badge', statusClasses[reg.status] || '')
                                 }, reg.statusLabel || reg.status),

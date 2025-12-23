@@ -40,11 +40,19 @@
     padding: 0 1rem;
 }
 
+.mj-event-page__actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin: 0 0 2rem;
+}
+
 .mj-event-page__back {
     display: inline-flex;
     align-items: center;
     gap: 0.75rem;
-    margin: 0 0 2rem;
+    margin: 0;
     padding: 0.5rem 1rem;
     border-radius: 999px;
     background: var(--mj-event-surface-alt);
@@ -98,6 +106,65 @@
     width: 1.25rem;
     height: 1.25rem;
     object-fit: contain;
+}
+
+.mj-event-page__edit {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1.125rem;
+    border-radius: 999px;
+    background: var(--mj-event-accent);
+    color: #fff;
+    text-decoration: none;
+    font-weight: 600;
+    line-height: 1.2;
+    box-shadow: var(--mj-event-shadow);
+    transition: background var(--mj-event-transition), color var(--mj-event-transition), box-shadow var(--mj-event-transition);
+}
+
+.mj-event-page__edit:hover,
+.mj-event-page__edit:focus {
+    background: color-mix(in srgb, var(--mj-event-accent) 85%, #fff 15%);
+    color: #fff;
+    box-shadow: var(--mj-event-shadow-lg);
+}
+
+.mj-event-page__edit:focus {
+    outline: 2px solid var(--mj-event-contrast);
+    outline-offset: 2px;
+}
+
+.mj-event-page__edit-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+}
+
+.mj-event-page__edit-icon svg {
+    width: 1rem;
+    height: 1rem;
+    color: #fff;
+}
+
+.mj-event-page__edit-label {
+    color: #fff;
+}
+
+.mj-event-page__edit:hover .mj-event-page__edit-icon,
+.mj-event-page__edit:focus .mj-event-page__edit-icon {
+    color: #fff;
+}
+
+.mj-event-page__edit:hover .mj-event-page__edit-icon svg,
+.mj-event-page__edit:focus .mj-event-page__edit-icon svg {
+    color: #fff;
+}
+
+.mj-event-page__edit:hover .mj-event-page__edit-label,
+.mj-event-page__edit:focus .mj-event-page__edit-label {
+    color: #fff;
 }
 
 .mj-event-page__body {
@@ -776,13 +843,23 @@
 }
 
 .mj-event-page__calendar-day.is-past {
-    opacity: 0.4;
     cursor: default;
+    opacity: 1;
+    color: var(--mj-event-text-muted);
 }
 
 .mj-event-page__calendar-day.is-past.has-occurrence {
-    background: var(--mj-event-surface-alt);
-    color: var(--mj-event-text-muted);
+    background: repeating-linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--mj-event-accent) 16%, var(--mj-event-surface)) 0,
+        color-mix(in srgb, var(--mj-event-accent) 16%, var(--mj-event-surface)) 8px,
+        transparent 8px,
+        transparent 16px
+    );
+    border: 1px dashed color-mix(in srgb, var(--mj-event-accent) 45%, var(--mj-event-border));
+    color: color-mix(in srgb, var(--mj-event-text) 75%, var(--mj-event-accent) 25%);
+    font-weight: 600;
+    text-decoration: line-through;
 }
 
 .mj-event-page__calendar-summary {

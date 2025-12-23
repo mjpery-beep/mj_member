@@ -4732,6 +4732,44 @@ input.mj-regmgr-search-input__field {
     color: var(--regmgr-gray-500);
 }
 
+.mj-regmgr-registration-item__sessions {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mj-regmgr-registration-item__sessions-label {
+    font-size: 12px;
+    color: var(--regmgr-gray-500);
+}
+
+.mj-regmgr-registration-item__sessions-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.mj-regmgr-session-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--regmgr-gray-200);
+    font-size: 12px;
+    color: var(--regmgr-gray-700);
+    line-height: 1.4;
+}
+
+.mj-regmgr-session-chip--past {
+    background: var(--regmgr-gray-100);
+    color: var(--regmgr-gray-500);
+}
+
+.mj-regmgr-registration-item__sessions-placeholder {
+    font-size: 12px;
+    color: var(--regmgr-gray-600);
+}
+
 /* Form grid for edit mode */
 .mj-regmgr-form-grid {
     display: grid;

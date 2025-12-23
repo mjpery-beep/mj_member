@@ -3528,20 +3528,158 @@ function mj_regmgr_get_member_registrations() {
 
     $status_labels = MjEventRegistrations::get_status_labels();
 
+    $events_cache = array();
+    $occurrence_cache = array();
+    $now_timestamp = current_time('timestamp');
+
+    $format_occurrence_label = static function ($start_value, $end_value = null) {
+        $start_value = (string) $start_value;
+        if ($start_value === '') {
+            return '';
+        }
+
+        $start_ts = strtotime($start_value);
+        if ($start_ts === false) {
+            return $start_value;
+        }
+
+        $date_format = get_option('date_format', 'd/m/Y');
+        $time_format = get_option('time_format', 'H:i');
+
+        $label = date_i18n($date_format, $start_ts) . ' - ' . date_i18n($time_format, $start_ts);
+
+        if ($end_value) {
+            $end_ts = strtotime((string) $end_value);
+            if ($end_ts !== false && $end_ts > $start_ts) {
+                if (date_i18n('Ymd', $start_ts) === date_i18n('Ymd', $end_ts)) {
+                    $label .= ' -> ' . date_i18n($time_format, $end_ts);
+                } else {
+                    $label .= ' -> ' . date_i18n($date_format, $end_ts);
+                }
+            }
+        }
+
+        return $label;
+    };
+
     $registrations = array();
     foreach ($registrations_data as $reg) {
-        $event = MjEvents::find((int) $reg->event_id);
+        if (!$reg) {
+            continue;
+        }
+
+        $event_id = isset($reg->event_id) ? (int) $reg->event_id : 0;
+
+        if ($event_id > 0 && !array_key_exists($event_id, $events_cache)) {
+            $event = MjEvents::find($event_id);
+            $events_cache[$event_id] = $event ? $event : null;
+
+            $event_occurrences = array();
+
+            if ($event && class_exists(MjEventSchedule::class)) {
+                $occurrences = MjEventSchedule::get_occurrences($event, array(
+                    'include_past' => true,
+                    'max' => 200,
+                ));
+
+                if (is_array($occurrences)) {
+                    foreach ($occurrences as $occurrence) {
+                        if (!is_array($occurrence)) {
+                            continue;
+                        }
+
+                        $start_value = isset($occurrence['start']) ? $occurrence['start'] : '';
+                        $normalized_start = MjEventAttendance::normalize_occurrence($start_value);
+                        if ($normalized_start === '') {
+                            continue;
+                        }
+
+                        $end_value = isset($occurrence['end']) ? (string) $occurrence['end'] : null;
+                        $label_value = isset($occurrence['label']) ? (string) $occurrence['label'] : $format_occurrence_label($normalized_start, $end_value);
+                        $is_past = isset($occurrence['is_past']) ? (bool) $occurrence['is_past'] : (strtotime($normalized_start) < $now_timestamp);
+
+                        $event_occurrences[$normalized_start] = array(
+                            'start' => $normalized_start,
+                            'end' => $end_value,
+                            'label' => $label_value,
+                            'isPast' => $is_past,
+                        );
+                    }
+                }
+            }
+
+            $occurrence_cache[$event_id] = $event_occurrences;
+        }
+
+        $event = ($event_id > 0 && isset($events_cache[$event_id])) ? $events_cache[$event_id] : null;
         $event_title = $event ? $event->title : __('Événement supprimé', 'mj-member');
-        $event_date = $event ? $event->start_date : null;
+
+        $event_date = null;
+        if ($event) {
+            if (!empty($event->start_date)) {
+                $event_date = $event->start_date;
+            } elseif (!empty($event->date_debut)) {
+                $event_date = $event->date_debut;
+            }
+        }
+
+        $assignments_raw = MjEventAttendance::get_registration_assignments($reg);
+        $assignment_mode = isset($assignments_raw['mode']) ? sanitize_key((string) $assignments_raw['mode']) : 'all';
+        if ($assignment_mode !== 'custom') {
+            $assignment_mode = 'all';
+        }
+
+        $assigned_occurrences = array();
+        if ($assignment_mode === 'custom' && !empty($assignments_raw['occurrences']) && is_array($assignments_raw['occurrences'])) {
+            foreach ($assignments_raw['occurrences'] as $candidate) {
+                $normalized_candidate = MjEventAttendance::normalize_occurrence($candidate);
+                if ($normalized_candidate === '' || in_array($normalized_candidate, $assigned_occurrences, true)) {
+                    continue;
+                }
+                $assigned_occurrences[] = $normalized_candidate;
+            }
+        }
+
+        $event_occurrence_map = ($event_id > 0 && isset($occurrence_cache[$event_id])) ? $occurrence_cache[$event_id] : array();
+
+        $sessions = array();
+        if ($assignment_mode === 'custom' && !empty($assigned_occurrences)) {
+            foreach ($assigned_occurrences as $occurrence_key) {
+                if (isset($event_occurrence_map[$occurrence_key])) {
+                    $sessions[] = $event_occurrence_map[$occurrence_key];
+                } else {
+                    $sessions[] = array(
+                        'start' => $occurrence_key,
+                        'end' => null,
+                        'label' => $format_occurrence_label($occurrence_key),
+                        'isPast' => (strtotime($occurrence_key) < $now_timestamp),
+                    );
+                }
+            }
+        } elseif (!empty($event_occurrence_map)) {
+            $sessions = array_values($event_occurrence_map);
+        }
+
+        $status_key = isset($reg->statut) ? (string) $reg->statut : (isset($reg->status) ? (string) $reg->status : 'en_attente');
+        if ($status_key === '') {
+            $status_key = 'en_attente';
+        }
 
         $registrations[] = array(
-            'id' => (int) $reg->id,
-            'eventId' => (int) $reg->event_id,
+            'id' => isset($reg->id) ? (int) $reg->id : 0,
+            'eventId' => $event_id,
             'eventTitle' => $event_title,
-            'status' => $reg->statut ?? $reg->status ?? 'en_attente',
-            'statusLabel' => $status_labels[$reg->statut ?? $reg->status ?? 'en_attente'] ?? ($reg->statut ?? $reg->status ?? 'en_attente'),
-            'createdAt' => $reg->created_at ?? null,
+            'status' => $status_key,
+            'statusLabel' => isset($status_labels[$status_key]) ? $status_labels[$status_key] : $status_key,
+            'createdAt' => isset($reg->created_at) ? $reg->created_at : null,
             'eventDate' => $event_date,
+            'occurrenceAssignments' => array(
+                'mode' => $assignment_mode,
+                'occurrences' => $assigned_occurrences,
+            ),
+            'occurrenceDetails' => $sessions,
+            'coversAllOccurrences' => ($assignment_mode !== 'custom'),
+            'totalOccurrences' => count($event_occurrence_map),
         );
     }
 

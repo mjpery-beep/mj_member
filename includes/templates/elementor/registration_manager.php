@@ -346,6 +346,11 @@ if ($membership_price_manual === '' || $membership_price_manual === null) {
 $ajax_url = admin_url('admin-ajax.php');
 $ajax_nonce = wp_create_nonce('mj-registration-manager');
 
+$prefill_event_id = 0;
+if (isset($_GET['event_id'])) {
+    $prefill_event_id = absint(wp_unslash($_GET['event_id']));
+}
+
 $config_json = wp_json_encode(array(
     'widgetId' => $widget_id,
     'ajaxUrl' => $ajax_url,
@@ -376,6 +381,7 @@ $config_json = wp_json_encode(array(
     'attendanceStatuses' => $attendance_statuses,
     'roleLabels' => $role_labels,
     'ageRanges' => $age_ranges,
+    'prefillEventId' => $prefill_event_id > 0 ? $prefill_event_id : null,
     'strings' => array(
         // Général
         'loading' => __('Chargement...', 'mj-member'),
