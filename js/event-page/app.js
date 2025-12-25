@@ -534,7 +534,7 @@
                 h('div', { className: 'mj-event-page__popup-actions' },
                     h('button', {
                         type: 'button',
-                        className: 'mj-event-page__btn mj-event-page__btn--secondary',
+                        className: 'mj-event-page__btn mj-event-page__btn--primary',
                         onClick: onClose,
                     }, 'Plus tard'),
                     h('button', {
@@ -769,7 +769,7 @@
                     ),
                     isParticipantRegistered && h('button', {
                         type: 'button',
-                        className: 'mj-event-page__btn mj-event-page__btn--secondary',
+                        className: 'mj-event-page__btn mj-event-page__btn--primary',
                         onClick: handleCancel,
                         disabled: isLoading,
                     }, i18n.cancel_registration || 'Annuler l\'inscription')
