@@ -733,6 +733,7 @@ if ($event) {
             $form_values['article_cat'] = (int) $article_terms[0]->term_id;
         }
     }
+
 }
 
     $current_type_key = isset($form_values['type']) ? sanitize_key((string) $form_values['type']) : '';
@@ -2811,7 +2812,7 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                 <th scope="row"><label for="mj-event-date-deadline">Date limite d inscription</label></th>
                 <td>
                     <input type="datetime-local" id="mj-event-date-deadline" name="event_date_deadline" value="<?php echo esc_attr($form_values['date_fin_inscription']); ?>" />
-                    <p class="description mj-event-help-text">Laisser vide pour utiliser la date par defaut (14 jours avant le debut).</p>
+                    <p class="description mj-event-help-text">Laisser vide pour ne pas fixer de date limite.</p>
                 </td>
             </tr>
             <tr>

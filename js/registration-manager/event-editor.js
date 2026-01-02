@@ -99,7 +99,7 @@
         recurringWeekly: 'Hebdomadaire',
         recurringWeekdaysHint: "Cochez les jours souhaites et definissez les plages horaires pour chaque jour (optionnel).",
         registrationDeadline: "Date limite d inscription",
-        registrationDeadlineHint: "Laisser vide pour utiliser la date par defaut (14 jours avant le debut).",
+        registrationDeadlineHint: "Laisser vide pour ne pas fixer de date limite.",
         registrationSection: 'Inscriptions et acces',
         registrationSectionHint: "Configurez l ouverture des inscriptions, les capacites et les publics autorises.",
         reloadEditor: 'Reinitialiser le formulaire',
@@ -1216,7 +1216,7 @@
                                 placeholder: '2024-05-10 12:00',
                                 onChange: function (e) { updateFormValue('event_date_deadline', e.target.value); },
                             }),
-                            h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'registrationDeadlineHint', "Laisser vide pour utiliser la date par defaut (14 jours avant le debut).")),
+                            h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'registrationDeadlineHint', "Laisser vide pour ne pas fixer de date limite.")),
                         ]),
                         h('div', { class: 'mj-regmgr-form-field' }, [
                             h('label', null, getString(strings, 'occurrenceSelectionMode', 'Gestion des occurrences')),

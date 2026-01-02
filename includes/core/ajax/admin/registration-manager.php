@@ -1915,6 +1915,7 @@ function mj_regmgr_prepare_event_form_values($event, array $schedule_weekdays, a
         $form_values['volunteer_ids'] = array_values(array_unique(array_map('intval', $volunteer_ids)));
 
         $form_values = mj_regmgr_fill_schedule_values($event, $form_values, $schedule_weekdays, $schedule_month_ordinals);
+
     } else {
         $timezone = wp_timezone();
         $now = current_time('timestamp');

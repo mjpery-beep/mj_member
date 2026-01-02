@@ -741,9 +741,10 @@ final class EventPageModel
         $participants = $this->buildParticipants($eventArray);
         $userReservations = $this->buildUserReservations($eventId, $participants);
 
+        $deadlineRaw = $this->resolveRegistrationDeadline($eventArray);
         $deadlineLabel = '';
-        if (!empty($eventArray['date_fin_inscription'])) {
-            $deadlineTs = strtotime((string) $eventArray['date_fin_inscription']);
+        if ($deadlineRaw !== '') {
+            $deadlineTs = strtotime($deadlineRaw);
             if ($deadlineTs) {
                 $deadlineLabel = date_i18n(get_option('date_format'), $deadlineTs);
             }
@@ -763,12 +764,24 @@ final class EventPageModel
             'capacity_waitlist' => $capacityWaitlist,
             'capacity_remaining' => $capacityRemaining,
             'registered_count' => $registeredCount,
-            'deadline' => isset($eventArray['date_fin_inscription']) ? (string) $eventArray['date_fin_inscription'] : '',
+            'deadline' => $deadlineRaw,
             'deadline_label' => $deadlineLabel,
             'participants' => $participants,
             'user_reservations' => $userReservations,
             'has_reservations' => !empty($userReservations),
         );
+    }
+
+    /**
+     * Resolve the registration deadline using stored value.
+     *
+     * @param array<string, mixed> $eventArray
+     * @return string
+     */
+    private function resolveRegistrationDeadline(array $eventArray): string
+    {
+        $stored = isset($eventArray['date_fin_inscription']) ? (string) $eventArray['date_fin_inscription'] : '';
+        return $stored;
     }
 
     /**
@@ -814,8 +827,9 @@ final class EventPageModel
         }
 
         // Vérifier la date limite
-        if (!empty($eventArray['date_fin_inscription'])) {
-            $deadlineTs = strtotime((string) $eventArray['date_fin_inscription']);
+        $deadlineRaw = $this->resolveRegistrationDeadline($eventArray);
+        if ($deadlineRaw !== '') {
+            $deadlineTs = strtotime($deadlineRaw);
             if ($deadlineTs && $deadlineTs < current_time('timestamp')) {
                 return false;
             }
