@@ -155,6 +155,7 @@ class MjEventLocations implements CrudRepositoryInterface {
             'postal_code' => '',
             'city' => '',
             'country' => 'Belgique',
+            'icon' => '',
             'latitude' => '',
             'longitude' => '',
             'map_query' => '',
@@ -529,6 +530,7 @@ class MjEventLocations implements CrudRepositoryInterface {
             'postal_code' => '%s',
             'city' => '%s',
             'country' => '%s',
+            'icon' => '%s',
             'latitude' => '%f',
             'longitude' => '%f',
             'map_query' => '%s',
@@ -563,7 +565,7 @@ class MjEventLocations implements CrudRepositoryInterface {
             $formats[] = $columns['slug'];
         }
 
-        $string_fields = array('address_line', 'postal_code', 'city', 'country', 'map_query');
+        $string_fields = array('address_line', 'postal_code', 'city', 'country', 'icon', 'map_query');
         foreach ($string_fields as $field) {
             if (!array_key_exists($field, $data)) {
                 continue;

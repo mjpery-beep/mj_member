@@ -761,6 +761,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_33($wpdb);
     mj_member_upgrade_to_2_34($wpdb);
     mj_member_upgrade_to_2_35($wpdb);
+    mj_member_upgrade_to_2_36($wpdb);
     
     
     $registrations_table = mj_member_get_event_registrations_table_name();
@@ -1391,6 +1392,7 @@ function mj_member_upgrade_to_2_3($wpdb) {
         postal_code varchar(30) DEFAULT '',
         city varchar(120) DEFAULT '',
         country varchar(120) DEFAULT '',
+        icon varchar(60) DEFAULT '',
         latitude decimal(10,6) DEFAULT NULL,
         longitude decimal(10,6) DEFAULT NULL,
         map_query varchar(255) DEFAULT NULL,
@@ -2071,6 +2073,29 @@ function mj_member_upgrade_to_2_35($wpdb) {
     if (!mj_member_column_exists($members_table, 'work_schedule')) {
         $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN work_schedule longtext DEFAULT NULL AFTER description_longue");
     }
+}
+
+function mj_member_upgrade_to_2_36($wpdb) {
+    $locations_table = mj_member_get_event_locations_table_name();
+
+    if (!$locations_table || !mj_member_table_exists($locations_table)) {
+        return;
+    }
+
+    if (mj_member_column_exists($locations_table, 'icon')) {
+        return;
+    }
+
+    $after_column = '';
+    foreach (array('country', 'city', 'name') as $candidate) {
+        if (mj_member_column_exists($locations_table, $candidate)) {
+            $after_column = ' AFTER ' . $candidate;
+            break;
+        }
+    }
+
+    $wpdb->query("ALTER TABLE {$locations_table} ADD COLUMN icon varchar(60) DEFAULT ''{$after_column}");
+    $wpdb->query("UPDATE {$locations_table} SET icon = '' WHERE icon IS NULL");
 }
 
 function mj_member_upgrade_to_2_5($wpdb) {

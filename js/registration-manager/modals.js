@@ -33,6 +33,64 @@
 
     var MemberAvatar = RegComps ? RegComps.MemberAvatar : function () { return null; };
 
+    function buildLocationQuery(data) {
+        if (!data) {
+            return '';
+        }
+
+        var mapQuery = data.map_query || data.mapQuery || '';
+        if (typeof mapQuery === 'string') {
+            mapQuery = mapQuery.trim();
+        } else {
+            mapQuery = '';
+        }
+        if (mapQuery !== '') {
+            return mapQuery;
+        }
+
+        var latitude = data.latitude !== undefined && data.latitude !== null
+            ? String(data.latitude).trim()
+            : '';
+        var longitude = data.longitude !== undefined && data.longitude !== null
+            ? String(data.longitude).trim()
+            : '';
+
+        if (latitude !== '' && longitude !== '') {
+            return latitude + ',' + longitude;
+        }
+
+        var parts = [];
+        ['address_line', 'postal_code', 'city', 'country'].forEach(function (key) {
+            var value = data[key];
+            if (value === undefined || value === null) {
+                return;
+            }
+            var str = typeof value === 'string' ? value : String(value);
+            str = str.trim();
+            if (str !== '') {
+                parts.push(str);
+            }
+        });
+
+        return parts.join(', ');
+    }
+
+    function buildLocationPreviewUrl(data) {
+        var query = buildLocationQuery(data);
+        if (!query) {
+            return '';
+        }
+        return 'https://maps.google.com/maps?q=' + encodeURIComponent(query) + '&output=embed';
+    }
+
+    function buildLocationExternalUrl(data) {
+        var query = buildLocationQuery(data);
+        if (!query) {
+            return '';
+        }
+        return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(query);
+    }
+
     // ============================================
     // MODAL BASE
     // ============================================
@@ -1135,6 +1193,431 @@
     // EXPORT
     // ============================================
 
+    function LocationModal(props) {
+        var isOpen = props.isOpen;
+        var onClose = props.onClose || function () {};
+        var mode = props.mode === 'edit' ? 'edit' : 'create';
+        var loading = !!props.loading;
+        var saving = !!props.saving;
+        var location = props.location || null;
+        var strings = props.strings || {};
+        var onSubmit = props.onSubmit || function () {};
+
+        var formId = useMemo(function () {
+            return 'mj-regmgr-location-' + Math.random().toString(36).slice(2);
+        }, []);
+
+        var initialState = useMemo(function () {
+            var payload = location || {};
+
+            var coverId = 0;
+            var rawCoverId = payload.cover_id !== undefined ? payload.cover_id : payload.coverId;
+            if (rawCoverId !== undefined && rawCoverId !== null && rawCoverId !== '') {
+                var parsedCoverId = parseInt(rawCoverId, 10);
+                if (!isNaN(parsedCoverId)) {
+                    coverId = parsedCoverId;
+                }
+            }
+
+            var coverUrl = '';
+            if (typeof payload.cover_url === 'string' && payload.cover_url.trim() !== '') {
+                coverUrl = payload.cover_url.trim();
+            } else if (typeof payload.coverUrl === 'string' && payload.coverUrl.trim() !== '') {
+                coverUrl = payload.coverUrl.trim();
+            }
+
+            var coverAdminUrl = '';
+            if (typeof payload.cover_admin_url === 'string' && payload.cover_admin_url.trim() !== '') {
+                coverAdminUrl = payload.cover_admin_url.trim();
+            } else if (typeof payload.coverAdminUrl === 'string' && payload.coverAdminUrl.trim() !== '') {
+                coverAdminUrl = payload.coverAdminUrl.trim();
+            }
+
+            return {
+                name: payload.name || '',
+                address_line: payload.address_line || '',
+                postal_code: payload.postal_code || '',
+                city: payload.city || '',
+                country: payload.country || '',
+                map_query: payload.map_query || '',
+                latitude: payload.latitude !== undefined && payload.latitude !== null ? String(payload.latitude) : '',
+                longitude: payload.longitude !== undefined && payload.longitude !== null ? String(payload.longitude) : '',
+                notes: payload.notes || '',
+                cover_id: coverId,
+                coverId: coverId,
+                cover_url: coverUrl,
+                coverUrl: coverUrl,
+                cover_admin_url: coverAdminUrl,
+                coverAdminUrl: coverAdminUrl,
+            };
+        }, [location]);
+
+        var _formState = useState(initialState);
+        var formState = _formState[0];
+        var setFormState = _formState[1];
+
+        var mediaFrameRef = useRef(null);
+
+        useEffect(function () {
+            setFormState(initialState);
+        }, [initialState, isOpen]);
+
+        var handleFieldChange = useCallback(function (field) {
+            return function (event) {
+                var value = event && event.target ? event.target.value : '';
+                setFormState(function (prev) {
+                    var next = Object.assign({}, prev);
+                    next[field] = value;
+                    return next;
+                });
+            };
+        }, []);
+
+        var handleClose = useCallback(function () {
+            if (saving) {
+                return;
+            }
+            onClose();
+        }, [saving, onClose]);
+
+        var coverMeta = useMemo(function () {
+            var source = formState || {};
+            var rawCoverId = source.cover_id !== undefined ? source.cover_id : source.coverId;
+            var coverId = 0;
+            if (rawCoverId !== undefined && rawCoverId !== null && rawCoverId !== '') {
+                var parsedId = parseInt(rawCoverId, 10);
+                if (!isNaN(parsedId)) {
+                    coverId = parsedId;
+                }
+            }
+            var coverUrl = '';
+            if (typeof source.cover_url === 'string' && source.cover_url.trim() !== '') {
+                coverUrl = source.cover_url.trim();
+            } else if (typeof source.coverUrl === 'string' && source.coverUrl.trim() !== '') {
+                coverUrl = source.coverUrl.trim();
+            }
+            var coverAdminUrl = '';
+            if (typeof source.cover_admin_url === 'string' && source.cover_admin_url.trim() !== '') {
+                coverAdminUrl = source.cover_admin_url.trim();
+            } else if (typeof source.coverAdminUrl === 'string' && source.coverAdminUrl.trim() !== '') {
+                coverAdminUrl = source.coverAdminUrl.trim();
+            }
+            return {
+                id: coverId,
+                url: coverUrl,
+                adminUrl: coverAdminUrl,
+            };
+        }, [formState]);
+
+        var wpMediaAvailable = !!(global.wp && global.wp.media && typeof global.wp.media === 'function');
+
+        var handleSelectCover = useCallback(function () {
+            if (!wpMediaAvailable) {
+                return;
+            }
+            var wpGlobal = global.wp;
+            if (!mediaFrameRef.current) {
+                mediaFrameRef.current = wpGlobal.media({
+                    title: getString(strings, 'locationCoverSelectModalTitle', 'Choisir un visuel pour ce lieu'),
+                    button: { text: getString(strings, 'locationCoverSelectButton', 'Choisir un visuel') },
+                    multiple: false,
+                    library: { type: 'image' },
+                });
+                mediaFrameRef.current.on('select', function () {
+                    var frame = mediaFrameRef.current;
+                    if (!frame) {
+                        return;
+                    }
+                    var state = typeof frame.state === 'function' ? frame.state() : frame.state;
+                    if (!state || typeof state.get !== 'function') {
+                        return;
+                    }
+                    var selection = state.get('selection');
+                    if (!selection || typeof selection.first !== 'function') {
+                        return;
+                    }
+                    var attachment = selection.first();
+                    if (!attachment || typeof attachment.toJSON !== 'function') {
+                        return;
+                    }
+                    var details = attachment.toJSON();
+                    var id = details && details.id ? parseInt(details.id, 10) || 0 : 0;
+                    var url = '';
+                    if (details) {
+                        if (details.sizes && details.sizes.medium && details.sizes.medium.url) {
+                            url = details.sizes.medium.url;
+                        } else if (details.url) {
+                            url = details.url;
+                        }
+                    }
+                    setFormState(function (prev) {
+                        var next = Object.assign({}, prev);
+                        next.cover_id = id;
+                        next.coverId = id;
+                        next.cover_url = url;
+                        next.coverUrl = url;
+                        return next;
+                    });
+                });
+            }
+
+            var frameInstance = mediaFrameRef.current;
+            if (!frameInstance) {
+                return;
+            }
+
+            var syncSelection = function () {
+                var state = typeof frameInstance.state === 'function' ? frameInstance.state() : frameInstance.state;
+                if (!state || typeof state.get !== 'function') {
+                    return;
+                }
+                var selection = state.get('selection');
+                if (!selection || typeof selection.reset !== 'function') {
+                    return;
+                }
+                selection.reset();
+
+                var currentId = 0;
+                if (formState.cover_id !== undefined && formState.cover_id !== null && formState.cover_id !== '') {
+                    var parsedExisting = parseInt(formState.cover_id, 10);
+                    if (!isNaN(parsedExisting)) {
+                        currentId = parsedExisting;
+                    }
+                } else if (formState.coverId !== undefined && formState.coverId !== null && formState.coverId !== '') {
+                    var parsedAlt = parseInt(formState.coverId, 10);
+                    if (!isNaN(parsedAlt)) {
+                        currentId = parsedAlt;
+                    }
+                }
+
+                if (currentId <= 0) {
+                    return;
+                }
+
+                var attachment = wpGlobal.media.attachment(currentId);
+                if (!attachment) {
+                    return;
+                }
+                if (typeof attachment.fetch === 'function') {
+                    attachment.fetch();
+                }
+                selection.add(attachment);
+            };
+
+            if (typeof frameInstance.once === 'function') {
+                frameInstance.once('open', syncSelection);
+            } else if (typeof frameInstance.on === 'function') {
+                frameInstance.on('open', function handleOpenOnce() {
+                    if (typeof frameInstance.off === 'function') {
+                        frameInstance.off('open', handleOpenOnce);
+                    }
+                    syncSelection();
+                });
+            } else {
+                syncSelection();
+            }
+
+            frameInstance.open();
+        }, [wpMediaAvailable, strings, formState, setFormState]);
+
+        var handleRemoveCover = useCallback(function () {
+            setFormState(function (prev) {
+                var next = Object.assign({}, prev);
+                next.cover_id = 0;
+                next.coverId = 0;
+                next.cover_url = '';
+                next.coverUrl = '';
+                return next;
+            });
+        }, [setFormState]);
+
+        var mapPreviewSrc = useMemo(function () {
+            return buildLocationPreviewUrl(formState);
+        }, [formState]);
+
+        var mapExternalUrl = useMemo(function () {
+            return buildLocationExternalUrl(formState);
+        }, [formState]);
+
+        var canSubmit = !loading && !saving && typeof formState.name === 'string' && formState.name.trim() !== '';
+
+        var handleSubmit = useCallback(function (event) {
+            if (event) {
+                event.preventDefault();
+            }
+            if (!canSubmit) {
+                return;
+            }
+            onSubmit(Object.assign({}, formState));
+        }, [canSubmit, formState, onSubmit]);
+
+        var title = mode === 'edit'
+            ? getString(strings, 'locationEditTitle', 'Modifier le lieu')
+            : getString(strings, 'locationCreateTitle', 'Nouveau lieu');
+
+        return h(Modal, {
+            isOpen: isOpen,
+            onClose: handleClose,
+            title: title,
+            size: 'large',
+            footer: h(Fragment, null, [
+                h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--ghost',
+                    onClick: handleClose,
+                    disabled: saving,
+                }, getString(strings, 'cancel', 'Annuler')),
+                h('button', {
+                    type: 'submit',
+                    form: formId,
+                    class: 'mj-btn mj-btn--primary',
+                    disabled: !canSubmit,
+                }, saving
+                    ? getString(strings, 'locationSaving', 'Enregistrement du lieu...')
+                    : getString(strings, 'locationSaveButton', 'Enregistrer le lieu')),
+            ]),
+        }, loading
+            ? h('div', { class: 'mj-regmgr-loading mj-location-form__loading' }, [
+                h('div', { class: 'mj-regmgr-loading__spinner' }),
+                h('p', { class: 'mj-regmgr-loading__text' }, getString(strings, 'locationModalLoading', 'Chargement du lieu...')),
+            ])
+            : h('form', {
+                id: formId,
+                class: 'mj-location-form',
+                onSubmit: handleSubmit,
+            }, [
+                h('div', { class: 'mj-location-form__grid' }, [
+                    h('div', { class: 'mj-location-form__field mj-location-form__field--full' }, [
+                        h('label', null, getString(strings, 'locationNameLabel', 'Nom du lieu') + ' *'),
+                        h('input', {
+                            type: 'text',
+                            value: formState.name,
+                            onInput: handleFieldChange('name'),
+                            required: true,
+                        }),
+                    ]),
+                    h('div', { class: 'mj-location-form__field mj-location-form__field--full' }, [
+                        h('label', null, getString(strings, 'locationAddressLabel', 'Adresse')),
+                        h('input', {
+                            type: 'text',
+                            value: formState.address_line,
+                            onInput: handleFieldChange('address_line'),
+                        }),
+                    ]),
+                    h('div', { class: 'mj-location-form__field' }, [
+                        h('label', null, getString(strings, 'locationPostalCodeLabel', 'Code postal')),
+                        h('input', {
+                            type: 'text',
+                            value: formState.postal_code,
+                            onInput: handleFieldChange('postal_code'),
+                        }),
+                    ]),
+                    h('div', { class: 'mj-location-form__field' }, [
+                        h('label', null, getString(strings, 'locationCityLabel', 'Ville')),
+                        h('input', {
+                            type: 'text',
+                            value: formState.city,
+                            onInput: handleFieldChange('city'),
+                        }),
+                    ]),
+                    h('div', { class: 'mj-location-form__field' }, [
+                        h('label', null, getString(strings, 'locationCountryLabel', 'Pays')),
+                        h('input', {
+                            type: 'text',
+                            value: formState.country,
+                            onInput: handleFieldChange('country'),
+                        }),
+                    ]),
+                    h('div', { class: 'mj-location-form__field mj-location-form__field--full' }, [
+                        h('label', null, getString(strings, 'locationMapQueryLabel', 'Recherche Google Maps')),
+                        h('input', {
+                            type: 'text',
+                            value: formState.map_query,
+                            onInput: handleFieldChange('map_query'),
+                        }),
+                    ]),
+                    h('div', { class: 'mj-location-form__field' }, [
+                        h('label', null, getString(strings, 'locationLatitudeLabel', 'Latitude')),
+                        h('input', {
+                            type: 'text',
+                            value: formState.latitude,
+                            onInput: handleFieldChange('latitude'),
+                        }),
+                    ]),
+                    h('div', { class: 'mj-location-form__field' }, [
+                        h('label', null, getString(strings, 'locationLongitudeLabel', 'Longitude')),
+                        h('input', {
+                            type: 'text',
+                            value: formState.longitude,
+                            onInput: handleFieldChange('longitude'),
+                        }),
+                    ]),
+                    h('div', { class: 'mj-location-form__field mj-location-form__field--full' }, [
+                        h('label', null, getString(strings, 'locationNotesLabel', 'Notes internes')),
+                        h('textarea', {
+                            rows: 3,
+                            value: formState.notes,
+                            onInput: handleFieldChange('notes'),
+                        }),
+                    ]),
+                ]),
+                h('div', { class: 'mj-location-form__preview' }, [
+                    h('div', { class: 'mj-location-form__cover' }, [
+                        h('span', { class: 'mj-location-form__cover-label' }, getString(strings, 'locationCoverLabel', 'Visuel du lieu')),
+                        coverMeta.url
+                            ? h('img', {
+                                class: 'mj-location-form__cover-image',
+                                src: coverMeta.url,
+                                alt: '',
+                                loading: 'lazy',
+                            })
+                            : h('span', { class: 'mj-location-form__cover-empty' }, getString(strings, 'locationCoverEmpty', 'Aucun visuel défini pour ce lieu.')),
+                        (function () {
+                            var actions = [];
+                            if (wpMediaAvailable) {
+                                actions.push(h('button', {
+                                    type: 'button',
+                                    class: 'mj-btn mj-btn--secondary mj-btn--small',
+                                    onClick: handleSelectCover,
+                                    disabled: saving,
+                                }, getString(strings, 'locationCoverSelectButton', 'Choisir un visuel')));
+
+                                if (coverMeta.id > 0) {
+                                    actions.push(h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                        onClick: handleRemoveCover,
+                                        disabled: saving,
+                                    }, getString(strings, 'locationCoverRemoveButton', 'Retirer le visuel')));
+                                }
+                            }
+
+                            if (actions.length === 0) {
+                                return null;
+                            }
+
+                            return h('div', { class: 'mj-location-form__cover-actions' }, actions);
+                        })(),
+                    ]),
+                    h('h2', null, getString(strings, 'locationPreviewLabel', 'Aperçu de la carte')),
+                    mapPreviewSrc
+                        ? h('iframe', {
+                            src: mapPreviewSrc,
+                            title: getString(strings, 'locationPreviewLabel', 'Aperçu de la carte'),
+                            loading: 'lazy',
+                            referrerPolicy: 'no-referrer-when-downgrade',
+                        })
+                        : h('p', { class: 'mj-location-form__preview-empty' }, getString(strings, 'locationModalEmpty', 'Impossible d\'afficher les détails de ce lieu.')),
+                    mapExternalUrl && h('a', {
+                        href: mapExternalUrl,
+                        target: '_blank',
+                        rel: 'noopener noreferrer',
+                        class: 'mj-location-form__preview-link',
+                    }, getString(strings, 'locationOpenExternal', 'Ouvrir dans Google Maps')),
+                ]),
+            ]));
+    }
+
     global.MjRegMgrModals = {
         Modal: Modal,
         AddParticipantModal: AddParticipantModal,
@@ -1143,6 +1626,7 @@
         MemberNotesModal: MemberNotesModal,
         QRCodeModal: QRCodeModal,
         OccurrencesModal: OccurrencesModal,
+        LocationModal: LocationModal,
     };
 
 })(window);

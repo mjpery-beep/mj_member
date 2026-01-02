@@ -181,6 +181,25 @@
             },
 
             /**
+             * Récupère les détails d'un lieu
+             */
+            getLocation: function (locationId) {
+                return post('mj_regmgr_get_location', {
+                    locationId: locationId || 0,
+                });
+            },
+
+            /**
+             * Crée ou met à jour un lieu
+             */
+            saveLocation: function (locationId, data) {
+                return post('mj_regmgr_save_location', {
+                    locationId: locationId || 0,
+                    data: data || {},
+                });
+            },
+
+            /**
              * Crée un nouvel événement en brouillon
              */
             createEvent: function (params) {

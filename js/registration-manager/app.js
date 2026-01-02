@@ -52,6 +52,7 @@
     var MemberNotesModal = Modals.MemberNotesModal;
     var QRCodeModal = Modals.QRCodeModal;
     var OccurrencesModal = Modals.OccurrencesModal;
+    var LocationModal = Modals.LocationModal;
 
     // ============================================
     // EVENT DETAIL PANEL
@@ -527,6 +528,23 @@
                 };
             }
 
+            if (typeof service.getLocation !== 'function') {
+                service.getLocation = function (locationId) {
+                    return fallbackPost('mj_regmgr_get_location', {
+                        locationId: locationId || 0,
+                    });
+                };
+            }
+
+            if (typeof service.saveLocation !== 'function') {
+                service.saveLocation = function (locationId, data) {
+                    return fallbackPost('mj_regmgr_save_location', {
+                        locationId: locationId || 0,
+                        data: data || {},
+                    });
+                };
+            }
+
             return service;
         }, [config.ajaxUrl, config.nonce]);
 
@@ -575,6 +593,7 @@
         var notesModal = useModal();
         var qrModal = useModal();
         var occurrencesModal = useModal();
+        var locationModal = useModal();
 
         // State
         var _events = useState([]);
@@ -649,6 +668,15 @@
         var qrLoading = _qrLoading[0];
         var setQrLoading = _qrLoading[1];
 
+        var _locationModalState = useState({
+            mode: 'create',
+            loading: false,
+            saving: false,
+            location: null,
+        });
+        var locationModalState = _locationModalState[0];
+        var setLocationModalState = _locationModalState[1];
+
         var _eventEditorData = useState(null);
         var eventEditorData = _eventEditorData[0];
         var setEventEditorData = _eventEditorData[1];
@@ -677,6 +705,17 @@
         var _mobileShowDetails = useState(false);
         var mobileShowDetails = _mobileShowDetails[0];
         var setMobileShowDetails = _mobileShowDetails[1];
+
+        useEffect(function () {
+            if (!locationModal.isOpen) {
+                setLocationModalState({
+                    mode: 'create',
+                    loading: false,
+                    saving: false,
+                    location: null,
+                });
+            }
+        }, [locationModal.isOpen, setLocationModalState]);
 
         // Sidebar mode state (events or members)
         var _sidebarMode = useState('events');
@@ -1085,9 +1124,98 @@
                 });
         }, [deletingEvent, strings, api, showSuccess, setEvents, selectedEvent, handleSelectEvent, loadEvents, pagination.page, storageKey, showError]);
 
+        var handleCloseLocationModal = useCallback(function () {
+            if (locationModalState.saving) {
+                return;
+            }
+            locationModal.close();
+        }, [locationModal, locationModalState.saving]);
+
+        var handleRequestLocationModal = useCallback(function (request) {
+            if (!config.canManageLocations) {
+                showError(getString(strings, 'locationPermissionError', 'Vous ne pouvez pas gérer les lieux.'));
+                return;
+            }
+            var payload = request && typeof request === 'object' ? request : {};
+            var mode = payload.mode === 'edit' ? 'edit' : 'create';
+            var locationId = mode === 'edit' && payload.locationId ? parseInt(payload.locationId, 10) || 0 : 0;
+
+            locationModal.open({
+                mode: mode,
+                locationId: locationId,
+                onComplete: typeof payload.onComplete === 'function' ? payload.onComplete : null,
+            });
+
+            setLocationModalState({
+                mode: mode,
+                loading: true,
+                saving: false,
+                location: null,
+            });
+
+            api.getLocation(locationId)
+                .then(function (result) {
+                    setLocationModalState({
+                        mode: mode,
+                        loading: false,
+                        saving: false,
+                        location: result && result.location ? result.location : null,
+                    });
+                })
+                .catch(function (error) {
+                    setLocationModalState({
+                        mode: mode,
+                        loading: false,
+                        saving: false,
+                        location: null,
+                    });
+                    locationModal.close();
+                    var messages = collectErrorMessages(error, getString(strings, 'locationLoadError', 'Impossible de charger ce lieu.'));
+                    if (messages.length > 0) {
+                        showError(messages[0]);
+                    }
+                });
+        }, [config.canManageLocations, showError, strings, locationModal, setLocationModalState, api, collectErrorMessages]);
+
+        var handleSubmitLocationModal = useCallback(function (payload) {
+            var modalData = locationModal.data || {};
+            var locationId = modalData.locationId || 0;
+
+            setLocationModalState(function (prev) {
+                return Object.assign({}, prev, { saving: true });
+            });
+
+            return api.saveLocation(locationId, payload)
+                .then(function (result) {
+                    setLocationModalState(function (prev) {
+                        return Object.assign({}, prev, {
+                            saving: false,
+                            location: result && result.location ? result.location : prev.location,
+                        });
+                    });
+                    var message = result && result.message ? result.message : getString(strings, 'locationSaved', 'Lieu enregistré.');
+                    showSuccess(message);
+                    if (modalData.onComplete && typeof modalData.onComplete === 'function') {
+                        modalData.onComplete(result);
+                    }
+                    locationModal.close();
+                    return result;
+                })
+                .catch(function (error) {
+                    setLocationModalState(function (prev) {
+                        return Object.assign({}, prev, { saving: false });
+                    });
+                    var messages = collectErrorMessages(error, getString(strings, 'locationSaveError', 'Impossible d\'enregistrer ce lieu.'));
+                    if (messages.length > 0) {
+                        showError(messages[0]);
+                    }
+                    throw error;
+                });
+        }, [api, locationModal, setLocationModalState, getString, strings, showSuccess, collectErrorMessages, showError]);
+
         var handleReloadEventEditor = useCallback(function () {
             if (!selectedEvent || !selectedEvent.id) {
-                return Promise.resolve();
+                return;
             }
             return loadEventEditor(selectedEvent.id);
         }, [selectedEvent, loadEventEditor]);
@@ -1992,6 +2120,8 @@
                                 onSubmit: handleSubmitEventEditor,
                                 onReload: handleReloadEventEditor,
                                 strings: strings,
+                                canManageLocations: !!config.canManageLocations,
+                                onManageLocation: handleRequestLocationModal,
                             }),
                         ]),
                     ]),
@@ -2079,6 +2209,17 @@
                 onSave: handleSaveOccurrences,
                 strings: strings,
                 loading: false,
+            }),
+
+            h(LocationModal, {
+                isOpen: locationModal.isOpen,
+                onClose: handleCloseLocationModal,
+                onSubmit: handleSubmitLocationModal,
+                loading: locationModalState.loading,
+                saving: locationModalState.saving,
+                location: locationModalState.location,
+                mode: locationModalState.mode,
+                strings: strings,
             }),
 
             // Toasts

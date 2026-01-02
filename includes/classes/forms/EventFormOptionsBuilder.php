@@ -99,12 +99,33 @@ final class EventFormOptionsBuilder
                     $label .= ' (' . $city . ')';
                 }
                 $locationMap[$locationId] = $label;
+                $iconValue = isset($locationData['icon']) ? sanitize_text_field((string) $locationData['icon']) : '';
+                $coverId = isset($locationData['cover_id']) ? (int) $locationData['cover_id'] : 0;
+                $coverSrc = '';
+                if ($coverId > 0 && function_exists('wp_get_attachment_image_url')) {
+                    $coverCandidate = wp_get_attachment_image_url($coverId, 'medium');
+                    if (is_string($coverCandidate)) {
+                        $coverSrc = $coverCandidate;
+                    }
+                }
+                $coverAdminUrl = add_query_arg(
+                    array(
+                        'page' => 'mj_locations',
+                        'action' => 'edit',
+                        'location' => $locationId,
+                    ),
+                    admin_url('admin.php')
+                );
                 $locationAttr[$locationId] = array(
                     'data-address' => MjEventLocations::format_address($locationData),
                     'data-map' => MjEventLocations::build_map_embed_src($locationData),
                     'data-notes' => isset($locationData['notes']) ? (string) $locationData['notes'] : '',
                     'data-city' => $city,
                     'data-country' => isset($locationData['country']) ? (string) $locationData['country'] : '',
+                    'data-icon' => $iconValue,
+                    'data-cover-id' => $coverId > 0 ? (string) $coverId : '',
+                    'data-cover-src' => $coverSrc !== '' ? esc_url_raw($coverSrc) : '',
+                    'data-cover-admin' => esc_url_raw($coverAdminUrl),
                 );
             }
         }

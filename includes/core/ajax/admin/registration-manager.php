@@ -21,6 +21,7 @@ use Mj\Member\Classes\Forms\EventFormOptionsBuilder;
 use Mj\Member\Classes\MjEventSchedule;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\Value\EventLocationData;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -48,6 +49,8 @@ add_action('wp_ajax_mj_regmgr_save_member_note', 'mj_regmgr_save_member_note');
 add_action('wp_ajax_mj_regmgr_delete_member_note', 'mj_regmgr_delete_member_note');
 add_action('wp_ajax_mj_regmgr_get_payment_qr', 'mj_regmgr_get_payment_qr');
 add_action('wp_ajax_mj_regmgr_update_occurrences', 'mj_regmgr_update_occurrences');
+add_action('wp_ajax_mj_regmgr_get_location', 'mj_regmgr_get_location');
+add_action('wp_ajax_mj_regmgr_save_location', 'mj_regmgr_save_location');
 
 // Members management actions
 add_action('wp_ajax_mj_regmgr_get_members', 'mj_regmgr_get_members');
@@ -2159,6 +2162,268 @@ function mj_regmgr_collect_event_editor_assets($event, array &$form_values) {
     );
 }
 
+function mj_regmgr_user_can_manage_locations($auth) {
+    if (current_user_can(Config::capability())) {
+        return true;
+    }
+    if (is_array($auth) && !empty($auth['is_coordinateur'])) {
+        return true;
+    }
+    return false;
+}
+
+function mj_regmgr_build_location_lookup_query(array $location) {
+    if (!empty($location['map_query'])) {
+        return (string) $location['map_query'];
+    }
+
+    $latitude = isset($location['latitude']) && $location['latitude'] !== null
+        ? trim((string) $location['latitude'])
+        : '';
+    $longitude = isset($location['longitude']) && $location['longitude'] !== null
+        ? trim((string) $location['longitude'])
+        : '';
+
+    if ($latitude !== '' && $longitude !== '') {
+        return $latitude . ',' . $longitude;
+    }
+
+    $parts = array();
+    if (!empty($location['address_line'])) {
+        $parts[] = (string) $location['address_line'];
+    }
+    if (!empty($location['postal_code'])) {
+        $parts[] = (string) $location['postal_code'];
+    }
+    if (!empty($location['city'])) {
+        $parts[] = (string) $location['city'];
+    }
+    if (!empty($location['country'])) {
+        $parts[] = (string) $location['country'];
+    }
+
+    if (empty($parts)) {
+        return '';
+    }
+
+    return implode(', ', $parts);
+}
+
+function mj_regmgr_build_location_map_preview_url(array $location) {
+    $query = mj_regmgr_build_location_lookup_query($location);
+    if ($query === '') {
+        return '';
+    }
+
+    return 'https://maps.google.com/maps?q=' . rawurlencode($query) . '&output=embed';
+}
+
+function mj_regmgr_build_location_map_link(array $location) {
+    $query = mj_regmgr_build_location_lookup_query($location);
+    if ($query === '') {
+        return '';
+    }
+
+    return 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode($query);
+}
+
+function mj_regmgr_format_location_payload($location) {
+    if ($location instanceof EventLocationData) {
+        $location_data = $location->toArray();
+    } elseif (is_object($location)) {
+        $location_data = get_object_vars($location);
+    } else {
+        $location_data = (array) $location;
+    }
+
+    $id = isset($location_data['id']) ? (int) $location_data['id'] : 0;
+    $name = isset($location_data['name']) ? sanitize_text_field((string) $location_data['name']) : '';
+    $address = isset($location_data['address_line']) ? sanitize_text_field((string) $location_data['address_line']) : '';
+    $postal_code = isset($location_data['postal_code']) ? sanitize_text_field((string) $location_data['postal_code']) : '';
+    $city = isset($location_data['city']) ? sanitize_text_field((string) $location_data['city']) : '';
+    $country = isset($location_data['country']) ? sanitize_text_field((string) $location_data['country']) : '';
+    $icon = isset($location_data['icon']) ? sanitize_text_field((string) $location_data['icon']) : '';
+    $cover_id = isset($location_data['cover_id']) ? (int) $location_data['cover_id'] : 0;
+    $cover_url = '';
+    if ($cover_id > 0 && function_exists('wp_get_attachment_image_url')) {
+        $cover_candidate = wp_get_attachment_image_url($cover_id, 'medium');
+        if (is_string($cover_candidate)) {
+            $cover_url = $cover_candidate;
+        }
+    }
+    $cover_admin_url = '';
+    if ($id > 0) {
+        $cover_admin_url = add_query_arg(
+            array(
+                'page' => 'mj_locations',
+                'action' => 'edit',
+                'location' => $id,
+            ),
+            admin_url('admin.php')
+        );
+    }
+    $map_query = isset($location_data['map_query']) ? sanitize_text_field((string) $location_data['map_query']) : '';
+    $latitude = isset($location_data['latitude']) && $location_data['latitude'] !== null ? trim((string) $location_data['latitude']) : '';
+    $longitude = isset($location_data['longitude']) && $location_data['longitude'] !== null ? trim((string) $location_data['longitude']) : '';
+    $notes = isset($location_data['notes']) ? sanitize_textarea_field((string) $location_data['notes']) : '';
+
+    $normalized = array(
+        'id' => $id,
+        'name' => $name,
+        'address_line' => $address,
+        'postal_code' => $postal_code,
+        'city' => $city,
+        'country' => $country,
+        'icon' => $icon,
+        'cover_id' => $cover_id,
+        'map_query' => $map_query,
+        'latitude' => $latitude,
+        'longitude' => $longitude,
+        'notes' => $notes,
+    );
+
+    $map_embed = class_exists(MjEventLocations::class) ? MjEventLocations::build_map_embed_src($location_data) : '';
+    $formatted_address = class_exists(MjEventLocations::class) ? MjEventLocations::format_address($location_data) : '';
+    $map_preview = $map_embed !== '' ? $map_embed : mj_regmgr_build_location_map_preview_url($normalized);
+    $map_link = mj_regmgr_build_location_map_link($normalized);
+
+    $label = $name;
+    if ($label === '' && $id > 0) {
+        /* translators: %d: location identifier */
+        $label = sprintf(__('Lieu #%d', 'mj-member'), $id);
+    }
+    if ($city !== '') {
+        $label .= $label !== '' ? ' (' . $city . ')' : $city;
+    }
+
+    $option = null;
+    if ($id > 0) {
+        $option = array(
+            'id' => $id,
+            'label' => $label,
+            'attributes' => array(
+                'data-address' => $formatted_address ? $formatted_address : '',
+                'data-map' => $map_preview,
+                'data-notes' => $notes,
+                'data-city' => $city,
+                'data-country' => $country,
+                'data-icon' => $icon,
+                'data-cover-id' => $cover_id > 0 ? (string) $cover_id : '',
+                'data-cover-src' => $cover_url !== '' ? esc_url_raw($cover_url) : '',
+                'data-cover-admin' => $cover_admin_url !== '' ? esc_url_raw($cover_admin_url) : '',
+            ),
+        );
+    }
+
+    $normalized['formattedAddress'] = $formatted_address ? $formatted_address : '';
+    $normalized['mapEmbed'] = $map_preview;
+    $normalized['mapLink'] = $map_link;
+    $normalized['coverId'] = $cover_id;
+    $normalized['coverUrl'] = $cover_url !== '' ? esc_url_raw($cover_url) : '';
+    $normalized['coverAdminUrl'] = $cover_admin_url !== '' ? esc_url_raw($cover_admin_url) : '';
+    $normalized['cover_url'] = $cover_url !== '' ? esc_url_raw($cover_url) : '';
+    $normalized['cover_admin_url'] = $cover_admin_url !== '' ? esc_url_raw($cover_admin_url) : '';
+
+    return array(
+        'location' => $normalized,
+        'option' => $option,
+    );
+}
+
+function mj_regmgr_get_location() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) {
+        return;
+    }
+
+    if (!mj_regmgr_user_can_manage_locations($auth)) {
+        wp_send_json_error(array('message' => __('Permissions insuffisantes pour gérer les lieux.', 'mj-member')), 403);
+        return;
+    }
+
+    if (!class_exists(MjEventLocations::class)) {
+        wp_send_json_error(array('message' => __('Gestion des lieux indisponible.', 'mj-member')), 500);
+        return;
+    }
+
+    $location_id = isset($_POST['locationId']) ? (int) $_POST['locationId'] : 0;
+
+    if ($location_id > 0) {
+        $location = MjEventLocations::find($location_id);
+        if (!$location) {
+            wp_send_json_error(array('message' => __('Lieu introuvable.', 'mj-member')), 404);
+            return;
+        }
+        $payload = mj_regmgr_format_location_payload($location);
+    } else {
+        $defaults = MjEventLocations::get_default_values();
+        $defaults['id'] = 0;
+        $payload = mj_regmgr_format_location_payload($defaults);
+    }
+
+    wp_send_json_success($payload);
+}
+
+function mj_regmgr_save_location() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) {
+        return;
+    }
+
+    if (!mj_regmgr_user_can_manage_locations($auth)) {
+        wp_send_json_error(array('message' => __('Permissions insuffisantes pour gérer les lieux.', 'mj-member')), 403);
+        return;
+    }
+
+    if (!class_exists(MjEventLocations::class)) {
+        wp_send_json_error(array('message' => __('Gestion des lieux indisponible.', 'mj-member')), 500);
+        return;
+    }
+
+    $location_id = isset($_POST['locationId']) ? (int) $_POST['locationId'] : 0;
+    $raw_data = isset($_POST['data']) ? wp_unslash((string) $_POST['data']) : '';
+    $payload = json_decode($raw_data, true);
+    if (!is_array($payload)) {
+        wp_send_json_error(array('message' => __('Format de données invalide.', 'mj-member')), 400);
+        return;
+    }
+
+    $allowed_fields = array('name', 'slug', 'address_line', 'postal_code', 'city', 'country', 'icon', 'cover_id', 'map_query', 'latitude', 'longitude', 'notes');
+    $data = array();
+    foreach ($allowed_fields as $field) {
+        if (array_key_exists($field, $payload)) {
+            $data[$field] = $payload[$field];
+        }
+    }
+
+    if ($location_id > 0) {
+        $result = MjEventLocations::update($location_id, $data);
+    } else {
+        $result = MjEventLocations::create($data);
+    }
+
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()), 400);
+        return;
+    }
+
+    $new_id = $location_id > 0 ? $location_id : (int) $result;
+    $location = MjEventLocations::find($new_id);
+    if (!$location) {
+        wp_send_json_error(array('message' => __('Lieu introuvable après enregistrement.', 'mj-member')), 500);
+        return;
+    }
+
+    $payload = mj_regmgr_format_location_payload($location);
+    $message = $location_id > 0 ? __('Lieu mis à jour.', 'mj-member') : __('Lieu créé.', 'mj-member');
+
+    wp_send_json_success(array(
+        'message' => $message,
+        'location' => $payload['location'],
+        'option' => $payload['option'],
+    ));
+}
+
 function mj_regmgr_sanitize_weekday_times($weekday_times, array $schedule_weekdays) {
     $sanitized = array();
 
@@ -3574,8 +3839,12 @@ function mj_regmgr_get_member_registrations() {
         if ($event_id > 0 && !array_key_exists($event_id, $events_cache)) {
             $event = MjEvents::find($event_id);
             $events_cache[$event_id] = $event ? $event : null;
+        }
 
+        if (!array_key_exists($event_id, $occurrence_cache)) {
             $event_occurrences = array();
+
+            $event = ($event_id > 0 && isset($events_cache[$event_id])) ? $events_cache[$event_id] : null;
 
             if ($event && class_exists(MjEventSchedule::class)) {
                 $occurrences = MjEventSchedule::get_occurrences($event, array(

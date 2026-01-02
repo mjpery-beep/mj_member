@@ -46,7 +46,7 @@
         capacityTotal: 'Places max',
         capacityWaitlist: "Liste d attente",
         contentSection: 'Description',
-        contentSectionHint: "Presentez l evenement en detail pour les membres et le public.",
+        contentSectionHint: "Présentez l'événement en détail pour les membres et le public.",
         coverId: 'ID de couverture',
         coverLabel: 'Visuel',
         coverSelect: 'Selectionner un fichier',
@@ -73,6 +73,9 @@
         loading: 'Chargement...',
         location: 'Lieu',
         locationHint: 'Administrez les lieux depuis la page des lieux du tableau de bord.',
+        manageLocationHint: 'Ajoutez ou editez un lieu sans quitter ce formulaire.',
+        addLocation: 'Ajouter un lieu',
+        editLocation: 'Modifier le lieu',
         locationSection: 'Lieu et equipe',
         locationSectionHint: "Choisissez le lieu d accueil et les referents associes.",
         noArticle: 'Aucun article',
@@ -243,6 +246,139 @@
             }
         }
         return [];
+    }
+
+    function RichTextEditorField(props) {
+        var value = typeof props.value === 'string' ? props.value : '';
+        var onChange = typeof props.onChange === 'function' ? props.onChange : function () {};
+        var rows = props.rows || 6;
+        var className = props.className || '';
+        var editorAvailable = !!(global.wp && global.wp.editor && typeof global.wp.editor.initialize === 'function');
+
+        var idRef = useRef(null);
+        if (!idRef.current) {
+            idRef.current = 'mj-regmgr-editor-' + Math.random().toString(36).slice(2);
+        }
+        var editorId = idRef.current;
+        var textareaRef = useRef(null);
+        var editorRef = useRef(null);
+        var syncingRef = useRef(false);
+        var valueRef = useRef(value || '');
+        valueRef.current = value || '';
+
+        useEffect(function () {
+            if (!editorAvailable) {
+                return undefined;
+            }
+
+            var textarea = textareaRef.current;
+            if (!textarea) {
+                return undefined;
+            }
+
+            if (global.wp.editor && typeof global.wp.editor.remove === 'function') {
+                try {
+                    global.wp.editor.remove(editorId);
+                } catch (removeError) {
+                    // ignore cleanup issues
+                }
+            }
+
+            textarea.value = valueRef.current;
+
+            var editorSettings = {
+                mediaButtons: false,
+                quicktags: false,
+                tinymce: {
+                    branding: false,
+                    menubar: false,
+                    statusbar: true,
+                    toolbar1: 'bold italic underline | bullist numlist | link unlink | undo redo',
+                    plugins: 'lists link paste',
+                    wpautop: true,
+                },
+            };
+
+            try {
+                global.wp.editor.initialize(editorId, editorSettings);
+            } catch (initError) {
+                console.error('[MjRegMgr] Failed to initialise editor', initError);
+                return undefined;
+            }
+
+            var editor = global.tinymce ? global.tinymce.get(editorId) : null;
+            if (!editor) {
+                return undefined;
+            }
+
+            editorRef.current = editor;
+
+            var handleContentChange = function () {
+                if (syncingRef.current) {
+                    return;
+                }
+                var content = editor.getContent();
+                if (content !== valueRef.current) {
+                    valueRef.current = content;
+                    onChange(content);
+                }
+            };
+
+            editor.on('Change KeyUp Paste Undo Redo', handleContentChange);
+
+            return function () {
+                editor.off('Change KeyUp Paste Undo Redo', handleContentChange);
+                editorRef.current = null;
+                if (global.wp.editor && typeof global.wp.editor.remove === 'function') {
+                    try {
+                        global.wp.editor.remove(editorId);
+                    } catch (cleanupError) {
+                        // ignore cleanup issues
+                    }
+                }
+            };
+        }, [editorAvailable, editorId, onChange]);
+
+        useEffect(function () {
+            if (!editorAvailable) {
+                return;
+            }
+            var editor = editorRef.current;
+            if (editor && editor.initialized) {
+                var targetValue = valueRef.current;
+                var currentValue = editor.getContent();
+                if (targetValue !== currentValue && !editor.hasFocus()) {
+                    syncingRef.current = true;
+                    editor.setContent(targetValue || '');
+                    editor.save();
+                    syncingRef.current = false;
+                }
+            } else if (textareaRef.current && textareaRef.current.value !== valueRef.current) {
+                textareaRef.current.value = valueRef.current;
+            }
+        }, [editorAvailable, editorId, value]);
+
+        if (!editorAvailable) {
+            return h('textarea', {
+                class: className,
+                rows: rows,
+                value: valueRef.current,
+                onInput: function (event) {
+                    valueRef.current = event.target.value;
+                    onChange(event.target.value);
+                },
+            });
+        }
+
+        var finalClassName = className ? className + ' wp-editor-area' : 'wp-editor-area';
+
+        return h('textarea', {
+            id: editorId,
+            ref: textareaRef,
+            class: finalClassName,
+            rows: rows,
+            defaultValue: valueRef.current,
+        });
     }
 
     function ScheduleEditor(props) {
@@ -421,7 +557,7 @@
                                 value: times.start || '',
                                 onChange: function (e) { onWeekdayTimeChange(key, 'start', e.target.value); },
                             }),
-                            h('span', { class: 'mj-regmgr-weekday__time-sep' }, '->'),
+                            h('span', { class: 'mj-regmgr-weekday__time-sep' }, '-'),
                             h('input', {
                                 type: 'time',
                                 value: times.end || '',
@@ -517,6 +653,27 @@
         var initialMeta = data ? data.meta : {};
         var initialCoverUrl = eventSummary && eventSummary.coverUrl ? eventSummary.coverUrl : '';
 
+        var _locationOptionsState = useState(function () {
+            var baseChoices = {};
+            var baseAttributes = {};
+            if (initialOptions && initialOptions.locations) {
+                Object.keys(initialOptions.locations).forEach(function (key) {
+                    baseChoices[String(key)] = initialOptions.locations[key];
+                });
+            }
+            if (initialOptions && initialOptions.location_choice_attributes) {
+                Object.keys(initialOptions.location_choice_attributes).forEach(function (key) {
+                    baseAttributes[String(key)] = initialOptions.location_choice_attributes[key];
+                });
+            }
+            return {
+                choices: baseChoices,
+                attributes: baseAttributes,
+            };
+        });
+        var locationOptions = _locationOptionsState[0];
+        var setLocationOptions = _locationOptionsState[1];
+
         var _formState = useState(initialValues || {});
         var formState = _formState[0];
         var setFormState = _formState[1];
@@ -539,6 +696,8 @@
 
         var mediaFrameRef = useRef(null);
         var previousTypeRef = useRef(initialValues && initialValues.event_type ? initialValues.event_type : '');
+        var manageLocationEnabled = !!(props.canManageLocations && typeof props.onManageLocation === 'function');
+        var onManageLocation = manageLocationEnabled ? props.onManageLocation : null;
         var typeDefaultColors = useMemo(function () {
             var map = {};
             var raw = initialOptions && initialOptions.type_choice_attributes ? initialOptions.type_choice_attributes : {};
@@ -593,6 +752,29 @@
             setCoverPreview(nextCover);
             previousTypeRef.current = nextValues.event_type || '';
         }, [data, eventSummary]);
+
+        useEffect(function () {
+            if (!data || !data.options) {
+                setLocationOptions({ choices: {}, attributes: {} });
+                return;
+            }
+            var baseChoices = {};
+            var baseAttributes = {};
+            if (data.options.locations) {
+                Object.keys(data.options.locations).forEach(function (key) {
+                    baseChoices[String(key)] = data.options.locations[key];
+                });
+            }
+            if (data.options.location_choice_attributes) {
+                Object.keys(data.options.location_choice_attributes).forEach(function (key) {
+                    baseAttributes[String(key)] = data.options.location_choice_attributes[key];
+                });
+            }
+            setLocationOptions({
+                choices: baseChoices,
+                attributes: baseAttributes,
+            });
+        }, [data, setLocationOptions]);
 
         useEffect(function () {
             if (isDirty) {
@@ -661,6 +843,57 @@
             });
             setIsDirty(true);
         }, []);
+
+        var handleLocationSaved = useCallback(function (result) {
+            if (!result || !result.option) {
+                return;
+            }
+            var option = result.option;
+            var rawId = option && Object.prototype.hasOwnProperty.call(option, 'id') ? option.id : null;
+            var optionId = parseInt(rawId, 10);
+            if (isNaN(optionId) || optionId <= 0) {
+                return;
+            }
+            var choiceKey = String(optionId);
+            setLocationOptions(function (prev) {
+                var nextChoices = Object.assign({}, prev.choices);
+                nextChoices[choiceKey] = option.label || nextChoices[choiceKey] || 'Lieu #' + optionId;
+                var nextAttributes = Object.assign({}, prev.attributes);
+                if (option.attributes && typeof option.attributes === 'object') {
+                    nextAttributes[choiceKey] = option.attributes;
+                }
+                return {
+                    choices: nextChoices,
+                    attributes: nextAttributes,
+                };
+            });
+            updateFormValue('event_location_id', optionId);
+        }, [setLocationOptions, updateFormValue]);
+
+        var handleCreateLocation = useCallback(function () {
+            if (!onManageLocation) {
+                return;
+            }
+            onManageLocation({
+                mode: 'create',
+                onComplete: handleLocationSaved,
+            });
+        }, [onManageLocation, handleLocationSaved]);
+
+        var handleEditLocation = useCallback(function () {
+            if (!onManageLocation) {
+                return;
+            }
+            var currentId = formState.event_location_id ? parseInt(formState.event_location_id, 10) || 0 : 0;
+            if (currentId <= 0) {
+                return;
+            }
+            onManageLocation({
+                mode: 'edit',
+                locationId: currentId,
+                onComplete: handleLocationSaved,
+            });
+        }, [onManageLocation, formState.event_location_id, handleLocationSaved]);
 
         var toggleWeekday = useCallback(function (weekday) {
             toggleArrayValue('event_recurring_weekdays', weekday);
@@ -878,6 +1111,8 @@
         var wpMediaAvailable = !!(global.wp && global.wp.media && typeof global.wp.media === 'function');
 
         var canSubmit = !!onSubmit && !saving && !loading && isDirty;
+        var locationSelectValue = formState.event_location_id ? String(formState.event_location_id) : '0';
+        var currentLocationSelected = parseInt(locationSelectValue, 10) || 0;
 
         return h('form', { class: 'mj-regmgr-event-editor', onSubmit: handleSubmit }, [
             h('div', { class: 'mj-regmgr-event-editor__header' }, [
@@ -1048,6 +1283,22 @@
 
                 h('div', { class: 'mj-regmgr-event-editor__section' }, [
                     h('div', { class: 'mj-regmgr-event-editor__section-header' }, [
+                        h('h2', null, getString(strings, 'contentSection', 'Description')),
+                        h('p', { class: 'mj-regmgr-event-editor__section-hint' }, getString(strings, 'contentSectionHint', 'Redigez le contenu presente aux membres et visiteurs.')),
+                    ]),
+                    h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
+                        h('label', { class: 'mj-regmgr-sr-only' }, getString(strings, 'description', 'Description')),
+                        h(RichTextEditorField, {
+                            className: 'mj-regmgr-richtext',
+                            rows: 10,
+                            value: formState.event_description || '',
+                            onChange: function (content) { updateFormValue('event_description', content); },
+                        }),
+                    ]),
+                ]),
+
+                h('div', { class: 'mj-regmgr-event-editor__section' }, [
+                    h('div', { class: 'mj-regmgr-event-editor__section-header' }, [
                         h('h2', null, getString(strings, 'locationSection', 'Lieu et equipe')),
                         h('p', { class: 'mj-regmgr-event-editor__section-hint' }, getString(strings, 'locationSectionHint', "Choisissez le lieu d accueil et les referents associes.")),
                     ]),
@@ -1055,15 +1306,29 @@
                         h('div', { class: 'mj-regmgr-form-field' }, [
                             h('label', null, getString(strings, 'location', 'Lieu')),
                             h('select', {
-                                value: formState.event_location_id || 0,
+                                value: locationSelectValue,
                                 onChange: function (e) { updateFormValue('event_location_id', parseInt(e.target.value, 10) || 0); },
                             }, [
-                                h('option', { value: 0 }, getString(strings, 'noLocation', 'Aucun lieu defini')),
-                                Object.keys(initialOptions.locations || {}).map(function (key) {
-                                    return h('option', { key: key, value: key }, initialOptions.locations[key]);
+                                h('option', { value: '0' }, getString(strings, 'noLocation', 'Aucun lieu defini')),
+                                Object.keys(locationOptions.choices || {}).map(function (key) {
+                                    return h('option', { key: key, value: key }, locationOptions.choices[key]);
                                 }),
                             ]),
-                            h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'locationHint', 'Administrez les lieux depuis la page des lieux du tableau de bord.')),
+                            manageLocationEnabled && h('div', { class: 'mj-regmgr-location-actions' }, [
+                                h('button', {
+                                    type: 'button',
+                                    class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                    onClick: handleCreateLocation,
+                                }, getString(strings, 'addLocation', 'Ajouter un lieu')),
+                                currentLocationSelected > 0 && h('button', {
+                                    type: 'button',
+                                    class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                    onClick: handleEditLocation,
+                                }, getString(strings, 'editLocation', 'Modifier le lieu')),
+                            ]),
+                            h('p', { class: 'mj-regmgr-field-hint' }, manageLocationEnabled
+                                ? getString(strings, 'manageLocationHint', 'Ajoutez ou editez un lieu sans quitter ce formulaire.')
+                                : getString(strings, 'locationHint', 'Administrez les lieux depuis la page des lieux du tableau de bord.')),
                         ]),
                     ]),
                     animateurOptions.length > 0 && h('div', { class: 'mj-regmgr-multiselect' }, [
@@ -1246,21 +1511,6 @@
                     onUpdateSeriesItem: handleSeriesUpdate,
                     onRemoveSeriesItem: handleSeriesRemove,
                 }),
-
-                h('div', { class: 'mj-regmgr-event-editor__section' }, [
-                    h('div', { class: 'mj-regmgr-event-editor__section-header' }, [
-                        h('h2', null, getString(strings, 'contentSection', 'Description')),
-                        h('p', { class: 'mj-regmgr-event-editor__section-hint' }, getString(strings, 'contentSectionHint', 'Redigez le contenu presente aux membres et visiteurs.')),
-                    ]),
-                    h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
-                        h('label', { class: 'mj-regmgr-sr-only' }, getString(strings, 'description', 'Description')),
-                        h('textarea', {
-                            value: formState.event_description || '',
-                            rows: 6,
-                            onChange: function (e) { updateFormValue('event_description', e.target.value); },
-                        }),
-                    ]),
-                ]),
 
             ]),
 

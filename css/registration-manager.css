@@ -2676,6 +2676,134 @@ input.mj-regmgr-search-input__field {
 }
 
 /* ============================================
+   Location Modal
+   ============================================ */
+.mj-location-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.mj-location-form__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px 20px;
+}
+
+.mj-location-form__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mj-location-form__field label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--regmgr-gray-700);
+}
+
+.mj-location-form__field input,
+.mj-location-form__field textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius);
+    background: #fff;
+    color: var(--regmgr-gray-800);
+    transition: border-color var(--regmgr-transition), box-shadow var(--regmgr-transition);
+}
+
+.mj-location-form__field input:focus,
+.mj-location-form__field textarea:focus {
+    outline: none;
+    border-color: var(--regmgr-primary);
+    box-shadow: 0 0 0 3px var(--regmgr-primary-light);
+}
+
+.mj-location-form__field textarea {
+    resize: vertical;
+    min-height: 108px;
+}
+
+.mj-location-form__field--full {
+    grid-column: 1 / -1;
+}
+
+.mj-location-form__preview {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.mj-location-form__preview iframe {
+    width: 100%;
+    min-height: 200px;
+    border: 0;
+    border-radius: var(--regmgr-radius);
+    background: var(--regmgr-gray-50);
+}
+
+.mj-location-form__preview-empty {
+    margin: 0;
+    padding: 16px;
+    border: 1px dashed var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius);
+    color: var(--regmgr-gray-500);
+    background: var(--regmgr-gray-50);
+}
+
+.mj-location-form__preview-link {
+    align-self: flex-start;
+    font-weight: 600;
+}
+
+.mj-location-form__cover {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mj-location-form__cover-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--regmgr-gray-600);
+}
+
+.mj-location-form__cover-image {
+    display: block;
+    max-width: 160px;
+    width: 100%;
+    height: auto;
+    border-radius: var(--regmgr-radius);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+.mj-location-form__cover-empty {
+    display: inline-block;
+    padding: 12px 14px;
+    border-radius: var(--regmgr-radius);
+    border: 1px dashed var(--regmgr-gray-200);
+    background: var(--regmgr-gray-50);
+    color: var(--regmgr-gray-500);
+    font-size: 13px;
+}
+
+.mj-location-form__cover-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.mj-location-form__loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 40px 0;
+}
+
+/* ============================================
    Notes Modal
    ============================================ */
 .mj-regmgr-notes {
@@ -4789,6 +4917,37 @@ input.mj-regmgr-search-input__field {
     gap: 6px;
 }
 
+.mj-regmgr-form-field textarea.mj-regmgr-richtext {
+    min-height: 220px;
+    padding: 12px;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius);
+    background: #fff;
+    resize: vertical;
+}
+
+.mj-regmgr-form-field .wp-editor-wrap {
+    width: 100%;
+    background: #fff;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius);
+    overflow: hidden;
+}
+
+.mj-regmgr-form-field .wp-editor-wrap .wp-editor-container {
+    border: none;
+    box-shadow: none;
+}
+
+.mj-regmgr-form-field .wp-editor-wrap .mce-toolbar-grp {
+    background: var(--regmgr-gray-50);
+    border-bottom: 1px solid var(--regmgr-gray-200);
+}
+
+.mj-regmgr-form-field .wp-editor-wrap .mce-statusbar {
+    border-top: 1px solid var(--regmgr-gray-200);
+}
+
 .mj-regmgr-form-field--full {
     grid-column: 1 / -1;
 }
@@ -5682,8 +5841,9 @@ input.mj-regmgr-search-input__field {
         justify-self: start;
     }
 }
-
-
+.mj-regmgr-weekday__times input[type='time'] {
+    font-size: 10px;
+}
 /*============================================
    Media attachments tweaks
    ============================================ */

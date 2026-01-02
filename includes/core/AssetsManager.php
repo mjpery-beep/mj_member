@@ -464,6 +464,9 @@ final class AssetsManager
                 if (function_exists('wp_enqueue_media')) {
                     wp_enqueue_media();
                 }
+                if (function_exists('wp_enqueue_editor')) {
+                    wp_enqueue_editor();
+                }
                 wp_enqueue_script('mj-member-preact');
                 wp_enqueue_script('mj-member-preact-hooks');
                 wp_enqueue_script('mj-member-regmgr-services');

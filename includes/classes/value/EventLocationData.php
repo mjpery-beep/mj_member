@@ -24,6 +24,7 @@ final class EventLocationData implements JsonSerializable
         'postal_code',
         'city',
         'country',
+        'icon',
         'latitude',
         'longitude',
         'map_query',
