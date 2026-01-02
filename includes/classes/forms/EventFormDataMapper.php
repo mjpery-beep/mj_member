@@ -81,6 +81,7 @@ final class EventFormDataMapper
         $values['volunteer_ids'] = isset($formData['event_volunteer_ids']) && is_array($formData['event_volunteer_ids']) ? array_map('intval', $formData['event_volunteer_ids']) : array();
         $values['allow_guardian_registration'] = !empty($formData['event_allow_guardian_registration']);
         $values['registration_is_free_participation'] = !empty($formData['event_free_participation']);
+        $values['free_participation'] = !empty($formData['event_free_participation']);
         $values['requires_validation'] = !empty($formData['event_requires_validation']);
         $values['capacity_total'] = isset($formData['event_capacity_total']) ? (int) $formData['event_capacity_total'] : $values['capacity_total'];
         $values['capacity_waitlist'] = isset($formData['event_capacity_waitlist']) ? (int) $formData['event_capacity_waitlist'] : $values['capacity_waitlist'];
