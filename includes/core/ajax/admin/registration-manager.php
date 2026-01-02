@@ -234,6 +234,7 @@ function mj_regmgr_build_event_sidebar_item($event, $type_labels = null, $status
         'scheduleMode' => $schedule_mode,
         'scheduleSummary' => isset($schedule_info['summary']) ? $schedule_info['summary'] : '',
         'scheduleDetail' => isset($schedule_info['detail']) ? $schedule_info['detail'] : '',
+        'freeParticipation' => !empty($event->free_participation),
         'occurrenceSelectionMode' => $occurrence_mode,
     );
 }

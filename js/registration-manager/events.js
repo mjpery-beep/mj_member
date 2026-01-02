@@ -150,6 +150,7 @@
         var isFull = event.capacityTotal > 0 && event.registrationsCount >= event.capacityTotal;
         var scheduleSummary = event.scheduleSummary || getScheduleModeLabel(event.scheduleMode, strings);
         var scheduleDetail = event.scheduleDetail || buildScheduleDetailFallback(event, strings);
+        var freeParticipation = !!event.freeParticipation;
 
         return h('div', {
             class: classNames('mj-regmgr-event-card', {
@@ -224,23 +225,39 @@
 
                 // Footer avec inscriptions et prix
                 h('div', { class: 'mj-regmgr-event-card__footer' }, [
-                    h('div', { class: 'mj-regmgr-event-card__registrations' }, [
-                        h('svg', {
-                            class: 'mj-regmgr-event-card__icon',
-                            width: 14,
-                            height: 14,
-                            viewBox: '0 0 24 24',
-                            fill: 'none',
-                            stroke: 'currentColor',
-                            'stroke-width': 2,
-                        }, [
-                            h('path', { d: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' }),
-                            h('circle', { cx: 9, cy: 7, r: 4 }),
-                            h('path', { d: 'M23 21v-2a4 4 0 0 0-3-3.87' }),
-                            h('path', { d: 'M16 3.13a4 4 0 0 1 0 7.75' }),
+                    freeParticipation
+                        ? h('div', { class: 'mj-regmgr-event-card__free-participation' }, [
+                            h('svg', {
+                                class: 'mj-regmgr-event-card__icon',
+                                width: 14,
+                                height: 14,
+                                viewBox: '0 0 24 24',
+                                fill: 'none',
+                                stroke: 'currentColor',
+                                'stroke-width': 2,
+                            }, [
+                                h('path', { d: 'M3 12h18' }),
+                                h('path', { d: 'M12 3v18' }),
+                            ]),
+                            h('span', null, getString(strings, 'eventFreeParticipation', 'Participation libre')),
+                        ])
+                        : h('div', { class: 'mj-regmgr-event-card__registrations' }, [
+                            h('svg', {
+                                class: 'mj-regmgr-event-card__icon',
+                                width: 14,
+                                height: 14,
+                                viewBox: '0 0 24 24',
+                                fill: 'none',
+                                stroke: 'currentColor',
+                                'stroke-width': 2,
+                            }, [
+                                h('path', { d: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' }),
+                                h('circle', { cx: 9, cy: 7, r: 4 }),
+                                h('path', { d: 'M23 21v-2a4 4 0 0 0-3-3.87' }),
+                                h('path', { d: 'M16 3.13a4 4 0 0 1 0 7.75' }),
+                            ]),
+                            h('span', null, capacityText),
                         ]),
-                        h('span', null, capacityText),
-                    ]),
                     event.prix > 0 && h('div', { class: 'mj-regmgr-event-card__price' },
                         event.prix.toFixed(2) + ' €'
                     ),

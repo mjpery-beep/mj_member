@@ -665,6 +665,15 @@ input.mj-regmgr-search-input__field {
     color: var(--regmgr-gray-600);
 }
 
+.mj-regmgr-event-card__free-participation {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--regmgr-primary);
+}
+
 .mj-regmgr-event-card__price {
     font-size: 13px;
     font-weight: 600;
