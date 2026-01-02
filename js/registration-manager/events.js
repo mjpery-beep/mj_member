@@ -26,6 +26,104 @@
     var classNames = Utils.classNames;
     var getString = Utils.getString;
 
+    function getScheduleModeLabel(mode, strings) {
+        var normalized = typeof mode === 'string' ? mode : '';
+        switch (normalized) {
+            case 'range':
+                return getString(strings, 'scheduleModeRangeShort', 'Période continue');
+            case 'recurring':
+                return getString(strings, 'scheduleModeRecurringShort', 'Récurrence');
+            case 'series':
+                return getString(strings, 'scheduleModeSeriesShort', 'Série personnalisée');
+            case 'fixed':
+            default:
+                return getString(strings, 'scheduleModeFixedShort', 'Date unique');
+        }
+    }
+
+    function parseDate(value) {
+        if (!value) {
+            return null;
+        }
+        var date = new Date(value);
+        if (isNaN(date.getTime())) {
+            return null;
+        }
+        return date;
+    }
+
+    function formatCompactDate(date) {
+        if (!date) {
+            return '';
+        }
+        var day = String(date.getDate()).padStart(2, '0');
+        var month = String(date.getMonth() + 1).padStart(2, '0');
+        return day + '/' + month;
+    }
+
+    function formatCompactTime(date) {
+        if (!date) {
+            return '';
+        }
+        var hours = String(date.getHours()).padStart(2, '0');
+        var minutes = String(date.getMinutes()).padStart(2, '0');
+        return hours + ':' + minutes;
+    }
+
+    function formatCompactDateTime(date) {
+        if (!date) {
+            return '';
+        }
+        var datePart = formatCompactDate(date);
+        var timePart = formatCompactTime(date);
+        return datePart && timePart ? datePart + ' ' + timePart : datePart || timePart;
+    }
+
+    function buildScheduleDetailFallback(event, strings) {
+        if (!event) {
+            return '';
+        }
+        var mode = typeof event.scheduleMode === 'string' && event.scheduleMode !== '' ? event.scheduleMode : 'fixed';
+        var start = parseDate(event.dateDebut);
+        var end = parseDate(event.dateFin);
+
+        if (mode === 'range') {
+            var rangeParts = [];
+            var startDate = formatCompactDate(start);
+            var endDate = formatCompactDate(end);
+            if (startDate && endDate) {
+                rangeParts.push(startDate + ' → ' + endDate);
+            } else if (startDate) {
+                rangeParts.push(startDate);
+            }
+            var startTime = formatCompactTime(start);
+            var endTime = formatCompactTime(end);
+            if (startTime && endTime) {
+                rangeParts.push(startTime + ' → ' + endTime);
+            } else if (startTime) {
+                rangeParts.push(startTime);
+            }
+            return rangeParts.join(' · ');
+        }
+
+        if (mode === 'recurring' || mode === 'series') {
+            return start ? formatCompactDateTime(start) : '';
+        }
+
+        var summary = '';
+        if (start) {
+            summary = formatCompactDateTime(start);
+            if (end) {
+                var sameDay = formatCompactDate(start) === formatCompactDate(end);
+                var endPart = sameDay ? formatCompactTime(end) : formatCompactDateTime(end);
+                if (endPart) {
+                    summary += ' → ' + endPart;
+                }
+            }
+        }
+        return summary;
+    }
+
     // ============================================
     // EVENT CARD
     // ============================================
@@ -50,6 +148,8 @@
         }
 
         var isFull = event.capacityTotal > 0 && event.registrationsCount >= event.capacityTotal;
+        var scheduleSummary = event.scheduleSummary || getScheduleModeLabel(event.scheduleMode, strings);
+        var scheduleDetail = event.scheduleDetail || buildScheduleDetailFallback(event, strings);
 
         return h('div', {
             class: classNames('mj-regmgr-event-card', {
@@ -115,6 +215,11 @@
                         h('line', { x1: 3, y1: 10, x2: 21, y2: 10 }),
                     ]),
                     h('span', null, formatShortDate(event.dateDebut)),
+                ]),
+
+                (scheduleSummary || scheduleDetail) && h('div', { class: 'mj-regmgr-event-card__schedule' }, [
+                    scheduleSummary && h('span', { class: 'mj-regmgr-event-card__schedule-summary' }, scheduleSummary),
+                    scheduleDetail && h('span', { class: 'mj-regmgr-event-card__schedule-detail' }, scheduleDetail),
                 ]),
 
                 // Footer avec inscriptions et prix
