@@ -5682,3 +5682,23 @@ input.mj-regmgr-search-input__field {
         justify-self: start;
     }
 }
+
+
+/*============================================
+   Media attachments tweaks
+   ============================================ */
+.media-frame a{
+    font-size: 16px;
+}
+.rml-attachment-filter-folder-selector,
+.attachments-browser .media-toolbar-secondary{
+        max-width: 100% !important;
+    width: 300px;
+    padding-top: 9px;
+}
+.rml-attachment-filter-folder-selector{
+    margin-top: 0 !important;
+}
+.media-attachments-filter-heading{
+    display: none !important;
+}
