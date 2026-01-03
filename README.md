@@ -68,6 +68,23 @@ MJ Member est un module WordPress conçu pour centraliser la gestion des adhére
 
 ## Installation
 
+	![Tableau de bord MJ Member](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202055.png)
+- **Création rapide d'un membre dans l'administration**  
+	![Création rapide d'un membre](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202107.png)
+- **Espace animateur front-end**  
+	![Espace animateur front-end](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202128.png)
+- **Liste des inscriptions événementielles**  
+	![Liste des inscriptions événementielles](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202135.png)
+- **Formulaire d'inscription à un événement**  
+	![Formulaire d'inscription à un événement](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202218.png)
+- **Bloc d'appel à l'action pour un événement**  
+	![Bloc d'appel à l'action pour un événement](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202230.png)
+- **Confirmation d'inscription front-end**  
+	![Confirmation d'inscription front-end](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202259.png)
+- **Calendrier hebdomadaire des heures encodées**  
+	![Calendrier hebdomadaire des heures encodées](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202306.png)
+- **Synthèse des présences animateur**  
+	![Synthèse des présences animateur](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202316.png)
 1. Copiez le dossier `mj-member` dans `/wp-content/plugins/`
 2. Activez le plugin depuis le menu **Extensions** de WordPress
 3. Une fois activé, le menu **Membres** apparaît automatiquement dans votre tableau de bord
