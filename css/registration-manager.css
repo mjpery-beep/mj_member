@@ -4597,9 +4597,69 @@ input.mj-regmgr-search-input__field {
     font-size: 14px;
 }
 
+.mj-regmgr-member-detail__row--guardian {
+    flex-wrap: wrap;
+    gap: 14px;
+}
+
 .mj-regmgr-member-detail__row svg {
     flex-shrink: 0;
     color: var(--regmgr-gray-400);
+}
+
+.mj-regmgr-guardian {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 220px;
+}
+
+.mj-regmgr-guardian__info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.mj-regmgr-guardian__label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--regmgr-gray-500);
+}
+
+.mj-regmgr-guardian__name {
+    font-weight: 600;
+    color: var(--regmgr-gray-800);
+}
+
+.mj-regmgr-guardian__edit-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: var(--regmgr-radius);
+    background: var(--regmgr-gray-100);
+    color: var(--regmgr-gray-600);
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    text-decoration: none;
+    transition: background-color var(--regmgr-transition), color var(--regmgr-transition), box-shadow var(--regmgr-transition);
+}
+
+.mj-regmgr-guardian__edit-link:hover,
+.mj-regmgr-guardian__edit-link:focus {
+    background: var(--regmgr-primary-light);
+    color: var(--regmgr-primary);
+    box-shadow: 0 8px 18px rgba(59, 130, 246, 0.2);
+}
+
+.mj-regmgr-guardian__edit-link svg {
+    width: 14px;
+    height: 14px;
 }
 
 .mj-regmgr-member-detail__actions {
@@ -5093,7 +5153,58 @@ input.mj-regmgr-search-input__field {
     grid-column: 1 / -1;
 }
 
-.mj-regmgr-member-detail__membership-row {
+.mj-regmgr-member-detail__membership {
+    display: grid;
+    gap: 24px;
+    padding: 24px;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius-lg);
+    background: #fff;
+    box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
+}
+
+@media (min-width: 1024px) {
+    .mj-regmgr-member-detail__membership {
+        grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+        align-items: start;
+    }
+}
+
+.mj-regmgr-member-detail__membership-main {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.mj-regmgr-member-detail__membership-item {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px 20px;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: 18px;
+    background: var(--regmgr-gray-50);
+}
+
+.mj-regmgr-member-detail__membership-item--subscription {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(59, 130, 246, 0.02));
+    border-color: rgba(59, 130, 246, 0.35);
+}
+
+.mj-regmgr-member-detail__membership-item--communication {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.02));
+    border-color: rgba(16, 185, 129, 0.28);
+}
+
+.mj-regmgr-member-detail__status-label {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--regmgr-gray-500);
+}
+
+.mj-regmgr-member-detail__membership-info {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
@@ -5102,8 +5213,141 @@ input.mj-regmgr-search-input__field {
 
 .mj-regmgr-member-detail__membership-actions {
     display: flex;
+    align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+}
+
+.mj-regmgr-member-detail__membership-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+@media (min-width: 1024px) {
+    .mj-regmgr-member-detail__membership-meta {
+        padding-left: 24px;
+        border-left: 1px solid var(--regmgr-gray-200);
+    }
+}
+
+.mj-regmgr-member-detail__meta-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 16px;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius);
+    background: #fff;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+}
+
+.mj-regmgr-member-detail__meta-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--regmgr-gray-500);
+    font-weight: 600;
+}
+
+.mj-regmgr-member-detail__meta-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--regmgr-gray-900);
+}
+
+@media (max-width: 767px) {
+    .mj-regmgr-member-detail__membership {
+        padding: 20px;
+    }
+
+    .mj-regmgr-member-detail__membership-item {
+        padding: 16px;
+    }
+}
+
+.mj-regmgr-communication-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.mj-regmgr-communication-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px 8px 12px;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: 999px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    transition: border-color var(--regmgr-transition), background-color var(--regmgr-transition), box-shadow var(--regmgr-transition), transform var(--regmgr-transition);
+}
+
+.mj-regmgr-communication-item:hover,
+.mj-regmgr-communication-item:focus-within {
+    border-color: var(--regmgr-gray-300);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+    transform: translateY(-1px);
+}
+
+.mj-regmgr-communication-item__icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--regmgr-gray-200);
+    color: var(--regmgr-gray-600);
+    transition: background-color var(--regmgr-transition), color var(--regmgr-transition);
+}
+
+.mj-regmgr-communication-item__icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.mj-regmgr-communication-item__label {
+    font-weight: 600;
+    color: var(--regmgr-gray-700);
+}
+
+.mj-regmgr-communication-item__state {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.mj-regmgr-communication-item--enabled {
+    border-color: rgba(16, 185, 129, 0.4);
+    background: var(--regmgr-success-light);
+}
+
+.mj-regmgr-communication-item--enabled .mj-regmgr-communication-item__icon {
+    background: var(--regmgr-success);
+    color: #fff;
+}
+
+.mj-regmgr-communication-item--enabled .mj-regmgr-communication-item__state {
+    color: var(--regmgr-success);
+}
+
+.mj-regmgr-communication-item--disabled {
+    border-color: var(--regmgr-gray-200);
+    background: var(--regmgr-gray-50);
+}
+
+.mj-regmgr-communication-item--disabled .mj-regmgr-communication-item__icon {
+    background: var(--regmgr-gray-200);
+    color: var(--regmgr-gray-500);
+}
+
+.mj-regmgr-communication-item--disabled .mj-regmgr-communication-item__state {
+    color: var(--regmgr-gray-500);
 }
 
 /* ============================================

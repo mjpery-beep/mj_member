@@ -208,6 +208,9 @@
         var onUpdatePhoto = typeof props.onUpdatePhoto === 'function' ? props.onUpdatePhoto : null;
         var onDeletePhoto = typeof props.onDeletePhoto === 'function' ? props.onDeletePhoto : null;
         var onDeleteMessage = typeof props.onDeleteMessage === 'function' ? props.onDeleteMessage : null;
+        var onOpenMember = typeof props.onOpenMember === 'function' ? props.onOpenMember : null;
+        var pendingEditRequest = props.pendingEditRequest || null;
+        var onPendingEditHandled = typeof props.onPendingEditHandled === 'function' ? props.onPendingEditHandled : null;
 
         var _editMode = useState(false);
         var editMode = _editMode[0];
@@ -317,6 +320,24 @@
             }
         }, [member ? member.id : null]);
 
+        useEffect(function () {
+            if (!pendingEditRequest || !member) {
+                return;
+            }
+            if (pendingEditRequest.memberId !== member.id) {
+                return;
+            }
+            setEditMode(true);
+            if (onPendingEditHandled) {
+                onPendingEditHandled();
+            }
+        }, [
+            pendingEditRequest ? pendingEditRequest.memberId : null,
+            pendingEditRequest ? pendingEditRequest.requestId : null,
+            member ? member.id : null,
+            onPendingEditHandled,
+        ]);
+
         if (loading) {
             return h('div', { class: 'mj-regmgr-member-detail mj-regmgr-member-detail--loading' }, [
                 h('div', { class: 'mj-regmgr-loading' }, [
@@ -374,6 +395,22 @@
 
         var communicationEnabledLabel = getString(strings, 'communicationEnabled', 'Activé');
         var communicationDisabledLabel = getString(strings, 'communicationDisabled', 'Désactivé');
+
+        var guardian = member.guardian;
+        var guardianEditUrl = guardian && guardian.id && config && config.adminMemberUrl
+            ? config.adminMemberUrl + guardian.id
+            : null;
+        var canEditGuardianInline = !!(guardian && guardian.id && onOpenMember);
+        var handleGuardianEditClick = useCallback(function () {
+            if (!guardian || !guardian.id) {
+                return;
+            }
+            if (onOpenMember) {
+                onOpenMember(guardian, { edit: true });
+            } else if (guardianEditUrl) {
+                window.open(guardianEditUrl, '_blank', 'noopener');
+            }
+        }, [guardian, onOpenMember, guardianEditUrl]);
 
         var handleFieldChange = function (field) {
             return function (e) {
@@ -920,14 +957,44 @@
                                     age !== null && ' (' + age + ' ans)',
                                 ]),
                             ]),
-                            member.guardianName && h('div', { class: 'mj-regmgr-member-detail__row' }, [
+                            member.guardianName && h('div', { class: 'mj-regmgr-member-detail__row mj-regmgr-member-detail__row--guardian' }, [
                                 h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
                                     h('path', { d: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' }),
                                     h('circle', { cx: 9, cy: 7, r: 4 }),
                                     h('path', { d: 'M23 21v-2a4 4 0 0 0-3-3.87' }),
                                     h('path', { d: 'M16 3.13a4 4 0 0 1 0 7.75' }),
                                 ]),
-                                h('span', null, 'Tuteur: ' + member.guardianName),
+                                h('div', { class: 'mj-regmgr-guardian' }, [
+                                    guardian ? h(MemberAvatar, { member: guardian, size: 'small' }) : null,
+                                    h('div', { class: 'mj-regmgr-guardian__info' }, [
+                                        h('span', { class: 'mj-regmgr-guardian__label' }, 'Tuteur référent'),
+                                        h('span', { class: 'mj-regmgr-guardian__name' }, member.guardianName),
+                                    ]),
+                                ]),
+                                canEditGuardianInline
+                                    ? h('button', {
+                                        type: 'button',
+                                        class: 'mj-regmgr-guardian__edit-link',
+                                        onClick: handleGuardianEditClick,
+                                    }, [
+                                        h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                            h('path', { d: 'M12 20h9' }),
+                                            h('path', { d: 'M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z' }),
+                                        ]),
+                                        h('span', null, 'Modifier'),
+                                    ])
+                                    : guardianEditUrl && h('a', {
+                                        class: 'mj-regmgr-guardian__edit-link',
+                                        href: guardianEditUrl,
+                                        target: '_blank',
+                                        rel: 'noopener noreferrer',
+                                    }, [
+                                        h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                            h('path', { d: 'M12 20h9' }),
+                                            h('path', { d: 'M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z' }),
+                                        ]),
+                                        h('span', null, 'Modifier'),
+                                    ]),
                             ]),
                         ]),
                     ],
@@ -992,14 +1059,29 @@
                             communicationChips.length > 0 && h('div', { class: 'mj-regmgr-member-detail__membership-item mj-regmgr-member-detail__membership-item--communication' }, [
                                 h('span', { class: 'mj-regmgr-member-detail__status-label' }, 'Communication'),
                                 h('ul', { class: 'mj-regmgr-communication-list' }, communicationChips.map(function (chip) {
+                                    var isEnabled = !!chip.enabled;
+                                    var chipStateLabel = isEnabled ? communicationEnabledLabel : communicationDisabledLabel;
                                     return h('li', {
                                         key: chip.key,
                                         class: classNames('mj-regmgr-communication-item', {
-                                            'mj-regmgr-communication-item--disabled': !chip.enabled,
+                                            'mj-regmgr-communication-item--enabled': isEnabled,
+                                            'mj-regmgr-communication-item--disabled': !isEnabled,
                                         }),
+                                        title: chip.label + ' · ' + chipStateLabel,
+                                        'aria-label': chip.label + ' : ' + chipStateLabel,
                                     }, [
+                                        h('span', { class: 'mj-regmgr-communication-item__icon', 'aria-hidden': 'true' }, [
+                                            isEnabled
+                                                ? h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                    h('polyline', { points: '5 13 9 17 19 7' }),
+                                                ])
+                                                : h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                    h('line', { x1: 18, y1: 6, x2: 6, y2: 18 }),
+                                                    h('line', { x1: 6, y1: 6, x2: 18, y2: 18 }),
+                                                ]),
+                                        ]),
                                         h('span', { class: 'mj-regmgr-communication-item__label' }, chip.label),
-                                        h('span', { class: 'mj-regmgr-communication-item__state' }, chip.enabled ? communicationEnabledLabel : communicationDisabledLabel),
+                                        h('span', { class: 'mj-regmgr-communication-item__state' }, chipStateLabel),
                                     ]);
                                 })),
                             ]),

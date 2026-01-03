@@ -196,6 +196,7 @@
                         previousWeek: 'Semaine précédente',
                         nextWeek: 'Semaine suivante',
                         today: 'Aujourd’hui',
+                        currentTime: 'Maintenant',
                         calendarTitle: 'Calendrier',
                         calendarPrevious: 'Mois précédent',
                         calendarNext: 'Mois suivant',
@@ -353,6 +354,80 @@
                         return max;
                     }
                     return value;
+                }
+
+                function resolveCurrentTimeMeta(timezone, locale) {
+                    var safeLocale = locale || 'fr';
+                    var now = new Date();
+                    var baseOptions = {
+                        hour12: false,
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    };
+                    var partsFormatter;
+                    try {
+                        var partsOptions = Object.assign({}, baseOptions);
+                        if (timezone) {
+                            partsOptions.timeZone = timezone;
+                        }
+                        partsFormatter = new Intl.DateTimeFormat('en-CA', partsOptions);
+                    } catch (error) {
+                        partsFormatter = new Intl.DateTimeFormat('en-CA', baseOptions);
+                    }
+
+                    var parts;
+                    try {
+                        parts = partsFormatter.formatToParts(now);
+                    } catch (formatError) {
+                        parts = [];
+                    }
+
+                    var values = { year: '', month: '', day: '', hour: '00', minute: '00', second: '00' };
+                    parts.forEach(function(part) {
+                        if (Object.prototype.hasOwnProperty.call(values, part.type)) {
+                            values[part.type] = part.value;
+                        }
+                    });
+
+                    if (values.year === '' || values.month === '' || values.day === '') {
+                        values.year = String(now.getFullYear());
+                        values.month = pad(now.getMonth() + 1);
+                        values.day = pad(now.getDate());
+                    }
+
+                    var parsedHour = parseInt(values.hour, 10);
+                    var parsedMinute = parseInt(values.minute, 10);
+                    var parsedSecond = parseInt(values.second, 10);
+                    var hours = Number.isFinite(parsedHour) ? clamp(parsedHour, 0, 23) : 0;
+                    var minutes = Number.isFinite(parsedMinute) ? clamp(parsedMinute, 0, 59) : 0;
+                    var seconds = Number.isFinite(parsedSecond) ? clamp(parsedSecond, 0, 59) : 0;
+                    var totalMinutes = hours * 60 + minutes + (seconds / 60);
+
+                    var isoDate = values.year + '-' + values.month + '-' + values.day;
+                    if (!isoDate || isoDate.length !== 10) {
+                        isoDate = toISODate(startOfDay(now));
+                    }
+
+                    var timeFormatterOptions = { hour: '2-digit', minute: '2-digit' };
+                    if (timezone) {
+                        timeFormatterOptions.timeZone = timezone;
+                    }
+                    var formattedTime;
+                    try {
+                        formattedTime = getFormatter(safeLocale, timeFormatterOptions).format(now);
+                    } catch (formatError) {
+                        formattedTime = pad(hours) + ':' + pad(minutes);
+                    }
+
+                    return {
+                        isoDate: isoDate,
+                        totalMinutes: totalMinutes,
+                        formattedTime: formattedTime
+                    };
                 }
 
                 function capitalize(text) {
@@ -1489,6 +1564,44 @@
                         var scrollbarState = hooks.useState(0);
                         var scrollbarWidth = scrollbarState[0]; 
                         var setScrollbarWidth = scrollbarState[1]; 
+                        var locale = props.locale || 'fr';
+                        var timezone = typeof props.timezone === 'string' && props.timezone !== '' ? props.timezone : null;
+                        var accentColor = resolveAccentColor(props.accentColor, '#ef4444');
+
+                        var computeCurrentTime = hooks.useCallback(function() {
+                            return resolveCurrentTimeMeta(timezone, locale);
+                        }, [timezone, locale]);
+
+                        var currentTimeState = hooks.useState(function() {
+                            return computeCurrentTime();
+                        });
+                        var currentTime = currentTimeState[0];
+                        var setCurrentTime = currentTimeState[1];
+
+                        hooks.useEffect(function() {
+                            var initial = computeCurrentTime();
+                            if (initial) {
+                                setCurrentTime(initial);
+                            }
+                            if (typeof window === 'undefined') {
+                                return function() {};
+                            }
+                            var intervalId = window.setInterval(function() {
+                                setCurrentTime(function(previous) {
+                                    var candidate = computeCurrentTime();
+                                    if (!candidate) {
+                                        return previous || null;
+                                    }
+                                    if (previous && previous.isoDate === candidate.isoDate && Math.abs(previous.totalMinutes - candidate.totalMinutes) < 0.01) {
+                                        return previous;
+                                    }
+                                    return candidate;
+                                });
+                            }, 30000);
+                            return function() {
+                                window.clearInterval(intervalId);
+                            };
+                        }, [computeCurrentTime, setCurrentTime]);
 
                         var rangeStart = HOURS_START * 60;
                         var rangeEnd = HOURS_END * 60;
@@ -2636,6 +2749,37 @@
                                     className: previewClass,
                                     style: previewStyle
                                 }));
+                            }
+
+                            if (currentTime && currentTime.isoDate === day.iso && Number.isFinite(currentTime.totalMinutes)) {
+                                var indicatorMinutes = currentTime.totalMinutes;
+                                if (indicatorMinutes >= rangeStart && indicatorMinutes <= rangeEnd) {
+                                    var indicatorTop = (indicatorMinutes - rangeStart) / MINUTES_PER_PIXEL;
+                                    var indicatorColor = accentColor;
+                                    var indicatorStyle = {
+                                        top: indicatorTop + 'px',
+                                        '--current-time-color': indicatorColor
+                                    };
+                                    var labelStyle = {
+                                        color: indicatorColor,
+                                        borderColor: hexToRgba(indicatorColor, 0.32),
+                                        boxShadow: '0 6px 18px ' + hexToRgba(indicatorColor, 0.15)
+                                    };
+                                    var indicatorAria = (labels.currentTime || 'Maintenant') + ' ' + currentTime.formattedTime;
+                                    canvasChildren.push(h('div', {
+                                        key: 'current-time-indicator',
+                                        className: 'mj-hour-encode-calendar__current-time',
+                                        style: indicatorStyle,
+                                        role: 'note',
+                                        'aria-label': indicatorAria
+                                    }, [
+                                        h('span', {
+                                            key: 'current-time-label',
+                                            className: 'mj-hour-encode-calendar__current-time-label',
+                                            style: labelStyle
+                                        }, currentTime.formattedTime)
+                                    ]));
+                                }
                             }
 
                             var hourLabels = props.hourMarks.map(function(mark, index) {
@@ -6458,6 +6602,9 @@
                                         hasEvents: calendarHasEvents,
                                         emptyLabel: config.labels.noEvents,
                                         labels: config.labels,
+                                        locale: config.locale,
+                                        timezone: config.timezone,
+                                        accentColor: config.accentColor,
                                         workSchedule: config.workSchedule,
                                         onSlotSelect: handleSlotSelect,
                                         onEntrySelect: handleEntrySelect,

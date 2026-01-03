@@ -320,6 +320,7 @@ $config = array(
         'previousWeek' => __('Semaine précédente', 'mj-member'),
         'nextWeek' => __('Semaine suivante', 'mj-member'),
         'today' => __('Aujourd’hui', 'mj-member'),
+        'currentTime' => __('Maintenant', 'mj-member'),
         'totalWeek' => __('Total semaine', 'mj-member'),
         'totalMonth' => __('Total mois', 'mj-member'),
         'totalYear' => __('Total année', 'mj-member'),

@@ -742,6 +742,9 @@
         var _selectedMember = useState(null);
         var selectedMember = _selectedMember[0];
         var setSelectedMember = _selectedMember[1];
+        var _pendingMemberEdit = useState(null);
+        var pendingMemberEdit = _pendingMemberEdit[0];
+        var setPendingMemberEdit = _pendingMemberEdit[1];
 
         var _memberDetails = useState(null);
         var memberDetails = _memberDetails[0];
@@ -1480,6 +1483,7 @@
         var handleSidebarModeChange = useCallback(function (mode) {
             setSidebarMode(mode);
             setMobileShowDetails(false);
+            setPendingMemberEdit(null);
             
             if (mode === 'events') {
                 setSelectedMember(null);
@@ -1580,15 +1584,27 @@
                 });
         }, [api, showSuccess, showError, loadMemberDetails]);
 
-        var handleViewMemberFromRegistration = useCallback(function (member) {
+        var handleConsumePendingMemberEdit = useCallback(function () {
+            setPendingMemberEdit(null);
+        }, []);
+
+        var handleViewMemberFromRegistration = useCallback(function (member, options) {
             if (!member || !member.id) {
                 return;
             }
             setSidebarMode('members');
             setSelectedEvent(null);
             setEventDetails(null);
+            if (options && options.edit === true) {
+                setPendingMemberEdit({
+                    memberId: member.id,
+                    requestId: Date.now(),
+                });
+            } else {
+                setPendingMemberEdit(null);
+            }
             handleSelectMember(member);
-        }, [handleSelectMember, setSelectedEvent, setEventDetails]);
+        }, [handleSelectMember, setSelectedEvent, setEventDetails, setSidebarMode, setPendingMemberEdit]);
 
         // Mettre à jour un membre
         var handleUpdateMember = useCallback(function (memberId, data) {
@@ -1991,6 +2007,8 @@
                     onLoadMoreMembers: function () { loadMembers(membersPagination.page + 1); },
                     hasMoreMembers: membersPagination.page < membersPagination.totalPages,
                     membersLoadingMore: false,
+                    canCreateMember: !!config.allowCreateMember,
+                    onCreateMember: config.allowCreateMember ? createMemberModal.open : null,
 
                     strings: strings,
                     title: config.title || 'Événements',
@@ -2143,6 +2161,9 @@
                             onUpdateIdea: handleUpdateMemberIdea,
                             onUpdatePhoto: handleUpdateMemberPhoto,
                             onDeletePhoto: handleDeleteMemberPhoto,
+                            onOpenMember: handleViewMemberFromRegistration,
+                            pendingEditRequest: pendingMemberEdit,
+                            onPendingEditHandled: handleConsumePendingMemberEdit,
                             onDeleteMessage: handleDeleteMemberMessage,
                         }),
                     ]),

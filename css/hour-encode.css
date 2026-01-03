@@ -947,6 +947,57 @@
     border-style: dashed;
 }
 
+.mj-hour-encode-calendar__current-time {
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    height: 0;
+    pointer-events: none;
+    z-index: 90;
+    transform: translateY(-1px);
+    --current-time-color: #ef4444;
+}
+
+.mj-hour-encode-calendar__current-time::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    border-top: 2px dashed var(--current-time-color);
+    opacity: 0.9;
+}
+
+.mj-hour-encode-calendar__current-time::after {
+    content: '';
+    position: absolute;
+    top: -6px;
+    left: -9px;
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    background: var(--current-time-color);
+    box-shadow: 0 0 0 2px #ffffff, 0 2px 8px rgba(17, 38, 94, 0.22);
+}
+
+.mj-hour-encode-calendar__current-time-label {
+    position: absolute;
+    right: 0;
+    top: -14px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid transparent;
+    color: var(--current-time-color);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    box-shadow: 0 6px 16px rgba(17, 38, 94, 0.12);
+    pointer-events: none;
+    white-space: nowrap;
+}
+
 .mj-hour-encode-calendar__event-tooltip-time {
     font-size: 14px;
     font-weight: 700;
@@ -2089,5 +2140,20 @@
 
     .mj-hour-encode-calendar__day-canvas {
         padding: 0 8px 12px;
+    }
+
+    .mj-hour-encode-calendar__current-time {
+        left: 4px;
+        right: 4px;
+    }
+
+    .mj-hour-encode-calendar__current-time::after {
+        left: -8px;
+    }
+
+    .mj-hour-encode-calendar__current-time-label {
+        top: -12px;
+        padding: 2px 6px;
+        font-size: 10px;
     }
 }

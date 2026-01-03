@@ -1638,7 +1638,7 @@ function mj_regmgr_create_quick_member() {
 
     if ($email !== '') {
         // Check if email already exists
-        $existing = MjMembers::get_by_email($email);
+        $existing = MjMembers::getByEmail($email);
         if ($existing) {
             wp_send_json_error(array('message' => __('Un membre avec cet email existe déjà.', 'mj-member')));
             return;
@@ -3412,13 +3412,33 @@ function mj_regmgr_get_member_details() {
         'whatsappOptIn' => isset($memberData->whatsapp_opt_in) ? !empty($memberData->whatsapp_opt_in) : true,
         'photoUsageConsent' => (bool) $memberData->get('photo_usage_consent', 0),
         'photoId' => $memberData->get('photo_id', null),
+        'guardian' => null,
     );
 
     // Add guardian info if exists
     if (!empty($memberData->guardian_id)) {
         $guardian = MjMembers::getById((int) $memberData->guardian_id);
         if ($guardian) {
+            $guardian_role = $guardian->role ?? '';
+            $guardian_role_label = '';
+
+            if ($guardian_role !== '' && isset($role_labels[$guardian_role])) {
+                $guardian_role_label = $role_labels[$guardian_role];
+            } elseif ($guardian_role !== '') {
+                $guardian_role_label = ucfirst($guardian_role);
+            }
+
             $member['guardianName'] = trim(($guardian->first_name ?? '') . ' ' . ($guardian->last_name ?? ''));
+            $member['guardian'] = array(
+                'id' => (int) $guardian->id,
+                'firstName' => $guardian->first_name ?? '',
+                'lastName' => $guardian->last_name ?? '',
+                'avatarUrl' => mj_regmgr_get_member_avatar_url((int) $guardian->id),
+                'role' => $guardian_role,
+                'roleLabel' => $guardian_role_label,
+                'email' => $guardian->email ?? '',
+                'phone' => $guardian->phone ?? '',
+            );
         }
     }
 

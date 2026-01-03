@@ -365,6 +365,8 @@
         var onCreateEvent = typeof props.onCreateEvent === 'function' ? props.onCreateEvent : null;
         var createEventLoading = !!props.createEventLoading;
         var canCreateEvent = !!props.canCreateEvent && (onCreateEvent || (typeof createEventUrl === 'string' && createEventUrl !== ''));
+        var onCreateMember = typeof props.onCreateMember === 'function' ? props.onCreateMember : null;
+        var canCreateMember = !!props.canCreateMember && !!onCreateMember;
 
         // Props for members mode
         var sidebarMode = props.sidebarMode || 'events';
@@ -497,6 +499,29 @@
                         ]),
                         h('span', null, getString(strings, 'addEvent', 'Ajouter un événement')),
                     ]),
+            ]),
+
+            sidebarMode === 'members' && canCreateMember && h('div', { class: 'mj-regmgr-sidebar__actions' }, [
+                h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--primary mj-btn--block',
+                    onClick: function () {
+                        onCreateMember();
+                    },
+                }, [
+                    h('svg', {
+                        width: 16,
+                        height: 16,
+                        viewBox: '0 0 24 24',
+                        fill: 'none',
+                        stroke: 'currentColor',
+                        'stroke-width': 2,
+                    }, [
+                        h('line', { x1: 12, y1: 5, x2: 12, y2: 19 }),
+                        h('line', { x1: 5, y1: 12, x2: 19, y2: 12 }),
+                    ]),
+                    h('span', null, getString(strings, 'addMember', 'Ajouter un membre')),
+                ]),
             ]),
 
             // Recherche

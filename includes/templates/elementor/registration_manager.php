@@ -418,6 +418,7 @@ $config_json = wp_json_encode(array(
         'deleteEventLoading' => __('Suppression...', 'mj-member'),
         'eventDeleted' => __('Événement supprimé.', 'mj-member'),
         'addEvent' => __('Ajouter un événement', 'mj-member'),
+        'addMember' => __('Ajouter un membre', 'mj-member'),
         'eventDate' => __('Date', 'mj-member'),
         'eventLocation' => __('Lieu', 'mj-member'),
         'eventCapacity' => __('Capacité', 'mj-member'),
