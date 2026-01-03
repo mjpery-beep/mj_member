@@ -27,6 +27,7 @@ class MjEventSchedule {
             'since' => null,
             'until' => null,
             'include_past' => true,
+            'ignore_persisted' => false,
         );
         $args = wp_parse_args($args, $defaults);
 
@@ -35,7 +36,10 @@ class MjEventSchedule {
             $mode = 'fixed';
         }
 
-        $occurrences = self::load_persisted_occurrences($event, $mode);
+        $occurrences = array();
+        if (empty($args['ignore_persisted'])) {
+            $occurrences = self::load_persisted_occurrences($event, $mode, $args);
+        }
         if (empty($occurrences)) {
             $occurrences = self::build_occurrences_from_schedule($event, $mode, $args);
         }
@@ -133,7 +137,7 @@ class MjEventSchedule {
      * @param string $mode
      * @return array<int,array<string,mixed>>
      */
-    private static function load_persisted_occurrences($event, $mode) {
+    private static function load_persisted_occurrences($event, $mode, array $args) {
         if (!isset($event->id) || !class_exists('Mj\\Member\\Classes\\Crud\\MjEventOccurrences')) {
             return array();
         }
@@ -141,6 +145,13 @@ class MjEventSchedule {
         $event_id = (int) $event->id;
         if ($event_id <= 0) {
             return array();
+        }
+
+        if ($mode === 'recurring') {
+            $payload = self::resolve_payload($event);
+            if (self::has_weekday_time_overrides($payload)) {
+                return array();
+            }
         }
 
         $rows = MjEventOccurrences::get_for_event($event_id);
@@ -401,8 +412,40 @@ class MjEventSchedule {
         }
         ksort($weekdays);
 
-        $start_time = self::extract_time_parts($first_start);
-        $end_time = self::extract_time_parts($first_end);
+        $default_start_time = self::extract_time_parts($first_start);
+        $default_end_time = self::extract_time_parts($first_end);
+        $default_duration_seconds = max(3600, max(0, $first_end->getTimestamp() - $first_start->getTimestamp()));
+
+        $weekday_time_overrides = array();
+        if (!empty($payload['weekday_times']) && is_array($payload['weekday_times'])) {
+            foreach ($payload['weekday_times'] as $weekday_key => $time_info) {
+                $weekday_key = sanitize_key($weekday_key);
+                $weekday_num = self::weekday_to_number($weekday_key);
+                if ($weekday_num === null || !is_array($time_info)) {
+                    continue;
+                }
+
+                $override = array();
+
+                if (isset($time_info['start'])) {
+                    $start_parts = self::time_string_to_parts($time_info['start']);
+                    if ($start_parts !== null) {
+                        $override['start'] = $start_parts;
+                    }
+                }
+
+                if (isset($time_info['end'])) {
+                    $end_parts = self::time_string_to_parts($time_info['end']);
+                    if ($end_parts !== null) {
+                        $override['end'] = $end_parts;
+                    }
+                }
+
+                if (!empty($override)) {
+                    $weekday_time_overrides[$weekday_num] = $override;
+                }
+            }
+        }
 
         $start_of_week = clone $first_start;
         $start_of_week->setTime(0, 0, 0);
@@ -420,7 +463,12 @@ class MjEventSchedule {
             foreach ($weekdays as $weekday_num) {
                 $occurrence_start = clone $current_week;
                 $occurrence_start->modify('+' . ($weekday_num - 1) . ' days');
-                $occurrence_start->setTime($start_time['hour'], $start_time['minute'], $start_time['second']);
+                $start_parts = $default_start_time;
+                if (isset($weekday_time_overrides[$weekday_num]['start'])) {
+                    $start_parts = $weekday_time_overrides[$weekday_num]['start'];
+                }
+
+                $occurrence_start->setTime($start_parts['hour'], $start_parts['minute'], $start_parts['second']);
 
                 if ($occurrence_start < $first_start) {
                     continue;
@@ -430,9 +478,21 @@ class MjEventSchedule {
                 }
 
                 $occurrence_end = clone $occurrence_start;
-                $occurrence_end->setTime($end_time['hour'], $end_time['minute'], $end_time['second']);
+                $end_parts = $default_end_time;
+                $has_end_override = false;
+                if (isset($weekday_time_overrides[$weekday_num]['end'])) {
+                    $end_parts = $weekday_time_overrides[$weekday_num]['end'];
+                    $has_end_override = true;
+                }
+
+                $occurrence_end->setTime($end_parts['hour'], $end_parts['minute'], $end_parts['second']);
                 if ($occurrence_end <= $occurrence_start) {
-                    $occurrence_end->modify('+1 hour');
+                    $occurrence_end = clone $occurrence_start;
+                    if ($has_end_override) {
+                        $occurrence_end->modify('+1 hour');
+                    } else {
+                        $occurrence_end->modify('+' . $default_duration_seconds . ' seconds');
+                    }
                 }
 
                 $occurrences[] = self::format_occurrence($occurrence_start, $occurrence_end, 'recurring');
@@ -688,6 +748,29 @@ class MjEventSchedule {
     }
 
     /**
+     * @param mixed $time
+     * @return array<string,int>|null
+     */
+    private static function time_string_to_parts($time) {
+        $time = trim((string) $time);
+        if ($time === '') {
+            return null;
+        }
+
+        $normalized = self::ensure_time_format($time);
+        $segments = explode(':', $normalized);
+        if (count($segments) !== 3) {
+            return null;
+        }
+
+        return array(
+            'hour' => (int) $segments[0],
+            'minute' => (int) $segments[1],
+            'second' => (int) $segments[2],
+        );
+    }
+
+    /**
      * @param string $weekday
      * @return int|null
      */
@@ -704,6 +787,30 @@ class MjEventSchedule {
 
         $weekday = strtolower($weekday);
         return isset($map[$weekday]) ? $map[$weekday] : null;
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     * @return bool
+     */
+    private static function has_weekday_time_overrides(array $payload) {
+        if (empty($payload['weekday_times']) || !is_array($payload['weekday_times'])) {
+            return false;
+        }
+
+        foreach ($payload['weekday_times'] as $time_info) {
+            if (!is_array($time_info)) {
+                continue;
+            }
+
+            $start = isset($time_info['start']) ? trim((string) $time_info['start']) : '';
+            $end = isset($time_info['end']) ? trim((string) $time_info['end']) : '';
+            if ($start !== '' || $end !== '') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

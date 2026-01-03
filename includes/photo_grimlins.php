@@ -285,8 +285,16 @@ if (!function_exists('mj_member_photo_grimlins_ajax_generate')) {
             wp_send_json_error(array('message' => __('Requête invalide. Recharge la page puis réessaie.', 'mj-member')), 403);
         }
 
-        $members_only_flag = isset($_POST['membersOnly']) ? (string) wp_unslash($_POST['membersOnly']) : '';
-        $enforce_limit = $members_only_flag === '1';
+        $access_scope_raw = isset($_POST['accessScope']) ? sanitize_key((string) wp_unslash($_POST['accessScope'])) : '';
+        $access_scope = $access_scope_raw === 'public' ? 'public' : 'members';
+        $access_nonce = isset($_POST['accessNonce']) ? sanitize_text_field(wp_unslash($_POST['accessNonce'])) : '';
+
+        $expected_scope_action = 'mj_member_photo_grimlins_scope_' . $access_scope;
+        if ($access_nonce === '' || !wp_verify_nonce($access_nonce, $expected_scope_action)) {
+            wp_send_json_error(array('message' => __('La session a expiré. Merci de recharger la page.', 'mj-member')), 400);
+        }
+
+        $enforce_limit = ($access_scope !== 'public');
         $is_logged_in = is_user_logged_in();
 
         $history_size = apply_filters('mj_member_photo_grimlins_history_size', 'medium');

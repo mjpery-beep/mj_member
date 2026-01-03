@@ -19,6 +19,9 @@ $members_only = !empty($template_data['members_only']);
 $can_apply_avatar = false;
 $show_history = $members_only && !$is_preview && is_user_logged_in();
 
+$access_scope = $members_only ? 'members' : 'public';
+$access_nonce = wp_create_nonce('mj_member_photo_grimlins_scope_' . $access_scope);
+
 if ($members_only && !$is_preview && is_user_logged_in() && function_exists('mj_member_get_current_member')) {
     $member_candidate = mj_member_get_current_member();
     $can_apply_avatar = $member_candidate && !empty($member_candidate->id);
@@ -32,6 +35,8 @@ if ($members_only && !is_user_logged_in() && !$is_preview) {
 $config = array(
     'isPreview' => $is_preview,
     'membersOnly' => $members_only,
+    'accessScope' => $access_scope,
+    'accessNonce' => $access_nonce,
     'canApplyAvatar' => $can_apply_avatar,
 );
 

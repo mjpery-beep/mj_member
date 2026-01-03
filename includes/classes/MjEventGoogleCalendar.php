@@ -328,12 +328,42 @@ class MjEventGoogleCalendar {
                 continue;
             }
 
-            $occurrences = MjEventSchedule::get_occurrences($schedule_event, array(
+            $occurrence_args = array(
                 'max' => 180,
                 'since' => $since,
                 'until' => $until,
                 'include_past' => false,
-            ));
+            );
+
+            if (!empty($schedule_event['schedule_payload']) && is_array($schedule_event['schedule_payload'])) {
+                foreach ($schedule_event['schedule_payload'] as $key => $value) {
+                    if ($key !== 'weekday_times' || !is_array($value)) {
+                        continue;
+                    }
+
+                    $has_overrides = false;
+                    foreach ($value as $time_info) {
+                        if (!is_array($time_info)) {
+                            continue;
+                        }
+
+                        $start = isset($time_info['start']) ? trim((string) $time_info['start']) : '';
+                        $end = isset($time_info['end']) ? trim((string) $time_info['end']) : '';
+                        if ($start !== '' || $end !== '') {
+                            $has_overrides = true;
+                            break;
+                        }
+                    }
+
+                    if ($has_overrides) {
+                        $occurrence_args['ignore_persisted'] = true;
+                    }
+
+                    break;
+                }
+            }
+
+            $occurrences = MjEventSchedule::get_occurrences($schedule_event, $occurrence_args);
 
             if (empty($occurrences)) {
                 continue;

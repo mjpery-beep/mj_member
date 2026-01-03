@@ -40,6 +40,19 @@
         return {};
     }
 
+    function resolveAccessScope(config) {
+        if (config && typeof config.accessScope === 'string') {
+            var lowered = config.accessScope.toLowerCase();
+            if (lowered === 'public' || lowered === 'members') {
+                return lowered;
+            }
+        }
+        if (config && config.membersOnly === false) {
+            return 'public';
+        }
+        return 'members';
+    }
+
     function formatBytes(bytes) {
         if (!bytes || bytes <= 0) {
             return '0 B';
@@ -53,6 +66,8 @@
     function PhotoGrimlins(root) {
         this.root = root;
         this.config = parseConfig(root);
+        this.accessScope = resolveAccessScope(this.config);
+        this.accessNonce = this.config && typeof this.config.accessNonce === 'string' ? this.config.accessNonce : '';
         this.file = null;
         this.previewUrl = '';
         this.controller = null;
@@ -735,7 +750,7 @@
     PhotoGrimlins.prototype.updateLimitState = function(limitReachedOverride) {
         this.historyCount = Array.isArray(this.history) ? this.history.length : 0;
 
-        var enforceLimit = !!(this.config && this.config.membersOnly);
+        var enforceLimit = this.accessScope !== 'public';
 
         if (!enforceLimit) {
             this.limitReached = false;
@@ -1196,7 +1211,11 @@
         formData.append('action', 'mj_member_generate_grimlins');
         formData.append('nonce', globalConfig.nonce || '');
         formData.append('source', this.file, this.file.name);
-        formData.append('membersOnly', this.config && this.config.membersOnly ? '1' : '0');
+        var scope = this.accessScope === 'public' ? 'public' : 'members';
+        formData.append('accessScope', scope);
+        if (this.accessNonce) {
+            formData.append('accessNonce', this.accessNonce);
+        }
 
         this.isSubmitting = true;
         this.setPreviewLoading(true);
