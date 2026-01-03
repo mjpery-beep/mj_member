@@ -67,7 +67,7 @@ MJ Member est un module WordPress conçu pour centraliser la gestion des adhére
 - Widgets Elementor pour personnaliser les pages front
 
 ## Installation
-
+- **Tableau de bord**  
 	![Tableau de bord MJ Member](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202055.png)
 - **Création rapide d'un membre dans l'administration**  
 	![Création rapide d'un membre](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202107.png)
