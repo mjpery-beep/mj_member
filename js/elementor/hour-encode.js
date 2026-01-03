@@ -425,6 +425,8 @@
                 var NO_PROJECT_KEY = '__mj_hour_encode_no_project__';
                 var MOBILE_BREAKPOINT_QUERY = '(max-width: 900px)';
 
+                var HAS_STRING_NORMALIZE = typeof String.prototype.normalize === 'function';
+
                 function normalizeProjectValue(value) {
                     if (!isString(value)) {
                         return '';
@@ -435,6 +437,17 @@
                 function ensureProjectKey(value) {
                     var normalized = normalizeProjectValue(value);
                     return normalized !== '' ? normalized : NO_PROJECT_KEY;
+                }
+
+                function normalizeSearchValue(value) {
+                    if (!isString(value)) {
+                        return '';
+                    }
+                    var base = value.trim().toLowerCase();
+                    if (HAS_STRING_NORMALIZE) {
+                        base = base.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    }
+                    return base;
                 }
 
                 function normalizeNumberMapValues(source) {
@@ -1292,7 +1305,24 @@
                         var primaryLabel = isEditing ? (labels.selectionUpdate || labels.selectionConfirm) : labels.selectionConfirm;
                         var taskSuggestions = Array.isArray(props.taskSuggestions) ? props.taskSuggestions : [];
                         var projectSuggestions = Array.isArray(props.projectSuggestions) ? props.projectSuggestions : [];
+                        var allProjectOptions = Array.isArray(props.allProjectOptions) ? props.allProjectOptions : projectSuggestions;
                         var taskSuggestionsMessage = isString(props.taskSuggestionsMessage) ? props.taskSuggestionsMessage : '';
+                        var projectQuery = normalizeSearchValue(selection.formProject);
+                        var projectPool = projectQuery === '' ? projectSuggestions : allProjectOptions;
+                        var filteredProjectSuggestions = projectPool.filter(function(project) {
+                            if (!isString(project)) {
+                                return false;
+                            }
+                            if (projectQuery === '') {
+                                return true;
+                            }
+                            return normalizeSearchValue(project).indexOf(projectQuery) === 0;
+                        });
+                        var displayedProjectSuggestions = projectQuery === '' ? filteredProjectSuggestions : uniqueStrings(filteredProjectSuggestions);
+                        var taskQuery = normalizeSearchValue(selection.formTask);
+                        var displayedTaskSuggestions = taskQuery === '' ? taskSuggestions : taskSuggestions.filter(function(task) {
+                            return normalizeSearchValue(task).indexOf(taskQuery) === 0;
+                        });
 
                         return h('form', {
                             className: 'mj-hour-encode-app__card mj-hour-encode-app__card--selection',
@@ -1314,7 +1344,7 @@
                                         props.onChange('formProject', event.target.value || '');
                                     }
                                 }),
-                                projectSuggestions.length > 0 ? h('div', { className: 'mj-hour-encode-app__selection-suggestions' }, projectSuggestions.map(function(project) {
+                                displayedProjectSuggestions.length > 0 ? h('div', { className: 'mj-hour-encode-app__selection-suggestions' }, displayedProjectSuggestions.map(function(project) {
                                     return h('button', {
                                         key: project,
                                         type: 'button',
@@ -1336,7 +1366,7 @@
                                         props.onChange('formTask', event.target.value || '');
                                     }
                                 }),
-                                taskSuggestions.length > 0 ? h('div', { className: 'mj-hour-encode-app__selection-suggestions' }, taskSuggestions.map(function(task) {
+                                displayedTaskSuggestions.length > 0 ? h('div', { className: 'mj-hour-encode-app__selection-suggestions' }, displayedTaskSuggestions.map(function(task) {
                                     return h('button', {
                                         key: task,
                                         type: 'button',
@@ -2804,6 +2834,7 @@
                                 taskSuggestions: props.taskSuggestions,
                                 taskSuggestionsMessage: props.taskSuggestionsMessage,
                                 projectSuggestions: props.projectSuggestions,
+                                allProjectOptions: props.allProjectOptions,
                                 onChange: props.onSelectionChange,
                                 onSubmit: props.onSelectionSubmit,
                                 onCancel: props.onSelectionCancel,
@@ -6395,6 +6426,7 @@
                                     taskSuggestions: selectionTaskContext.suggestions,
                                     taskSuggestionsMessage: selectionTaskContext.message,
                                     projectSuggestions: projectSelectionSuggestions,
+                                    allProjectOptions: projects,
                                     calendarModel: null,
                                     onCalendarMonthNavigate: handleCalendarMonthNavigate,
                                     onCalendarWeekSelect: handleCalendarWeekSelect,
