@@ -1064,30 +1064,83 @@ class MjMemberHours extends MjTools implements CrudRepositoryInterface {
         }
 
         $table = self::table_name();
-        $fields = array(
-            'task_label' => $to,
-            'task_key' => sanitize_title($to),
-            'updated_at' => current_time('mysql'),
-        );
-        $fieldFormats = array('%s', '%s', '%s');
+        $newKey = sanitize_title($to);
+        $oldKey = sanitize_title($from);
+        $now = current_time('mysql');
+        $collation = self::resolve_unicode_collation();
 
-        $where = array('task_label' => $from);
-        $whereFormats = array('%s');
+        $setParts = array('task_label = %s', 'task_key = %s', 'updated_at = %s');
+        $whereParts = array();
+        $params = array($to, $newKey, $now);
+
+        $labelConditions = array('task_label = %s');
+        $params[] = $from;
+        if ($oldKey !== '') {
+            $labelConditions[] = 'task_key = %s';
+            $params[] = $oldKey;
+        }
+        if ($collation !== '') {
+            $labelConditions[] = 'task_label COLLATE ' . $collation . ' = %s';
+            $params[] = $from;
+        }
+        $whereParts[] = '(' . implode(' OR ', $labelConditions) . ')';
 
         if (!empty($scope['member_id'])) {
             $memberId = (int) $scope['member_id'];
             if ($memberId > 0) {
-                $where['member_id'] = $memberId;
-                $whereFormats[] = '%d';
+                $whereParts[] = 'member_id = %d';
+                $params[] = $memberId;
             }
         }
 
-        $updated = $wpdb->update($table, $fields, $where, $fieldFormats, $whereFormats);
-        if ($updated === false) {
+        $sql = 'UPDATE ' . $table . ' SET ' . implode(', ', $setParts) . ' WHERE ' . implode(' AND ', $whereParts);
+        $prepared = $wpdb->prepare($sql, $params);
+        $result = $wpdb->query($prepared);
+
+        if ($result === false) {
             return new WP_Error('mj_member_hours_rename_task_failed', __('Impossible de renommer la tâche.', 'mj-member'));
         }
 
-        return (int) $updated;
+        if ((int) $result === 0) {
+            $binaryWhere = array('BINARY task_label = %s');
+            $binaryParams = array($to, $newKey, $now, $from);
+            if (!empty($scope['member_id'])) {
+                $memberId = (int) $scope['member_id'];
+                if ($memberId > 0) {
+                    $binaryWhere[] = 'member_id = %d';
+                    $binaryParams[] = $memberId;
+                }
+            }
+            $binarySql = 'UPDATE ' . $table . ' SET ' . implode(', ', $setParts) . ' WHERE ' . implode(' AND ', $binaryWhere);
+            $binaryPrepared = $wpdb->prepare($binarySql, $binaryParams);
+            $result = $wpdb->query($binaryPrepared);
+            if ($result === false) {
+                return new WP_Error('mj_member_hours_rename_task_failed', __('Impossible de renommer la tâche.', 'mj-member'));
+            }
+        }
+
+        return (int) $result;
+    }
+
+    private static function resolve_unicode_collation(): string
+    {
+        global $wpdb;
+
+        if (!empty($wpdb->collate)) {
+            return (string) $wpdb->collate;
+        }
+
+        if (!empty($wpdb->charset)) {
+            $charset = strtolower((string) $wpdb->charset);
+            if ($charset === 'utf8mb4') {
+                return 'utf8mb4_unicode_ci';
+            }
+            if ($charset === 'utf8') {
+                return 'utf8_unicode_ci';
+            }
+        }
+
+        return 'utf8mb4_unicode_ci';
     }
 
     /**
