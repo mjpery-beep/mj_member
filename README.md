@@ -67,30 +67,40 @@ MJ Member est un module WordPress conçu pour centraliser la gestion des adhére
 - Widgets Elementor pour personnaliser les pages front
 
 ## Captures d'écran
-- **Tableau de bord MJ Member**  
-  ![Tableau de bord MJ Member](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202055.png)
-- **Création rapide d'un membre dans l'administration**  
-  ![Création rapide d'un membre](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202107.png)
-- **Espace animateur front-end**  
-  ![Espace animateur front-end](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202128.png)
-- **Liste des inscriptions événementielles**  
-  ![Liste des inscriptions événementielles](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202135.png)
-- **Formulaire d'inscription à un événement**  
-  ![Formulaire d'inscription à un événement](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202218.png)
-- **Bloc d'appel à l'action pour un événement**  
-  ![Bloc d'appel à l'action pour un événement](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202230.png)
-- **Confirmation d'inscription front-end**  
-  ![Confirmation d'inscription front-end](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202259.png)
-- **Calendrier hebdomadaire des heures encodées**  
-  ![Calendrier hebdomadaire des heures encodées](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202306.png)
-- **Synthèse des présences animateur**  
-  ![Synthèse des présences animateur](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202316.png)
-- **Vue supplémentaire MJ Member (205602)**  
-  ![Vue supplémentaire MJ Member (205602)](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20205602.png)
-- **Vue supplémentaire MJ Member (205815)**  
-  ![Vue supplémentaire MJ Member (205815)](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20205815.png)
-- **Vue supplémentaire MJ Member (205829)**  
-  ![Vue supplémentaire MJ Member (205829)](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20205829.png)
+- **Encodage des heures pour les animateurs/coordinateurs**  
+  ![Encodage des heures pour les animateurs/coordinateurs](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202055.png)  
+  _Suivi hebdomadaire des heures encodées avec totaux automatiques et filtres dédiés._
+- **Gestionnaire de to-dos pour les animateurs/coordinateurs**  
+  ![Gestionnaire de to-dos pour les animateurs/coordinateurs](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202107.png)  
+  _Planifiez et suivez les actions clés de l'équipe en regroupant les priorités par projet._
+- **Crée ton avatar grâce à l'IA**  
+  ![Crée ton avatar grâce à l'IA](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202128.png)  
+  _Générez en un clic un portrait ludique pour animer les profils membres._
+- **Boîte à idées**  
+  ![Boîte à idées](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202135.png)  
+  _Recueillez et priorisez les propositions d'activités soumises par les jeunes._
+- **Données individuelles et gestion de la cotisation avec paiement en ligne**  
+  ![Données individuelles et gestion de la cotisation avec paiement en ligne](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202218.png)  
+  _Retrouvez l'historique d'un membre, ses statuts et ses paiements Stripe au même endroit._
+- **Gestionnaire centralisé des paiements (cotisation/participation événements)**  
+  ![Gestionnaire centralisé des paiements (cotisation/participation événements)](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202230.png)  
+  _Suivez les encaissements en temps réel et filtrez par type d'opération._
+- **Gestionnaire des messages en interne**  
+  ![Gestionnaire des messages en interne](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202259.png)  
+  _Centralisez les échanges entrants pour ne manquer aucun message important._
+- **Calendrier des événements dynamique**  
+  ![Calendrier des événements dynamique](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202306.png)  
+  _Visualisez l'ensemble des stages et fermetures avec navigation rapide par période._
+- **Fiche d'un événement**  
+  ![Fiche d'un événement](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20202316.png)  
+  _Accédez aux détails pratiques, aux inscrits et aux animateurs associés en un coup d'œil._
+- **Éditeur des événements pour les animateurs/coordinateurs**  
+  ![Éditeur des événements pour les animateurs/coordinateurs](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20205602.png)  
+  _Préparez vos séances avec des formulaires guidés et des validations intégrées._
+- **Gestionnaires des membres pour les animateurs/coordinateurs**  
+  ![Gestionnaires des membres pour les animateurs/coordinateurs](screen-capture/Capture%20d%27%C3%A9cran%202026-01-03%20205815.png)  
+  _Parcourez la base adhérents avec filtres rapides et actions groupées._
+
 
 ## Installation
 1. Copiez le dossier `mj-member` dans `/wp-content/plugins/`
