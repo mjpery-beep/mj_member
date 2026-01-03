@@ -742,6 +742,9 @@
         var _selectedMember = useState(null);
         var selectedMember = _selectedMember[0];
         var setSelectedMember = _selectedMember[1];
+        var _pendingMemberSelection = useState(null);
+        var pendingMemberSelection = _pendingMemberSelection[0];
+        var setPendingMemberSelection = _pendingMemberSelection[1];
         var _pendingMemberEdit = useState(null);
         var pendingMemberEdit = _pendingMemberEdit[0];
         var setPendingMemberEdit = _pendingMemberEdit[1];
@@ -1360,24 +1363,35 @@
         // Charger les membres
         var loadMembers = useCallback(function (page) {
             setMembersLoading(true);
-            api.getMembers({
+            return api.getMembers({
                 filter: memberFilter,
                 search: memberSearch,
                 page: page || 1,
                 perPage: config.perPage || 20,
             })
                 .then(function (data) {
-                    setMembersList(data.members || []);
+                    var fetchedMembers = Array.isArray(data.members) ? data.members.slice() : [];
+                    if (pendingMemberSelection && pendingMemberSelection.id && pendingMemberSelection.member) {
+                        var alreadyPresent = fetchedMembers.some(function (item) {
+                            return item.id === pendingMemberSelection.id;
+                        });
+                        if (!alreadyPresent) {
+                            fetchedMembers.unshift(pendingMemberSelection.member);
+                        }
+                    }
+                    setMembersList(fetchedMembers);
                     setMembersPagination(data.pagination || { page: 1, totalPages: 1 });
                     setMembersLoading(false);
+                    return data;
                 })
                 .catch(function (err) {
                     if (!err.aborted) {
                         showError(err.message || getString(strings, 'error', 'Erreur'));
                         setMembersLoading(false);
                     }
+                    return null;
                 });
-        }, [api, memberFilter, memberSearch, config.perPage, showError, strings]);
+        }, [api, memberFilter, memberSearch, config.perPage, pendingMemberSelection, showError, strings]);
 
         // Charger les membres quand on bascule en mode membres ou quand les filtres changent
         useEffect(function () {
@@ -1479,11 +1493,38 @@
             }
         }, [sidebarMode, membersLoading, selectedMember, membersList, handleSelectMember, memberStorageKey]);
 
+        useEffect(function () {
+            if (!pendingMemberSelection) {
+                return;
+            }
+            if (sidebarMode !== 'members') {
+                return;
+            }
+            if (membersLoading) {
+                return;
+            }
+
+            var targetId = pendingMemberSelection.id;
+            if (!targetId) {
+                setPendingMemberSelection(null);
+                return;
+            }
+
+            var memberFromList = membersList.find(function (memberItem) {
+                return memberItem.id === targetId;
+            });
+
+            if (memberFromList) {
+                setPendingMemberSelection(null);
+            }
+        }, [pendingMemberSelection, sidebarMode, membersLoading, membersList, setPendingMemberSelection]);
+
         // Changer de mode sidebar
         var handleSidebarModeChange = useCallback(function (mode) {
             setSidebarMode(mode);
             setMobileShowDetails(false);
             setPendingMemberEdit(null);
+            setPendingMemberSelection(null);
             
             if (mode === 'events') {
                 setSelectedMember(null);
@@ -1895,16 +1936,63 @@
                 .then(function (data) {
                     showSuccess(data.message);
                     createMemberModal.close();
-                    // Optionnel: ajouter directement à l'événement
-                    if (selectedEvent && data.member) {
-                        return api.addRegistration(selectedEvent.id, [data.member.id], [])
+
+                    var createdMember = data.member || null;
+                    if (createdMember && createdMember.id) {
+                        var lightweightMember = Object.assign({
+                            membershipStatus: 'not_required',
+                            requiresPayment: false,
+                            isVolunteer: false,
+                            status: 'active',
+                        }, createdMember);
+
+                        if (sidebarMode === 'members') {
+                            setMembersList(function (current) {
+                                var list = Array.isArray(current) ? current.slice() : [];
+                                var filtered = list.filter(function (item) { return item.id !== lightweightMember.id; });
+                                filtered.unshift(lightweightMember);
+                                return filtered;
+                            });
+
+                            handleSelectMember(lightweightMember);
+                            setPendingMemberSelection({
+                                id: lightweightMember.id,
+                                member: lightweightMember,
+                            });
+
+                            loadMembers(membersPagination.page);
+                        } else {
+                            loadMembers(membersPagination.page);
+                        }
+                    } else {
+                        loadMembers(membersPagination.page);
+                    }
+
+                    if (selectedEvent && createdMember) {
+                        return api.addRegistration(selectedEvent.id, [createdMember.id], [])
                             .then(function () {
                                 loadRegistrations(selectedEvent.id);
                                 loadEvents(pagination.page);
                             });
                     }
+
+                    return data;
                 });
-        }, [api, selectedEvent, showSuccess, createMemberModal, loadRegistrations, loadEvents, pagination.page]);
+        }, [
+            api,
+            selectedEvent,
+            showSuccess,
+            createMemberModal,
+            setMembersList,
+            setPendingMemberSelection,
+            loadMembers,
+            membersPagination.page,
+            sidebarMode,
+            handleSelectMember,
+            loadRegistrations,
+            loadEvents,
+            pagination.page,
+        ]);
 
         // Rechercher membres
         var handleSearchMembers = useCallback(function (params) {
