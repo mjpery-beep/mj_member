@@ -2800,7 +2800,10 @@
                             });
                             
                             // Construire l'affichage du total avec différentiel
-                            var totalChildren = [week.totalLabel];
+                            var totalChildren = [h('span', {
+                                key: 'total',
+                                className: 'mj-hour-encode-mini-calendar__week-total-value'
+                            }, week.totalLabel)];
                             if (week.hasHours && week.differenceLabel && model.weekContractualMinutes > 0) {
                                 var diffClass = 'mj-hour-encode-mini-calendar__week-diff';
                                 if (week.differenceMinutes >= 0) {
@@ -2815,7 +2818,7 @@
                             }
                             
                             dayButtons.push(h('span', {
-                                key: 'total',
+                                key: 'summary',
                                 className: 'mj-hour-encode-mini-calendar__week-total' + (week.isActive ? ' is-active' : ''),
                                 title: ariaLabel
                             }, totalChildren));

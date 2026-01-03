@@ -300,20 +300,28 @@
 
 .mj-hour-encode-mini-calendar__week-total {
     display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 4px;
-    padding: 0 4px;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 2px;
+    padding: 2px 4px;
     font-size: 9px;
     font-weight: 600;
     color: rgba(26, 45, 71, 0.75);
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.85);
+    text-align: right;
+    line-height: 14px;
 }
 
 .mj-hour-encode-mini-calendar__week-total.is-active {
     background: rgba(42, 85, 255, 0.16);
     color: #1f2d3d;
+}
+
+.mj-hour-encode-mini-calendar__week-total-value {
+    display: block;
+    line-height: 1.1;
 }
 
 /* Différentiel par semaine dans le mini-calendrier */
