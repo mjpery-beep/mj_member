@@ -176,6 +176,8 @@ function mj_member_ajax_hour_encode_create() {
     $startDateTime = mj_member_hour_encode_combine_datetime($dayIso, $startTime, $timezone);
     $endDateTime = mj_member_hour_encode_combine_datetime($dayIso, $endTime, $timezone);
 
+    $endDateTime = mj_member_hour_encode_adjust_end_datetime($startDateTime, $endDateTime, $startTime, $endTime);
+
     if (!$startDateTime || !$endDateTime || $endDateTime <= $startDateTime) {
         wp_send_json_error(array('message' => __('L’heure de fin doit être postérieure à l’heure de début.', 'mj-member')));
     }
@@ -475,6 +477,8 @@ function mj_member_ajax_hour_encode_update() {
     $timezone = wp_timezone();
     $startDateTime = mj_member_hour_encode_combine_datetime($dayIso, $startTime, $timezone);
     $endDateTime = mj_member_hour_encode_combine_datetime($dayIso, $endTime, $timezone);
+
+    $endDateTime = mj_member_hour_encode_adjust_end_datetime($startDateTime, $endDateTime, $startTime, $endTime);
 
     if (!$startDateTime || !$endDateTime || $endDateTime <= $startDateTime) {
         wp_send_json_error(array('message' => __('L’heure de fin doit être postérieure à l’heure de début.', 'mj-member')));
@@ -1231,6 +1235,9 @@ function mj_member_hour_encode_normalize_time_value($value) {
     $hour = (int) $matches[1];
     $minute = (int) $matches[2];
     $second = isset($matches[3]) ? (int) $matches[3] : 0;
+    if ($hour === 24 && $minute === 0 && $second === 0) {
+        return '24:00:00';
+    }
     if ($hour < 0 || $hour > 23 || $minute < 0 || $minute > 59 || $second < 0 || $second > 59) {
         return '';
     }
@@ -1248,8 +1255,15 @@ function mj_member_hour_encode_combine_datetime($dayIso, $timeValue, DateTimeZon
         return null;
     }
 
+    $shouldAddDay = false;
+
     if (strlen($timeValue) === 5) {
         $timeValue .= ':00';
+    }
+
+    if ($timeValue === '24:00:00') {
+        $timeValue = '00:00:00';
+        $shouldAddDay = true;
     }
 
     try {
@@ -1263,10 +1277,52 @@ function mj_member_hour_encode_combine_datetime($dayIso, $timeValue, DateTimeZon
     }
 
     if ($dateTime instanceof DateTimeImmutable) {
+        if ($shouldAddDay) {
+            $dateTime = $dateTime->add(new DateInterval('P1D'));
+        }
         return $dateTime;
     }
 
     return null;
+}
+
+function mj_member_hour_encode_is_midnight_time_label($value) {
+    if (!is_string($value) || $value === '') {
+        return false;
+    }
+    $value = trim($value);
+    if ($value === '') {
+        return false;
+    }
+    if (strlen($value) === 5) {
+        $value .= ':00';
+    }
+    return $value === '00:00:00' || $value === '24:00:00';
+}
+
+function mj_member_hour_encode_adjust_end_datetime($startDateTime, $endDateTime, $startTime, $endTime) {
+    if (!$startDateTime instanceof DateTimeImmutable || !$endDateTime instanceof DateTimeImmutable) {
+        return $endDateTime;
+    }
+
+    if ($endDateTime > $startDateTime) {
+        return $endDateTime;
+    }
+
+    if (!mj_member_hour_encode_is_midnight_time_label($endTime)) {
+        return $endDateTime;
+    }
+
+    if (mj_member_hour_encode_is_midnight_time_label($startTime)) {
+        return $endDateTime;
+    }
+
+    $adjusted = $endDateTime->add(new DateInterval('P1D'));
+    if ($adjusted > $startDateTime) {
+        return $adjusted;
+    }
+
+    return $endDateTime;
 }
 
 function mj_member_hour_encode_format_hour_entry(array $record, DateTimeZone $timezone) {
@@ -1293,6 +1349,10 @@ function mj_member_hour_encode_format_hour_entry(array $record, DateTimeZone $ti
 
     if ($start && !$end && $duration > 0) {
         $end = $start->add(new DateInterval('PT' . $duration . 'M'));
+    }
+
+    if ($start && $end) {
+        $end = mj_member_hour_encode_adjust_end_datetime($start, $end, $startTime, $endTime);
     }
 
     if (!$start || !$end || $end <= $start) {

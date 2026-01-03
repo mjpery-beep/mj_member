@@ -776,6 +776,46 @@
                     return (hours * 60) + minutes;
                 }
 
+                function isMidnightTimeValue(value) {
+                    if (!isString(value)) {
+                        return false;
+                    }
+                    var trimmed = value.trim();
+                    if (trimmed === '') {
+                        return false;
+                    }
+                    if (trimmed === '24:00' || trimmed === '24:00:00') {
+                        return true;
+                    }
+                    if (trimmed === '00:00' || trimmed === '00:00:00' || trimmed === '0:00') {
+                        return true;
+                    }
+                    var minutes = timeValueToMinutes(trimmed);
+                    return minutes === 0;
+                }
+
+                function normalizeMidnightEndDate(dayIso, startDate, endDate, endValue) {
+                    if (!isMidnightTimeValue(endValue)) {
+                        return endDate;
+                    }
+                    if (!isValidDate(startDate) || !isValidDate(endDate) || endDate > startDate) {
+                        return endDate;
+                    }
+                    if (minutesSinceMidnight(startDate) === 0) {
+                        return endDate;
+                    }
+                    var baseDay = parseISODate(dayIso);
+                    if (baseDay) {
+                        var nextDay = addDays(baseDay, 1);
+                        nextDay.setHours(0, 0, 0, 0);
+                        return nextDay;
+                    }
+                    var startDay = startOfDay(startDate);
+                    var fallback = addDays(startDay, 1);
+                    fallback.setHours(0, 0, 0, 0);
+                    return fallback;
+                }
+
                 function createDateFromDayAndTime(dayIso, timeValue) {
                     var base = parseISODate(dayIso);
                     var minutes = timeValueToMinutes(timeValue);
@@ -807,6 +847,7 @@
                 function formatDurationFromValues(dayIso, startValue, endValue, labels) {
                     var start = createDateFromDayAndTime(dayIso, startValue);
                     var end = createDateFromDayAndTime(dayIso, endValue);
+                    end = normalizeMidnightEndDate(dayIso, start, end, endValue);
                     if (!isValidDate(start) || !isValidDate(end) || end <= start) {
                         return formatTotalMinutes(0, labels);
                     }
@@ -4590,6 +4631,7 @@
                             }
                             var start = createDateFromDayAndTime(selectedSlot.dayIso, selectedSlot.formStart) || parseDateTime(selectedSlot.baseStartIso);
                             var end = createDateFromDayAndTime(selectedSlot.dayIso, selectedSlot.formEnd) || parseDateTime(selectedSlot.baseEndIso);
+                            end = normalizeMidnightEndDate(selectedSlot.dayIso, start, end, selectedSlot.formEnd);
                             if (!isValidDate(start) || !isValidDate(end)) {
                                 return null;
                             }
@@ -4598,7 +4640,11 @@
                             var startMinutes = clamp(minutesSinceMidnight(start), rangeStart, rangeEnd);
                             var endMinutes = clamp(minutesSinceMidnight(end), rangeStart, rangeEnd);
                             if (endMinutes <= startMinutes) {
-                                endMinutes = Math.min(rangeEnd, startMinutes + SLOT_STEP_MINUTES);
+                                if (isMidnightTimeValue(selectedSlot.formEnd) && startMinutes > rangeStart && startMinutes < rangeEnd) {
+                                    endMinutes = rangeEnd;
+                                } else {
+                                    endMinutes = Math.min(rangeEnd, startMinutes + SLOT_STEP_MINUTES);
+                                }
                             }
                             var duration = Math.max(endMinutes - startMinutes, MIN_EVENT_HEIGHT);
                             var durationLabel = formatTotalMinutes(duration, config.labels);
@@ -5908,6 +5954,7 @@
                             pendingDragSubmitRef.current = null;
                             var startDate = createDateFromDayAndTime(selectedSlot.dayIso, selectedSlot.formStart);
                             var endDate = createDateFromDayAndTime(selectedSlot.dayIso, selectedSlot.formEnd);
+                            endDate = normalizeMidnightEndDate(selectedSlot.dayIso, startDate, endDate, selectedSlot.formEnd);
                             var taskLabel = selectedSlot.formTask ? selectedSlot.formTask.trim() : '';
                             var projectLabel = selectedSlot.formProject ? selectedSlot.formProject.trim() : '';
 

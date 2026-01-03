@@ -594,6 +594,10 @@ class MjMemberHours extends MjTools implements CrudRepositoryInterface {
         $minute = (int) $matches[2];
         $second = isset($matches[3]) ? (int) $matches[3] : 0;
 
+        if ($hour === 24 && $minute === 0 && $second === 0) {
+            return '24:00:00';
+        }
+
         if ($hour < 0 || $hour > 23 || $minute < 0 || $minute > 59 || $second < 0 || $second > 59) {
             return '';
         }
@@ -690,11 +694,20 @@ class MjMemberHours extends MjTools implements CrudRepositoryInterface {
         $endSeconds = self::time_to_seconds($endTime);
 
         $delta = $endSeconds - $startSeconds;
+        if ($delta <= 0 && self::is_midnight_time($endTime) && !self::is_midnight_time($startTime)) {
+            $delta += DAY_IN_SECONDS;
+        }
+
         if ($delta <= 0) {
             return 0;
         }
 
         return (int) round($delta / 60);
+    }
+
+    private static function is_midnight_time(string $time): bool
+    {
+        return $time === '00:00:00' || $time === '24:00:00';
     }
 
     private static function format_time_value($value) {
