@@ -87,8 +87,20 @@ if (defined('WP_DEBUG') && WP_DEBUG) {
         if (defined('WP_DEBUG_LOG') && WP_DEBUG_LOG) {
             $debug_log = WP_CONTENT_DIR . '/debug.log';
             if (file_exists($debug_log)) {
-                $last_lines = file_get_contents($debug_log, false, null, -2000);
-                if (preg_match('/sk_live_|sk_test_/', $last_lines)) {
+                $file_size = filesize($debug_log);
+                if ($file_size === false) {
+                    return;
+                }
+
+                $slice_start = $file_size > 2000 ? $file_size - 2000 : 0;
+                $bytes_to_read = $file_size > 0 ? $file_size - $slice_start : 0;
+
+                if ($bytes_to_read < 1) {
+                    return;
+                }
+
+                $last_lines = file_get_contents($debug_log, false, null, $slice_start, $bytes_to_read);
+                if ($last_lines && preg_match('/sk_live_|sk_test_/', $last_lines)) {
                     error_log('⚠️ SÉCURITÉ CRITIQUE: Une clé Stripe peut avoir été exposée dans le debug log!');
                 }
             }
