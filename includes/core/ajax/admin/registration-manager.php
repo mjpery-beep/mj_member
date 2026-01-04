@@ -214,6 +214,12 @@ function mj_regmgr_build_event_sidebar_item($event, $type_labels = null, $status
 
     $schedule_info = mj_regmgr_build_event_schedule_info($event, $schedule_mode);
 
+    $registration_payload = mj_regmgr_decode_json_field(isset($event->registration_payload) ? $event->registration_payload : array());
+    $attendance_show_all_members = !empty($registration_payload['attendance_show_all_members']);
+    if (!$attendance_show_all_members && isset($event->attendance_show_all_members)) {
+        $attendance_show_all_members = !empty($event->attendance_show_all_members);
+    }
+
     return array(
         'id' => $event_id,
         'title' => isset($event->title) ? (string) $event->title : '',
@@ -699,6 +705,7 @@ function mj_regmgr_get_event_details() {
             'occurrenceSelectionMode' => isset($event->occurrence_selection_mode) && $event->occurrence_selection_mode !== ''
                 ? $event->occurrence_selection_mode
                 : 'member_choice',
+            'attendanceShowAllMembers' => $attendance_show_all_members,
         ),
     ));
 }
@@ -1049,9 +1056,77 @@ function mj_regmgr_get_registrations() {
         return;
     }
 
+    $event = MjEvents::find($event_id);
+    $registration_payload = $event ? mj_regmgr_decode_json_field(isset($event->registration_payload) ? $event->registration_payload : array()) : array();
+    $attendance_show_all_members = !empty($registration_payload['attendance_show_all_members']);
+    if (!$attendance_show_all_members && $event && isset($event->attendance_show_all_members)) {
+        $attendance_show_all_members = !empty($event->attendance_show_all_members);
+    }
+
     $registrations = MjEventRegistrations::get_by_event($event_id);
     
     $data = array();
+    $attendance_members = array();
+    $existing_member_ids = array();
+    $now = new DateTime();
+
+    $build_member_payload = function ($member) use ($now) {
+        if (!$member) {
+            return null;
+        }
+
+        $member_id = isset($member->id) ? (int) $member->id : 0;
+        if ($member_id <= 0) {
+            return null;
+        }
+
+        $birth_date = isset($member->birth_date) ? $member->birth_date : null;
+        $age = null;
+        if (!empty($birth_date) && $birth_date !== '0000-00-00') {
+            try {
+                $birth = new DateTime($birth_date);
+                $age = $now->diff($birth)->y;
+            } catch (\Exception $e) {
+                $age = null;
+            }
+        }
+
+        $subscription_status = 'none';
+        $last_payment_raw = isset($member->date_last_payement) ? $member->date_last_payement : '';
+        if (!empty($last_payment_raw) && $last_payment_raw !== '0000-00-00 00:00:00') {
+            try {
+                $last_payment = new DateTime($last_payment_raw);
+                $expiry = clone $last_payment;
+                $expiry->modify('+1 year');
+                $subscription_status = $expiry > $now ? 'active' : 'expired';
+            } catch (\Exception $e) {
+                $subscription_status = 'none';
+            }
+        }
+
+        $role = isset($member->role) ? (string) $member->role : '';
+        $photo_id = isset($member->photo_id) ? (int) $member->photo_id : 0;
+        $photo_url = $photo_id > 0 ? wp_get_attachment_image_url($photo_id, 'thumbnail') : '';
+
+        return array(
+            'id' => $member_id,
+            'firstName' => isset($member->first_name) ? (string) $member->first_name : '',
+            'lastName' => isset($member->last_name) ? (string) $member->last_name : '',
+            'nickname' => isset($member->nickname) ? (string) $member->nickname : '',
+            'email' => isset($member->email) ? (string) $member->email : '',
+            'phone' => isset($member->phone) ? (string) $member->phone : '',
+            'role' => $role,
+            'roleLabel' => MjRoles::getRoleLabel($role),
+            'photoId' => $photo_id,
+            'photoUrl' => $photo_url ?: '',
+            'age' => $age,
+            'birthDate' => $birth_date ?: '',
+            'subscriptionStatus' => $subscription_status,
+            'whatsappOptIn' => isset($member->whatsapp_opt_in) ? ((int) $member->whatsapp_opt_in !== 0) : true,
+            'isVolunteer' => !empty($member->is_volunteer),
+        );
+    };
+
     foreach ($registrations as $reg) {
         $member = null;
         $guardian = null;
@@ -1064,23 +1139,9 @@ function mj_regmgr_get_registrations() {
             $guardian = MjMembers::getById($reg->guardian_id);
         }
 
-        // Calculate age
-        $age = null;
-        if ($member && !empty($member->birth_date)) {
-            $birth = new DateTime($member->birth_date);
-            $now = new DateTime();
-            $age = $now->diff($birth)->y;
-        }
-
-        // Get subscription status
-        $subscription_status = 'none';
-        if ($member) {
-            if (!empty($member->date_last_payement)) {
-                $last_payment = new DateTime($member->date_last_payement);
-                $expiry = clone $last_payment;
-                $expiry->modify('+1 year');
-                $subscription_status = $expiry > new DateTime() ? 'active' : 'expired';
-            }
+        $member_payload = $build_member_payload($member);
+        if ($member_payload && isset($member_payload['id'])) {
+            $existing_member_ids[(int) $member_payload['id']] = true;
         }
 
         // Get attendance data
@@ -1115,6 +1176,18 @@ function mj_regmgr_get_registrations() {
             }
         }
 
+        $guardian_payload = null;
+        if ($guardian) {
+            $guardian_payload = array(
+                'id' => $guardian->id,
+                'firstName' => $guardian->first_name,
+                'lastName' => $guardian->last_name,
+                'email' => isset($guardian->email) ? $guardian->email : '',
+                'phone' => isset($guardian->phone) ? $guardian->phone : '',
+                'whatsappOptIn' => isset($guardian->whatsapp_opt_in) ? ((int) $guardian->whatsapp_opt_in !== 0) : true,
+            );
+        }
+
         $data[] = array(
             'id' => $reg->id,
             'eventId' => $reg->event_id,
@@ -1128,39 +1201,44 @@ function mj_regmgr_get_registrations() {
             'notes' => $reg->notes ?? '',
             'createdAt' => $reg->created_at,
             'createdAtFormatted' => mj_regmgr_format_date($reg->created_at, true),
-            'member' => $member ? array(
-                'id' => $member->id,
-                'firstName' => $member->first_name,
-                'lastName' => $member->last_name,
-                'nickname' => $member->nickname ?? '',
-                'email' => $member->email ?? '',
-                'phone' => $member->phone ?? '',
-                'role' => $member->role,
-                'roleLabel' => MjRoles::getRoleLabel($member->role),
-                'photoId' => $member->photo_id ?? 0,
-                'photoUrl' => !empty($member->photo_id) ? wp_get_attachment_image_url($member->photo_id, 'thumbnail') : '',
-                'age' => $age,
-                'birthDate' => $member->birth_date ?? '',
-                'subscriptionStatus' => $subscription_status,
-                'whatsappOptIn' => isset($member->whatsapp_opt_in) ? ((int) $member->whatsapp_opt_in !== 0) : true,
-                'isVolunteer' => !empty($member->is_volunteer),
-            ) : null,
-            'guardian' => $guardian ? array(
-                'id' => $guardian->id,
-                'firstName' => $guardian->first_name,
-                'lastName' => $guardian->last_name,
-                'email' => $guardian->email ?? '',
-                'phone' => $guardian->phone ?? '',
-                'whatsappOptIn' => isset($guardian->whatsapp_opt_in) ? ((int) $guardian->whatsapp_opt_in !== 0) : true,
-            ) : null,
+            'member' => $member_payload,
+            'guardian' => $guardian_payload,
             'attendance' => $attendance,
+            'occurrences' => $assigned_occurrences,
             'assignedOccurrences' => $assigned_occurrences,
             'notesCount' => $notes_count,
         );
     }
 
+    if ($attendance_show_all_members) {
+        $all_members = MjMembers::get_all(array(
+            'limit' => 0,
+            'orderby' => 'last_name',
+            'order' => 'ASC',
+        ));
+
+        foreach ($all_members as $member) {
+            $member_payload = $build_member_payload($member);
+            if (!$member_payload) {
+                continue;
+            }
+
+            $member_id = isset($member_payload['id']) ? (int) $member_payload['id'] : 0;
+            if ($member_id <= 0 || isset($existing_member_ids[$member_id])) {
+                continue;
+            }
+
+            if (isset($member->status) && $member->status !== MjMembers::STATUS_ACTIVE) {
+                continue;
+            }
+
+            $attendance_members[] = $member_payload;
+        }
+    }
+
     wp_send_json_success(array(
         'registrations' => $data,
+        'attendanceMembers' => $attendance_members,
     ));
 }
 
@@ -2099,6 +2177,7 @@ function mj_regmgr_prepare_event_form_values($event, array $schedule_weekdays, a
     $form_values['registration_payload'] = array();
     $form_values['registration_is_free_participation'] = !empty($defaults['free_participation']);
     $form_values['free_participation'] = !empty($defaults['free_participation']);
+    $form_values['attendance_show_all_members'] = false;
 
     if ($event) {
         $accent_color = mj_regmgr_normalize_hex_color(isset($event->accent_color) ? $event->accent_color : '');
@@ -2135,6 +2214,10 @@ function mj_regmgr_prepare_event_form_values($event, array $schedule_weekdays, a
         ));
 
         $form_values['registration_payload'] = mj_regmgr_decode_json_field(isset($event->registration_payload) ? $event->registration_payload : array());
+        $form_values['attendance_show_all_members'] = !empty($form_values['registration_payload']['attendance_show_all_members']);
+        if (!$form_values['attendance_show_all_members'] && isset($event->attendance_show_all_members)) {
+            $form_values['attendance_show_all_members'] = !empty($event->attendance_show_all_members);
+        }
 
         $animateur_ids = class_exists(MjEventAnimateurs::class) ? MjEventAnimateurs::get_ids_by_event((int) $event->id) : array();
         if (empty($animateur_ids) && isset($event->animateur_id) && (int) $event->animateur_id > 0) {

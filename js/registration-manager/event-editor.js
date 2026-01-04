@@ -68,6 +68,11 @@
         freeParticipation: 'Participation libre',
         freeParticipationToggle: "Il n est pas necessaire de s inscrire a cet evenement",
         freeParticipationHint: "Aucune reservation n est recue. L evenement reste visible dans l espace membre.",
+        attendanceList: 'Liste de presence',
+        attendanceAllMembersToggle: 'Afficher tous les membres dans la liste de presence',
+        attendanceAllMembersHint: 'Permet de pointer les membres autorises meme sans inscription prealable.',
+        attendanceAllMembers: 'Liste de presence : tous les membres',
+        attendanceRegisteredOnly: 'Liste de presence : inscrits uniquement',
         generalSection: 'Informations principales',
         generalSectionHint: "Renseignez les informations essentielles de l evenement.",
         loading: 'Chargement...',
@@ -731,6 +736,9 @@
         var freeParticipationId = useMemo(function () {
             return 'mj-regmgr-free-participation-' + Math.random().toString(36).slice(2);
         }, []);
+        var attendanceAllMembersId = useMemo(function () {
+            return 'mj-regmgr-attendance-all-members-' + Math.random().toString(36).slice(2);
+        }, []);
 
         useEffect(function () {
             if (!data) {
@@ -1081,6 +1089,18 @@
                 });
             }
             var payloadMeta = Object.assign({}, metaState);
+            if (payloadMeta && typeof payloadMeta === 'object') {
+                var attendanceFlag = !!payloadForm.event_attendance_show_all_members;
+                if (payloadMeta.registrationPayload && typeof payloadMeta.registrationPayload === 'object') {
+                    payloadMeta.registrationPayload = Object.assign({}, payloadMeta.registrationPayload, {
+                        attendance_show_all_members: attendanceFlag,
+                    });
+                } else {
+                    payloadMeta.registrationPayload = {
+                        attendance_show_all_members: attendanceFlag,
+                    };
+                }
+            }
             var result = onSubmit(payloadForm, payloadMeta);
             if (result && typeof result.then === 'function') {
                 result.then(function () {
@@ -1415,6 +1435,19 @@
                                 h('span', null, getString(strings, 'freeParticipationToggle', "Il n est pas necessaire de s inscrire a cet evenement")),
                             ]),
                             h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'freeParticipationHint', "Aucune reservation n est recue. L evenement reste visible dans l espace membre.")),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full mj-regmgr-form-field--checkbox' }, [
+                            h('span', { class: 'mj-regmgr-form-label' }, getString(strings, 'attendanceList', 'Liste de presence')),
+                            h('label', { class: 'mj-regmgr-checkbox' }, [
+                                h('input', {
+                                    type: 'checkbox',
+                                    id: attendanceAllMembersId,
+                                    checked: !!formState.event_attendance_show_all_members,
+                                    onChange: function (e) { updateFormValue('event_attendance_show_all_members', e.target.checked); },
+                                }),
+                                h('span', null, getString(strings, 'attendanceAllMembersToggle', 'Afficher tous les membres dans la liste de presence')),
+                            ]),
+                            h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'attendanceAllMembersHint', 'Permet de pointer les membres autorises meme sans inscription prealable.')),
                         ]),
                         h('div', { class: 'mj-regmgr-form-field' }, [
                             h('label', null, getString(strings, 'capacityTotal', 'Places max')),

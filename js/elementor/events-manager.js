@@ -412,6 +412,48 @@
             }
         }
 
+        parseRegistrationPayload(rawPayload) {
+            if (!rawPayload) {
+                return {};
+            }
+
+            if (typeof rawPayload === 'object') {
+                return rawPayload;
+            }
+
+            if (typeof rawPayload === 'string') {
+                try {
+                    const parsed = JSON.parse(rawPayload);
+                    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                        return parsed;
+                    }
+                } catch (error) {
+                    // Silent parse failure; return empty object for resilience.
+                }
+            }
+
+            return {};
+        }
+
+        normalizeEvent(rawEvent) {
+            if (!rawEvent || typeof rawEvent !== 'object') {
+                return {
+                    attendance_show_all_members: false,
+                };
+            }
+
+            const normalized = Object.assign({}, rawEvent);
+            const payload = this.parseRegistrationPayload(rawEvent.registration_payload);
+            normalized.registration_payload_data = payload;
+            const attendanceRaw = payload ? payload.attendance_show_all_members : false;
+            normalized.attendance_show_all_members = attendanceRaw === true
+                || attendanceRaw === 1
+                || attendanceRaw === '1'
+                || attendanceRaw === 'true';
+
+            return normalized;
+        }
+
         parseConfig() {
             const configAttr = this.container.getAttribute('data-config');
             if (!configAttr) return {};
@@ -522,7 +564,8 @@
                     throw new Error(data.data?.message || this.getString('error'));
                 }
 
-                this.events = data.data.events || [];
+                const incomingEvents = Array.isArray(data.data?.events) ? data.data.events : [];
+                this.events = incomingEvents.map(event => this.normalizeEvent(event));
                 this.applyFilters();
             } catch (error) {
                 console.error('EventsManager: Load error', error);
@@ -599,6 +642,11 @@
             const startDate = event.start_date ? this.formatDate(event.start_date) : '—';
             const price = event.price > 0 ? `${parseFloat(event.price).toFixed(2)} €` : this.getString('free', 'Gratuit');
             const scheduleMarkup = this.renderSchedule(event);
+            const attendanceLabelKey = event.attendance_show_all_members ? 'attendanceAllMembers' : 'attendanceRegisteredOnly';
+            const attendanceLabelFallback = event.attendance_show_all_members
+                ? 'Liste de présence : tous les membres'
+                : 'Liste de présence : inscrits uniquement';
+            const attendanceLabel = this.getString(attendanceLabelKey, attendanceLabelFallback);
 
             return `
                 <div class="mj-events-manager-card" data-event-id="${escapeHtml(event.id)}">
@@ -625,6 +673,10 @@
                                     <span>${escapeHtml(event.capacity_total)} places</span>
                                 </div>
                             ` : ''}
+                            <div class="mj-events-manager-card__meta-item">
+                                <span class="dashicons dashicons-admin-users"></span>
+                                <span>${escapeHtml(attendanceLabel)}</span>
+                            </div>
                         </div>
                             ${scheduleMarkup}
                         ${event.description ? `
@@ -1015,6 +1067,11 @@
             if (this.scheduleController) {
                 this.scheduleController.reset();
             }
+
+            const attendanceCheckbox = this.elements.form ? this.elements.form.querySelector('[name="attendance_show_all_members"]') : null;
+            if (attendanceCheckbox) {
+                attendanceCheckbox.checked = false;
+            }
         }
 
         loadEventToForm(eventId) {
@@ -1028,6 +1085,11 @@
             form.querySelector('[name="description"]').value = event.description || '';
             form.querySelector('[name="price"]').value = event.price || '';
             form.querySelector('[name="capacity_total"]').value = event.capacity_total || '';
+
+            const attendanceCheckbox = form.querySelector('[name="attendance_show_all_members"]');
+            if (attendanceCheckbox) {
+                attendanceCheckbox.checked = !!event.attendance_show_all_members;
+            }
 
             if (event.start_date) {
                 const startFormatted = this.formatDateForInput(event.start_date);
@@ -1078,6 +1140,9 @@
                 formData.set('schedule_mode', scheduleData.mode);
                 formData.set('schedule_payload', JSON.stringify(scheduleData.payload));
             }
+
+            const attendanceCheckbox = this.elements.form.querySelector('[name="attendance_show_all_members"]');
+            formData.set('attendance_show_all_members', attendanceCheckbox && attendanceCheckbox.checked ? '1' : '0');
 
             this.showFormFeedback(this.getString('loading'), 'loading');
 

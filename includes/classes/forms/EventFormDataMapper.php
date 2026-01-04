@@ -4,6 +4,7 @@ namespace Mj\Member\Classes\Forms;
 
 use Mj\Member\Classes\Crud\MjEvents;
 use function array_key_exists;
+use function json_decode;
 use function sanitize_text_field;
 
 if (!defined('ABSPATH')) {
@@ -18,6 +19,25 @@ final class EventFormDataMapper
      */
     public static function fromValues(array $values): array
     {
+        $registration_payload = array();
+        if (isset($values['registration_payload'])) {
+            if (is_array($values['registration_payload'])) {
+                $registration_payload = $values['registration_payload'];
+            } else {
+                $decoded_payload = json_decode((string) $values['registration_payload'], true);
+                if (is_array($decoded_payload)) {
+                    $registration_payload = $decoded_payload;
+                }
+            }
+        }
+
+        $attendance_show_all_members = false;
+        if (array_key_exists('attendance_show_all_members', $values)) {
+            $attendance_show_all_members = !empty($values['attendance_show_all_members']);
+        } elseif (isset($registration_payload['attendance_show_all_members'])) {
+            $attendance_show_all_members = !empty($registration_payload['attendance_show_all_members']);
+        }
+
         return array(
             'event_title' => isset($values['title']) ? (string) $values['title'] : '',
             'event_status' => isset($values['status']) ? (string) $values['status'] : MjEvents::STATUS_DRAFT,
@@ -30,6 +50,7 @@ final class EventFormDataMapper
             'event_animateur_ids' => isset($values['animateur_ids']) && is_array($values['animateur_ids']) ? array_map('intval', $values['animateur_ids']) : array(),
             'event_volunteer_ids' => isset($values['volunteer_ids']) && is_array($values['volunteer_ids']) ? array_map('intval', $values['volunteer_ids']) : array(),
             'event_allow_guardian_registration' => !empty($values['allow_guardian_registration']),
+            'event_attendance_show_all_members' => $attendance_show_all_members,
             'event_free_participation' => !empty($values['registration_is_free_participation']),
             'event_requires_validation' => array_key_exists('requires_validation', $values) ? !empty($values['requires_validation']) : true,
             'event_capacity_total' => isset($values['capacity_total']) ? (int) $values['capacity_total'] : 0,
@@ -80,9 +101,16 @@ final class EventFormDataMapper
         $values['animateur_ids'] = isset($formData['event_animateur_ids']) && is_array($formData['event_animateur_ids']) ? array_map('intval', $formData['event_animateur_ids']) : array();
         $values['volunteer_ids'] = isset($formData['event_volunteer_ids']) && is_array($formData['event_volunteer_ids']) ? array_map('intval', $formData['event_volunteer_ids']) : array();
         $values['allow_guardian_registration'] = !empty($formData['event_allow_guardian_registration']);
+        $values['attendance_show_all_members'] = !empty($formData['event_attendance_show_all_members']);
         $values['registration_is_free_participation'] = !empty($formData['event_free_participation']);
         $values['free_participation'] = !empty($formData['event_free_participation']);
         $values['requires_validation'] = !empty($formData['event_requires_validation']);
+
+        if (!isset($values['registration_payload']) || !is_array($values['registration_payload'])) {
+            $values['registration_payload'] = array();
+        }
+        $values['registration_payload']['attendance_show_all_members'] = !empty($formData['event_attendance_show_all_members']);
+
         $values['capacity_total'] = isset($formData['event_capacity_total']) ? (int) $formData['event_capacity_total'] : $values['capacity_total'];
         $values['capacity_waitlist'] = isset($formData['event_capacity_waitlist']) ? (int) $formData['event_capacity_waitlist'] : $values['capacity_waitlist'];
         $values['capacity_notify_threshold'] = isset($formData['event_capacity_notify_threshold']) ? (int) $formData['event_capacity_notify_threshold'] : $values['capacity_notify_threshold'];

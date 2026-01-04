@@ -27,6 +27,22 @@ class EventFormRenderer
         ];
     }
 
+    private static function parseRegistrationPayload($source): array
+    {
+        if (is_array($source)) {
+            return $source;
+        }
+
+        if (is_string($source) && $source !== '') {
+            $decoded = json_decode($source, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return [];
+    }
+
     /**
      * Labels des ordinaux mensuels
      */
@@ -297,6 +313,45 @@ class EventFormRenderer
     }
 
     /**
+     * Rend un champ toggle/checkbox avec étiquette principale
+     *
+     * @param string $id ID du champ
+     * @param string $legend Label principal affiché au-dessus du toggle
+     * @param string $label Label associé au checkbox
+     * @param bool $checked Valeur de sélection actuelle
+     * @param array<string,mixed> $args Arguments supplémentaires
+     * @return void
+     */
+    public static function renderToggleField(string $id, string $legend, string $label, bool $checked = false, array $args = []): void
+    {
+        $description = $args['description'] ?? '';
+        $wrapper_class = $args['wrapper_class'] ?? 'mj-form-field';
+        $toggle_class = $args['toggle_class'] ?? 'mj-form-toggle';
+        $value = $args['value'] ?? '1';
+
+        ?>
+        <div class="<?php echo esc_attr($wrapper_class); ?>">
+            <label for="<?php echo esc_attr($id); ?>"><?php echo esc_html($legend); ?></label>
+            <div class="<?php echo esc_attr($toggle_class); ?>">
+                <label for="<?php echo esc_attr($id); ?>">
+                    <input
+                        type="checkbox"
+                        id="<?php echo esc_attr($id); ?>"
+                        name="<?php echo esc_attr($id); ?>"
+                        value="<?php echo esc_attr($value); ?>"
+                        <?php checked($checked, true); ?>
+                    />
+                    <?php echo esc_html($label); ?>
+                </label>
+            </div>
+            <?php if ($description): ?>
+                <p class="description"><?php echo esc_html($description); ?></p>
+            <?php endif; ?>
+        </div>
+        <?php
+    }
+
+    /**
      * Rend les champs de base d'un événement
      *
      * @param array<string,mixed> $event Données de l'événement (ou tableau vide pour création)
@@ -317,6 +372,14 @@ class EventFormRenderer
         $end_date = $event['end_date'] ?? '';
         $price = $event['price'] ?? 0;
         $capacity_total = $event['capacity_total'] ?? 0;
+        $registration_payload = [];
+        if (!empty($event['registration_payload'])) {
+            $registration_payload = self::parseRegistrationPayload($event['registration_payload']);
+        }
+        if (isset($event['attendance_show_all_members']) && $event['attendance_show_all_members'] !== null) {
+            $registration_payload['attendance_show_all_members'] = $event['attendance_show_all_members'];
+        }
+        $attendance_show_all_members = !empty($registration_payload['attendance_show_all_members']);
 
         $event_types = $options['types'] ?? \MjEvents::get_type_labels();
         $event_statuses = $options['statuses'] ?? \MjEvents::get_status_labels();
@@ -368,6 +431,16 @@ class EventFormRenderer
         }, [
             'class' => 'mj-form-field-group mj-form-field-group--row',
         ]);
+
+        self::renderToggleField(
+            'attendance_show_all_members',
+            __('Liste de présence', 'mj-member'),
+            __('Afficher tous les membres dans la liste de présence', 'mj-member'),
+            $attendance_show_all_members,
+            [
+                'description' => __('Permet de pointer les membres autorisés même sans inscription préalable.', 'mj-member'),
+            ]
+        );
 
         self::renderFieldGroup(function () use ($start_date, $end_date) {
             self::renderDatetime(

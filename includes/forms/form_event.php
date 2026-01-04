@@ -640,6 +640,7 @@ $form_values['article_cat'] = 0;
 $form_values['requires_validation'] = isset($defaults['requires_validation']) ? !empty($defaults['requires_validation']) : true;
 $form_values['free_participation'] = !empty($defaults['free_participation']);
 $form_values['registration_is_free_participation'] = !empty($form_values['free_participation']);
+$form_values['attendance_show_all_members'] = false;
 
 $registration_payload_value = isset($form_values['registration_payload']) ? $form_values['registration_payload'] : array();
 if (!is_array($registration_payload_value)) {
@@ -647,6 +648,7 @@ if (!is_array($registration_payload_value)) {
     $registration_payload_value = is_array($decoded_registration_payload) ? $decoded_registration_payload : array();
 }
 $form_values['registration_payload'] = $registration_payload_value;
+$form_values['attendance_show_all_members'] = !empty($registration_payload_value['attendance_show_all_members']);
 
 $timezone = wp_timezone();
 $now_timestamp = current_time('timestamp');
@@ -726,6 +728,7 @@ if ($event) {
         }
     }
     $form_values['registration_payload'] = $event_registration_payload;
+    $form_values['attendance_show_all_members'] = !empty($event_registration_payload['attendance_show_all_members']);
 
     if (!empty($form_values['article_id'])) {
         $article_terms = get_the_category($form_values['article_id']);
@@ -746,6 +749,7 @@ if ($event) {
     }
 
 $form_values['allow_guardian_registration'] = !empty($form_values['allow_guardian_registration']);
+$form_values['attendance_show_all_members'] = !empty($form_values['attendance_show_all_members']);
 $form_values['requires_validation'] = array_key_exists('requires_validation', $form_values) ? !empty($form_values['requires_validation']) : true;
 $form_values['free_participation'] = !empty($form_values['free_participation']) ? 1 : 0;
 $form_values['registration_is_free_participation'] = $form_values['free_participation'] === 1;
@@ -1257,6 +1261,12 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
     $primary_animateur_id = !empty($animateur_ids_list) ? (int) $animateur_ids_list[0] : 0;
     $volunteer_ids_list = array_values($volunteer_ids);
     $allow_guardian_registration = !empty($_POST['event_allow_guardian_registration']) ? 1 : 0;
+    $attendance_show_all_members = !empty($_POST['event_attendance_show_all_members']) ? 1 : 0;
+    $registration_payload_for_storage = array();
+    if (isset($form_values['registration_payload']) && is_array($form_values['registration_payload'])) {
+        $registration_payload_for_storage = $form_values['registration_payload'];
+    }
+    $registration_payload_for_storage['attendance_show_all_members'] = ($attendance_show_all_members === 1);
     $requires_validation = !empty($_POST['event_requires_validation']) ? 1 : 0;
     $occurrence_selection_mode = isset($_POST['event_occurrence_selection_mode'])
         ? sanitize_key((string) $_POST['event_occurrence_selection_mode'])
@@ -1283,6 +1293,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
         'location_id' => $location_id,
         'animateur_id' => $animateur_column_supported ? $primary_animateur_id : 0,
         'allow_guardian_registration' => ($allow_guardian_registration === 1),
+        'attendance_show_all_members' => ($attendance_show_all_members === 1),
         'requires_validation' => ($requires_validation === 1),
         'schedule_mode' => $schedule_mode_input,
         'recurrence_until' => $recurrence_until_input,
@@ -1312,6 +1323,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
     $form_values['schedule_payload'] = $schedule_payload;
     $form_values['schedule_series_items'] = $series_payload_items;
     $form_values['registration_is_free_participation'] = $free_participation_flag === 1;
+    $form_values['registration_payload'] = $registration_payload_for_storage;
 
     if (empty($errors)) {
         $capacity_notified_value = 0;
@@ -1351,6 +1363,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
             'capacity_notify_threshold' => $capacity_notify_threshold,
             'capacity_notified' => $capacity_notified_value,
             'article_id' => isset($_POST['event_article_id']) ? (int)$_POST['event_article_id'] : 0,
+            'registration_payload' => $registration_payload_for_storage,
         );
 
             if ($schedule_mode_input === 'series') {
@@ -1417,6 +1430,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
                         }
                     }
                     $form_values['registration_payload'] = $event_registration_payload;
+                    $form_values['attendance_show_all_members'] = !empty($event_registration_payload['attendance_show_all_members']);
                     mj_member_fill_schedule_form_values($event, $form_values, $schedule_weekdays, $schedule_month_ordinals);
                     $form_values['capacity_total'] = isset($event->capacity_total) ? (int) $event->capacity_total : 0;
                     $form_values['capacity_waitlist'] = isset($event->capacity_waitlist) ? (int) $event->capacity_waitlist : 0;
@@ -1496,6 +1510,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
                         }
                     }
                     $form_values['registration_payload'] = $event_registration_payload;
+                    $form_values['attendance_show_all_members'] = !empty($event_registration_payload['attendance_show_all_members']);
                     mj_member_fill_schedule_form_values($event, $form_values, $schedule_weekdays, $schedule_month_ordinals);
                     $form_values['capacity_total'] = isset($event->capacity_total) ? (int) $event->capacity_total : 0;
                     $form_values['capacity_waitlist'] = isset($event->capacity_waitlist) ? (int) $event->capacity_waitlist : 0;
@@ -2507,6 +2522,18 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                         </label>
                     </div>
                     <p class="description mj-event-help-text">Par defaut, seuls les jeunes peuvent s'inscrire. Cochez pour ouvrir les inscriptions aux tuteurs.</p>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row"><label for="mj-event-attendance-all-members"><?php esc_html_e('Liste de presence complete', 'mj-member'); ?></label></th>
+                <td>
+                    <div class="mj-event-toggle">
+                        <label for="mj-event-attendance-all-members">
+                            <input type="checkbox" id="mj-event-attendance-all-members" name="event_attendance_show_all_members" value="1" <?php checked(!empty($form_values['attendance_show_all_members']), true); ?> />
+                            <?php esc_html_e('Afficher tous les membres dans la liste de presence', 'mj-member'); ?>
+                        </label>
+                    </div>
+                    <p class="description mj-event-help-text"><?php esc_html_e('Permet de pointer les membres admissibles meme s ils ne sont pas inscrits.', 'mj-member'); ?></p>
                 </td>
             </tr>
             <tr>

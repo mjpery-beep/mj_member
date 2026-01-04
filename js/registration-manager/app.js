@@ -631,6 +631,9 @@
         var _registrations = useState([]);
         var registrations = _registrations[0];
         var setRegistrations = _registrations[1];
+        var _attendanceMembers = useState([]);
+        var attendanceMembers = _attendanceMembers[0];
+        var setAttendanceMembers = _attendanceMembers[1];
 
         var _registrationsLoading = useState(false);
         var registrationsLoading = _registrationsLoading[0];
@@ -932,6 +935,7 @@
             api.getRegistrations(eventId)
                 .then(function (data) {
                     setRegistrations(data.registrations || []);
+                    setAttendanceMembers(data.attendanceMembers || []);
                     
                     // Construire la map de présence
                     var attMap = {};
@@ -950,6 +954,7 @@
                     if (!err.aborted) {
                         showError(err.message);
                         setRegistrationsLoading(false);
+                        setAttendanceMembers([]);
                     }
                 });
         }, [api, showError]);
@@ -959,6 +964,8 @@
             setSelectedEvent(event);
             setEventDetails(null);
             setRegistrations([]);
+            setAttendanceMembers([]);
+            setAttendanceMembers([]);
             setAttendanceMap({});
             setEventEditorData(null);
             setEventEditorSummary(null);
@@ -1098,6 +1105,7 @@
                         setSelectedEvent(null);
                         setEventDetails(null);
                         setRegistrations([]);
+                        setAttendanceMembers([]);
                         setAttendanceMap({});
                         setEventEditorData(null);
                         setEventEditorSummary(null);
@@ -2190,6 +2198,7 @@
                             activeTab === 'attendance' && h(AttendanceSheet, {
                                 event: eventDetails,
                                 registrations: registrations,
+                                attendanceMembers: attendanceMembers,
                                 occurrences: eventDetails ? eventDetails.occurrences : [],
                                 attendanceMap: attendanceMap,
                                 onUpdateAttendance: handleUpdateAttendance,

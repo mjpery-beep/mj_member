@@ -255,6 +255,7 @@
             whatsappLink = buildWhatsAppLink(memberPhone);
         }
         var volunteerLabel = getString(strings, 'volunteerLabel', 'Bénévole');
+        var isAttendanceOnly = registration && registration.attendanceOnly;
 
         var handleClick = function (status) {
             if (loading) return;
@@ -340,7 +341,7 @@
             // Actions
             h('div', { class: 'mj-att-member__actions' }, [
                 // Bouton de régularisation si nécessaire
-                irregular && onRegularize && h('button', {
+                irregular && onRegularize && !isAttendanceOnly && h('button', {
                     type: 'button',
                     class: 'mj-att-member__regularize-btn',
                     onClick: function () { onRegularize(registration, irregular); },
@@ -416,6 +417,7 @@
     function AttendanceSheet(props) {
         var event = props.event;
         var registrations = props.registrations || [];
+        var attendanceMembers = props.attendanceMembers || [];
         var occurrences = props.occurrences || [];
         var attendanceMap = props.attendanceMap || {};
         var onUpdateAttendance = props.onUpdateAttendance;
@@ -474,6 +476,43 @@
             return priceValue > 0 && !freeParticipation;
         }, [event]);
 
+        var mergedRegistrations = useMemo(function () {
+            if (!attendanceMembers || attendanceMembers.length === 0) {
+                return registrations;
+            }
+
+            var seen = {};
+            registrations.forEach(function (reg) {
+                if (reg && reg.memberId) {
+                    seen[reg.memberId] = true;
+                }
+            });
+
+            var extras = attendanceMembers.map(function (member) {
+                var memberId = member && member.id ? member.id : null;
+                if (!memberId || seen[memberId]) {
+                    return null;
+                }
+                return {
+                    id: 'attendance-only-' + memberId,
+                    eventId: event ? event.id : null,
+                    memberId: memberId,
+                    status: 'valide',
+                    paymentStatus: 'paid',
+                    member: member,
+                    attendanceOnly: true,
+                    occurrences: [],
+                    assignedOccurrences: [],
+                };
+            }).filter(function (entry) { return entry !== null; });
+
+            if (extras.length === 0) {
+                return registrations;
+            }
+
+            return registrations.concat(extras);
+        }, [registrations, attendanceMembers, event]);
+
         // Filtrer les inscriptions par catégorie
         var categorizedRegistrations = useMemo(function () {
             var valid = [];        // Validé + inscrit à cette séance
@@ -483,17 +522,38 @@
             var selectedOccNormalized = normalizeOccurrenceKey(selectedOccurrence);
             var hasMultipleOccurrences = occurrences.length > 1;
 
-            registrations.forEach(function (reg) {
+            mergedRegistrations.forEach(function (reg) {
+                if (!reg) {
+                    return;
+                }
                 var isValidated = reg.status === 'valide'
                     || (!requiresValidation && reg.status === 'en_attente');
+                var isAttendanceOnly = reg.attendanceOnly === true;
+                var registrationOccurrences = Array.isArray(reg.occurrences) ? reg.occurrences : [];
+                if (registrationOccurrences.length === 0 && Array.isArray(reg.assignedOccurrences)) {
+                    registrationOccurrences = reg.assignedOccurrences;
+                }
                 
                 // Vérifier si inscrit à cette occurrence
                 var isRegisteredToOccurrence = true;
-                if (hasMultipleOccurrences && selectedOccNormalized && reg.occurrences) {
-                    isRegisteredToOccurrence = reg.occurrences.some(function (occ) {
+                if (isAttendanceOnly) {
+                    isRegisteredToOccurrence = false;
+                } else if (hasMultipleOccurrences && selectedOccNormalized) {
+                    if (registrationOccurrences.length > 0) {
+                        isRegisteredToOccurrence = registrationOccurrences.some(function (occ) {
+                            var occKey = normalizeOccurrenceKey(occ);
+                            return occKey === selectedOccNormalized;
+                        });
+                    } else {
+                        isRegisteredToOccurrence = false;
+                    }
+                } else if (selectedOccNormalized && registrationOccurrences.length > 0) {
+                    isRegisteredToOccurrence = registrationOccurrences.some(function (occ) {
                         var occKey = normalizeOccurrenceKey(occ);
                         return occKey === selectedOccNormalized;
                     });
+                } else if (selectedOccNormalized && registrationOccurrences.length === 0 && hasMultipleOccurrences) {
+                    isRegisteredToOccurrence = false;
                 }
 
                 if (isValidated && isRegisteredToOccurrence) {
@@ -507,7 +567,7 @@
             });
 
             return { valid: valid, unpaid: unpaid, notRegistered: notRegistered };
-        }, [registrations, selectedOccurrence, occurrences, requiresValidation]);
+        }, [mergedRegistrations, selectedOccurrence, occurrences, requiresValidation]);
 
         // Obtenir le statut de présence
         var getAttendanceStatus = useCallback(function (memberId) {
@@ -546,6 +606,9 @@
 
         // Régulariser un membre
         var handleRegularize = useCallback(function (registration, irregularType) {
+            if (registration && registration.attendanceOnly) {
+                return;
+            }
             if (irregularType === 'unpaid') {
                 var paymentStatus = registration.paymentStatus || 'unpaid';
                 var canValidateRegistration = requiresValidation && registration.status === 'en_attente';

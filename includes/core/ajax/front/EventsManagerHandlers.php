@@ -22,6 +22,47 @@ class EventsManagerHandlers
     }
 
     /**
+     * @param mixed $raw
+     * @return array<string,mixed>
+     */
+    private static function decodeRegistrationPayload($raw): array
+    {
+        if (is_array($raw)) {
+            return $raw;
+        }
+
+        if (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private static function normalizeAttendanceFlag($value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_int($value)) {
+            return $value === 1;
+        }
+
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+            return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
+        }
+
+        return !empty($value);
+    }
+
+    /**
      * Liste les événements (AJAX)
      */
     public static function handleList(): void
@@ -101,10 +142,14 @@ class EventsManagerHandlers
         $end_date = !empty($_POST['end_date']) ? self::parseDateTime($_POST['end_date']) : '';
         $price = isset($_POST['price']) ? floatval($_POST['price']) : 0;
         $capacity_total = isset($_POST['capacity_total']) ? intval($_POST['capacity_total']) : 0;
+        $attendance_show_all_members = isset($_POST['attendance_show_all_members'])
+            ? self::normalizeAttendanceFlag($_POST['attendance_show_all_members'])
+            : false;
 
         // Schedule mode and payload
         $schedule_mode = !empty($_POST['schedule_mode']) ? sanitize_key($_POST['schedule_mode']) : 'fixed';
         $schedule_payload = '';
+        $decoded = [];
         if (!empty($_POST['schedule_payload'])) {
             $decoded = json_decode(wp_unslash($_POST['schedule_payload']), true);
             if (is_array($decoded)) {
@@ -117,6 +162,10 @@ class EventsManagerHandlers
         if ($schedule_mode === 'recurring' && !empty($decoded['until'])) {
             $recurrence_until = sanitize_text_field($decoded['until']);
         }
+
+        $registration_payload = [
+            'attendance_show_all_members' => $attendance_show_all_members,
+        ];
 
         try {
             $event_id = \MjEvents::create([
@@ -131,6 +180,7 @@ class EventsManagerHandlers
                 'schedule_mode' => $schedule_mode,
                 'schedule_payload' => $schedule_payload,
                 'recurrence_until' => $recurrence_until,
+                'registration_payload' => $registration_payload,
             ]);
 
             if (is_wp_error($event_id)) {
@@ -177,6 +227,8 @@ class EventsManagerHandlers
         }
 
         $data = [];
+
+        $registration_payload = self::decodeRegistrationPayload(isset($event->registration_payload) ? $event->registration_payload : []);
 
         if (isset($_POST['title'])) {
             $title = sanitize_text_field($_POST['title']);
@@ -229,6 +281,12 @@ class EventsManagerHandlers
                     $data['recurrence_until'] = sanitize_text_field($decoded['until']);
                 }
             }
+        }
+
+        if (isset($_POST['attendance_show_all_members'])) {
+            $attendance_flag = self::normalizeAttendanceFlag($_POST['attendance_show_all_members']);
+            $registration_payload['attendance_show_all_members'] = $attendance_flag;
+            $data['registration_payload'] = $registration_payload;
         }
 
         try {

@@ -442,6 +442,11 @@ $config_json = wp_json_encode(array(
         'confirmDeleteRegistration' => __('Voulez-vous vraiment supprimer cette inscription ?', 'mj-member'),
         'registrationStatus' => __('Statut inscription', 'mj-member'),
         'changeOccurrences' => __('Modifier les séances', 'mj-member'),
+        'attendanceList' => __('Liste de présence', 'mj-member'),
+        'attendanceAllMembersToggle' => __('Afficher tous les membres dans la liste de présence', 'mj-member'),
+        'attendanceAllMembersHint' => __('Permet de pointer les membres autorisés même sans inscription préalable.', 'mj-member'),
+        'attendanceAllMembers' => __('Liste de présence : tous les membres', 'mj-member'),
+        'attendanceRegisteredOnly' => __('Liste de présence : inscrits uniquement', 'mj-member'),
         
         // Paiements
         'paymentStatus' => __('Statut paiement', 'mj-member'),

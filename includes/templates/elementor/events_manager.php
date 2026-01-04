@@ -34,6 +34,7 @@ if ($is_preview) {
                 wp_date('H:i', $now_timestamp + DAY_IN_SECONDS),
                 wp_date('H:i', $now_timestamp + DAY_IN_SECONDS + 3 * HOUR_IN_SECONDS)
             ),
+            'attendance_show_all_members' => true,
         ],
         [
             'title' => __('Atelier découverte Hip-Hop', 'mj-member'),
@@ -58,6 +59,7 @@ if ($is_preview) {
                 __('Jusqu\'au %s', 'mj-member'),
                 wp_date('d/m/Y', $now_timestamp + 90 * DAY_IN_SECONDS)
             ),
+            'attendance_show_all_members' => false,
         ],
     ];
     ?>
@@ -108,6 +110,15 @@ if ($is_preview) {
                                 <div class="mj-events-manager-card__meta-item">
                                     <span class="dashicons dashicons-groups"></span>
                                     <span><?php echo esc_html($preview_event['capacity']); ?></span>
+                                </div>
+                                <?php
+                                $attendance_label = !empty($preview_event['attendance_show_all_members'])
+                                    ? __('Liste de présence : tous les membres', 'mj-member')
+                                    : __('Liste de présence : inscrits uniquement', 'mj-member');
+                                ?>
+                                <div class="mj-events-manager-card__meta-item">
+                                    <span class="dashicons dashicons-admin-users"></span>
+                                    <span><?php echo esc_html($attendance_label); ?></span>
                                 </div>
                             </div>
                             <?php if (!empty($preview_event['schedule_type'])) : ?>
@@ -240,6 +251,8 @@ $config_json = wp_json_encode([
         'scheduleUntilPrefix' => __('Jusqu\'au', 'mj-member'),
         'scheduleFallback' => __('Planification non renseignée.', 'mj-member'),
         'scheduleMonthlyPattern' => __('Chaque %1$s %2$s', 'mj-member'),
+        'attendanceAllMembers' => __('Liste de présence : tous les membres', 'mj-member'),
+        'attendanceRegisteredOnly' => __('Liste de présence : inscrits uniquement', 'mj-member'),
     ],
 ]);
 ?>
