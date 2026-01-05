@@ -1142,6 +1142,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             } else {
                                 echo '<a' . $trigger_attributes . ' href="' . esc_url($event_href) . '">';
                             }
+                            $has_type_label = !empty($event_entry['type_label']);
                             if (!empty($event_entry['cover'])) {
                                 $cover_sources = array();
                                 if (isset($event_entry['cover_sources']) && is_array($event_entry['cover_sources'])) {
@@ -1164,10 +1165,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 }
                                 echo '<img src="' . esc_url($fallback_cover) . '" alt="' . esc_attr($event_entry['title']) . '" loading="lazy" />';
                                 echo '</picture>';
+                                if ($has_type_label) {
+                                    echo '<span class="mj-member-events-calendar__event-type mj-member-events-calendar__event-type--overlay">' . esc_html($event_entry['type_label']) . '</span>';
+                                }
                                 echo '</span>';
                             }
                             echo '<span class="mj-member-events-calendar__event-copy">';
-                            if (!empty($event_entry['type_label'])) {
+                            if ($has_type_label && empty($event_entry['cover'])) {
                                 echo '<span class="mj-member-events-calendar__event-type">' . esc_html($event_entry['type_label']) . '</span>';
                             }
                             echo '<span class="mj-member-events-calendar__event-title">' . esc_html($event_entry['title']) . '</span>';
