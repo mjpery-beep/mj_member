@@ -487,16 +487,18 @@
     gap: 4px;
     font-size: 0.66rem;
     font-weight: 600;
-    padding: 2px 2px;
+    padding: 0px 6px;
     overflow: hidden;
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     line-clamp: 2;
     white-space: normal;
+    border-radius: 15px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     width: fit-content;
+    background-color: white;
 }
 
 .mj-member-events-calendar__event-type--overlay {
@@ -504,7 +506,7 @@
     top: 6px;
     right: 6px;
     z-index: 2;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
 }
 
 /* ==========================================================================
@@ -520,6 +522,12 @@
     background: #ffe4e6;
     color: #be123c;
 }
+
+.mj-member-events-calendar__event[data-calendar-type="atelier"] .mj-member-events-calendar__event-type {
+    background: #214431;
+    color: #ffffff;
+}
+
 
 /* ==========================================================================
    Filtered State

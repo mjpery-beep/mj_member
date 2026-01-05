@@ -492,7 +492,7 @@
                         onChange: function (e) { onChangeForm('event_recurring_start_date', e.target.value); },
                     }),
                 ]),
-                h('div', { class: 'mj-regmgr-form-field' }, [
+                frequency !== 'weekly' && h('div', { class: 'mj-regmgr-form-field' }, [
                     h('label', null, getString(strings, 'recurringStartTime', 'Heure de debut')),
                     h('input', {
                         type: 'time',
@@ -500,7 +500,7 @@
                         onChange: function (e) { onChangeForm('event_recurring_start_time', e.target.value); },
                     }),
                 ]),
-                h('div', { class: 'mj-regmgr-form-field' }, [
+                frequency !== 'weekly' && h('div', { class: 'mj-regmgr-form-field' }, [
                     h('label', null, getString(strings, 'recurringEndTime', 'Heure de fin')),
                     h('input', {
                         type: 'time',
