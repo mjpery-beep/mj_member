@@ -334,9 +334,26 @@
     // ============================================
 
     function Tabs(props) {
-        var tabs = props.tabs;
+        var originalTabs = Array.isArray(props.tabs) ? props.tabs.slice() : [];
+        var fallbackRegistrationsTab = props.fallbackRegistrationsTab;
         var activeTab = props.activeTab;
         var onChange = props.onChange;
+        var shouldEnsureRegistrationsTab = props.ensureRegistrationsTab !== false;
+
+        var tabs = originalTabs;
+        var hasRegistrationsTab = tabs.some(function (tab) {
+            return tab && tab.key === 'registrations';
+        });
+
+        if (shouldEnsureRegistrationsTab && !hasRegistrationsTab) {
+            var fallback = fallbackRegistrationsTab || {
+                key: 'registrations',
+                label: 'Inscriptions',
+                badge: 0,
+            };
+
+            tabs = [fallback].concat(tabs);
+        }
 
         return h('div', { class: 'mj-regmgr-tabs', role: 'tablist' },
             tabs.map(function (tab) {
@@ -356,6 +373,48 @@
                 ]);
             })
         );
+    }
+    /**
+     *  Assure la présence de l'onglet "Inscriptions" dans une liste d'onglets.
+     */
+    function ensureRegistrationsTab(tabs, fallback) {
+        var fallbackLabel = fallback && fallback.label ? fallback.label : 'Inscriptions';
+        var fallbackBadge = fallback && typeof fallback.badge === 'number' ? fallback.badge : 0;
+
+        var safeTabs = Array.isArray(tabs) ? tabs.filter(function (tab) { return !!tab; }) : [];
+        var existingIndex = -1;
+
+        for (var i = 0; i < safeTabs.length; i++) {
+            var tab = safeTabs[i];
+            if (tab && tab.key === 'registrations') {
+                existingIndex = i;
+                break;
+            }
+        }
+
+        if (existingIndex !== -1) {
+            var current = safeTabs[existingIndex];
+            var normalized = Object.assign({}, current, {
+                key: 'registrations',
+                label: current && current.label ? current.label : fallbackLabel,
+            });
+
+            if (normalized.badge === undefined) {
+                normalized.badge = fallbackBadge;
+            }
+
+            safeTabs[existingIndex] = normalized;
+            return safeTabs;
+        }
+
+        var fallbackTab = {
+            key: 'registrations',
+            label: fallbackLabel,
+            badge: fallbackBadge,
+        };
+
+        safeTabs.unshift(fallbackTab);
+        return safeTabs;
     }
 
     // ============================================
@@ -973,7 +1032,8 @@
             setEventEditorLoading(false);
             setEventEditorSaving(false);
             eventEditorLoadedRef.current = null;
-            setActiveTab('registrations');
+            var defaultTab = event && event.freeParticipation ? 'details' : 'registrations';
+            setActiveTab(defaultTab);
             setMobileShowDetails(true); // Afficher les détails sur mobile
             
             // Mémoriser l'événement sélectionné
@@ -2008,11 +2068,14 @@
         }, [api]);
 
         // Onglets
+        var registrationsCount = Array.isArray(registrations) ? registrations.length : 0;
+        var registrationsTabLabel = getString(strings, 'tabRegistrations', 'Inscriptions');
+
         var tabs = [
             { 
                 key: 'registrations', 
-                label: getString(strings, 'tabRegistrations', 'Inscriptions'),
-                badge: registrations.length,
+                label: registrationsTabLabel,
+                badge: registrationsCount,
             },
             { 
                 key: 'attendance', 
@@ -2028,6 +2091,22 @@
             tabs.push({
                 key: 'editor',
                 label: getString(strings, 'tabEditor', 'Éditer'),
+            });
+        }
+
+        var eventHasFreeParticipation = false;
+        if (eventDetails && typeof eventDetails.freeParticipation !== 'undefined') {
+            eventHasFreeParticipation = !!eventDetails.freeParticipation;
+        } else if (selectedEvent && typeof selectedEvent.freeParticipation !== 'undefined') {
+            eventHasFreeParticipation = !!selectedEvent.freeParticipation;
+        }
+
+        if (eventHasFreeParticipation) {
+            tabs = tabs.filter(function (tab) { return tab && tab.key !== 'registrations'; });
+        } else {
+            tabs = ensureRegistrationsTab(tabs, {
+                label: registrationsTabLabel,
+                badge: registrationsCount,
             });
         }
 
@@ -2169,6 +2248,12 @@
                         // Onglets
                         h(Tabs, {
                             tabs: tabs,
+                            fallbackRegistrationsTab: {
+                                key: 'registrations',
+                                label: registrationsTabLabel,
+                                badge: registrationsCount,
+                            },
+                            ensureRegistrationsTab: !eventHasFreeParticipation,
                             activeTab: activeTab,
                             onChange: setActiveTab,
                         }),
