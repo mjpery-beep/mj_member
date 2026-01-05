@@ -645,9 +645,31 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     continue;
                 }
 
-                $start_ts = isset($occurrence['timestamp']) ? (int) $occurrence['timestamp'] : strtotime($occurrence_start_raw);
-                if (!$start_ts) {
+                $occurrence_start_dt = $create_datetime($occurrence_start_raw);
+                $start_ts = isset($occurrence['timestamp']) ? (int) $occurrence['timestamp'] : 0;
+
+                if ($occurrence_start_dt instanceof \DateTimeImmutable) {
+                    if ($start_ts <= 0) {
+                        $start_ts = $occurrence_start_dt->getTimestamp();
+                    }
+                }
+
+                if ($start_ts <= 0) {
+                    $fallback_ts = strtotime($occurrence_start_raw);
+                    if ($fallback_ts !== false) {
+                        $start_ts = $fallback_ts;
+                        if (!$occurrence_start_dt) {
+                            $occurrence_start_dt = (new \DateTimeImmutable('@' . $fallback_ts))->setTimezone($timezone);
+                        }
+                    }
+                }
+
+                if ($start_ts <= 0) {
                     continue;
+                }
+
+                if (!$occurrence_start_dt) {
+                    $occurrence_start_dt = (new \DateTimeImmutable('@' . $start_ts))->setTimezone($timezone);
                 }
 
                 if ($start_ts < $range_start || $start_ts > $range_end) {
@@ -666,17 +688,19 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
                 $ensure_day_bucket($months, $month_key, $day_key);
 
-                $time_label = wp_date(get_option('time_format', 'H:i'), $start_ts, $timezone);
                 $occurrence_end_raw = isset($occurrence['end']) ? (string) $occurrence['end'] : '';
-                $end_ts_candidate = $occurrence_end_raw !== '' ? strtotime($occurrence_end_raw) : false;
-                if ($time_label !== '') {
-                    if ($occurrence_end_raw === '' || $end_ts_candidate === false || $end_ts_candidate === $start_ts) {
-                        $time_label = sprintf(__('à partir de %s', 'mj-member'), $time_label);
+                $occurrence_end_dt = null;
+                if ($occurrence_end_raw !== '') {
+                    $occurrence_end_dt = $create_datetime($occurrence_end_raw);
+                    if (!$occurrence_end_dt) {
+                        $end_fallback_ts = strtotime($occurrence_end_raw);
+                        if ($end_fallback_ts !== false) {
+                            $occurrence_end_dt = (new \DateTimeImmutable('@' . $end_fallback_ts))->setTimezone($timezone);
+                        }
                     }
                 }
-                if ($occurrence_end_raw === '') {
-                    $occurrence_end_raw = $occurrence_start_raw;
-                }
+
+                $time_label = self::format_occurrence_time_label($occurrence_start_dt, $occurrence_end_dt);
                 $occurrence_key = $event_id . ':' . $start_ts;
 
                 $months[$month_key]['days'][$day_key]['events'][] = array(
@@ -1308,6 +1332,51 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
 
         echo '<script>window.mjMemberEventsCalendarQueue = window.mjMemberEventsCalendarQueue || [];window.mjMemberEventsCalendarQueue.push({id:' . wp_json_encode($instance_id) . ',config:' . wp_json_encode($instance_config) . '});</script>';
+    }
+
+    /**
+     * Formate le libellé horaire d'une occurrence en respectant le fuseau WP.
+     */
+    private static function format_occurrence_time_label(\DateTimeImmutable $start, ?\DateTimeImmutable $end = null) {
+        $time_format = get_option('time_format', 'H:i');
+        $start_label = self::normalize_time_label(date_i18n($time_format, $start->getTimestamp()));
+
+        if ($start_label === '') {
+            return '';
+        }
+
+        if ($end instanceof \DateTimeImmutable) {
+            $end_label = self::normalize_time_label(date_i18n($time_format, $end->getTimestamp()));
+            if ($end_label !== '' && $end_label !== $start_label) {
+                return $start_label . ' → ' . $end_label;
+            }
+        }
+
+        return sprintf(__('À partir de %s', 'mj-member'), $start_label);
+    }
+
+    private static function normalize_time_label($label) {
+        $label = is_string($label) ? trim($label) : '';
+        if ($label === '') {
+            return '';
+        }
+
+        $label = preg_replace('/\s+/u', ' ', $label);
+        if ($label === null) {
+            $label = '';
+        }
+
+        $label = preg_replace('/\s*min$/u', '', $label);
+        if ($label === null) {
+            $label = '';
+        }
+
+        $label = preg_replace('/\s*h\s*/u', 'h', $label);
+        if ($label === null) {
+            $label = '';
+        }
+
+        return trim($label);
     }
 
     /**

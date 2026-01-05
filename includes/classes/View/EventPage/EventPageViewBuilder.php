@@ -2,6 +2,8 @@
 
 namespace Mj\Member\Classes\View\EventPage;
 
+use DateTime;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -336,17 +338,23 @@ final class EventPageViewBuilder
                 $nextOccurrenceData['full_date'] = date_i18n('l j F Y', $timestamp);
             }
             
-            // Extraire les heures depuis start/end
-            if (!empty($nextOccurrence['start'])) {
-                $startTime = strtotime((string) $nextOccurrence['start']);
-                if ($startTime) {
-                    $nextOccurrenceData['time_start'] = date_i18n('H:i', $startTime);
+            $occurrenceStartTimestamp = $timestamp;
+
+            if (!empty($nextOccurrence['start']) && $occurrenceStartTimestamp <= 0) {
+                $parsedStart = $this->parseOccurrenceTimestamp((string) $nextOccurrence['start']);
+                if ($parsedStart !== null) {
+                    $occurrenceStartTimestamp = $parsedStart;
                 }
             }
+
+            if ($occurrenceStartTimestamp > 0) {
+                $nextOccurrenceData['time_start'] = date_i18n('H:i', $occurrenceStartTimestamp);
+            }
+
             if (!empty($nextOccurrence['end'])) {
-                $endTime = strtotime((string) $nextOccurrence['end']);
-                if ($endTime) {
-                    $nextOccurrenceData['time_end'] = date_i18n('H:i', $endTime);
+                $parsedEnd = $this->parseOccurrenceTimestamp((string) $nextOccurrence['end']);
+                if ($parsedEnd !== null) {
+                    $nextOccurrenceData['time_end'] = date_i18n('H:i', $parsedEnd);
                 }
             }
         }
@@ -401,6 +409,33 @@ final class EventPageViewBuilder
             'total' => isset($photos['total']) ? (int) $photos['total'] : 0,
             'pending_count' => isset($photos['pending_count']) ? (int) $photos['pending_count'] : 0,
         );
+    }
+
+    /**
+     * Convertit une chaîne datetime en timestamp en respectant le fuseau WordPress
+     *
+     * @param string $value
+     * @return int|null
+     */
+    private function parseOccurrenceTimestamp(string $value): ?int
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+
+        $timezone = wp_timezone();
+        $formats = array('Y-m-d H:i:s', 'Y-m-d H:i', 'Y-m-d');
+
+        foreach ($formats as $format) {
+            $date = DateTime::createFromFormat($format, $value, $timezone);
+            if ($date instanceof DateTime) {
+                return $date->getTimestamp();
+            }
+        }
+
+        $timestamp = strtotime($value);
+        return $timestamp !== false ? $timestamp : null;
     }
 
     /**

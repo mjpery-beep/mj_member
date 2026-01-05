@@ -396,7 +396,7 @@
     height: 100%;
     cursor: pointer;
     color: var(--mj-events-calendar-event-text);
-    text-decoration: none;
+    text-decoration: none !important;
     transition: transform 0.2s ease;
 }
 
@@ -404,7 +404,7 @@
 .mj-member-events-calendar__event-trigger:focus {
     background: none;
     color: var(--mj-events-calendar-event-text);
-    text-decoration: none;
+    text-decoration: none !important;
     transform: translateY(-1px);
 }
 
@@ -469,6 +469,8 @@
     gap: 6px;
     font-size: 0.7rem;
     color: var(--mj-events-calendar-event-time);
+    text-decoration: none !important;
+    white-space: nowrap;
 }
 
 /* ==========================================================================

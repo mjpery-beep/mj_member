@@ -2,6 +2,7 @@
 
 namespace Mj\Member\Classes\View\EventPage;
 
+use DateTime;
 use Mj\Member\Classes\Crud\MjEventAnimateurs;
 use Mj\Member\Classes\Crud\MjEventAttendance;
 use Mj\Member\Classes\Crud\MjEventLocations;
@@ -231,9 +232,6 @@ final class EventPageModel
 
         // MjEventSchedule utilise des méthodes statiques
         $occurrences = MjEventSchedule::get_occurrences($eventArray);
-        
-        // Construire le label d'affichage à partir des dates
-        $displayLabel = $this->buildDisplayLabel($dateDebut, $dateFin, $mode);
         $scheduleSummary = $this->buildScheduleSummary($mode, count($occurrences));
 
         $now = current_time('timestamp');
@@ -245,8 +243,8 @@ final class EventPageModel
             $isToday = $timestamp > 0 && date('Y-m-d', $timestamp) === date('Y-m-d', $now);
 
             // Générer le label si absent
-            $label = isset($occ['label']) ? (string) $occ['label'] : '';
-            if (empty($label) && $timestamp > 0) {
+            $label = $this->buildOccurrenceLabel($occ, $mode);
+            if ($label === '' && $timestamp > 0) {
                 $label = date_i18n(get_option('date_format', 'd/m/Y'), $timestamp);
             }
 
@@ -285,6 +283,9 @@ final class EventPageModel
         // Extraire les données de récurrence hebdomadaire depuis schedule_payload
         $weeklySchedule = $this->buildWeeklySchedule($eventArray);
 
+        $nextOccurrence = $this->findNextOccurrence($occurrenceItems);
+        $displayLabel = $this->buildDisplayLabel($dateDebut, $dateFin, $mode, $nextOccurrence, $occurrenceItems);
+
         return array(
             'mode' => $mode,
             'selection_mode' => $selectionMode,
@@ -295,7 +296,7 @@ final class EventPageModel
             'schedule_summary' => $scheduleSummary,
             'occurrences' => $occurrenceItems,
             'has_multiple_occurrences' => $showCalendar,
-            'next_occurrence' => $this->findNextOccurrence($occurrenceItems),
+            'next_occurrence' => $nextOccurrence,
             'weekly_schedule' => $weeklySchedule,
         );
     }
@@ -304,31 +305,126 @@ final class EventPageModel
      * Construit le label d'affichage pour les dates
      *
      * @param string $dateDebut
-     * @param string $dateFin
-     * @param string $mode
+    * @param string $dateFin
+    * @param string $mode
+    * @param array<string,mixed>|null $nextOccurrence
+    * @param array<int,array<string,mixed>> $occurrenceItems
      * @return string
      */
-    private function buildDisplayLabel(string $dateDebut, string $dateFin, string $mode): string
+    private function buildDisplayLabel(string $dateDebut, string $dateFin, string $mode, ?array $nextOccurrence, array $occurrenceItems): string
     {
-        if (empty($dateDebut)) {
-            return '';
-        }
+        if ($mode === 'fixed') {
+            $candidate = $nextOccurrence;
+            if ($candidate === null && !empty($occurrenceItems)) {
+                $candidate = $occurrenceItems[0];
+            }
 
-        $startTimestamp = strtotime($dateDebut);
-        if ($startTimestamp === false) {
-            return '';
-        }
+            if (is_array($candidate) && !empty($candidate['start'])) {
+                $start = $this->parseEventDate((string) $candidate['start']);
+                if ($start instanceof DateTime) {
+                    $end = !empty($candidate['end']) ? $this->parseEventDate((string) $candidate['end']) : null;
+                    if (!$end instanceof DateTime || $end <= $start) {
+                        $end = (clone $start)->modify('+1 hour');
+                    }
 
-        $formatted = date_i18n('l j F Y', $startTimestamp);
-
-        if (!empty($dateFin) && $dateFin !== $dateDebut) {
-            $endTimestamp = strtotime($dateFin);
-            if ($endTimestamp !== false && $endTimestamp > $startTimestamp) {
-                $formatted .= ' - ' . date_i18n('l j F Y', $endTimestamp);
+                    return $this->formatDateRangeLabel($start, $end, true);
+                }
             }
         }
 
-        return $formatted;
+        $start = $this->parseEventDate($dateDebut);
+        if (!$start instanceof DateTime) {
+            return '';
+        }
+
+        $end = $this->parseEventDate($dateFin);
+        if (!$end instanceof DateTime || $end <= $start) {
+            $end = (clone $start)->modify('+1 hour');
+        }
+
+        return $this->formatDateRangeLabel($start, $end, false);
+    }
+
+    /**
+     * Formate un libellé date/heure harmonisé
+     */
+    private function formatDateRangeLabel(DateTime $start, DateTime $end, bool $forceTime): string
+    {
+        $dateFormat = 'l j F Y';
+        $timeFormat = get_option('time_format', 'H:i');
+        $startLabel = date_i18n($dateFormat, $start->getTimestamp());
+
+        if ($start->format('Y-m-d') === $end->format('Y-m-d')) {
+            $startTime = date_i18n($timeFormat, $start->getTimestamp());
+            $endTime = date_i18n($timeFormat, $end->getTimestamp());
+
+            if (!$forceTime && $startTime === '00:00' && $endTime === '00:00') {
+                return $startLabel;
+            }
+
+            if ($startTime === $endTime) {
+                return $startLabel . ' · ' . $startTime;
+            }
+
+            return $startLabel . ' · ' . $startTime . ' → ' . $endTime;
+        }
+
+        return $startLabel . ' - ' . date_i18n($dateFormat, $end->getTimestamp());
+    }
+
+    /**
+     * Construit un libellé pour une occurrence
+     *
+     * @param array<string,mixed> $occ
+     */
+    private function buildOccurrenceLabel(array $occ, string $mode): string
+    {
+        $startRaw = isset($occ['start']) ? (string) $occ['start'] : '';
+        $endRaw = isset($occ['end']) ? (string) $occ['end'] : '';
+
+        $start = $this->parseEventDate($startRaw);
+        if (!$start instanceof DateTime) {
+            return isset($occ['label']) ? (string) $occ['label'] : '';
+        }
+
+        $end = $this->parseEventDate($endRaw);
+        if (!$end instanceof DateTime || $end <= $start) {
+            $end = (clone $start)->modify('+1 hour');
+        }
+
+        $forceTime = ($mode === 'fixed');
+        return $this->formatDateRangeLabel($start, $end, $forceTime);
+    }
+
+    /**
+     * Retourne une DateTime basée sur le fuseau WordPress
+     */
+    private function parseEventDate(string $value): ?DateTime
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+
+        $timezone = wp_timezone();
+        $formats = array('Y-m-d H:i:s', 'Y-m-d H:i', 'Y-m-d');
+
+        foreach ($formats as $format) {
+            $date = DateTime::createFromFormat($format, $value, $timezone);
+            if ($date instanceof DateTime) {
+                return $date;
+            }
+        }
+
+        $timestamp = strtotime($value);
+        if ($timestamp === false) {
+            return null;
+        }
+
+        $date = new DateTime('@' . $timestamp);
+        $date->setTimezone($timezone);
+
+        return $date;
     }
 
     /**
