@@ -242,6 +242,7 @@ function mj_regmgr_build_event_sidebar_item($event, $type_labels = null, $status
         'scheduleDetail' => isset($schedule_info['detail']) ? $schedule_info['detail'] : '',
         'freeParticipation' => !empty($event->free_participation),
         'occurrenceSelectionMode' => $occurrence_mode,
+        'attendanceShowAllMembers' => $attendance_show_all_members,
     );
 }
 
@@ -1514,6 +1515,83 @@ function mj_regmgr_delete_registration() {
 /**
  * Update attendance for a single registration/occurrence
  */
+function mj_regmgr_event_allows_attendance_without_registration($event) {
+    if (!$event) {
+        return false;
+    }
+
+    $registration_payload = mj_regmgr_decode_json_field(isset($event->registration_payload) ? $event->registration_payload : array());
+    $attendance_show_all_members = !empty($registration_payload['attendance_show_all_members']);
+    if (!$attendance_show_all_members && isset($event->attendance_show_all_members)) {
+        $attendance_show_all_members = !empty($event->attendance_show_all_members);
+    }
+
+    return $attendance_show_all_members;
+}
+
+/**
+ * Ensure a lightweight registration exists so attendance can be recorded.
+ *
+ * @param object $event
+ * @param int    $member_id
+ * @return int|WP_Error
+ */
+function mj_regmgr_ensure_attendance_registration($event, $member_id) {
+    $event_id = isset($event->id) ? (int) $event->id : 0;
+    $member_id = (int) $member_id;
+
+    if ($event_id <= 0 || $member_id <= 0) {
+        return new WP_Error('mj_regmgr_attendance_invalid_args', __('Paramètres de présence invalides.', 'mj-member'));
+    }
+
+    $existing = MjEventRegistrations::get_existing($event_id, $member_id);
+    if ($existing && isset($existing->id)) {
+        return (int) $existing->id;
+    }
+
+    if (!function_exists('mj_member_get_event_registrations_table_name')) {
+        return new WP_Error('mj_regmgr_attendance_missing_table', __('Table des inscriptions introuvable.', 'mj-member'));
+    }
+
+    $table = mj_member_get_event_registrations_table_name();
+    if (!$table) {
+        return new WP_Error('mj_regmgr_attendance_missing_table', __('Table des inscriptions introuvable.', 'mj-member'));
+    }
+
+    $guardian_id = null;
+    $member = MjMembers::getById($member_id);
+    if ($member && !empty($member->guardian_id)) {
+        $guardian_id = (int) $member->guardian_id;
+    }
+
+    $now = current_time('mysql');
+
+    $insert = array(
+        'event_id' => $event_id,
+        'member_id' => $member_id,
+    );
+    $formats = array('%d', '%d');
+
+    if ($guardian_id) {
+        $insert['guardian_id'] = $guardian_id;
+        $formats[] = '%d';
+    }
+
+    $insert['statut'] = MjEventRegistrations::STATUS_CONFIRMED;
+    $formats[] = '%s';
+
+    $insert['created_at'] = $now;
+    $formats[] = '%s';
+
+    global $wpdb;
+    $result = $wpdb->insert($table, $insert, $formats);
+    if ($result === false) {
+        return new WP_Error('mj_regmgr_attendance_insert_failed', __('Impossible de créer une inscription automatique.', 'mj-member'));
+    }
+
+    return (int) $wpdb->insert_id;
+}
+
 function mj_regmgr_update_attendance() {
     $auth = mj_regmgr_verify_request();
     if (!$auth) return;
@@ -1545,8 +1623,35 @@ function mj_regmgr_update_attendance() {
     ));
 
     if (is_wp_error($result)) {
-        wp_send_json_error(array('message' => $result->get_error_message()));
-        return;
+        $error_code = $result->get_error_code();
+
+        if ($error_code === 'mj_event_attendance_missing_registration') {
+            if ($status === '') {
+                wp_send_json_success(array(
+                    'message' => __('Présence mise à jour.', 'mj-member'),
+                ));
+                return;
+            }
+
+            $event = MjEvents::find($event_id);
+            if ($event && mj_regmgr_event_allows_attendance_without_registration($event)) {
+                $registration_id = mj_regmgr_ensure_attendance_registration($event, $member_id);
+                if (is_wp_error($registration_id)) {
+                    wp_send_json_error(array('message' => $registration_id->get_error_message()));
+                    return;
+                }
+
+                $result = MjEventAttendance::record($event_id, $member_id, $occurrence, $status, array(
+                    'recorded_by' => $auth['member_id'],
+                    'registration_id' => $registration_id,
+                ));
+            }
+        }
+
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()));
+            return;
+        }
     }
 
     wp_send_json_success(array(
@@ -1588,6 +1693,9 @@ function mj_regmgr_bulk_attendance() {
     $success = 0;
     $errors = 0;
 
+    $event = MjEvents::find($event_id);
+    $allow_virtual_registrations = mj_regmgr_event_allows_attendance_without_registration($event);
+
     foreach ($updates as $update) {
         $member_id = isset($update['memberId']) ? (int) $update['memberId'] : 0;
         $status = isset($update['status']) ? sanitize_key($update['status']) : '';
@@ -1602,10 +1710,35 @@ function mj_regmgr_bulk_attendance() {
         ));
 
         if (is_wp_error($result)) {
-            $errors++;
-        } else {
-            $success++;
+            $error_code = $result->get_error_code();
+
+            if ($error_code === 'mj_event_attendance_missing_registration') {
+                if ($status === '') {
+                    $success++;
+                    continue;
+                }
+
+                if ($allow_virtual_registrations && $event) {
+                    $registration_id = mj_regmgr_ensure_attendance_registration($event, $member_id);
+                    if (is_wp_error($registration_id)) {
+                        $errors++;
+                        continue;
+                    }
+
+                    $result = MjEventAttendance::record($event_id, $member_id, $occurrence, $status, array(
+                        'recorded_by' => $auth['member_id'],
+                        'registration_id' => $registration_id,
+                    ));
+                }
+            }
+
+            if (is_wp_error($result)) {
+                $errors++;
+                continue;
+            }
         }
+
+        $success++;
     }
 
     if ($success === 0 && $errors > 0) {

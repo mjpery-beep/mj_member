@@ -1032,7 +1032,12 @@
             setEventEditorLoading(false);
             setEventEditorSaving(false);
             eventEditorLoadedRef.current = null;
-            var defaultTab = event && event.freeParticipation ? 'details' : 'registrations';
+            var defaultTab = 'registrations';
+            if (event) {
+                if (event.freeParticipation) {
+                    defaultTab = 'attendance';
+                }
+            }
             setActiveTab(defaultTab);
             setMobileShowDetails(true); // Afficher les détails sur mobile
             

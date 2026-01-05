@@ -243,6 +243,7 @@
         var requiresPayment = props.requiresPayment === true;
         var requiresValidation = props.requiresValidation !== false;
         var onViewMember = props.onViewMember;
+        var hideOccurrenceIrregular = props.hideOccurrenceIrregular === true;
 
         var member = registration.member;
         var memberName = member 
@@ -275,7 +276,7 @@
             irregularLabel = shouldValidateRegistration
                 ? getString(strings, 'registrationPending', "Inscription à valider")
                 : getString(strings, 'paymentPending', 'Non payé');
-        } else if (irregular === 'not-registered') {
+        } else if (irregular === 'not-registered' && !hideOccurrenceIrregular) {
             irregularLabel = getString(strings, 'occurrenceMissing', 'Non inscrit à cette séance');
         }
 
@@ -285,7 +286,7 @@
             } else {
                 irregularAction = getString(strings, 'validatePayment', "Valider le paiement");
             }
-        } else if (irregular === 'not-registered') {
+        } else if (irregular === 'not-registered' && !hideOccurrenceIrregular) {
             irregularAction = getString(strings, 'validateRegistration', "Valider l'inscription");
         }
 
@@ -295,7 +296,7 @@
                 'mj-att-member--absent': attendanceStatus === 'absent',
                 'mj-att-member--loading': loading,
                 'mj-att-member--unpaid': irregular === 'unpaid',
-                'mj-att-member--not-registered': irregular === 'not-registered',
+                'mj-att-member--not-registered': irregular === 'not-registered' && !hideOccurrenceIrregular,
             }),
         }, [
             // Info membre
@@ -341,7 +342,7 @@
             // Actions
             h('div', { class: 'mj-att-member__actions' }, [
                 // Bouton de régularisation si nécessaire
-                irregular && onRegularize && !isAttendanceOnly && h('button', {
+                irregular && onRegularize && !isAttendanceOnly && !(hideOccurrenceIrregular && irregular === 'not-registered') && h('button', {
                     type: 'button',
                     class: 'mj-att-member__regularize-btn',
                     onClick: function () { onRegularize(registration, irregular); },
@@ -430,6 +431,12 @@
         var loading = props.loading;
         var loadingMembers = props.loadingMembers || {};
         var requiresValidation = props.eventRequiresValidation !== false;
+        var allowAttendanceAll = useMemo(function () {
+            if (event && (event.attendanceShowAllMembers || event.attendance_show_all_members)) {
+                return true;
+            }
+            return Array.isArray(attendanceMembers) && attendanceMembers.length > 0;
+        }, [event, attendanceMembers]);
 
         var _selectedOccurrence = useState('');
         var selectedOccurrence = _selectedOccurrence[0];
@@ -556,6 +563,10 @@
                     isRegisteredToOccurrence = false;
                 }
 
+                if (allowAttendanceAll) {
+                    isRegisteredToOccurrence = true;
+                }
+
                 if (isValidated && isRegisteredToOccurrence) {
                     valid.push(reg);
                 } else if (!isValidated && isRegisteredToOccurrence) {
@@ -567,7 +578,7 @@
             });
 
             return { valid: valid, unpaid: unpaid, notRegistered: notRegistered };
-        }, [mergedRegistrations, selectedOccurrence, occurrences, requiresValidation]);
+        }, [mergedRegistrations, selectedOccurrence, occurrences, requiresValidation, allowAttendanceAll]);
 
         // Obtenir le statut de présence
         var getAttendanceStatus = useCallback(function (memberId) {
@@ -721,12 +732,13 @@
                             requiresPayment: requiresPayment,
                             requiresValidation: requiresValidation,
                             onViewMember: onViewMember,
+                            hideOccurrenceIrregular: allowAttendanceAll,
                         });
                     }),
                 ]),
 
                 // Section: Membres irréguliers (non payés ou non inscrits à la séance)
-                totalIrregular > 0 && h('div', { class: 'mj-att__irregular-section' }, [
+                !allowAttendanceAll && totalIrregular > 0 && h('div', { class: 'mj-att__irregular-section' }, [
                     h('h2', { class: 'mj-att__irregular-title' }, [
                         h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
                             h('path', { d: 'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z' }),
@@ -752,6 +764,7 @@
                                 requiresPayment: requiresPayment,
                                 requiresValidation: requiresValidation,
                                 onViewMember: onViewMember,
+                                hideOccurrenceIrregular: allowAttendanceAll,
                             });
                         }),
 
@@ -770,6 +783,7 @@
                                 requiresPayment: requiresPayment,
                                 requiresValidation: requiresValidation,
                                 onViewMember: onViewMember,
+                                hideOccurrenceIrregular: allowAttendanceAll,
                             });
                         }),
                     ]),
