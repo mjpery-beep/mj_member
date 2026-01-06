@@ -1,0 +1,5 @@
+{% if primary_label %}
+<p class="mj-event-page__date generate-from-helpers">{{ primary_label }}</p>
+{% elseif summary %}
+<p class="mj-event-page__date generate-from-helpers">{{ summary }}</p>
+{% endif %}

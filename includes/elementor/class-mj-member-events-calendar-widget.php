@@ -11,6 +11,8 @@ use Elementor\Group_Control_Typography;
 use Elementor\Widget_Base;
 use Mj\Member\Core\AssetsManager;
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\MjEventSchedule;
+use Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper;
 
 class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
     use Mj_Member_Elementor_Widget_Visibility;
@@ -472,6 +474,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             if ($permalink === '' && !empty($event['article_permalink'])) {
                 $permalink = esc_url($event['article_permalink']);
             }
+
             $cover_modal = !empty($event['cover_url']) ? esc_url($event['cover_url']) : '';
             if ($cover_modal === '' && !empty($event['article_cover_url'])) {
                 $cover_modal = esc_url($event['article_cover_url']);
@@ -486,156 +489,78 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             if (($primary_cover === '' || $primary_cover === false) && !empty($cover_sources['fallback'])) {
                 $primary_cover = $cover_sources['fallback'];
             }
-            $location_label = isset($event['location']) ? sanitize_text_field($event['location']) : '';
-            $address_label = isset($event['location_address']) ? sanitize_text_field($event['location_address']) : '';
-            $location_notes = isset($event['location_description']) ? sanitize_textarea_field($event['location_description']) : '';
-            $map_embed = !empty($event['location_map']) ? esc_url($event['location_map']) : '';
-            $map_link = !empty($event['location_map_link']) ? esc_url($event['location_map_link']) : '';
 
             $type_key = isset($event['type']) ? sanitize_key($event['type']) : '';
             $type_label = isset($type_labels_map[$type_key]) ? $type_labels_map[$type_key] : '';
             if ($type_label === '' && $type_key !== '') {
                 $type_label = ucfirst($type_key);
             }
+
             $event_type_key = $type_key !== '' ? $type_key : 'misc';
-            if ($type_key !== '') {
-                $available_type_filters[$type_key] = array(
-                    'label' => $type_label !== '' ? $type_label : ucfirst($type_key),
+            if ($type_label === '' && $event_type_key === 'misc') {
+                $type_label = __('Autre', 'mj-member');
+            }
+
+            if (!isset($available_type_filters[$event_type_key])) {
+                $fallback_filter_label = $type_label !== '' ? $type_label : ucfirst(str_replace(array('_', '-'), ' ', $event_type_key));
+                $available_type_filters[$event_type_key] = array(
+                    'label' => $fallback_filter_label,
                 );
             }
 
-            $event_accent_color = isset($event['accent_color']) ? self::normalize_hex_color_value($event['accent_color']) : '';
-            $palette = self::build_event_palette($event_accent_color, $type_key, $type_colors_map);
+            $palette = self::build_event_palette(isset($event['accent_color']) ? $event['accent_color'] : '', $event_type_key, $type_colors_map);
 
-            $price_label = '';
-            if (isset($event['price']) && (float) $event['price'] > 0) {
-                $price_label = sprintf(__('Tarif : %s €', 'mj-member'), number_format_i18n((float) $event['price'], 2));
+            $schedule_occurrences = array();
+            if (class_exists(MjEventSchedule::class)) {
+                $schedule_occurrences = MjEventSchedule::get_occurrences(
+                    $event,
+                    array(
+                        'since' => $occurrence_since,
+                        'until' => $occurrence_until,
+                        'include_past' => true,
+                        'max' => 400,
+                    )
+                );
+
+                if (empty($schedule_occurrences)) {
+                    $schedule_occurrences = MjEventSchedule::build_all_occurrences($event);
+                }
             }
 
-            $description_html = '';
-            if (!empty($event['description'])) {
-                $description_html = wpautop(wp_kses_post($event['description']));
-            }
+            if (empty($schedule_occurrences)) {
+                $start_raw = '';
+                if (!empty($event['start_date'])) {
+                    $start_raw = (string) $event['start_date'];
+                } elseif (!empty($event['date_debut'])) {
+                    $start_raw = (string) $event['date_debut'];
+                }
 
-            $occurrence_args = array(
-                'max' => 240,
-                'include_past' => true,
-                'since' => $occurrence_since,
-                'until' => $occurrence_until,
-            );
+                if ($start_raw !== '') {
+                    $end_raw = '';
+                    if (!empty($event['end_date'])) {
+                        $end_raw = (string) $event['end_date'];
+                    } elseif (!empty($event['date_fin'])) {
+                        $end_raw = (string) $event['date_fin'];
+                    }
 
-            $occurrences = array();
-            if (class_exists('MjEventSchedule')) {
-                $occurrences = MjEventSchedule::get_occurrences($event, $occurrence_args);
-            }
+                    $start_ts_candidate = strtotime($start_raw);
+                    if ($start_ts_candidate !== false) {
+                        $end_ts_candidate = $end_raw !== '' ? strtotime($end_raw) : false;
+                        if ($end_ts_candidate === false || $end_ts_candidate <= $start_ts_candidate) {
+                            $end_ts_candidate = $start_ts_candidate + HOUR_IN_SECONDS;
+                        }
 
-            if (empty($occurrences)) {
-                $start_fallback = !empty($event['start_date']) ? (string) $event['start_date'] : '';
-                if ($start_fallback !== '') {
-                    $end_fallback = !empty($event['end_date']) ? (string) $event['end_date'] : $start_fallback;
-                    $fallback_timestamp = strtotime($start_fallback);
-                    if ($fallback_timestamp !== false) {
-                        $occurrences[] = array(
-                            'start' => $start_fallback,
-                            'end' => $end_fallback,
-                            'timestamp' => $fallback_timestamp,
+                        $schedule_occurrences[] = array(
+                            'start' => wp_date('Y-m-d H:i:s', $start_ts_candidate, $timezone),
+                            'end' => wp_date('Y-m-d H:i:s', $end_ts_candidate, $timezone),
+                            'timestamp' => $start_ts_candidate,
                         );
                     }
                 }
             }
 
-            $event_start_raw = !empty($event['start_date']) ? (string) $event['start_date'] : '';
-            $event_end_raw = !empty($event['end_date']) ? (string) $event['end_date'] : $event_start_raw;
-
-            $event_start_dt = $create_datetime($event_start_raw);
-            $event_end_dt = $create_datetime($event_end_raw);
-            if ($event_start_dt && $event_end_dt && $event_end_dt < $event_start_dt) {
-                $event_end_dt = $event_start_dt;
-            }
-
-            $event_start_day_dt = $event_start_dt ? $event_start_dt->setTime(0, 0, 0) : null;
-            $event_end_day_dt = $event_end_dt ? $event_end_dt->setTime(0, 0, 0) : $event_start_day_dt;
-
-            $is_multi_day = false;
-            if ($event_start_day_dt && $event_end_day_dt) {
-                $difference_interval = $event_start_day_dt->diff($event_end_day_dt);
-                if ($difference_interval && $difference_interval->days !== false && (int) $difference_interval->days >= 1) {
-                    $is_multi_day = true;
-                }
-            }
-
-            // Événements multi-jours : afficher sur chaque jour avec indication de durée
-            if ($is_multi_day && $event_start_day_dt && $event_end_day_dt) {
-                $clamped_start_ts = max($event_start_day_dt->getTimestamp(), $calendar_start_day_dt->getTimestamp());
-                $clamped_end_ts = min($event_end_day_dt->getTimestamp(), $calendar_end_day_dt->getTimestamp());
-
-                if ($clamped_start_ts <= $clamped_end_ts) {
-                    $clamped_start_day_dt = (new \DateTimeImmutable('@' . $clamped_start_ts))->setTimezone($timezone)->setTime(0, 0, 0);
-                    $clamped_end_day_dt = (new \DateTimeImmutable('@' . $clamped_end_ts))->setTimezone($timezone)->setTime(0, 0, 0);
-                    
-                    // Formater la durée (ex: "Du 15 au 18 déc.")
-                    $start_day_num = $clamped_start_day_dt->format('j');
-                    $end_day_num = $clamped_end_day_dt->format('j');
-                    $end_month_short = wp_date('M', $clamped_end_day_dt->getTimestamp(), $timezone);
-                    $time_label = sprintf(__('Du %s au %s %s', 'mj-member'), $start_day_num, $end_day_num, $end_month_short);
-                    
-                    // Parcourir chaque jour de l'événement
-                    $day_cursor = $clamped_start_day_dt;
-                    $first_day_ts = null;
-                    while ($day_cursor->getTimestamp() <= $clamped_end_day_dt->getTimestamp()) {
-                        $day_key = $day_cursor->format('Y-m-d');
-                        $month_key = $day_cursor->format('Y-m');
-                        
-                        if (isset($months[$month_key])) {
-                            $ensure_day_bucket($months, $month_key, $day_key);
-                            
-                            $event_key = 'multi:' . $event_id . ':' . $day_key;
-                            $day_ts = $day_cursor->getTimestamp();
-                            
-                            if ($first_day_ts === null) {
-                                $first_day_ts = $day_ts;
-                            }
-                            
-                            $months[$month_key]['days'][$day_key]['events'][] = array(
-                                'id' => $event_key,
-                                'title' => $title,
-                                'time' => $time_label,
-                                'cover' => $primary_cover,
-                                'cover_sources' => $cover_sources,
-                                'type_label' => $type_label,
-                                'type_key' => $event_type_key,
-                                'start_ts' => $day_ts,
-                                'palette' => $palette,
-                                'permalink' => $permalink,
-                                'accent_color' => isset($palette['base']) ? $palette['base'] : '',
-                            );
-                            
-                            $has_any_event = true;
-                        }
-                        
-                        $day_cursor = $day_cursor->modify('+1 day');
-                    }
-                    
-                    // Highlight du prochain événement (sur le premier jour)
-                    if ($highlight_next && $first_day_ts !== null && $first_day_ts >= $now_ts) {
-                        $highlight_month_key = $clamped_start_day_dt->format('Y-m');
-                        $highlight_day_key = $clamped_start_day_dt->format('Y-m-d');
-                        $highlight_event_key = 'multi:' . $event_id . ':' . $highlight_day_key;
-                        if ($next_event_pointer === null || $first_day_ts < $next_event_pointer['start_ts']) {
-                            $next_event_pointer = array(
-                                'month_key' => $highlight_month_key,
-                                'day_key' => $highlight_day_key,
-                                'event_key' => $highlight_event_key,
-                                'start_ts' => $first_day_ts,
-                            );
-                        }
-                    }
-                }
-
-                continue;
-            }
-
-            foreach ($occurrences as $occurrence) {
+            $normalized_occurrences = array();
+            foreach ($schedule_occurrences as $occurrence) {
                 if (!is_array($occurrence)) {
                     continue;
                 }
@@ -648,10 +573,11 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 $occurrence_start_dt = $create_datetime($occurrence_start_raw);
                 $start_ts = isset($occurrence['timestamp']) ? (int) $occurrence['timestamp'] : 0;
 
-                if ($occurrence_start_dt instanceof \DateTimeImmutable) {
-                    if ($start_ts <= 0) {
-                        $start_ts = $occurrence_start_dt->getTimestamp();
-                    }
+                if (!$occurrence_start_dt && $start_ts > 0) {
+                    $occurrence_start_dt = (new \DateTimeImmutable('@' . $start_ts))->setTimezone($timezone);
+                }
+                if ($occurrence_start_dt instanceof \DateTimeImmutable && $start_ts <= 0) {
+                    $start_ts = $occurrence_start_dt->getTimestamp();
                 }
 
                 if ($start_ts <= 0) {
@@ -668,6 +594,64 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     continue;
                 }
 
+                if ($start_ts < $range_start || $start_ts > $range_end) {
+                    continue;
+                }
+
+                $normalized_entry = array(
+                    'start' => $occurrence_start_dt ? $occurrence_start_dt->format('Y-m-d H:i:s') : wp_date('Y-m-d H:i:s', $start_ts, $timezone),
+                    'timestamp' => $start_ts,
+                );
+
+                if (isset($occurrence['end']) && (string) $occurrence['end'] !== '') {
+                    $end_dt = $create_datetime((string) $occurrence['end']);
+                    if ($end_dt) {
+                        $normalized_entry['end'] = $end_dt->format('Y-m-d H:i:s');
+                    } else {
+                        $end_ts_candidate = strtotime((string) $occurrence['end']);
+                        if ($end_ts_candidate !== false) {
+                            $normalized_entry['end'] = wp_date('Y-m-d H:i:s', $end_ts_candidate, $timezone);
+                        }
+                    }
+                }
+
+                if (isset($occurrence['label']) && !is_array($occurrence['label'])) {
+                    $normalized_entry['label'] = (string) $occurrence['label'];
+                }
+
+                $normalized_occurrences[] = $normalized_entry;
+            }
+
+            if (empty($normalized_occurrences)) {
+                continue;
+            }
+
+            foreach ($normalized_occurrences as $occurrence) {
+                $occurrence_start_raw = isset($occurrence['start']) ? (string) $occurrence['start'] : '';
+                if ($occurrence_start_raw === '') {
+                    continue;
+                }
+
+                $occurrence_start_dt = $create_datetime($occurrence_start_raw);
+                $start_ts = isset($occurrence['timestamp']) ? (int) $occurrence['timestamp'] : 0;
+                if (!$occurrence_start_dt && $start_ts > 0) {
+                    $occurrence_start_dt = (new \DateTimeImmutable('@' . $start_ts))->setTimezone($timezone);
+                }
+                if ($occurrence_start_dt instanceof \DateTimeImmutable && $start_ts <= 0) {
+                    $start_ts = $occurrence_start_dt->getTimestamp();
+                }
+                if ($start_ts <= 0) {
+                    $fallback_ts = strtotime($occurrence_start_raw);
+                    if ($fallback_ts !== false) {
+                        $start_ts = $fallback_ts;
+                        if (!$occurrence_start_dt) {
+                            $occurrence_start_dt = (new \DateTimeImmutable('@' . $fallback_ts))->setTimezone($timezone);
+                        }
+                    }
+                }
+                if ($start_ts <= 0) {
+                    continue;
+                }
                 if (!$occurrence_start_dt) {
                     $occurrence_start_dt = (new \DateTimeImmutable('@' . $start_ts))->setTimezone($timezone);
                 }
@@ -688,25 +672,55 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
                 $ensure_day_bucket($months, $month_key, $day_key);
 
-                $occurrence_end_raw = isset($occurrence['end']) ? (string) $occurrence['end'] : '';
                 $occurrence_end_dt = null;
-                if ($occurrence_end_raw !== '') {
-                    $occurrence_end_dt = $create_datetime($occurrence_end_raw);
+                $occurrence_end_ts = $start_ts;
+                if (!empty($occurrence['end'])) {
+                    $occurrence_end_dt = $create_datetime((string) $occurrence['end']);
                     if (!$occurrence_end_dt) {
-                        $end_fallback_ts = strtotime($occurrence_end_raw);
+                        $end_fallback_ts = strtotime((string) $occurrence['end']);
                         if ($end_fallback_ts !== false) {
                             $occurrence_end_dt = (new \DateTimeImmutable('@' . $end_fallback_ts))->setTimezone($timezone);
                         }
+                    }
+                    if ($occurrence_end_dt) {
+                        $occurrence_end_ts = $occurrence_end_dt->getTimestamp();
                     }
                 }
 
                 $time_label = self::format_occurrence_time_label($occurrence_start_dt, $occurrence_end_dt);
                 $occurrence_key = $event_id . ':' . $start_ts;
 
+                $occurrence_context = $occurrence;
+                if (!isset($occurrence_context['timestamp'])) {
+                    $occurrence_context['timestamp'] = $start_ts;
+                }
+                if (!isset($occurrence_context['start']) || $occurrence_context['start'] === '') {
+                    $occurrence_context['start'] = $occurrence_start_dt->format('Y-m-d H:i:s');
+                }
+
+                $schedule_label = ScheduleDisplayHelper::buildCalendarLabel(
+                    $event,
+                    array($occurrence_context),
+                    array(
+                        'now' => $start_ts,
+                        'timezone' => $timezone,
+                        'variant' => 'event-schedule-calendar',
+                        'fallback_label' => $time_label,
+                        'extra_context' => array(
+                            'next_occurrence_label' => $time_label,
+                        ),
+                    )
+                );
+
+                if ($schedule_label === '') {
+                    $schedule_label = $time_label;
+                }
+
                 $months[$month_key]['days'][$day_key]['events'][] = array(
                     'id' => $occurrence_key,
                     'title' => $title,
                     'time' => $time_label,
+                    'schedule_label' => $schedule_label,
                     'cover' => $primary_cover,
                     'cover_sources' => $cover_sources,
                     'type_label' => $type_label,
@@ -718,6 +732,55 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 );
 
                 $has_any_event = true;
+
+                if ($occurrence_end_ts > $start_ts) {
+                    $span_start_day = $occurrence_start_dt->setTime(0, 0, 0);
+                    $span_end_day = $occurrence_end_dt ? $occurrence_end_dt->setTime(0, 0, 0) : $span_start_day;
+                    if ($span_end_day->getTimestamp() < $span_start_day->getTimestamp()) {
+                        $span_end_day = $span_start_day;
+                    }
+
+                    $month_pointer = new \DateTimeImmutable($span_start_day->format('Y-m-01 00:00:00'), $timezone);
+                    $end_month_pointer = new \DateTimeImmutable($span_end_day->format('Y-m-01 00:00:00'), $timezone);
+
+                    while ($month_pointer->getTimestamp() <= $end_month_pointer->getTimestamp()) {
+                        $segment_month_key = $month_pointer->format('Y-m');
+                        if (isset($months[$segment_month_key])) {
+                            $month_first_day = $month_pointer;
+                            $month_last_day = $month_pointer->modify('last day of this month');
+
+                            if ($month_last_day->getTimestamp() >= $span_start_day->getTimestamp() && $month_first_day->getTimestamp() <= $span_end_day->getTimestamp()) {
+                                $segment_start_dt = $span_start_day->getTimestamp() > $month_first_day->getTimestamp() ? $span_start_day : $month_first_day;
+                                $segment_end_dt = $span_end_day->getTimestamp() < $month_last_day->getTimestamp() ? $span_end_day : $month_last_day;
+
+                                $segment_start_key = $segment_start_dt->format('Y-m-d');
+                                $segment_end_key = $segment_end_dt->format('Y-m-d');
+
+                                $months[$segment_month_key]['multi_events'][] = array(
+                                    'event_key' => $occurrence_key,
+                                    'title' => $title,
+                                    'type_label' => $type_label,
+                                    'start_day' => $segment_start_key,
+                                    'end_day' => $segment_end_key,
+                                    'start_ts' => $start_ts,
+                                    'cover' => $primary_cover,
+                                    'permalink' => $permalink,
+                                    'palette' => $palette,
+                                );
+
+                                $marker = $segment_start_dt;
+                                while ($marker->getTimestamp() <= $segment_end_dt->getTimestamp()) {
+                                    $marker_key = $marker->format('Y-m-d');
+                                    $ensure_day_bucket($months, $segment_month_key, $marker_key);
+                                    $months[$segment_month_key]['days'][$marker_key]['has_multi'] = true;
+                                    $marker = $marker->modify('+1 day');
+                                }
+                            }
+                        }
+
+                        $month_pointer = $month_pointer->modify('first day of next month');
+                    }
+                }
 
                 if ($highlight_next && $start_ts >= $now_ts) {
                     if ($next_event_pointer === null || $start_ts < $next_event_pointer['start_ts']) {
@@ -788,6 +851,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         'id' => $closure_event_id,
                         'title' => $closure_title,
                         'time' => $closure_time_label,
+                        'schedule_label' => $closure_time_label,
                         'cover' => $closure_primary_cover,
                         'cover_sources' => $closure_sources,
                         'cover_full' => $cover_full,
@@ -1175,8 +1239,14 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 echo '<span class="mj-member-events-calendar__event-type">' . esc_html($event_entry['type_label']) . '</span>';
                             }
                             echo '<span class="mj-member-events-calendar__event-title">' . esc_html($event_entry['title']) . '</span>';
-                            if (!empty($event_entry['time'])) {
-                                echo '<span class="mj-member-events-calendar__event-meta">' . esc_html($event_entry['time']) . '</span>';
+                            $meta_label = '';
+                            if (isset($event_entry['schedule_label']) && $event_entry['schedule_label'] !== '') {
+                                $meta_label = (string) $event_entry['schedule_label'];
+                            } elseif (!empty($event_entry['time'])) {
+                                $meta_label = (string) $event_entry['time'];
+                            }
+                            if ($meta_label !== '') {
+                                echo '<span class="mj-member-events-calendar__event-meta">' . esc_html($meta_label) . '</span>';
                             }
                             echo '</span>';
                             if ($event_is_closure) {
@@ -1299,8 +1369,14 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             echo '<span class="mj-member-events-calendar__mobile-pill">' . esc_html($mobile_event['type_label']) . '</span>';
                         }
                         echo '<span class="mj-member-events-calendar__mobile-title">' . esc_html($mobile_event['title']) . '</span>';
-                        if (!empty($mobile_event['time'])) {
-                            echo '<span class="mj-member-events-calendar__mobile-meta">' . esc_html($mobile_event['time']) . '</span>';
+                        $mobile_meta = '';
+                        if (isset($mobile_event['schedule_label']) && $mobile_event['schedule_label'] !== '') {
+                            $mobile_meta = (string) $mobile_event['schedule_label'];
+                        } elseif (!empty($mobile_event['time'])) {
+                            $mobile_meta = (string) $mobile_event['time'];
+                        }
+                        if ($mobile_meta !== '') {
+                            echo '<span class="mj-member-events-calendar__mobile-meta">' . esc_html($mobile_meta) . '</span>';
                         }
                         echo '</div>';
                         echo '</' . $mobile_tag . '>';
@@ -1342,15 +1418,20 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
      * Formate le libellé horaire d'une occurrence en respectant le fuseau WP.
      */
     private static function format_occurrence_time_label(\DateTimeImmutable $start, ?\DateTimeImmutable $end = null) {
+        $timezone = wp_timezone();
+        if (!($timezone instanceof \DateTimeZone)) {
+            $timezone = new \DateTimeZone('UTC');
+        }
+
         $time_format = get_option('time_format', 'H:i');
-        $start_label = self::normalize_time_label(date_i18n($time_format, $start->getTimestamp()));
+        $start_label = self::normalize_time_label(wp_date($time_format, $start->getTimestamp(), $timezone));
 
         if ($start_label === '') {
             return '';
         }
 
         if ($end instanceof \DateTimeImmutable) {
-            $end_label = self::normalize_time_label(date_i18n($time_format, $end->getTimestamp()));
+            $end_label = self::normalize_time_label(wp_date($time_format, $end->getTimestamp(), $timezone));
             if ($end_label !== '' && $end_label !== $start_label) {
                 return $start_label . ' → ' . $end_label;
             }

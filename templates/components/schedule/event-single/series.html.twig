@@ -1,0 +1,24 @@
+<div class="mj-member-event-single__schedule-box mj-member-event-single__schedule-box--series">
+    {% if summary %}
+        <p class="mj-member-event-single__schedule-summary">{{ summary }}</p>
+    {% endif %}
+
+    {% if weekly.series_items|length > 0 %}
+        <ul class="mj-member-event-single__schedule-list mj-member-event-single__schedule-list--series">
+            {% for item in weekly.series_items %}
+                <li class="mj-member-event-single__schedule-item">
+                    <span class="mj-member-event-single__schedule-item-day">{{ item.date_formatted }}</span>
+                    {% if item.time_range %}
+                        <span class="mj-member-event-single__schedule-item-time">{{ item.time_range }}</span>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% elseif primary_label %}
+        <p class="mj-member-event-single__schedule-primary">{{ primary_label }}</p>
+    {% endif %}
+
+    {% if next_occurrence_label %}
+        <p class="mj-member-event-single__schedule-next">{{ next_occurrence_label }}</p>
+    {% endif %}
+</div>

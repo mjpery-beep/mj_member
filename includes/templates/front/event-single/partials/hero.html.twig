@@ -1,5 +1,6 @@
 {% set type_label = hero.type_label|default('') %}
 {% set schedule = hero.schedule_summary|default('') %}
+{% set schedule_component = hero.schedule_component|default('') %}
 {% set status_label = hero.status_label|default('') %}
 {% set status_key = hero.status_key|default('') %}
 {% set active_status = hero.active_status|default('') %}
@@ -13,7 +14,7 @@
         {% if type_label %}
             <span class="mj-member-event-single__badge">{{ type_label }}</span>
         {% endif %}
-        {% if schedule %}
+        {% if not schedule_component and schedule %}
             <span class="mj-member-event-single__badge mj-member-event-single__badge--schedule">{{ schedule }}</span>
         {% endif %}
         {% if status_label and status_key != active_status %}
@@ -21,6 +22,11 @@
         {% endif %}
     </div>
     <h1 class="mj-member-event-single__title">{{ title }}</h1>
+    {% if schedule_component %}
+        <div class="mj-member-event-single__schedule">
+            {{ schedule_component|raw }}
+        </div>
+    {% endif %}
     {% if date_label %}
         <p class="mj-member-event-single__date">{{ date_label }}</p>
     {% endif %}

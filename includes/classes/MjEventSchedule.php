@@ -340,6 +340,23 @@ class MjEventSchedule {
         $start_date = isset($payload['start_date']) ? sanitize_text_field($payload['start_date']) : '';
         $start_time_raw = isset($payload['start_time']) ? sanitize_text_field($payload['start_time']) : '';
         $end_time_raw = isset($payload['end_time']) ? sanitize_text_field($payload['end_time']) : '';
+        $frequency = isset($payload['frequency']) ? sanitize_key($payload['frequency']) : 'weekly';
+
+        if ($frequency === 'weekly') {
+            if ($start_time_raw === '') {
+                $derived_start = self::resolve_weekday_time_value($payload, 'start');
+                if ($derived_start !== null) {
+                    $start_time_raw = $derived_start;
+                }
+            }
+
+            if ($end_time_raw === '') {
+                $derived_end = self::resolve_weekday_time_value($payload, 'end');
+                if ($derived_end !== null) {
+                    $end_time_raw = $derived_end;
+                }
+            }
+        }
 
         $first_start = null;
         if ($start_date !== '' && $start_time_raw !== '') {
@@ -366,7 +383,6 @@ class MjEventSchedule {
             $first_end->modify('+1 hour');
         }
 
-        $frequency = isset($payload['frequency']) ? sanitize_key($payload['frequency']) : 'weekly';
         $interval = isset($payload['interval']) ? max(1, (int) $payload['interval']) : 1;
 
         $limit = null;
@@ -768,6 +784,64 @@ class MjEventSchedule {
             'minute' => (int) $segments[1],
             'second' => (int) $segments[2],
         );
+    }
+
+    private static function resolve_weekday_time_value(array $payload, $field) {
+        if (empty($payload['weekday_times']) || !is_array($payload['weekday_times'])) {
+            return null;
+        }
+
+        $field = $field === 'end' ? 'end' : 'start';
+        $weekday_times = $payload['weekday_times'];
+
+        $preferred_order = array('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday');
+        $lookup_keys = $field === 'start'
+            ? array('start', 'start_time', 'startTime', 'from')
+            : array('end', 'end_time', 'endTime', 'to');
+
+        foreach ($preferred_order as $weekday_key) {
+            if (!isset($weekday_times[$weekday_key]) || !is_array($weekday_times[$weekday_key])) {
+                continue;
+            }
+
+            $candidate = self::extract_time_from_weekday_info($weekday_times[$weekday_key], $lookup_keys);
+            if ($candidate !== null) {
+                return sprintf('%02d:%02d', $candidate['hour'], $candidate['minute']);
+            }
+        }
+
+        foreach ($weekday_times as $info) {
+            if (!is_array($info)) {
+                continue;
+            }
+
+            $candidate = self::extract_time_from_weekday_info($info, $lookup_keys);
+            if ($candidate !== null) {
+                return sprintf('%02d:%02d', $candidate['hour'], $candidate['minute']);
+            }
+        }
+
+        return null;
+    }
+
+    private static function extract_time_from_weekday_info(array $info, array $keys) {
+        foreach ($keys as $key) {
+            if (!isset($info[$key])) {
+                continue;
+            }
+
+            $raw = trim((string) $info[$key]);
+            if ($raw === '') {
+                continue;
+            }
+
+            $parts = self::time_string_to_parts($raw);
+            if ($parts !== null) {
+                return $parts;
+            }
+        }
+
+        return null;
     }
 
     /**

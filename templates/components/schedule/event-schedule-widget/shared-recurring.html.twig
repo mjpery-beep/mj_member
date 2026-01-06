@@ -1,0 +1,114 @@
+{% set classes = wrapper_classes|default([]) %}
+{% set classes_attr = classes|join(' ') %}
+{% set days = weekly.days|default([]) %}
+{% set hasRecurrence = days|length > 0 or weekly.is_monthly %}
+
+<div class="{{ classes_attr|e('html_attr') }}">
+    {% if display_title and title %}
+        <h3 class="mj-event-schedule__title">{{ title }}</h3>
+    {% endif %}
+
+    {% if not hasRecurrence %}
+        <div class="mj-event-schedule__empty">
+            {% if is_preview and not has_event %}
+                <p class="mj-event-schedule__empty-preview">{{ strings.select_event }}</p>
+            {% else %}
+                <p>{{ empty_message }}</p>
+            {% endif %}
+        </div>
+    {% else %}
+        {% if summary %}
+            <p class="mj-event-schedule__summary">{{ summary }}</p>
+        {% endif %}
+
+        {% if layout == 'table' and days|length > 0 %}
+            <div class="mj-event-schedule__table-wrapper">
+                <table class="mj-event-schedule__table mj-event-schedule__table--recurring">
+                    <thead>
+                        <tr>
+                            <th>{{ strings.day }}</th>
+                            <th>{{ strings.start }}</th>
+                            <th>{{ strings.end }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for day in days %}
+                            <tr>
+                                <td>{{ day.label }}</td>
+                                <td>{{ day.start_formatted ?? day.time_range }}</td>
+                                <td>
+                                    {% if day.end_formatted and day.end_formatted != day.start_formatted %}
+                                        {{ day.end_formatted }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% elseif layout == 'chips' and days|length > 0 %}
+            <div class="mj-event-schedule__chips">
+                {% for day in days %}
+                    <span class="mj-event-schedule__chip">
+                        <strong>{{ day.label }}</strong>
+                        {% if day.time_range %}
+                            <span class="mj-event-schedule__chip-time">{{ day.time_range }}</span>
+                        {% endif %}
+                    </span>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="mj-event-schedule__recurring">
+                {% if weekly.is_monthly %}
+                    <div class="mj-event-schedule__recurring-item">
+                        <span class="mj-event-schedule__recurring-day">{{ weekly.monthly_label }}</span>
+                        {% if weekly.time_range %}
+                            <div class="mj-event-schedule__recurring-time">
+                                {% if show_icons %}
+                                    <span class="mj-event-schedule__time-icon" aria-hidden="true">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <polyline points="12 6 12 12 16 14"></polyline>
+                                        </svg>
+                                    </span>
+                                {% endif %}
+                                <span class="mj-event-schedule__time-text">{{ weekly.time_range }}</span>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    {% for day in days %}
+                        <div class="mj-event-schedule__recurring-item">
+                            <span class="mj-event-schedule__recurring-day">{{ day.label }}</span>
+                            {% if day.time_range %}
+                                <div class="mj-event-schedule__recurring-time">
+                                    {% if show_icons %}
+                                        <span class="mj-event-schedule__time-icon" aria-hidden="true">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <circle cx="12" cy="12" r="10"></circle>
+                                                <polyline points="12 6 12 12 16 14"></polyline>
+                                            </svg>
+                                        </span>
+                                    {% endif %}
+                                    <span class="mj-event-schedule__time-text">{{ day.time_range }}</span>
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+        {% endif %}
+
+        {% if next_occurrence_label %}
+            <p class="mj-event-schedule__next">{{ next_occurrence_label }}</p>
+        {% endif %}
+    {% endif %}
+
+    {% if show_register_button and register_button.url %}
+        <div class="mj-event-schedule__cta">
+            <a class="mj-event-schedule__cta-button" href="{{ register_button.url|e('url') }}">
+                {{ register_button.label }}
+            </a>
+        </div>
+    {% endif %}
+</div>

@@ -668,6 +668,12 @@ function mj_regmgr_get_event_details() {
         $front_url = get_permalink($event->article_id);
     }
 
+    $registration_payload = mj_regmgr_decode_json_field(isset($event->registration_payload) ? $event->registration_payload : array());
+    $attendance_show_all_members = !empty($registration_payload['attendance_show_all_members']);
+    if (!$attendance_show_all_members && isset($event->attendance_show_all_members)) {
+        $attendance_show_all_members = !empty($event->attendance_show_all_members);
+    }
+
     wp_send_json_success(array(
         'event' => array(
             'id' => $event->id,

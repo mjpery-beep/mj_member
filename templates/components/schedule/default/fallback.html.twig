@@ -1,0 +1,11 @@
+<div class="mj-schedule mj-schedule--generic fallback">
+    {% if summary %}
+        <p class="mj-schedule__summary">{{ summary }}</p>
+    {% endif %}
+
+    {% if primary_label %}
+        <p class="mj-schedule__primary">{{ primary_label }}</p>
+    {% elseif date_range_label %}
+        <p class="mj-schedule__primary">{{ date_range_label }}</p>
+    {% endif %}
+</div>

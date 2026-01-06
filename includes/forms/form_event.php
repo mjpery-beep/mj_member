@@ -112,6 +112,219 @@ if (!function_exists('mj_member_admin_normalize_hex_color')) {
     }
 }
 
+if (!function_exists('mj_member_admin_normalize_time_value')) {
+    function mj_member_admin_normalize_time_value($value) {
+        $candidate = is_string($value) ? trim($value) : '';
+        if ($candidate === '') {
+            return '';
+        }
+
+        $time = DateTime::createFromFormat('H:i', $candidate);
+        if ($time instanceof DateTime) {
+            return $time->format('H:i');
+        }
+
+        $time = DateTime::createFromFormat('H:i:s', $candidate);
+        if ($time instanceof DateTime) {
+            return $time->format('H:i');
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('mj_member_admin_first_non_empty_value')) {
+    function mj_member_admin_first_non_empty_value($source, array $candidates) {
+        if (!is_array($source)) {
+            return '';
+        }
+
+        foreach ($candidates as $key) {
+            if (!isset($source[$key])) {
+                continue;
+            }
+            $value = is_string($source[$key]) ? trim($source[$key]) : '';
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('mj_member_admin_weekday_index')) {
+    function mj_member_admin_weekday_index($weekday_key) {
+        $map = array(
+            'monday' => 1,
+            'tuesday' => 2,
+            'wednesday' => 3,
+            'thursday' => 4,
+            'friday' => 5,
+            'saturday' => 6,
+            'sunday' => 7,
+        );
+
+        $normalized = sanitize_key((string) $weekday_key);
+        return isset($map[$normalized]) ? $map[$normalized] : null;
+    }
+}
+
+if (!function_exists('mj_member_admin_sanitize_weekday_times')) {
+    function mj_member_admin_sanitize_weekday_times($input, array $schedule_weekdays) {
+        $result = array();
+        if (!is_array($input)) {
+            return $result;
+        }
+
+        foreach ($input as $weekday_key => $time_info) {
+            $weekday_key = sanitize_key($weekday_key);
+            if (!isset($schedule_weekdays[$weekday_key]) || !is_array($time_info)) {
+                continue;
+            }
+
+            $start_value = mj_member_admin_first_non_empty_value($time_info, array('start', 'start_time', 'startTime', 'from'));
+            $end_value = mj_member_admin_first_non_empty_value($time_info, array('end', 'end_time', 'endTime', 'to'));
+
+            $start_value = mj_member_admin_normalize_time_value($start_value);
+            $end_value = mj_member_admin_normalize_time_value($end_value);
+
+            if ($start_value === '' && $end_value === '') {
+                continue;
+            }
+
+            if ($end_value === '') {
+                $end_value = $start_value;
+            }
+
+            $result[$weekday_key] = array(
+                'start' => $start_value,
+                'end' => $end_value,
+            );
+        }
+
+        return $result;
+    }
+}
+
+if (!function_exists('mj_member_admin_resolve_weekly_anchor')) {
+    function mj_member_admin_resolve_weekly_anchor($start_date, array $weekdays, array $weekday_times, $timezone) {
+        if ($start_date === '') {
+            return null;
+        }
+
+        if (!($timezone instanceof DateTimeZone)) {
+            $timezone = wp_timezone();
+        }
+
+        $anchor = DateTime::createFromFormat('Y-m-d', $start_date, $timezone);
+        if (!$anchor instanceof DateTime) {
+            return null;
+        }
+
+        $normalized_weekdays = array();
+        foreach ($weekdays as $weekday_key) {
+            $normalized = sanitize_key((string) $weekday_key);
+            if ($normalized !== '') {
+                $normalized_weekdays[$normalized] = true;
+            }
+        }
+
+        $normalized_times = array();
+        foreach ($weekday_times as $weekday_key => $time_info) {
+            $normalized_key = sanitize_key((string) $weekday_key);
+            if ($normalized_key === '') {
+                continue;
+            }
+            $normalized_times[$normalized_key] = $time_info;
+            if (!isset($normalized_weekdays[$normalized_key])) {
+                $normalized_weekdays[$normalized_key] = true;
+            }
+        }
+
+        if (empty($normalized_weekdays)) {
+            return null;
+        }
+
+        $search_weekdays = array_keys($normalized_weekdays);
+        $week_order = array('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday');
+        usort(
+            $search_weekdays,
+            static function ($left, $right) use ($week_order) {
+                $left_index = array_search($left, $week_order, true);
+                $right_index = array_search($right, $week_order, true);
+                if ($left_index === false) {
+                    $left_index = 7;
+                }
+                if ($right_index === false) {
+                    $right_index = 7;
+                }
+                return $left_index <=> $right_index;
+            }
+        );
+
+        $cursor = clone $anchor;
+        for ($i = 0; $i < 14; $i++) {
+            $weekday_key = sanitize_key(strtolower($cursor->format('l')));
+            if (!in_array($weekday_key, $search_weekdays, true)) {
+                $cursor->modify('+1 day');
+                continue;
+            }
+
+            $time_info = isset($normalized_times[$weekday_key]) ? $normalized_times[$weekday_key] : array();
+            $start_candidate = mj_member_admin_first_non_empty_value($time_info, array('start', 'start_time', 'startTime', 'from'));
+            if ($start_candidate === '') {
+                $cursor->modify('+1 day');
+                continue;
+            }
+            $end_candidate = mj_member_admin_first_non_empty_value($time_info, array('end', 'end_time', 'endTime', 'to'));
+
+            return array(
+                'date' => $cursor->format('Y-m-d'),
+                'start_time' => $start_candidate,
+                'end_time' => $end_candidate,
+            );
+        }
+
+        $fallback = null;
+        foreach ($normalized_times as $weekday_key => $time_info) {
+            $start_candidate = mj_member_admin_first_non_empty_value($time_info, array('start', 'start_time', 'startTime', 'from'));
+            if ($start_candidate === '') {
+                continue;
+            }
+            $weekday_index = mj_member_admin_weekday_index($weekday_key);
+            if ($weekday_index === null) {
+                continue;
+            }
+            if ($fallback === null || $weekday_index < $fallback['weekday_index']) {
+                $fallback = array(
+                    'weekday_index' => $weekday_index,
+                    'weekday' => $weekday_key,
+                    'start_time' => $start_candidate,
+                    'end_time' => mj_member_admin_first_non_empty_value($time_info, array('end', 'end_time', 'endTime', 'to')),
+                );
+            }
+        }
+
+        if ($fallback !== null) {
+            $current_index = (int) $anchor->format('N');
+            $offset = ($fallback['weekday_index'] - $current_index + 7) % 7;
+            $adjusted = clone $anchor;
+            if ($offset > 0) {
+                $adjusted->modify('+' . $offset . ' days');
+            }
+
+            return array(
+                'date' => $adjusted->format('Y-m-d'),
+                'start_time' => $fallback['start_time'],
+                'end_time' => $fallback['end_time'],
+            );
+        }
+
+        return null;
+    }
+}
+
 if (!function_exists('mj_member_fill_schedule_form_values')) {
     function mj_member_fill_schedule_form_values($event, array &$form_values, array $schedule_weekdays, array $schedule_month_ordinals) {
         if (!$event) {
@@ -179,8 +392,6 @@ if (!function_exists('mj_member_fill_schedule_form_values')) {
             }
 
             $form_values['schedule_recurring_start_date'] = $default_start_date;
-            $form_values['schedule_recurring_start_time'] = isset($payload_value['start_time']) ? sanitize_text_field($payload_value['start_time']) : $default_start_time;
-            $form_values['schedule_recurring_end_time'] = isset($payload_value['end_time']) ? sanitize_text_field($payload_value['end_time']) : $default_end_time;
             $form_values['schedule_range_start'] = '';
             $form_values['schedule_range_end'] = '';
 
@@ -189,6 +400,11 @@ if (!function_exists('mj_member_fill_schedule_form_values')) {
 
             // Plages horaires par jour de la semaine
             $form_values['schedule_weekday_times'] = array();
+            $fallback_start = isset($payload_value['start_time']) ? sanitize_text_field($payload_value['start_time']) : '';
+            $fallback_end = isset($payload_value['end_time']) ? sanitize_text_field($payload_value['end_time']) : '';
+            if ($fallback_end === '' && $fallback_start !== '') {
+                $fallback_end = $fallback_start;
+            }
             if (isset($payload_value['weekday_times']) && is_array($payload_value['weekday_times'])) {
                 foreach ($payload_value['weekday_times'] as $day_key => $day_times) {
                     $day_key = sanitize_key($day_key);
@@ -200,10 +416,17 @@ if (!function_exists('mj_member_fill_schedule_form_values')) {
                     }
                 }
             }
+
+            if (empty($form_values['schedule_weekday_times']) && $fallback_start !== '' && !empty($form_values['schedule_recurring_weekdays'])) {
+                foreach ($form_values['schedule_recurring_weekdays'] as $weekday_key) {
+                    $form_values['schedule_weekday_times'][$weekday_key] = array(
+                        'start' => $fallback_start,
+                        'end' => $fallback_end,
+                    );
+                }
+            }
         } else {
             $form_values['schedule_recurring_start_date'] = $default_start_date;
-            $form_values['schedule_recurring_start_time'] = $default_start_time;
-            $form_values['schedule_recurring_end_time'] = $default_end_time;
             $form_values['schedule_recurring_frequency'] = 'weekly';
             $form_values['schedule_recurring_interval'] = 1;
             $form_values['schedule_recurring_weekdays'] = array();
@@ -621,11 +844,10 @@ $form_values['occurrence_selection_mode'] = 'member_choice';
 $form_values['schedule_series_items'] = array();
 $form_values['recurrence_until'] = '';
 $form_values['schedule_recurring_start_date'] = '';
-$form_values['schedule_recurring_start_time'] = '';
-$form_values['schedule_recurring_end_time'] = '';
 $form_values['schedule_recurring_frequency'] = 'weekly';
 $form_values['schedule_recurring_interval'] = 1;
 $form_values['schedule_recurring_weekdays'] = array();
+$form_values['schedule_weekday_times'] = array();
 $form_values['schedule_recurring_month_ordinal'] = 'first';
 $form_values['schedule_recurring_month_weekday'] = 'saturday';
 $form_values['schedule_show_date_range'] = false;
@@ -862,8 +1084,6 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
     $range_end_input = isset($_POST['event_range_end']) ? sanitize_text_field($_POST['event_range_end']) : '';
 
     $recurring_start_date = isset($_POST['event_recurring_start_date']) ? sanitize_text_field($_POST['event_recurring_start_date']) : '';
-    $recurring_start_time = isset($_POST['event_recurring_start_time']) ? sanitize_text_field($_POST['event_recurring_start_time']) : '';
-    $recurring_end_time = isset($_POST['event_recurring_end_time']) ? sanitize_text_field($_POST['event_recurring_end_time']) : '';
     $recurring_frequency = isset($_POST['event_recurring_frequency']) ? sanitize_key($_POST['event_recurring_frequency']) : 'weekly';
     $recurring_interval = isset($_POST['event_recurring_interval']) ? (int) $_POST['event_recurring_interval'] : 1;
     if ($recurring_interval <= 0) {
@@ -890,39 +1110,14 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
     $schedule_payload = array();
     $recurrence_until_value = '';
     $recurring_weekdays = array();
+    $weekday_times = array();
+    $show_date_range = false;
     $series_payload_items = array();
 
     if ($schedule_mode_input === 'recurring') {
-        $start_datetime = null;
-        $end_datetime = null;
-
-        if ($recurring_start_date === '' || $recurring_start_time === '') {
-            $errors[] = 'La date et l\'heure de debut de la recurrence sont obligatoires.';
-        } else {
-            $start_datetime = DateTime::createFromFormat('Y-m-d H:i', $recurring_start_date . ' ' . $recurring_start_time, $timezone);
-            if (!$start_datetime) {
-                $errors[] = 'La combinaison date/heure de debut de la recurrence est invalide.';
-            }
-        }
-
-        if ($recurring_end_time === '') {
-            $errors[] = 'L\'heure de fin est obligatoire pour une recurrence.';
-        } elseif ($recurring_start_date !== '') {
-            $end_datetime = DateTime::createFromFormat('Y-m-d H:i', $recurring_start_date . ' ' . $recurring_end_time, $timezone);
-            if (!$end_datetime) {
-                $errors[] = 'L\'heure de fin de la recurrence est invalide.';
-            }
-        }
-
-        if ($start_datetime instanceof DateTime && $end_datetime instanceof DateTime) {
-            if ($end_datetime <= $start_datetime) {
-                $end_datetime->modify('+1 day');
-            }
-            $date_debut = $start_datetime->format('Y-m-d H:i:s');
-            $date_fin = $end_datetime->format('Y-m-d H:i:s');
-            $date_debut_input = $start_datetime->format('Y-m-d\TH:i');
-            $date_fin_input = $end_datetime->format('Y-m-d\TH:i');
-        }
+        $weekday_times_input = isset($_POST['event_weekday_times']) ? $_POST['event_weekday_times'] : array();
+        $weekday_times = mj_member_admin_sanitize_weekday_times($weekday_times_input, $schedule_weekdays);
+        $show_date_range = isset($_POST['event_recurring_show_date_range']) && $_POST['event_recurring_show_date_range'] === '1';
 
         if ($recurring_frequency === 'weekly') {
             foreach ($recurring_weekdays_input as $weekday_entry) {
@@ -932,46 +1127,174 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
                 }
             }
             $recurring_weekdays = array_values($recurring_weekdays);
+
+            if (empty($recurring_weekdays) && !empty($weekday_times)) {
+                foreach (array_keys($weekday_times) as $weekday_key) {
+                    $recurring_weekdays[$weekday_key] = $weekday_key;
+                }
+                $recurring_weekdays = array_values($recurring_weekdays);
+            }
+
             if (empty($recurring_weekdays)) {
                 $errors[] = 'Selectionnez au moins un jour pour la recurrence hebdomadaire.';
             }
 
-            // Récupérer les plages horaires par jour
-            $weekday_times = array();
-            $weekday_times_input = isset($_POST['event_weekday_times']) ? $_POST['event_weekday_times'] : array();
-            if (is_array($weekday_times_input)) {
-                foreach ($weekday_times_input as $day_key => $day_times) {
-                    $day_key = sanitize_key($day_key);
-                    if (in_array($day_key, $recurring_weekdays, true) && is_array($day_times)) {
-                        $day_start = isset($day_times['start']) ? sanitize_text_field($day_times['start']) : '';
-                        $day_end = isset($day_times['end']) ? sanitize_text_field($day_times['end']) : '';
-                        if ($day_start !== '' || $day_end !== '') {
-                            $weekday_times[$day_key] = array(
-                                'start' => $day_start,
-                                'end' => $day_end,
-                            );
-                        }
+            $ordered_weekdays = $recurring_weekdays;
+            if (empty($ordered_weekdays) && !empty($weekday_times)) {
+                $ordered_weekdays = array_keys($weekday_times);
+            }
+
+            $first_slot_start = '';
+            $first_slot_end = '';
+
+            foreach ($ordered_weekdays as $weekday_key) {
+                if (!empty($weekday_times[$weekday_key]['start'])) {
+                    $first_slot_start = $weekday_times[$weekday_key]['start'];
+                    break;
+                }
+            }
+            foreach ($ordered_weekdays as $weekday_key) {
+                if (!empty($weekday_times[$weekday_key]['end'])) {
+                    $first_slot_end = $weekday_times[$weekday_key]['end'];
+                    break;
+                }
+            }
+
+            if ($first_slot_start === '' && !empty($weekday_times)) {
+                $first_time = reset($weekday_times);
+                if (is_array($first_time) && !empty($first_time['start'])) {
+                    $first_slot_start = $first_time['start'];
+                }
+            }
+            if ($first_slot_end === '' && !empty($weekday_times)) {
+                $first_time = reset($weekday_times);
+                if (is_array($first_time) && !empty($first_time['end'])) {
+                    $first_slot_end = $first_time['end'];
+                }
+            }
+
+            $anchor_base_date = $recurring_start_date !== '' ? $recurring_start_date : wp_date('Y-m-d', current_time('timestamp'), $timezone);
+            if (!empty($ordered_weekdays)) {
+                $weekly_anchor = mj_member_admin_resolve_weekly_anchor($anchor_base_date, $ordered_weekdays, $weekday_times, $timezone);
+                if ($weekly_anchor !== null) {
+                    if ($recurring_start_date === '') {
+                        $recurring_start_date = $weekly_anchor['date'];
+                    }
+                    if ($first_slot_start === '' && $weekly_anchor['start_time'] !== '') {
+                        $first_slot_start = mj_member_admin_normalize_time_value($weekly_anchor['start_time']);
+                    }
+                    if ($first_slot_end === '' && $weekly_anchor['end_time'] !== '') {
+                        $first_slot_end = mj_member_admin_normalize_time_value($weekly_anchor['end_time']);
                     }
                 }
             }
 
-            // Option affichage des dates
-            $show_date_range = isset($_POST['event_recurring_show_date_range']) && $_POST['event_recurring_show_date_range'] === '1';
+            $first_slot_start = mj_member_admin_normalize_time_value($first_slot_start);
+            $first_slot_end = mj_member_admin_normalize_time_value($first_slot_end);
+            if ($first_slot_end === '' && $first_slot_start !== '') {
+                $first_slot_end = $first_slot_start;
+            }
+
+            if ($recurring_start_date === '') {
+                $errors[] = 'La date de debut de la recurrence est obligatoire.';
+            }
+            if ($first_slot_start === '') {
+                $errors[] = 'Definissez au moins une plage horaire pour la recurrence.';
+            }
+
+            if ($recurring_start_date !== '' && $first_slot_start !== '') {
+                $start_datetime = DateTime::createFromFormat('Y-m-d H:i', $recurring_start_date . ' ' . $first_slot_start, $timezone);
+                $end_time_candidate = $first_slot_end !== '' ? $first_slot_end : $first_slot_start;
+                $end_datetime = $end_time_candidate !== '' ? DateTime::createFromFormat('Y-m-d H:i', $recurring_start_date . ' ' . $end_time_candidate, $timezone) : null;
+
+                if (!$start_datetime) {
+                    $errors[] = 'La combinaison date/heure de debut de la recurrence est invalide.';
+                }
+
+                if ($start_datetime instanceof DateTime) {
+                    if ($end_datetime instanceof DateTime && $end_datetime <= $start_datetime) {
+                        $end_datetime->modify('+1 day');
+                    }
+
+                    if ($end_datetime instanceof DateTime) {
+                        $date_debut = $start_datetime->format('Y-m-d H:i:s');
+                        $date_fin = $end_datetime->format('Y-m-d H:i:s');
+                        $date_debut_input = $start_datetime->format('Y-m-d\TH:i');
+                        $date_fin_input = $end_datetime->format('Y-m-d\TH:i');
+                    } else {
+                        $date_debut = $start_datetime->format('Y-m-d H:i:s');
+                        $date_fin = $start_datetime->format('Y-m-d H:i:s');
+                        $date_debut_input = $start_datetime->format('Y-m-d\TH:i');
+                        $date_fin_input = $date_debut_input;
+                    }
+                }
+            }
 
             $schedule_payload = array(
                 'mode' => 'recurring',
                 'frequency' => 'weekly',
                 'interval' => $recurring_interval,
-                'weekdays' => $recurring_weekdays,
+                'weekdays' => array_values($recurring_weekdays),
                 'weekday_times' => $weekday_times,
-                'start_time' => $recurring_start_time,
-                'end_time' => $recurring_end_time,
                 'start_date' => $recurring_start_date,
+                'start_time' => $first_slot_start,
+                'end_time' => $first_slot_end,
                 'show_date_range' => $show_date_range,
             );
+            $first_slot_for_until = $first_slot_end;
         } else {
-            // Option affichage des dates
-            $show_date_range = isset($_POST['event_recurring_show_date_range']) && $_POST['event_recurring_show_date_range'] === '1';
+            $first_slot_start = '';
+            $first_slot_end = '';
+            $time_source = isset($weekday_times[$recurring_month_weekday]) ? $weekday_times[$recurring_month_weekday] : (empty($weekday_times) ? array() : reset($weekday_times));
+            if (is_array($time_source)) {
+                if (isset($time_source['start'])) {
+                    $first_slot_start = $time_source['start'];
+                }
+                if (isset($time_source['end'])) {
+                    $first_slot_end = $time_source['end'];
+                }
+            }
+
+            $first_slot_start = mj_member_admin_normalize_time_value($first_slot_start);
+            $first_slot_end = mj_member_admin_normalize_time_value($first_slot_end);
+            if ($first_slot_end === '' && $first_slot_start !== '') {
+                $first_slot_end = $first_slot_start;
+            }
+
+            if ($recurring_start_date === '') {
+                $errors[] = 'La date de debut de la recurrence est obligatoire.';
+            }
+            if ($first_slot_start === '') {
+                $errors[] = 'Definissez au moins une plage horaire pour la recurrence.';
+            }
+
+            if ($recurring_start_date !== '' && $first_slot_start !== '') {
+                $start_datetime = DateTime::createFromFormat('Y-m-d H:i', $recurring_start_date . ' ' . $first_slot_start, $timezone);
+                $end_time_candidate = $first_slot_end !== '' ? $first_slot_end : $first_slot_start;
+                $end_datetime = $end_time_candidate !== '' ? DateTime::createFromFormat('Y-m-d H:i', $recurring_start_date . ' ' . $end_time_candidate, $timezone) : null;
+
+                if (!$start_datetime) {
+                    $errors[] = 'La combinaison date/heure de debut de la recurrence est invalide.';
+                }
+
+                if ($start_datetime instanceof DateTime) {
+                    if ($end_datetime instanceof DateTime && $end_datetime <= $start_datetime) {
+                        $end_datetime->modify('+1 day');
+                    }
+
+                    if ($end_datetime instanceof DateTime) {
+                        $date_debut = $start_datetime->format('Y-m-d H:i:s');
+                        $date_fin = $end_datetime->format('Y-m-d H:i:s');
+                        $date_debut_input = $start_datetime->format('Y-m-d\TH:i');
+                        $date_fin_input = $end_datetime->format('Y-m-d\TH:i');
+                    } else {
+                        $date_debut = $start_datetime->format('Y-m-d H:i:s');
+                        $date_fin = $start_datetime->format('Y-m-d H:i:s');
+                        $date_debut_input = $start_datetime->format('Y-m-d\TH:i');
+                        $date_fin_input = $date_debut_input;
+                    }
+                }
+            }
 
             $schedule_payload = array(
                 'mode' => 'recurring',
@@ -979,19 +1302,21 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
                 'interval' => $recurring_interval,
                 'ordinal' => $recurring_month_ordinal,
                 'weekday' => $recurring_month_weekday,
-                'start_time' => $recurring_start_time,
-                'end_time' => $recurring_end_time,
+                'weekday_times' => $weekday_times,
                 'start_date' => $recurring_start_date,
+                'start_time' => $first_slot_start,
+                'end_time' => $first_slot_end,
                 'show_date_range' => $show_date_range,
             );
+            $first_slot_for_until = $first_slot_end;
         }
 
         if ($recurrence_until_input !== '') {
-            $end_time_for_until = $recurring_end_time !== '' ? $recurring_end_time : '23:59';
+            $end_time_for_until = isset($first_slot_for_until) && $first_slot_for_until !== '' ? $first_slot_for_until : '23:59';
             $until_datetime = DateTime::createFromFormat('Y-m-d H:i', $recurrence_until_input . ' ' . $end_time_for_until, $timezone);
             if (!$until_datetime) {
                 $errors[] = 'La date de fin de recurrence est invalide.';
-            } elseif ($start_datetime instanceof DateTime && $until_datetime < $start_datetime) {
+            } elseif ($date_debut !== '' && strtotime($until_datetime->format('Y-m-d H:i:s')) < strtotime($date_debut)) {
                 $errors[] = 'La date de fin de recurrence doit etre posterieure au premier evenement.';
             } else {
                 $recurrence_until_value = $until_datetime->format('Y-m-d H:i:s');
@@ -1298,8 +1623,6 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
         'schedule_mode' => $schedule_mode_input,
         'recurrence_until' => $recurrence_until_input,
         'schedule_recurring_start_date' => $recurring_start_date,
-        'schedule_recurring_start_time' => $recurring_start_time,
-        'schedule_recurring_end_time' => $recurring_end_time,
         'schedule_recurring_frequency' => $recurring_frequency,
         'schedule_recurring_interval' => $recurring_interval,
         'schedule_recurring_month_ordinal' => $recurring_month_ordinal,
@@ -1320,6 +1643,8 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
     $form_values['animateur_ids'] = $animateur_ids_list;
     $form_values['volunteer_ids'] = $volunteer_ids_list;
     $form_values['schedule_recurring_weekdays'] = $recurring_weekdays;
+    $form_values['schedule_weekday_times'] = $weekday_times;
+    $form_values['schedule_show_date_range'] = $show_date_range;
     $form_values['schedule_payload'] = $schedule_payload;
     $form_values['schedule_series_items'] = $series_payload_items;
     $form_values['registration_is_free_participation'] = $free_participation_flag === 1;
@@ -2672,10 +2997,6 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                         <div class="mj-schedule-inline">
                             <label for="mj-event-recurring-start-date">Jour</label>
                             <input type="date" id="mj-event-recurring-start-date" name="event_recurring_start_date" value="<?php echo esc_attr($form_values['schedule_recurring_start_date']); ?>" />
-                            <label for="mj-event-recurring-start-time">Debut</label>
-                            <input type="time" id="mj-event-recurring-start-time" name="event_recurring_start_time" value="<?php echo esc_attr($form_values['schedule_recurring_start_time']); ?>" />
-                            <label for="mj-event-recurring-end-time">Fin</label>
-                            <input type="time" id="mj-event-recurring-end-time" name="event_recurring_end_time" value="<?php echo esc_attr($form_values['schedule_recurring_end_time']); ?>" />
                         </div>
 
                         <strong>Frequence</strong>

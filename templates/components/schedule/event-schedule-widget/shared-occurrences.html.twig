@@ -1,0 +1,189 @@
+{% set classes = wrapper_classes|default([]) %}
+{% set classes_attr = classes|join(' ') %}
+<div class="{{ classes_attr|e('html_attr') }}">
+    {% if display_title and title %}
+        <h3 class="mj-event-schedule__title">{{ title }}</h3>
+    {% endif %}
+
+    {% if entries|length == 0 %}
+        <div class="mj-event-schedule__empty">
+            {% if is_preview and not has_event %}
+                <p class="mj-event-schedule__empty-preview">{{ strings.select_event }}</p>
+            {% else %}
+                <p>{{ empty_message }}</p>
+            {% endif %}
+        </div>
+    {% else %}
+        {% if layout == 'table' %}
+            <div class="mj-event-schedule__table-wrapper">
+                <table class="mj-event-schedule__table">
+                    <thead>
+                        <tr>
+                            <th>{{ strings.day }}</th>
+                            <th>{{ strings.date }}</th>
+                            <th>{{ strings.time }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in entries %}
+                            {% set row_classes = [] %}
+                            {% if entry.is_past %}
+                                {% set row_classes = row_classes|merge(['is-past']) %}
+                            {% endif %}
+                            {% if entry.is_today %}
+                                {% set row_classes = row_classes|merge(['is-today']) %}
+                            {% endif %}
+                            <tr class="{{ row_classes|join(' ')|trim }}">
+                                <td>{{ entry.day }}</td>
+                                <td>{{ entry.date }}</td>
+                                <td>
+                                    {{ entry.start_time }}
+                                    {% if entry.end_time and entry.end_time != entry.start_time %}
+                                        <span class="mj-event-schedule__time-separator"></span>
+                                        {{ entry.end_time }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% elseif layout == 'chips' %}
+            <div class="mj-event-schedule__chips">
+                {% for entry in entries %}
+                    {% set chip_classes = ['mj-event-schedule__chip'] %}
+                    {% if entry.is_today %}
+                        {% set chip_classes = chip_classes|merge(['mj-event-schedule__chip--today']) %}
+                    {% endif %}
+                    <span class="{{ chip_classes|join(' ')|e('html_attr') }}">
+                        <strong>{{ entry.day }}</strong>
+                        <span class="mj-event-schedule__chip-meta">{{ entry.date }}</span>
+                        <span class="mj-event-schedule__chip-time">
+                            {{ entry.start_time }}
+                            {% if entry.end_time and entry.end_time != entry.start_time %}
+                                <span class="mj-event-schedule__time-separator"></span>
+                                {{ entry.end_time }}
+                            {% endif %}
+                        </span>
+                    </span>
+                {% endfor %}
+            </div>
+        {% elseif layout == 'card' %}
+            <div class="mj-event-schedule__cards">
+                {% for entry in entries %}
+                    {% set card_classes = ['mj-event-schedule__card'] %}
+                    {% if entry.is_past %}
+                        {% set card_classes = card_classes|merge(['mj-event-schedule__card--past']) %}
+                    {% endif %}
+                    {% if entry.is_today %}
+                        {% set card_classes = card_classes|merge(['mj-event-schedule__card--today']) %}
+                    {% endif %}
+                    <article class="{{ card_classes|join(' ')|e('html_attr') }}">
+                        <header class="mj-event-schedule__card-header">
+                            <span class="mj-event-schedule__day-text">{{ entry.day }}</span>
+                            <span class="mj-event-schedule__date-text">{{ entry.date }}</span>
+                        </header>
+                        <div class="mj-event-schedule__card-time">
+                            {% if show_icons %}
+                                <span class="mj-event-schedule__time-icon" aria-hidden="true">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <polyline points="12 6 12 12 16 14"></polyline>
+                                    </svg>
+                                </span>
+                            {% endif %}
+                            <span class="mj-event-schedule__time-text">
+                                {{ entry.start_time }}
+                                {% if entry.end_time and entry.end_time != entry.start_time %}
+                                    <span class="mj-event-schedule__time-separator"></span>
+                                    {{ entry.end_time }}
+                                {% endif %}
+                            </span>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        {% elseif layout == 'timeline' %}
+            <div class="mj-event-schedule__timeline">
+                {% for entry in entries %}
+                    {% set timeline_classes = ['mj-event-schedule__timeline-entry'] %}
+                    {% if entry.is_past %}
+                        {% set timeline_classes = timeline_classes|merge(['mj-event-schedule__timeline-entry--past']) %}
+                    {% endif %}
+                    {% if entry.is_today %}
+                        {% set timeline_classes = timeline_classes|merge(['mj-event-schedule__timeline-entry--today']) %}
+                    {% endif %}
+                    <div class="{{ timeline_classes|join(' ')|e('html_attr') }}">
+                        <div class="mj-event-schedule__timeline-marker" aria-hidden="true"></div>
+                        <div class="mj-event-schedule__timeline-content">
+                            <div class="mj-event-schedule__day">
+                                <span class="mj-event-schedule__day-text">{{ entry.day }}</span>
+                                <span class="mj-event-schedule__date-text">{{ entry.date }}</span>
+                            </div>
+                            <div class="mj-event-schedule__time">
+                                {% if show_icons %}
+                                    <span class="mj-event-schedule__time-icon" aria-hidden="true">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <polyline points="12 6 12 12 16 14"></polyline>
+                                        </svg>
+                                    </span>
+                                {% endif %}
+                                <span class="mj-event-schedule__time-text">
+                                    {{ entry.start_time }}
+                                    {% if entry.end_time and entry.end_time != entry.start_time %}
+                                        <span class="mj-event-schedule__time-separator"></span>
+                                        {{ entry.end_time }}
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="mj-event-schedule__list">
+                {% for entry in entries %}
+                    {% set item_classes = ['mj-event-schedule__item'] %}
+                    {% if entry.is_past %}
+                        {% set item_classes = item_classes|merge(['mj-event-schedule__item--past']) %}
+                    {% endif %}
+                    {% if entry.is_today %}
+                        {% set item_classes = item_classes|merge(['mj-event-schedule__item--today']) %}
+                    {% endif %}
+                    <div class="{{ item_classes|join(' ')|e('html_attr') }}">
+                        <div class="mj-event-schedule__day">
+                            <span class="mj-event-schedule__day-text">{{ entry.day }}</span>
+                            <span class="mj-event-schedule__date-text">{{ entry.date }}</span>
+                        </div>
+                        <div class="mj-event-schedule__time">
+                            {% if show_icons %}
+                                <span class="mj-event-schedule__time-icon" aria-hidden="true">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <polyline points="12 6 12 12 16 14"></polyline>
+                                    </svg>
+                                </span>
+                            {% endif %}
+                            <span class="mj-event-schedule__time-text">
+                                {{ entry.start_time }}
+                                {% if entry.end_time and entry.end_time != entry.start_time %}
+                                    <span class="mj-event-schedule__time-separator"></span>
+                                    {{ entry.end_time }}
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endif %}
+
+    {% if show_register_button and register_button.url %}
+        <div class="mj-event-schedule__cta">
+            <a class="mj-event-schedule__cta-button" href="{{ register_button.url|e('url') }}">
+                {{ register_button.label }}
+            </a>
+        </div>
+    {% endif %}
+</div>

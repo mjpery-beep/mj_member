@@ -41,6 +41,13 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         return array('mj-member-events-widget');
     }
 
+    public function get_style_depends() {
+        if (function_exists('mj_member_output_events_widget_styles')) {
+            mj_member_output_events_widget_styles();
+        }
+        return array('mj-member-components', 'mj-member-events-widget-inline');
+    }
+
     protected function register_controls() {
 
         $status_options = method_exists('MjEvents', 'get_status_labels') ? MjEvents::get_status_labels() : array(
@@ -609,6 +616,7 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
     protected function render() {
         $settings = $this->get_settings_for_display();
         $this->apply_visibility_to_wrapper($settings, 'mj-member-events-widget');
+        $is_preview = $this->is_elementor_preview_mode();
 
         if (!function_exists('mj_member_get_public_events')) {
             echo '<div class="mj-member-events__warning">' . esc_html__('Le module MJ Member doit être actif pour utiliser ce widget.', 'mj-member') . '</div>';
@@ -655,7 +663,19 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
 
         $events = mj_member_get_public_events($query_arguments);
 
-        $wide_mode = isset($settings['wide_mode']) && $settings['wide_mode'] === 'yes';
+        if ($is_preview && empty($events)) {
+            $events = $this->build_preview_events(
+                $settings,
+                array(
+                    'limit' => $limit,
+                    'statuses' => $statuses,
+                    'types' => $types,
+                    'article_filter_mode' => $article_filter_mode,
+                    'article_ids' => $article_ids,
+                    'include_past' => $include_past,
+                )
+            );
+        }
 
         if ($article_filter_mode !== 'any' && !empty($events)) {
             $events = array_values(
@@ -676,6 +696,8 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 )
             );
         }
+
+        $wide_mode = isset($settings['wide_mode']) && $settings['wide_mode'] === 'yes';
 
         $title = isset($settings['title']) ? $settings['title'] : '';
         $display_title = !isset($settings['display_title']) || $settings['display_title'] === 'yes';
@@ -1055,5 +1077,187 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         echo '</div>';
         echo '<p class="mj-member-events__filtered-empty" hidden>' . esc_html__('Aucun événement ne correspond à ce filtre.', 'mj-member') . '</p>';
         echo '</div>';
+    }
+
+    private function is_elementor_preview_mode() {
+        if (!did_action('elementor/loaded')) {
+            return false;
+        }
+
+        $elementor = \Elementor\Plugin::$instance ?? null;
+        if ($elementor && isset($elementor->editor) && method_exists($elementor->editor, 'is_edit_mode')) {
+            return (bool) $elementor->editor->is_edit_mode();
+        }
+
+        return false;
+    }
+
+    private function build_preview_events($settings, $context = array()) {
+        $limit = isset($context['limit']) ? (int) $context['limit'] : 3;
+        if ($limit <= 0) {
+            $limit = 3;
+        }
+
+        $cover_url = '';
+        if (!empty($settings['fallback_image']['id'])) {
+            $cover_candidate = wp_get_attachment_image_url((int) $settings['fallback_image']['id'], 'large');
+            if (is_string($cover_candidate) && $cover_candidate !== '') {
+                $cover_url = $cover_candidate;
+            }
+        }
+        if ($cover_url === '' && !empty($settings['fallback_image']['url'])) {
+            $cover_candidate = esc_url_raw($settings['fallback_image']['url']);
+            if (is_string($cover_candidate) && $cover_candidate !== '') {
+                $cover_url = $cover_candidate;
+            }
+        }
+        if ($cover_url === '' && method_exists(Utils::class, 'get_placeholder_image_src')) {
+            $cover_url = Utils::get_placeholder_image_src();
+        }
+
+        $status_value = 'actif';
+        if (!empty($context['statuses']) && is_array($context['statuses'])) {
+            $status_candidate = sanitize_key((string) reset($context['statuses']));
+            if ($status_candidate !== '') {
+                $status_value = $status_candidate;
+            }
+        }
+
+        $type_filters = array();
+        if (!empty($context['types']) && is_array($context['types'])) {
+            foreach ($context['types'] as $type_candidate) {
+                $type_key = sanitize_key((string) $type_candidate);
+                if ($type_key === '') {
+                    continue;
+                }
+                $type_filters[$type_key] = $type_key;
+            }
+        }
+        if (empty($type_filters)) {
+            $type_filters = array('stage', 'sortie', 'soiree');
+        }
+
+        $article_mode = isset($context['article_filter_mode']) ? sanitize_key((string) $context['article_filter_mode']) : 'any';
+        if (!in_array($article_mode, array('any', 'with_article', 'without_article'), true)) {
+            $article_mode = 'any';
+        }
+
+        $article_ids = array();
+        if (!empty($context['article_ids']) && is_array($context['article_ids'])) {
+            foreach ($context['article_ids'] as $article_candidate) {
+                $article_id = (int) $article_candidate;
+                if ($article_id > 0) {
+                    $article_ids[] = $article_id;
+                }
+            }
+        }
+
+        $now = current_time('timestamp');
+
+        $type_presets = array(
+            'stage' => array(
+                'title' => __('Stage multi-activités', 'mj-member'),
+                'excerpt' => __('Une semaine sportive et ludique pour les 12-17 ans.', 'mj-member'),
+                'location' => __('Maison des Jeunes', 'mj-member'),
+                'address' => __('12 rue des Arts, Mons', 'mj-member'),
+                'note' => __('Accueil dès 9h, collation fournie.', 'mj-member'),
+                'accent' => '#2563EB',
+            ),
+            'sortie' => array(
+                'title' => __('Sortie nature guidée', 'mj-member'),
+                'excerpt' => __('Découverte des sentiers et sensibilisation à la faune locale.', 'mj-member'),
+                'location' => __('Parc du Loup', 'mj-member'),
+                'address' => __('Chemin des Bruyères 5, Jemappes', 'mj-member'),
+                'note' => __('Prévoir des chaussures de marche et une gourde.', 'mj-member'),
+                'accent' => '#059669',
+            ),
+            'soiree' => array(
+                'title' => __('Soirée jeux collaboratifs', 'mj-member'),
+                'excerpt' => __('Une soirée conviviale autour de jeux coopératifs et musicaux.', 'mj-member'),
+                'location' => __('Espace Agora', 'mj-member'),
+                'address' => __('Place du Marché 8, Mons', 'mj-member'),
+                'note' => __('Snacks partagés et boissons disponibles sur place.', 'mj-member'),
+                'accent' => '#7C3AED',
+            ),
+        );
+
+        $events = array();
+        $type_keys = array_values($type_filters);
+        $type_count = count($type_keys);
+        if ($type_count === 0) {
+            $type_keys = array('stage');
+            $type_count = 1;
+        }
+
+        for ($index = 0; $index < $limit; $index++) {
+            $type_key = $type_keys[$index % $type_count];
+            $preset = isset($type_presets[$type_key]) ? $type_presets[$type_key] : array(
+                'title' => sprintf(__('Événement %d', 'mj-member'), $index + 1),
+                'excerpt' => __('Aperçu des activités proposées par la MJ.', 'mj-member'),
+                'location' => __('Maison des Jeunes', 'mj-member'),
+                'address' => __('Rue Principale 1, Mons', 'mj-member'),
+                'note' => '',
+                'accent' => '#2563EB',
+            );
+
+            $start_time = $now + (($index + 1) * DAY_IN_SECONDS * 3);
+            $end_time = $start_time + (3 * HOUR_IN_SECONDS);
+            $start_date = wp_date('Y-m-d H:i:s', $start_time);
+            $end_date = wp_date('Y-m-d H:i:s', $end_time);
+
+            $slug_seed = sanitize_title($preset['title']);
+            $permalink = '#';
+            if (function_exists('home_url')) {
+                $permalink = home_url('/evenements/' . $slug_seed . '-demo');
+            }
+
+            $article_id_value = 0;
+            $article_permalink = '';
+            if ($article_mode === 'with_article' || (!empty($article_ids))) {
+                if (!empty($article_ids)) {
+                    $article_id_value = $article_ids[$index % count($article_ids)];
+                } else {
+                    $article_id_value = 9800 + $index;
+                }
+                $article_permalink = $permalink !== '' ? $permalink : '#';
+            } elseif ($article_mode === 'any' && ($index % 2 === 0)) {
+                $article_id_value = 9700 + $index;
+                $article_permalink = $permalink !== '' ? $permalink : '#';
+            }
+
+            if ($article_mode === 'without_article') {
+                $article_id_value = 0;
+                $article_permalink = '';
+            }
+
+            $events[] = array(
+                'id' => 9500 + $index,
+                'status' => $status_value,
+                'type' => $type_key,
+                'title' => $preset['title'],
+                'permalink' => $permalink,
+                'article_permalink' => $article_permalink,
+                'article_id' => $article_id_value,
+                'cover_url' => $cover_url,
+                'article_cover_url' => $cover_url,
+                'excerpt' => $preset['excerpt'],
+                'location' => $preset['location'],
+                'raw_location_name' => $preset['location'],
+                'location_address' => $preset['address'],
+                'location_description' => $preset['note'],
+                'location_types' => array($type_key),
+                'location_cover' => '',
+                'price' => 12 + ($index * 4),
+                'start_date' => $start_date,
+                'end_date' => $end_date,
+                'date_debut' => $start_date,
+                'date_fin' => $end_date,
+                'schedule_mode' => 'single',
+                'schedule_payload' => array(),
+                'accent_color' => isset($preset['accent']) ? $preset['accent'] : '#2563EB',
+            );
+        }
+
+        return $events;
     }
 }

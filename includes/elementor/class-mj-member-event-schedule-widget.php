@@ -163,6 +163,31 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'show_register_button',
+            array(
+                'label' => __('Afficher le bouton d\'inscription', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => '',
+                'description' => __('Affiche un bouton "Inscription" qui redirige vers la page de l\'événement.', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
+            'register_button_label',
+            array(
+                'label' => __('Libellé du bouton', 'mj-member'),
+                'type' => Controls_Manager::TEXT,
+                'default' => __('Inscription', 'mj-member'),
+                'placeholder' => __('Inscription', 'mj-member'),
+                'label_block' => true,
+                'condition' => array('show_register_button' => 'yes'),
+            )
+        );
+
+        $this->add_control(
             'empty_message',
             array(
                 'label' => __('Message si aucun horaire', 'mj-member'),
@@ -571,6 +596,134 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
         );
 
         $this->end_controls_section();
+
+        // Bouton d'inscription
+        $this->start_controls_section(
+            'section_style_register_button',
+            array(
+                'label' => __('Bouton d\'inscription', 'mj-member'),
+                'tab' => Controls_Manager::TAB_STYLE,
+                'condition' => array('show_register_button' => 'yes'),
+            )
+        );
+
+        $this->add_responsive_control(
+            'register_button_alignment',
+            array(
+                'label' => __('Alignement', 'mj-member'),
+                'type' => Controls_Manager::CHOOSE,
+                'options' => array(
+                    'flex-start' => array(
+                        'title' => __('Gauche', 'mj-member'),
+                        'icon' => 'eicon-text-align-left',
+                    ),
+                    'center' => array(
+                        'title' => __('Centre', 'mj-member'),
+                        'icon' => 'eicon-text-align-center',
+                    ),
+                    'flex-end' => array(
+                        'title' => __('Droite', 'mj-member'),
+                        'icon' => 'eicon-text-align-right',
+                    ),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-event-schedule__cta' => 'justify-content: {{VALUE}};',
+                ),
+                'default' => 'flex-start',
+            )
+        );
+
+        $this->add_responsive_control(
+            'register_button_spacing',
+            array(
+                'label' => __('Marge supérieure', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px', 'em', 'rem'),
+                'range' => array(
+                    'px' => array('min' => 0, 'max' => 80),
+                    'em' => array('min' => 0, 'max' => 5),
+                    'rem' => array('min' => 0, 'max' => 5),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-event-schedule__cta' => 'margin-top: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'register_button_background',
+            array(
+                'label' => __('Couleur de fond', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-event-schedule__cta-button' => 'background-color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'register_button_hover_background',
+            array(
+                'label' => __('Fond au survol', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-event-schedule__cta-button:hover, {{WRAPPER}} .mj-event-schedule__cta-button:focus' => 'background-color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'register_button_text_color',
+            array(
+                'label' => __('Couleur du texte', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-event-schedule__cta-button' => 'color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_group_control(
+            Group_Control_Typography::get_type(),
+            array(
+                'name' => 'register_button_typography',
+                'selector' => '{{WRAPPER}} .mj-event-schedule__cta-button',
+            )
+        );
+
+        $this->add_responsive_control(
+            'register_button_padding',
+            array(
+                'label' => __('Rembourrage', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', 'em', 'rem'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-event-schedule__cta-button' => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'register_button_border_radius',
+            array(
+                'label' => __('Angles arrondis', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', '%'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-event-schedule__cta-button' => 'border-radius: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_group_control(
+            Group_Control_Box_Shadow::get_type(),
+            array(
+                'name' => 'register_button_shadow',
+                'selector' => '{{WRAPPER}} .mj-event-schedule__cta-button',
+            )
+        );
+
+        $this->end_controls_section();
     }
 
     private function get_events_options() {
@@ -629,6 +782,10 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
         $show_icons = !isset($settings['show_icons']) || $settings['show_icons'] === 'yes';
         $highlight_today = !isset($settings['highlight_today']) || $settings['highlight_today'] === 'yes';
         $empty_message = isset($settings['empty_message']) ? (string) $settings['empty_message'] : '';
+        $show_register_button = isset($settings['show_register_button']) && $settings['show_register_button'] === 'yes';
+        $register_button_label = isset($settings['register_button_label']) && $settings['register_button_label'] !== ''
+            ? (string) $settings['register_button_label']
+            : __('Inscription', 'mj-member');
 
         $is_preview = $this->is_elementor_preview_mode();
 
@@ -648,6 +805,8 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
             'show_icons' => $show_icons,
             'highlight_today' => $highlight_today,
             'empty_message' => $empty_message,
+            'show_register_button' => $show_register_button,
+            'register_button_label' => $register_button_label,
             'is_preview' => $is_preview,
         );
 

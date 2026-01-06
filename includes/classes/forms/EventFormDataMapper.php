@@ -67,8 +67,6 @@ final class EventFormDataMapper
             'event_range_start' => isset($values['schedule_range_start']) ? (string) $values['schedule_range_start'] : '',
             'event_range_end' => isset($values['schedule_range_end']) ? (string) $values['schedule_range_end'] : '',
             'event_recurring_start_date' => isset($values['schedule_recurring_start_date']) ? (string) $values['schedule_recurring_start_date'] : '',
-            'event_recurring_start_time' => isset($values['schedule_recurring_start_time']) ? (string) $values['schedule_recurring_start_time'] : '',
-            'event_recurring_end_time' => isset($values['schedule_recurring_end_time']) ? (string) $values['schedule_recurring_end_time'] : '',
             'event_recurring_frequency' => isset($values['schedule_recurring_frequency']) ? (string) $values['schedule_recurring_frequency'] : 'weekly',
             'event_recurring_interval' => isset($values['schedule_recurring_interval']) ? (int) $values['schedule_recurring_interval'] : 1,
             'event_recurring_weekdays' => isset($values['schedule_recurring_weekdays']) && is_array($values['schedule_recurring_weekdays']) ? array_map('sanitize_key', $values['schedule_recurring_weekdays']) : array(),
@@ -125,8 +123,6 @@ final class EventFormDataMapper
         $values['schedule_range_start'] = isset($formData['event_range_start']) ? (string) $formData['event_range_start'] : $values['schedule_range_start'];
         $values['schedule_range_end'] = isset($formData['event_range_end']) ? (string) $formData['event_range_end'] : $values['schedule_range_end'];
         $values['schedule_recurring_start_date'] = isset($formData['event_recurring_start_date']) ? (string) $formData['event_recurring_start_date'] : $values['schedule_recurring_start_date'];
-        $values['schedule_recurring_start_time'] = isset($formData['event_recurring_start_time']) ? (string) $formData['event_recurring_start_time'] : $values['schedule_recurring_start_time'];
-        $values['schedule_recurring_end_time'] = isset($formData['event_recurring_end_time']) ? (string) $formData['event_recurring_end_time'] : $values['schedule_recurring_end_time'];
         $values['schedule_recurring_frequency'] = isset($formData['event_recurring_frequency']) ? sanitize_key((string) $formData['event_recurring_frequency']) : $values['schedule_recurring_frequency'];
         $values['schedule_recurring_interval'] = isset($formData['event_recurring_interval']) ? (int) $formData['event_recurring_interval'] : $values['schedule_recurring_interval'];
         $values['schedule_recurring_weekdays'] = isset($formData['event_recurring_weekdays']) && is_array($formData['event_recurring_weekdays']) ? array_map('sanitize_key', $formData['event_recurring_weekdays']) : $values['schedule_recurring_weekdays'];

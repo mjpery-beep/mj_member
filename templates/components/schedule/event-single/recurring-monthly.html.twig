@@ -1,0 +1,20 @@
+<div class="mj-member-event-single__schedule-box mj-member-event-single__schedule-box--monthly">
+    {% if summary %}
+        <p class="mj-member-event-single__schedule-summary">{{ summary }}</p>
+    {% endif %}
+
+    {% if weekly.show_date_range and primary_label %}
+        <p class="mj-member-event-single__schedule-period">{{ primary_label }}</p>
+    {% endif %}
+
+    <div class="mj-member-event-single__schedule-item mj-member-event-single__schedule-item--monthly">
+        <span class="mj-member-event-single__schedule-item-day">{{ weekly.monthly_label }}</span>
+        {% if weekly.time_range %}
+            <span class="mj-member-event-single__schedule-item-time">{{ weekly.time_range }}</span>
+        {% endif %}
+    </div>
+
+    {% if next_occurrence_label %}
+        <p class="mj-member-event-single__schedule-next">{{ next_occurrence_label }}</p>
+    {% endif %}
+</div>

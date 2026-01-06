@@ -1,7 +1,7 @@
 <?php
 /**
  * Template: Event Schedule Widget
- * Affiche l'horaire d'un �v�nement MJ et adapte le rendu selon le type de planification.
+ * Affiche l'horaire d'un événement MJ et adapte le rendu selon le type de planification.
  */
 
 if (!defined('ABSPATH')) {
@@ -10,107 +10,333 @@ if (!defined('ABSPATH')) {
 
 use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\MjEventSchedule;
+use Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper;
 
 $event_id = isset($template_data['event_id']) ? (int) $template_data['event_id'] : 0;
 $title = isset($template_data['title']) ? (string) $template_data['title'] : '';
 $display_title = !empty($template_data['display_title']);
-$max_occurrences = isset($template_data['max_occurrences']) ? (int) $template_data['max_occurrences'] : 20;
+$max_occurrences = isset($template_data['max_occurrences']) ? max(1, (int) $template_data['max_occurrences']) : 20;
 $show_past = !empty($template_data['show_past']);
-$date_format_setting = isset($template_data['date_format']) ? $template_data['date_format'] : 'full';
-$time_format_setting = isset($template_data['time_format']) ? $template_data['time_format'] : '24h';
-$layout_mode_fallback = isset($template_data['layout_mode_fallback']) ? sanitize_key($template_data['layout_mode_fallback']) : 'list';
-$layout_mode_fixed = isset($template_data['layout_mode_fixed']) ? sanitize_key($template_data['layout_mode_fixed']) : 'card';
-$layout_mode_range = isset($template_data['layout_mode_range']) ? sanitize_key($template_data['layout_mode_range']) : 'timeline';
-$layout_mode_series = isset($template_data['layout_mode_series']) ? sanitize_key($template_data['layout_mode_series']) : 'list';
-$layout_mode_recurring = isset($template_data['layout_mode_recurring']) ? sanitize_key($template_data['layout_mode_recurring']) : 'cards';
+$date_format_setting = isset($template_data['date_format']) ? (string) $template_data['date_format'] : 'full';
+$time_format_setting = isset($template_data['time_format']) ? (string) $template_data['time_format'] : '24h';
+$layout_mode_fallback = isset($template_data['layout_mode_fallback']) ? sanitize_key((string) $template_data['layout_mode_fallback']) : 'list';
+$layout_mode_fixed = isset($template_data['layout_mode_fixed']) ? sanitize_key((string) $template_data['layout_mode_fixed']) : 'card';
+$layout_mode_range = isset($template_data['layout_mode_range']) ? sanitize_key((string) $template_data['layout_mode_range']) : 'timeline';
+$layout_mode_series = isset($template_data['layout_mode_series']) ? sanitize_key((string) $template_data['layout_mode_series']) : 'list';
+$layout_mode_recurring = isset($template_data['layout_mode_recurring']) ? sanitize_key((string) $template_data['layout_mode_recurring']) : 'cards';
 $show_icons = !empty($template_data['show_icons']);
 $highlight_today = !empty($template_data['highlight_today']);
-$empty_message = isset($template_data['empty_message']) ? $template_data['empty_message'] : __('Aucun horaire disponible.', 'mj-member');
+$empty_message = isset($template_data['empty_message']) && $template_data['empty_message'] !== ''
+    ? (string) $template_data['empty_message']
+    : __('Aucun horaire disponible pour cet événement.', 'mj-member');
+$show_register_button = !empty($template_data['show_register_button']);
+$register_button_label = isset($template_data['register_button_label']) && $template_data['register_button_label'] !== ''
+    ? (string) $template_data['register_button_label']
+    : __('Inscription', 'mj-member');
 $is_preview = !empty($template_data['is_preview']);
 
-$format_time_string = function ($time_str) use ($time_format_setting) {
-    $time_str = trim((string) $time_str);
-    if ($time_str === '') {
+// Map Elementor display options to WordPress date/time formats.
+$time_format_pattern = $time_format_setting === '12h' ? 'g:i A' : 'H:i';
+$date_format_map = array(
+    'full' => 'l j F Y',
+    'short' => 'd/m/Y',
+    'medium' => 'j M Y',
+    'day_only' => 'j F',
+);
+$date_format_pattern = isset($date_format_map[$date_format_setting]) ? $date_format_map[$date_format_setting] : $date_format_map['full'];
+
+$format_time = static function (string $value) use ($time_format_pattern): string {
+    $value = trim($value);
+    if ($value === '') {
         return '';
     }
 
-    $timezone = function_exists('wp_timezone') ? wp_timezone() : null;
-    $time_candidate = DateTime::createFromFormat('H:i:s', $time_str, $timezone);
-    if (!$time_candidate instanceof DateTime) {
-        $time_candidate = DateTime::createFromFormat('H:i', $time_str, $timezone);
+    $timestamp = strtotime($value);
+    if ($timestamp === false) {
+        return '';
     }
 
-    if (!$time_candidate instanceof DateTime) {
-        $timestamp = strtotime($time_str);
-        if ($timestamp === false) {
-            return '';
-        }
-    } else {
-        $timestamp = $time_candidate->getTimestamp();
-    }
-
-    if ($time_format_setting === '12h') {
-        return function_exists('wp_date') ? wp_date('g:i A', $timestamp) : gmdate('g:i A', $timestamp);
-    }
-
-    return function_exists('wp_date') ? wp_date('H:i', $timestamp) : gmdate('H:i', $timestamp);
+    return wp_date($time_format_pattern, $timestamp);
 };
 
-$format_day = function ($datetime_str) {
-    $timestamp = strtotime($datetime_str);
-    if (!$timestamp) {
+$format_time_string = static function (string $value) use ($time_format_pattern): string {
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    $timestamp = strtotime('1970-01-01 ' . $value);
+    if ($timestamp === false) {
+        return '';
+    }
+
+    return wp_date($time_format_pattern, $timestamp);
+};
+
+$format_day = static function (string $value): string {
+    $timestamp = strtotime($value);
+    if ($timestamp === false) {
         return '';
     }
 
     return wp_date('l', $timestamp);
 };
 
-$format_date_label = function ($datetime_str) use ($date_format_setting) {
-    $timestamp = strtotime($datetime_str);
-    if (!$timestamp) {
+$format_date_label = static function (string $value) use ($date_format_pattern): string {
+    $timestamp = strtotime($value);
+    if ($timestamp === false) {
         return '';
     }
 
-    switch ($date_format_setting) {
-        case 'short':
-            return wp_date('d/m/Y', $timestamp);
-        case 'medium':
-            return wp_date('j M Y', $timestamp);
-        case 'day_only':
-            return wp_date('j F', $timestamp);
-        case 'full':
-        default:
-            return wp_date('j F Y', $timestamp);
-    }
+    return wp_date($date_format_pattern, $timestamp);
 };
 
-$format_time = function ($datetime_str) use ($time_format_setting) {
-    $timestamp = strtotime($datetime_str);
-    if (!$timestamp) {
-        return '';
-    }
-
-    if ($time_format_setting === '12h') {
-        return wp_date('g:i A', $timestamp);
-    }
-
-    return wp_date('H:i', $timestamp);
+$format_time_for_display = static function (string $time) use ($format_time_string): string {
+    return $format_time_string($time);
 };
 
-// Prépare les données de l'événement pour couvrir EventData, tableaux ou objets simples.
+$blank_weekly_schedule = static function (bool $showDateRange = false): array {
+    return array(
+        'is_weekly' => false,
+        'is_monthly' => false,
+        'is_series' => false,
+        'show_date_range' => $showDateRange,
+        'monthly_label' => '',
+        'time_range' => '',
+        'days' => array(),
+        'series_items' => array(),
+    );
+};
+
+$decode_schedule_payload = static function ($payload): array {
+    if (is_string($payload) && $payload !== '') {
+        $decoded = json_decode($payload, true);
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+    }
+
+    if (is_array($payload)) {
+        return $payload;
+    }
+
+    return array();
+};
+
+$build_recurring_weekly_schedule = static function (array $payload, bool $showDateRange) use ($format_time_for_display, $blank_weekly_schedule): array {
+    $weekday_labels = array(
+        'monday' => __('Lundi', 'mj-member'),
+        'tuesday' => __('Mardi', 'mj-member'),
+        'wednesday' => __('Mercredi', 'mj-member'),
+        'thursday' => __('Jeudi', 'mj-member'),
+        'friday' => __('Vendredi', 'mj-member'),
+        'saturday' => __('Samedi', 'mj-member'),
+        'sunday' => __('Dimanche', 'mj-member'),
+    );
+
+    $weekdays = isset($payload['weekdays']) && is_array($payload['weekdays']) ? $payload['weekdays'] : array();
+    $weekday_times = isset($payload['weekday_times']) && is_array($payload['weekday_times']) ? $payload['weekday_times'] : array();
+    $default_start = isset($payload['start_time']) ? (string) $payload['start_time'] : '';
+    $default_end = isset($payload['end_time']) ? (string) $payload['end_time'] : '';
+
+    $days = array();
+    foreach ($weekdays as $day_raw) {
+        $day_key = sanitize_key((string) $day_raw);
+        if (!isset($weekday_labels[$day_key])) {
+            continue;
+        }
+
+        $start_time = $default_start;
+        $end_time = $default_end;
+
+        if (isset($weekday_times[$day_key]) && is_array($weekday_times[$day_key])) {
+            $day_times = $weekday_times[$day_key];
+            if (!empty($day_times['start'])) {
+                $start_time = (string) $day_times['start'];
+            }
+            if (!empty($day_times['end'])) {
+                $end_time = (string) $day_times['end'];
+            }
+        }
+
+        $start_formatted = $format_time_for_display($start_time);
+        $end_formatted = $format_time_for_display($end_time);
+
+        $time_range = '';
+        if ($start_formatted !== '' && $end_formatted !== '') {
+            $time_range = $start_formatted . ' - ' . $end_formatted;
+        } elseif ($start_formatted !== '') {
+            $time_range = sprintf(__('à partir de %s', 'mj-member'), $start_formatted);
+        } elseif ($end_formatted !== '') {
+            $time_range = $end_formatted;
+        }
+
+        $days[] = array(
+            'key' => $day_key,
+            'label' => $weekday_labels[$day_key],
+            'start_time' => $start_time,
+            'end_time' => $end_time,
+            'start_formatted' => $start_formatted,
+            'end_formatted' => $end_formatted,
+            'time_range' => $time_range,
+        );
+    }
+
+    if (empty($days)) {
+        return $blank_weekly_schedule($showDateRange);
+    }
+
+    return array(
+        'is_weekly' => true,
+        'is_monthly' => false,
+        'is_series' => false,
+        'show_date_range' => $showDateRange,
+        'monthly_label' => '',
+        'time_range' => '',
+        'days' => $days,
+        'series_items' => array(),
+    );
+};
+
+$build_monthly_schedule_data = static function (array $payload, bool $showDateRange) use ($format_time_for_display, $blank_weekly_schedule): array {
+    $weekday_labels = array(
+        'monday' => __('Lundi', 'mj-member'),
+        'tuesday' => __('Mardi', 'mj-member'),
+        'wednesday' => __('Mercredi', 'mj-member'),
+        'thursday' => __('Jeudi', 'mj-member'),
+        'friday' => __('Vendredi', 'mj-member'),
+        'saturday' => __('Samedi', 'mj-member'),
+        'sunday' => __('Dimanche', 'mj-member'),
+    );
+
+    $ordinal_labels = array(
+        'first' => __('1er', 'mj-member'),
+        'second' => __('2ème', 'mj-member'),
+        'third' => __('3ème', 'mj-member'),
+        'fourth' => __('4ème', 'mj-member'),
+        'last' => __('Dernier', 'mj-member'),
+    );
+
+    $ordinal_key = sanitize_key(isset($payload['ordinal']) ? (string) $payload['ordinal'] : '');
+    $weekday_key = sanitize_key(isset($payload['weekday']) ? (string) $payload['weekday'] : '');
+
+    $ordinal_label = isset($ordinal_labels[$ordinal_key]) ? $ordinal_labels[$ordinal_key] : $ordinal_key;
+    $weekday_label = isset($weekday_labels[$weekday_key]) ? $weekday_labels[$weekday_key] : $weekday_key;
+
+    $start_time = isset($payload['start_time']) ? (string) $payload['start_time'] : '';
+    $end_time = isset($payload['end_time']) ? (string) $payload['end_time'] : '';
+
+    $start_formatted = $format_time_for_display($start_time);
+    $end_formatted = $format_time_for_display($end_time);
+
+    $time_range = '';
+    if ($start_formatted !== '' && $end_formatted !== '') {
+        $time_range = $start_formatted . ' - ' . $end_formatted;
+    } elseif ($start_formatted !== '') {
+        $time_range = sprintf(__('à partir de %s', 'mj-member'), $start_formatted);
+    } elseif ($end_formatted !== '') {
+        $time_range = $end_formatted;
+    }
+
+    $monthly_label = trim(implode(' ', array_filter(array($ordinal_label, $weekday_label, __('du mois', 'mj-member')))));
+
+    if ($monthly_label === '') {
+        return $blank_weekly_schedule($showDateRange);
+    }
+
+    return array(
+        'is_weekly' => false,
+        'is_monthly' => true,
+        'is_series' => false,
+        'show_date_range' => $showDateRange,
+        'monthly_label' => $monthly_label,
+        'time_range' => $time_range,
+        'days' => array(),
+        'series_items' => array(),
+    );
+};
+
+$build_series_schedule_data = static function (array $payload, bool $showDateRange) use ($format_time_for_display, $blank_weekly_schedule): array {
+    $items = isset($payload['items']) && is_array($payload['items']) ? $payload['items'] : array();
+    if (empty($items)) {
+        return $blank_weekly_schedule($showDateRange);
+    }
+
+    $series_items = array();
+
+    foreach ($items as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+
+        $date_raw = isset($item['date']) ? (string) $item['date'] : '';
+        if ($date_raw === '') {
+            continue;
+        }
+
+        $timestamp = strtotime($date_raw);
+        $date_formatted = $timestamp ? date_i18n('D j M', $timestamp) : $date_raw;
+
+        $start_time = isset($item['start_time']) ? (string) $item['start_time'] : '';
+        $end_time = isset($item['end_time']) ? (string) $item['end_time'] : '';
+
+        $start_formatted = $format_time_for_display($start_time);
+        $end_formatted = $format_time_for_display($end_time);
+
+        $time_range = '';
+        if ($start_formatted !== '' && $end_formatted !== '') {
+            $time_range = $start_formatted . ' - ' . $end_formatted;
+        } elseif ($start_formatted !== '') {
+            $time_range = $start_formatted;
+        } elseif ($end_formatted !== '') {
+            $time_range = $end_formatted;
+        }
+
+        $series_items[] = array(
+            'date' => $date_raw,
+            'date_formatted' => $date_formatted,
+            'start_time' => $start_time,
+            'end_time' => $end_time,
+            'time_range' => $time_range,
+            'timestamp' => $timestamp ? $timestamp : 0,
+        );
+    }
+
+    if (!empty($series_items)) {
+        usort(
+            $series_items,
+            static function (array $left, array $right): int {
+                $left_ts = isset($left['timestamp']) ? (int) $left['timestamp'] : 0;
+                $right_ts = isset($right['timestamp']) ? (int) $right['timestamp'] : 0;
+                return $left_ts <=> $right_ts;
+            }
+        );
+    }
+
+    if (empty($series_items)) {
+        return $blank_weekly_schedule($showDateRange);
+    }
+
+    return array(
+        'is_weekly' => false,
+        'is_monthly' => false,
+        'is_series' => true,
+        'show_date_range' => $showDateRange,
+        'monthly_label' => '',
+        'time_range' => '',
+        'days' => array(),
+        'series_items' => $series_items,
+    );
+};
+
 $event = null;
 $event_array = array();
 $event_for_schedule = null;
-$schedule_mode = 'unknown';
-$occurrences = array();
-$entries = array();
-$is_recurring = false;
-$recurring_slots = array();
 
-if ($event_id > 0 && class_exists(MjEvents::class)) {
+if ($event_id > 0 and class_exists(MjEvents::class)) {
     $event = MjEvents::find($event_id);
 
-    if (is_object($event) && method_exists($event, 'toArray')) {
+    if (is_object($event) and method_exists($event, 'toArray')) {
         $event_array = $event->toArray();
     } elseif (is_array($event)) {
         $event_array = $event;
@@ -123,26 +349,24 @@ if ($event_id > 0 && class_exists(MjEvents::class)) {
     }
 }
 
-$occurrence_args = array();
-$occurrence_args['max'] = $max_occurrences;
-$occurrence_args['include_past'] = (bool) $show_past;
-
 $get_event_value = static function ($key, $default = null) use ($event, $event_array) {
-    if (!empty($event_array) && array_key_exists($key, $event_array)) {
+    if (!empty($event_array) and array_key_exists($key, $event_array)) {
         return $event_array[$key];
     }
 
-    if ($event && isset($event->$key)) {
+    if ($event and isset($event->$key)) {
         return $event->$key;
     }
 
-    if (is_array($event) && array_key_exists($key, $event)) {
+    if (is_array($event) and array_key_exists($key, $event)) {
         return $event[$key];
     }
 
     return $default;
 };
 
+$schedule_mode = 'unknown';
+$schedule_payload_raw = array();
 if ($event_for_schedule) {
     $schedule_mode_raw = $get_event_value('schedule_mode', 'fixed');
     $schedule_mode = $schedule_mode_raw !== null ? sanitize_key((string) $schedule_mode_raw) : 'fixed';
@@ -150,120 +374,94 @@ if ($event_for_schedule) {
         $schedule_mode = 'fixed';
     }
 
-    if ($schedule_mode === 'recurring') {
-        $is_recurring = true;
+    $schedule_payload_raw = $get_event_value('schedule_payload', array());
+}
 
-        $schedule_payload = $get_event_value('schedule_payload', '');
-        if (is_string($schedule_payload) && $schedule_payload !== '') {
-            $schedule_payload = json_decode($schedule_payload, true);
-        }
-        if (!is_array($schedule_payload)) {
-            $schedule_payload = array();
-        }
+$schedule_payload = $decode_schedule_payload($schedule_payload_raw);
+$show_date_range = !empty($schedule_payload['show_date_range']);
 
-        $weekday_labels = array(
-            'monday' => __('Lundi', 'mj-member'),
-            'tuesday' => __('Mardi', 'mj-member'),
-            'wednesday' => __('Mercredi', 'mj-member'),
-            'thursday' => __('Jeudi', 'mj-member'),
-            'friday' => __('Vendredi', 'mj-member'),
-            'saturday' => __('Samedi', 'mj-member'),
-            'sunday' => __('Dimanche', 'mj-member'),
-        );
-        $weekday_order = array_keys($weekday_labels);
-
-        $selected_weekdays = array();
-        if (!empty($schedule_payload['weekdays']) && is_array($schedule_payload['weekdays'])) {
-            foreach ($schedule_payload['weekdays'] as $weekday) {
-                $weekday = strtolower(sanitize_key($weekday));
-                if (isset($weekday_labels[$weekday])) {
-                    $selected_weekdays[$weekday] = $weekday;
-                }
-            }
-        }
-
-        $weekday_times = array();
-        if (!empty($schedule_payload['weekday_times']) && is_array($schedule_payload['weekday_times'])) {
-            $weekday_times = $schedule_payload['weekday_times'];
-        }
-
-        foreach ($weekday_order as $weekday_key) {
-            $day_label = $weekday_labels[$weekday_key];
-            $start_formatted = '';
-            $end_formatted = '';
-
-            if (isset($weekday_times[$weekday_key]) && is_array($weekday_times[$weekday_key])) {
-                $times = $weekday_times[$weekday_key];
-                if (!empty($times['start'])) {
-                    $start_formatted = $format_time_string($times['start']);
-                }
-                if (!empty($times['end'])) {
-                    $end_formatted = $format_time_string($times['end']);
-                }
-            }
-
-            if ($start_formatted === '' && !empty($schedule_payload['start_time'])) {
-                $start_formatted = $format_time_string($schedule_payload['start_time']);
-            }
-            if ($end_formatted === '' && !empty($schedule_payload['end_time'])) {
-                $end_formatted = $format_time_string($schedule_payload['end_time']);
-            }
-
-            if ($start_formatted !== '' || $end_formatted !== '') {
-                $recurring_slots[] = array(
-                    'day_label' => $day_label,
-                    'start' => $start_formatted,
-                    'end' => $end_formatted,
-                );
-                $selected_weekdays[$weekday_key] = $weekday_key;
-            }
-        }
-
-        if (empty($recurring_slots)) {
-            $is_recurring = false;
-        }
+$weekly_schedule = $blank_weekly_schedule($show_date_range);
+if ($schedule_mode === 'series') {
+    $weekly_schedule = $build_series_schedule_data($schedule_payload, $show_date_range);
+} elseif ($schedule_mode === 'recurring') {
+    $frequency = isset($schedule_payload['frequency']) ? (string) $schedule_payload['frequency'] : '';
+    if ($frequency === 'monthly') {
+        $weekly_schedule = $build_monthly_schedule_data($schedule_payload, $show_date_range);
+    } else {
+        $weekly_schedule = $build_recurring_weekly_schedule($schedule_payload, $show_date_range);
     }
+}
 
-    if (!$is_recurring && class_exists(MjEventSchedule::class)) {
-        $occurrences = MjEventSchedule::get_occurrences($event_for_schedule, $occurrence_args);
+$schedule_summary = '';
+$summary_keys = array('occurrence_schedule_summary', 'schedule_summary');
+foreach ($summary_keys as $summary_key) {
+    $candidate = $get_event_value($summary_key, '');
+    if (is_string($candidate) and $candidate !== '') {
+        $schedule_summary = (string) $candidate;
+        break;
+    }
+}
 
-        if (empty($occurrences)) {
-            $raw_occurrences = MjEventSchedule::build_all_occurrences($event_for_schedule);
-            if (is_array($raw_occurrences) && !empty($raw_occurrences)) {
-                $now_ts = current_time('timestamp');
-                foreach ($raw_occurrences as $raw_occurrence) {
-                    if (!isset($raw_occurrence['start']) || !isset($raw_occurrence['timestamp'])) {
-                        continue;
-                    }
+$display_label = '';
+$label_keys = array('display_date_label', 'display_label');
+foreach ($label_keys as $label_key) {
+    $candidate = $get_event_value($label_key, '');
+    if (is_string($candidate) and $candidate !== '') {
+        $display_label = (string) $candidate;
+        break;
+    }
+}
 
-                    $timestamp = (int) $raw_occurrence['timestamp'];
-                    if (!$show_past && $timestamp < $now_ts) {
+$date_debut = (string) $get_event_value('date_debut', '');
+$date_fin = (string) $get_event_value('date_fin', '');
 
-                        continue;
-                    }
+$occurrence_args = array(
+    'max' => $max_occurrences,
+    'include_past' => (bool) $show_past,
+);
 
-                    $raw_occurrence['is_past'] = ($timestamp < $now_ts);
-                    $occurrences[] = $raw_occurrence;
+$occurrences = array();
+
+if ($event_for_schedule and class_exists(MjEventSchedule::class)) {
+    $occurrences = MjEventSchedule::get_occurrences($event_for_schedule, $occurrence_args);
+
+    if (empty($occurrences)) {
+        $raw_occurrences = MjEventSchedule::build_all_occurrences($event_for_schedule);
+        if (is_array($raw_occurrences) and !empty($raw_occurrences)) {
+            $now_ts = current_time('timestamp');
+            foreach ($raw_occurrences as $raw_occurrence) {
+                if (!isset($raw_occurrence['start']) or !isset($raw_occurrence['timestamp'])) {
+                    continue;
                 }
 
-                if (!empty($occurrences)) {
-                    usort(
-                        $occurrences,
-                        static function ($a, $b) {
-                            return (int) $a['timestamp'] <=> (int) $b['timestamp'];
-                        }
-                    );
+                $timestamp = (int) $raw_occurrence['timestamp'];
+                if (!$show_past and $timestamp < $now_ts) {
+                    continue;
+                }
 
-                    if ($max_occurrences > 0 && count($occurrences) > $max_occurrences) {
-                        $occurrences = array_slice($occurrences, 0, $max_occurrences);
+                $raw_occurrence['is_past'] = ($timestamp < $now_ts);
+                $occurrences[] = $raw_occurrence;
+            }
+
+            if (!empty($occurrences)) {
+                usort(
+                    $occurrences,
+                    static function (array $left, array $right): int {
+                        $left_ts = isset($left['timestamp']) ? (int) $left['timestamp'] : 0;
+                        $right_ts = isset($right['timestamp']) ? (int) $right['timestamp'] : 0;
+                        return $left_ts <=> $right_ts;
                     }
+                );
+
+                if ($max_occurrences > 0 and count($occurrences) > $max_occurrences) {
+                    $occurrences = array_slice($occurrences, 0, $max_occurrences);
                 }
             }
         }
     }
 }
 
-if ($is_preview && !$event_for_schedule) {
+if ($is_preview and !$event_for_schedule) {
     $schedule_mode = 'preview';
     $dummy_date = new DateTime('next monday');
     for ($i = 0; $i < min(5, max(1, $max_occurrences)); $i++) {
@@ -281,15 +479,14 @@ if ($is_preview && !$event_for_schedule) {
     }
 }
 
-
-if (empty($occurrences) && !$is_recurring && $event_for_schedule) {
+if (empty($occurrences) and $event_for_schedule) {
     $start_raw = (string) $get_event_value('date_debut', '');
     if ($start_raw !== '') {
         $end_raw = (string) $get_event_value('date_fin', '');
         $manual_start = strtotime($start_raw);
         if ($manual_start) {
             $manual_end = $end_raw !== '' ? strtotime($end_raw) : false;
-            if ($manual_end === false || $manual_end <= $manual_start) {
+            if ($manual_end === false or $manual_end <= $manual_start) {
                 $manual_end = $manual_start + HOUR_IN_SECONDS;
             }
 
@@ -302,40 +499,87 @@ if (empty($occurrences) && !$is_recurring && $event_for_schedule) {
         }
     }
 }
-$today_key = wp_date('Y-m-d');
-if (!empty($occurrences)) {
-    foreach ($occurrences as $occurrence) {
-        $start_str = isset($occurrence['start']) ? (string) $occurrence['start'] : '';
-        if ($start_str === '') {
-            continue;
+
+$now_timestamp = current_time('timestamp');
+foreach ($occurrences as &$occurrence) {
+    if (!isset($occurrence['timestamp'])) {
+        $start_candidate = isset($occurrence['start']) ? strtotime((string) $occurrence['start']) : false;
+        $occurrence['timestamp'] = $start_candidate ? $start_candidate : 0;
+    }
+
+    if (!isset($occurrence['is_past'])) {
+        $occurrence['is_past'] = ($occurrence['timestamp'] < $now_timestamp);
+    }
+}
+unset($occurrence);
+
+$next_occurrence = null;
+foreach ($occurrences as $occurrence) {
+    if ((int) $occurrence['timestamp'] >= $now_timestamp) {
+        $next_occurrence = $occurrence;
+        break;
+    }
+}
+if ($next_occurrence === null and !empty($occurrences)) {
+    $next_occurrence = $occurrences[0];
+}
+
+$next_occurrence_label = '';
+if ($next_occurrence) {
+    $label_date = $format_date_label(isset($next_occurrence['start']) ? (string) $next_occurrence['start'] : '');
+    $label_start = $format_time(isset($next_occurrence['start']) ? (string) $next_occurrence['start'] : '');
+    $label_end = $format_time(isset($next_occurrence['end']) ? (string) $next_occurrence['end'] : '');
+    if ($label_date !== '') {
+        if ($label_start !== '') {
+            $next_occurrence_label = $label_date . ' · ' . $label_start;
+            if ($label_end !== '' and $label_end !== $label_start) {
+                $next_occurrence_label .= ' → ' . $label_end;
+            }
+        } else {
+            $next_occurrence_label = $label_date;
         }
-
-        $end_str = isset($occurrence['end']) ? (string) $occurrence['end'] : '';
-        $start_day = $format_day($start_str);
-        $date_label = $format_date_label($start_str);
-        $start_time_label = $format_time($start_str);
-        $end_time_label = $end_str !== '' ? $format_time($end_str) : '';
-
-        $start_timestamp = strtotime($start_str);
-        $date_key = $start_timestamp ? wp_date('Y-m-d', $start_timestamp) : '';
-        $is_past_entry = !empty($occurrence['is_past']);
-        $is_today_entry = ($highlight_today && $date_key !== '' && $date_key === $today_key);
-
-        $entries[] = array(
-            'day' => ucfirst($start_day),
-            'date' => $date_label,
-            'start_time' => $start_time_label,
-            'end_time' => $end_time_label,
-            'is_past' => $is_past_entry,
-            'is_today' => $is_today_entry,
-        );
     }
 }
 
+$entries = array();
+$today_key = wp_date('Y-m-d');
+foreach ($occurrences as $occurrence) {
+    $start_str = isset($occurrence['start']) ? (string) $occurrence['start'] : '';
+    if ($start_str === '') {
+        continue;
+    }
+
+    $end_str = isset($occurrence['end']) ? (string) $occurrence['end'] : '';
+    $start_day = $format_day($start_str);
+    $date_label = $format_date_label($start_str);
+    $start_time_label = $format_time($start_str);
+    $end_time_label = $end_str !== '' ? $format_time($end_str) : '';
+
+    $start_timestamp = strtotime($start_str);
+    $date_key = $start_timestamp ? wp_date('Y-m-d', $start_timestamp) : '';
+    $is_past_entry = !empty($occurrence['is_past']);
+    $is_today_entry = ($highlight_today and $date_key !== '' and $date_key === $today_key);
+
+    $entries[] = array(
+        'day' => $start_day,
+        'date' => $date_label,
+        'start_time' => $start_time_label,
+        'end_time' => $end_time_label,
+        'is_past' => $is_past_entry,
+        'is_today' => $is_today_entry,
+    );
+}
+
+$has_recurring = ($schedule_mode === 'recurring') and (!empty($weekly_schedule['days']) or !empty($weekly_schedule['is_monthly']));
+$has_series = ($schedule_mode === 'series') and !empty($weekly_schedule['series_items']);
+$has_entries = !empty($entries);
+
 $active_layout = $layout_mode_fallback;
-if ($is_recurring && !empty($recurring_slots)) {
+if ($has_recurring) {
     $active_layout = $layout_mode_recurring;
-} elseif (!empty($entries)) {
+} elseif ($has_series) {
+    $active_layout = $layout_mode_series;
+} elseif ($has_entries) {
     switch ($schedule_mode) {
         case 'fixed':
             $active_layout = $layout_mode_fixed;
@@ -353,259 +597,133 @@ if ($is_recurring && !empty($recurring_slots)) {
     }
 }
 
-$active_layout = sanitize_key($active_layout);
-$schedule_class = 'mj-event-schedule--mode-' . sanitize_html_class($schedule_mode ?: 'unknown');
-$layout_class = 'mj-event-schedule--layout-' . sanitize_html_class($active_layout ?: 'list');
-$wrapper_classes = array('mj-event-schedule', $schedule_class, $layout_class);
+$schedule_class = 'mj-event-schedule--mode-' . sanitize_html_class($schedule_mode !== '' ? $schedule_mode : 'unknown');
+$layout_class = 'mj-event-schedule--layout-' . sanitize_html_class($active_layout !== '' ? $active_layout : 'list');
 
+$wrapper_classes = array(
+    'mj-event-schedule',
+    $schedule_class,
+    $layout_class,
+);
+
+if ($highlight_today) {
+    $wrapper_classes[] = 'mj-event-schedule--highlight-today';
+}
+if ($show_icons) {
+    $wrapper_classes[] = 'mj-event-schedule--show-icons';
+}
+
+$event_permalink = '';
+if ($show_register_button) {
+    if ($event_for_schedule) {
+        $candidate_permalink = apply_filters('mj_member_event_permalink', '', $event_for_schedule);
+        if (is_string($candidate_permalink) and $candidate_permalink !== '') {
+            $event_permalink = $candidate_permalink;
+        }
+    }
+
+    if ($event_permalink === '') {
+        $article_permalink_candidate = $get_event_value('article_permalink', '');
+        if (is_string($article_permalink_candidate) and $article_permalink_candidate !== '') {
+            $event_permalink = $article_permalink_candidate;
+        }
+    }
+
+    if ($event_permalink === '') {
+        $article_id = (int) $get_event_value('article_id', 0);
+        if ($article_id > 0) {
+            $permalink_from_article = get_permalink($article_id);
+            if (is_string($permalink_from_article) and $permalink_from_article !== '') {
+                $event_permalink = $permalink_from_article;
+            }
+        }
+    }
+
+    if ($event_permalink === '' and $is_preview) {
+        $event_permalink = home_url('/evenement/exemple');
+    }
+
+    if ($event_permalink !== '') {
+        $event_permalink = esc_url_raw($event_permalink);
+        $wrapper_classes[] = 'mj-event-schedule--has-cta';
+    }
+}
+
+$wrapper_classes = array_values(array_filter(array_unique($wrapper_classes)));
+
+$register_button_url = ($show_register_button and $event_permalink !== '') ? $event_permalink : '';
+
+$schedule_data = array(
+    'mode' => $schedule_mode,
+    'schedule_summary' => $schedule_summary,
+    'display_label' => $display_label,
+    'date_debut' => $date_debut,
+    'date_fin' => $date_fin,
+    'occurrences' => $occurrences,
+    'weekly_schedule' => $weekly_schedule,
+);
+
+if (!empty($next_occurrence)) {
+    $schedule_data['next_occurrence'] = $next_occurrence;
+}
+if ($next_occurrence_label !== '') {
+    $schedule_data['next_occurrence_label'] = $next_occurrence_label;
+}
+
+$extra_context = array(
+    'title' => $title,
+    'display_title' => $display_title,
+    'empty_message' => $empty_message,
+    'show_icons' => $show_icons,
+    'highlight_today' => $highlight_today,
+    'layout' => $active_layout,
+    'entries' => $entries,
+    'is_preview' => $is_preview,
+    'has_event' => !empty($event_for_schedule),
+    'show_register_button' => $register_button_url !== '',
+    'register_button' => array(
+        'label' => $register_button_label,
+        'url' => $register_button_url,
+    ),
+    'wrapper_classes' => $wrapper_classes,
+    'strings' => array(
+        'day' => __('Jour', 'mj-member'),
+        'date' => __('Date', 'mj-member'),
+        'time' => __('Heure', 'mj-member'),
+        'start' => __('Début', 'mj-member'),
+        'end' => __('Fin', 'mj-member'),
+        'select_event' => __('Sélectionnez un événement dans les réglages du widget.', 'mj-member'),
+    ),
+);
+
+if ($schedule_summary !== '') {
+    $extra_context['summary'] = $schedule_summary;
+}
+if ($next_occurrence_label !== '') {
+    $extra_context['next_occurrence_label'] = $next_occurrence_label;
+}
+
+$schedule_component = '';
+if (class_exists(ScheduleDisplayHelper::class)) {
+    $schedule_component = ScheduleDisplayHelper::render(
+        $schedule_data,
+        array(
+            'variant' => 'event-schedule-widget',
+            'extra_context' => $extra_context,
+        )
+    );
+}
+
+if ($schedule_component === '') {
+    $schedule_component = sprintf(
+        '<div class="%s"><p>%s</p></div>',
+        esc_attr(implode(' ', $wrapper_classes)),
+        esc_html($empty_message)
+    );
+}
+
+echo $schedule_component;
 ?>
-
-<div class="<?php echo esc_attr(implode(' ', $wrapper_classes)); ?>">
-    <?php if ($display_title && $title !== '') : ?>
-        <h3 class="mj-event-schedule__title"><?php echo esc_html($title); ?></h3>
-    <?php endif; ?>
-
-    <?php if ($is_recurring && !empty($recurring_slots)) : ?>
-        <?php if ($active_layout === 'table') : ?>
-            <div class="mj-event-schedule__table-wrapper">
-                <table class="mj-event-schedule__table mj-event-schedule__table--recurring">
-                    <thead>
-                        <tr>
-                            <th><?php esc_html_e('Jour', 'mj-member'); ?></th>
-                            <th><?php esc_html_e('D�but', 'mj-member'); ?></th>
-                            <th><?php esc_html_e('Fin', 'mj-member'); ?></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($recurring_slots as $slot) : ?>
-                            <tr>
-                                <td><?php echo esc_html($slot['day_label']); ?></td>
-                                <td><?php echo esc_html($slot['start']); ?></td>
-                                <td><?php echo esc_html($slot['end']); ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        <?php elseif ($active_layout === 'chips') : ?>
-            <div class="mj-event-schedule__chips">
-                <?php foreach ($recurring_slots as $slot) : ?>
-                    <span class="mj-event-schedule__chip">
-                        <strong><?php echo esc_html($slot['day_label']); ?></strong>
-                        <?php if ($slot['start'] !== '' || $slot['end'] !== '') : ?>
-                            <span class="mj-event-schedule__chip-time">
-                                <?php echo esc_html($slot['start']); ?>
-                                <?php if ($slot['end'] !== '' && $slot['end'] !== $slot['start']) : ?>
-                                    <span class="mj-event-schedule__time-separator"></span>
-                                    <?php echo esc_html($slot['end']); ?>
-                                <?php endif; ?>
-                            </span>
-                        <?php endif; ?>
-                    </span>
-                <?php endforeach; ?>
-            </div>
-        <?php else : ?>
-            <div class="mj-event-schedule__recurring">
-                <?php foreach ($recurring_slots as $slot) : ?>
-                    <div class="mj-event-schedule__recurring-item">
-                        <span class="mj-event-schedule__recurring-day"><?php echo esc_html($slot['day_label']); ?></span>
-                        <?php if ($slot['start'] !== '' || $slot['end'] !== '') : ?>
-                            <div class="mj-event-schedule__recurring-time">
-                                <?php if ($show_icons) : ?>
-                                    <span class="mj-event-schedule__time-icon" aria-hidden="true">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <circle cx="12" cy="12" r="10"></circle>
-                                            <polyline points="12 6 12 12 16 14"></polyline>
-                                        </svg>
-                                    </span>
-                                <?php endif; ?>
-                                <span class="mj-event-schedule__time-text">
-                                    <?php echo esc_html($slot['start']); ?>
-                                    <?php if ($slot['end'] !== '' && $slot['end'] !== $slot['start']) : ?>
-                                        <span class="mj-event-schedule__time-separator"></span>
-                                        <?php echo esc_html($slot['end']); ?>
-                                    <?php endif; ?>
-                                </span>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
-    <?php elseif (empty($entries)) : ?>
-        <div class="mj-event-schedule__empty">
-            <?php if ($is_preview && $event_id <= 0) : ?>
-                <p class="mj-event-schedule__empty-preview">
-                    <?php esc_html_e('S�lectionnez un �v�nement dans les r�glages du widget.', 'mj-member'); ?>
-                </p>
-            <?php else : ?>
-                <p><?php echo esc_html($empty_message); ?></p>
-            <?php endif; ?>
-        </div>
-    <?php else : ?>
-        <?php if ($active_layout === 'table') : ?>
-            <div class="mj-event-schedule__table-wrapper">
-                <table class="mj-event-schedule__table">
-                    <thead>
-                        <tr>
-                            <th><?php esc_html_e('Jour', 'mj-member'); ?></th>
-                            <th><?php esc_html_e('Date', 'mj-member'); ?></th>
-                            <th><?php esc_html_e('Heure', 'mj-member'); ?></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($entries as $entry) : ?>
-                            <tr class="<?php echo $entry['is_past'] ? 'is-past' : ''; ?><?php echo $entry['is_today'] ? ' is-today' : ''; ?>">
-                                <td><?php echo esc_html($entry['day']); ?></td>
-                                <td><?php echo esc_html($entry['date']); ?></td>
-                                <td>
-                                    <?php echo esc_html($entry['start_time']); ?>
-                                    <?php if ($entry['end_time'] !== '' && $entry['end_time'] !== $entry['start_time']) : ?>
-                                        <span class="mj-event-schedule__time-separator"></span>
-                                        <?php echo esc_html($entry['end_time']); ?>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        <?php elseif ($active_layout === 'chips') : ?>
-            <div class="mj-event-schedule__chips">
-                <?php foreach ($entries as $entry) :
-                    $chip_classes = array('mj-event-schedule__chip');
-                    if ($entry['is_today']) {
-                        $chip_classes[] = 'mj-event-schedule__chip--today';
-                    }
-                ?>
-                    <span class="<?php echo esc_attr(implode(' ', $chip_classes)); ?>">
-                        <strong><?php echo esc_html($entry['day']); ?></strong>
-                        <span class="mj-event-schedule__chip-meta"><?php echo esc_html($entry['date']); ?></span>
-                        <span class="mj-event-schedule__chip-time">
-                            <?php echo esc_html($entry['start_time']); ?>
-                            <?php if ($entry['end_time'] !== '' && $entry['end_time'] !== $entry['start_time']) : ?>
-                                <span class="mj-event-schedule__time-separator"></span>
-                                <?php echo esc_html($entry['end_time']); ?>
-                            <?php endif; ?>
-                        </span>
-                    </span>
-                <?php endforeach; ?>
-            </div>
-        <?php elseif ($active_layout === 'card') : ?>
-            <div class="mj-event-schedule__cards">
-                <?php foreach ($entries as $entry) :
-                    $card_classes = array('mj-event-schedule__card');
-                    if ($entry['is_past']) {
-                        $card_classes[] = 'mj-event-schedule__card--past';
-                    }
-                    if ($entry['is_today']) {
-                        $card_classes[] = 'mj-event-schedule__card--today';
-                    }
-                ?>
-                    <article class="<?php echo esc_attr(implode(' ', $card_classes)); ?>">
-                        <header class="mj-event-schedule__card-header">
-                            <span class="mj-event-schedule__day-text"><?php echo esc_html($entry['day']); ?></span>
-                            <span class="mj-event-schedule__date-text"><?php echo esc_html($entry['date']); ?></span>
-                        </header>
-                        <div class="mj-event-schedule__card-time">
-                            <?php if ($show_icons) : ?>
-                                <span class="mj-event-schedule__time-icon" aria-hidden="true">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <circle cx="12" cy="12" r="10"></circle>
-                                        <polyline points="12 6 12 12 16 14"></polyline>
-                                    </svg>
-                                </span>
-                            <?php endif; ?>
-                            <span class="mj-event-schedule__time-text">
-                                <?php echo esc_html($entry['start_time']); ?>
-                                <?php if ($entry['end_time'] !== '' && $entry['end_time'] !== $entry['start_time']) : ?>
-                                    <span class="mj-event-schedule__time-separator"></span>
-                                    <?php echo esc_html($entry['end_time']); ?>
-                                <?php endif; ?>
-                            </span>
-                        </div>
-                    </article>
-                <?php endforeach; ?>
-            </div>
-        <?php elseif ($active_layout === 'timeline') : ?>
-            <div class="mj-event-schedule__timeline">
-                <?php foreach ($entries as $entry) :
-                    $timeline_classes = array('mj-event-schedule__timeline-entry');
-                    if ($entry['is_past']) {
-                        $timeline_classes[] = 'mj-event-schedule__timeline-entry--past';
-                    }
-                    if ($entry['is_today']) {
-                        $timeline_classes[] = 'mj-event-schedule__timeline-entry--today';
-                    }
-                ?>
-                    <div class="<?php echo esc_attr(implode(' ', $timeline_classes)); ?>">
-                        <div class="mj-event-schedule__timeline-marker" aria-hidden="true"></div>
-                        <div class="mj-event-schedule__timeline-content">
-                            <div class="mj-event-schedule__day">
-                                <span class="mj-event-schedule__day-text"><?php echo esc_html($entry['day']); ?></span>
-                                <span class="mj-event-schedule__date-text"><?php echo esc_html($entry['date']); ?></span>
-                            </div>
-                            <div class="mj-event-schedule__time">
-                                <?php if ($show_icons) : ?>
-                                    <span class="mj-event-schedule__time-icon" aria-hidden="true">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <circle cx="12" cy="12" r="10"></circle>
-                                            <polyline points="12 6 12 12 16 14"></polyline>
-                                        </svg>
-                                    </span>
-                                <?php endif; ?>
-                                <span class="mj-event-schedule__time-text">
-                                    <?php echo esc_html($entry['start_time']); ?>
-                                    <?php if ($entry['end_time'] !== '' && $entry['end_time'] !== $entry['start_time']) : ?>
-                                        <span class="mj-event-schedule__time-separator"></span>
-                                        <?php echo esc_html($entry['end_time']); ?>
-                                    <?php endif; ?>
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        <?php else : ?>
-            <div class="mj-event-schedule__list">
-                <?php foreach ($entries as $entry) :
-                    $item_classes = array('mj-event-schedule__item');
-                    if ($entry['is_past']) {
-                        $item_classes[] = 'mj-event-schedule__item--past';
-                    }
-                    if ($entry['is_today']) {
-                        $item_classes[] = 'mj-event-schedule__item--today';
-                    }
-                ?>
-                    <div class="<?php echo esc_attr(implode(' ', $item_classes)); ?>">
-                        <div class="mj-event-schedule__day">
-                            <span class="mj-event-schedule__day-text"><?php echo esc_html($entry['day']); ?></span>
-                            <span class="mj-event-schedule__date-text"><?php echo esc_html($entry['date']); ?></span>
-                        </div>
-                        <div class="mj-event-schedule__time">
-                            <?php if ($show_icons) : ?>
-                                <span class="mj-event-schedule__time-icon" aria-hidden="true">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <circle cx="12" cy="12" r="10"></circle>
-                                        <polyline points="12 6 12 12 16 14"></polyline>
-                                    </svg>
-                                </span>
-                            <?php endif; ?>
-                            <span class="mj-event-schedule__time-text">
-                                <?php echo esc_html($entry['start_time']); ?>
-                                <?php if ($entry['end_time'] !== '' && $entry['end_time'] !== $entry['start_time']) : ?>
-                                    <span class="mj-event-schedule__time-separator"></span>
-                                    <?php echo esc_html($entry['end_time']); ?>
-                                <?php endif; ?>
-                            </span>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
-    <?php endif; ?>
-</div>
-
 <style>
 .mj-event-schedule {
     --mj-schedule-bg: transparent;
@@ -615,6 +733,10 @@ $wrapper_classes = array('mj-event-schedule', $schedule_class, $layout_class);
     --mj-schedule-icon-color: #888;
     --mj-schedule-border-color: #e9ecef;
     --mj-schedule-past-opacity: 0.6;
+    --mj-schedule-cta-bg: #2563eb;
+    --mj-schedule-cta-color: #ffffff;
+    --mj-schedule-cta-hover-bg: #1d4ed8;
+    --mj-schedule-cta-shadow: rgba(37, 99, 235, 0.35);
 }
 
 .mj-event-schedule__title {
@@ -719,43 +841,80 @@ $wrapper_classes = array('mj-event-schedule', $schedule_class, $layout_class);
 
 .mj-event-schedule__date-text {
     font-size: 0.85rem;
-    color: #6c757d;
+    color: var(--mj-schedule-time-color);
 }
 
-.mj-event-schedule__time {
+.mj-event-schedule__time-text {
+    font-weight: 500;
     color: var(--mj-schedule-time-color);
 }
 
 .mj-event-schedule__time-icon {
     display: inline-flex;
-    align-items: center;
     color: var(--mj-schedule-icon-color);
 }
 
 .mj-event-schedule__time-separator {
-    margin: 0 0.25rem;
+    display: inline-flex;
+    width: 1.75rem;
+    height: 1px;
+    margin: 0 0.5rem;
+    background: var(--mj-schedule-border-color);
+}
+
+.mj-event-schedule__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.mj-event-schedule__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.85rem;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.1);
+    color: #1d4ed8;
+    font-weight: 600;
+}
+
+.mj-event-schedule__chip--today {
+    background: rgba(16, 185, 129, 0.12);
+    color: #0f766e;
+}
+
+.mj-event-schedule__chip-meta {
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.mj-event-schedule__chip-time {
+    font-size: 0.85rem;
+    font-weight: 500;
 }
 
 .mj-event-schedule__cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 1rem;
 }
 
 .mj-event-schedule__card {
-    background: var(--mj-schedule-item-bg);
-    border-radius: 14px;
-    border: 1px solid var(--mj-schedule-border-color);
-    padding: 1.2rem;
     display: flex;
     flex-direction: column;
-    gap: 0.8rem;
-    transition: box-shadow 0.2s ease, transform 0.2s ease;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid var(--mj-schedule-border-color);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .mj-event-schedule__card:hover {
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
     transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.1);
 }
 
 .mj-event-schedule__card--past {
@@ -763,51 +922,28 @@ $wrapper_classes = array('mj-event-schedule', $schedule_class, $layout_class);
 }
 
 .mj-event-schedule__card--today {
-    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.25);
+    border-color: rgba(37, 99, 235, 0.5);
+    box-shadow: 0 12px 28px rgba(37, 99, 235, 0.15);
 }
 
 .mj-event-schedule__card-header {
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
-}
-
-.mj-event-schedule__card-time {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    color: var(--mj-schedule-time-color);
+    gap: 0.25rem;
 }
 
 .mj-event-schedule__timeline {
     position: relative;
-    padding-left: 1.75rem;
+    padding-left: 1.25rem;
+    border-left: 2px solid rgba(148, 163, 184, 0.4);
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
-}
-
-.mj-event-schedule__timeline::before {
-    content: '';
-    position: absolute;
-    left: 0.6rem;
-    top: 0.5rem;
-    bottom: 0.5rem;
-    width: 2px;
-    background: rgba(33, 150, 243, 0.2);
+    gap: 1rem;
 }
 
 .mj-event-schedule__timeline-entry {
     position: relative;
-    background: var(--mj-schedule-item-bg);
-    border: 1px solid var(--mj-schedule-border-color);
-    border-radius: 10px;
-    padding: 0.85rem 1.1rem;
-    transition: box-shadow 0.2s ease;
-}
-
-.mj-event-schedule__timeline-entry:hover {
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+    padding-left: 1rem;
 }
 
 .mj-event-schedule__timeline-entry--past {
@@ -815,58 +951,30 @@ $wrapper_classes = array('mj-event-schedule', $schedule_class, $layout_class);
 }
 
 .mj-event-schedule__timeline-entry--today {
-    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.25);
+    border-left: 3px solid #2563eb;
+    margin-left: -1rem;
+    padding-left: 2rem;
 }
 
 .mj-event-schedule__timeline-marker {
     position: absolute;
-    left: -1.25rem;
-    top: 1rem;
-    width: 10px;
-    height: 10px;
-    background: #fff;
-    border: 3px solid #2196f3;
-    border-radius: 50%;
+    left: -1.35rem;
+    top: 0.35rem;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 999px;
+    background: #2563eb;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
 }
 
 .mj-event-schedule__timeline-content {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
-}
-
-.mj-event-schedule__chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.6rem;
-}
-
-.mj-event-schedule__chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.5rem 0.9rem;
-    background: #eef2ff;
-    color: #2f3e9e;
-    border-radius: 20px;
-    font-size: 0.9rem;
-    border: 1px solid rgba(47, 62, 158, 0.15);
-}
-
-.mj-event-schedule__chip--today {
-    border-color: rgba(33, 150, 243, 0.45);
-    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.15);
-}
-
-.mj-event-schedule__chip-meta {
-    font-size: 0.8rem;
-    color: rgba(47, 62, 158, 0.75);
-}
-
-.mj-event-schedule__chip-time {
-    display: inline-flex;
-    alignments: center;
-    gap: 0.25rem;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: var(--mj-schedule-item-bg);
+    border-radius: 10px;
+    border: 1px solid var(--mj-schedule-border-color);
 }
 
 .mj-event-schedule__table-wrapper {
@@ -876,23 +984,26 @@ $wrapper_classes = array('mj-event-schedule', $schedule_class, $layout_class);
 .mj-event-schedule__table {
     width: 100%;
     border-collapse: collapse;
+    background: #ffffff;
     border: 1px solid var(--mj-schedule-border-color);
-    background: #fff;
     border-radius: 10px;
     overflow: hidden;
 }
 
-.mj-event-schedule__table thead th {
-    background: #f1f5fb;
-    color: #2f3e9e;
-    text-align: left;
+.mj-event-schedule__table th,
+.mj-event-schedule__table td {
     padding: 0.75rem 1rem;
-    font-weight: 600;
+    text-align: left;
+    border-bottom: 1px solid var(--mj-schedule-border-color);
 }
 
-.mj-event-schedule__table tbody td {
-    padding: 0.75rem 1rem;
-    border-top: 1px solid var(--mj-schedule-border-color);
+.mj-event-schedule__table thead {
+    background: rgba(37, 99, 235, 0.08);
+    color: #1d4ed8;
+}
+
+.mj-event-schedule__table tbody tr:nth-child(even) {
+    background: rgba(248, 249, 250, 0.6);
 }
 
 .mj-event-schedule__table tbody tr.is-past {
@@ -900,32 +1011,55 @@ $wrapper_classes = array('mj-event-schedule', $schedule_class, $layout_class);
 }
 
 .mj-event-schedule__table tbody tr.is-today {
-    background: #eef6ff;
+    background: rgba(16, 185, 129, 0.12);
 }
 
-.mj-event-schedule__table--recurring thead th {
-    text-align: center;
+.mj-event-schedule__cta {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: 1.25rem;
 }
 
-.mj-event-schedule__table--recurring tbody td {
-    text-align: center;
+.mj-event-schedule__cta-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--mj-schedule-cta-bg);
+    color: var(--mj-schedule-cta-color);
+    border-radius: 999px;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: 0 10px 30px var(--mj-schedule-cta-shadow);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.mj-event-schedule__cta-button:hover,
+.mj-event-schedule__cta-button:focus {
+    background: var(--mj-schedule-cta-hover-bg);
+    transform: translateY(-1px);
+    box-shadow: 0 14px 34px rgba(37, 99, 235, 0.35);
 }
 
 @media (max-width: 600px) {
-    .mj-event-schedule__cards {
-        grid-template-columns: 1fr;
+    .mj-event-schedule__item,
+    .mj-event-schedule__timeline-content,
+    .mj-event-schedule__card {
+        padding: 0.75rem 0.85rem;
     }
 
-    .mj-event-schedule__timeline::before {
-        left: 0.4rem;
-    }
-
-    .mj-event-schedule__timeline-entry {
+    .mj-event-schedule__timeline {
+        border-left-width: 1px;
         padding-left: 1rem;
     }
 
     .mj-event-schedule__timeline-marker {
-        left: -1.1rem;
+        left: -1.05rem;
+    }
+
+    .mj-event-schedule__table th,
+    .mj-event-schedule__table td {
+        padding: 0.6rem 0.75rem;
     }
 }
 </style>

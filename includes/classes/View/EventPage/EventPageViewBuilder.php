@@ -3,6 +3,7 @@
 namespace Mj\Member\Classes\View\EventPage;
 
 use DateTime;
+use Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -139,6 +140,13 @@ final class EventPageViewBuilder
             ? $this->model['registration']
             : array();
 
+        $scheduleComponent = '';
+        if (!empty($schedule)) {
+            $scheduleComponent = ScheduleDisplayHelper::render($schedule, array(
+                'variant' => 'event-page',
+            ));
+        }
+
         $weeklySchedule = isset($schedule['weekly_schedule']) && is_array($schedule['weekly_schedule'])
             ? $schedule['weekly_schedule']
             : array('is_weekly' => false, 'days' => array());
@@ -154,6 +162,7 @@ final class EventPageViewBuilder
             'schedule_summary' => isset($schedule['schedule_summary']) ? (string) $schedule['schedule_summary'] : '',
             'display_label' => isset($schedule['display_label']) ? (string) $schedule['display_label'] : '',
             'weekly_schedule' => $weeklySchedule,
+            'schedule_component' => $scheduleComponent,
             'price_label' => isset($registration['price_display']) ? (string) $registration['price_display'] : '',
         );
     }
@@ -327,6 +336,11 @@ final class EventPageViewBuilder
         );
         
         if ($nextOccurrence !== null) {
+            $timezone = wp_timezone();
+            if (!($timezone instanceof \DateTimeZone)) {
+                $timezone = new \DateTimeZone('UTC');
+            }
+
             $nextOccurrenceData['label'] = isset($nextOccurrence['label']) ? (string) $nextOccurrence['label'] : '';
             $nextOccurrenceData['day_name'] = isset($nextOccurrence['day_name']) ? (string) $nextOccurrence['day_name'] : '';
             $nextOccurrenceData['day_num'] = isset($nextOccurrence['day_num']) ? (string) $nextOccurrence['day_num'] : '';
@@ -334,8 +348,8 @@ final class EventPageViewBuilder
             
             $timestamp = isset($nextOccurrence['timestamp']) ? (int) $nextOccurrence['timestamp'] : 0;
             if ($timestamp > 0) {
-                $nextOccurrenceData['year'] = date_i18n('Y', $timestamp);
-                $nextOccurrenceData['full_date'] = date_i18n('l j F Y', $timestamp);
+                $nextOccurrenceData['year'] = wp_date('Y', $timestamp, $timezone);
+                $nextOccurrenceData['full_date'] = wp_date('l j F Y', $timestamp, $timezone);
             }
             
             $occurrenceStartTimestamp = $timestamp;
@@ -348,13 +362,13 @@ final class EventPageViewBuilder
             }
 
             if ($occurrenceStartTimestamp > 0) {
-                $nextOccurrenceData['time_start'] = date_i18n('H:i', $occurrenceStartTimestamp);
+                $nextOccurrenceData['time_start'] = $this->formatTimeFromTimestamp($occurrenceStartTimestamp, $timezone);
             }
 
             if (!empty($nextOccurrence['end'])) {
                 $parsedEnd = $this->parseOccurrenceTimestamp((string) $nextOccurrence['end']);
                 if ($parsedEnd !== null) {
-                    $nextOccurrenceData['time_end'] = date_i18n('H:i', $parsedEnd);
+                    $nextOccurrenceData['time_end'] = $this->formatTimeFromTimestamp($parsedEnd, $timezone);
                 }
             }
         }
@@ -425,6 +439,9 @@ final class EventPageViewBuilder
         }
 
         $timezone = wp_timezone();
+        if (!($timezone instanceof \DateTimeZone)) {
+            $timezone = new \DateTimeZone('UTC');
+        }
         $formats = array('Y-m-d H:i:s', 'Y-m-d H:i', 'Y-m-d');
 
         foreach ($formats as $format) {
@@ -436,6 +453,45 @@ final class EventPageViewBuilder
 
         $timestamp = strtotime($value);
         return $timestamp !== false ? $timestamp : null;
+    }
+
+    private function formatTimeFromTimestamp(int $timestamp, ?\DateTimeZone $timezone = null): string
+    {
+        if (!($timezone instanceof \DateTimeZone)) {
+            $timezone = wp_timezone();
+            if (!($timezone instanceof \DateTimeZone)) {
+                $timezone = new \DateTimeZone('UTC');
+            }
+        }
+
+        $time = wp_date('H:i', $timestamp, $timezone);
+        return $this->formatTimeForDisplay($time);
+    }
+
+    private function formatTimeForDisplay(string $time): string
+    {
+        $time = trim($time);
+        if ($time === '' || strpos($time, ':') === false) {
+            return $time;
+        }
+
+        $parts = explode(':', $time);
+        $hours = isset($parts[0]) ? ltrim($parts[0], '0') : '';
+        $minutes = isset($parts[1]) ? $parts[1] : '00';
+
+        if ($hours === '') {
+            $hours = '0';
+        }
+
+        if ($hours === '0' && $minutes === '00') {
+            return '';
+        }
+
+        if ($minutes === '00') {
+            return $hours . 'h';
+        }
+
+        return $hours . 'h' . $minutes;
     }
 
     /**

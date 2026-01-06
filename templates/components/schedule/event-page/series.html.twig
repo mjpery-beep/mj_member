@@ -1,0 +1,17 @@
+{% if weekly.series_items|length > 0 %}
+<div class="mj-event-page__weekly-schedule generate-from-helpers">
+    <div class="mj-event-page__weekly-days mj-event-page__weekly-days--series">
+        {% for item in weekly.series_items %}
+            <div class="mj-event-page__weekly-item">
+                <span class="mj-event-page__weekly-day">{{ item.date_formatted }}</span>
+                {% if item.time_range %}
+                    <svg class="mj-event-page__weekly-icon mj-event-page__weekly-icon--time" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span class="mj-event-page__weekly-time">{{ item.time_range }}</span>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+</div>
+{% elseif primary_label %}
+<p class="mj-event-page__date">{{ primary_label }}</p>
+{% endif %}

@@ -1,0 +1,26 @@
+<div class="mj-member-event-single__schedule-box mj-member-event-single__schedule-box--recurring">
+    {% if summary %}
+        <p class="mj-member-event-single__schedule-summary">{{ summary }}</p>
+    {% endif %}
+
+    {% if weekly.show_date_range and primary_label %}
+        <p class="mj-member-event-single__schedule-period">{{ primary_label }}</p>
+    {% endif %}
+
+    {% if weekly.days|length > 0 %}
+        <ul class="mj-member-event-single__schedule-list">
+            {% for day in weekly.days %}
+                <li class="mj-member-event-single__schedule-item">
+                    <span class="mj-member-event-single__schedule-item-day">{{ day.label }}</span>
+                    {% if day.time_range %}
+                        <span class="mj-member-event-single__schedule-item-time">{{ day.time_range }}</span>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if next_occurrence_label %}
+        <p class="mj-member-event-single__schedule-next">{{ next_occurrence_label }}</p>
+    {% endif %}
+</div>

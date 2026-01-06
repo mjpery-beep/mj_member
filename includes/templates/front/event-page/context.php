@@ -130,9 +130,11 @@ function mj_member_render_event_page_fallback(array $payload): string
                     <span class="mj-event-page__badge"><?php echo esc_html($hero['type_label']); ?></span>
                 <?php endif; ?>
                 <h1 class="mj-event-page__title"><?php echo esc_html($hero['title'] ?? ''); ?></h1>
-                <?php if (!empty($hero['display_label'])) : ?>
-                    <p class="mj-event-page__date"><?php echo esc_html($hero['display_label']); ?></p>
-                <?php endif; ?>
+                    <?php if (!empty($hero['schedule_component'])) : ?>
+                        <?php echo $hero['schedule_component']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                    <?php elseif (!empty($hero['display_label'])) : ?>
+                        <p class="mj-event-page__date"><?php echo esc_html($hero['display_label'] ?? ''); ?></p>
+                    <?php endif; ?>
                 <?php if (!empty($hero['cover_url'])) : ?>
                     <div class="mj-event-page__hero-cover">
                         <img src="<?php echo esc_url($hero['cover_url']); ?>" alt="<?php echo esc_attr($hero['title'] ?? ''); ?>" />

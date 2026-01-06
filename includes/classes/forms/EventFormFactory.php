@@ -207,16 +207,6 @@ final class EventFormFactory
             'label' => __('Jour', 'mj-member'),
             'attr' => array('type' => 'date'),
         ));
-        $builder->add('event_recurring_start_time', TextType::class, array(
-            'required' => false,
-            'label' => __('Début', 'mj-member'),
-            'attr' => array('type' => 'time'),
-        ));
-        $builder->add('event_recurring_end_time', TextType::class, array(
-            'required' => false,
-            'label' => __('Fin', 'mj-member'),
-            'attr' => array('type' => 'time'),
-        ));
 
         $builder->add('event_recurring_frequency', ChoiceType::class, array(
             'choices' => $this->flipChoices($resolved['recurring_frequencies']),

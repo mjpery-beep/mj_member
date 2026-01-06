@@ -23,59 +23,8 @@
             {# Titre #}
             <h1 class="mj-event-page__title">{{ title }}</h1>
 
-            {# Dates et horaires hebdomadaires #}
-            {% if weekly_schedule.is_weekly and weekly_schedule.days|length > 0 %}
-                <div class="mj-event-page__weekly-schedule">
-                    {% if display_label and not weekly_schedule.show_date_range|default(false) %}
-                        <p class="mj-event-page__weekly-period">
-                            <svg class="mj-event-page__weekly-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                            {{ display_label }}
-                        </p>
-                    {% endif %}
-                    <div class="mj-event-page__weekly-days">
-                        {% for day in weekly_schedule.days %}
-                            <div class="mj-event-page__weekly-item">
-                                <span class="mj-event-page__weekly-day">{{ day.label }}</span>
-                                <svg class="mj-event-page__weekly-icon mj-event-page__weekly-icon--time" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                <span class="mj-event-page__weekly-time">{{ day.time_range|default('-') }}</span>
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {# Dates et horaires mensuels #}
-            {% elseif weekly_schedule.is_monthly|default(false) %}
-                <div class="mj-event-page__weekly-schedule">
-                    {% if display_label and not weekly_schedule.show_date_range|default(false) %}
-                        <p class="mj-event-page__weekly-period">
-                            <svg class="mj-event-page__weekly-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                            {{ display_label }}
-                        </p>
-                    {% endif %}
-                    <div class="mj-event-page__weekly-days">
-                        <div class="mj-event-page__weekly-item">
-                            <span class="mj-event-page__weekly-day">{{ weekly_schedule.monthly_label }}</span>
-                            {% if weekly_schedule.time_range %}
-                                <svg class="mj-event-page__weekly-icon mj-event-page__weekly-icon--time" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                <span class="mj-event-page__weekly-time">{{ weekly_schedule.time_range }}</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            {# Série de dates personnalisées #}
-            {% elseif weekly_schedule.is_series|default(false) and weekly_schedule.series_items|length > 0 %}
-                <div class="mj-event-page__weekly-schedule">
-                    <div class="mj-event-page__weekly-days mj-event-page__weekly-days--series">
-                        {% for item in weekly_schedule.series_items %}
-                            <div class="mj-event-page__weekly-item">
-                                <span class="mj-event-page__weekly-day">{{ item.date_formatted }}</span>
-                                {% if item.time_range %}
-                                    <svg class="mj-event-page__weekly-icon mj-event-page__weekly-icon--time" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                    <span class="mj-event-page__weekly-time">{{ item.time_range }}</span>
-                                {% endif %}
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
+            {% if hero.schedule_component %}
+                {{ hero.schedule_component|raw }}
             {% elseif display_label %}
                 <p class="mj-event-page__date">{{ display_label }}</p>
             {% endif %}

@@ -1,0 +1,26 @@
+<div class="mj-schedule mj-schedule--series">
+    {% if summary %}
+        <p class="mj-schedule__summary">{{ summary }}</p>
+    {% endif %}
+
+    {% if primary_label %}
+        <p class="mj-schedule__period">{{ primary_label }}</p>
+    {% endif %}
+
+    {% if weekly.series_items|length > 0 %}
+        <ul class="mj-schedule__list">
+            {% for item in weekly.series_items %}
+                <li class="mj-schedule__item">
+                    <span class="mj-schedule__item-day">{{ item.date_formatted }}</span>
+                    {% if item.time_range %}
+                        <span class="mj-schedule__item-time">{{ item.time_range }}</span>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if next_occurrence_label %}
+        <p class="mj-schedule__next">{{ next_occurrence_label }}</p>
+    {% endif %}
+</div>

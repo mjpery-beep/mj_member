@@ -235,7 +235,9 @@ final class EventPageModel
         $scheduleSummary = $this->buildScheduleSummary($mode, count($occurrences));
 
         $now = current_time('timestamp');
+        $timezone = $this->getSiteTimezone();
         $occurrenceItems = array();
+        $dateFormatOption = get_option('date_format', 'd/m/Y');
 
         foreach ($occurrences as $occ) {
             $timestamp = isset($occ['timestamp']) ? (int) $occ['timestamp'] : 0;
@@ -245,7 +247,7 @@ final class EventPageModel
             // Générer le label si absent
             $label = $this->buildOccurrenceLabel($occ, $mode);
             if ($label === '' && $timestamp > 0) {
-                $label = date_i18n(get_option('date_format', 'd/m/Y'), $timestamp);
+                $label = wp_date($dateFormatOption, $timestamp, $timezone);
             }
 
             // Extraire la date depuis start ou timestamp
@@ -257,9 +259,9 @@ final class EventPageModel
             }
 
             // Labels localisés pour l'affichage mini-agenda
-            $dayName = $timestamp > 0 ? date_i18n('D', $timestamp) : '';
-            $dayNum = $timestamp > 0 ? date_i18n('d', $timestamp) : '';
-            $monthName = $timestamp > 0 ? date_i18n('M', $timestamp) : '';
+            $dayName = $timestamp > 0 ? wp_date('D', $timestamp, $timezone) : '';
+            $dayNum = $timestamp > 0 ? wp_date('d', $timestamp, $timezone) : '';
+            $monthName = $timestamp > 0 ? wp_date('M', $timestamp, $timezone) : '';
 
             $occurrenceItems[] = array(
                 'date' => $dateStr,
@@ -350,13 +352,14 @@ final class EventPageModel
      */
     private function formatDateRangeLabel(DateTime $start, DateTime $end, bool $forceTime): string
     {
+        $timezone = $this->getSiteTimezone();
         $dateFormat = 'l j F Y';
         $timeFormat = get_option('time_format', 'H:i');
-        $startLabel = date_i18n($dateFormat, $start->getTimestamp());
+        $startLabel = wp_date($dateFormat, $start->getTimestamp(), $timezone);
 
         if ($start->format('Y-m-d') === $end->format('Y-m-d')) {
-            $startTime = date_i18n($timeFormat, $start->getTimestamp());
-            $endTime = date_i18n($timeFormat, $end->getTimestamp());
+            $startTime = wp_date($timeFormat, $start->getTimestamp(), $timezone);
+            $endTime = wp_date($timeFormat, $end->getTimestamp(), $timezone);
 
             if (!$forceTime && $startTime === '00:00' && $endTime === '00:00') {
                 return $startLabel;
@@ -369,7 +372,7 @@ final class EventPageModel
             return $startLabel . ' · ' . $startTime . ' → ' . $endTime;
         }
 
-        return $startLabel . ' - ' . date_i18n($dateFormat, $end->getTimestamp());
+        return $startLabel . ' - ' . wp_date($dateFormat, $end->getTimestamp(), $timezone);
     }
 
     /**
@@ -397,6 +400,19 @@ final class EventPageModel
     }
 
     /**
+     * Retourne le fuseau horaire configuré dans WordPress.
+     */
+    private function getSiteTimezone(): \DateTimeZone
+    {
+        $timezone = wp_timezone();
+        if (!($timezone instanceof \DateTimeZone)) {
+            $timezone = new \DateTimeZone('UTC');
+        }
+
+        return $timezone;
+    }
+
+    /**
      * Retourne une DateTime basée sur le fuseau WordPress
      */
     private function parseEventDate(string $value): ?DateTime
@@ -406,7 +422,7 @@ final class EventPageModel
             return null;
         }
 
-        $timezone = wp_timezone();
+        $timezone = $this->getSiteTimezone();
         $formats = array('Y-m-d H:i:s', 'Y-m-d H:i', 'Y-m-d');
 
         foreach ($formats as $format) {
@@ -643,6 +659,7 @@ final class EventPageModel
         }
 
         $seriesItems = array();
+        $timezone = $this->getSiteTimezone();
         foreach ($items as $item) {
             if (!is_array($item)) {
                 continue;
@@ -658,7 +675,7 @@ final class EventPageModel
 
             // Formater la date
             $timestamp = strtotime($dateStr);
-            $dateFormatted = $timestamp ? date_i18n('D j M', $timestamp) : $dateStr;
+            $dateFormatted = $timestamp ? wp_date('D j M', $timestamp, $timezone) : $dateStr;
 
             // Formater les heures
             $startFormatted = $this->formatTimeForDisplay($startTime);
@@ -714,6 +731,10 @@ final class EventPageModel
 
         if ($hours === '') {
             $hours = '0';
+        }
+
+        if ($hours === '0' && $minutes === '00') {
+            return '';
         }
 
         if ($minutes === '00') {
@@ -842,7 +863,7 @@ final class EventPageModel
         if ($deadlineRaw !== '') {
             $deadlineTs = strtotime($deadlineRaw);
             if ($deadlineTs) {
-                $deadlineLabel = date_i18n(get_option('date_format'), $deadlineTs);
+                $deadlineLabel = wp_date(get_option('date_format', 'd/m/Y'), $deadlineTs, $this->getSiteTimezone());
             }
         }
 

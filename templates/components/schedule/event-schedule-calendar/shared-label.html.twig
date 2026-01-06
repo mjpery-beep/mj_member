@@ -1,0 +1,14 @@
+{% set label = next_occurrence_label|default('') %}
+{% if label == '' %}
+    {% set label = summary|default('') %}
+{% endif %}
+{% if label == '' %}
+    {% set label = primary_label|default('') %}
+{% endif %}
+{% if label == '' %}
+    {% set label = date_range_label|default('') %}
+{% endif %}
+{% if label == '' and fallback_label is defined %}
+    {% set label = fallback_label %}
+{% endif %}
+{{ label|trim }}

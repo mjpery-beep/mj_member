@@ -210,6 +210,7 @@ final class AssetsManager
     public static function registerFrontAssets(): void
     {
         self::registerStyle('mj-member-components', 'css/styles.css');
+        wp_register_style('mj-member-events-widget-inline', false, array('mj-member-components'), Config::version());
         self::registerStyle('mj-member-event-page', 'css/event-page.css', array('mj-member-components'));
         self::registerScript('mj-member-utils', 'js/utils.js', array('jquery'));
         self::registerScript('mj-member-contact-form', 'js/contact-form.js', array('jquery'));
@@ -345,6 +346,7 @@ final class AssetsManager
                 break;
 
             case 'events-widget':
+                wp_enqueue_style('mj-member-components');
                 if (function_exists('mj_member_output_events_widget_styles')) {
                     mj_member_output_events_widget_styles();
                 }

@@ -1,0 +1,15 @@
+<div class="mj-member-event-single__schedule-box mj-member-event-single__schedule-box--fixed">
+    {% if summary %}
+        <p class="mj-member-event-single__schedule-summary">{{ summary }}</p>
+    {% endif %}
+
+    {% if primary_label %}
+        <p class="mj-member-event-single__schedule-primary">{{ primary_label }}</p>
+    {% elseif date_range_label %}
+        <p class="mj-member-event-single__schedule-primary">{{ date_range_label }}</p>
+    {% endif %}
+
+    {% if next_occurrence_label %}
+        <p class="mj-member-event-single__schedule-next">{{ next_occurrence_label }}</p>
+    {% endif %}
+</div>
