@@ -27,6 +27,41 @@ function mj_member_table_exists($table_name) {
     return $result === $table_name;
 }
 
+function mj_member_convert_table_to_utf8mb4($table_name) {
+    if (empty($table_name) || !mj_member_table_exists($table_name)) {
+        return;
+    }
+
+    global $wpdb;
+
+    if (!method_exists($wpdb, 'has_cap') || !$wpdb->has_cap('utf8mb4')) {
+        return;
+    }
+
+    $current_collation = $wpdb->get_var(
+        $wpdb->prepare(
+            'SELECT TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s',
+            DB_NAME,
+            $table_name
+        )
+    );
+
+    if (is_string($current_collation) && stripos($current_collation, 'utf8mb4') !== false) {
+        return;
+    }
+
+    $charset = 'utf8mb4';
+    $collate = $wpdb->collate;
+    if (!is_string($collate) || stripos($collate, 'utf8mb4') === false) {
+        $collate = 'utf8mb4_unicode_ci';
+    }
+
+    $charset_sql = esc_sql($charset);
+    $collate_sql = esc_sql($collate);
+
+    $wpdb->query("ALTER TABLE {$table_name} CONVERT TO CHARACTER SET {$charset_sql} COLLATE {$collate_sql}");
+}
+
 function mj_member_get_events_table_name() {
     static $cached = null;
     if ($cached !== null) {
@@ -653,7 +688,8 @@ function mj_member_run_schema_upgrade() {
             'slug',
             'requires_validation',
             'free_participation',
-            'registration_payload'
+            'registration_payload',
+            'emoji'
         );
 
         foreach ($event_critical_columns as $column) {
@@ -733,6 +769,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_4($wpdb);
     mj_member_upgrade_to_2_5($wpdb);
     mj_member_upgrade_to_2_6($wpdb);
+    mj_member_upgrade_to_2_38($wpdb);
     mj_member_upgrade_to_2_7($wpdb);
     mj_member_upgrade_to_2_8($wpdb);
     mj_member_upgrade_to_2_9($wpdb);
@@ -762,6 +799,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_34($wpdb);
     mj_member_upgrade_to_2_35($wpdb);
     mj_member_upgrade_to_2_36($wpdb);
+    mj_member_upgrade_to_2_37($wpdb);
     
     
     $registrations_table = mj_member_get_event_registrations_table_name();
@@ -2096,6 +2134,36 @@ function mj_member_upgrade_to_2_36($wpdb) {
 
     $wpdb->query("ALTER TABLE {$locations_table} ADD COLUMN icon varchar(60) DEFAULT ''{$after_column}");
     $wpdb->query("UPDATE {$locations_table} SET icon = '' WHERE icon IS NULL");
+}
+
+function mj_member_upgrade_to_2_37($wpdb) {
+    $events_table = mj_member_get_events_table_name();
+
+    if (!$events_table || !mj_member_table_exists($events_table)) {
+        return;
+    }
+
+    if (mj_member_column_exists($events_table, 'emoji')) {
+        return;
+    }
+
+    $after_clause = '';
+    if (mj_member_column_exists($events_table, 'accent_color')) {
+        $after_clause = ' AFTER accent_color';
+    }
+
+    $wpdb->query("ALTER TABLE {$events_table} ADD COLUMN emoji varchar(32) DEFAULT ''{$after_clause}");
+    $wpdb->query("UPDATE {$events_table} SET emoji = '' WHERE emoji IS NULL");
+}
+
+function mj_member_upgrade_to_2_38($wpdb) {
+    $events_table = mj_member_get_events_table_name();
+
+    if (!$events_table || !mj_member_table_exists($events_table)) {
+        return;
+    }
+
+    mj_member_convert_table_to_utf8mb4($events_table);
 }
 
 function mj_member_upgrade_to_2_5($wpdb) {

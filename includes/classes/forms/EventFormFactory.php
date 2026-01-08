@@ -79,6 +79,12 @@ final class EventFormFactory
             'choice_attr' => $this->buildChoiceAttrCallback($resolved['type_choice_attributes']),
         ));
 
+        $builder->add('event_emoji', TextType::class, array(
+            'required' => false,
+            'label' => __('Émoticône', 'mj-member'),
+            'attr' => array('class' => 'regular-text', 'maxlength' => 16, 'placeholder' => '🎉'),
+        ));
+
         $builder->add('event_accent_color', TextType::class, array(
             'required' => false,
             'label' => __('Couleur pastel', 'mj-member'),

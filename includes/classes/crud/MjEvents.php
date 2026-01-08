@@ -32,6 +32,7 @@ class MjEvents implements CrudRepositoryInterface {
         'status' => '%s',
         'type' => '%s',
         'accent_color' => '%s',
+        'emoji' => '%s',
         'cover_id' => '%d',
         'location_id' => '%d',
         'animateur_id' => '%d',
@@ -330,6 +331,8 @@ class MjEvents implements CrudRepositoryInterface {
         global $wpdb;
         $table = self::table_name();
 
+        self::ensure_table_supports_emoji();
+
         $data['created_at'] = current_time('mysql');
         $data['updated_at'] = current_time('mysql');
 
@@ -352,6 +355,19 @@ class MjEvents implements CrudRepositoryInterface {
             }
         }
 
+        if (array_key_exists('emoji', $data)) {
+            if (!self::supports_emoji_column()) {
+                unset($data['emoji']);
+            } else {
+                $normalized_emoji = self::sanitize_emoji($data['emoji']);
+                if ($normalized_emoji === '') {
+                    unset($data['emoji']);
+                } else {
+                    $data['emoji'] = $normalized_emoji;
+                }
+            }
+        }
+
         list($filtered, $formats) = self::prepare_for_db($data);
         if (empty($filtered)) {
             return new WP_Error('mj_event_empty_payload', 'Aucune donnee valide pour creer cet evenement.');
@@ -359,7 +375,8 @@ class MjEvents implements CrudRepositoryInterface {
 
         $result = $wpdb->insert($table, $filtered, $formats);
         if ($result === false) {
-            return new WP_Error('mj_event_insert_failed', 'Impossible de creer cet evenement.');
+            $error_detail = $wpdb->last_error ? ' (MySQL: ' . $wpdb->last_error . ')' : '';
+            return new WP_Error('mj_event_insert_failed', 'Impossible de creer cet evenement.' . $error_detail);
         }
 
         $event_id = (int) $wpdb->insert_id;
@@ -392,6 +409,8 @@ class MjEvents implements CrudRepositoryInterface {
 
         global $wpdb;
         $table = self::table_name();
+
+        self::ensure_table_supports_emoji();
 
         $data['updated_at'] = current_time('mysql');
 
@@ -449,6 +468,21 @@ class MjEvents implements CrudRepositoryInterface {
             }
         }
 
+        if (array_key_exists('emoji', $data)) {
+            if (!self::supports_emoji_column()) {
+                unset($data['emoji']);
+            } else {
+                $normalized_emoji = self::sanitize_emoji($data['emoji']);
+                if ($normalized_emoji === '') {
+                    $nullable_columns[] = 'emoji';
+                    unset($data['emoji']);
+                } else {
+                    $data['emoji'] = $normalized_emoji;
+                }
+            }
+        }
+   
+        
         list($filtered, $formats) = self::prepare_for_db($data);
         if (empty($filtered) && empty($nullable_columns) && $slug_candidate === null) {
             return true;
@@ -457,7 +491,8 @@ class MjEvents implements CrudRepositoryInterface {
         if (!empty($filtered)) {
             $update_result = $wpdb->update($table, $filtered, array('id' => $event_id), $formats, array('%d'));
             if ($update_result === false) {
-                return new WP_Error('mj_event_update_failed', 'Impossible de mettre a jour cet evenement.');
+                $error_detail = $wpdb->last_error ? ' (MySQL: ' . $wpdb->last_error . ')' : '';
+                return new WP_Error('mj_event_update_failed', 'Impossible de mettre a jour cet evenement.' . $error_detail);
             }
         }
 
@@ -468,7 +503,8 @@ class MjEvents implements CrudRepositoryInterface {
                 }
                 $reset = $wpdb->query($wpdb->prepare("UPDATE {$table} SET {$column} = NULL WHERE id = %d", $event_id));
                 if ($reset === false) {
-                    return new WP_Error('mj_event_update_failed', 'Impossible de mettre a jour cet evenement.');
+                    $error_detail = $wpdb->last_error ? ' (MySQL: ' . $wpdb->last_error . ')' : '';
+                    return new WP_Error('mj_event_update_failed', 'Impossible de mettre a jour cet evenement.' . $error_detail);
                 }
             }
         }
@@ -635,6 +671,7 @@ class MjEvents implements CrudRepositoryInterface {
             'status' => self::STATUS_DRAFT,
             'type' => self::TYPE_STAGE,
             'accent_color' => '',
+            'emoji' => '',
             'cover_id' => 0,
             'location_id' => 0,
             'allow_guardian_registration' => 0,
@@ -676,6 +713,10 @@ class MjEvents implements CrudRepositoryInterface {
             }
 
             if ($column === 'animateur_id' && !self::supports_animateur_column()) {
+                continue;
+            }
+
+            if ($column === 'emoji' && !self::supports_emoji_column()) {
                 continue;
             }
 
@@ -744,6 +785,12 @@ class MjEvents implements CrudRepositoryInterface {
                     break;
                 case 'accent_color':
                     $value = self::normalize_hex_color($value);
+                    if ($value === '') {
+                        continue 2;
+                    }
+                    break;
+                case 'emoji':
+                    $value = self::sanitize_emoji($value);
                     if ($value === '') {
                         continue 2;
                     }
@@ -977,6 +1024,73 @@ class MjEvents implements CrudRepositoryInterface {
         }
 
         return $sanitized;
+    }
+
+    private static function sanitize_emoji($value) {
+        if (is_object($value) && method_exists($value, '__toString')) {
+            $value = (string) $value;
+        }
+
+        if (!is_scalar($value)) {
+            return '';
+        }
+
+        $candidate = wp_check_invalid_utf8((string) $value);
+        if ($candidate === '') {
+            return '';
+        }
+
+        $candidate = wp_strip_all_tags($candidate, false);
+        $candidate = preg_replace('/[\x00-\x1F\x7F]+/', '', $candidate);
+        if (!is_string($candidate)) {
+            return '';
+        }
+        $candidate = trim($candidate);
+        if ($candidate === '') {
+            return '';
+        }
+
+        $candidate = \wp_html_excerpt($candidate, 16, '');
+
+        return trim($candidate);
+    }
+
+    private static function supports_emoji_column() {
+        static $supported = null;
+
+        if ($supported !== null) {
+            return $supported;
+        }
+
+        if (!function_exists('mj_member_column_exists')) {
+            $supported = false;
+            return $supported;
+        }
+
+        $table = mj_member_get_events_table_name();
+        $supported = mj_member_column_exists($table, 'emoji');
+        return $supported;
+    }
+
+    private static function ensure_table_supports_emoji() {
+        static $ensured = false;
+
+        if ($ensured) {
+            return;
+        }
+
+        $ensured = true;
+
+        if (!self::supports_emoji_column()) {
+            return;
+        }
+
+        if (!function_exists('mj_member_convert_table_to_utf8mb4')) {
+            return;
+        }
+
+        $table = self::table_name();
+        mj_member_convert_table_to_utf8mb4($table);
     }
 
     private static function supports_animateur_column() {

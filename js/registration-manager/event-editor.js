@@ -61,6 +61,13 @@
         eventStatus: 'Statut',
         eventTitle: 'Titre',
         eventType: 'Type',
+        eventEmoji: 'Emoticone',
+        eventEmojiHint: 'Facultatif, s affiche dans les listes et apercus.',
+        eventEmojiPlaceholder: 'Ex: 🎉',
+        eventEmojiPicker: 'Choisir',
+        eventEmojiPickerClose: 'Fermer',
+        eventEmojiClear: 'Effacer',
+        eventEmojiSuggestions: 'Suggestions',
         fixedDate: 'Jour',
         fixedEndTime: 'Fin',
         fixedHint: 'Utilisez cette option pour un evenement sur une seule journee avec un creneau horaire.',
@@ -253,6 +260,87 @@
         return [];
     }
 
+    var DEFAULT_EMOJI_SUGGESTIONS = [
+        '🎉', '🎈', '🎊', '🎁', '🎂', '🥳', '✨', '🌟', '💫', '💡',
+        '🚀', '🛸', '🌈', '☀️', '🌤️', '🌧️', '❄️', '🌊', '🔥', '🌋',
+        '🌿', '🍃', '🍀', '🌻', '🌸', '🌺', '🌷', '🌼', '🍁', '🍂',
+        '🍎', '🍇', '🍉', '🍓', '🍒', '🍑', '🥝', '🥥', '🥕', '🥦',
+        '🍔', '🍕', '🌮', '🍣', '🍱', '🥗', '🍲', '🥐', '🧑‍🍳', '🍩',
+        '🍪', '🍰', '🧁', '🍫', '🍿', '☕', '🍵', '🧋', '🥤', '🥂',
+        '🏆', '🎯', '🥇', '🥈', '🥉', '🏅', '⚽', '🏀', '🏈', '⚾',
+        '🥎', '🎾', '🏐', '🏓', '🏸', '🥏', '🥊', '🥋', '🥅', '🚴',
+        '🚣', '🏊', '🤽', '🤾', '🧘', '🤸', '🏋️', '🧗', '🛼', '🛹',
+        '🎨', '🖌️', '🎭', '🎬', '🎤', '🎹', '🎺', '🎷', '🎸', '🎻',
+        '🥁', '🎶', '🎼', '📚', '📖', '🧪', '🔬', '🧬', '🧠', '🤖',
+        '🧩', '♟️', '🎲', '🧸', '🪁', '🪀', '🧵', '🪡', '🛠️', '⚙️',
+        '🧰', '🔧', '🔨', '🧱', '🏗️', '🧭', '🧳', '🗺️', '📅', '🗓️',
+        '⏰', '⌛', '🕰️', '💬', '📣', '📢', '💌', '📎', '📌', '📍',
+        '❤️', '🧡', '💛', '💚', '💙', '💜', '🤍', '🤎', '🖤', '💖',
+        '💞', '💗', '💓', '🤝', '🙌', '👏', '👍', '🤩', '😃', '😁',
+        '😊', '🙂', '😎', '🥰', '😇', '🤗', '🤔', '🤓', '🧐', '😴',
+        '🤯', '🤪', '🧘‍♀️', '🧘‍♂️', '🧑‍🎓', '🧑‍🏫', '🧑‍🔬', '🧑‍🎨', '🧑‍🚀', '🧑‍⚕️',
+        '🧑‍🚒', '🧑‍🌾', '🧑‍🔧', '🧑‍🏭', '🧑‍💼', '🧑‍💻', '🧑‍🎤', '🧑‍✈️', '🚴‍♀️', '🚴‍♂️'
+    ];
+
+    function sliceGraphemes(text, max) {
+        if (typeof text !== 'string' || !max || max <= 0) {
+            return '';
+        }
+        if (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function') {
+            try {
+                var segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+                var iterator = segmenter.segment(text);
+                var collected = '';
+                var count = 0;
+                if (iterator && typeof Symbol === 'function' && typeof iterator[Symbol.iterator] === 'function') {
+                    var iter = iterator[Symbol.iterator]();
+                    var step = iter.next();
+                    while (!step.done && count < max) {
+                        collected += step.value.segment;
+                        count++;
+                        step = iter.next();
+                    }
+                    return collected;
+                }
+            } catch (segmenterError) {
+                // ignore segmenter issues and fall back to code point slicing
+            }
+        }
+        var units;
+        try {
+            units = Array.from(text);
+        } catch (arrayError) {
+            units = String(text).split('');
+        }
+        return units.slice(0, max).join('');
+    }
+
+    function sanitizeEmojiValue(value) {
+        if (typeof value !== 'string') {
+            return '';
+        }
+        var normalized = value.replace(/\s+/g, ' ').trim();
+        if (normalized === '') {
+            return '';
+        }
+        var limited = sliceGraphemes(normalized, 8);
+        if (limited.length > 16) {
+            limited = limited.slice(0, 16);
+        }
+        return limited;
+    }
+
+    function normalizeEventFormValues(values) {
+        if (!values || typeof values !== 'object') {
+            return {};
+        }
+        var next = Object.assign({}, values);
+        if (Object.prototype.hasOwnProperty.call(next, 'event_emoji')) {
+            next.event_emoji = sanitizeEmojiValue(next.event_emoji);
+        }
+        return next;
+    }
+
     function RichTextEditorField(props) {
         var value = typeof props.value === 'string' ? props.value : '';
         var onChange = typeof props.onChange === 'function' ? props.onChange : function () {};
@@ -384,6 +472,150 @@
             rows: rows,
             defaultValue: valueRef.current,
         });
+    }
+
+    function EmojiPickerField(props) {
+        var value = typeof props.value === 'string' ? props.value : '';
+        var onChange = typeof props.onChange === 'function' ? props.onChange : function () {};
+        var disabled = !!props.disabled;
+        var strings = props.strings || {};
+        var suggestions = Array.isArray(props.suggestions) && props.suggestions.length > 0
+            ? props.suggestions
+            : DEFAULT_EMOJI_SUGGESTIONS;
+
+        var containerRef = useRef(null);
+        var inputRef = useRef(null);
+        var pickerIdRef = useRef(null);
+        if (!pickerIdRef.current) {
+            pickerIdRef.current = 'mj-regmgr-emoji-picker-' + Math.random().toString(36).slice(2);
+        }
+        var pickerId = pickerIdRef.current;
+
+        var _isPickerOpen = useState(false);
+        var isPickerOpen = _isPickerOpen[0];
+        var setPickerOpen = _isPickerOpen[1];
+
+        useEffect(function () {
+            if (!isPickerOpen) {
+                return undefined;
+            }
+            var handleOutside = function (event) {
+                if (!containerRef.current || containerRef.current.contains(event.target)) {
+                    return;
+                }
+                setPickerOpen(false);
+            };
+            var handleKeydown = function (event) {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    setPickerOpen(false);
+                    if (inputRef.current) {
+                        inputRef.current.focus();
+                    }
+                }
+            };
+            document.addEventListener('mousedown', handleOutside);
+            document.addEventListener('touchstart', handleOutside);
+            document.addEventListener('keydown', handleKeydown);
+            return function () {
+                document.removeEventListener('mousedown', handleOutside);
+                document.removeEventListener('touchstart', handleOutside);
+                document.removeEventListener('keydown', handleKeydown);
+            };
+        }, [isPickerOpen]);
+
+        useEffect(function () {
+            if (!disabled) {
+                return;
+            }
+            if (isPickerOpen) {
+                setPickerOpen(false);
+            }
+        }, [disabled, isPickerOpen]);
+
+        var handleInputChange = useCallback(function (event) {
+            var raw = event.target.value;
+            var sanitized = sanitizeEmojiValue(raw);
+            onChange(sanitized);
+        }, [onChange]);
+
+        var handleTogglePicker = useCallback(function () {
+            if (disabled) {
+                return;
+            }
+            setPickerOpen(function (prev) {
+                return !prev;
+            });
+        }, [disabled]);
+
+        var handleSelectSuggestion = useCallback(function (emoji) {
+            var sanitized = sanitizeEmojiValue(emoji);
+            onChange(sanitized);
+            setPickerOpen(false);
+            if (inputRef.current) {
+                inputRef.current.focus();
+            }
+        }, [onChange]);
+
+        var handleClear = useCallback(function () {
+            onChange('');
+            if (inputRef.current) {
+                inputRef.current.focus();
+            }
+        }, [onChange]);
+
+        return h('div', { class: 'mj-regmgr-emoji-field', ref: containerRef }, [
+            h('div', { class: 'mj-regmgr-emoji-field__control' }, [
+                h('input', {
+                    ref: inputRef,
+                    type: 'text',
+                    class: 'mj-regmgr-emoji-field__input',
+                    value: value,
+                    onChange: handleInputChange,
+                    placeholder: getString(strings, 'eventEmojiPlaceholder', 'Ex: 🎉'),
+                    disabled: disabled,
+                    'aria-label': getString(strings, 'eventEmoji', 'Emoticone'),
+                }),
+                h('div', { class: 'mj-regmgr-emoji-field__actions' }, [
+                    value ? h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--ghost mj-btn--sm',
+                        onClick: handleClear,
+                        disabled: disabled,
+                    }, getString(strings, 'eventEmojiClear', 'Effacer')) : null,
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--ghost mj-btn--sm',
+                        onClick: handleTogglePicker,
+                        disabled: disabled,
+                        'aria-haspopup': 'listbox',
+                        'aria-expanded': isPickerOpen ? 'true' : 'false',
+                        'aria-controls': pickerId,
+                    }, isPickerOpen
+                        ? getString(strings, 'eventEmojiPickerClose', 'Fermer')
+                        : getString(strings, 'eventEmojiPicker', 'Choisir')),
+                ]),
+            ]),
+            isPickerOpen && h('div', {
+                id: pickerId,
+                class: 'mj-regmgr-emoji-field__picker',
+                role: 'listbox',
+            }, [
+                h('p', { class: 'mj-regmgr-emoji-field__picker-title' }, getString(strings, 'eventEmojiSuggestions', 'Suggestions')),
+                suggestions.length > 0 ? h('div', { class: 'mj-regmgr-emoji-field__grid' }, suggestions.map(function (emoji) {
+                    return h('button', {
+                        key: emoji,
+                        type: 'button',
+                        class: 'mj-regmgr-emoji-field__choice',
+                        onClick: function () { handleSelectSuggestion(emoji); },
+                        role: 'option',
+                        'aria-selected': value === emoji ? 'true' : 'false',
+                        'aria-label': getString(strings, 'eventEmojiPicker', 'Choisir') + ' ' + emoji,
+                        title: emoji,
+                    }, emoji);
+                })) : h('p', { class: 'mj-regmgr-emoji-field__empty' }, getString(strings, 'eventEmojiHint', 'Facultatif, s affiche dans les listes et apercus.')),
+            ]),
+        ]);
     }
 
     function ScheduleEditor(props) {
@@ -679,7 +911,9 @@
         var locationOptions = _locationOptionsState[0];
         var setLocationOptions = _locationOptionsState[1];
 
-        var _formState = useState(initialValues || {});
+        var _formState = useState(function () {
+            return normalizeEventFormValues(initialValues || {});
+        });
         var formState = _formState[0];
         var setFormState = _formState[1];
 
@@ -750,7 +984,7 @@
                 previousTypeRef.current = '';
                 return;
             }
-            var nextValues = data.values ? Object.assign({}, data.values) : {};
+            var nextValues = data && data.values ? normalizeEventFormValues(data.values) : {};
             var nextMeta = data.meta ? JSON.parse(JSON.stringify(data.meta)) : {};
             setFormState(nextValues);
             setMetaState(nextMeta);
@@ -820,7 +1054,7 @@
         var updateFormValue = useCallback(function (key, value) {
             setFormState(function (prev) {
                 var next = Object.assign({}, prev);
-                next[key] = value;
+                next[key] = key === 'event_emoji' ? sanitizeEmojiValue(value) : value;
                 return next;
             });
             setIsDirty(true);
@@ -1075,6 +1309,9 @@
             }
             var payloadForm = Object.assign({}, formState);
             payloadForm.event_series_items = JSON.stringify(seriesItems);
+            if (Object.prototype.hasOwnProperty.call(payloadForm, 'event_emoji')) {
+                payloadForm.event_emoji = sanitizeEmojiValue(payloadForm.event_emoji);
+            }
             if (payloadForm.event_accent_color) {
                 payloadForm.event_accent_color = normalizeHexColor(payloadForm.event_accent_color);
             }
@@ -1209,6 +1446,16 @@
                             }, Object.keys(initialOptions.type_choices || {}).map(function (key) {
                                 return h('option', { key: key, value: key }, initialOptions.type_choices[key]);
                             })),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', null, getString(strings, 'eventEmoji', 'Emoticone')),
+                            h(EmojiPickerField, {
+                                value: formState.event_emoji || '',
+                                onChange: function (value) { updateFormValue('event_emoji', value); },
+                                strings: strings,
+                                disabled: loading || saving,
+                            }),
+                            h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'eventEmojiHint', 'Facultatif, s affiche dans les listes et apercus.')),
                         ]),
                         h('div', { class: 'mj-regmgr-form-field' }, [
                             h('label', null, getString(strings, 'accentColor', 'Couleur pastel')),

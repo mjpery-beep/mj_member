@@ -680,6 +680,7 @@ function mj_regmgr_get_event_details() {
             'title' => $event->title,
             'slug' => $event->slug,
             'type' => $event->type,
+            'emoji' => $event->emoji,
             'typeLabel' => isset($type_labels[$event->type]) ? $type_labels[$event->type] : $event->type,
             'status' => $event->status,
             'statusLabel' => isset($status_labels[$event->status]) ? $status_labels[$event->status] : $event->status,
@@ -2290,6 +2291,7 @@ function mj_regmgr_prepare_event_form_values($event, array $schedule_weekdays, a
 
     $form_values = $defaults;
     $form_values['accent_color'] = isset($defaults['accent_color']) ? $defaults['accent_color'] : '';
+    $form_values['emoji'] = isset($defaults['emoji']) ? $defaults['emoji'] : '';
     $form_values['animateur_ids'] = array();
     $form_values['volunteer_ids'] = array();
     $form_values['schedule_mode'] = isset($defaults['schedule_mode']) ? $defaults['schedule_mode'] : 'fixed';
@@ -2325,11 +2327,18 @@ function mj_regmgr_prepare_event_form_values($event, array $schedule_weekdays, a
             $occurrence_mode = 'member_choice';
         }
 
+        $raw_emoji = isset($event->emoji) ? (string) $event->emoji : '';
+        $sanitized_emoji = $raw_emoji;
+        if ($sanitized_emoji === '' && $raw_emoji !== '') {
+            $sanitized_emoji = $raw_emoji;
+        }
+
         $form_values = array_merge($form_values, array(
             'title' => isset($event->title) ? (string) $event->title : '',
             'status' => isset($event->status) ? (string) $event->status : $form_values['status'],
             'type' => isset($event->type) ? (string) $event->type : $form_values['type'],
             'accent_color' => $accent_color,
+            'emoji' => $sanitized_emoji,
             'cover_id' => isset($event->cover_id) ? (int) $event->cover_id : 0,
             'article_id' => isset($event->article_id) ? (int) $event->article_id : 0,
             'location_id' => isset($event->location_id) ? (int) $event->location_id : 0,
@@ -2896,7 +2905,9 @@ function mj_regmgr_sanitize_weekday_times($weekday_times, array $schedule_weekda
 
     return $sanitized;
 }
-
+/**
+ * Builds and validates the payload for updating or creating an event based on form values.
+ */
 function mj_regmgr_build_event_update_payload($event, array $form_values, array $meta, array $references, array $schedule_weekdays, array $schedule_month_ordinals, array &$errors) {
     $errors = array();
 
@@ -3240,11 +3251,13 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
 
     $capacity_notified_value = ($previous_capacity_total === $capacity_total && $previous_capacity_threshold === $capacity_notify_threshold) ? $previous_capacity_notified : 0;
 
+
     $payload = array(
         'title' => $title,
         'status' => $status,
         'type' => $type,
         'accent_color' => $accent_color,
+        'emoji' => isset($form_values['emoji']) ? sanitize_text_field((string) $form_values['emoji']) : '',
         'cover_id' => $cover_id,
         'description' => $description,
         'age_min' => $age_min,

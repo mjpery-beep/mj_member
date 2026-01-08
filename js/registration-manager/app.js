@@ -160,6 +160,11 @@
             };
         }, [registrations, attendanceMap, occurrences]);
 
+        var emoji = typeof event.emoji === 'string' ? event.emoji : '';
+        var fallbackTitle = getString(strings, 'eventUntitled', 'Sans titre');
+        var displayTitle = event.title && event.title !== '' ? event.title : fallbackTitle;
+        var detailTitleLabel = emoji ? (emoji + ' ' + displayTitle).trim() : displayTitle;
+
         return h('div', { class: 'mj-regmgr-event-detail' }, [
             // Header avec image
             event.coverUrl && h('div', { class: 'mj-regmgr-event-detail__cover' }, [
@@ -172,7 +177,16 @@
                     event.typeLabel && h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--type-' + event.type },
                         event.typeLabel
                     ),
-                    h('h2', { class: 'mj-regmgr-event-detail__title' }, event.title || 'Sans titre'),
+                    h('h2', {
+                        class: 'mj-regmgr-event-detail__title',
+                        'aria-label': detailTitleLabel,
+                    }, [
+                        emoji && h('span', {
+                            class: 'mj-regmgr-event-detail__emoji',
+                            'aria-hidden': 'true',
+                        }, emoji),
+                        h('span', { class: 'mj-regmgr-event-detail__title-text' }, displayTitle),
+                    ]),
                 ]),
 
                 // Infos principales

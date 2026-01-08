@@ -426,6 +426,7 @@ $config_json = wp_json_encode(array(
         'eventRegistrations' => __('Inscriptions', 'mj-member'),
         'eventFree' => __('Gratuit', 'mj-member'),
         'eventFreeParticipation' => __('Participation libre', 'mj-member'),
+        'eventUntitled' => __('Événement sans titre', 'mj-member'),
         'scheduleModeFixedShort' => __('Date unique', 'mj-member'),
         'scheduleModeRangeShort' => __('Période continue', 'mj-member'),
         'scheduleModeRecurringShort' => __('Récurrence', 'mj-member'),

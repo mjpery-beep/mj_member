@@ -112,6 +112,37 @@ if (!function_exists('mj_member_admin_normalize_hex_color')) {
     }
 }
 
+if (!function_exists('mj_member_admin_sanitize_emoji')) {
+    function mj_member_admin_sanitize_emoji($value) {
+        if (is_object($value) && method_exists($value, '__toString')) {
+            $value = (string) $value;
+        }
+
+        if (!is_scalar($value)) {
+            return '';
+        }
+
+        $candidate = wp_check_invalid_utf8((string) $value);
+        if ($candidate === '') {
+            return '';
+        }
+
+        $candidate = wp_strip_all_tags($candidate, false);
+        $candidate = preg_replace('/[\x00-\x1F\x7F]+/', '', $candidate);
+        if (!is_string($candidate)) {
+            return '';
+        }
+        $candidate = trim($candidate);
+        if ($candidate === '') {
+            return '';
+        }
+
+        $candidate = wp_html_excerpt($candidate, 16, '');
+
+        return trim($candidate);
+    }
+}
+
 if (!function_exists('mj_member_admin_normalize_time_value')) {
     function mj_member_admin_normalize_time_value($value) {
         $candidate = is_string($value) ? trim($value) : '';
@@ -836,6 +867,7 @@ if (!in_array('free_participation', $non_interactive_registration_modes, true)) 
 $defaults = MjEvents::get_default_values();
 $form_values = $defaults;
 $form_values['accent_color'] = isset($defaults['accent_color']) ? $defaults['accent_color'] : '';
+$form_values['emoji'] = isset($defaults['emoji']) ? $defaults['emoji'] : '';
 $form_values['animateur_ids'] = array();
 $form_values['volunteer_ids'] = array();
 $form_values['schedule_mode'] = isset($defaults['schedule_mode']) ? $defaults['schedule_mode'] : 'fixed';
@@ -900,6 +932,7 @@ if ($event) {
         'status' => $event->status,
         'type' => $event->type,
         'accent_color' => $accent_color_value,
+        'emoji' => mj_member_admin_sanitize_emoji(isset($event->emoji) ? $event->emoji : ''),
         'cover_id' => (int) $event->cover_id,
         'article_id' => isset($event->article_id) ? (int) $event->article_id : 0,
         'location_id' => (int) (isset($event->location_id) ? $event->location_id : 0),
@@ -1049,6 +1082,11 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
     $accent_color_input = '';
     if (isset($_POST['event_accent_color'])) {
         $accent_color_input = mj_member_admin_normalize_hex_color(wp_unslash((string) $_POST['event_accent_color']));
+    }
+
+    $emoji_input = '';
+    if (isset($_POST['event_emoji'])) {
+        $emoji_input = mj_member_admin_sanitize_emoji(wp_unslash((string) $_POST['event_emoji']));
     }
 
     $cover_id = isset($_POST['event_cover_id']) ? (int) $_POST['event_cover_id'] : 0;
@@ -1607,6 +1645,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
         'status' => $status,
         'type' => $type,
         'accent_color' => $accent_color_input,
+        'emoji' => $emoji_input,
         'cover_id' => $cover_id,
         'description' => $description,
         'age_min' => $age_min,
@@ -1666,6 +1705,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
             'status' => $status,
             'type' => $type,
             'accent_color' => $accent_color_input,
+            'emoji' => $emoji_input,
             'cover_id' => $cover_id,
             'description' => $description,
             'age_min' => $age_min,
@@ -2555,6 +2595,13 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                             <option value="<?php echo esc_attr($type_key); ?>" <?php selected($form_values['type'], $type_key); ?>><?php echo esc_html($type_label); ?></option>
                         <?php endforeach; ?>
                     </select>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row"><label for="mj-event-emoji">Émoticône</label></th>
+                <td>
+                    <input type="text" id="mj-event-emoji" name="event_emoji" class="regular-text" value="<?php echo esc_attr($form_values['emoji']); ?>" maxlength="16" autocomplete="off" />
+                    <p class="description">Affichez une émoticône en préfixe sur les listes d'événements.</p>
                 </td>
             </tr>
             <tr>

@@ -43,6 +43,7 @@ final class EventFormDataMapper
             'event_status' => isset($values['status']) ? (string) $values['status'] : MjEvents::STATUS_DRAFT,
             'event_type' => isset($values['type']) ? (string) $values['type'] : MjEvents::TYPE_STAGE,
             'event_accent_color' => isset($values['accent_color']) ? (string) $values['accent_color'] : '',
+            'event_emoji' => isset($values['emoji']) ? self::sanitizeEmoji($values['emoji']) : '',
             'event_article_cat' => isset($values['article_cat']) ? (int) $values['article_cat'] : 0,
             'event_article_id' => isset($values['article_id']) ? (int) $values['article_id'] : 0,
             'event_cover_id' => isset($values['cover_id']) ? (int) $values['cover_id'] : 0,
@@ -92,6 +93,7 @@ final class EventFormDataMapper
         $values['status'] = isset($formData['event_status']) ? sanitize_key((string) $formData['event_status']) : $values['status'];
         $values['type'] = isset($formData['event_type']) ? sanitize_key((string) $formData['event_type']) : $values['type'];
         $values['accent_color'] = isset($formData['event_accent_color']) ? (string) $formData['event_accent_color'] : $values['accent_color'];
+        $values['emoji'] = isset($formData['event_emoji']) ? self::sanitizeEmoji($formData['event_emoji']) : (isset($values['emoji']) ? self::sanitizeEmoji($values['emoji']) : '');
         $values['article_cat'] = isset($formData['event_article_cat']) ? (int) $formData['event_article_cat'] : $values['article_cat'];
         $values['article_id'] = isset($formData['event_article_id']) ? (int) $formData['event_article_id'] : $values['article_id'];
         $values['cover_id'] = isset($formData['event_cover_id']) ? (int) $formData['event_cover_id'] : $values['cover_id'];
@@ -139,5 +141,40 @@ final class EventFormDataMapper
         $values['description'] = isset($formData['event_description']) ? (string) $formData['event_description'] : $values['description'];
 
         return $values;
+    }
+
+    private static function sanitizeEmoji($value): string
+    {
+        if (is_object($value) && method_exists($value, '__toString')) {
+            $value = (string) $value;
+        }
+
+        if (!is_scalar($value)) {
+            return '';
+        }
+
+        $candidate = wp_check_invalid_utf8((string) $value);
+        if ($candidate === '') {
+            return '';
+        }
+
+        $candidate = wp_strip_all_tags($candidate, false);
+        $candidate = preg_replace('/[\x00-\x1F\x7F]+/', '', $candidate);
+        if (!is_string($candidate)) {
+            return '';
+        }
+        $candidate = trim($candidate);
+        if ($candidate === '') {
+            return '';
+        }
+
+        $excerpt = \wp_html_excerpt($candidate, 16, '');
+        $excerpt = trim(is_string($excerpt) ? $excerpt : '');
+
+        if ($excerpt === '' && $candidate !== '') {
+            return $candidate;
+        }
+
+        return $excerpt;
     }
 }

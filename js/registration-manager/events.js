@@ -140,6 +140,10 @@
         var statusClass = 'mj-regmgr-event-card__status--' + event.status;
         var typeClass = 'mj-regmgr-event-card__type--' + event.type;
 
+        var emoji = typeof event.emoji === 'string' ? event.emoji : '';
+        var fallbackTitle = getString(strings, 'eventUntitled', 'Sans titre');
+        var titleText = event.title && event.title !== '' ? event.title : fallbackTitle;
+        var titleLabel = emoji ? (emoji + ' ' + titleText).trim() : titleText;
         var capacityText = '';
         if (event.capacityTotal > 0) {
             capacityText = event.registrationsCount + '/' + event.capacityTotal;
@@ -196,8 +200,17 @@
                     ),
                 ]),
 
-                // Titre
-                h('h2', { class: 'mj-regmgr-event-card__title' }, event.title),
+                // Titre avec emoji
+                h('h2', {
+                    class: 'mj-regmgr-event-card__title',
+                    'aria-label': titleLabel,
+                }, [
+                    emoji && h('span', {
+                        class: 'mj-regmgr-event-card__emoji',
+                        'aria-hidden': 'true',
+                    }, emoji),
+                    h('span', { class: 'mj-regmgr-event-card__title-text' }, titleText),
+                ]),
 
                 // Date
                 h('div', { class: 'mj-regmgr-event-card__date' }, [
