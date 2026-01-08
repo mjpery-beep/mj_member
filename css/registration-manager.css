@@ -5911,27 +5911,110 @@ input.mj-regmgr-search-input__field {
     flex-shrink: 0;
 }
 
+
 .mj-regmgr-emoji-field__picker {
     position: absolute;
     top: calc(100% + 8px);
     left: 0;
     z-index: 40;
     width: 100%;
-    max-width: 320px;
+    max-width: 360px;
     background: #fff;
     border: 1px solid var(--regmgr-gray-200);
     border-radius: var(--regmgr-radius);
     box-shadow: var(--regmgr-shadow-lg);
     padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 420px;
 }
 
 .mj-regmgr-emoji-field__picker-title {
-    margin: 0 0 8px;
+    margin: 0;
     font-size: 12px;
     font-weight: 600;
     color: var(--regmgr-gray-500);
     text-transform: uppercase;
     letter-spacing: 0.04em;
+}
+
+.mj-regmgr-emoji-field__tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mj-regmgr-emoji-field__search {
+    flex: 1;
+    padding: 6px 9px;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius);
+    font-size: 14px;
+}
+
+.mj-regmgr-emoji-field__search:focus {
+    outline: none;
+    border-color: var(--regmgr-primary);
+    box-shadow: 0 0 0 2px var(--regmgr-primary-light);
+}
+
+.mj-regmgr-emoji-field__categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.mj-regmgr-emoji-field__category {
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius-sm);
+    background: var(--regmgr-gray-50);
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: background var(--regmgr-transition), border-color var(--regmgr-transition), color var(--regmgr-transition);
+}
+
+.mj-regmgr-emoji-field__category:hover,
+.mj-regmgr-emoji-field__category:focus {
+    outline: none;
+    border-color: var(--regmgr-primary);
+    background: #fff;
+}
+
+.mj-regmgr-emoji-field__category--active {
+    background: var(--regmgr-primary);
+    border-color: var(--regmgr-primary);
+    color: #fff;
+}
+
+.mj-regmgr-emoji-field__groups {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.mj-regmgr-emoji-field__group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.mj-regmgr-emoji-field__group:last-child {
+    margin-bottom: 0;
+}
+
+.mj-regmgr-emoji-field__group-title {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--regmgr-gray-400);
+    text-transform: uppercase;
 }
 
 .mj-regmgr-emoji-field__grid {

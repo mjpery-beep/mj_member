@@ -300,11 +300,12 @@ final class AssetsManager
         self::registerStyle('mj-member-registration-manager', 'css/registration-manager.css', array('mj-member-components'));
         self::registerScript('mj-member-regmgr-services', 'js/registration-manager/services.js', array('mj-member-utils'));
         self::registerScript('mj-member-regmgr-hooks', 'js/registration-manager/hooks.js', array('mj-member-preact-hooks'));
+        self::registerScript('mj-member-regmgr-emoji-picker', 'js/registration-manager/emoji-picker.js', array('mj-member-regmgr-hooks'));
         self::registerScript('mj-member-regmgr-events', 'js/registration-manager/events.js', array('mj-member-regmgr-hooks'));
         self::registerScript('mj-member-regmgr-registrations', 'js/registration-manager/registrations.js', array('mj-member-regmgr-hooks'));
         self::registerScript('mj-member-regmgr-attendance', 'js/registration-manager/attendance.js', array('mj-member-regmgr-hooks'));
         self::registerScript('mj-member-regmgr-members', 'js/registration-manager/members.js', array('mj-member-regmgr-registrations'));
-        self::registerScript('mj-member-regmgr-event-editor', 'js/registration-manager/event-editor.js', array('mj-member-regmgr-hooks'));
+        self::registerScript('mj-member-regmgr-event-editor', 'js/registration-manager/event-editor.js', array('mj-member-regmgr-hooks', 'mj-member-regmgr-emoji-picker'));
         self::registerScript('mj-member-regmgr-modals', 'js/registration-manager/modals.js', array('mj-member-regmgr-hooks'));
         self::registerScript('mj-member-regmgr-app', 'js/registration-manager/app.js', array(
             'mj-member-regmgr-services',
