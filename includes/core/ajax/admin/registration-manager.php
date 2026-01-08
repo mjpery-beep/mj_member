@@ -63,6 +63,7 @@ add_action('wp_ajax_mj_regmgr_update_member_idea', 'mj_regmgr_update_member_idea
 add_action('wp_ajax_mj_regmgr_update_member_photo', 'mj_regmgr_update_member_photo');
 add_action('wp_ajax_mj_regmgr_delete_member_photo', 'mj_regmgr_delete_member_photo');
 add_action('wp_ajax_mj_regmgr_delete_member_message', 'mj_regmgr_delete_member_message');
+add_action('wp_ajax_mj_regmgr_reset_member_password', 'mj_regmgr_reset_member_password');
 
 /**
  * Verify nonce and check user permissions
@@ -3937,6 +3938,56 @@ function mj_regmgr_update_member() {
 
     wp_send_json_success(array(
         'message' => __('Membre mis à jour avec succès.', 'mj-member'),
+    ));
+}
+
+/**
+ * Trigger a password reset email for a member's linked WordPress account
+ */
+function mj_regmgr_reset_member_password() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) {
+        return;
+    }
+
+    $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+    if ($member_id <= 0) {
+        wp_send_json_error(array('message' => __('Identifiant de membre invalide.', 'mj-member')));
+        return;
+    }
+
+    $member = MjMembers::getById($member_id);
+    if (!$member) {
+        wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
+        return;
+    }
+
+    $user_id = isset($member->wp_user_id) ? (int) $member->wp_user_id : 0;
+    if ($user_id <= 0) {
+        wp_send_json_error(array('message' => __('Aucun compte WordPress n\'est associé à ce membre.', 'mj-member')));
+        return;
+    }
+
+    $user = get_user_by('id', $user_id);
+    if (!$user) {
+        wp_send_json_error(array('message' => __('Compte utilisateur introuvable.', 'mj-member')));
+        return;
+    }
+
+    if (!apply_filters('allow_password_reset', true, $user->ID)) {
+        wp_send_json_error(array('message' => __('La réinitialisation du mot de passe est désactivée pour ce compte.', 'mj-member')));
+        return;
+    }
+
+    $reset = retrieve_password($user->user_login);
+    if (is_wp_error($reset)) {
+        wp_send_json_error(array('message' => $reset->get_error_message()));
+        return;
+    }
+
+    wp_send_json_success(array(
+        'message' => __('Un email de réinitialisation a été envoyé au membre.', 'mj-member'),
+        'email' => $user->user_email,
     ));
 }
 

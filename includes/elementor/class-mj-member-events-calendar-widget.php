@@ -557,6 +557,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             $requires_validation = !empty($event['requires_validation']);
             $registration_label = self::build_registration_label($is_free_participation, $legacy_registration_mode, $requires_validation);
 
+            $recurring_schedule_preview = self::build_recurring_schedule_preview($event);
+            $schedule_mode = isset($recurring_schedule_preview['mode']) ? sanitize_key((string) $recurring_schedule_preview['mode']) : '';
+
             $recurrence_summary = '';
             if (function_exists('mj_member_get_event_recurring_summary')) {
                 $recurrence_summary = (string) mj_member_get_event_recurring_summary($event);
@@ -800,6 +803,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     'palette' => $palette,
                     'permalink' => $permalink,
                     'accent_color' => isset($palette['base']) ? $palette['base'] : '',
+                    'schedule_mode' => $schedule_mode,
+                    'recurring_schedule_preview' => $recurring_schedule_preview,
                 );
 
                 $has_any_event = true;
@@ -933,6 +938,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         'palette' => $closure_palette,
                         'permalink' => '',
                         'accent_color' => isset($closure_palette['base']) ? $closure_palette['base'] : '',
+                        'schedule_mode' => 'closure',
+                        'recurring_schedule_preview' => array(),
                     );
                 }
                 unset($event_list_reference);
@@ -1334,6 +1341,36 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             $preview_registration = (!$event_is_closure && !empty($event_entry['registration_label'])) ? (string) $event_entry['registration_label'] : '';
                             $preview_animateurs = (!$event_is_closure && !empty($event_entry['animateurs']) && is_array($event_entry['animateurs'])) ? $event_entry['animateurs'] : array();
 
+                            $preview_recurring_schedule_entries = array();
+                            if (!$event_is_closure && isset($event_entry['recurring_schedule_preview']) && is_array($event_entry['recurring_schedule_preview'])) {
+                                $preview_schedule_meta = $event_entry['recurring_schedule_preview'];
+                                if (isset($preview_schedule_meta['mode']) && (string) $preview_schedule_meta['mode'] === 'recurring' && !empty($preview_schedule_meta['entries']) && is_array($preview_schedule_meta['entries'])) {
+                                    foreach ($preview_schedule_meta['entries'] as $schedule_entry) {
+                                        if (!is_array($schedule_entry)) {
+                                            continue;
+                                        }
+
+                                        $day_label = isset($schedule_entry['label']) ? (string) $schedule_entry['label'] : '';
+                                        $time_value = isset($schedule_entry['time']) ? (string) $schedule_entry['time'] : '';
+
+                                        if ($day_label === '' && $time_value === '') {
+                                            continue;
+                                        }
+
+                                        $preview_recurring_schedule_entries[] = array(
+                                            'label' => $day_label,
+                                            'time' => $time_value,
+                                        );
+
+                                        if (count($preview_recurring_schedule_entries) >= 6) {
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            $has_preview_recurring_schedule = !empty($preview_recurring_schedule_entries);
+
                             $price_label = '';
                             if (!$event_is_closure && array_key_exists('price', $event_entry) && $event_entry['price'] !== null && $event_entry['price'] !== '') {
                                 $price_value = (float) $event_entry['price'];
@@ -1434,12 +1471,32 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 if ($preview_schedule !== '') {
                                     if ($event_is_closure) {
                                         echo '<div class="mj-member-events-calendar__event-preview-line"><span class="mj-member-events-calendar__event-preview-value">' . esc_html($preview_schedule) . '</span></div>';
-                                    } else {
+                                    } elseif (!$has_preview_recurring_schedule) {
                                         echo '<div class="mj-member-events-calendar__event-preview-line"><span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Plage horaire', 'mj-member') . '</span><span class="mj-member-events-calendar__event-preview-value">' . esc_html($preview_schedule) . '</span></div>';
                                     }
                                 }
-                                if ($preview_recurrence !== '') {
-                                    echo '<div class="mj-member-events-calendar__event-preview-line"><span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Récurrence', 'mj-member') . '</span><span class="mj-member-events-calendar__event-preview-value">' . esc_html($preview_recurrence) . '</span></div>';
+                                if (!empty($preview_recurring_schedule_entries)) {
+                                    echo '<div class="mj-member-events-calendar__event-preview-recurring">';
+                                    echo '<span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Horaires par jour', 'mj-member') . '</span>';
+                                    echo '<ul class="mj-member-events-calendar__event-preview-recurring-list">';
+                                    foreach ($preview_recurring_schedule_entries as $recurring_entry) {
+                                        $recurring_day = isset($recurring_entry['label']) ? (string) $recurring_entry['label'] : '';
+                                        $recurring_time = isset($recurring_entry['time']) ? (string) $recurring_entry['time'] : '';
+                                        if ($recurring_day === '' && $recurring_time === '') {
+                                            continue;
+                                        }
+
+                                        echo '<li class="mj-member-events-calendar__event-preview-recurring-item">';
+                                        if ($recurring_day !== '') {
+                                            echo '<span class="mj-member-events-calendar__event-preview-recurring-day">' . esc_html($recurring_day) . '</span>';
+                                        }
+                                        if ($recurring_time !== '') {
+                                            echo '<span class="mj-member-events-calendar__event-preview-recurring-time">' . esc_html($recurring_time) . '</span>';
+                                        }
+                                        echo '</li>';
+                                    }
+                                    echo '</ul>';
+                                    echo '</div>';
                                 }
                                 if ($preview_location !== '') {
                                     echo '<div class="mj-member-events-calendar__event-preview-line"><span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Lieu', 'mj-member') . '</span><span class="mj-member-events-calendar__event-preview-value">' . esc_html($preview_location) . '</span></div>';
@@ -1853,6 +1910,260 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         }
 
         return strtoupper($initials);
+    }
+
+    private static function build_recurring_schedule_preview($event) {
+        $result = array(
+            'mode' => '',
+            'entries' => array(),
+        );
+
+        if (is_object($event)) {
+            $event = get_object_vars($event);
+        }
+        if (!is_array($event)) {
+            return $result;
+        }
+
+        $mode = isset($event['schedule_mode']) ? sanitize_key((string) $event['schedule_mode']) : '';
+        if ($mode === '') {
+            $mode = 'fixed';
+        }
+        $result['mode'] = $mode;
+
+        if ($mode !== 'recurring') {
+            return $result;
+        }
+
+        $payload = array();
+        if (isset($event['schedule_payload'])) {
+            if (is_array($event['schedule_payload'])) {
+                $payload = $event['schedule_payload'];
+            } elseif (is_string($event['schedule_payload']) && $event['schedule_payload'] !== '') {
+                $decoded = json_decode($event['schedule_payload'], true);
+                if (is_array($decoded)) {
+                    $payload = $decoded;
+                }
+            }
+        }
+
+        if (empty($payload) || !is_array($payload)) {
+            return $result;
+        }
+
+        $frequency = isset($payload['frequency']) ? sanitize_key((string) $payload['frequency']) : 'weekly';
+        $weekday_labels = array(
+            'monday' => __('Lundi', 'mj-member'),
+            'tuesday' => __('Mardi', 'mj-member'),
+            'wednesday' => __('Mercredi', 'mj-member'),
+            'thursday' => __('Jeudi', 'mj-member'),
+            'friday' => __('Vendredi', 'mj-member'),
+            'saturday' => __('Samedi', 'mj-member'),
+            'sunday' => __('Dimanche', 'mj-member'),
+        );
+
+        if ($frequency === 'weekly') {
+            $weekday_order = array(
+                'monday' => 1,
+                'tuesday' => 2,
+                'wednesday' => 3,
+                'thursday' => 4,
+                'friday' => 5,
+                'saturday' => 6,
+                'sunday' => 7,
+            );
+
+            $weekdays = array();
+            if (!empty($payload['weekdays']) && is_array($payload['weekdays'])) {
+                foreach ($payload['weekdays'] as $weekday_candidate) {
+                    $weekday_key = sanitize_key((string) $weekday_candidate);
+                    if ($weekday_key !== '' && isset($weekday_order[$weekday_key])) {
+                        $weekdays[$weekday_key] = $weekday_key;
+                    }
+                }
+            }
+
+            if (empty($weekdays) && !empty($payload['weekday_times']) && is_array($payload['weekday_times'])) {
+                foreach ($payload['weekday_times'] as $weekday_key => $time_info) {
+                    $weekday_candidate = sanitize_key((string) $weekday_key);
+                    if ($weekday_candidate !== '' && isset($weekday_order[$weekday_candidate])) {
+                        $weekdays[$weekday_candidate] = $weekday_candidate;
+                    }
+                }
+            }
+
+            if (empty($weekdays)) {
+                return $result;
+            }
+
+            uksort(
+                $weekdays,
+                static function ($left, $right) use ($weekday_order) {
+                    return $weekday_order[$left] <=> $weekday_order[$right];
+                }
+            );
+
+            $default_start = isset($payload['start_time']) ? (string) $payload['start_time'] : '';
+            $default_end = isset($payload['end_time']) ? (string) $payload['end_time'] : '';
+            $weekday_times = isset($payload['weekday_times']) && is_array($payload['weekday_times']) ? $payload['weekday_times'] : array();
+
+            $time_groups = array();
+
+            foreach (array_keys($weekdays) as $weekday_key) {
+                $start_raw = $default_start;
+                $end_raw = $default_end;
+
+                if (isset($weekday_times[$weekday_key]) && is_array($weekday_times[$weekday_key])) {
+                    $day_times = $weekday_times[$weekday_key];
+                    if (!empty($day_times['start'])) {
+                        $start_raw = (string) $day_times['start'];
+                    }
+                    if (!empty($day_times['end'])) {
+                        $end_raw = (string) $day_times['end'];
+                    }
+                }
+
+                $start_formatted = self::format_schedule_time_for_preview($start_raw);
+                $end_formatted = self::format_schedule_time_for_preview($end_raw);
+
+                $time_range = '';
+                if ($start_formatted !== '' && $end_formatted !== '' && $start_formatted !== $end_formatted) {
+                    $time_range = $start_formatted . ' → ' . $end_formatted;
+                } elseif ($start_formatted !== '') {
+                    $time_range = sprintf(__('À partir de %s', 'mj-member'), $start_formatted);
+                } elseif ($end_formatted !== '') {
+                    $time_range = $end_formatted;
+                }
+
+                if ($time_range === '') {
+                    continue;
+                }
+
+                $label = isset($weekday_labels[$weekday_key]) ? $weekday_labels[$weekday_key] : ucfirst($weekday_key);
+                $label = sanitize_text_field($label);
+
+                if (!isset($time_groups[$time_range])) {
+                    $time_groups[$time_range] = array(
+                        'time' => $time_range,
+                        'days' => array(),
+                    );
+                }
+
+                $time_groups[$time_range]['days'][] = $label;
+            }
+
+            foreach ($time_groups as $group_entry) {
+                if (empty($group_entry['days'])) {
+                    continue;
+                }
+
+                $days_label = self::format_schedule_days_label($group_entry['days']);
+                $time_label = isset($group_entry['time']) ? (string) $group_entry['time'] : '';
+
+                if ($days_label === '' && $time_label === '') {
+                    continue;
+                }
+
+                $result['entries'][] = array(
+                    'label' => $days_label,
+                    'time' => sanitize_text_field($time_label),
+                );
+
+                if (count($result['entries']) >= 6) {
+                    break;
+                }
+            }
+
+            return $result;
+        }
+
+        if ($frequency === 'monthly') {
+            $ordinal_labels = array(
+                'first' => __('1er', 'mj-member'),
+                'second' => __('2ème', 'mj-member'),
+                'third' => __('3ème', 'mj-member'),
+                'fourth' => __('4ème', 'mj-member'),
+                'last' => __('Dernier', 'mj-member'),
+            );
+
+            $ordinal = isset($payload['ordinal']) ? sanitize_key((string) $payload['ordinal']) : '';
+            $weekday = isset($payload['weekday']) ? sanitize_key((string) $payload['weekday']) : '';
+
+            $ordinal_label = isset($ordinal_labels[$ordinal]) ? $ordinal_labels[$ordinal] : $ordinal;
+            $weekday_label = isset($weekday_labels[$weekday]) ? $weekday_labels[$weekday] : $weekday;
+
+            $summary = trim(implode(' ', array_filter(array($ordinal_label, $weekday_label, __('du mois', 'mj-member')))));
+
+            $start_formatted = self::format_schedule_time_for_preview(isset($payload['start_time']) ? $payload['start_time'] : '');
+            $end_formatted = self::format_schedule_time_for_preview(isset($payload['end_time']) ? $payload['end_time'] : '');
+
+            $time_range = '';
+            if ($start_formatted !== '' && $end_formatted !== '' && $start_formatted !== $end_formatted) {
+                $time_range = $start_formatted . ' → ' . $end_formatted;
+            } elseif ($start_formatted !== '') {
+                $time_range = sprintf(__('À partir de %s', 'mj-member'), $start_formatted);
+            } elseif ($end_formatted !== '') {
+                $time_range = $end_formatted;
+            }
+
+            if ($summary !== '') {
+                $result['entries'][] = array(
+                    'label' => sanitize_text_field($summary),
+                    'time' => sanitize_text_field($time_range),
+                );
+            }
+
+            return $result;
+        }
+
+        return $result;
+    }
+
+    private static function format_schedule_time_for_preview($value) {
+        $value = is_string($value) ? trim($value) : '';
+        if ($value === '') {
+            return '';
+        }
+
+        if (preg_match('/^\d{1,2}:\d{2}$/', $value)) {
+            $value .= ':00';
+        } elseif (!preg_match('/^\d{1,2}:\d{2}:\d{2}$/', $value)) {
+            return '';
+        }
+
+        $timezone = wp_timezone();
+        if (!($timezone instanceof \DateTimeZone)) {
+            $timezone = new \DateTimeZone('UTC');
+        }
+
+        try {
+            $datetime = new \DateTimeImmutable('1970-01-01 ' . $value, $timezone);
+        } catch (\Exception $exception) {
+            return '';
+        }
+
+        $time_format = get_option('time_format', 'H:i');
+        return wp_date($time_format, $datetime->getTimestamp(), $timezone);
+    }
+
+    private static function format_schedule_days_label(array $days) {
+        $days = array_values(array_filter(array_map('trim', $days))); 
+        if (empty($days)) {
+            return '';
+        }
+
+        if (count($days) === 1) {
+            return sanitize_text_field($days[0]);
+        }
+
+        if (count($days) === 2) {
+            return sanitize_text_field($days[0] . ' ' . __('et', 'mj-member') . ' ' . $days[1]);
+        }
+
+        $last = array_pop($days);
+        $joined = implode(', ', $days) . ' ' . __('et', 'mj-member') . ' ' . $last;
+
+        return sanitize_text_field($joined);
     }
 
     /**

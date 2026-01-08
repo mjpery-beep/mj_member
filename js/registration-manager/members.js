@@ -204,6 +204,7 @@
         var onUpdateMember = props.onUpdateMember;
         var onPayMembershipOnline = props.onPayMembershipOnline;
         var onMarkMembershipPaid = props.onMarkMembershipPaid;
+        var onResetPassword = typeof props.onResetPassword === 'function' ? props.onResetPassword : null;
         var onUpdateIdea = typeof props.onUpdateIdea === 'function' ? props.onUpdateIdea : null;
         var onUpdatePhoto = typeof props.onUpdatePhoto === 'function' ? props.onUpdatePhoto : null;
         var onDeletePhoto = typeof props.onDeletePhoto === 'function' ? props.onDeletePhoto : null;
@@ -235,6 +236,10 @@
         var _paymentProcessing = useState(false);
         var paymentProcessing = _paymentProcessing[0];
         var setPaymentProcessing = _paymentProcessing[1];
+
+        var _resettingPassword = useState(false);
+        var resettingPassword = _resettingPassword[0];
+        var setResettingPassword = _resettingPassword[1];
 
         var _editingNoteId = useState(null);
         var editingNoteId = _editingNoteId[0];
@@ -317,6 +322,7 @@
                 setEditingPhotoId(null);
                 setPhotoDraft({ caption: '', status: 'approved' });
                 setPhotoSaving(false);
+                setResettingPassword(false);
             }
         }, [member ? member.id : null]);
 
@@ -593,6 +599,23 @@
                 });
         };
 
+        var memberId = member && member.id ? member.id : null;
+        var hasLinkedAccount = member && member.userId ? true : false;
+
+        var handleResetPassword = useCallback(function () {
+            if (!onResetPassword || !memberId || !hasLinkedAccount) {
+                return;
+            }
+            setResettingPassword(true);
+            Promise.resolve(onResetPassword(memberId))
+                .catch(function () {
+                    // Feedback déjà géré côté parent
+                })
+                .finally(function () {
+                    setResettingPassword(false);
+                });
+        }, [onResetPassword, memberId, hasLinkedAccount]);
+
         // Calculate age
         var age = null;
         if (member.birthDate) {
@@ -637,6 +660,9 @@
         var smsLabel = getString(strings, 'chipSMS', 'SMS');
         var whatsappLabel = getString(strings, 'chipWhatsapp', 'WhatsApp');
         var photoConsentLabel = getString(strings, 'chipPhotoConsent', 'Consentement photo');
+        var resetPasswordLabel = getString(strings, 'resetPassword', 'Réinitialiser le mot de passe');
+        var resetPasswordUnavailableLabel = getString(strings, 'resetPasswordUnavailable', 'Compte WordPress non lié');
+        var resetPasswordProcessingLabel = getString(strings, 'resetPasswordProcessing', 'Réinitialisation...');
 
         var messageStatusLabels = {
             'nouveau': 'Nouveau',
@@ -700,6 +726,23 @@
                                 fill: 'currentColor',
                             }),
                         ]),
+                    ]),
+                    onResetPassword && h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--icon mj-btn--secondary',
+                        onClick: handleResetPassword,
+                        disabled: !hasLinkedAccount || resettingPassword,
+                        title: resettingPassword ? resetPasswordProcessingLabel : (hasLinkedAccount ? resetPasswordLabel : resetPasswordUnavailableLabel),
+                        'aria-label': resettingPassword ? resetPasswordProcessingLabel : (hasLinkedAccount ? resetPasswordLabel : resetPasswordUnavailableLabel),
+                    }, [
+                        resettingPassword
+                            ? h('span', { class: 'mj-regmgr-loading__spinner', style: { width: '16px', height: '16px' } })
+                            : h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                h('circle', { cx: 7, cy: 12, r: 3 }),
+                                h('line', { x1: 10, y1: 12, x2: 21, y2: 12 }),
+                                h('line', { x1: 17, y1: 12, x2: 17, y2: 16 }),
+                                h('line', { x1: 14, y1: 12, x2: 14, y2: 14 }),
+                            ]),
                     ]),
                     !editMode && h('button', {
                         type: 'button',

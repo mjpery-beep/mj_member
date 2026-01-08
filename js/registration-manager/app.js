@@ -1763,6 +1763,19 @@
                 });
         }, [api, showSuccess, showError, loadMemberDetails, loadMembers, membersPagination.page, loadMemberNotesForPanel]);
 
+        // Réinitialiser le mot de passe d'un membre (envoi mail WordPress)
+        var handleResetMemberPassword = useCallback(function (memberId) {
+            return api.resetMemberPassword(memberId)
+                .then(function (result) {
+                    showSuccess(result.message || 'Email de réinitialisation envoyé');
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err.message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError]);
+
         // Payer la cotisation via Stripe - retourne le résultat complet avec qrUrl
         var handlePayMembershipOnline = useCallback(function (memberId) {
             return api.createMembershipPaymentLink(memberId)
@@ -2359,6 +2372,7 @@
                             onUpdateMember: handleUpdateMember,
                             onPayMembershipOnline: handlePayMembershipOnline,
                             onMarkMembershipPaid: handleMarkMembershipPaid,
+                            onResetPassword: handleResetMemberPassword,
                             onUpdateIdea: handleUpdateMemberIdea,
                             onUpdatePhoto: handleUpdateMemberPhoto,
                             onDeletePhoto: handleDeleteMemberPhoto,

@@ -386,6 +386,15 @@
             },
 
             /**
+             * Envoie un email de réinitialisation de mot de passe
+             */
+            resetMemberPassword: function (memberId) {
+                return post('mj_regmgr_reset_member_password', {
+                    memberId: memberId,
+                });
+            },
+
+            /**
              * Met à jour une idée liée à un membre
              */
             updateMemberIdea: function (ideaId, memberId, data) {
