@@ -1471,6 +1471,7 @@ if (!function_exists('mj_member_get_public_events')) {
         $supports_validation_toggle = function_exists('mj_member_column_exists') ? mj_member_column_exists($events_table, 'requires_validation') : false;
         $supports_free_participation = function_exists('mj_member_column_exists') ? mj_member_column_exists($events_table, 'free_participation') : false;
         $supports_registration_mode = !$supports_free_participation && function_exists('mj_member_column_exists') ? mj_member_column_exists($events_table, 'registration_mode') : false;
+        $supports_emoji_column = function_exists('mj_member_column_exists') ? mj_member_column_exists($events_table, 'emoji') : false;
         if ($supports_guardian_toggle) {
             $select_fields[] = 'events.allow_guardian_registration';
         }
@@ -1482,6 +1483,9 @@ if (!function_exists('mj_member_get_public_events')) {
         }
         if ($supports_registration_mode) {
             $select_fields[] = 'events.registration_mode';
+        }
+        if ($supports_emoji_column) {
+            $select_fields[] = 'events.emoji';
         }
 
         $default_free_registration_modes = array('attendance', 'attendance_free', 'free_participation', 'free', 'open_access', 'no_registration', 'optional', 'none', 'libre', 'presence');
@@ -1879,6 +1883,7 @@ if (!function_exists('mj_member_get_public_events')) {
                 'article_cover_thumb' => $article_cover_thumb_url,
                 'excerpt' => $excerpt,
                 'description' => $description,
+                'emoji' => ($supports_emoji_column && isset($row->emoji)) ? sanitize_text_field($row->emoji) : '',
                 'permalink' => esc_url_raw(is_string($permalink) ? $permalink : ''),
                 'schedule_mode' => $schedule_mode,
                 'schedule_payload' => $schedule_payload,

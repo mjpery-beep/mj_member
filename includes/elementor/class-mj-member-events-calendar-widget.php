@@ -11,7 +11,9 @@ use Elementor\Group_Control_Typography;
 use Elementor\Widget_Base;
 use Mj\Member\Core\AssetsManager;
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\Crud\MjEventAnimateurs;
 use Mj\Member\Classes\MjEventSchedule;
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper;
 
 class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
@@ -510,6 +512,61 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
             $palette = self::build_event_palette(isset($event['accent_color']) ? $event['accent_color'] : '', $event_type_key, $type_colors_map);
 
+            $emoji_value = '';
+            if (!empty($event['emoji']) && !is_array($event['emoji'])) {
+                $emoji_candidate = sanitize_text_field((string) $event['emoji']);
+                if ($emoji_candidate !== '') {
+                    if (function_exists('mb_substr')) {
+                        $emoji_candidate = mb_substr($emoji_candidate, 0, 8);
+                    } else {
+                        $emoji_candidate = substr($emoji_candidate, 0, 8);
+                    }
+                    $emoji_value = $emoji_candidate;
+                }
+            }
+
+            $price_value = null;
+            if (array_key_exists('price', $event) && $event['price'] !== null && $event['price'] !== '') {
+                $numeric_price = is_numeric($event['price']) ? (float) $event['price'] : null;
+                if ($numeric_price !== null) {
+                    $price_value = $numeric_price;
+                }
+            }
+
+            $location_label = '';
+            if (!empty($event['location'])) {
+                $location_label = sanitize_text_field((string) $event['location']);
+            }
+
+            $description_preview = '';
+            if (!empty($event['excerpt']) && !is_array($event['excerpt'])) {
+                $description_preview = wp_strip_all_tags((string) $event['excerpt']);
+            } elseif (!empty($event['description']) && !is_array($event['description'])) {
+                $description_preview = wp_strip_all_tags((string) $event['description']);
+            }
+            if ($description_preview !== '') {
+                $description_preview = wp_html_excerpt($description_preview, 200, '...');
+            }
+
+            $age_min = isset($event['age_min']) ? (int) $event['age_min'] : 0;
+            $age_max = isset($event['age_max']) ? (int) $event['age_max'] : 0;
+            $age_range_label = self::format_age_range_label($age_min, $age_max);
+
+            $is_free_participation = !empty($event['free_participation']) || !empty($event['is_free_participation']);
+            $legacy_registration_mode = isset($event['legacy_registration_mode']) ? sanitize_key((string) $event['legacy_registration_mode']) : '';
+            $requires_validation = !empty($event['requires_validation']);
+            $registration_label = self::build_registration_label($is_free_participation, $legacy_registration_mode, $requires_validation);
+
+            $recurrence_summary = '';
+            if (function_exists('mj_member_get_event_recurring_summary')) {
+                $recurrence_summary = (string) mj_member_get_event_recurring_summary($event);
+            }
+            if ($recurrence_summary !== '') {
+                $recurrence_summary = sanitize_text_field($recurrence_summary);
+            }
+
+            $animateur_items = self::build_event_animateurs_preview($event_id);
+
             $schedule_occurrences = array();
             if (class_exists(MjEventSchedule::class)) {
                 $schedule_occurrences = MjEventSchedule::get_occurrences(
@@ -719,13 +776,27 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 $months[$month_key]['days'][$day_key]['events'][] = array(
                     'id' => $occurrence_key,
                     'title' => $title,
+                    'emoji' => $emoji_value,
                     'time' => $time_label,
                     'schedule_label' => $schedule_label,
                     'cover' => $primary_cover,
+                    'cover_full' => $cover_modal,
                     'cover_sources' => $cover_sources,
                     'type_label' => $type_label,
                     'type_key' => $event_type_key,
                     'start_ts' => $start_ts,
+                    'price' => $price_value,
+                    'location_label' => $location_label,
+                    'description_excerpt' => $description_preview,
+                    'age_min' => $age_min,
+                    'age_max' => $age_max,
+                    'age_label' => $age_range_label !== '' ? sanitize_text_field($age_range_label) : '',
+                    'is_free_participation' => $is_free_participation,
+                    'legacy_registration_mode' => $legacy_registration_mode,
+                    'requires_validation' => $requires_validation,
+                    'registration_label' => $registration_label !== '' ? sanitize_text_field($registration_label) : '',
+                    'recurrence_summary' => $recurrence_summary,
+                    'animateurs' => $animateur_items,
                     'palette' => $palette,
                     'permalink' => $permalink,
                     'accent_color' => isset($palette['base']) ? $palette['base'] : '',
@@ -1207,38 +1278,23 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 echo '<a' . $trigger_attributes . ' href="' . esc_url($event_href) . '">';
                             }
                             $has_type_label = !empty($event_entry['type_label']);
-                            if (!empty($event_entry['cover'])) {
-                                $cover_sources = array();
-                                if (isset($event_entry['cover_sources']) && is_array($event_entry['cover_sources'])) {
-                                    $cover_sources = $event_entry['cover_sources'];
+                            $event_emoji = '';
+                            if (isset($event_entry['emoji']) && $event_entry['emoji'] !== '') {
+                                $event_emoji = (string) $event_entry['emoji'];
+                                if ($event_emoji !== '' && function_exists('mb_substr')) {
+                                    $event_emoji = mb_substr($event_emoji, 0, 8);
+                                } elseif ($event_emoji !== '') {
+                                    $event_emoji = substr($event_emoji, 0, 8);
                                 }
-                                $fallback_cover = $event_entry['cover'];
-                                if ($fallback_cover === '' && isset($cover_sources['fallback']) && $cover_sources['fallback'] !== '') {
-                                    $fallback_cover = $cover_sources['fallback'];
-                                }
-                                echo '<span class="mj-member-events-calendar__event-thumb">';
-                                echo '<picture>';
-                                if (!empty($cover_sources['desktop'])) {
-                                    echo '<source media="(min-width: 901px)" srcset="' . esc_url($cover_sources['desktop']) . '" />';
-                                }
-                                if (!empty($cover_sources['tablet'])) {
-                                    echo '<source media="(min-width: 641px)" srcset="' . esc_url($cover_sources['tablet']) . '" />';
-                                }
-                                if (!empty($cover_sources['mobile'])) {
-                                    echo '<source media="(max-width: 640px)" srcset="' . esc_url($cover_sources['mobile']) . '" />';
-                                }
-                                echo '<img src="' . esc_url($fallback_cover) . '" alt="' . esc_attr($event_entry['title']) . '" loading="lazy" />';
-                                echo '</picture>';
-                                if ($has_type_label) {
-                                    echo '<span class="mj-member-events-calendar__event-type mj-member-events-calendar__event-type--overlay">' . esc_html($event_entry['type_label']) . '</span>';
-                                }
-                                echo '</span>';
                             }
+
                             echo '<span class="mj-member-events-calendar__event-copy">';
-                            if ($has_type_label && empty($event_entry['cover'])) {
-                                echo '<span class="mj-member-events-calendar__event-type">' . esc_html($event_entry['type_label']) . '</span>';
+                            echo '<span class="mj-member-events-calendar__event-title">';
+                            if ($event_emoji !== '') {
+                                echo '<span class="mj-member-events-calendar__event-emoji">' . esc_html($event_emoji) . '</span>';
                             }
-                            echo '<span class="mj-member-events-calendar__event-title">' . esc_html($event_entry['title']) . '</span>';
+                            echo '<span class="mj-member-events-calendar__event-title-text">' . esc_html($event_entry['title']) . '</span>';
+                            echo '</span>';
                             $meta_label = '';
                             if (isset($event_entry['schedule_label']) && $event_entry['schedule_label'] !== '') {
                                 $meta_label = (string) $event_entry['schedule_label'];
@@ -1249,6 +1305,152 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 echo '<span class="mj-member-events-calendar__event-meta">' . esc_html($meta_label) . '</span>';
                             }
                             echo '</span>';
+
+                            if ($has_type_label) {
+                                echo '<span class="mj-member-events-calendar__event-type mj-member-events-calendar__event-type--border">' . esc_html($event_entry['type_label']) . '</span>';
+                            }
+
+                            $preview_cover = '';
+                            if (!empty($event_entry['cover_full'])) {
+                                $preview_cover = (string) $event_entry['cover_full'];
+                            } elseif (!empty($event_entry['cover'])) {
+                                $preview_cover = (string) $event_entry['cover'];
+                            } elseif (!empty($event_entry['cover_sources']) && is_array($event_entry['cover_sources']) && !empty($event_entry['cover_sources']['fallback'])) {
+                                $preview_cover = (string) $event_entry['cover_sources']['fallback'];
+                            }
+
+                            $preview_schedule = '';
+                            if (!empty($event_entry['schedule_label'])) {
+                                $preview_schedule = (string) $event_entry['schedule_label'];
+                            } elseif (!empty($event_entry['time'])) {
+                                $preview_schedule = (string) $event_entry['time'];
+                            }
+
+                            $preview_location = !empty($event_entry['location_label']) ? (string) $event_entry['location_label'] : '';
+                            $preview_description = !empty($event_entry['description_excerpt']) ? (string) $event_entry['description_excerpt'] : '';
+
+                            $preview_age = (!$event_is_closure && !empty($event_entry['age_label'])) ? (string) $event_entry['age_label'] : '';
+                            $preview_recurrence = (!$event_is_closure && !empty($event_entry['recurrence_summary'])) ? (string) $event_entry['recurrence_summary'] : '';
+                            $preview_registration = (!$event_is_closure && !empty($event_entry['registration_label'])) ? (string) $event_entry['registration_label'] : '';
+                            $preview_animateurs = (!$event_is_closure && !empty($event_entry['animateurs']) && is_array($event_entry['animateurs'])) ? $event_entry['animateurs'] : array();
+
+                            $price_label = '';
+                            if (!$event_is_closure && array_key_exists('price', $event_entry) && $event_entry['price'] !== null && $event_entry['price'] !== '') {
+                                $price_value = (float) $event_entry['price'];
+                                if ($price_value <= 0) {
+                                    $price_label = __('Gratuit', 'mj-member');
+                                } else {
+                                    $price_label = sprintf(__('%s €', 'mj-member'), number_format_i18n($price_value, 2));
+                                }
+                            }
+
+                            if ($event_is_closure && $preview_schedule === '') {
+                                $preview_schedule = __('Fermeture exceptionnelle', 'mj-member');
+                            }
+                            if ($event_is_closure && $preview_description === '') {
+                                $preview_description = __('La Maison des Jeunes est fermée sur cette date.', 'mj-member');
+                            }
+
+                            $has_preview_animateurs = !$event_is_closure && !empty($preview_animateurs);
+
+                            if ($preview_cover !== '' || $price_label !== '' || $preview_schedule !== '' || $preview_location !== '' || $preview_description !== '' || $preview_age !== '' || $preview_recurrence !== '' || $preview_registration !== '' || $has_preview_animateurs) {
+                                echo '<div class="mj-member-events-calendar__event-preview" aria-hidden="true">';
+                                echo '<div class="mj-member-events-calendar__event-preview-content">';
+                                if ($preview_cover !== '' || $has_preview_animateurs || $preview_registration !== '' || $preview_age !== '') {
+                                    echo '<div class="mj-member-events-calendar__event-preview-side">';
+                                    if ($preview_cover !== '') {
+                                        echo '<div class="mj-member-events-calendar__event-preview-cover"><img src="' . esc_url($preview_cover) . '" alt="' . esc_attr($event_entry['title']) . '" loading="lazy" /></div>';
+                                    }
+                                    if ($preview_registration !== '') {
+                                        echo '<div class="mj-member-events-calendar__event-preview-line mj-member-events-calendar__event-preview-line--side"><span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Inscriptions', 'mj-member') . '</span><span class="mj-member-events-calendar__event-preview-value">' . esc_html($preview_registration) . '</span></div>';
+                                    }
+                                    if ($preview_age !== '') {
+                                        echo '<div class="mj-member-events-calendar__event-preview-line mj-member-events-calendar__event-preview-line--side"><span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Âges', 'mj-member') . '</span><span class="mj-member-events-calendar__event-preview-value">' . esc_html($preview_age) . '</span></div>';
+                                    }
+                                    if ($has_preview_animateurs) {
+                                        echo '<div class="mj-member-events-calendar__event-preview-animateurs">';
+                                        echo '<span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Animateurs', 'mj-member') . '</span>';
+                                        echo '<span class="mj-member-events-calendar__event-preview-value">';
+                                        echo '<span class="mj-member-events-calendar__event-animateurs">';
+                                        $animateur_limit = 4;
+                                        $animateur_total = count($preview_animateurs);
+                                        $animateur_subset = array_slice($preview_animateurs, 0, $animateur_limit);
+                                        foreach ($animateur_subset as $animateur_item) {
+                                            if (!is_array($animateur_item)) {
+                                                continue;
+                                            }
+
+                                            $animateur_name = isset($animateur_item['name']) ? (string) $animateur_item['name'] : '';
+                                            $animateur_role = isset($animateur_item['role_label']) ? (string) $animateur_item['role_label'] : '';
+                                            $animateur_avatar = !empty($animateur_item['avatar']) ? (string) $animateur_item['avatar'] : '';
+                                            $animateur_initials = isset($animateur_item['initials']) ? (string) $animateur_item['initials'] : '';
+                                            $animateur_is_primary = !empty($animateur_item['is_primary']);
+
+                                            $animateur_classes = array('mj-member-events-calendar__event-animateur');
+                                            if ($animateur_avatar !== '') {
+                                                $animateur_classes[] = 'has-avatar';
+                                            }
+                                            if ($animateur_is_primary) {
+                                                $animateur_classes[] = 'is-primary';
+                                            }
+
+                                            $animateur_title = $animateur_name;
+                                            if ($animateur_title === '' && $animateur_initials !== '') {
+                                                $animateur_title = $animateur_initials;
+                                            }
+                                            if ($animateur_role !== '') {
+                                                $animateur_title = $animateur_title !== '' ? $animateur_title . ' — ' . $animateur_role : $animateur_role;
+                                            }
+
+                                            $animateur_alt = $animateur_name !== '' ? sprintf(__('Portrait de %s', 'mj-member'), $animateur_name) : __('Portrait de l\'animateur', 'mj-member');
+
+                                            echo '<span class="' . esc_attr(implode(' ', $animateur_classes)) . '" title="' . esc_attr($animateur_title) . '">';
+                                            if ($animateur_avatar !== '') {
+                                                echo '<img src="' . esc_url($animateur_avatar) . '" alt="' . esc_attr($animateur_alt) . '" loading="lazy" />';
+                                            } elseif ($animateur_initials !== '') {
+                                                echo '<span class="mj-member-events-calendar__event-animateur-initials" aria-hidden="true">' . esc_html($animateur_initials) . '</span>';
+                                            } else {
+                                                echo '<span class="mj-member-events-calendar__event-animateur-initials" aria-hidden="true">?</span>';
+                                            }
+                                            echo '</span>';
+                                        }
+
+                                        if ($animateur_total > $animateur_limit) {
+                                            $animateur_remaining = $animateur_total - $animateur_limit;
+                                            echo '<span class="mj-member-events-calendar__event-animateur mj-member-events-calendar__event-animateur--more">+' . esc_html((string) $animateur_remaining) . '</span>';
+                                        }
+
+                                        echo '</span>';
+                                        echo '</span>';
+                                        echo '</div>';
+                                    }
+                                    echo '</div>';
+                                }
+
+                                echo '<div class="mj-member-events-calendar__event-preview-body">';
+                                if ($price_label !== '') {
+                                    echo '<div class="mj-member-events-calendar__event-preview-line mj-member-events-calendar__event-preview-price"><span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Tarif', 'mj-member') . '</span><span class="mj-member-events-calendar__event-preview-value">' . esc_html($price_label) . '</span></div>';
+                                }
+                                if ($preview_schedule !== '') {
+                                    if ($event_is_closure) {
+                                        echo '<div class="mj-member-events-calendar__event-preview-line"><span class="mj-member-events-calendar__event-preview-value">' . esc_html($preview_schedule) . '</span></div>';
+                                    } else {
+                                        echo '<div class="mj-member-events-calendar__event-preview-line"><span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Plage horaire', 'mj-member') . '</span><span class="mj-member-events-calendar__event-preview-value">' . esc_html($preview_schedule) . '</span></div>';
+                                    }
+                                }
+                                if ($preview_recurrence !== '') {
+                                    echo '<div class="mj-member-events-calendar__event-preview-line"><span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Récurrence', 'mj-member') . '</span><span class="mj-member-events-calendar__event-preview-value">' . esc_html($preview_recurrence) . '</span></div>';
+                                }
+                                if ($preview_location !== '') {
+                                    echo '<div class="mj-member-events-calendar__event-preview-line"><span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Lieu', 'mj-member') . '</span><span class="mj-member-events-calendar__event-preview-value">' . esc_html($preview_location) . '</span></div>';
+                                }
+                                if ($preview_description !== '') {
+                                    echo '<p class="mj-member-events-calendar__event-preview-description">' . esc_html($preview_description) . '</p>';
+                                }
+                                echo '</div>';
+                                echo '</div>';
+                                echo '</div>';
+                            }
                             if ($event_is_closure) {
                                 echo '</div>';
                             } else {
@@ -1368,7 +1570,21 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         if (!empty($mobile_event['type_label'])) {
                             echo '<span class="mj-member-events-calendar__mobile-pill">' . esc_html($mobile_event['type_label']) . '</span>';
                         }
-                        echo '<span class="mj-member-events-calendar__mobile-title">' . esc_html($mobile_event['title']) . '</span>';
+                        $mobile_emoji = '';
+                        if (isset($mobile_event['emoji']) && $mobile_event['emoji'] !== '') {
+                            $mobile_emoji = (string) $mobile_event['emoji'];
+                            if ($mobile_emoji !== '' && function_exists('mb_substr')) {
+                                $mobile_emoji = mb_substr($mobile_emoji, 0, 8);
+                            } elseif ($mobile_emoji !== '') {
+                                $mobile_emoji = substr($mobile_emoji, 0, 8);
+                            }
+                        }
+                        echo '<span class="mj-member-events-calendar__mobile-title">';
+                        if ($mobile_emoji !== '') {
+                            echo '<span class="mj-member-events-calendar__event-emoji">' . esc_html($mobile_emoji) . '</span>';
+                        }
+                        echo '<span class="mj-member-events-calendar__mobile-title-text">' . esc_html($mobile_event['title']) . '</span>';
+                        echo '</span>';
                         $mobile_meta = '';
                         if (isset($mobile_event['schedule_label']) && $mobile_event['schedule_label'] !== '') {
                             $mobile_meta = (string) $mobile_event['schedule_label'];
@@ -1412,6 +1628,231 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
 
         echo '<script>window.mjMemberEventsCalendarQueue = window.mjMemberEventsCalendarQueue || [];window.mjMemberEventsCalendarQueue.push({id:' . wp_json_encode($instance_id) . ',config:' . wp_json_encode($instance_config) . '});</script>';
+    }
+
+    /**
+     * Format the age range label displayed in the preview tooltip.
+     */
+    private static function format_age_range_label($min, $max) {
+        $min = (int) $min;
+        $max = (int) $max;
+
+        if ($min <= 0 && $max <= 0) {
+            return '';
+        }
+
+        if ($min > 0 && $max > 0) {
+            if ($min === $max) {
+                return sprintf(__('%d ans', 'mj-member'), $min);
+            }
+
+            return sprintf(__('De %1$d à %2$d ans', 'mj-member'), $min, $max);
+        }
+
+        if ($min > 0) {
+            return sprintf(__('Dès %d ans', 'mj-member'), $min);
+        }
+
+        return sprintf(__('Jusqu\'à %d ans', 'mj-member'), $max);
+    }
+
+    /**
+     * Build a short registration summary label for the preview tooltip.
+     */
+    private static function build_registration_label($is_free_participation, $mode, $requires_validation) {
+        if ($is_free_participation) {
+            $label = __('Participation libre', 'mj-member');
+
+            if ($requires_validation) {
+                $label .= ' — ' . __('Validation requise', 'mj-member');
+            }
+
+            return $label;
+        }
+
+        $mode = sanitize_key($mode);
+
+        $mode_labels = array(
+            'participant' => __('Inscription des jeunes', 'mj-member'),
+            'guardian' => __('Inscription via responsables', 'mj-member'),
+            'volunteer' => __('Inscription réservée à l\'équipe', 'mj-member'),
+            'staff' => __('Réservé à l\'équipe', 'mj-member'),
+            'internal' => __('Réservé aux membres internes', 'mj-member'),
+            'application' => __('Sur candidature', 'mj-member'),
+            'pre_registration' => __('Pré-inscription', 'mj-member'),
+            'ticket' => __('Billetterie', 'mj-member'),
+            'form' => __('Formulaire externe', 'mj-member'),
+            'email' => __('Inscription par email', 'mj-member'),
+            'external' => __('Inscription externe', 'mj-member'),
+        );
+
+        if ($mode !== '' && isset($mode_labels[$mode])) {
+            $label = $mode_labels[$mode];
+        } elseif ($mode !== '') {
+            $friendly = ucwords(str_replace(array('_', '-'), ' ', $mode));
+            $label = sprintf(__('Inscription (%s)', 'mj-member'), $friendly);
+        } else {
+            $label = __('Inscription en ligne', 'mj-member');
+        }
+
+        if ($requires_validation) {
+            $label .= ' — ' . __('Validation requise', 'mj-member');
+        }
+
+        return $label;
+    }
+
+    /**
+     * Build animateur preview data (avatars + initials) for a given event.
+     *
+     * @param int $event_id
+     * @return array<int,array<string,mixed>>
+     */
+    private static function build_event_animateurs_preview($event_id) {
+        $event_id = (int) $event_id;
+        if ($event_id <= 0) {
+            return array();
+        }
+
+        static $cache = array();
+        if (isset($cache[$event_id])) {
+            return $cache[$event_id];
+        }
+
+        if (!class_exists(MjEventAnimateurs::class)) {
+            $cache[$event_id] = array();
+            return $cache[$event_id];
+        }
+
+        $rows = MjEventAnimateurs::get_members_by_event($event_id);
+        if (empty($rows)) {
+            $cache[$event_id] = array();
+            return $cache[$event_id];
+        }
+
+        $items = array();
+
+        foreach ($rows as $index => $row) {
+            if (!is_object($row)) {
+                continue;
+            }
+
+            $member_id = isset($row->id) ? (int) $row->id : 0;
+            $first_name = isset($row->first_name) ? sanitize_text_field((string) $row->first_name) : '';
+            $last_name = isset($row->last_name) ? sanitize_text_field((string) $row->last_name) : '';
+
+            $full_name = trim($first_name . ' ' . $last_name);
+            if ($full_name === '' && isset($row->nickname)) {
+                $full_name = sanitize_text_field((string) $row->nickname);
+            }
+            if ($full_name === '' && $member_id > 0) {
+                $full_name = sprintf(__('Membre #%d', 'mj-member'), $member_id);
+            }
+            $full_name = sanitize_text_field($full_name);
+
+            $role_key = isset($row->role) ? sanitize_key((string) $row->role) : '';
+            $role_label = '';
+            if ($role_key !== '' && class_exists(MjRoles::class)) {
+                $role_label = MjRoles::getRoleLabel($role_key);
+            }
+            if ($role_label !== '') {
+                $role_label = sanitize_text_field($role_label);
+            }
+
+            $avatar_url = '';
+            if (!empty($row->photo_id) && function_exists('wp_get_attachment_image_src')) {
+                $photo_id = (int) $row->photo_id;
+                if ($photo_id > 0) {
+                    $photo = wp_get_attachment_image_src($photo_id, 'thumbnail');
+                    if (is_array($photo) && !empty($photo[0])) {
+                        $avatar_url = esc_url_raw($photo[0]);
+                    }
+                }
+            }
+
+            if ($avatar_url === '' && !empty($row->wp_user_id) && function_exists('get_avatar_url')) {
+                $avatar_url = esc_url_raw(get_avatar_url((int) $row->wp_user_id, array('size' => 96)));
+            }
+
+            if ($avatar_url === '' && !empty($row->email) && is_email($row->email) && function_exists('get_avatar_url')) {
+                $avatar_url = esc_url_raw(get_avatar_url($row->email, array('size' => 96)));
+            }
+
+            $initials_source = $full_name !== '' ? $full_name : trim($first_name . ' ' . $last_name);
+            $initials = self::build_member_initials($initials_source);
+            if ($initials !== '') {
+                $initials = sanitize_text_field($initials);
+            }
+
+            $items[] = array(
+                'id' => $member_id,
+                'name' => $full_name,
+                'role' => $role_key,
+                'role_label' => $role_label,
+                'avatar' => $avatar_url,
+                'initials' => $initials,
+                'is_primary' => $index === 0,
+            );
+
+            if (count($items) >= 6) {
+                break;
+            }
+        }
+
+        $cache[$event_id] = $items;
+
+        return $cache[$event_id];
+    }
+
+    /**
+     * Extract two-letter initials from a name.
+     */
+    private static function build_member_initials($name) {
+        $name = is_string($name) ? trim($name) : '';
+        if ($name === '') {
+            return '';
+        }
+
+        $parts = preg_split('/[\s\-]+/u', $name);
+        if (!is_array($parts) || empty($parts)) {
+            $parts = array($name);
+        }
+
+        $initials = '';
+        foreach ($parts as $part) {
+            $part = trim((string) $part);
+            if ($part === '') {
+                continue;
+            }
+
+            if (function_exists('mb_substr')) {
+                $initials .= mb_substr($part, 0, 1);
+            } else {
+                $initials .= substr($part, 0, 1);
+            }
+
+            $length = function_exists('mb_strlen') ? mb_strlen($initials) : strlen($initials);
+            if ($length >= 2) {
+                if ($length > 2) {
+                    $initials = function_exists('mb_substr') ? mb_substr($initials, 0, 2) : substr($initials, 0, 2);
+                }
+                break;
+            }
+        }
+
+        if ($initials === '' && $name !== '') {
+            if (function_exists('mb_substr')) {
+                $initials = mb_substr($name, 0, 1);
+            } else {
+                $initials = substr($name, 0, 1);
+            }
+        }
+
+        if (function_exists('mb_strtoupper')) {
+            return mb_strtoupper($initials);
+        }
+
+        return strtoupper($initials);
     }
 
     /**
