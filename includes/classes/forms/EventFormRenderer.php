@@ -372,6 +372,19 @@ class EventFormRenderer
         $end_date = $event['end_date'] ?? '';
         $price = $event['price'] ?? 0;
         $capacity_total = $event['capacity_total'] ?? 0;
+        $emoji_value = '';
+        if (!empty($event['emoji']) && !is_array($event['emoji'])) {
+            $emoji_candidate = sanitize_text_field((string) $event['emoji']);
+            if ($emoji_candidate !== '') {
+                if (function_exists('mb_substr')) {
+                    $emoji_candidate = mb_substr($emoji_candidate, 0, 16);
+                } else {
+                    $emoji_candidate = substr($emoji_candidate, 0, 16);
+                }
+                $emoji_value = $emoji_candidate;
+            }
+        }
+
         $registration_payload = [];
         if (!empty($event['registration_payload'])) {
             $registration_payload = self::parseRegistrationPayload($event['registration_payload']);
@@ -394,6 +407,32 @@ class EventFormRenderer
                 'class' => 'widefat',
             ]
         );
+
+        $emoji_input_id = 'mj-event-emoji';
+        $emoji_hint_id = 'mj-event-emoji-hint';
+        $emoji_placeholder = __('Ex : 🎉', 'mj-member');
+        $emoji_hint_text = __('Facultatif, affiché avec le titre.', 'mj-member');
+        ?>
+        <div class="mj-form-field mj-form-field--emoji" data-emoji-field>
+            <label for="<?php echo esc_attr($emoji_input_id); ?>"><?php esc_html_e('Emoji', 'mj-member'); ?></label>
+            <div class="mj-form-emoji" data-emoji-container>
+                <div class="mj-form-emoji__picker" data-emoji-picker-root></div>
+                <input
+                    type="text"
+                    id="<?php echo esc_attr($emoji_input_id); ?>"
+                    name="emoji"
+                    class="mj-form-emoji__fallback"
+                    value="<?php echo esc_attr($emoji_value); ?>"
+                    maxlength="16"
+                    placeholder="<?php echo esc_attr($emoji_placeholder); ?>"
+                    autocomplete="off"
+                    data-emoji-input
+                    aria-describedby="<?php echo esc_attr($emoji_hint_id); ?>"
+                />
+            </div>
+            <p class="description mj-form-emoji__hint" id="<?php echo esc_attr($emoji_hint_id); ?>"><?php echo esc_html($emoji_hint_text); ?></p>
+        </div>
+        <?php
 
         self::renderTextarea(
             'description',

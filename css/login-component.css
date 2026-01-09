@@ -45,6 +45,51 @@
     margin-bottom: 0.75rem;
 }
 
+.mj-member-account-menu__manage-events-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    color: var(--mj-member-login-primary, #2563eb);
+    text-decoration: none;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    flex: 0 0 auto;
+}
+
+.mj-member-account-menu__manage-events-button:hover,
+.mj-member-account-menu__manage-events-button:focus-visible {
+    color: var(--mj-member-login-text, #ffffff);
+    transform: translateY(-1px);
+}
+
+.mj-member-account-menu__manage-events-button:focus-visible {
+    outline: 2px solid rgba(37, 99, 235, 0.45);
+    outline-offset: 2px;
+}
+
+.mj-member-account-menu__manage-events-button-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+}
+
+.mj-member-account-menu__manage-events-button-icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.mj-member-account-menu__manage-events-button-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
 .mj-member-account-menu__event-button {
     display: inline-flex;
     align-items: center;
@@ -141,6 +186,9 @@
     color: #ffffff;
     transform: translateY(-2px) scale(1.03);
     box-shadow: 0 22px 40px rgba(37, 99, 235, 0.32);
+}
+.mj-member-login-component__account-link.is-current:hover .mj-member-login-component__account-label {
+    color:  var(--mj-member-login-primary-hover);
 }
 
 .mj-member-login-component__account-item.is-current .mj-member-account-menu__item-icon,

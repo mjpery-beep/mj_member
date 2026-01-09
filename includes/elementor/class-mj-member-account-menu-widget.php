@@ -196,6 +196,25 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'manage_events_button_heading',
+            array(
+                'label' => __('Bouton Gestion des événements', 'mj-member'),
+                'type' => Controls_Manager::HEADING,
+                'separator' => 'before',
+            )
+        );
+
+        $this->add_control(
+            'manage_events_button_image',
+            array(
+                'label' => __('Icône du bouton', 'mj-member'),
+                'type' => Controls_Manager::MEDIA,
+                'dynamic' => array('active' => true),
+                'description' => __('Téléversez une icône personnalisée pour le lien Gestion des événements.', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
             'event_button_url',
             array(
                 'label' => __('Lien de la page Événements', 'mj-member'),
@@ -662,6 +681,136 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
             )
         );
 
+        $this->add_control(
+            'manage_events_button_style_heading',
+            array(
+                'label' => __('Bouton Gestion des événements', 'mj-member'),
+                'type' => Controls_Manager::HEADING,
+                'separator' => 'before',
+            )
+        );
+
+        $this->add_responsive_control(
+            'manage_events_button_size',
+            array(
+                'label' => __('Taille du bouton', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px', 'rem'),
+                'range' => array(
+                    'px' => array('min' => 16, 'max' => 96),
+                    'rem' => array('min' => 1, 'max' => 6),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'manage_events_button_margin',
+            array(
+                'label' => __('Marge externe', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', 'em', 'rem', '%'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button' => 'margin: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'manage_events_button_icon_size',
+            array(
+                'label' => __('Taille de l’icône', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('px', 'rem'),
+                'range' => array(
+                    'px' => array('min' => 8, 'max' => 72),
+                    'rem' => array('min' => 0.5, 'max' => 4.5),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button-icon' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button-image' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'manage_events_button_color',
+            array(
+                'label' => __('Couleur', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button' => 'color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'manage_events_button_color_hover',
+            array(
+                'label' => __('Couleur au survol', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button:hover, {{WRAPPER}} .mj-member-account-menu__manage-events-button:focus-visible' => 'color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'manage_events_button_background',
+            array(
+                'label' => __('Arrière-plan', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button' => 'background-color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'manage_events_button_background_hover',
+            array(
+                'label' => __('Arrière-plan au survol', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button:hover, {{WRAPPER}} .mj-member-account-menu__manage-events-button:focus-visible' => 'background-color: {{VALUE}};',
+                ),
+            )
+        );
+
+        if (class_exists(Group_Control_Border::class)) {
+            $this->add_group_control(
+                Group_Control_Border::get_type(),
+                array(
+                    'name' => 'manage_events_button_border',
+                    'selector' => '{{WRAPPER}} .mj-member-account-menu__manage-events-button',
+                )
+            );
+        }
+
+        $this->add_responsive_control(
+            'manage_events_button_border_radius',
+            array(
+                'label' => __('Rayon de bordure', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', '%'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button' => 'border-radius: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                ),
+            )
+        );
+
+        if (class_exists(Group_Control_Box_Shadow::class)) {
+            $this->add_group_control(
+                Group_Control_Box_Shadow::get_type(),
+                array(
+                    'name' => 'manage_events_button_shadow',
+                    'selector' => '{{WRAPPER}} .mj-member-account-menu__manage-events-button',
+                )
+            );
+        }
+
         $this->end_controls_section();
     }
 
@@ -676,6 +825,7 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
 
         $mobile_only = !isset($settings['mobile_only']) || $settings['mobile_only'] === 'yes';
         $event_button = $this->prepare_event_button_settings($settings);
+    $manage_events_button = $this->prepare_manage_events_button_settings($settings);
 
         $base_args = array(
             'menu_id' => isset($settings['menu_id']) ? (int) $settings['menu_id'] : 0,
@@ -687,6 +837,7 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
             'desktop_alignment' => isset($settings['desktop_alignment']) ? $settings['desktop_alignment'] : 'right',
             'show_submenus' => !isset($settings['show_submenus']) || $settings['show_submenus'] !== 'no',
             'event_button' => $event_button,
+            'manage_events_button' => $manage_events_button,
         );
 
         if (function_exists('mj_member_render_account_menu_component')) {
@@ -765,6 +916,30 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
             'nofollow' => $nofollow,
             'icon_html' => $icon_html,
             'icon_type' => $icon_type,
+        );
+    }
+
+    private function prepare_manage_events_button_settings(array $settings) {
+        $icon_url = '';
+        $icon_id = 0;
+
+        if (!empty($settings['manage_events_button_image']) && is_array($settings['manage_events_button_image'])) {
+            $media = $settings['manage_events_button_image'];
+            if (!empty($media['id'])) {
+                $icon_id = (int) $media['id'];
+                $icon_url = wp_get_attachment_image_url($icon_id, 'full');
+            } elseif (!empty($media['url']) && is_string($media['url'])) {
+                $icon_url = esc_url_raw($media['url']);
+            }
+        }
+
+        if (!is_string($icon_url)) {
+            $icon_url = '';
+        }
+
+        return array(
+            'icon_id' => $icon_id,
+            'icon_url' => $icon_url,
         );
     }
 

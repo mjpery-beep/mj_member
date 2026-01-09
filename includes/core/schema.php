@@ -770,6 +770,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_5($wpdb);
     mj_member_upgrade_to_2_6($wpdb);
     mj_member_upgrade_to_2_38($wpdb);
+    mj_member_upgrade_to_2_39($wpdb);
     mj_member_upgrade_to_2_7($wpdb);
     mj_member_upgrade_to_2_8($wpdb);
     mj_member_upgrade_to_2_9($wpdb);
@@ -1581,6 +1582,7 @@ function mj_member_upgrade_to_2_24($wpdb) {
         project_id bigint(20) unsigned DEFAULT NULL,
         title varchar(190) NOT NULL DEFAULT '',
         description text DEFAULT NULL,
+        emoji varchar(32) DEFAULT NULL,
         status varchar(20) NOT NULL DEFAULT 'open',
         due_date date DEFAULT NULL,
         assigned_member_id bigint(20) unsigned DEFAULT NULL,
@@ -2164,6 +2166,27 @@ function mj_member_upgrade_to_2_38($wpdb) {
     }
 
     mj_member_convert_table_to_utf8mb4($events_table);
+}
+
+function mj_member_upgrade_to_2_39($wpdb) {
+    $todos_table = mj_member_get_todos_table_name();
+
+    if (!$todos_table || !mj_member_table_exists($todos_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($todos_table, 'emoji')) {
+        $after_clause = '';
+        if (mj_member_column_exists($todos_table, 'description')) {
+            $after_clause = ' AFTER description';
+        } elseif (mj_member_column_exists($todos_table, 'title')) {
+            $after_clause = ' AFTER title';
+        }
+
+        $wpdb->query("ALTER TABLE {$todos_table} ADD COLUMN emoji varchar(32) DEFAULT NULL{$after_clause}");
+    }
+
+    mj_member_convert_table_to_utf8mb4($todos_table);
 }
 
 function mj_member_upgrade_to_2_5($wpdb) {

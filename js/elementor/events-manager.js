@@ -23,6 +23,88 @@
             return div.innerHTML;
         };
 
+    let emojiModuleCache = null;
+
+    function getEmojiModule() {
+        if (emojiModuleCache) {
+            return emojiModuleCache;
+        }
+        const candidate = globalObject.MjRegMgrEmojiPicker || globalObject.MjRegMgrEmojiHelper || null;
+        if (candidate && typeof candidate === 'object') {
+            emojiModuleCache = candidate;
+        }
+        return emojiModuleCache;
+    }
+
+    function sliceEmojiGraphemes(text, max) {
+        if (typeof text !== 'string' || !max || max <= 0) {
+            return '';
+        }
+        if (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function') {
+            try {
+                const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+                const iterator = segmenter.segment(text);
+                if (iterator && typeof Symbol === 'function' && typeof iterator[Symbol.iterator] === 'function') {
+                    const iter = iterator[Symbol.iterator]();
+                    let collected = '';
+                    let count = 0;
+                    let step = iter.next();
+                    while (!step.done && count < max) {
+                        collected += step.value.segment;
+                        count += 1;
+                        step = iter.next();
+                    }
+                    if (collected !== '') {
+                        return collected;
+                    }
+                }
+            } catch (segmenterError) {
+                // Ignore segmenter errors and fall back to array slicing
+            }
+        }
+        let units;
+        try {
+            units = Array.from(text);
+        } catch (arrayError) {
+            units = String(text).split('');
+        }
+        return units.slice(0, max).join('');
+    }
+
+    function sanitizeEmojiInput(value) {
+        const module = getEmojiModule();
+        if (module && typeof module.sanitizeValue === 'function') {
+            return module.sanitizeValue(value);
+        }
+        if (typeof value !== 'string') {
+            return '';
+        }
+        let normalized = value.replace(/\s+/g, ' ').trim();
+        if (normalized === '') {
+            return '';
+        }
+        let limited = sliceEmojiGraphemes(normalized, 8);
+        if (limited.length > 16) {
+            limited = limited.slice(0, 16);
+        }
+        return limited;
+    }
+
+    function resolveEmojiCandidate(input) {
+        if (typeof input === 'string') {
+            return input;
+        }
+        if (input && typeof input === 'object') {
+            if (typeof input.value === 'string') {
+                return input.value;
+            }
+            if (input.target && typeof input.target.value === 'string') {
+                return input.target.value;
+            }
+        }
+        return '';
+    }
+
     /**
      * Controller pour les champs de planification/récurrence
      */
@@ -387,6 +469,9 @@
             // Schedule fields controller
             this.scheduleController = this.elements.form ? new ScheduleFieldsController(this.elements.form) : null;
 
+            this.emojiController = null;
+            this.setupEmojiField();
+
             this.init();
         }
 
@@ -450,8 +535,126 @@
                 || attendanceRaw === 1
                 || attendanceRaw === '1'
                 || attendanceRaw === 'true';
+            normalized.emoji = sanitizeEmojiInput(rawEvent.emoji);
 
             return normalized;
+        }
+
+        buildEmojiStrings() {
+            const strings = (this.config && this.config.strings) || {};
+            return {
+                eventEmoji: strings.emojiLabel || 'Emoji',
+                eventEmojiHint: strings.emojiHint || '',
+                eventEmojiPlaceholder: strings.emojiPlaceholder || 'Ex : 🎉',
+                eventEmojiPicker: strings.emojiPicker || 'Choisir',
+                eventEmojiPickerClose: strings.emojiPickerClose || 'Fermer',
+                eventEmojiClear: strings.emojiClear || 'Effacer',
+                eventEmojiSuggestions: strings.emojiSuggestions || 'Suggestions',
+                eventEmojiSearchPlaceholder: strings.emojiSearchPlaceholder || 'Rechercher un emoji',
+                eventEmojiSearchNoResult: strings.emojiSearchNoResult || 'Aucun emoji ne correspond à votre recherche.',
+                eventEmojiAllCategory: strings.emojiAllCategory || 'Tout',
+            };
+        }
+
+        setupEmojiField() {
+            if (!this.elements.form) {
+                return;
+            }
+
+            const field = this.elements.form.querySelector('[data-emoji-field]');
+            if (!field) {
+                return;
+            }
+
+            const fallbackInput = field.querySelector('[data-emoji-input]');
+            if (!fallbackInput) {
+                return;
+            }
+
+            const container = field.querySelector('[data-emoji-container]') || field;
+            let mount = field.querySelector('[data-emoji-picker-root]');
+            if (!mount) {
+                mount = document.createElement('div');
+                mount.setAttribute('data-emoji-picker-root', '');
+                if (container && container.contains(fallbackInput)) {
+                    container.insertBefore(mount, fallbackInput);
+                } else {
+                    field.insertBefore(mount, fallbackInput);
+                }
+            }
+
+            const module = getEmojiModule();
+            const preactLib = globalObject.preact || null;
+            const EmojiPickerField = module && module.EmojiPickerField ? module.EmojiPickerField : null;
+            const emojiStrings = this.buildEmojiStrings();
+
+            const controller = {
+                field,
+                input: fallbackInput,
+                mount,
+                strings: emojiStrings,
+                currentValue: sanitizeEmojiInput(fallbackInput.value || ''),
+                enabled: !!(preactLib && EmojiPickerField),
+                render: null,
+                applyValue: null,
+            };
+
+            controller.applyValue = () => {
+                controller.currentValue = sanitizeEmojiInput(controller.currentValue);
+                controller.input.value = controller.currentValue;
+            };
+
+            if (controller.enabled) {
+                const { h, render } = preactLib;
+
+                const handleChange = (nextValue) => {
+                    controller.currentValue = sanitizeEmojiInput(resolveEmojiCandidate(nextValue));
+                    controller.applyValue();
+                    if (controller.render) {
+                        controller.render();
+                    }
+                };
+
+                controller.render = () => {
+                    controller.applyValue();
+                    render(h(EmojiPickerField, {
+                        value: controller.currentValue,
+                        onChange: handleChange,
+                        strings: controller.strings,
+                        labels: controller.strings,
+                        disabled: false,
+                        fallbackPlaceholder: controller.strings.eventEmojiPlaceholder || 'Ex : 🎉',
+                        'aria-describedby': controller.input.getAttribute('aria-describedby') || undefined,
+                    }), controller.mount);
+                };
+
+                field.classList.add('mj-form-field--emoji-enhanced');
+                controller.render();
+            } else {
+                controller.applyValue();
+            }
+
+            this.emojiController = controller;
+        }
+
+        setEmojiValue(value) {
+            if (!this.emojiController) {
+                if (this.elements && this.elements.form) {
+                    const fallback = this.elements.form.querySelector('[data-emoji-input]');
+                    if (fallback) {
+                        fallback.value = sanitizeEmojiInput(value);
+                    }
+                }
+                return;
+            }
+
+            this.emojiController.currentValue = sanitizeEmojiInput(value);
+            this.emojiController.input.value = this.emojiController.currentValue;
+            if (this.emojiController.enabled && typeof this.emojiController.render === 'function') {
+                this.emojiController.render();
+            } else if (typeof this.emojiController.applyValue === 'function') {
+                this.emojiController.applyValue();
+            }
         }
 
         parseConfig() {
@@ -585,7 +788,8 @@
                 if (this.searchTerm) {
                     const title = (event.title || '').toLowerCase();
                     const description = (event.description || '').toLowerCase();
-                    if (!title.includes(this.searchTerm) && !description.includes(this.searchTerm)) {
+                    const emoji = (event.emoji || '').toLowerCase();
+                    if (!title.includes(this.searchTerm) && !description.includes(this.searchTerm) && !emoji.includes(this.searchTerm)) {
                         return false;
                     }
                 }
@@ -647,11 +851,19 @@
                 ? 'Liste de présence : tous les membres'
                 : 'Liste de présence : inscrits uniquement';
             const attendanceLabel = this.getString(attendanceLabelKey, attendanceLabelFallback);
+            const emojiValue = sanitizeEmojiInput(event.emoji || '');
+            const emojiLabel = this.getString('emojiLabel', 'Emoji');
+            const emojiAccessible = `${emojiLabel}: ${emojiValue}`;
+            const titleContent = [
+                emojiValue ? `<span class="mj-events-manager-card__emoji" aria-hidden="true">${escapeHtml(emojiValue)}</span>` : '',
+                `<span class="mj-events-manager-card__title-text">${escapeHtml(event.title)}</span>`,
+                emojiValue ? `<span class="screen-reader-text">${escapeHtml(emojiAccessible)}</span>` : '',
+            ].filter(Boolean).join('');
 
             return `
                 <div class="mj-events-manager-card" data-event-id="${escapeHtml(event.id)}">
                     <div class="mj-events-manager-card__header">
-                        <h3 class="mj-events-manager-card__title">${escapeHtml(event.title)}</h3>
+                        <h3 class="mj-events-manager-card__title">${titleContent}</h3>
                         <div class="mj-events-manager-card__badges">
                             <span class="mj-events-manager-card__badge mj-events-manager-card__badge--status">${escapeHtml(statusLabel)}</span>
                             <span class="mj-events-manager-card__badge mj-events-manager-card__badge--type">${escapeHtml(typeLabel)}</span>
@@ -1072,6 +1284,8 @@
             if (attendanceCheckbox) {
                 attendanceCheckbox.checked = false;
             }
+
+            this.setEmojiValue('');
         }
 
         loadEventToForm(eventId) {
@@ -1101,6 +1315,8 @@
                 form.querySelector('[name="end_date"]').value = endFormatted;
             }
 
+            this.setEmojiValue(event.emoji || '');
+
             // Hydrate schedule fields
             if (this.scheduleController) {
                 this.scheduleController.hydrateFromEvent(event);
@@ -1123,6 +1339,15 @@
 
         async handleFormSubmit() {
             if (!this.elements.form) return;
+
+            if (this.emojiController && this.emojiController.input) {
+                this.emojiController.input.value = sanitizeEmojiInput(this.emojiController.input.value || '');
+            } else {
+                const emojiInput = this.elements.form.querySelector('[name="emoji"]');
+                if (emojiInput) {
+                    emojiInput.value = sanitizeEmojiInput(emojiInput.value || '');
+                }
+            }
 
             const formData = new FormData(this.elements.form);
             const action = this.currentEventId ? 'mj_events_manager_update' : 'mj_events_manager_create';

@@ -1,5 +1,6 @@
 <?php
 
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\AssetsManager;
 
 if (!defined('ABSPATH')) {
@@ -534,6 +535,11 @@ if (!function_exists('mj_member_render_account_menu_component')) {
             $event_button_settings = $args['event_button'];
         }
 
+        $manage_events_button_settings = array();
+        if (isset($args['manage_events_button']) && is_array($args['manage_events_button'])) {
+            $manage_events_button_settings = $args['manage_events_button'];
+        }
+
         $event_button_label = isset($event_button_settings['label']) ? trim((string) $event_button_settings['label']) : '';
         $event_button_url = isset($event_button_settings['url']) ? esc_url_raw((string) $event_button_settings['url']) : '';
         $event_button_is_external = !empty($event_button_settings['is_external']);
@@ -545,6 +551,11 @@ if (!function_exists('mj_member_render_account_menu_component')) {
         $event_button_icon_type = 'icon';
         if (!empty($event_button_settings['icon_type']) && $event_button_settings['icon_type'] === 'image') {
             $event_button_icon_type = 'image';
+        }
+
+        $manage_events_icon_url_setting = '';
+        if (!empty($manage_events_button_settings['icon_url'])) {
+            $manage_events_icon_url_setting = esc_url_raw((string) $manage_events_button_settings['icon_url']);
         }
 
         $layout = $args['layout'] === 'desktop' ? 'desktop' : 'modal';
@@ -572,6 +583,36 @@ if (!function_exists('mj_member_render_account_menu_component')) {
         $event_button_rel = '';
         $event_button_markup = '';
         $has_event_button = $event_button_label !== '' && $event_button_href !== '';
+
+        $has_manage_events_button = false;
+        $manage_events_button_markup = '';
+
+        $manage_events_roles = array(
+            MjRoles::ANIMATEUR,
+            MjRoles::COORDINATEUR,
+            MjRoles::BENEVOLE,
+        );
+
+        $current_member_role = '';
+        if (function_exists('mj_member_get_current_member')) {
+            $current_member = mj_member_get_current_member();
+            if (is_object($current_member) && isset($current_member->role)) {
+                $current_member_role = sanitize_key((string) $current_member->role);
+            } elseif (is_array($current_member) && isset($current_member['role'])) {
+                $current_member_role = sanitize_key((string) $current_member['role']);
+            }
+        }
+
+        if ($current_member_role !== '') {
+            $normalized_role = MjRoles::normalize($current_member_role);
+            if (in_array($normalized_role, $manage_events_roles, true)) {
+                $has_manage_events_button = true;
+            }
+        }
+
+        if ($is_preview) {
+            $has_manage_events_button = true;
+        }
 
         if ($has_event_button) {
             $rel_parts = array();
@@ -616,6 +657,46 @@ if (!function_exists('mj_member_render_account_menu_component')) {
             }
         }
 
+        if ($has_manage_events_button) {
+            $manage_events_url = (string) apply_filters('mj_member_account_menu_manage_events_url', home_url('/gestion-evenement/'));
+            if ($manage_events_url === '') {
+                $has_manage_events_button = false;
+            } elseif ($manage_events_url === '#' && !$is_preview) {
+                $has_manage_events_button = false;
+            }
+
+            if ($has_manage_events_button) {
+                $manage_events_label = apply_filters('mj_member_account_menu_manage_events_label', __('Gestion des événements', 'mj-member'));
+                $manage_events_icon_url = $manage_events_icon_url_setting !== ''
+                    ? $manage_events_icon_url_setting
+                    : (string) apply_filters('mj_member_account_menu_manage_events_icon_url', 'https://upload.wikimedia.org/wikipedia/commons/a/ac/Windows_Settings_icon.svg');
+
+                if (!is_string($manage_events_icon_url)) {
+                    $manage_events_icon_url = '';
+                }
+
+                ob_start();
+                ?>
+                <a
+                    class="mj-member-account-menu__manage-events-button"
+                    href="<?php echo esc_url($manage_events_url); ?>"
+                    aria-label="<?php echo esc_attr($manage_events_label); ?>"
+                >
+                    <?php if ($manage_events_icon_url !== '') : ?>
+                        <span class="mj-member-account-menu__manage-events-button-icon" aria-hidden="true">
+                            <img src="<?php echo esc_url($manage_events_icon_url); ?>" alt="" class="mj-member-account-menu__manage-events-button-image" loading="lazy" decoding="async" />
+                        </span>
+                    <?php endif; ?>
+                </a>
+                <?php
+                $manage_events_button_markup = trim((string) ob_get_clean());
+
+                if ($manage_events_button_markup === '') {
+                    $has_manage_events_button = false;
+                }
+            }
+        }
+
         $menu_items = mj_member_account_menu_prepare_items(
             (int) $args['menu_id'],
             is_array($args['preview_items']) ? $args['preview_items'] : array(),
@@ -627,6 +708,9 @@ if (!function_exists('mj_member_render_account_menu_component')) {
         $wrapper_classes = array('mj-member-account-menu', 'mj-member-account-menu--layout-' . $layout);
         if ($has_event_button) {
             $wrapper_classes[] = 'mj-member-account-menu--has-event-button';
+        }
+        if ($has_manage_events_button) {
+            $wrapper_classes[] = 'mj-member-account-menu--has-manage-events-button';
         }
         $wrapper_attributes = array();
 
@@ -655,6 +739,7 @@ if (!function_exists('mj_member_render_account_menu_component')) {
         $wrapper_attributes[] = 'data-layout="' . esc_attr($layout) . '"';
         $wrapper_attributes[] = 'data-show-submenus="' . ($show_submenus ? '1' : '0') . '"';
         $wrapper_attributes[] = 'data-has-event-button="' . ($has_event_button ? '1' : '0') . '"';
+        $wrapper_attributes[] = 'data-has-manage-events-button="' . ($has_manage_events_button ? '1' : '0') . '"';
 
         if ($layout === 'desktop') {
             $nav_classes = array(
@@ -677,6 +762,9 @@ if (!function_exists('mj_member_render_account_menu_component')) {
                     </nav>
                     <?php if ($has_event_button && $event_button_markup !== '') : ?>
                         <?php echo $event_button_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                    <?php endif; ?>
+                    <?php if ($has_manage_events_button && $manage_events_button_markup !== '') : ?>
+                        <?php echo $manage_events_button_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
                     <?php endif; ?>
                 </div>
             </div>
@@ -735,6 +823,9 @@ if (!function_exists('mj_member_render_account_menu_component')) {
                 </button>
                 <?php if ($has_event_button && $event_button_markup !== '') : ?>
                     <?php echo $event_button_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                <?php endif; ?>
+                <?php if ($has_manage_events_button && $manage_events_button_markup !== '') : ?>
+                    <?php echo $manage_events_button_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
                 <?php endif; ?>
             </div>
             <div

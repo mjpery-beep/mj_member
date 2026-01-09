@@ -177,6 +177,52 @@ function mj_regmgr_to_bool($value, $default = false) {
 }
 
 /**
+ * Retourne un emoji normalisé à partir d'un événement ou d'un tableau associatif.
+ *
+ * @param object|array|null $event Source contenant éventuellement une clé/propriété "emoji"
+ * @return string Emoji nettoyé (16 caractères max) ou chaîne vide
+ */
+function mj_regmgr_get_event_emoji_value($event) {
+    $raw = '';
+
+    if (is_array($event) && isset($event['emoji'])) {
+        $raw = $event['emoji'];
+    } elseif (is_object($event) && isset($event->emoji)) {
+        $raw = $event->emoji;
+    }
+
+    if (!is_scalar($raw)) {
+        return '';
+    }
+
+    $candidate = wp_check_invalid_utf8((string) $raw);
+    if ($candidate === '') {
+        return '';
+    }
+
+    $candidate = wp_strip_all_tags($candidate, false);
+    $candidate = preg_replace('/[\x00-\x1F\x7F]+/', '', $candidate);
+    if (!is_string($candidate)) {
+        return '';
+    }
+
+    $candidate = trim($candidate);
+    if ($candidate === '') {
+        return '';
+    }
+
+    if (function_exists('wp_html_excerpt')) {
+        $candidate = wp_html_excerpt($candidate, 16, '');
+    } elseif (function_exists('mb_substr')) {
+        $candidate = mb_substr($candidate, 0, 16);
+    } else {
+        $candidate = substr($candidate, 0, 16);
+    }
+
+    return trim($candidate);
+}
+
+/**
  * Prépare les données d'un événement pour la sidebar.
  *
  * @param object|null $event
@@ -221,9 +267,12 @@ function mj_regmgr_build_event_sidebar_item($event, $type_labels = null, $status
         $attendance_show_all_members = !empty($event->attendance_show_all_members);
     }
 
+    $emoji_value = mj_regmgr_get_event_emoji_value($event);
+
     return array(
         'id' => $event_id,
         'title' => isset($event->title) ? (string) $event->title : '',
+        'emoji' => $emoji_value,
         'type' => $type_key,
         'typeLabel' => isset($type_labels[$type_key]) ? $type_labels[$type_key] : ($type_key !== '' ? $type_key : ''),
         'status' => $status_key,
@@ -675,13 +724,15 @@ function mj_regmgr_get_event_details() {
         $attendance_show_all_members = !empty($event->attendance_show_all_members);
     }
 
+    $event_emoji = mj_regmgr_get_event_emoji_value($event);
+
     wp_send_json_success(array(
         'event' => array(
             'id' => $event->id,
             'title' => $event->title,
             'slug' => $event->slug,
             'type' => $event->type,
-            'emoji' => $event->emoji,
+            'emoji' => $event_emoji,
             'typeLabel' => isset($type_labels[$event->type]) ? $type_labels[$event->type] : $event->type,
             'status' => $event->status,
             'statusLabel' => isset($status_labels[$event->status]) ? $status_labels[$event->status] : $event->status,

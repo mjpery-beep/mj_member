@@ -244,7 +244,7 @@ final class AssetsManager
         self::registerScript('mj-member-documents-manager', 'js/elementor/documents-manager.js', array('mj-member-utils'));
         self::registerScript('mj-member-payments-overview', 'js/elementor/payments-overview.js', array('mj-member-utils'));
         self::registerStyle('mj-member-payments-overview', 'css/payments-overview.css', array('mj-member-components'));
-        self::registerScript('mj-member-events-manager', 'js/elementor/events-manager.js', array('mj-member-utils'));
+        self::registerScript('mj-member-events-manager', 'js/elementor/events-manager.js', array('mj-member-utils', 'mj-member-regmgr-emoji-picker'));
         self::registerStyle('mj-member-event-form', 'css/event-form.css');
         self::registerStyle('mj-member-events-manager', 'css/events-manager.css', array('mj-member-components', 'mj-member-event-form'));
         wp_register_script(
@@ -262,13 +262,14 @@ final class AssetsManager
             '10.19.3',
             true
         );
-        self::registerScript('mj-member-todo-widget', 'js/elementor/todo-widget.js', array('mj-member-utils', 'mj-member-preact-hooks', 'media-editor'));
+        self::registerScript('mj-member-todo-widget', 'js/elementor/todo-widget.js', array('mj-member-utils', 'mj-member-preact-hooks', 'media-editor', 'mj-member-regmgr-emoji-picker'));
 
         self::registerStyle('mj-member-login-component', 'css/login-component.css');
         self::registerScript('mj-member-login-component', 'js/login-component.js');
         self::registerStyle('mj-member-hour-encode', 'css/hour-encode.css', array('mj-member-components'));
         self::registerStyle('mj-member-photo-grimlins', 'css/photo-grimlins.css', array('mj-member-components'));
         self::registerStyle('mj-member-grimlins-gallery', 'css/grimlins-gallery.css', array('mj-member-components'));
+        self::registerStyle('mj-member-grim-gif', 'css/grim-gif.css', array('mj-member-components'));
         self::registerStyle('mj-member-todo-widget', 'css/todo-widget.css', array('mj-member-components'));
         self::registerStyle('mj-member-idea-box', 'css/idea-box.css', array('mj-member-components'));
         self::registerStyle('mj-member-documents-manager', 'css/documents-manager.css', array('mj-member-components'));
@@ -396,6 +397,11 @@ final class AssetsManager
                 }
                 break;
 
+            case 'grim-gif':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-grim-gif');
+                break;
+
             case 'todo-widget':
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-todo-widget');
@@ -404,6 +410,7 @@ final class AssetsManager
                 }
                 wp_enqueue_script('mj-member-preact');
                 wp_enqueue_script('mj-member-preact-hooks');
+                wp_enqueue_script('mj-member-regmgr-emoji-picker');
                 wp_enqueue_script('mj-member-todo-widget');
                 if (function_exists('mj_member_todo_widget_localize')) {
                     mj_member_todo_widget_localize();

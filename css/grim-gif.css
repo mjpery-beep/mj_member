@@ -1,0 +1,69 @@
+/* Styles du widget Grim GIF */
+.mj-grim-gif {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1rem;
+    padding: 1.5rem;
+    border-radius: 1rem;
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.15), rgba(14, 116, 144, 0.15));
+}
+
+.mj-grim-gif__title {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.mj-grim-gif__subtitle {
+    margin: 0;
+    max-width: 36rem;
+    color: #334155;
+}
+
+.mj-grim-gif__figure {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.mj-grim-gif__image {
+    width: min(100%, 20rem);
+    border-radius: 0.75rem;
+    box-shadow: 0 1.25rem 3rem rgba(15, 23, 42, 0.15);
+}
+
+.mj-grim-gif__caption {
+    margin: 0;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    background-color: rgba(15, 23, 42, 0.85);
+    color: #f8fafc;
+    font-size: 0.875rem;
+    letter-spacing: 0.02em;
+}
+
+.mj-grim-gif__message {
+    margin: 0;
+    max-width: 32rem;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #0f172a;
+}
+
+.mj-grim-gif__fallback {
+    margin: 0;
+    color: #dc2626;
+    font-weight: 600;
+}
+
+.mj-grim-gif__hint {
+    margin: 0;
+    font-size: 0.875rem;
+    color: #475569;
+}

@@ -146,6 +146,11 @@ class EventsManagerHandlers
             ? self::normalizeAttendanceFlag($_POST['attendance_show_all_members'])
             : false;
 
+        $emoji = '';
+        if (isset($_POST['emoji'])) {
+            $emoji = self::sanitizeEmoji(wp_unslash((string) $_POST['emoji']));
+        }
+
         // Schedule mode and payload
         $schedule_mode = !empty($_POST['schedule_mode']) ? sanitize_key($_POST['schedule_mode']) : 'fixed';
         $schedule_payload = '';
@@ -181,6 +186,7 @@ class EventsManagerHandlers
                 'schedule_payload' => $schedule_payload,
                 'recurrence_until' => $recurrence_until,
                 'registration_payload' => $registration_payload,
+                'emoji' => $emoji,
             ]);
 
             if (is_wp_error($event_id)) {
@@ -264,6 +270,10 @@ class EventsManagerHandlers
 
         if (isset($_POST['capacity_total'])) {
             $data['capacity_total'] = intval($_POST['capacity_total']);
+        }
+
+        if (isset($_POST['emoji'])) {
+            $data['emoji'] = self::sanitizeEmoji(wp_unslash((string) $_POST['emoji']));
         }
 
         // Schedule mode and payload
@@ -384,6 +394,37 @@ class EventsManagerHandlers
             error_log('EventsManager Parse DateTime Error: ' . $e->getMessage());
             return '';
         }
+    }
+
+    private static function sanitizeEmoji($value): string
+    {
+        if (is_object($value) && method_exists($value, '__toString')) {
+            $value = (string) $value;
+        }
+
+        if (!is_scalar($value)) {
+            return '';
+        }
+
+        $candidate = wp_check_invalid_utf8((string) $value);
+        if ($candidate === '') {
+            return '';
+        }
+
+        $candidate = wp_strip_all_tags($candidate, false);
+        $candidate = preg_replace('/[\x00-\x1F\x7F]+/', '', $candidate);
+        if (!is_string($candidate)) {
+            return '';
+        }
+
+        $candidate = trim($candidate);
+        if ($candidate === '') {
+            return '';
+        }
+
+        $candidate = wp_html_excerpt($candidate, 16, '');
+
+        return trim(is_string($candidate) ? $candidate : '');
     }
 }
 

@@ -88,3 +88,192 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* Champ emoji avec sélecteur */
+.mj-form-field--emoji {
+    --regmgr-primary: #3b82f6;
+    --regmgr-primary-light: rgba(59, 130, 246, 0.15);
+    --regmgr-gray-50: #f8fafc;
+    --regmgr-gray-200: #cbd5e1;
+    --regmgr-gray-400: #94a3b8;
+    --regmgr-gray-500: #475569;
+    --regmgr-radius: 8px;
+    --regmgr-radius-sm: 4px;
+    --regmgr-shadow-lg: 0 20px 45px -20px rgba(15, 23, 42, 0.25);
+    --regmgr-transition: 160ms ease;
+}
+
+.mj-form-field--emoji .mj-form-emoji {
+    position: relative;
+}
+
+.mj-form-field--emoji.mj-form-field--emoji-enhanced .mj-form-emoji__fallback {
+    display: none;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__control {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__input {
+    flex: 1;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__picker {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 40;
+    width: 100%;
+    max-width: 360px;
+    background: #ffffff;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius);
+    box-shadow: var(--regmgr-shadow-lg);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 420px;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__picker-title {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--regmgr-gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__search {
+    flex: 1;
+    padding: 6px 9px;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius);
+    font-size: 14px;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__search:focus {
+    outline: none;
+    border-color: var(--regmgr-primary);
+    box-shadow: 0 0 0 2px var(--regmgr-primary-light);
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__category {
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius-sm);
+    background: var(--regmgr-gray-50);
+    padding: 1px 10px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: background var(--regmgr-transition), border-color var(--regmgr-transition), color var(--regmgr-transition);
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__category:hover,
+.mj-form-field--emoji .mj-regmgr-emoji-field__category:focus {
+    outline: none;
+    border-color: var(--regmgr-primary);
+    background: rgba(59, 130, 246, 0.1);
+    color: #0f172a;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__category--active {
+    background: var(--regmgr-primary);
+    border-color: var(--regmgr-primary);
+    color: #0f172a;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__groups {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__group:last-child {
+    margin-bottom: 0;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__group-title {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--regmgr-gray-400);
+    text-transform: uppercase;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
+    gap: 8px;
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__choice {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    border-radius: var(--regmgr-radius);
+    border: 1px solid transparent;
+    background: var(--regmgr-gray-50);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    transition: transform var(--regmgr-transition), border-color var(--regmgr-transition), background var(--regmgr-transition);
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__choice:hover,
+.mj-form-field--emoji .mj-regmgr-emoji-field__choice:focus {
+    outline: none;
+    border-color: var(--regmgr-primary);
+    background: #ffffff;
+    transform: translateY(-1px);
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__choice:focus-visible {
+    box-shadow: 0 0 0 3px var(--regmgr-primary-light);
+}
+
+.mj-form-field--emoji .mj-regmgr-emoji-field__empty {
+    margin: 0;
+    font-size: 13px;
+    color: var(--regmgr-gray-400);
+    text-align: center;
+}

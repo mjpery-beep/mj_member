@@ -5936,6 +5936,7 @@ input.mj-regmgr-search-input__field {
     max-height: 420px;
 }
 
+
 .mj-regmgr-emoji-field__picker-title {
     margin: 0;
     font-size: 12px;
@@ -5975,10 +5976,10 @@ input.mj-regmgr-search-input__field {
     border: 1px solid var(--regmgr-gray-200);
     border-radius: var(--regmgr-radius-sm);
     background: var(--regmgr-gray-50);
-    padding: 4px 10px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
+    padding: 1px 10px;
+    font-size: 10px;
+    font-weight: 100;
+    transform: lowercase;
     letter-spacing: 0.04em;
     cursor: pointer;
     transition: background var(--regmgr-transition), border-color var(--regmgr-transition), color var(--regmgr-transition);
@@ -5988,13 +5989,14 @@ input.mj-regmgr-search-input__field {
 .mj-regmgr-emoji-field__category:focus {
     outline: none;
     border-color: var(--regmgr-primary);
-    background: #fff;
+    background: #ffffff25;
+    color: #000000;
 }
 
 .mj-regmgr-emoji-field__category--active {
     background: var(--regmgr-primary);
     border-color: var(--regmgr-primary);
-    color: #fff;
+    color: #000000;
 }
 
 .mj-regmgr-emoji-field__groups {
@@ -6028,16 +6030,19 @@ input.mj-regmgr-search-input__field {
     grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
     gap: 8px;
 }
-
+.mj-regmgr-emoji-field__choice,
+.mj-regmgr-emoji-field__input{
+    font-size: 25px;
+}
 .mj-regmgr-emoji-field__choice {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 8px;
+    padding: 1px;
     border-radius: var(--regmgr-radius);
     border: 1px solid transparent;
     background: var(--regmgr-gray-50);
-    font-size: 22px;
+    font-size: 30px;
     line-height: 1;
     cursor: pointer;
     transition: transform var(--regmgr-transition), border-color var(--regmgr-transition), background var(--regmgr-transition);
