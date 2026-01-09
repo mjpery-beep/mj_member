@@ -80,18 +80,6 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         );
 
         $this->add_control(
-            'display_title',
-            array(
-                'label' => __('Afficher le titre du widget', 'mj-member'),
-                'type' => Controls_Manager::SWITCHER,
-                'label_on' => __('Oui', 'mj-member'),
-                'label_off' => __('Non', 'mj-member'),
-                'return_value' => 'yes',
-                'default' => 'yes',
-            )
-        );
-
-        $this->add_control(
             'statuses',
             array(
                 'label' => __('Statuts à afficher', 'mj-member'),
@@ -230,6 +218,19 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 'label_off' => __('Non', 'mj-member'),
                 'return_value' => 'yes',
                 'default' => 'yes',
+            )
+        );
+
+        $this->add_control(
+            'show_next_dates',
+            array(
+                'label' => __('Afficher les prochaines dates', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'description' => __('Affiche un résumé des prochaines occurrences lorsque l’événement est récurrent.', 'mj-member'),
             )
         );
 
@@ -422,14 +423,6 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
             )
         );
 
-        $this->add_group_control(
-            Group_Control_Box_Shadow::get_type(),
-            array(
-                'name' => 'card_shadow',
-                'selector' => '{{WRAPPER}} .mj-member-events__item',
-            )
-        );
-
         $this->add_responsive_control(
             'card_padding',
             array(
@@ -496,7 +489,7 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 'name' => 'title_typography',
                 'label' => __('Titre de la carte', 'mj-member'),
                 'global' => array('default' => Global_Typography::TYPOGRAPHY_PRIMARY),
-                'selector' => '{{WRAPPER}} .mj-member-events__item-title',
+                'selector' => '{{WRAPPER}} .mj-member-events__item-title, {{WRAPPER}} .mj-member-events__item-title a',
             )
         );
 
@@ -518,19 +511,7 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 'name' => 'meta_typography',
                 'label' => __('Métadonnées', 'mj-member'),
                 'global' => array('default' => Global_Typography::TYPOGRAPHY_TEXT),
-                'selector' => '{{WRAPPER}} .mj-member-events__meta',
-            )
-        );
-
-        $this->add_control(
-            'meta_color',
-            array(
-                'label' => __('Couleur des métadonnées', 'mj-member'),
-                'type' => Controls_Manager::COLOR,
-                'global' => array('default' => Global_Colors::COLOR_TEXT),
-                'selectors' => array(
-                    '{{WRAPPER}} .mj-member-events' => '--mj-events-meta: {{VALUE}};',
-                ),
+                'selector' => '{{WRAPPER}} .mj-member-events__recurring-summary',
             )
         );
 
@@ -703,6 +684,7 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         $display_title = !isset($settings['display_title']) || $settings['display_title'] === 'yes';
         $empty_message = isset($settings['empty_message']) ? $settings['empty_message'] : __('Aucun événement disponible pour le moment.', 'mj-member');
         $show_description = isset($settings['show_description']) && $settings['show_description'] === 'yes';
+        $show_next_dates = !isset($settings['show_next_dates']) || $settings['show_next_dates'] === 'yes';
         $show_location = isset($settings['show_location']) && $settings['show_location'] === 'yes';
         $layout = isset($settings['layout']) ? $settings['layout'] : 'grid';
         $card_layout = isset($settings['card_layout']) ? $settings['card_layout'] : 'standard';
@@ -937,22 +919,6 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 echo $heading_open . esc_html($event['title']) . $heading_close;
             }
 
-            $meta_parts = array();
-            if ($date_range !== '') {
-                $meta_parts[] = $date_range;
-            }
-            if (!$show_location && !empty($event['location'])) {
-                $meta_parts[] = $event['location'];
-            }
-
-            if (!empty($meta_parts)) {
-                echo '<div class="mj-member-events__meta">';
-                foreach ($meta_parts as $meta_part) {
-                    echo '<span class="mj-member-events__meta-item">' . esc_html($meta_part) . '</span>';
-                }
-                echo '</div>';
-            }
-
             if ($recurring_summary_text !== '' || $recurring_summary_time !== '') {
                 echo '<div class="mj-member-events__recurring-summary">';
                 if ($recurring_summary_text !== '') {
@@ -1025,7 +991,7 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 $occurrence_line = $dates_label;
             }
 
-            if ($event_has_multiple_occurrences && $occurrence_line !== '') {
+            if ($show_next_dates && $event_has_multiple_occurrences && $occurrence_line !== '') {
                 echo '<p class="mj-member-events__occurrence-next">'
                     . '<span class="mj-member-events__occurrence-prefix">' . esc_html__('Prochaines dates :', 'mj-member') . '</span>'
                     . '<span class="mj-member-events__occurrence-label">' . esc_html($occurrence_line) . '</span>'

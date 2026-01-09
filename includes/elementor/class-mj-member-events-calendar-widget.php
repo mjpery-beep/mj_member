@@ -39,6 +39,14 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         return array('mj', 'events', 'calendar', 'agenda', 'planning');
     }
 
+    public function get_style_depends() {
+        return array('mj-member-events-calendar');
+    }
+
+    public function get_script_depends() {
+        return array('mj-member-events-calendar');
+    }
+
     protected function register_controls() {
         $status_options = method_exists('MjEvents', 'get_status_labels') ? MjEvents::get_status_labels() : array(
             'actif' => __('Actif', 'mj-member'),
@@ -149,6 +157,43 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 'return_value' => 'yes',
                 'default' => 'yes',
                 'description' => __('Supprime les occurrences (notamment récurrentes) quand la MJ est fermée.', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
+            'show_toolbar_left',
+            array(
+                'label' => __('Afficher la navigation du calendrier', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+            )
+        );
+
+        $this->add_control(
+            'show_toolbar_actions',
+            array(
+                'label' => __('Afficher les filtres et le bouton "Aujourd\'hui"', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+            )
+        );
+
+        $this->add_control(
+            'current_week_only',
+            array(
+                'label' => __('Afficher uniquement la semaine courante', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => '',
+                'description' => __('Réduit l’affichage au calendrier de la semaine en cours.', 'mj-member'),
             )
         );
 
@@ -314,6 +359,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $highlight_next = !isset($settings['highlight_next_event']) || $settings['highlight_next_event'] === 'yes';
         $highlight_closure_days = isset($settings['highlight_closure_days']) && $settings['highlight_closure_days'] === 'yes';
         $hide_closure_occurrences = !isset($settings['hide_closure_occurrences']) || $settings['hide_closure_occurrences'] === 'yes';
+        $show_toolbar_left = !isset($settings['show_toolbar_left']) || $settings['show_toolbar_left'] === 'yes';
+        $show_toolbar_actions = !isset($settings['show_toolbar_actions']) || $settings['show_toolbar_actions'] === 'yes';
 
         $cover_width_settings = self::normalize_cover_width_settings($settings);
 
@@ -375,6 +422,41 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         }
 
         $now_ts = current_time('timestamp');
+        $display_current_week_only = isset($settings['current_week_only']) && $settings['current_week_only'] === 'yes';
+        $week_days_keys = array();
+        $restrict_mobile_to_week = array();
+        if ($display_current_week_only) {
+            try {
+                $week_reference_dt = new \DateTimeImmutable('@' . $now_ts);
+                $week_reference_dt = $week_reference_dt->setTimezone($timezone);
+            } catch (\Exception $exception) {
+                $week_reference_dt = null;
+            }
+
+            if (!($week_reference_dt instanceof \DateTimeImmutable)) {
+                $week_reference_dt = new \DateTimeImmutable('now', $timezone);
+            }
+
+            try {
+                $week_start_dt = $week_reference_dt->modify('monday this week');
+            } catch (\Exception $exception) {
+                $week_start_dt = null;
+            }
+
+            if (!($week_start_dt instanceof \DateTimeImmutable)) {
+                $week_start_dt = $week_reference_dt;
+            }
+
+            $week_start_dt = $week_start_dt->setTime(0, 0, 0);
+
+            $week_pointer_dt = $week_start_dt;
+            for ($week_day_offset = 0; $week_day_offset < 7; $week_day_offset++) {
+                if ($week_pointer_dt instanceof \DateTimeImmutable) {
+                    $week_days_keys[] = $week_pointer_dt->format('Y-m-d');
+                    $week_pointer_dt = $week_pointer_dt->modify('+1 day');
+                }
+            }
+        }
 
         $occurrence_since = wp_date('Y-m-d H:i:s', $range_start, $timezone);
         $occurrence_until = wp_date('Y-m-d H:i:s', $range_end, $timezone);
@@ -1012,35 +1094,61 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             );
         }
 
-        echo '<div class="mj-member-events-calendar" id="' . esc_attr($instance_id) . '" data-calendar-preferred="0" data-calendar-today="' . esc_attr($today_month_key) . '" data-calendar-count-singular="' . esc_attr($count_singular_label) . '" data-calendar-count-plural="' . esc_attr($count_plural_label) . '" data-calendar-count-empty="' . esc_attr($count_empty_label) . '">';
+        $preferred_attribute_value = $preferred_index >= 0 ? (string) $preferred_index : '0';
+        $calendar_attributes = array(
+            'class="mj-member-events-calendar"',
+            'id="' . esc_attr($instance_id) . '"',
+            'data-calendar-preferred="' . esc_attr($preferred_attribute_value) . '"',
+            'data-calendar-today="' . esc_attr($today_month_key) . '"',
+            'data-calendar-count-singular="' . esc_attr($count_singular_label) . '"',
+            'data-calendar-count-plural="' . esc_attr($count_plural_label) . '"',
+            'data-calendar-count-empty="' . esc_attr($count_empty_label) . '"',
+        );
+
+        if ($display_current_week_only && !empty($week_days_keys)) {
+            $restrict_mobile_to_week = array_fill_keys($week_days_keys, true);
+            $calendar_attributes[] = 'data-calendar-week-only="1"';
+            $calendar_attributes[] = 'data-calendar-week-days="' . esc_attr(implode(',', $week_days_keys)) . '"';
+            $calendar_attributes[] = 'data-calendar-week-start="' . esc_attr($week_days_keys[0]) . '"';
+        } else {
+            $calendar_attributes[] = 'data-calendar-week-only="0"';
+        }
+
+        echo '<div ' . implode(' ', $calendar_attributes) . '>';
 
         if (!empty($settings['title'])) {
             echo '<h3 class="mj-member-events-calendar__title">' . esc_html($settings['title']) . '</h3>';
         }
 
-        echo '<div class="mj-member-events-calendar__toolbar">';
-        echo '<div class="mj-member-events-calendar__toolbar-left">';
-        echo '<div class="mj-member-events-calendar__nav-group">';
-        echo '<button type="button" class="mj-member-events-calendar__nav-button" data-calendar-nav="prev" aria-label="' . esc_attr__('Mois précédent', 'mj-member') . '"><span aria-hidden="true">&lsaquo;</span></button>';
-        echo '<span class="mj-member-events-calendar__month-chip" data-calendar-active-label aria-live="polite" aria-atomic="true">' . esc_html($initial_month_label) . '</span>';
-        echo '<button type="button" class="mj-member-events-calendar__nav-button" data-calendar-nav="next" aria-label="' . esc_attr__('Mois suivant', 'mj-member') . '"><span aria-hidden="true">&rsaquo;</span></button>';
-        echo '</div>';
-        echo '</div>';
-        echo '<div class="mj-member-events-calendar__toolbar-actions">';
-        if (!empty($sorted_filters)) {
-            echo '<div class="mj-member-events-calendar__filters" role="group" aria-label="' . esc_attr__('Filtrer par type d’événement', 'mj-member') . '">';
-            foreach ($sorted_filters as $filter_key => $filter_meta) {
-                $filter_label = isset($filter_meta['label']) && $filter_meta['label'] !== '' ? (string) $filter_meta['label'] : ucfirst((string) $filter_key);
-                echo '<label class="mj-member-events-calendar__filter">';
-                echo '<input type="checkbox" value="' . esc_attr($filter_key) . '" data-calendar-filter checked />';
-                echo '<span>' . esc_html($filter_label) . '</span>';
-                echo '</label>';
+        if ($show_toolbar_left || $show_toolbar_actions) {
+            echo '<div class="mj-member-events-calendar__toolbar">';
+            if ($show_toolbar_left) {
+                echo '<div class="mj-member-events-calendar__toolbar-left">';
+                echo '<div class="mj-member-events-calendar__nav-group">';
+                echo '<button type="button" class="mj-member-events-calendar__nav-button" data-calendar-nav="prev" aria-label="' . esc_attr__('Mois précédent', 'mj-member') . '"><span aria-hidden="true">&lsaquo;</span></button>';
+                echo '<span class="mj-member-events-calendar__month-chip" data-calendar-active-label aria-live="polite" aria-atomic="true">' . esc_html($initial_month_label) . '</span>';
+                echo '<button type="button" class="mj-member-events-calendar__nav-button" data-calendar-nav="next" aria-label="' . esc_attr__('Mois suivant', 'mj-member') . '"><span aria-hidden="true">&rsaquo;</span></button>';
+                echo '</div>';
+                echo '</div>';
+            }
+            if ($show_toolbar_actions) {
+                echo '<div class="mj-member-events-calendar__toolbar-actions">';
+                if (!empty($sorted_filters)) {
+                    echo '<div class="mj-member-events-calendar__filters" role="group" aria-label="' . esc_attr__('Filtrer par type d’événement', 'mj-member') . '">';
+                    foreach ($sorted_filters as $filter_key => $filter_meta) {
+                        $filter_label = isset($filter_meta['label']) && $filter_meta['label'] !== '' ? (string) $filter_meta['label'] : ucfirst((string) $filter_key);
+                        echo '<label class="mj-member-events-calendar__filter">';
+                        echo '<input type="checkbox" value="' . esc_attr($filter_key) . '" data-calendar-filter checked />';
+                        echo '<span>' . esc_html($filter_label) . '</span>';
+                        echo '</label>';
+                    }
+                    echo '</div>';
+                }
+                echo '<button type="button" class="mj-member-events-calendar__today-button" data-calendar-action="today">' . esc_html__('Aujourd\'hui', 'mj-member') . '</button>';
+                echo '</div>';
             }
             echo '</div>';
         }
-        echo '<button type="button" class="mj-member-events-calendar__today-button" data-calendar-action="today">' . esc_html__('Aujourd\'hui', 'mj-member') . '</button>';
-        echo '</div>';
-        echo '</div>';
 
         echo '<div class="mj-member-events-calendar__months">';
 
@@ -1123,12 +1231,14 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         'col' => $weekday_pointer,
                     );
 
-                    $day_list_entries[] = array(
-                        'day_number' => $day_number,
-                        'day_key' => $day_key,
-                        'events' => $events_for_day,
-                        'is_closure' => !empty($month_data['days'][$day_key]['is_closure']),
-                    );
+                    if (empty($restrict_mobile_to_week) || isset($restrict_mobile_to_week[$day_key])) {
+                        $day_list_entries[] = array(
+                            'day_number' => $day_number,
+                            'day_key' => $day_key,
+                            'events' => $events_for_day,
+                            'is_closure' => !empty($month_data['days'][$day_key]['is_closure']),
+                        );
+                    }
 
                     $day_number++;
                 }

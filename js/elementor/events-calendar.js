@@ -75,12 +75,83 @@
         if (config && config.todayMonth) {
             todayMonthKey = config.todayMonth;
         }
+        var activeIndex = 0;
+        var weekOnly = root.getAttribute('data-calendar-week-only') === '1';
+        var weekDaysAttr = root.getAttribute('data-calendar-week-days') || '';
+        var weekDays = weekOnly && weekDaysAttr ? weekDaysAttr.split(',').map(function(item) {
+            return item.trim();
+        }).filter(function(value) {
+            return value.length > 0;
+        }) : [];
+
+        if (weekOnly && weekDays.length) {
+            var weekDaySet = {};
+            weekDays.forEach(function(dayKey) {
+                weekDaySet[dayKey] = true;
+            });
+
+            var visibleMonths = [];
+            months.forEach(function(month) {
+                var keepMonth = false;
+                var weeks = toArray(month.querySelectorAll('.mj-member-events-calendar__week'));
+                weeks.forEach(function(week) {
+                    var containsTargetDay = false;
+                    var dayCells = toArray(week.querySelectorAll('[data-calendar-day]'));
+                    dayCells.forEach(function(dayCell) {
+                        var dayKey = dayCell.getAttribute('data-calendar-day');
+                        if (dayKey && Object.prototype.hasOwnProperty.call(weekDaySet, dayKey)) {
+                            containsTargetDay = true;
+                        }
+                    });
+
+                    if (!containsTargetDay) {
+                        week.style.display = 'none';
+                    } else {
+                        keepMonth = true;
+                    }
+                });
+
+                if (keepMonth) {
+                    visibleMonths.push(month);
+                } else {
+                    month.style.display = 'none';
+                    month.classList.remove('is-active');
+                }
+            });
+
+            if (visibleMonths.length) {
+                months = visibleMonths;
+                monthIndexMap = {};
+                months.forEach(function(month, idx) {
+                    var key = month.getAttribute('data-calendar-month');
+                    if (key) {
+                        monthIndexMap[key] = idx;
+                    }
+                });
+            }
+
+            activeIndex = 0;
+            root.setAttribute('data-calendar-preferred', '0');
+            if (prev) {
+                prev.disabled = true;
+                prev.style.display = 'none';
+            }
+            if (next) {
+                next.disabled = true;
+                next.style.display = 'none';
+            }
+            if (todayBtn) {
+                todayBtn.disabled = true;
+                todayBtn.style.display = 'none';
+            }
+        }
+
         var todayIndex = -1;
         if (todayMonthKey && Object.prototype.hasOwnProperty.call(monthIndexMap, todayMonthKey)) {
             todayIndex = monthIndexMap[todayMonthKey];
         }
 
-        var activeIndex = 0;
+        activeIndex = 0;
         var preferred = parseInt(root.getAttribute('data-calendar-preferred'), 10);
         if (!isNaN(preferred) && preferred >= 0 && preferred < months.length) {
             activeIndex = preferred;

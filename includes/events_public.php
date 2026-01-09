@@ -327,6 +327,8 @@ if (!function_exists('mj_member_output_events_widget_styles')) {
     .mj-member-events__grid{display:grid;gap:20px;}
     .mj-member-events__grid.is-grid{grid-template-columns:repeat(var(--mj-events-grid-columns,3),minmax(0,1fr));}
     .mj-member-events__grid.is-list{grid-template-columns:1fr;}
+    @media (max-width:1024px){.mj-member-events:not(.is-wide){--mj-events-grid-columns:2;}}
+    @media (max-width:680px){.mj-member-events:not(.is-wide){--mj-events-grid-columns:1;}}
     .mj-member-events__item{position:relative;display:flex;flex-direction:column;border:1px solid var(--mj-events-border);border-radius:var(--mj-events-radius);overflow:hidden;background:var(--mj-events-card-bg);transition:box-shadow 0.25s ease,transform 0.25s ease;}
     .mj-member-events__item.layout-horizontal{flex-direction:row;}
     .mj-member-events.is-wide .mj-member-events__item{flex-direction:row;min-height:280px;}
@@ -348,10 +350,8 @@ if (!function_exists('mj_member_output_events_widget_styles')) {
     .mj-member-events__badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;background:var(--mj-event-accent,var(--mj-events-accent));color:var(--mj-events-accent-contrast);font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;}
     .mj-member-events__badge.is-overlay{position:absolute;top:14px;right:14px;box-shadow:0 12px 28px rgba(15,23,42,0.18);pointer-events:none;}
     .mj-member-events__item-title{margin:0;font-size:1.15rem;font-weight:700;color:var(--mj-events-card-title);}
-    .mj-member-events__item-title a{text-decoration:none;color:inherit;}
+    .mj-member-events__item-title a{text-decoration:none;color:inherit;font:inherit;}
     .mj-member-events__item-title a:hover{color:var(--mj-event-accent,var(--mj-events-accent));}
-    .mj-member-events__meta{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:0.95rem;color:var(--mj-events-meta);}
-    .mj-member-events__meta-item{display:inline-flex;align-items:center;gap:6px;}
     .mj-member-events__recurring-summary{display:flex;flex-wrap:wrap;gap:6px 14px;margin:2px 0 0;font-size:0.92rem;color:var(--mj-events-meta);}
     .mj-member-events__recurring-heading{font-weight:700;color:var(--mj-events-card-title);}
     .mj-member-events__recurring-time{font-weight:500;color:var(--mj-events-meta);}
