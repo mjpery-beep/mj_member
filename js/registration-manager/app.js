@@ -1712,6 +1712,58 @@
                 });
         }, [api, showSuccess, showError, loadMemberDetails]);
 
+        var handleDeleteMemberRegistration = useCallback(function (registration) {
+            if (!registration || !registration.id) {
+                return;
+            }
+
+            if (!confirm(getString(strings, 'confirmDeleteRegistration', 'Voulez-vous vraiment supprimer cette inscription ?'))) {
+                return;
+            }
+
+            api.deleteRegistration(registration.id)
+                .then(function (result) {
+                    var successMessage = result && result.message
+                        ? result.message
+                        : getString(strings, 'success', 'Opération réussie');
+                    showSuccess(successMessage);
+
+                    setMemberRegistrations(function (current) {
+                        if (!Array.isArray(current)) {
+                            return current;
+                        }
+                        return current.filter(function (item) { return item.id !== registration.id; });
+                    });
+
+                    if (selectedMember && selectedMember.id) {
+                        loadMemberRegistrationsHistory(selectedMember.id);
+                        loadMemberDetails(selectedMember.id);
+                    }
+
+                    if (registration.eventId && selectedEvent && selectedEvent.id === registration.eventId) {
+                        loadRegistrations(selectedEvent.id);
+                    }
+
+                    loadEvents(pagination.page);
+                })
+                .catch(function (err) {
+                    showError(err.message);
+                });
+        }, [
+            api,
+            showSuccess,
+            strings,
+            setMemberRegistrations,
+            selectedMember,
+            loadMemberRegistrationsHistory,
+            loadMemberDetails,
+            selectedEvent,
+            loadRegistrations,
+            loadEvents,
+            pagination.page,
+            showError,
+        ]);
+
         var handleConsumePendingMemberEdit = useCallback(function () {
             setPendingMemberEdit(null);
         }, []);
@@ -2376,6 +2428,7 @@
                             onUpdateIdea: handleUpdateMemberIdea,
                             onUpdatePhoto: handleUpdateMemberPhoto,
                             onDeletePhoto: handleDeleteMemberPhoto,
+                            onDeleteRegistration: handleDeleteMemberRegistration,
                             onOpenMember: handleViewMemberFromRegistration,
                             pendingEditRequest: pendingMemberEdit,
                             onPendingEditHandled: handleConsumePendingMemberEdit,

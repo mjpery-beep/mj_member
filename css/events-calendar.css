@@ -81,29 +81,39 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 34px;
-    height: 34px;
+    width: 30px;
+    height: 30px;
     border: none;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.14);
-    color: inherit;
-    font-size: 1.2rem;
+    background: #ffffff;
+    color: var(--mj-events-calendar-nav-bg);
+    font-size: 1.05rem;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.2s ease, transform 0.2s ease;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
 }
 
 .mj-member-events-calendar__nav-button:hover,
 .mj-member-events-calendar__nav-button:focus {
-    background: rgba(255, 255, 255, 0.28);
+    background: var(--mj-events-calendar-accent-soft);
+    color: var(--mj-events-calendar-accent);
     transform: translateY(-1px);
 }
 
+.mj-member-events-calendar__nav-button:active {
+    background: var(--mj-events-calendar-accent);
+    color: #ffffff;
+    transform: translateY(-2px);
+}
+
 .mj-member-events-calendar__nav-button:disabled {
-    opacity: 0.45;
+    opacity: 0.55;
     cursor: not-allowed;
-    background: rgba(255, 255, 255, 0.12);
+    background: #e2e8f0;
+    color: var(--mj-events-calendar-event-time);
     transform: none;
+    box-shadow: none;
 }
 
 .mj-member-events-calendar__month-chip {
@@ -155,26 +165,37 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 9px 22px;
-    border-radius: 12px;
+    padding: 8px 18px;
+    border-radius: 10px;
     border: 1px solid var(--mj-events-calendar-border);
     background: #ffffff;
     color: var(--mj-events-calendar-nav-bg);
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.2s ease, box-shadow 0.2s ease;
+    transition: background 0.2s ease, box-shadow 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 .mj-member-events-calendar__today-button:hover,
 .mj-member-events-calendar__today-button:focus {
-    background: #f8fafc;
+    background: var(--mj-events-calendar-accent-soft);
+    color: var(--mj-events-calendar-accent);
+    border-color: var(--mj-events-calendar-accent);
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.mj-member-events-calendar__today-button:active {
+    background: var(--mj-events-calendar-accent);
+    color: #ffffff;
+    border-color: transparent;
 }
 
 .mj-member-events-calendar__today-button:disabled {
     opacity: 0.6;
     cursor: not-allowed;
     box-shadow: none;
+    background: #e2e8f0;
+    color: var(--mj-events-calendar-event-time);
+    border-color: #e2e8f0;
 }
 
 /* ==========================================================================
@@ -1011,8 +1032,8 @@
     }
     
     .mj-member-events-calendar__nav-button {
-        width: 32px;
-        height: 32px;
+        width: 28px;
+        height: 28px;
     }
     
     .mj-member-events-calendar__toolbar-actions {

@@ -209,6 +209,7 @@
         var onUpdatePhoto = typeof props.onUpdatePhoto === 'function' ? props.onUpdatePhoto : null;
         var onDeletePhoto = typeof props.onDeletePhoto === 'function' ? props.onDeletePhoto : null;
         var onDeleteMessage = typeof props.onDeleteMessage === 'function' ? props.onDeleteMessage : null;
+        var onDeleteRegistration = typeof props.onDeleteRegistration === 'function' ? props.onDeleteRegistration : null;
         var onOpenMember = typeof props.onOpenMember === 'function' ? props.onOpenMember : null;
         var pendingEditRequest = props.pendingEditRequest || null;
         var onPendingEditHandled = typeof props.onPendingEditHandled === 'function' ? props.onPendingEditHandled : null;
@@ -401,6 +402,7 @@
 
         var communicationEnabledLabel = getString(strings, 'communicationEnabled', 'Activé');
         var communicationDisabledLabel = getString(strings, 'communicationDisabled', 'Désactivé');
+        var allowDeleteRegistration = !!(config && config.allowDeleteRegistration);
 
         var guardian = member.guardian;
         var guardianEditUrl = guardian && guardian.id && config && config.adminMemberUrl
@@ -1621,15 +1623,27 @@
                                 ]);
                             }
 
+                            var deleteLabel = getString(strings, 'deleteRegistration', 'Supprimer');
+                            var canDelete = allowDeleteRegistration && onDeleteRegistration;
+
                             return h('div', { key: reg.id, class: 'mj-regmgr-registration-item' }, [
                                 h('div', { class: 'mj-regmgr-registration-item__info' }, [
                                     h('span', { class: 'mj-regmgr-registration-item__event' }, reg.eventTitle || 'Événement'),
                                     h('span', { class: 'mj-regmgr-registration-item__date' }, formatDate(reg.createdAt)),
                                     sessionsContent,
                                 ].filter(Boolean)),
-                                h('span', { 
-                                    class: classNames('mj-regmgr-badge', statusClasses[reg.status] || '')
-                                }, reg.statusLabel || reg.status),
+                                h('div', { class: 'mj-regmgr-registration-item__meta' }, [
+                                    h('span', {
+                                        class: classNames('mj-regmgr-badge', statusClasses[reg.status] || ''),
+                                    }, reg.statusLabel || reg.status),
+                                    canDelete && h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--ghost mj-btn--danger mj-btn--small',
+                                        onClick: function () { onDeleteRegistration(reg); },
+                                        title: deleteLabel,
+                                        'aria-label': deleteLabel,
+                                    }, deleteLabel),
+                                ].filter(Boolean)),
                             ]);
                         })
                     ),

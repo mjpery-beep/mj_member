@@ -4957,6 +4957,12 @@ input.mj-regmgr-search-input__field {
     border-radius: var(--regmgr-radius);
 }
 
+.mj-regmgr-registration-item__meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .mj-regmgr-registration-item__info {
     display: flex;
     flex-direction: column;
