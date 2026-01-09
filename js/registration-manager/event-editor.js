@@ -9,6 +9,7 @@
     var preact = global.preact;
     var hooks = global.preactHooks;
     var Utils = global.MjRegMgrUtils;
+    var Modals = global.MjRegMgrModals || null;
 
     if (!preact || !hooks || !Utils) {
         console.warn('[MjRegMgr] Missing dependencies for event-editor.js');
@@ -25,6 +26,7 @@
 
     var classNames = Utils.classNames;
     var rawGetString = Utils.getString;
+    var Modal = Modals && Modals.Modal ? Modals.Modal : null;
 
     var DEFAULT_STRINGS = {
         accentColor: 'Couleur pastel',
@@ -116,6 +118,33 @@
         recurringWeekday: 'Jour de semaine',
         recurringWeekly: 'Hebdomadaire',
         recurringWeekdaysHint: "Cochez les jours souhaites et definissez les plages horaires pour chaque jour (optionnel).",
+        recurringAgendaTitle: 'Occurrences planifiees',
+        recurringAgendaHint: 'Cliquez sur une date pour la desactiver ou la reactiver.',
+        recurringAgendaWeekLabel: 'Semaine du {date}',
+        recurringAgendaWeekOccurrences: '{count} occurrence(s)',
+        recurringAgendaWeekCancelled: '{count} annulee(s)',
+        recurringAgendaWeekExcluded: '{count} exclue(s)',
+        recurringAgendaToggleShow: 'Afficher les occurrences',
+        recurringAgendaToggleHide: 'Masquer les occurrences',
+        recurringAgendaTotalLabel: 'Occurrences',
+        recurringAgendaCancelledLabel: 'Annulees',
+        recurringAgendaExcludedLabel: 'Exclusions',
+        recurringAgendaEmpty: 'Configurez la recurrence pour visualiser les occurrences.',
+        recurringAgendaDisabled: 'Exclu',
+        recurringAgendaCancelled: 'Annule',
+        recurringAgendaCancelPrompt: "Motif d'annulation (optionnel)",
+        recurringAgendaExceptionTitle: "Gestion de l occurrence",
+        recurringAgendaExceptionSubtitle: 'Choisissez comment traiter cette occurrence.',
+        recurringAgendaExceptionCancelOption: 'Annuler la seance (afficher un motif)',
+        recurringAgendaExceptionExcludeOption: 'Exclure de la serie (masquer sans motif)',
+        recurringAgendaExceptionReasonLabel: "Motif d annulation",
+        recurringAgendaExceptionReasonPlaceholder: 'Animateur absent, meteo, ...',
+        recurringAgendaExceptionMissingReason: 'Indiquez un motif pour confirmer l annulation.',
+        recurringAgendaExceptionDateLabel: 'Date',
+        recurringAgendaExceptionTimeLabel: 'Horaire',
+        recurringAgendaExceptionCancel: 'Fermer',
+        recurringAgendaExceptionSave: 'Enregistrer',
+        recurringAgendaExceptionRestore: 'Reactiver l occurrence',
         registrationDeadline: "Date limite d inscription",
         registrationDeadlineHint: "Laisser vide pour ne pas fixer de date limite.",
         registrationSection: 'Inscriptions et acces',
@@ -245,6 +274,103 @@
         return [];
     }
 
+    function normalizeScheduleExceptionEntry(entry) {
+        if (entry === null || typeof entry === 'undefined') {
+            return null;
+        }
+
+        var dateCandidate = '';
+        var reasonCandidate = '';
+
+        if (typeof entry === 'string' || typeof entry === 'number') {
+            dateCandidate = String(entry);
+        } else if (typeof entry === 'object') {
+            if (Array.isArray(entry)) {
+                if (entry.length > 0) {
+                    dateCandidate = entry[0];
+                }
+                if (entry.length > 1) {
+                    reasonCandidate = entry[1];
+                }
+            } else {
+                if (Object.prototype.hasOwnProperty.call(entry, 'date')) {
+                    dateCandidate = entry.date;
+                }
+                if (Object.prototype.hasOwnProperty.call(entry, 'reason')) {
+                    reasonCandidate = entry.reason;
+                }
+            }
+        }
+
+        var normalizedDate = normalizeIsoDate(dateCandidate);
+        if (!normalizedDate) {
+            return null;
+        }
+
+        var normalizedReason = '';
+        if (typeof reasonCandidate === 'string') {
+            normalizedReason = reasonCandidate.replace(/\s+/g, ' ').trim();
+            if (normalizedReason.length > 200) {
+                normalizedReason = normalizedReason.slice(0, 200);
+            }
+        }
+
+        return normalizedReason !== ''
+            ? { date: normalizedDate, reason: normalizedReason }
+            : { date: normalizedDate };
+    }
+
+    function normalizeScheduleExceptions(value) {
+        var map = {};
+        ensureArray(value).forEach(function (item) {
+            var entry = normalizeScheduleExceptionEntry(item);
+            if (!entry) {
+                return;
+            }
+            if (map[entry.date]) {
+                if (!map[entry.date].reason && entry.reason) {
+                    map[entry.date].reason = entry.reason;
+                }
+                return;
+            }
+            map[entry.date] = {
+                date: entry.date,
+                reason: entry.reason ? entry.reason : '',
+            };
+        });
+
+        return Object.keys(map)
+            .sort()
+            .map(function (dateKey) {
+                var stored = map[dateKey];
+                if (stored.reason) {
+                    return { date: dateKey, reason: stored.reason };
+                }
+                return { date: dateKey };
+            });
+    }
+
+    function findScheduleExceptionIndex(list, date) {
+        if (!Array.isArray(list) || !date) {
+            return -1;
+        }
+        for (var idx = 0; idx < list.length; idx += 1) {
+            var entry = list[idx];
+            if (entry && entry.date === date) {
+                return idx;
+            }
+        }
+        return -1;
+    }
+
+    function scheduleExceptionsToMap(list) {
+        var map = {};
+        normalizeScheduleExceptions(list).forEach(function (entry) {
+            map[entry.date] = entry.reason ? { reason: entry.reason } : { reason: '' };
+        });
+        return map;
+    }
+
     function parseSeriesItems(raw) {
         if (!raw) {
             return [];
@@ -256,11 +382,394 @@
             try {
                 var parsed = JSON.parse(raw);
                 return Array.isArray(parsed) ? parsed : [];
-            } catch (e) {
+            } catch (error) {
                 return [];
             }
         }
         return [];
+    }
+
+    var WEEKDAY_KEYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    var WEEKDAY_NUMBERS = {
+        monday: 1,
+        tuesday: 2,
+        wednesday: 3,
+        thursday: 4,
+        friday: 5,
+        saturday: 6,
+        sunday: 7,
+    };
+    var ORDINAL_INDEX = {
+        first: 1,
+        second: 2,
+        third: 3,
+        fourth: 4,
+        last: -1,
+    };
+    var MAX_PREVIEW_OCCURRENCES = 120;
+    var MAX_PREVIEW_ITERATIONS = 520;
+
+    function normalizeIsoDate(value) {
+        if (!value) {
+            return '';
+        }
+        var text = String(value).trim();
+        var match = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(text);
+        if (!match) {
+            return '';
+        }
+        return match[1] + '-' + match[2] + '-' + match[3];
+    }
+
+    function parseIsoDate(value) {
+        var normalized = normalizeIsoDate(value);
+        if (!normalized) {
+            return null;
+        }
+        var segments = normalized.split('-');
+        var year = parseInt(segments[0], 10);
+        var month = parseInt(segments[1], 10) - 1;
+        var day = parseInt(segments[2], 10);
+        if (isNaN(year) || isNaN(month) || isNaN(day)) {
+            return null;
+        }
+        return new Date(year, month, day);
+    }
+
+    function normalizeTime(value) {
+        if (!value) {
+            return '';
+        }
+        var text = String(value).trim();
+        var match = /^([0-9]{1,2}):([0-9]{2})$/.exec(text);
+        if (!match) {
+            return '';
+        }
+        var hours = parseInt(match[1], 10);
+        var minutes = parseInt(match[2], 10);
+        if (isNaN(hours) || isNaN(minutes)) {
+            return '';
+        }
+        if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+            return '';
+        }
+        var paddedHours = hours < 10 ? '0' + hours : String(hours);
+        var paddedMinutes = minutes < 10 ? '0' + minutes : String(minutes);
+        return paddedHours + ':' + paddedMinutes;
+    }
+
+    function pickTimeFromWeekdayTimes(weekdayTimes, field, preferEarliest) {
+        if (!weekdayTimes || typeof weekdayTimes !== 'object') {
+            return '';
+        }
+        var best = '';
+        Object.keys(weekdayTimes).forEach(function (weekday) {
+            if (!Object.prototype.hasOwnProperty.call(weekdayTimes, weekday)) {
+                return;
+            }
+            var entry = weekdayTimes[weekday];
+            if (!entry || typeof entry !== 'object') {
+                return;
+            }
+            var candidate = normalizeTime(entry[field]);
+            if (!candidate) {
+                return;
+            }
+            if (!best) {
+                best = candidate;
+                return;
+            }
+            if (preferEarliest && candidate < best) {
+                best = candidate;
+                return;
+            }
+            if (!preferEarliest && candidate > best) {
+                best = candidate;
+            }
+        });
+        return best;
+    }
+
+    function sanitizeExceptionReason(value) {
+        if (!value) {
+            return '';
+        }
+        var text = String(value).replace(/\s+/g, ' ').trim();
+        if (text.length > 200) {
+            text = text.slice(0, 200);
+        }
+        return text;
+    }
+
+    function extractTimeFromDateValue(value) {
+        if (typeof value !== 'string') {
+            return '';
+        }
+        if (value.length >= 16) {
+            return normalizeTime(value.slice(11, 16));
+        }
+        return '';
+    }
+
+    function formatIsoDate(date) {
+        if (!(date instanceof Date) || isNaN(date.getTime())) {
+            return '';
+        }
+        var year = date.getFullYear();
+        var month = String(date.getMonth() + 1).padStart(2, '0');
+        var day = String(date.getDate()).padStart(2, '0');
+        return year + '-' + month + '-' + day;
+    }
+
+    function formatDateDisplay(date) {
+        if (!(date instanceof Date) || isNaN(date.getTime())) {
+            return '';
+        }
+        if (typeof date.toLocaleDateString === 'function') {
+            try {
+                return date.toLocaleDateString(undefined, {
+                    weekday: 'long',
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                });
+            } catch (localeError) {
+                return formatIsoDate(date);
+            }
+        }
+        return formatIsoDate(date);
+    }
+
+    function formatTimeValue(value) {
+        if (!value) {
+            return '';
+        }
+        var text = String(value).trim();
+        if (/^[0-9]{2}:[0-9]{2}:[0-9]{2}$/.test(text)) {
+            return text.slice(0, 5);
+        }
+        if (/^[0-9]{2}:[0-9]{2}$/.test(text)) {
+            return text;
+        }
+        return '';
+    }
+
+    function formatTimeRange(start, end) {
+        var startLabel = formatTimeValue(start);
+        var endLabel = formatTimeValue(end);
+        if (startLabel && endLabel) {
+            return startLabel + ' - ' + endLabel;
+        }
+        if (startLabel) {
+            return startLabel;
+        }
+        if (endLabel) {
+            return endLabel;
+        }
+        return '';
+    }
+
+    function addDays(date, amount) {
+        var next = new Date(date.getTime());
+        next.setDate(next.getDate() + amount);
+        return next;
+    }
+
+    function addMonths(date, amount) {
+        var next = new Date(date.getTime());
+        next.setMonth(next.getMonth() + amount);
+        return next;
+    }
+
+    function startOfWeek(date) {
+        var base = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        var day = base.getDay();
+        var diff = day === 0 ? -6 : 1 - day;
+        base.setDate(base.getDate() + diff);
+        return base;
+    }
+
+    function weekdayNumberFromDate(date) {
+        var day = date.getDay();
+        return day === 0 ? 7 : day;
+    }
+
+    function weekdayToNumber(key) {
+        if (!key) {
+            return null;
+        }
+        var normalized = String(key).toLowerCase();
+        var number = WEEKDAY_NUMBERS[normalized];
+        return typeof number === 'number' ? number : null;
+    }
+
+    function resolveMonthlyOccurrence(monthCursor, ordinalKey, weekdayNum) {
+        var ordinalValue = ORDINAL_INDEX[ordinalKey] || 1;
+        var monthStart = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
+
+        if (ordinalValue === -1) {
+            var lastDay = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0);
+            while (weekdayNumberFromDate(lastDay) !== weekdayNum) {
+                lastDay.setDate(lastDay.getDate() - 1);
+            }
+            return new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate());
+        }
+
+        var count = 0;
+        var candidate = new Date(monthStart.getTime());
+        while (candidate.getMonth() === monthStart.getMonth()) {
+            if (weekdayNumberFromDate(candidate) === weekdayNum) {
+                count += 1;
+                if (count === ordinalValue) {
+                    return new Date(candidate.getFullYear(), candidate.getMonth(), candidate.getDate());
+                }
+            }
+            candidate.setDate(candidate.getDate() + 1);
+        }
+
+        return null;
+    }
+
+    function createAgendaEntry(dateObj, startTime, endTime, exceptionsMap) {
+        var isoDate = formatIsoDate(dateObj);
+        var exceptionMeta = isoDate && exceptionsMap ? exceptionsMap[isoDate] : null;
+        var isExcluded = !!(exceptionMeta);
+        var reason = exceptionMeta && typeof exceptionMeta.reason === 'string' ? exceptionMeta.reason : '';
+
+        var entry = {
+            date: isoDate,
+            dateLabel: formatDateDisplay(dateObj),
+            timeLabel: formatTimeRange(startTime, endTime),
+            disabled: isExcluded,
+        };
+
+        if (reason) {
+            entry.reason = reason;
+        }
+
+        return entry;
+    }
+
+    function buildRecurringWeeklyAgenda(config) {
+        var weekdays = ensureArray(config.weekdays).map(function (weekday) {
+            return weekdayToNumber(weekday);
+        }).filter(function (value) {
+            return typeof value === 'number';
+        }).sort(function (left, right) {
+            return left - right;
+        });
+
+        if (!weekdays.length) {
+            return [];
+        }
+
+        var occurrences = [];
+        var weekCursor = startOfWeek(config.startDate);
+        var safety = 0;
+
+        while (occurrences.length < config.maxOccurrences && safety < MAX_PREVIEW_ITERATIONS) {
+            var currentWeek = new Date(weekCursor.getTime());
+
+            for (var i = 0; i < weekdays.length; i++) {
+                var weekdayNum = weekdays[i];
+                var dayOffset = weekdayNum - 1;
+                var occurrenceDate = addDays(currentWeek, dayOffset);
+
+                if (occurrenceDate < config.startDate) {
+                    continue;
+                }
+                if (occurrenceDate > config.untilDate) {
+                    return occurrences;
+                }
+
+                var weekdayKey = WEEKDAY_KEYS[weekdayNum - 1] || 'monday';
+                var timeOverride = config.weekdayTimes[weekdayKey] || {};
+                var startTime = timeOverride.start || config.defaultStartTime;
+                var endTime = timeOverride.end || config.defaultEndTime;
+
+                occurrences.push(createAgendaEntry(occurrenceDate, startTime, endTime, config.exceptionsMap));
+
+                if (occurrences.length >= config.maxOccurrences) {
+                    return occurrences;
+                }
+            }
+
+            weekCursor = addDays(weekCursor, config.interval * 7);
+            safety += 1;
+        }
+
+        return occurrences;
+    }
+
+    function buildRecurringMonthlyAgenda(config) {
+        var weekdayNum = weekdayToNumber(config.monthWeekday);
+        if (weekdayNum === null) {
+            weekdayNum = 6;
+        }
+        var occurrences = [];
+        var monthCursor = new Date(config.startDate.getFullYear(), config.startDate.getMonth(), 1);
+        var safety = 0;
+
+        while (occurrences.length < config.maxOccurrences && safety < MAX_PREVIEW_ITERATIONS) {
+            var occurrenceDate = resolveMonthlyOccurrence(monthCursor, config.monthOrdinal, weekdayNum);
+            if (!occurrenceDate) {
+                monthCursor = addMonths(monthCursor, config.interval);
+                safety += 1;
+                continue;
+            }
+
+            if (occurrenceDate < config.startDate) {
+                monthCursor = addMonths(monthCursor, config.interval);
+                safety += 1;
+                continue;
+            }
+
+            if (occurrenceDate > config.untilDate) {
+                break;
+            }
+
+            occurrences.push(createAgendaEntry(occurrenceDate, config.defaultStartTime, config.defaultEndTime, config.exceptionsMap));
+
+            monthCursor = addMonths(monthCursor, config.interval);
+            safety += 1;
+        }
+
+        return occurrences;
+    }
+
+    function buildRecurringAgenda(config) {
+        var startDate = parseIsoDate(config.startDate);
+        if (!startDate) {
+            return [];
+        }
+
+        var untilDate = parseIsoDate(config.untilDate);
+        if (!untilDate) {
+            untilDate = addMonths(startDate, 6);
+        }
+        untilDate.setHours(23, 59, 59, 999);
+
+        var exceptionsMap = scheduleExceptionsToMap(config.exceptions);
+
+        var baseConfig = {
+            startDate: startDate,
+            untilDate: untilDate,
+            interval: Math.max(1, parseInt(config.interval, 10) || 1),
+            defaultStartTime: config.startTime || '',
+            defaultEndTime: config.endTime || '',
+            weekdayTimes: config.weekdayTimes || {},
+            exceptionsMap: exceptionsMap,
+            maxOccurrences: config.maxOccurrences || MAX_PREVIEW_OCCURRENCES,
+            monthOrdinal: config.monthOrdinal || 'first',
+            monthWeekday: config.monthWeekday || 'saturday',
+        };
+
+        if (config.frequency === 'monthly') {
+            return buildRecurringMonthlyAgenda(baseConfig);
+        }
+
+        baseConfig.weekdays = config.weekdays || [];
+        return buildRecurringWeeklyAgenda(baseConfig);
     }
 
     function normalizeEmojiSearchValue(value) {
@@ -288,7 +797,7 @@
                 var label = categoryDef.label ? String(categoryDef.label) : key;
                 var rawItems = Array.isArray(categoryDef.items) ? categoryDef.items : [];
 
-                var items = rawItems.map(function (rawItem, itemIndex) {
+                var items = rawItems.map(function (rawItem) {
                     var symbol = '';
                     var name = '';
                     var keywords = [];
@@ -2138,9 +2647,127 @@
         var currentWeekdays = ensureArray(form.event_recurring_weekdays);
         var showDateRange = !!meta.scheduleShowDateRange;
         var weekdayTimes = meta.scheduleWeekdayTimes || {};
+        var scheduleExceptions = normalizeScheduleExceptions(meta.scheduleExceptions);
+        var _a = useState(true);
+        var isAgendaCollapsed = _a[0];
+        var setAgendaCollapsed = _a[1];
+        var onOpenExceptionDialog = typeof props.onOpenExceptionDialog === 'function' ? props.onOpenExceptionDialog : function () {};
 
         var frequency = form.event_recurring_frequency || 'weekly';
         var interval = form.event_recurring_interval || 1;
+
+        var toggleAgendaCollapsed = useCallback(function () {
+            setAgendaCollapsed(function (prev) { return !prev; });
+        }, []);
+
+        var agendaOccurrences = useMemo(function () {
+            if (scheduleMode !== 'recurring') {
+                return [];
+            }
+            return buildRecurringAgenda({
+                startDate: form.event_recurring_start_date,
+                startTime: form.event_recurring_start_time,
+                endTime: form.event_recurring_end_time,
+                frequency: frequency,
+                interval: interval,
+                weekdays: currentWeekdays,
+                weekdayTimes: weekdayTimes,
+                monthOrdinal: form.event_recurring_month_ordinal,
+                monthWeekday: form.event_recurring_month_weekday,
+                untilDate: form.event_recurring_until,
+                exceptions: scheduleExceptions,
+            });
+        }, [scheduleMode, form.event_recurring_start_date, form.event_recurring_start_time, form.event_recurring_end_time, frequency, interval, JSON.stringify(currentWeekdays), JSON.stringify(weekdayTimes), form.event_recurring_month_ordinal, form.event_recurring_month_weekday, form.event_recurring_until, JSON.stringify(scheduleExceptions)]);
+
+
+        var agendaCounts = useMemo(function () {
+            var info = {
+                total: agendaOccurrences.length,
+                cancelled: 0,
+                excluded: 0,
+            };
+            agendaOccurrences.forEach(function (occurrence) {
+                if (!occurrence || !occurrence.disabled) {
+                    return;
+                }
+                if (occurrence.reason) {
+                    info.cancelled += 1;
+                } else {
+                    info.excluded += 1;
+                }
+            });
+            return info;
+        }, [agendaOccurrences]);
+        var agendaWeeks = useMemo(function () {
+            if (!agendaOccurrences.length) {
+                return [];
+            }
+            var weekMap = {};
+            agendaOccurrences.forEach(function (occurrence) {
+                if (!occurrence || !occurrence.date) {
+                    return;
+                }
+                var parsedDate = parseIsoDate(occurrence.date);
+                if (!parsedDate) {
+                    return;
+                }
+                var weekStartDate = startOfWeek(parsedDate);
+                var weekKey = formatIsoDate(weekStartDate);
+                if (!weekKey) {
+                    return;
+                }
+                if (!weekMap[weekKey]) {
+                    weekMap[weekKey] = {
+                        key: weekKey,
+                        weekStart: weekStartDate,
+                        occurrences: [],
+                        cancelled: 0,
+                        excluded: 0,
+                    };
+                }
+                var bucket = weekMap[weekKey];
+                bucket.occurrences.push(Object.assign({}, occurrence));
+                if (occurrence.disabled) {
+                    if (occurrence.reason) {
+                        bucket.cancelled += 1;
+                    } else {
+                        bucket.excluded += 1;
+                    }
+                }
+            });
+            return Object.keys(weekMap).sort().map(function (weekKey) {
+                var group = weekMap[weekKey];
+                group.total = group.occurrences.length;
+                return group;
+            });
+        }, [agendaOccurrences]);
+        var cancelledCount = agendaCounts.cancelled;
+        var excludedCount = agendaCounts.excluded;
+        var hasOccurrences = agendaCounts.total > 0;
+        var toggleLabel = isAgendaCollapsed
+            ? getString(strings, 'recurringAgendaToggleShow', 'Afficher les occurrences')
+            : getString(strings, 'recurringAgendaToggleHide', 'Masquer les occurrences');
+        if (hasOccurrences) {
+            toggleLabel = toggleLabel + ' (' + agendaCounts.total + ')';
+        }
+        var agendaSummary = hasOccurrences
+            ? (function () {
+                var parts = [];
+                var totalLabel = getString(strings, 'recurringAgendaTotalLabel', 'Occurrences');
+                var cancelledLabel = getString(strings, 'recurringAgendaCancelledLabel', 'Annulees');
+                var excludedLabel = getString(strings, 'recurringAgendaExcludedLabel', 'Exclusions');
+                parts.push(totalLabel + ': ' + agendaCounts.total);
+                if (cancelledCount > 0) {
+                    parts.push(cancelledLabel + ': ' + cancelledCount);
+                }
+                if (excludedCount > 0) {
+                    parts.push(excludedLabel + ': ' + excludedCount);
+                }
+                return parts.join(' · ');
+            })()
+            : '';
+        var showAgendaSummary = !!agendaSummary && hasOccurrences && isAgendaCollapsed;
+        var shouldShowAgendaList = !isAgendaCollapsed;
 
         return h('div', { class: 'mj-regmgr-event-editor__section' }, [
             h('div', { class: 'mj-regmgr-event-editor__section-header' }, [
@@ -2272,6 +2899,86 @@
                         onChange: function (e) { onChangeMeta('scheduleShowDateRange', e.target.checked); },
                     }),
                 ]),
+            ]),
+
+            scheduleMode === 'recurring' && h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full mj-regmgr-event-editor__agenda' }, [
+                h('div', { class: 'mj-regmgr-agenda__legend' }, [
+                    h('span', { class: 'mj-regmgr-form-label' }, getString(strings, 'recurringAgendaTitle', 'Occurrences planifiees')),
+                    h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'recurringAgendaHint', 'Cliquez sur une date pour la desactiver ou la reactiver.')),
+                ]),
+                h('div', { class: 'mj-regmgr-agenda__controls' }, [
+                    showAgendaSummary ? h('p', { class: 'mj-regmgr-agenda__summary' }, agendaSummary) : null,
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--ghost mj-btn--small mj-regmgr-agenda__toggle',
+                        onClick: toggleAgendaCollapsed,
+                        'aria-expanded': (!isAgendaCollapsed).toString(),
+                    }, toggleLabel),
+                ]),
+                shouldShowAgendaList
+                    ? (hasOccurrences && agendaWeeks.length > 0
+                        ? h('div', { class: 'mj-regmgr-agenda', role: 'list' }, agendaWeeks.map(function (weekGroup) {
+                            var weekLabelTemplate = getString(strings, 'recurringAgendaWeekLabel', 'Semaine du {date}');
+                            var weekLabelDate = formatDateDisplay(weekGroup.weekStart);
+                            var weekLabel = weekLabelTemplate.replace('{date}', weekLabelDate || weekGroup.key);
+                            var weekSummaryParts = [];
+                            var occurrencesLabel = getString(strings, 'recurringAgendaWeekOccurrences', '{count} occurrence(s)').replace('{count}', String(weekGroup.total));
+                            weekSummaryParts.push(occurrencesLabel);
+                            if (weekGroup.cancelled > 0) {
+                                weekSummaryParts.push(getString(strings, 'recurringAgendaWeekCancelled', '{count} annulee(s)').replace('{count}', String(weekGroup.cancelled)));
+                            }
+                            if (weekGroup.excluded > 0) {
+                                weekSummaryParts.push(getString(strings, 'recurringAgendaWeekExcluded', '{count} exclue(s)').replace('{count}', String(weekGroup.excluded)));
+                            }
+                            var weekSummary = weekSummaryParts.join(' · ');
+                            return h('section', {
+                                key: weekGroup.key,
+                                class: 'mj-regmgr-agenda__week',
+                                role: 'group',
+                                'aria-label': weekSummary ? weekLabel + ' (' + weekSummary + ')' : weekLabel,
+                            }, [
+                                h('header', { class: 'mj-regmgr-agenda__week-header' }, [
+                                    h('span', { class: 'mj-regmgr-agenda__week-label' }, weekLabel),
+                                    weekSummary ? h('span', { class: 'mj-regmgr-agenda__week-summary' }, weekSummary) : null,
+                                ]),
+                                h('div', { class: 'mj-regmgr-agenda__week-items', role: 'list' }, weekGroup.occurrences.map(function (occurrence, index) {
+                                    var itemKey = occurrence.date || (weekGroup.key + '-' + index);
+                                    var badge = null;
+                                    if (occurrence.disabled) {
+                                        var badgeText = occurrence.reason
+                                            ? getString(strings, 'recurringAgendaCancelled', 'Annule')
+                                            : getString(strings, 'recurringAgendaDisabled', 'Exclu');
+                                        badge = h('span', { class: 'mj-regmgr-agenda__badge' }, badgeText);
+                                    }
+                                    return h('button', {
+                                        key: itemKey,
+                                        type: 'button',
+                                        class: classNames('mj-regmgr-agenda__item', {
+                                            'mj-regmgr-agenda__item--disabled': occurrence.disabled,
+                                            'mj-regmgr-agenda__item--cancelled': occurrence.disabled && !!occurrence.reason,
+                                            'mj-regmgr-agenda__item--excluded': occurrence.disabled && !occurrence.reason,
+                                        }),
+                                        onClick: function () {
+                                            if (occurrence.date) {
+                                                onOpenExceptionDialog(Object.assign({}, occurrence, {
+                                                    weekLabel: weekLabel,
+                                                    weekSummary: weekSummary,
+                                                }));
+                                            }
+                                        },
+                                        'aria-pressed': occurrence.disabled ? 'true' : 'false',
+                                        role: 'listitem',
+                                    }, [
+                                        h('span', { class: 'mj-regmgr-agenda__date' }, occurrence.dateLabel || occurrence.date || ''),
+                                        occurrence.timeLabel ? h('span', { class: 'mj-regmgr-agenda__time' }, occurrence.timeLabel) : null,
+                                        badge,
+                                        occurrence.disabled && occurrence.reason ? h('span', { class: 'mj-regmgr-agenda__note' }, occurrence.reason) : null,
+                                    ]);
+                                })),
+                            ]);
+                        }))
+                        : h('div', { class: 'mj-regmgr-agenda mj-regmgr-agenda--empty' }, getString(strings, 'recurringAgendaEmpty', 'Configurez la recurrence pour visualiser les occurrences.')))
+                    : null,
             ]),
 
             scheduleMode === 'recurring' && frequency === 'weekly' && h('div', { class: 'mj-regmgr-event-editor__weekdays' }, [
@@ -2433,6 +3140,24 @@
         var coverPreview = _coverPreview[0];
         var setCoverPreview = _coverPreview[1];
 
+        var _exceptionDialogState = useState({
+            isOpen: false,
+            date: '',
+            dateLabel: '',
+            timeLabel: '',
+            reason: '',
+            mode: 'exclude',
+            weekLabel: '',
+            weekSummary: '',
+            initiallyDisabled: false,
+        });
+        var exceptionDialogState = _exceptionDialogState[0];
+        var setExceptionDialogState = _exceptionDialogState[1];
+
+        var _exceptionDialogError = useState('');
+        var exceptionDialogError = _exceptionDialogError[0];
+        var setExceptionDialogError = _exceptionDialogError[1];
+
         var mediaFrameRef = useRef(null);
         var previousTypeRef = useRef(initialValues && initialValues.event_type ? initialValues.event_type : '');
         var manageLocationEnabled = !!(props.canManageLocations && typeof props.onManageLocation === 'function');
@@ -2473,6 +3198,12 @@
         var attendanceAllMembersId = useMemo(function () {
             return 'mj-regmgr-attendance-all-members-' + Math.random().toString(36).slice(2);
         }, []);
+        var exceptionRadioName = useMemo(function () {
+            return 'mj-regmgr-agenda-exception-' + Math.random().toString(36).slice(2);
+        }, []);
+        var exceptionReasonFieldId = useMemo(function () {
+            return 'mj-regmgr-agenda-reason-' + Math.random().toString(36).slice(2);
+        }, []);
 
         useEffect(function () {
             if (!data) {
@@ -2486,6 +3217,14 @@
             }
             var nextValues = data && data.values ? normalizeEventFormValues(data.values) : {};
             var nextMeta = data.meta ? JSON.parse(JSON.stringify(data.meta)) : {};
+            nextMeta.scheduleExceptions = normalizeScheduleExceptions(nextMeta.scheduleExceptions);
+            if (nextMeta.schedulePayload && typeof nextMeta.schedulePayload === 'object') {
+                var payloadClone = Object.assign({}, nextMeta.schedulePayload);
+                if (Array.isArray(payloadClone.exceptions)) {
+                    payloadClone.exceptions = normalizeScheduleExceptions(payloadClone.exceptions);
+                }
+                nextMeta.schedulePayload = payloadClone;
+            }
             setFormState(nextValues);
             setMetaState(nextMeta);
             setSeriesItems(parseSeriesItems(nextValues.event_series_items));
@@ -2654,6 +3393,157 @@
             setIsDirty(true);
         }, []);
 
+        var applyScheduleException = useCallback(function (date, action, reason) {
+            var normalized = normalizeIsoDate(date);
+            if (!normalized) {
+                return;
+            }
+            setMetaState(function (prev) {
+                var next = Object.assign({}, prev);
+                var current = normalizeScheduleExceptions(next.scheduleExceptions);
+                var index = findScheduleExceptionIndex(current, normalized);
+
+                if (action === 'keep') {
+                    if (index !== -1) {
+                        current.splice(index, 1);
+                    }
+                } else if (action === 'exclude') {
+                    if (index === -1) {
+                        current.push({ date: normalized });
+                    } else {
+                        current[index] = { date: normalized };
+                    }
+                } else if (action === 'cancel') {
+                    var sanitized = sanitizeExceptionReason(reason);
+                    if (!sanitized) {
+                        sanitized = '';
+                    }
+                    if (index === -1) {
+                        current.push({ date: normalized, reason: sanitized });
+                    } else {
+                        current[index] = { date: normalized, reason: sanitized };
+                    }
+                }
+
+                next.scheduleExceptions = normalizeScheduleExceptions(current);
+                return next;
+            });
+            setIsDirty(true);
+        }, [setMetaState, setIsDirty]);
+
+        var legacyToggleException = useCallback(function (occurrence) {
+            if (!occurrence || !occurrence.date) {
+                return;
+            }
+            var normalized = normalizeIsoDate(occurrence.date);
+            if (!normalized) {
+                return;
+            }
+            setMetaState(function (prev) {
+                var next = Object.assign({}, prev);
+                var current = normalizeScheduleExceptions(next.scheduleExceptions);
+                var index = findScheduleExceptionIndex(current, normalized);
+                if (index === -1) {
+                    var reason = '';
+                    if (typeof window !== 'undefined' && typeof window.prompt === 'function') {
+                        var promptLabel = getString(strings, 'recurringAgendaCancelPrompt', "Motif d'annulation (optionnel)");
+                        var response = window.prompt(promptLabel, '');
+                        reason = sanitizeExceptionReason(response);
+                    }
+                    current.push(reason ? { date: normalized, reason: reason } : { date: normalized });
+                } else {
+                    current.splice(index, 1);
+                }
+                next.scheduleExceptions = normalizeScheduleExceptions(current);
+                return next;
+            });
+            setIsDirty(true);
+        }, [setMetaState, setIsDirty, strings]);
+
+        var closeExceptionDialog = useCallback(function () {
+            setExceptionDialogState({
+                isOpen: false,
+                date: '',
+                dateLabel: '',
+                timeLabel: '',
+                reason: '',
+                mode: 'exclude',
+                weekLabel: '',
+                weekSummary: '',
+                initiallyDisabled: false,
+            });
+            setExceptionDialogError('');
+        }, []);
+
+        var openExceptionDialog = useCallback(function (occurrence) {
+            if (!occurrence || !occurrence.date) {
+                return;
+            }
+            if (!Modal) {
+                legacyToggleException(occurrence);
+                return;
+            }
+            var initialMode = 'exclude';
+            if (occurrence.disabled) {
+                initialMode = occurrence.reason ? 'cancel' : 'exclude';
+            }
+            setExceptionDialogState({
+                isOpen: true,
+                date: occurrence.date,
+                dateLabel: occurrence.dateLabel || occurrence.date,
+                timeLabel: occurrence.timeLabel || '',
+                reason: occurrence.reason || '',
+                mode: initialMode,
+                weekLabel: occurrence.weekLabel || '',
+                weekSummary: occurrence.weekSummary || '',
+                initiallyDisabled: !!occurrence.disabled,
+            });
+            setExceptionDialogError('');
+        }, [Modal, legacyToggleException]);
+
+        var handleExceptionModeChange = useCallback(function (mode) {
+            setExceptionDialogState(function (prev) {
+                return Object.assign({}, prev, { mode: mode });
+            });
+            setExceptionDialogError('');
+        }, []);
+
+        var handleExceptionReasonChange = useCallback(function (value) {
+            setExceptionDialogState(function (prev) {
+                return Object.assign({}, prev, { reason: value });
+            });
+            setExceptionDialogError('');
+        }, []);
+
+        var handleExceptionRestore = useCallback(function () {
+            var state = exceptionDialogState;
+            if (!state.isOpen || !state.date) {
+                closeExceptionDialog();
+                return;
+            }
+            applyScheduleException(state.date, 'keep', '');
+            closeExceptionDialog();
+        }, [exceptionDialogState, applyScheduleException, closeExceptionDialog]);
+
+        var handleExceptionSave = useCallback(function () {
+            var state = exceptionDialogState;
+            if (!state.isOpen || !state.date) {
+                closeExceptionDialog();
+                return;
+            }
+            if (state.mode === 'cancel') {
+                var sanitizedReason = sanitizeExceptionReason(state.reason);
+                if (!sanitizedReason) {
+                    setExceptionDialogError(getString(strings, 'recurringAgendaExceptionMissingReason', 'Indiquez un motif pour confirmer l annulation.'));
+                    return;
+                }
+                applyScheduleException(state.date, 'cancel', sanitizedReason);
+            } else {
+                applyScheduleException(state.date, 'exclude', '');
+            }
+            closeExceptionDialog();
+        }, [exceptionDialogState, applyScheduleException, closeExceptionDialog, strings]);
+
         var handleSeriesAdd = useCallback(function () {
             setSeriesItems(function (prev) {
                 var next = prev.slice();
@@ -2809,6 +3699,7 @@
             }
             var payloadForm = Object.assign({}, formState);
             payloadForm.event_series_items = JSON.stringify(seriesItems);
+            var normalizedScheduleExceptions = normalizeScheduleExceptions(metaState.scheduleExceptions);
             if (Object.prototype.hasOwnProperty.call(payloadForm, 'event_emoji')) {
                 payloadForm.event_emoji = sanitizeEmojiValue(payloadForm.event_emoji);
             }
@@ -2825,6 +3716,37 @@
                     return parseInt(id, 10) || 0;
                 });
             }
+            payloadForm.event_schedule_exceptions = normalizedScheduleExceptions;
+            var resolvedRecurringStart = normalizeTime(payloadForm.event_recurring_start_time);
+            if (!resolvedRecurringStart) {
+                resolvedRecurringStart = pickTimeFromWeekdayTimes(metaState.scheduleWeekdayTimes, 'start', true);
+            }
+            if (!resolvedRecurringStart && metaState.schedulePayload && typeof metaState.schedulePayload === 'object') {
+                resolvedRecurringStart = normalizeTime(metaState.schedulePayload.start_time);
+            }
+            if (!resolvedRecurringStart) {
+                resolvedRecurringStart = extractTimeFromDateValue(payloadForm.event_date_start);
+            }
+            if (resolvedRecurringStart) {
+                payloadForm.event_recurring_start_time = resolvedRecurringStart;
+            }
+
+            var resolvedRecurringEnd = normalizeTime(payloadForm.event_recurring_end_time);
+            if (!resolvedRecurringEnd) {
+                resolvedRecurringEnd = pickTimeFromWeekdayTimes(metaState.scheduleWeekdayTimes, 'end', false);
+            }
+            if (!resolvedRecurringEnd && metaState.schedulePayload && typeof metaState.schedulePayload === 'object') {
+                resolvedRecurringEnd = normalizeTime(metaState.schedulePayload.end_time);
+            }
+            if (!resolvedRecurringEnd) {
+                resolvedRecurringEnd = extractTimeFromDateValue(payloadForm.event_date_end);
+            }
+            if (!resolvedRecurringEnd && resolvedRecurringStart) {
+                resolvedRecurringEnd = resolvedRecurringStart;
+            }
+            if (resolvedRecurringEnd) {
+                payloadForm.event_recurring_end_time = resolvedRecurringEnd;
+            }
             var payloadMeta = Object.assign({}, metaState);
             if (payloadMeta && typeof payloadMeta === 'object') {
                 var attendanceFlag = !!payloadForm.event_attendance_show_all_members;
@@ -2837,6 +3759,18 @@
                         attendance_show_all_members: attendanceFlag,
                     };
                 }
+                if (resolvedRecurringStart || resolvedRecurringEnd) {
+                    var existingPayload = payloadMeta.schedulePayload && typeof payloadMeta.schedulePayload === 'object' ? payloadMeta.schedulePayload : {};
+                    payloadMeta.schedulePayload = Object.assign({}, existingPayload);
+                    if (resolvedRecurringStart) {
+                        payloadMeta.schedulePayload.start_time = resolvedRecurringStart;
+                    }
+                    if (resolvedRecurringEnd) {
+                        payloadMeta.schedulePayload.end_time = resolvedRecurringEnd;
+                    }
+                    payloadMeta.schedulePayload.exceptions = normalizedScheduleExceptions;
+                }
+                payloadMeta.scheduleExceptions = normalizedScheduleExceptions;
             }
             var result = onSubmit(payloadForm, payloadMeta);
             if (result && typeof result.then === 'function') {
@@ -3285,6 +4219,7 @@
                     onChangeForm: updateFormValue,
                     onChangeMeta: updateMetaValue,
                     onToggleWeekday: toggleWeekday,
+                    onOpenExceptionDialog: openExceptionDialog,
                     onWeekdayTimeChange: updateWeekdayTime,
                     seriesItems: seriesItems,
                     onAddSeriesItem: handleSeriesAdd,
@@ -3292,6 +4227,93 @@
                     onRemoveSeriesItem: handleSeriesRemove,
                 }),
 
+            ]),
+
+            Modal && h(Modal, {
+                isOpen: exceptionDialogState.isOpen,
+                onClose: closeExceptionDialog,
+                title: getString(strings, 'recurringAgendaExceptionTitle', "Gestion de l occurrence"),
+                size: 'medium',
+                footer: h('div', { class: 'mj-regmgr-agenda-modal__actions' }, [
+                    exceptionDialogState.initiallyDisabled ? h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--ghost',
+                        style: { marginRight: 'auto' },
+                        onClick: handleExceptionRestore,
+                    }, getString(strings, 'recurringAgendaExceptionRestore', "Reactiver l occurrence")) : null,
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--ghost',
+                        onClick: closeExceptionDialog,
+                    }, getString(strings, 'recurringAgendaExceptionCancel', 'Fermer')),
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--primary',
+                        onClick: handleExceptionSave,
+                    }, getString(strings, 'recurringAgendaExceptionSave', 'Enregistrer')),
+                ]),
+            }, [
+                h('div', { class: 'mj-regmgr-agenda-modal' }, [
+                    h('p', { class: 'mj-regmgr-agenda-modal__subtitle' }, getString(strings, 'recurringAgendaExceptionSubtitle', 'Choisissez comment traiter cette occurrence.')),
+                    (exceptionDialogState.weekLabel || exceptionDialogState.weekSummary) && h('p', { class: 'mj-regmgr-agenda-modal__subtitle' }, [
+                        exceptionDialogState.weekLabel || '',
+                        exceptionDialogState.weekLabel && exceptionDialogState.weekSummary ? ' · ' : '',
+                        exceptionDialogState.weekSummary || '',
+                    ]),
+                    h('div', { class: 'mj-regmgr-agenda-modal__details' }, [
+                        h('span', { class: 'mj-regmgr-agenda-modal__details-label' }, getString(strings, 'recurringAgendaExceptionDateLabel', 'Date')),
+                        h('span', null, exceptionDialogState.dateLabel || exceptionDialogState.date || ''),
+                        exceptionDialogState.timeLabel ? h(Fragment, null, [
+                            h('span', { class: 'mj-regmgr-agenda-modal__details-label' }, getString(strings, 'recurringAgendaExceptionTimeLabel', 'Horaire')),
+                            h('span', null, exceptionDialogState.timeLabel),
+                        ]) : null,
+                    ]),
+                    h('fieldset', { class: 'mj-regmgr-agenda-modal__options' }, [
+                        h('label', {
+                            class: classNames('mj-regmgr-agenda-modal__option', {
+                                'mj-regmgr-agenda-modal__option--active': exceptionDialogState.mode === 'exclude',
+                            }),
+                        }, [
+                            h('input', {
+                                type: 'radio',
+                                name: exceptionRadioName,
+                                value: 'exclude',
+                                checked: exceptionDialogState.mode === 'exclude',
+                                onChange: function () { handleExceptionModeChange('exclude'); },
+                            }),
+                            h('div', { class: 'mj-regmgr-agenda-modal__option-content' }, [
+                                h('span', { class: 'mj-regmgr-agenda-modal__option-title' }, getString(strings, 'recurringAgendaExceptionExcludeOption', 'Exclure de la serie (masquer sans motif)')),
+                            ]),
+                        ]),
+                        h('label', {
+                            class: classNames('mj-regmgr-agenda-modal__option', {
+                                'mj-regmgr-agenda-modal__option--active': exceptionDialogState.mode === 'cancel',
+                            }),
+                        }, [
+                            h('input', {
+                                type: 'radio',
+                                name: exceptionRadioName,
+                                value: 'cancel',
+                                checked: exceptionDialogState.mode === 'cancel',
+                                onChange: function () { handleExceptionModeChange('cancel'); },
+                            }),
+                            h('div', { class: 'mj-regmgr-agenda-modal__option-content' }, [
+                                h('span', { class: 'mj-regmgr-agenda-modal__option-title' }, getString(strings, 'recurringAgendaExceptionCancelOption', 'Annuler la seance (afficher un motif)')),
+                            ]),
+                        ]),
+                    ]),
+                    exceptionDialogState.mode === 'cancel' && h('div', { class: 'mj-regmgr-agenda-modal__reason' }, [
+                        h('label', { htmlFor: exceptionReasonFieldId }, getString(strings, 'recurringAgendaExceptionReasonLabel', 'Motif d annulation')),
+                        h('textarea', {
+                            id: exceptionReasonFieldId,
+                            class: 'mj-regmgr-agenda-modal__textarea',
+                            value: exceptionDialogState.reason,
+                            placeholder: getString(strings, 'recurringAgendaExceptionReasonPlaceholder', 'Animateur absent, meteo, ...'),
+                            onInput: function (e) { handleExceptionReasonChange(e.target.value); },
+                        }),
+                    ]),
+                    exceptionDialogError ? h('p', { class: 'mj-regmgr-agenda-modal__error' }, exceptionDialogError) : null,
+                ]),
             ]),
 
         ]);

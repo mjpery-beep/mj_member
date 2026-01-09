@@ -6,6 +6,9 @@ use Mj\Member\Classes\Crud\MjEvents;
 use function array_key_exists;
 use function json_decode;
 use function sanitize_text_field;
+use function is_array;
+use function is_string;
+use function preg_match;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -170,7 +173,103 @@ final class EventFormDataMapper
         $values['prix'] = isset($formData['event_price']) ? (float) $formData['event_price'] : $values['prix'];
         $values['description'] = isset($formData['event_description']) ? (string) $formData['event_description'] : $values['description'];
 
+        if (array_key_exists('event_schedule_exceptions', $formData)) {
+            $values['schedule_exceptions'] = self::sanitizeExceptionsField($formData['event_schedule_exceptions']);
+        }
+
         return $values;
+    }
+
+    /**
+     * @param mixed $value
+     * @return array<int,string>
+     */
+    private static function sanitizeExceptionsField($value): array
+    {
+        if (is_string($value) && $value !== '') {
+            $decoded = json_decode($value, true);
+            if (is_array($decoded)) {
+                $value = $decoded;
+            }
+        }
+
+        if ($value instanceof \Traversable) {
+            $value = iterator_to_array($value);
+        }
+
+        if (!is_array($value)) {
+            $value = array($value);
+        }
+
+        $timezone = wp_timezone();
+        $normalized = array();
+
+        foreach ($value as $candidate) {
+            if ($candidate === null) {
+                continue;
+            }
+
+            if (is_object($candidate)) {
+                $candidate = get_object_vars($candidate);
+            }
+
+            $date_raw = '';
+            $reason_raw = '';
+
+            if (is_array($candidate)) {
+                if (isset($candidate['date'])) {
+                    $date_raw = $candidate['date'];
+                } elseif (isset($candidate[0])) {
+                    $date_raw = $candidate[0];
+                }
+                if (isset($candidate['reason'])) {
+                    $reason_raw = $candidate['reason'];
+                }
+            } else {
+                $date_raw = $candidate;
+            }
+
+            if (!is_scalar($date_raw)) {
+                continue;
+            }
+
+            $date_text = sanitize_text_field((string) $date_raw);
+            if ($date_text === '') {
+                continue;
+            }
+
+            $date = \DateTime::createFromFormat('Y-m-d', $date_text, $timezone);
+            if (!$date instanceof \DateTime) {
+                continue;
+            }
+
+            $key = $date->format('Y-m-d');
+
+            $reason_value = '';
+            if (is_scalar($reason_raw)) {
+                $reason_value = sanitize_text_field((string) $reason_raw);
+                if ($reason_value !== '') {
+                    $reason_value = wp_strip_all_tags($reason_value, false);
+                    if ($reason_value !== '') {
+                        if (function_exists('mb_substr')) {
+                            $reason_value = mb_substr($reason_value, 0, 200);
+                        } else {
+                            $reason_value = substr($reason_value, 0, 200);
+                        }
+                        $reason_value = trim($reason_value);
+                    }
+                }
+            }
+
+            $entry = array('date' => $key);
+            if ($reason_value !== '') {
+                $entry['reason'] = $reason_value;
+            }
+
+            $normalized[$key] = $entry;
+        }
+
+        return array_values($normalized);
     }
 
     private static function sanitizeEmoji($value): string

@@ -45,7 +45,7 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         if (function_exists('mj_member_output_events_widget_styles')) {
             mj_member_output_events_widget_styles();
         }
-        return array('mj-member-components', 'mj-member-events-widget-inline');
+        return array('mj-member-events-widget');
     }
 
     protected function register_controls() {

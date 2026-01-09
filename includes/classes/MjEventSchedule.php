@@ -401,6 +401,41 @@ class MjEventSchedule {
             $occurrences = self::build_weekly_occurrences($first_start, $first_end, $payload, $interval, $limit);
         }
 
+        $exceptions = self::normalize_recurrence_exceptions(isset($payload['exceptions']) ? $payload['exceptions'] : array());
+        if (!empty($exceptions)) {
+            foreach ($occurrences as &$occurrence) {
+                if (!is_array($occurrence) || empty($occurrence['start'])) {
+                    continue;
+                }
+
+                $start = (string) $occurrence['start'];
+                $date = substr($start, 0, 10);
+                if ($date === '' || !isset($exceptions[$date])) {
+                    continue;
+                }
+
+                $reason = '';
+                if (isset($exceptions[$date]['reason']) && is_string($exceptions[$date]['reason'])) {
+                    $reason = $exceptions[$date]['reason'];
+                }
+
+                $occurrence['is_cancelled'] = true;
+                $occurrence['status'] = 'cancelled';
+                if ($reason !== '') {
+                    $occurrence['cancellation_reason'] = $reason;
+                }
+
+                if (!isset($occurrence['meta']) || !is_array($occurrence['meta'])) {
+                    $occurrence['meta'] = array();
+                }
+                $occurrence['meta']['status'] = 'cancelled';
+                if ($reason !== '') {
+                    $occurrence['meta']['cancellation_reason'] = $reason;
+                }
+            }
+            unset($occurrence);
+        }
+
         return $occurrences;
     }
 
@@ -581,6 +616,97 @@ class MjEventSchedule {
         }
 
         return $occurrences;
+    }
+
+    /**
+     * @param mixed $value
+     * @return array<string,array<string,string>>
+     */
+    private static function normalize_recurrence_exceptions($value) {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            if (is_array($decoded)) {
+                $value = $decoded;
+            }
+        }
+
+        if (!is_array($value)) {
+            return array();
+        }
+
+        $timezone = wp_timezone();
+        $normalized = array();
+
+        foreach ($value as $item) {
+            if ($item === null) {
+                continue;
+            }
+
+            if (is_object($item)) {
+                $item = get_object_vars($item);
+            }
+
+            $date_raw = '';
+            $reason_raw = '';
+
+            if (is_array($item)) {
+                if (isset($item['date'])) {
+                    $date_raw = $item['date'];
+                } elseif (isset($item[0])) {
+                    $date_raw = $item[0];
+                }
+                if (isset($item['reason'])) {
+                    $reason_raw = $item['reason'];
+                }
+            } else {
+                $date_raw = $item;
+            }
+
+            if (!is_scalar($date_raw)) {
+                continue;
+            }
+
+            $raw_date = sanitize_text_field((string) $date_raw);
+            if ($raw_date === '') {
+                continue;
+            }
+
+            $date = DateTime::createFromFormat('Y-m-d', $raw_date, $timezone);
+            if (!$date instanceof DateTime) {
+                continue;
+            }
+
+            $key = $date->format('Y-m-d');
+
+            $reason_value = '';
+            if (is_scalar($reason_raw)) {
+                $reason_value = sanitize_text_field((string) $reason_raw);
+                if ($reason_value !== '') {
+                    $reason_value = wp_strip_all_tags($reason_value, false);
+                    if ($reason_value !== '') {
+                        if (function_exists('mb_substr')) {
+                            $reason_value = mb_substr($reason_value, 0, 200);
+                        } else {
+                            $reason_value = substr($reason_value, 0, 200);
+                        }
+                        $reason_value = trim($reason_value);
+                    }
+                }
+            }
+
+            $entry = array('date' => $key);
+            if ($reason_value !== '') {
+                $entry['reason'] = $reason_value;
+            }
+
+            $normalized[$key] = $entry;
+
+            if (count($normalized) >= 730) {
+                break;
+            }
+        }
+
+        return $normalized;
     }
 
     /**

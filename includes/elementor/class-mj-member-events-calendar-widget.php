@@ -679,6 +679,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     $normalized_entry['label'] = (string) $occurrence['label'];
                 }
 
+                if (!empty($occurrence['is_cancelled'])) {
+                    $normalized_entry['is_cancelled'] = true;
+                }
+                if (!empty($occurrence['cancellation_reason']) && !is_array($occurrence['cancellation_reason'])) {
+                    $normalized_entry['cancellation_reason'] = sanitize_text_field((string) $occurrence['cancellation_reason']);
+                }
+
                 $normalized_occurrences[] = $normalized_entry;
             }
 
@@ -776,6 +783,17 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     $schedule_label = $time_label;
                 }
 
+                $occurrence_is_cancelled = !empty($occurrence['is_cancelled']);
+                $occurrence_cancellation_reason = '';
+                if ($occurrence_is_cancelled) {
+                    if (isset($occurrence['cancellation_reason']) && !is_array($occurrence['cancellation_reason'])) {
+                        $occurrence_cancellation_reason = trim((string) $occurrence['cancellation_reason']);
+                    }
+                    if ($occurrence_cancellation_reason === '') {
+                        continue;
+                    }
+                }
+
                 $months[$month_key]['days'][$day_key]['events'][] = array(
                     'id' => $occurrence_key,
                     'title' => $title,
@@ -805,6 +823,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     'accent_color' => isset($palette['base']) ? $palette['base'] : '',
                     'schedule_mode' => $schedule_mode,
                     'recurring_schedule_preview' => $recurring_schedule_preview,
+                    'is_cancelled' => $occurrence_is_cancelled,
+                    'cancellation_reason' => $occurrence_cancellation_reason,
                 );
 
                 $has_any_event = true;
@@ -842,6 +862,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                     'cover' => $primary_cover,
                                     'permalink' => $permalink,
                                     'palette' => $palette,
+                                    'is_cancelled' => $occurrence_is_cancelled,
+                                    'cancellation_reason' => $occurrence_cancellation_reason,
                                 );
 
                                 $marker = $segment_start_dt;
@@ -1165,6 +1187,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             'cover' => isset($multi_event['cover']) ? $multi_event['cover'] : '',
                             'permalink' => isset($multi_event['permalink']) ? $multi_event['permalink'] : '',
                             'palette' => isset($multi_event['palette']) && is_array($multi_event['palette']) ? $multi_event['palette'] : array(),
+                            'is_cancelled' => !empty($multi_event['is_cancelled']),
+                            'cancellation_reason' => !empty($multi_event['cancellation_reason']) ? (string) $multi_event['cancellation_reason'] : '',
                         );
 
                         $segment_cursor = $segment_cursor->modify('+' . $span_days . ' day');
@@ -1263,6 +1287,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             if (!empty($event_entry['is_closure'])) {
                                 $event_classes[] = 'is-closure';
                             }
+                            if (!empty($event_entry['is_cancelled'])) {
+                                $event_classes[] = 'is-cancelled';
+                            }
                             if ($next_event_pointer && $next_event_pointer['event_key'] === $event_entry['id']) {
                                 $event_classes[] = 'is-next';
                             }
@@ -1285,6 +1312,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 echo '<a' . $trigger_attributes . ' href="' . esc_url($event_href) . '">';
                             }
                             $has_type_label = !empty($event_entry['type_label']);
+                            $event_badges_markup = self::build_event_badges_markup($event_entry, 'grid');
                             $event_emoji = '';
                             if (isset($event_entry['emoji']) && $event_entry['emoji'] !== '') {
                                 $event_emoji = (string) $event_entry['emoji'];
@@ -1311,7 +1339,20 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             if ($meta_label !== '') {
                                 echo '<span class="mj-member-events-calendar__event-meta">' . esc_html($meta_label) . '</span>';
                             }
+                            if (!empty($event_entry['is_cancelled'])) {
+                                $cancellation_reason = isset($event_entry['cancellation_reason']) ? trim((string) $event_entry['cancellation_reason']) : '';
+                                echo '<span class="mj-member-events-calendar__event-cancellation">';
+                                echo '<span class="mj-member-events-calendar__event-cancellation-label">' . esc_html__('Annulé', 'mj-member') . '</span>';
+                                if ($cancellation_reason !== '') {
+                                    echo '<span class="mj-member-events-calendar__event-cancellation-reason">' . esc_html($cancellation_reason) . '</span>';
+                                }
+                                echo '</span>';
+                            }
                             echo '</span>';
+
+                            if ($event_badges_markup !== '') {
+                                echo $event_badges_markup;
+                            }
 
                             if ($has_type_label) {
                                 echo '<span class="mj-member-events-calendar__event-type mj-member-events-calendar__event-type--border">' . esc_html($event_entry['type_label']) . '</span>';
@@ -1465,6 +1506,15 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 }
 
                                 echo '<div class="mj-member-events-calendar__event-preview-body">';
+                                if (!empty($event_entry['is_cancelled'])) {
+                                    $preview_cancellation_reason = isset($event_entry['cancellation_reason']) ? trim((string) $event_entry['cancellation_reason']) : '';
+                                    echo '<div class="mj-member-events-calendar__event-preview-cancellation">';
+                                    echo '<span class="mj-member-events-calendar__event-preview-cancellation-label">' . esc_html__('Événement annulé', 'mj-member') . '</span>';
+                                    if ($preview_cancellation_reason !== '') {
+                                        echo '<span class="mj-member-events-calendar__event-preview-cancellation-reason">' . esc_html($preview_cancellation_reason) . '</span>';
+                                    }
+                                    echo '</div>';
+                                }
                                 if ($price_label !== '') {
                                     echo '<div class="mj-member-events-calendar__event-preview-line mj-member-events-calendar__event-preview-price"><span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Tarif', 'mj-member') . '</span><span class="mj-member-events-calendar__event-preview-value">' . esc_html($price_label) . '</span></div>';
                                 }
@@ -1583,6 +1633,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         if ($mobile_is_closure) {
                             $mobile_classes[] = 'is-closure';
                         }
+                        if (!empty($mobile_event['is_cancelled'])) {
+                            $mobile_classes[] = 'is-cancelled';
+                        }
 
                         $mobile_style = self::build_event_style_attribute($mobile_event);
                         $mobile_cover_sources = array();
@@ -1648,8 +1701,21 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         } elseif (!empty($mobile_event['time'])) {
                             $mobile_meta = (string) $mobile_event['time'];
                         }
+                        $mobile_badges_markup = self::build_event_badges_markup($mobile_event, 'mobile');
                         if ($mobile_meta !== '') {
                             echo '<span class="mj-member-events-calendar__mobile-meta">' . esc_html($mobile_meta) . '</span>';
+                        }
+                        if ($mobile_badges_markup !== '') {
+                            echo $mobile_badges_markup;
+                        }
+                        if (!empty($mobile_event['is_cancelled'])) {
+                            $mobile_cancellation_reason = isset($mobile_event['cancellation_reason']) ? trim((string) $mobile_event['cancellation_reason']) : '';
+                            echo '<span class="mj-member-events-calendar__mobile-cancellation">';
+                            echo '<span class="mj-member-events-calendar__mobile-cancellation-label">' . esc_html__('Annulé', 'mj-member') . '</span>';
+                            if ($mobile_cancellation_reason !== '') {
+                                echo '<span class="mj-member-events-calendar__mobile-cancellation-reason">' . esc_html($mobile_cancellation_reason) . '</span>';
+                            }
+                            echo '</span>';
                         }
                         echo '</div>';
                         echo '</' . $mobile_tag . '>';
@@ -1757,6 +1823,74 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         }
 
         return $label;
+    }
+
+    /**
+     * Build badge markup for calendar event entries.
+     */
+    private static function build_event_badges_markup($event_entry, $context = 'grid') {
+        if (!is_array($event_entry)) {
+            return '';
+        }
+
+        if (!empty($event_entry['is_closure'])) {
+            return '';
+        }
+
+        $badges = array();
+
+        if (!empty($event_entry['is_free_participation'])) {
+            $badges[] = array(
+                'label' => __('Participation libre', 'mj-member'),
+                'modifier' => 'free',
+            );
+        }
+
+        if (!empty($event_entry['requires_validation'])) {
+            $badges[] = array(
+                'label' => __('Validation requise', 'mj-member'),
+                'modifier' => 'validation',
+            );
+        }
+
+        if (empty($badges)) {
+            return '';
+        }
+
+        $wrapper_classes = array('mj-member-events-calendar__badges');
+        if ($context === 'mobile') {
+            $wrapper_classes[] = 'mj-member-events-calendar__badges--mobile';
+        } else {
+            $wrapper_classes[] = 'mj-member-events-calendar__badges--grid';
+        }
+
+        $badge_markup_parts = array();
+
+        foreach ($badges as $badge) {
+            $label = isset($badge['label']) ? (string) $badge['label'] : '';
+            if ($label === '') {
+                continue;
+            }
+
+            $badge_classes = array('mj-member-events-calendar__badge');
+            $modifier = isset($badge['modifier']) ? (string) $badge['modifier'] : '';
+            if ($modifier !== '') {
+                if (function_exists('sanitize_html_class')) {
+                    $modifier = sanitize_html_class($modifier);
+                }
+                if ($modifier !== '') {
+                    $badge_classes[] = 'mj-member-events-calendar__badge--' . $modifier;
+                }
+            }
+
+            $badge_markup_parts[] = '<span class="' . esc_attr(implode(' ', $badge_classes)) . '">' . esc_html($label) . '</span>';
+        }
+
+        if (empty($badge_markup_parts)) {
+            return '';
+        }
+
+        return '<span class="' . esc_attr(implode(' ', $wrapper_classes)) . '">' . implode('', $badge_markup_parts) . '</span>';
     }
 
     /**

@@ -26,6 +26,9 @@ $layout_mode_series = isset($template_data['layout_mode_series']) ? sanitize_key
 $layout_mode_recurring = isset($template_data['layout_mode_recurring']) ? sanitize_key((string) $template_data['layout_mode_recurring']) : 'cards';
 $show_icons = !empty($template_data['show_icons']);
 $highlight_today = !empty($template_data['highlight_today']);
+$show_next_occurrence_label = array_key_exists('show_next_occurrence_label', $template_data)
+    ? (bool) $template_data['show_next_occurrence_label']
+    : true;
 $empty_message = isset($template_data['empty_message']) && $template_data['empty_message'] !== ''
     ? (string) $template_data['empty_message']
     : __('Aucun horaire disponible pour cet événement.', 'mj-member');
@@ -680,6 +683,7 @@ $extra_context = array(
     'entries' => $entries,
     'is_preview' => $is_preview,
     'has_event' => !empty($event_for_schedule),
+    'show_next_occurrence_label' => $show_next_occurrence_label,
     'show_register_button' => $register_button_url !== '',
     'register_button' => array(
         'label' => $register_button_label,

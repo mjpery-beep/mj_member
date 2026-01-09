@@ -824,6 +824,7 @@ function mj_regmgr_get_event_editor() {
         'scheduleMode' => isset($form_values['schedule_mode']) ? $form_values['schedule_mode'] : 'fixed',
         'schedulePayload' => isset($form_values['schedule_payload']) ? $form_values['schedule_payload'] : array(),
         'scheduleWeekdayTimes' => isset($form_values['schedule_weekday_times']) ? $form_values['schedule_weekday_times'] : array(),
+        'scheduleExceptions' => isset($form_values['schedule_exceptions']) ? array_values($form_values['schedule_exceptions']) : array(),
         'scheduleShowDateRange' => !empty($form_values['schedule_show_date_range']),
         'registrationPayload' => isset($form_values['registration_payload']) ? $form_values['registration_payload'] : array(),
     );
@@ -916,6 +917,9 @@ function mj_regmgr_update_event() {
     if (isset($meta['scheduleShowDateRange'])) {
         $form_values['schedule_show_date_range'] = mj_regmgr_to_bool($meta['scheduleShowDateRange'], false);
     }
+    if (isset($meta['scheduleExceptions'])) {
+        $form_values['schedule_exceptions'] = mj_regmgr_sanitize_recurrence_exceptions($meta['scheduleExceptions']);
+    }
     if (isset($meta['registrationPayload'])) {
         if (is_array($meta['registrationPayload'])) {
             $form_values['registration_payload'] = $meta['registrationPayload'];
@@ -985,6 +989,7 @@ function mj_regmgr_update_event() {
         'scheduleMode' => isset($updated_form_values['schedule_mode']) ? $updated_form_values['schedule_mode'] : 'fixed',
         'schedulePayload' => isset($updated_form_values['schedule_payload']) ? $updated_form_values['schedule_payload'] : array(),
         'scheduleWeekdayTimes' => isset($updated_form_values['schedule_weekday_times']) ? $updated_form_values['schedule_weekday_times'] : array(),
+        'scheduleExceptions' => isset($updated_form_values['schedule_exceptions']) ? array_values($updated_form_values['schedule_exceptions']) : array(),
         'scheduleShowDateRange' => !empty($updated_form_values['schedule_show_date_range']),
         'registrationPayload' => isset($updated_form_values['registration_payload']) ? $updated_form_values['registration_payload'] : array(),
     );
@@ -2351,6 +2356,7 @@ function mj_regmgr_prepare_event_form_values($event, array $schedule_weekdays, a
     $form_values['schedule_series_items'] = array();
     $form_values['schedule_show_date_range'] = false;
     $form_values['schedule_weekday_times'] = array();
+    $form_values['schedule_exceptions'] = array();
     $form_values['occurrence_selection_mode'] = isset($defaults['occurrence_selection_mode']) ? $defaults['occurrence_selection_mode'] : 'member_choice';
     $form_values['recurrence_until'] = '';
     $form_values['schedule_recurring_start_date'] = '';
@@ -2487,6 +2493,21 @@ function mj_regmgr_fill_schedule_values($event, array $form_values, array $sched
         $form_values['schedule_recurring_start_time'] = isset($payload['start_time']) ? (string) $payload['start_time'] : $default_start_time;
         $form_values['schedule_recurring_end_time'] = isset($payload['end_time']) ? (string) $payload['end_time'] : $default_end_time;
         $form_values['schedule_show_date_range'] = !empty($payload['show_date_range']);
+        $form_values['schedule_exceptions'] = mj_regmgr_sanitize_recurrence_exceptions(isset($payload['exceptions']) ? $payload['exceptions'] : array());
+
+        if (!isset($payload['until']) || !is_string($payload['until']) || $payload['until'] === '') {
+            $until_source = isset($form_values['recurrence_until']) ? (string) $form_values['recurrence_until'] : '';
+            if ($until_source !== '') {
+                $timezone = wp_timezone();
+                $until_value = mj_regmgr_parse_recurrence_until($until_source, $form_values['schedule_recurring_end_time'], $timezone);
+                if ($until_value !== '') {
+                    $payload['until'] = $until_value;
+                    $form_values['schedule_payload'] = $payload;
+                }
+            }
+        } else {
+            $form_values['schedule_payload'] = $payload;
+        }
 
         if ($frequency === 'weekly') {
             $weekdays = array();
@@ -2537,6 +2558,7 @@ function mj_regmgr_fill_schedule_values($event, array $form_values, array $sched
     } elseif ($schedule_mode === 'range') {
         $form_values['schedule_range_start'] = isset($payload['start']) ? (string) $payload['start'] : $form_values['date_debut'];
         $form_values['schedule_range_end'] = isset($payload['end']) ? (string) $payload['end'] : $form_values['date_fin'];
+        $form_values['schedule_exceptions'] = array();
     } elseif ($schedule_mode === 'series') {
         $series_items = array();
         if (isset($payload['items']) && is_array($payload['items'])) {
@@ -2560,6 +2582,7 @@ function mj_regmgr_fill_schedule_values($event, array $form_values, array $sched
         $form_values['schedule_series_items'] = $series_items;
         $form_values['schedule_range_start'] = '';
         $form_values['schedule_range_end'] = '';
+        $form_values['schedule_exceptions'] = array();
     }
 
     if (!empty($form_values['date_debut'])) {
@@ -2957,6 +2980,126 @@ function mj_regmgr_sanitize_weekday_times($weekday_times, array $schedule_weekda
 
     return $sanitized;
 }
+
+function mj_regmgr_sanitize_recurrence_exceptions($value) {
+    if (is_string($value) && $value !== '') {
+        $decoded = json_decode($value, true);
+        if (is_array($decoded)) {
+            $value = $decoded;
+        }
+    }
+
+    if ($value instanceof \Traversable) {
+        $value = iterator_to_array($value);
+    }
+
+    if (!is_array($value)) {
+        return array();
+    }
+
+    $timezone = wp_timezone();
+    $normalized = array();
+
+    foreach ($value as $item) {
+        if ($item === null) {
+            continue;
+        }
+
+        $candidate = $item;
+        if (is_object($candidate)) {
+            $candidate = get_object_vars($candidate);
+        }
+
+        $date_raw = '';
+        $reason_raw = '';
+
+        if (is_array($candidate)) {
+            if (isset($candidate['date'])) {
+                $date_raw = $candidate['date'];
+            } elseif (isset($candidate[0])) {
+                $date_raw = $candidate[0];
+            }
+            if (isset($candidate['reason'])) {
+                $reason_raw = $candidate['reason'];
+            }
+        } else {
+            $date_raw = $candidate;
+        }
+
+        if (!is_scalar($date_raw)) {
+            continue;
+        }
+
+        $raw_date = sanitize_text_field((string) $date_raw);
+        if ($raw_date === '') {
+            continue;
+        }
+
+        $date = \DateTime::createFromFormat('Y-m-d', $raw_date, $timezone);
+        if (!$date instanceof \DateTime) {
+            continue;
+        }
+
+        $key = $date->format('Y-m-d');
+
+        $reason_value = '';
+        if (is_scalar($reason_raw)) {
+            $reason_value = sanitize_text_field((string) $reason_raw);
+            if ($reason_value !== '') {
+                $reason_value = wp_strip_all_tags($reason_value, false);
+                if ($reason_value !== '') {
+                    if (function_exists('mb_substr')) {
+                        $reason_value = mb_substr($reason_value, 0, 200);
+                    } else {
+                        $reason_value = substr($reason_value, 0, 200);
+                    }
+                    $reason_value = trim($reason_value);
+                }
+            }
+        }
+
+        $entry = array('date' => $key);
+        if ($reason_value !== '') {
+            $entry['reason'] = $reason_value;
+        }
+
+        $normalized[$key] = $entry;
+
+        if (count($normalized) >= 365) {
+            break;
+        }
+    }
+
+    return array_values($normalized);
+}
+
+/**
+ * @param array<string,mixed> $form_values
+ * @param array<string,mixed> $meta
+ * @return array<int,array<string,string>>
+ */
+function mj_regmgr_resolve_schedule_exceptions(array $form_values, array $meta) {
+    if (array_key_exists('schedule_exceptions', $form_values)) {
+        return mj_regmgr_sanitize_recurrence_exceptions($form_values['schedule_exceptions']);
+    }
+
+    if (isset($meta['scheduleExceptions'])) {
+        $from_meta = mj_regmgr_sanitize_recurrence_exceptions($meta['scheduleExceptions']);
+        if (!empty($from_meta)) {
+            return $from_meta;
+        }
+    }
+
+    if (
+        isset($meta['schedulePayload'])
+        && is_array($meta['schedulePayload'])
+        && array_key_exists('exceptions', $meta['schedulePayload'])
+    ) {
+        return mj_regmgr_sanitize_recurrence_exceptions($meta['schedulePayload']['exceptions']);
+    }
+
+    return array();
+}
 /**
  * Builds and validates the payload for updating or creating an event based on form values.
  */
@@ -3107,6 +3250,8 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
             $frequency = 'weekly';
         }
         $interval = isset($form_values['schedule_recurring_interval']) ? max(1, (int) $form_values['schedule_recurring_interval']) : 1;
+        $schedule_exceptions = mj_regmgr_resolve_schedule_exceptions($form_values, $meta);
+        $recurrence_until_value = mj_regmgr_parse_recurrence_until(isset($form_values['recurrence_until']) ? $form_values['recurrence_until'] : '', $recurring_end_time, $timezone);
 
         if ($frequency === 'weekly') {
             $weekdays = array();
@@ -3135,6 +3280,8 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
                 'end_time' => $recurring_end_time,
                 'start_date' => $recurring_start_date,
                 'show_date_range' => $show_date_range,
+                'exceptions' => $schedule_exceptions,
+                'until' => $recurrence_until_value,
             );
         } else {
             $ordinal = isset($form_values['schedule_recurring_month_ordinal']) ? sanitize_key((string) $form_values['schedule_recurring_month_ordinal']) : 'first';
@@ -3157,10 +3304,14 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
                 'end_time' => $recurring_end_time,
                 'start_date' => $recurring_start_date,
                 'show_date_range' => $show_date_range,
+                'exceptions' => $schedule_exceptions,
+                'until' => $recurrence_until_value,
             );
         }
 
-        $recurrence_until_value = mj_regmgr_parse_recurrence_until(isset($form_values['recurrence_until']) ? $form_values['recurrence_until'] : '', $recurring_end_time, $timezone);
+        $schedule_payload['exceptions'] = $schedule_exceptions;
+
+        $form_values['schedule_exceptions'] = $schedule_exceptions;
     } elseif ($schedule_mode === 'series') {
         $series = isset($form_values['schedule_series_items']) && is_array($form_values['schedule_series_items']) ? $form_values['schedule_series_items'] : array();
         $earliest = null;

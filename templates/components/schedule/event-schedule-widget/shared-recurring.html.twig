@@ -2,6 +2,7 @@
 {% set classes_attr = classes|join(' ') %}
 {% set days = weekly.days|default([]) %}
 {% set hasRecurrence = days|length > 0 or weekly.is_monthly %}
+{% set show_next_label = show_next_occurrence_label is defined ? show_next_occurrence_label : true %}
 
 <div class="{{ classes_attr|e('html_attr') }}">
     {% if display_title and title %}
@@ -99,7 +100,7 @@
             </div>
         {% endif %}
 
-        {% if next_occurrence_label %}
+        {% if show_next_label and next_occurrence_label %}
             <p class="mj-event-schedule__next">{{ next_occurrence_label }}</p>
         {% endif %}
     {% endif %}

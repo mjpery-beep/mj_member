@@ -163,6 +163,19 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'show_next_occurrence_label',
+            array(
+                'label' => __('Afficher la prochaine date', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'description' => __('Masque le libellé de prochaine occurrence dans les vues récurrentes.', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
             'show_register_button',
             array(
                 'label' => __('Afficher le bouton d\'inscription', 'mj-member'),
@@ -543,6 +556,106 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
             )
         );
 
+        $this->add_group_control(
+            Group_Control_Typography::get_type(),
+            array(
+                'name' => 'compact_day_typography',
+                'label' => __('Typographie jour', 'mj-member'),
+                'selector' => '{{WRAPPER}} .mj-event-schedule__chip strong, {{WRAPPER}} .mj-event-schedule__table th:first-child, {{WRAPPER}} .mj-event-schedule__table td:first-child',
+            )
+        );
+
+        $this->add_group_control(
+            Group_Control_Typography::get_type(),
+            array(
+                'name' => 'compact_time_typography',
+                'label' => __('Typographie heure', 'mj-member'),
+                'selector' => '{{WRAPPER}} .mj-event-schedule__chip-time, {{WRAPPER}} .mj-event-schedule__table th:nth-child(2), {{WRAPPER}} .mj-event-schedule__table th:nth-child(3), {{WRAPPER}} .mj-event-schedule__table td:nth-child(2), {{WRAPPER}} .mj-event-schedule__table td:nth-child(3)',
+            )
+        );
+
+        $this->add_responsive_control(
+            'compact_line_height',
+            array(
+                'label' => __('Interlignage (pastilles & tableau)', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'size_units' => array('em', 'px'),
+                'range' => array(
+                    'em' => array(
+                        'min' => 0.8,
+                        'max' => 3,
+                        'step' => 0.05,
+                    ),
+                    'px' => array(
+                        'min' => 12,
+                        'max' => 60,
+                    ),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-event-schedule__chip strong, {{WRAPPER}} .mj-event-schedule__chip-meta, {{WRAPPER}} .mj-event-schedule__chip-time' => 'line-height: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-event-schedule__table th, {{WRAPPER}} .mj-event-schedule__table td' => 'line-height: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'compact_chip_padding',
+            array(
+                'label' => __('Marge interne des pastilles', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', 'em', '%'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-event-schedule__chip' => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'compact_chip_display',
+            array(
+                'label' => __('Type de flex des pastilles', 'mj-member'),
+                'type' => Controls_Manager::CHOOSE,
+                'options' => array(
+                    'inline-flex' => array(
+                        'title' => __('Inline flex', 'mj-member'),
+                        'icon' => 'eicon-align-h-left',
+                    ),
+                    'flex' => array(
+                        'title' => __('Bloc flex', 'mj-member'),
+                        'icon' => 'eicon-align-stretch-h',
+                    ),
+                ),
+                'default' => 'inline-flex',
+                'toggle' => true,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-event-schedule__chip' => 'display: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'compact_chips_direction',
+            array(
+                'label' => __('Direction du conteneur', 'mj-member'),
+                'type' => Controls_Manager::CHOOSE,
+                'options' => array(
+                    'row' => array(
+                        'title' => __('Ligne', 'mj-member'),
+                        'icon' => 'eicon-editor-h-align-left',
+                    ),
+                    'column' => array(
+                        'title' => __('Colonne', 'mj-member'),
+                        'icon' => 'eicon-editor-v-align-top',
+                    ),
+                ),
+                'default' => 'row',
+                'toggle' => true,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-event-schedule__chips' => 'flex-direction: {{VALUE}};',
+                ),
+            )
+        );
+
         $this->end_controls_section();
 
         // Récurrence hebdomadaire
@@ -781,6 +894,7 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
         $layout_mode_recurring = isset($settings['layout_mode_recurring']) ? $settings['layout_mode_recurring'] : 'cards';
         $show_icons = !isset($settings['show_icons']) || $settings['show_icons'] === 'yes';
         $highlight_today = !isset($settings['highlight_today']) || $settings['highlight_today'] === 'yes';
+        $show_next_occurrence_label = !isset($settings['show_next_occurrence_label']) || $settings['show_next_occurrence_label'] === 'yes';
         $empty_message = isset($settings['empty_message']) ? (string) $settings['empty_message'] : '';
         $show_register_button = isset($settings['show_register_button']) && $settings['show_register_button'] === 'yes';
         $register_button_label = isset($settings['register_button_label']) && $settings['register_button_label'] !== ''
@@ -804,6 +918,7 @@ class Mj_Member_Elementor_Event_Schedule_Widget extends Widget_Base {
             'layout_mode_recurring' => $layout_mode_recurring,
             'show_icons' => $show_icons,
             'highlight_today' => $highlight_today,
+            'show_next_occurrence_label' => $show_next_occurrence_label,
             'empty_message' => $empty_message,
             'show_register_button' => $show_register_button,
             'register_button_label' => $register_button_label,
