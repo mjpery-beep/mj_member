@@ -124,6 +124,12 @@ class Mj_Member_Elementor_Event_Photos_Widget extends Widget_Base {
             $member = null;
         }
 
+        static $mj_event_photos_sent_nocache = false;
+        if (!$is_preview && !$mj_event_photos_sent_nocache && function_exists('nocache_headers')) {
+            nocache_headers();
+            $mj_event_photos_sent_nocache = true;
+        }
+
         $context = mj_member_event_photos_get_member_upload_context($member, array(
             'limit' => $limit,
             'preview' => $is_preview,

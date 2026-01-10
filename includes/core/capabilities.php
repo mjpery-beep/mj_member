@@ -220,6 +220,23 @@ function mj_member_restrict_dashboard_access()
         return;
     }
 
+    $script = isset($_SERVER['PHP_SELF']) ? basename(sanitize_text_field(wp_unslash($_SERVER['PHP_SELF']))) : '';
+    if ($script === 'admin-post.php') {
+        $action = isset($_REQUEST['action']) ? sanitize_key((string) wp_unslash($_REQUEST['action'])) : '';
+        $allowed_actions = apply_filters(
+            'mj_member_admin_post_whitelist',
+            array(
+                'mj_member_submit_event_photo',
+                'mj_member_delete_event_photo',
+            ),
+            $user
+        );
+
+        if ($action !== '' && in_array($action, $allowed_actions, true)) {
+            return;
+        }
+    }
+
     $capability = Config::capability();
     $contactCapability = Config::contactCapability();
 

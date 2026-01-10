@@ -58,7 +58,7 @@ if (!function_exists('mj_member_event_photos_is_staff_member')) {
         }
 
         // Utiliser MjRoles si disponible
-        if (class_exists('Mj\\Member\\Classes\\MjRoles')) {
+        if (class_exists('Mj\Member\Classes\MjRoles')) {
             return \Mj\Member\Classes\MjRoles::isStaff($role);
         }
 
@@ -77,120 +77,38 @@ if (!function_exists('mj_member_event_photos_is_staff_member')) {
     }
 }
 
-if (!function_exists('mj_member_event_photos_get_attachment_sources')) {
-    function mj_member_event_photos_get_attachment_sources($attachment_id) {
-        $attachment_id = (int) $attachment_id;
-        if ($attachment_id <= 0) {
-            return array(
-                'thumb' => '',
-                'display' => '',
-                'full' => '',
-            );
-        }
-
-        $map = mj_member_event_photos_get_image_size_map();
-
-        $full = wp_get_attachment_image_src($attachment_id, 'full');
-        $display = wp_get_attachment_image_src($attachment_id, $map['display']);
-        $thumb = wp_get_attachment_image_src($attachment_id, $map['thumb']);
-
-        if (!$display) {
-            $display = wp_get_attachment_image_src($attachment_id, 'large');
-        }
-
-        if (!$thumb) {
-            $thumb = wp_get_attachment_image_src($attachment_id, 'medium_large');
-        }
-        if (!$thumb) {
-            $thumb = wp_get_attachment_image_src($attachment_id, 'medium');
-        }
-
-        $full_url = $full ? esc_url_raw($full[0]) : '';
-        $display_url = $display ? esc_url_raw($display[0]) : $full_url;
-        $thumb_url = $thumb ? esc_url_raw($thumb[0]) : $display_url;
-
-        return array(
-            'thumb' => $thumb_url,
-            'display' => $display_url,
-            'full' => $full_url !== '' ? $full_url : $display_url,
-        );
-    }
-}
-
-if (!function_exists('mj_member_event_photos_optimize_attachment')) {
-    function mj_member_event_photos_optimize_attachment($attachment_id) {
-        $attachment_id = (int) $attachment_id;
-        if ($attachment_id <= 0) {
+if (!function_exists('mj_member_event_photos_log')) {
+    /**
+     * Écrit un message de debug cohérent dans debug.log quand WP_DEBUG est actif.
+     *
+     * @param string $tag
+     * @param array<string,mixed> $context
+     * @return void
+     */
+    function mj_member_event_photos_log($tag, array $context) {
+        if (!defined('WP_DEBUG') || !WP_DEBUG) {
             return;
         }
 
-        $mime = get_post_mime_type($attachment_id);
-        if (!is_string($mime) || strpos($mime, 'image/') !== 0) {
-            return;
-        }
+        $log_message = '[' . $tag . '] ' . wp_json_encode($context);
 
-        $file_path = get_attached_file($attachment_id);
-        if (!$file_path || !file_exists($file_path)) {
-            return;
-        }
-
-        require_once ABSPATH . 'wp-admin/includes/image.php';
-
-        $max_width = (int) apply_filters('mj_member_event_photo_max_width', 1920, $attachment_id, $mime);
-        $max_height = (int) apply_filters('mj_member_event_photo_max_height', 1920, $attachment_id, $mime);
-        $quality = (int) apply_filters('mj_member_event_photo_quality', 85, $attachment_id, $mime);
-
-        $quality_mimes = array('image/jpeg', 'image/jpg', 'image/webp');
-        $quality_applicable = in_array($mime, $quality_mimes, true) && $quality > 0 && $quality < 100;
-
-        $editor = wp_get_image_editor($file_path);
-        $should_save = false;
-
-        if (!is_wp_error($editor)) {
-            $size = $editor->get_size();
-            $width = isset($size['width']) ? (int) $size['width'] : 0;
-            $height = isset($size['height']) ? (int) $size['height'] : 0;
-
-            $needs_resize = false;
-            if ($max_width > 0 && $width > $max_width) {
-                $needs_resize = true;
-            }
-            if ($max_height > 0 && $height > $max_height) {
-                $needs_resize = true;
-            }
-
-            if ($needs_resize) {
-                $editor->resize($max_width > 0 ? $max_width : null, $max_height > 0 ? $max_height : null, false);
-                $should_save = true;
-            }
-
-            if ($quality_applicable && method_exists($editor, 'set_quality')) {
-                $editor->set_quality($quality);
-                $should_save = true;
-            }
-
-            if ($should_save) {
-                $saved = $editor->save($file_path);
-                if (!is_wp_error($saved) && isset($saved['path']) && $saved['path'] !== '' && $saved['path'] !== $file_path) {
-                    update_attached_file($attachment_id, $saved['path']);
-                    $file_path = $saved['path'];
+        if (defined('WP_DEBUG_LOG') && WP_DEBUG_LOG) {
+            $log_target = WP_DEBUG_LOG === true ? WP_CONTENT_DIR . '/debug.log' : WP_DEBUG_LOG;
+            if (is_string($log_target) && $log_target !== '') {
+                $log_directory = dirname($log_target);
+                if (!is_dir($log_directory) && function_exists('wp_mkdir_p')) {
+                    wp_mkdir_p($log_directory);
                 }
+
+                $written = @file_put_contents($log_target, $log_message . PHP_EOL, FILE_APPEND | LOCK_EX);
+                if ($written === false) {
+                    error_log($log_message . PHP_EOL, 3, $log_target);
+                }
+                return;
             }
         }
 
-        $metadata = wp_get_attachment_metadata($attachment_id);
-        $size_map = mj_member_event_photos_get_image_size_map();
-        $needs_regenerate = !is_array($metadata)
-            || !isset($metadata['sizes'][$size_map['thumb']])
-            || !isset($metadata['sizes'][$size_map['display']])
-            || $should_save;
-
-        if ($needs_regenerate) {
-            $generated = wp_generate_attachment_metadata($attachment_id, $file_path);
-            if (!is_wp_error($generated) && !empty($generated)) {
-                wp_update_attachment_metadata($attachment_id, $generated);
-            }
-        }
+        error_log($log_message);
     }
 }
 
@@ -671,6 +589,7 @@ if (!function_exists('mj_member_event_photos_get_member_upload_context')) {
         $statuses = array(
             MjEventRegistrations::STATUS_CONFIRMED,
             MjEventRegistrations::STATUS_PENDING,
+            MjEventRegistrations::STATUS_WAITLIST,
         );
 
         $registrations = MjEventRegistrations::get_all(array(
@@ -714,7 +633,7 @@ if (!function_exists('mj_member_event_photos_get_member_upload_context')) {
             $event_record = (object) $event_array;
 
             $limit_per_member = (int) apply_filters('mj_member_event_photo_upload_limit', 3, $event_id, $member);
-            if ($limit_per_member <= 0) {
+                if ($limit_per_member <= 0) {
                 $limit_per_member = 3;
             }
 
@@ -727,6 +646,20 @@ if (!function_exists('mj_member_event_photos_get_member_upload_context')) {
                     $reason = sprintf(__('Limite atteinte : %d photo(s) déjà partagée(s) pour cet événement.', 'mj-member'), $limit_per_member);
                 } else {
                     $reason = __('Tu pourras ajouter des photos une fois l’événement terminé et ton inscription confirmée.', 'mj-member');
+                }
+
+                if (!$args['preview']) {
+                    mj_member_event_photos_log('mj_event_photo_context', array(
+                        'member_id' => $member_id,
+                        'event_id' => $event_id,
+                        'status' => isset($registration->statut) ? sanitize_key((string) $registration->statut) : '',
+                        'free' => !empty($event_record->free_participation) ? 1 : 0,
+                        'count' => (int) $member_upload_count,
+                        'limit' => (int) $limit_per_member,
+                        'reason' => $reason,
+                        'start' => isset($event_record->date_debut) ? (string) $event_record->date_debut : '',
+                        'now' => current_time('mysql'),
+                    ));
                 }
             }
 
@@ -791,6 +724,141 @@ if (!function_exists('mj_member_event_photos_get_member_upload_context')) {
             }
         }
 
+        if (count($events) < $limit_setting) {
+            $existing_event_ids = array();
+            foreach ($events as $entry) {
+                if (isset($entry['event_id'])) {
+                    $existing_event_ids[(int) $entry['event_id']] = true;
+                }
+            }
+
+            $free_candidates = MjEvents::get_all(array(
+                'statuses' => array(MjEvents::STATUS_ACTIVE, MjEvents::STATUS_PAST),
+                'order' => 'DESC',
+                'orderby' => 'date_debut',
+                'limit' => max($limit_setting * 3, 15),
+            ));
+
+            if (!empty($free_candidates)) {
+                $now = current_time('timestamp');
+
+                foreach ($free_candidates as $event_obj) {
+                    if (!is_object($event_obj)) {
+                        continue;
+                    }
+
+                    $event_id = method_exists($event_obj, 'get') ? (int) $event_obj->get('id', 0) : (isset($event_obj->id) ? (int) $event_obj->id : 0);
+                    if ($event_id <= 0 || isset($existing_event_ids[$event_id])) {
+                        continue;
+                    }
+
+                    $event_array = method_exists($event_obj, 'toArray') ? $event_obj->toArray() : (array) $event_obj;
+                    $event_record = (object) $event_array;
+
+                    if (empty($event_record->free_participation)) {
+                        continue;
+                    }
+
+                    $start_timestamp = isset($event_record->date_debut) ? strtotime((string) $event_record->date_debut) : 0;
+                    if ($start_timestamp && $start_timestamp > $now) {
+                        continue;
+                    }
+
+                    $limit_per_member = (int) apply_filters('mj_member_event_photo_upload_limit', 3, $event_id, $member);
+                    if ($limit_per_member <= 0) {
+                        $limit_per_member = 3;
+                    }
+
+                    $member_upload_count = MjEventPhotos::count_for_member($event_id, $member_id);
+                    $can_upload = mj_member_event_photos_member_can_upload($event_record, null, $member_upload_count, $limit_per_member, $member);
+
+                    $reason = '';
+                    if (!$can_upload) {
+                        if ($limit_per_member > 0 && $member_upload_count >= $limit_per_member) {
+                            /* Translators: %d is the maximum number of photos allowed per event. */
+                            $reason = sprintf(__('Limite atteinte : %d photo(s) déjà partagée(s) pour cet événement.', 'mj-member'), $limit_per_member);
+                        } else {
+                            $reason = __('Tu pourras ajouter des photos une fois l’événement démarré.', 'mj-member');
+                        }
+
+                        if (!$args['preview']) {
+                            mj_member_event_photos_log('mj_event_photo_context', array(
+                                'member_id' => $member_id,
+                                'event_id' => $event_id,
+                                'status' => '',
+                                'free' => 1,
+                                'count' => (int) $member_upload_count,
+                                'limit' => (int) $limit_per_member,
+                                'reason' => $reason,
+                                'start' => isset($event_record->date_debut) ? (string) $event_record->date_debut : '',
+                                'now' => current_time('mysql'),
+                            ));
+                        }
+                    }
+
+                    $remaining = max(0, $limit_per_member - $member_upload_count);
+
+                    $member_photos = MjEventPhotos::query(array(
+                        'event_id' => $event_id,
+                        'member_id' => $member_id,
+                        'per_page' => 20,
+                        'paged' => 1,
+                        'order' => 'DESC',
+                    ));
+
+                    $photo_entries = array();
+                    if (!empty($member_photos)) {
+                        foreach ($member_photos as $photo_row) {
+                            $attachment_id = isset($photo_row->attachment_id) ? (int) $photo_row->attachment_id : 0;
+                            if ($attachment_id <= 0) {
+                                continue;
+                            }
+
+                            $sources = mj_member_event_photos_get_attachment_sources($attachment_id);
+                            $status = isset($photo_row->status) ? sanitize_key((string) $photo_row->status) : MjEventPhotos::STATUS_PENDING;
+                            $rejection_reason = isset($photo_row->rejection_reason) ? sanitize_text_field((string) $photo_row->rejection_reason) : '';
+
+                            $created_at_raw = isset($photo_row->created_at) ? strtotime((string) $photo_row->created_at) : false;
+                            $created_at_label = $created_at_raw ? sprintf(__('Envoyée le %s', 'mj-member'), date_i18n(get_option('date_format', 'd/m/Y'), $created_at_raw)) : '';
+
+                            $photo_entries[] = array(
+                                'id' => isset($photo_row->id) ? (int) $photo_row->id : 0,
+                                'status' => $status,
+                                'status_label' => isset($status_labels[$status]) ? $status_labels[$status] : ucfirst($status),
+                                'thumb' => $sources['thumb'],
+                                'url' => $sources['display'],
+                                'full' => $sources['full'],
+                                'caption' => !empty($photo_row->caption) ? esc_html($photo_row->caption) : '',
+                                'created_at' => $created_at_label,
+                                'rejection_reason' => $rejection_reason,
+                                'can_delete' => empty($args['preview']),
+                            );
+                        }
+                    }
+
+                    $events[] = array(
+                        'event_id' => $event_id,
+                        'title' => isset($event_record->title) ? sanitize_text_field((string) $event_record->title) : sprintf(__('Événement #%d', 'mj-member'), $event_id),
+                        'date_label' => mj_member_format_event_datetime_range(
+                            isset($event_record->date_debut) ? (string) $event_record->date_debut : '',
+                            isset($event_record->date_fin) ? (string) $event_record->date_fin : ''
+                        ),
+                        'permalink' => apply_filters('mj_member_event_permalink', '', $event_record),
+                        'remaining' => $remaining,
+                        'limit' => $limit_per_member,
+                        'can_upload' => $can_upload,
+                        'reason' => $reason,
+                        'uploads' => $photo_entries,
+                        'is_unlimited' => false,
+                    );
+
+                    if (count($events) >= $limit_setting) {
+                        break;
+                    }
+                }
+            }
+        }
+
         return array(
             'events' => $events,
             'has_events' => !empty($events),
@@ -804,17 +872,22 @@ if (!function_exists('mj_member_event_photos_member_can_upload')) {
             return true;
         }
 
-        if (!$registration || !is_object($registration)) {
-            return false;
-        }
+        $event_free = is_object($event_record) && !empty($event_record->free_participation);
 
-        $status = isset($registration->statut) ? sanitize_key((string) $registration->statut) : '';
-        $allowed_statuses = array(
-            MjEventRegistrations::STATUS_CONFIRMED,
-            MjEventRegistrations::STATUS_PENDING,
-        );
-        if (!in_array($status, $allowed_statuses, true)) {
-            return false;
+        if (!$event_free) {
+            if (!$registration || !is_object($registration)) {
+                return false;
+            }
+
+            $status = isset($registration->statut) ? sanitize_key((string) $registration->statut) : '';
+            $allowed_statuses = array(
+                MjEventRegistrations::STATUS_CONFIRMED,
+                MjEventRegistrations::STATUS_PENDING,
+                MjEventRegistrations::STATUS_WAITLIST,
+            );
+            if (!in_array($status, $allowed_statuses, true)) {
+                return false;
+            }
         }
 
         if ($limit > 0 && $current_count >= $limit) {
@@ -851,6 +924,7 @@ if (!function_exists('mj_member_event_photos_get_member_registration')) {
             $allowed_statuses = array(
                 MjEventRegistrations::STATUS_CONFIRMED,
                 MjEventRegistrations::STATUS_PENDING,
+                MjEventRegistrations::STATUS_WAITLIST,
             );
             if (in_array($status, $allowed_statuses, true)) {
                 return $registration;
@@ -866,8 +940,30 @@ if (!function_exists('mj_member_event_photos_submission_handler')) {
         $redirect = isset($_POST['redirect_to']) ? esc_url_raw($_POST['redirect_to']) : home_url('/');
         $redirect = $redirect !== '' ? $redirect : home_url('/');
 
-        $redirect_with_notice = function ($code) use ($redirect) {
-            $target = add_query_arg('mj_event_photo', urlencode($code), $redirect);
+        $debug_context = array(
+            'member_id' => 0,
+            'event_id' => 0,
+            'count' => 0,
+            'limit' => 0,
+            'free' => 0,
+            'registration' => 0,
+        );
+
+        $redirect_with_notice = function ($code) use ($redirect, &$debug_context) {
+            $debug_context['code'] = $code;
+            mj_member_event_photos_log('mj_event_photo', $debug_context);
+
+            $cache_buster = function_exists('wp_unique_id')
+                ? wp_unique_id('mjphoto_')
+                : (function_exists('wp_generate_password') ? wp_generate_password(8, false, false) : wp_hash(microtime()));
+
+            $target = add_query_arg(
+                array(
+                    'mj_event_photo' => $code,
+                    'a' => $cache_buster,
+                ),
+                $redirect
+            );
             wp_safe_redirect($target);
             exit;
         };
@@ -896,6 +992,8 @@ if (!function_exists('mj_member_event_photos_submission_handler')) {
             $redirect_with_notice('profile');
         }
 
+        $debug_context['member_id'] = isset($current_member->id) ? (int) $current_member->id : 0;
+
         $is_staff_member = mj_member_event_photos_is_staff_member($current_member);
 
         $event = MjEvents::find($event_id);
@@ -903,19 +1001,38 @@ if (!function_exists('mj_member_event_photos_submission_handler')) {
             $redirect_with_notice('missing');
         }
 
+        $event_array = method_exists($event, 'toArray') ? $event->toArray() : (array) $event;
+        $event_record = (object) $event_array;
+        $event_free = !empty($event_record->free_participation);
+
+        $debug_context['event_id'] = $event_id;
+        $debug_context['free'] = $event_free ? 1 : 0;
+
         $limit = $is_staff_member ? 0 : (int) apply_filters('mj_member_event_photo_upload_limit', 3, $event_id, $current_member);
         if (!$is_staff_member && $limit <= 0) {
             $limit = 3;
         }
 
+        $debug_context['limit'] = (int) $limit;
+
         $current_count = MjEventPhotos::count_for_member($event_id, (int) $current_member->id);
+        $debug_context['count'] = (int) $current_count;
         if (!$is_staff_member && $limit > 0 && $current_count >= $limit) {
             $redirect_with_notice('limit');
         }
 
         $registration = mj_member_event_photos_get_member_registration($event_id, $current_member);
-        if (!$registration && !$is_staff_member) {
+        $debug_context['registration'] = $registration ? 1 : 0;
+
+        if (!$registration && !$is_staff_member && !$event_free) {
             $redirect_with_notice('not_registered');
+        }
+
+        if (!$is_staff_member) {
+            $can_upload_now = mj_member_event_photos_member_can_upload($event_record, $registration, $current_count, $limit, $current_member);
+            if (!$can_upload_now) {
+                $redirect_with_notice($event_free ? 'not_started' : 'not_registered');
+            }
         }
 
         if (!isset($_FILES['event_photo_file']) || !is_array($_FILES['event_photo_file'])) {
@@ -1026,6 +1143,9 @@ if (!function_exists('mj_member_event_photos_submission_handler')) {
             ));
         }
 
+        $debug_context['code'] = $should_auto_approve ? 'success_auto' : 'success';
+        mj_member_event_photos_log('mj_event_photo', $debug_context);
+
         $redirect_with_notice($should_auto_approve ? 'success_auto' : 'success');
     }
 
@@ -1039,7 +1159,17 @@ if (!function_exists('mj_member_event_photos_delete_handler')) {
         $redirect = $redirect !== '' ? $redirect : home_url('/');
 
         $redirect_with_notice = function ($code) use ($redirect) {
-            $target = add_query_arg('mj_event_photo', urlencode($code), $redirect);
+            $cache_buster = function_exists('wp_unique_id')
+                ? wp_unique_id('mjphoto_')
+                : (function_exists('wp_generate_password') ? wp_generate_password(8, false, false) : wp_hash(microtime()));
+
+            $target = add_query_arg(
+                array(
+                    'mj_event_photo' => $code,
+                    'a' => $cache_buster,
+                ),
+                $redirect
+            );
             wp_safe_redirect($target);
             exit;
         };
@@ -1117,5 +1247,45 @@ if (!function_exists('mj_member_event_photos_format_member_name')) {
         }
 
         return isset($member->email) ? sanitize_text_field($member->email) : __('Participant', 'mj-member');
+    }
+}
+
+if (!function_exists('mj_member_event_photos_get_attachment_sources')) {
+    function mj_member_event_photos_get_attachment_sources($attachment_id) {
+        $attachment_id = (int) $attachment_id;
+        if ($attachment_id <= 0) {
+            return array(
+                'thumb' => '',
+                'display' => '',
+                'full' => '',
+            );
+        }
+
+        $map = mj_member_event_photos_get_image_size_map();
+
+        $full = wp_get_attachment_image_src($attachment_id, 'full');
+        $display = wp_get_attachment_image_src($attachment_id, $map['display']);
+        $thumb = wp_get_attachment_image_src($attachment_id, $map['thumb']);
+
+        if (!$display) {
+            $display = wp_get_attachment_image_src($attachment_id, 'large');
+        }
+
+        if (!$thumb) {
+            $thumb = wp_get_attachment_image_src($attachment_id, 'medium_large');
+        }
+        if (!$thumb) {
+            $thumb = wp_get_attachment_image_src($attachment_id, 'medium');
+        }
+
+        $full_url = $full ? esc_url_raw($full[0]) : '';
+        $display_url = $display ? esc_url_raw($display[0]) : $full_url;
+        $thumb_url = $thumb ? esc_url_raw($thumb[0]) : $display_url;
+
+        return array(
+            'thumb' => $thumb_url,
+            'display' => $display_url,
+            'full' => $full_url !== '' ? $full_url : $display_url,
+        );
     }
 }
