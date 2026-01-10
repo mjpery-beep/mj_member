@@ -648,6 +648,45 @@ if (!function_exists('mj_member_get_member_registrations')) {
                 }
             }
 
+            $permalink = '';
+            if (!empty($registration['permalink'])) {
+                $permalink = esc_url_raw((string) $registration['permalink']);
+            }
+
+            $payment_status = isset($registration['payment_status']) ? sanitize_key((string) $registration['payment_status']) : '';
+            $payment_status_label = isset($registration['payment_status_label']) ? sanitize_text_field($registration['payment_status_label']) : '';
+
+            $occurrence_scope = isset($registration['occurrence_scope']) ? sanitize_key((string) $registration['occurrence_scope']) : 'all';
+            if ($occurrence_scope === '') {
+                $occurrence_scope = 'all';
+            }
+
+            $occurrence_count = isset($registration['occurrence_count']) ? (int) $registration['occurrence_count'] : 0;
+            if ($occurrence_count < 0) {
+                $occurrence_count = 0;
+            }
+
+            $occurrence_entries = array();
+            if (!empty($registration['occurrences']) && is_array($registration['occurrences'])) {
+                foreach ($registration['occurrences'] as $occurrence) {
+                    if (!is_array($occurrence)) {
+                        continue;
+                    }
+
+                    $start = isset($occurrence['start']) ? sanitize_text_field((string) $occurrence['start']) : '';
+                    $label = isset($occurrence['label']) ? sanitize_text_field((string) $occurrence['label']) : '';
+
+                    if ($start === '' && $label === '') {
+                        continue;
+                    }
+
+                    $occurrence_entries[] = array(
+                        'start' => $start,
+                        'label' => $label !== '' ? $label : $start,
+                    );
+                }
+            }
+
             $sanitized[] = array(
                 'id' => isset($registration['id']) ? (int) $registration['id'] : 0,
                 'title' => $title,
@@ -659,6 +698,12 @@ if (!function_exists('mj_member_get_member_registrations')) {
                 'location' => $location,
                 'actions' => $actions,
                 'notes' => isset($registration['notes']) ? wp_kses_post($registration['notes']) : '',
+                'permalink' => $permalink,
+                'payment_status' => $payment_status,
+                'payment_status_label' => $payment_status_label,
+                'occurrence_scope' => $occurrence_scope,
+                'occurrence_count' => $occurrence_count,
+                'occurrences' => $occurrence_entries,
             );
 
             if ((int) $args['limit'] > 0 && count($sanitized) >= (int) $args['limit']) {
@@ -1095,6 +1140,7 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
             'regs.payment_status',
             'regs.payment_method',
             'regs.payment_recorded_at',
+            'regs.attendance_payload',
             'events.title',
             'events.slug',
             'events.type',
@@ -1212,6 +1258,7 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
                     'target' => '_self',
                 );
             }
+            $permalink_url = $permalink !== '' ? esc_url_raw($permalink) : '';
 
             $type_value = isset($row->type) ? sanitize_key((string) $row->type) : '';
             $type_label = isset($type_labels[$type_value]) ? $type_labels[$type_value] : $type_value;
@@ -1230,26 +1277,43 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
             }
             $payment_status_label = isset($payment_labels[$payment_status_raw]) ? $payment_labels[$payment_status_raw] : $payment_status_raw;
 
+            $occurrence_scope = 'all';
+            $occurrence_count = 0;
+            $occurrence_details = array();
+
             $notes_segments = array();
-            if ($location_label !== '') {
-                $notes_segments[] = '<strong>' . esc_html__('Lieu', 'mj-member') . '</strong> : ' . esc_html($location_label);
-            }
-            if ($payment_status_label !== '') {
-                $notes_segments[] = '<strong>' . esc_html__('Paiement', 'mj-member') . '</strong> : ' . esc_html($payment_status_label);
-            }
 
             if (method_exists('MjEventRegistrations', 'build_occurrence_summary')) {
                 $occurrence_summary = MjEventRegistrations::build_occurrence_summary($row);
-                if (!empty($occurrence_summary['occurrences']) && is_array($occurrence_summary['occurrences'])) {
-                    $occurrence_labels = array();
-                    foreach ($occurrence_summary['occurrences'] as $occurrence) {
-                        if (empty($occurrence['label'])) {
-                            continue;
-                        }
-                        $occurrence_labels[] = sanitize_text_field((string) $occurrence['label']);
+                if (is_array($occurrence_summary)) {
+                    $occurrence_scope = isset($occurrence_summary['scope']) ? sanitize_key((string) $occurrence_summary['scope']) : 'all';
+                    if ($occurrence_scope === '') {
+                        $occurrence_scope = 'all';
                     }
-                    if (!empty($occurrence_labels)) {
-                        $notes_segments[] = '<strong>' . esc_html__('Occurrences', 'mj-member') . '</strong> : ' . esc_html(implode(', ', $occurrence_labels));
+
+                    if (!empty($occurrence_summary['occurrences']) && is_array($occurrence_summary['occurrences'])) {
+                        foreach ($occurrence_summary['occurrences'] as $occurrence) {
+                            if (!is_array($occurrence)) {
+                                continue;
+                            }
+
+                            $start = isset($occurrence['start']) ? sanitize_text_field((string) $occurrence['start']) : '';
+                            $label = isset($occurrence['label']) ? sanitize_text_field((string) $occurrence['label']) : '';
+
+                            if ($start === '' && $label === '') {
+                                continue;
+                            }
+
+                            $occurrence_details[] = array(
+                                'start' => $start,
+                                'label' => $label !== '' ? $label : $start,
+                            );
+                        }
+                    }
+
+                    $occurrence_count = isset($occurrence_summary['count']) ? (int) $occurrence_summary['count'] : count($occurrence_details);
+                    if ($occurrence_count < 0) {
+                        $occurrence_count = 0;
                     }
                 }
             }
@@ -1274,6 +1338,12 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
                 'location' => $location_label,
                 'actions' => $actions,
                 'notes' => $notes_html,
+                'permalink' => $permalink_url,
+                'payment_status' => $payment_status_raw,
+                'payment_status_label' => $payment_status_label,
+                'occurrence_scope' => $occurrence_scope,
+                'occurrence_count' => $occurrence_count,
+                'occurrences' => $occurrence_details,
             );
         }
 
