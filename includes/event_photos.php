@@ -953,9 +953,11 @@ if (!function_exists('mj_member_event_photos_submission_handler')) {
             $debug_context['code'] = $code;
             mj_member_event_photos_log('mj_event_photo', $debug_context);
 
-            $cache_buster = function_exists('wp_unique_id')
-                ? wp_unique_id('mjphoto_')
-                : (function_exists('wp_generate_password') ? wp_generate_password(8, false, false) : wp_hash(microtime()));
+            $timestamp = current_time('timestamp');
+            $entropy = function_exists('wp_generate_password')
+                ? wp_generate_password(6, false, false)
+                : substr(wp_hash(microtime()), 0, 6);
+            $cache_buster = sprintf('mjphoto_%s_%s', $timestamp, $entropy);
 
             $target = add_query_arg(
                 array(
@@ -1159,9 +1161,11 @@ if (!function_exists('mj_member_event_photos_delete_handler')) {
         $redirect = $redirect !== '' ? $redirect : home_url('/');
 
         $redirect_with_notice = function ($code) use ($redirect) {
-            $cache_buster = function_exists('wp_unique_id')
-                ? wp_unique_id('mjphoto_')
-                : (function_exists('wp_generate_password') ? wp_generate_password(8, false, false) : wp_hash(microtime()));
+            $timestamp = current_time('timestamp');
+            $entropy = function_exists('wp_generate_password')
+                ? wp_generate_password(6, false, false)
+                : substr(wp_hash(microtime()), 0, 6);
+            $cache_buster = sprintf('mjphoto_%s_%s', $timestamp, $entropy);
 
             $target = add_query_arg(
                 array(
