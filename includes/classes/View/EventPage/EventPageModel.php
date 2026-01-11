@@ -232,6 +232,7 @@ final class EventPageModel
 
         // MjEventSchedule utilise des méthodes statiques
         $occurrences = MjEventSchedule::get_occurrences($eventArray);
+        $occurrences = $this->filterActiveOccurrences($occurrences);
         $scheduleSummary = $this->buildScheduleSummary($mode, count($occurrences));
 
         $now = current_time('timestamp');
@@ -397,6 +398,88 @@ final class EventPageModel
 
         $forceTime = ($mode === 'fixed');
         return $this->formatDateRangeLabel($start, $end, $forceTime);
+    }
+
+    /**
+     * @param array<int,array<string,mixed>> $occurrences
+     * @return array<int,array<string,mixed>>
+     */
+    private function filterActiveOccurrences(array $occurrences): array
+    {
+        if (empty($occurrences)) {
+            return array();
+        }
+
+        $filtered = array();
+
+        foreach ($occurrences as $occurrence) {
+            if (!is_array($occurrence)) {
+                continue;
+            }
+
+            if ($this->isCancelledOccurrence($occurrence)) {
+                continue;
+            }
+
+            $filtered[] = $occurrence;
+        }
+
+        return $filtered;
+    }
+
+    /**
+     * @param array<string,mixed> $occurrence
+     */
+    private function isCancelledOccurrence(array $occurrence): bool
+    {
+        if (!empty($occurrence['is_cancelled'])) {
+            return true;
+        }
+
+        $statusCandidates = array();
+
+        if (isset($occurrence['status'])) {
+            $statusCandidates[] = $occurrence['status'];
+        }
+
+        if (isset($occurrence['state'])) {
+            $statusCandidates[] = $occurrence['state'];
+        }
+
+        if (isset($occurrence['meta']) && is_array($occurrence['meta'])) {
+            if (isset($occurrence['meta']['status'])) {
+                $statusCandidates[] = $occurrence['meta']['status'];
+            }
+
+            if (isset($occurrence['meta']['state'])) {
+                $statusCandidates[] = $occurrence['meta']['state'];
+            }
+
+            if (!empty($occurrence['meta']['is_cancelled'])) {
+                return true;
+            }
+
+            if (!empty($occurrence['meta']['cancelled'])) {
+                return true;
+            }
+
+            if (!empty($occurrence['meta']['excluded']) || !empty($occurrence['meta']['exclude'])) {
+                return true;
+            }
+        }
+
+        foreach ($statusCandidates as $statusCandidate) {
+            $statusKey = sanitize_key((string) $statusCandidate);
+            if ($statusKey === '') {
+                continue;
+            }
+
+            if (in_array($statusKey, array('cancelled', 'canceled', 'annule', 'annulee', 'excluded', 'exclude', 'skipped', 'skip'), true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

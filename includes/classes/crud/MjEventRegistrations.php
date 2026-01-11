@@ -887,10 +887,17 @@ class MjEventRegistrations implements CrudRepositoryInterface {
         }
 
         $occurrence_map = array();
+        $cancelled_occurrences = array();
         if ($event_id > 0 && class_exists('MjEvents') && class_exists('MjEventSchedule')) {
             static $event_occurrence_cache = array();
             if (isset($event_occurrence_cache[$event_id])) {
-                $occurrence_map = $event_occurrence_cache[$event_id];
+                $cached_entry = $event_occurrence_cache[$event_id];
+                if (is_array($cached_entry) && array_key_exists('entries', $cached_entry)) {
+                    $occurrence_map = isset($cached_entry['entries']) && is_array($cached_entry['entries']) ? $cached_entry['entries'] : array();
+                    $cancelled_occurrences = isset($cached_entry['cancelled']) && is_array($cached_entry['cancelled']) ? $cached_entry['cancelled'] : array();
+                } elseif (is_array($cached_entry)) {
+                    $occurrence_map = $cached_entry;
+                }
             } else {
                 $event_object = MjEvents::find($event_id);
                 if ($event_object) {
@@ -907,6 +914,10 @@ class MjEventRegistrations implements CrudRepositoryInterface {
                             if ($normalized_start === '') {
                                 continue;
                             }
+                            if (self::is_cancelled_occurrence($occurrence_entry)) {
+                                $cancelled_occurrences[$normalized_start] = true;
+                                continue;
+                            }
                             $label = isset($occurrence_entry['label']) ? sanitize_text_field((string) $occurrence_entry['label']) : self::format_occurrence_label($normalized_start);
                             $end_value = '';
                             if (!empty($occurrence_entry['end'])) {
@@ -920,7 +931,10 @@ class MjEventRegistrations implements CrudRepositoryInterface {
                         }
                     }
                 }
-                $event_occurrence_cache[$event_id] = $occurrence_map;
+                $event_occurrence_cache[$event_id] = array(
+                    'entries' => $occurrence_map,
+                    'cancelled' => $cancelled_occurrences,
+                );
             }
         }
 
@@ -950,6 +964,9 @@ class MjEventRegistrations implements CrudRepositoryInterface {
             }
             if (!empty($unique)) {
                 foreach (array_keys($unique) as $normalized) {
+                    if (isset($cancelled_occurrences[$normalized])) {
+                        continue;
+                    }
                     $entry = isset($occurrence_map[$normalized]) && is_array($occurrence_map[$normalized])
                         ? $occurrence_map[$normalized]
                         : null;
@@ -981,6 +998,61 @@ class MjEventRegistrations implements CrudRepositoryInterface {
         }
 
         return $summary;
+    }
+
+    /**
+     * @param mixed $occurrence
+     * @return bool
+     */
+    private static function is_cancelled_occurrence($occurrence) {
+        if (!is_array($occurrence)) {
+            return false;
+        }
+
+        if (!empty($occurrence['is_cancelled'])) {
+            return true;
+        }
+
+        $status_candidates = array();
+
+        if (isset($occurrence['status'])) {
+            $status_candidates[] = $occurrence['status'];
+        }
+
+        if (isset($occurrence['state'])) {
+            $status_candidates[] = $occurrence['state'];
+        }
+
+        if (isset($occurrence['meta']) && is_array($occurrence['meta'])) {
+            if (!empty($occurrence['meta']['is_cancelled']) || !empty($occurrence['meta']['cancelled'])) {
+                return true;
+            }
+
+            if (!empty($occurrence['meta']['excluded']) || !empty($occurrence['meta']['exclude']) || !empty($occurrence['meta']['is_excluded'])) {
+                return true;
+            }
+
+            if (isset($occurrence['meta']['status'])) {
+                $status_candidates[] = $occurrence['meta']['status'];
+            }
+
+            if (isset($occurrence['meta']['state'])) {
+                $status_candidates[] = $occurrence['meta']['state'];
+            }
+        }
+
+        foreach ($status_candidates as $status_candidate) {
+            $status_key = sanitize_key((string) $status_candidate);
+            if ($status_key === '') {
+                continue;
+            }
+
+            if (in_array($status_key, array('cancelled', 'canceled', 'annule', 'annulee', 'excluded', 'exclude', 'skipped', 'skip'), true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
