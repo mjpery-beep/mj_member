@@ -3026,13 +3026,110 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                 <td>
                     <div class="mj-schedule-card">
                         <strong>Intervalle</strong>
+                        <?php
+                        $timezone = wp_timezone();
+
+                        $range_start_hidden = '';
+                        $range_start_date = '';
+                        $range_start_time = '';
+
+                        if (!empty($form_values['schedule_range_start'])) {
+                            $range_start_candidate = str_replace(' ', 'T', (string) $form_values['schedule_range_start']);
+                            try {
+                                $range_start_dt = new DateTimeImmutable($range_start_candidate, $timezone);
+                                $range_start_date = $range_start_dt->format('Y-m-d');
+                                $range_start_time = $range_start_dt->format('H:i');
+                                $range_start_hidden = $range_start_time !== ''
+                                    ? $range_start_dt->format('Y-m-d\TH:i')
+                                    : $range_start_date;
+                            } catch (Exception $e) {
+                                $range_start_hidden = sanitize_text_field((string) $form_values['schedule_range_start']);
+                                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $range_start_hidden)) {
+                                    $range_start_date = $range_start_hidden;
+                                }
+                            }
+                        }
+
+                        $range_end_hidden = '';
+                        $range_end_date = '';
+                        $range_end_time = '';
+
+                        if (!empty($form_values['schedule_range_end'])) {
+                            $range_end_candidate = str_replace(' ', 'T', (string) $form_values['schedule_range_end']);
+                            try {
+                                $range_end_dt = new DateTimeImmutable($range_end_candidate, $timezone);
+                                $range_end_date = $range_end_dt->format('Y-m-d');
+                                $range_end_time = $range_end_dt->format('H:i');
+                                $range_end_hidden = $range_end_time !== ''
+                                    ? $range_end_dt->format('Y-m-d\TH:i')
+                                    : $range_end_date;
+                            } catch (Exception $e) {
+                                $range_end_hidden = sanitize_text_field((string) $form_values['schedule_range_end']);
+                                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $range_end_hidden)) {
+                                    $range_end_date = $range_end_hidden;
+                                }
+                            }
+                        }
+                        ?>
                         <div class="mj-schedule-inline">
                             <label for="mj-event-range-start">Debut</label>
-                            <input type="datetime-local" id="mj-event-range-start" name="event_range_start" value="<?php echo esc_attr($form_values['schedule_range_start']); ?>" />
+                            <input type="hidden" id="mj-event-range-start" name="event_range_start" value="<?php echo esc_attr($range_start_hidden); ?>" data-range-hidden="start" />
+                            <div class="mj-form-datetime" data-range-field="start">
+                                <div class="mj-form-datetime__column">
+                                    <span class="mj-form-datetime__label" aria-hidden="true"><?php esc_html_e('Date', 'mj-member'); ?></span>
+                                    <input
+                                        type="date"
+                                        id="mj-event-range-start-date"
+                                        name="event_range_start_date"
+                                        value="<?php echo esc_attr($range_start_date); ?>"
+                                        class="mj-form-datetime__input"
+                                        aria-label="<?php esc_attr_e('Date de début de la plage', 'mj-member'); ?>"
+                                        required
+                                    />
+                                </div>
+                                <div class="mj-form-datetime__column">
+                                    <span class="mj-form-datetime__label" aria-hidden="true"><?php esc_html_e('Heure', 'mj-member'); ?></span>
+                                    <input
+                                        type="time"
+                                        id="mj-event-range-start-time"
+                                        name="event_range_start_time"
+                                        value="<?php echo esc_attr($range_start_time); ?>"
+                                        class="mj-form-datetime__input"
+                                        aria-label="<?php esc_attr_e('Heure de début de la plage', 'mj-member'); ?>"
+                                        required
+                                    />
+                                </div>
+                            </div>
                             <label for="mj-event-range-end">Fin</label>
-                            <input type="datetime-local" id="mj-event-range-end" name="event_range_end" value="<?php echo esc_attr($form_values['schedule_range_end']); ?>" />
+                            <input type="hidden" id="mj-event-range-end" name="event_range_end" value="<?php echo esc_attr($range_end_hidden); ?>" data-range-hidden="end" />
+                            <div class="mj-form-datetime" data-range-field="end">
+                                <div class="mj-form-datetime__column">
+                                    <span class="mj-form-datetime__label" aria-hidden="true"><?php esc_html_e('Date', 'mj-member'); ?></span>
+                                    <input
+                                        type="date"
+                                        id="mj-event-range-end-date"
+                                        name="event_range_end_date"
+                                        value="<?php echo esc_attr($range_end_date); ?>"
+                                        class="mj-form-datetime__input"
+                                        aria-label="<?php esc_attr_e('Date de fin de la plage', 'mj-member'); ?>"
+                                        required
+                                    />
+                                </div>
+                                <div class="mj-form-datetime__column">
+                                    <span class="mj-form-datetime__label" aria-hidden="true"><?php esc_html_e('Heure', 'mj-member'); ?></span>
+                                    <input
+                                        type="time"
+                                        id="mj-event-range-end-time"
+                                        name="event_range_end_time"
+                                        value="<?php echo esc_attr($range_end_time); ?>"
+                                        class="mj-form-datetime__input"
+                                        aria-label="<?php esc_attr_e('Heure de fin de la plage', 'mj-member'); ?>"
+                                        required
+                                    />
+                                </div>
+                            </div>
                         </div>
-                        <p class="description">Choisissez cette option pour un evenement etale sur plusieurs jours.</p>
+                        <p class="description">Choisissez cette option pour un evenement etale sur plusieurs jours et précisez les horaires.</p>
                     </div>
                 </td>
             </tr>

@@ -680,6 +680,46 @@
     background: #e2e8f0;
 }
 
+
+.mj-form-datetime {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.mj-form-datetime__column {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 150px;
+    flex: 1 1 160px;
+}
+
+.mj-form-datetime__label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #475569;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.mj-form-datetime__input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    background: #ffffff;
+    color: #0f172a;
+    transition: all 0.2s ease;
+}
+
+.mj-form-datetime__input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
 .mj-events-manager-form__submit {
     background: #2563eb;
     color: #ffffff;

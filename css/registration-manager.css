@@ -5037,6 +5037,18 @@ input.mj-regmgr-search-input__field {
     gap: 6px;
 }
 
+.mj-regmgr-form-datetime {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+@media (max-width: 600px) {
+    .mj-regmgr-form-datetime {
+        grid-template-columns: 1fr;
+    }
+}
+
 .mj-regmgr-form-field textarea.mj-regmgr-richtext {
     min-height: 220px;
     padding: 12px;

@@ -19,7 +19,6 @@
             ':' + pad(date.getMinutes())
         );
     }
-
     function setCover(imageId, imageUrl) {
         $('#mj-event-cover-id').val(imageId || 0);
         var preview = $('#mj-event-cover-preview');
@@ -479,6 +478,10 @@
         var fixedEndTimeInput = $('#mj-event-fixed-end-time');
         var rangeStartInput = $('#mj-event-range-start');
         var rangeEndInput = $('#mj-event-range-end');
+        var rangeStartDateInput = $('#mj-event-range-start-date');
+        var rangeStartTimeInput = $('#mj-event-range-start-time');
+        var rangeEndDateInput = $('#mj-event-range-end-date');
+        var rangeEndTimeInput = $('#mj-event-range-end-time');
         var seriesField = $('#mj-event-series-items');
         var seriesTableBody = $('#mj-event-series-table tbody');
         var seriesEmptyRow = $('#mj-event-series-empty');
@@ -726,7 +729,11 @@
         function updateFieldRequirements(mode) {
             fixedDateInput.add(fixedStartTimeInput).prop('required', mode === 'fixed');
             fixedEndTimeInput.prop('required', false);
-            rangeStartInput.add(rangeEndInput).prop('required', mode === 'range');
+            var rangeRequired = mode === 'range';
+            rangeStartDateInput.add(rangeStartTimeInput)
+                .add(rangeEndDateInput)
+                .add(rangeEndTimeInput)
+                .prop('required', rangeRequired);
             recurringDateInput.add(recurringStartTimeInput).add(recurringEndTimeInput).prop('required', mode === 'recurring');
             if (recurringUntilInput.length) {
                 recurringUntilInput.prop('disabled', mode !== 'recurring');
@@ -835,9 +842,17 @@
             refreshScheduleUI('fixed');
         });
 
-        rangeStartInput.add(rangeEndInput).on('change', function () {
+        var rangeFieldInputs = rangeStartDateInput
+            .add(rangeStartTimeInput)
+            .add(rangeEndDateInput)
+            .add(rangeEndTimeInput);
+
+        rangeFieldInputs.on('input change', function () {
+            syncRangeHiddenValues();
             refreshScheduleUI('range');
         });
+
+        syncRangeHiddenValues();
 
         if (seriesAddButton.length) {
             seriesAddButton.on('click', function (event) {

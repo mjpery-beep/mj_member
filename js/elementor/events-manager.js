@@ -120,7 +120,11 @@
                 weekdaySelector: form.querySelector('[data-weekday-selector]'),
                 intervalLabel: form.querySelector('[data-interval-label]'),
                 payloadInput: form.querySelector('[data-schedule-payload]'),
+                rangeNotice: form.querySelector('[data-schedule-range-note]'),
             };
+            this.datetimeCompositeMap = new Map();
+
+            this.setupDatetimeComposites();
             
             this.init();
         }
@@ -148,12 +152,121 @@
             this.handleFrequencyChange();
         }
 
+        setupDatetimeComposites() {
+            this.datetimeCompositeMap = new Map();
+            const containers = this.form.querySelectorAll('[data-datetime-composite]');
+            containers.forEach(container => {
+                const field = container.getAttribute('data-datetime-target');
+                if (!field) {
+                    return;
+                }
+
+                const hidden = this.form.querySelector(`[data-datetime-hidden="${field}"]`);
+                if (!hidden) {
+                    return;
+                }
+
+                const dateInput = container.querySelector('[data-datetime-date]');
+                const timeInput = container.querySelector('[data-datetime-time]');
+                if (!dateInput || !timeInput) {
+                    return;
+                }
+
+                const requireTime = container.getAttribute('data-datetime-require-time') === '1';
+
+                const composite = {
+                    field,
+                    hidden,
+                    dateInput,
+                    timeInput,
+                    requireTime,
+                };
+
+                const sync = () => {
+                    const dateValue = dateInput.value ? dateInput.value.trim() : '';
+                    const timeValue = timeInput.value ? timeInput.value.trim() : '';
+
+                    if (!dateValue) {
+                        hidden.value = '';
+                        return;
+                    }
+
+                    if (requireTime && !timeValue) {
+                        hidden.value = '';
+                        return;
+                    }
+
+                    hidden.value = timeValue ? `${dateValue}T${timeValue}` : dateValue;
+                };
+
+                composite.sync = sync;
+
+                dateInput.addEventListener('input', sync);
+                dateInput.addEventListener('change', sync);
+                timeInput.addEventListener('input', sync);
+                timeInput.addEventListener('change', sync);
+
+                sync();
+
+                this.datetimeCompositeMap.set(field, composite);
+            });
+        }
+
+        updateDatetimeComposite(field, rawValue) {
+            if (!this.datetimeCompositeMap.has(field)) {
+                return;
+            }
+
+            const composite = this.datetimeCompositeMap.get(field);
+            const normalized = typeof rawValue === 'string' ? rawValue.trim() : '';
+
+            if (normalized === '') {
+                composite.hidden.value = '';
+                composite.dateInput.value = '';
+                composite.timeInput.value = '';
+                if (typeof composite.sync === 'function') {
+                    composite.sync();
+                }
+                return;
+            }
+
+            const parts = this.extractDateParts(normalized);
+            composite.hidden.value = parts.iso || '';
+            composite.dateInput.value = parts.date || '';
+            composite.timeInput.value = parts.hasTime ? parts.time : '';
+
+            if (!parts.hasTime && composite.requireTime) {
+                composite.timeInput.value = '';
+                composite.hidden.value = '';
+            }
+
+            if (typeof composite.sync === 'function') {
+                composite.sync();
+            }
+        }
+
+        syncDatetimeHidden() {
+            if (!this.datetimeCompositeMap) {
+                return;
+            }
+
+            this.datetimeCompositeMap.forEach(composite => {
+                if (typeof composite.sync === 'function') {
+                    composite.sync();
+                }
+            });
+        }
+
         handleModeChange() {
             const selectedMode = this.form.querySelector('[data-schedule-mode]:checked');
             const mode = selectedMode ? selectedMode.value : 'fixed';
             
             if (this.elements.recurringSection) {
                 this.elements.recurringSection.hidden = mode !== 'recurring';
+            }
+
+            if (this.elements.rangeNotice) {
+                this.elements.rangeNotice.hidden = mode !== 'range';
             }
         }
 
@@ -1280,6 +1393,10 @@
                 this.scheduleController.reset();
             }
 
+            this.updateDatetimeComposite('start_date', '');
+            this.updateDatetimeComposite('end_date', '');
+            this.syncDatetimeHidden();
+
             const attendanceCheckbox = this.elements.form ? this.elements.form.querySelector('[name="attendance_show_all_members"]') : null;
             if (attendanceCheckbox) {
                 attendanceCheckbox.checked = false;
@@ -1305,15 +1422,8 @@
                 attendanceCheckbox.checked = !!event.attendance_show_all_members;
             }
 
-            if (event.start_date) {
-                const startFormatted = this.formatDateForInput(event.start_date);
-                form.querySelector('[name="start_date"]').value = startFormatted;
-            }
-
-            if (event.end_date) {
-                const endFormatted = this.formatDateForInput(event.end_date);
-                form.querySelector('[name="end_date"]').value = endFormatted;
-            }
+            this.updateDatetimeComposite('start_date', event.start_date || '');
+            this.updateDatetimeComposite('end_date', event.end_date || '');
 
             this.setEmojiValue(event.emoji || '');
 
@@ -1337,6 +1447,46 @@
             }
         }
 
+        extractDateParts(value) {
+            const result = {
+                iso: '',
+                date: '',
+                time: '',
+                hasTime: false,
+            };
+
+            if (!value) {
+                return result;
+            }
+
+            const raw = String(value).trim();
+            if (raw === '') {
+                return result;
+            }
+
+            const date = this.parseDate(raw);
+            if (!date) {
+                return result;
+            }
+
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+
+            const datePart = `${year}-${month}-${day}`;
+            const timePart = `${hours}:${minutes}`;
+            const hasTime = /[T ]\d{2}:\d{2}/.test(raw);
+
+            return {
+                iso: hasTime ? `${datePart}T${timePart}` : datePart,
+                date: datePart,
+                time: timePart,
+                hasTime: hasTime,
+            };
+        }
+
         async handleFormSubmit() {
             if (!this.elements.form) return;
 
@@ -1348,6 +1498,8 @@
                     emojiInput.value = sanitizeEmojiInput(emojiInput.value || '');
                 }
             }
+
+            this.syncDatetimeHidden();
 
             const formData = new FormData(this.elements.form);
             const action = this.currentEventId ? 'mj_events_manager_update' : 'mj_events_manager_create';

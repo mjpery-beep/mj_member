@@ -77,7 +77,7 @@ class EventFormRenderer
 
         ?>
         <div class="<?php echo esc_attr($wrapper_class); ?>">
-            <label for="<?php echo esc_attr($id); ?>">
+            <label for="<?php echo esc_attr($date_input_id); ?>">
                 <?php echo esc_html($label); ?>
                 <?php if ($required): ?>
                     <span class="required">*</span>
@@ -204,21 +204,53 @@ class EventFormRenderer
         $description = $args['description'] ?? '';
         $class = $args['class'] ?? '';
         $wrapper_class = $args['wrapper_class'] ?? 'mj-form-field';
+        $require_time = array_key_exists('require_time', $args) ? (bool) $args['require_time'] : $required;
 
-        // Convertir format MySQL en datetime-local
-        $formatted_value = '';
-        if ($value && $value !== '0000-00-00 00:00:00') {
+        $hidden_value = '';
+        $date_value = '';
+        $time_value = '';
+
+        if (!empty($value) && $value !== '0000-00-00 00:00:00') {
             try {
                 $timezone = wp_timezone();
-                $datetime = \DateTime::createFromFormat('Y-m-d H:i:s', $value, $timezone);
-                if ($datetime instanceof \DateTime) {
-                    $datetime->setTimezone($timezone);
-                    $formatted_value = $datetime->format('Y-m-d\TH:i');
+
+                $datetime = null;
+
+                if ($value instanceof \DateTimeInterface) {
+                    $datetime = new \DateTime($value->format('Y-m-d H:i:s'), $timezone);
+                }
+
+                if (!$datetime instanceof \DateTimeInterface && is_string($value)) {
+                    $normalized = str_replace('T', ' ', $value);
+                    $datetime = \DateTime::createFromFormat('Y-m-d H:i:s', $normalized, $timezone);
+                    if (!$datetime instanceof \DateTime) {
+                        $datetime = \DateTime::createFromFormat('Y-m-d H:i', $normalized, $timezone);
+                    }
+                }
+
+                if (!$datetime instanceof \DateTimeInterface) {
+                    $timestamp = strtotime((string) $value);
+                    if ($timestamp) {
+                        $datetime = new \DateTime('@' . $timestamp);
+                        $datetime->setTimezone($timezone);
+                    }
+                }
+
+                if ($datetime instanceof \DateTimeInterface) {
+                    $date_value = $datetime->format('Y-m-d');
+                    $time_value = $datetime->format('H:i');
+                    $hidden_value = $time_value !== ''
+                        ? $datetime->format('Y-m-d\TH:i')
+                        : $date_value;
                 }
             } catch (\Exception $e) {
                 error_log('EventFormRenderer: Invalid datetime format - ' . $e->getMessage());
             }
         }
+
+        $date_input_id = $id . '_date';
+        $time_input_id = $id . '_time';
+        $input_class = trim($class . ' mj-form-datetime__input');
 
         ?>
         <div class="<?php echo esc_attr($wrapper_class); ?>">
@@ -229,13 +261,45 @@ class EventFormRenderer
                 <?php endif; ?>
             </label>
             <input
-                type="datetime-local"
+                type="hidden"
                 id="<?php echo esc_attr($id); ?>"
                 name="<?php echo esc_attr($id); ?>"
-                value="<?php echo esc_attr($formatted_value); ?>"
-                class="<?php echo esc_attr($class); ?>"
-                <?php if ($required): ?>required<?php endif; ?>
+                value="<?php echo esc_attr($hidden_value); ?>"
+                data-datetime-hidden="<?php echo esc_attr($id); ?>"
             />
+            <div
+                class="mj-form-datetime"
+                data-datetime-composite
+                data-datetime-target="<?php echo esc_attr($id); ?>"
+                data-datetime-require-time="<?php echo $require_time ? '1' : '0'; ?>"
+            >
+                <div class="mj-form-datetime__column">
+                    <span class="mj-form-datetime__label" aria-hidden="true"><?php esc_html_e('Date', 'mj-member'); ?></span>
+                    <input
+                        type="date"
+                        id="<?php echo esc_attr($date_input_id); ?>"
+                        name="<?php echo esc_attr($id); ?>_date"
+                        value="<?php echo esc_attr($date_value); ?>"
+                        class="<?php echo esc_attr($input_class); ?>"
+                        data-datetime-date
+                        aria-label="<?php echo esc_attr(sprintf(__('Date pour %s', 'mj-member'), $label)); ?>"
+                        <?php if ($required): ?>required<?php endif; ?>
+                    />
+                </div>
+                <div class="mj-form-datetime__column">
+                    <span class="mj-form-datetime__label" aria-hidden="true"><?php esc_html_e('Heure', 'mj-member'); ?></span>
+                    <input
+                        type="time"
+                        id="<?php echo esc_attr($time_input_id); ?>"
+                        name="<?php echo esc_attr($id); ?>_time"
+                        value="<?php echo esc_attr($time_value); ?>"
+                        class="<?php echo esc_attr($input_class); ?>"
+                        data-datetime-time
+                        aria-label="<?php echo esc_attr(sprintf(__('Heure pour %s', 'mj-member'), $label)); ?>"
+                        <?php if ($require_time): ?>required<?php endif; ?>
+                    />
+                </div>
+            </div>
             <?php if ($description): ?>
                 <p class="description"><?php echo esc_html($description); ?></p>
             <?php endif; ?>
@@ -481,7 +545,9 @@ class EventFormRenderer
             ]
         );
 
-        self::renderFieldGroup(function () use ($start_date, $end_date) {
+        ?>
+        <div class="mj-form-field-group mj-form-field-group--row" data-schedule-datetime-group>
+            <?php
             self::renderDatetime(
                 'start_date',
                 __('Date et heure de début', 'mj-member'),
@@ -489,6 +555,7 @@ class EventFormRenderer
                 [
                     'required' => true,
                     'wrapper_class' => 'mj-form-field mj-form-field--inline',
+                    'require_time' => true,
                 ]
             );
 
@@ -498,11 +565,15 @@ class EventFormRenderer
                 $end_date,
                 [
                     'wrapper_class' => 'mj-form-field mj-form-field--inline',
+                    'require_time' => false,
                 ]
             );
-        }, [
-            'class' => 'mj-form-field-group mj-form-field-group--row',
-        ]);
+            ?>
+        </div>
+        <div class="mj-form-field mj-form-field--full" data-schedule-range-note hidden>
+            <p class="description"><?php esc_html_e('Pour une plage de dates, indiquez la date et l\'heure de début et de fin ci-dessus.', 'mj-member'); ?></p>
+        </div>
+        <?php
 
         self::renderFieldGroup(function () use ($price, $capacity_total) {
             self::renderNumber(
@@ -575,6 +646,10 @@ class EventFormRenderer
                 <label class="mj-form-radio">
                     <input type="radio" name="schedule_mode" value="fixed" <?php checked($schedule_mode, 'fixed'); ?> data-schedule-mode />
                     <?php esc_html_e('Date fixe', 'mj-member'); ?>
+                </label>
+                <label class="mj-form-radio">
+                    <input type="radio" name="schedule_mode" value="range" <?php checked($schedule_mode, 'range'); ?> data-schedule-mode />
+                    <?php esc_html_e('Plage de dates', 'mj-member'); ?>
                 </label>
                 <label class="mj-form-radio">
                     <input type="radio" name="schedule_mode" value="recurring" <?php checked($schedule_mode, 'recurring'); ?> data-schedule-mode />

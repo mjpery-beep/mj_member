@@ -197,6 +197,38 @@
         return rawGetString(strings, key, defaultValue);
     }
 
+    function splitDateTimeParts(value) {
+        if (!value) {
+            return { date: '', time: '' };
+        }
+        var raw = String(value).trim().replace('T', ' ');
+        if (!raw) {
+            return { date: '', time: '' };
+        }
+        var segments = raw.split(' ');
+        var date = segments[0] || '';
+        var time = segments[1] || '';
+        if (time.length > 5) {
+            time = time.slice(0, 5);
+        }
+        return { date: date, time: time };
+    }
+
+    function mergeDateTimeParts(date, time) {
+        var cleanDate = (date || '').trim();
+        var cleanTime = (time || '').trim();
+        if (!cleanDate && !cleanTime) {
+            return '';
+        }
+        if (!cleanDate) {
+            return '';
+        }
+        if (!cleanTime) {
+            return cleanDate;
+        }
+        return cleanDate + ' ' + cleanTime;
+    }
+
     function normalizeErrorKey(message) {
         if (!message) {
             return '';
@@ -2821,26 +2853,60 @@
                 ]),
             ]),
 
-            scheduleMode === 'range' && h('div', { class: 'mj-regmgr-form-grid' }, [
-                h('div', { class: 'mj-regmgr-form-field' }, [
-                    h('label', null, getString(strings, 'rangeStart', 'Debut (AAAA-MM-JJ HH:MM)')),
-                    h('input', {
-                        type: 'text',
-                        value: form.event_range_start || '',
-                        placeholder: '2024-05-01 09:00',
-                        onChange: function (e) { onChangeForm('event_range_start', e.target.value); },
-                    }),
-                ]),
-                h('div', { class: 'mj-regmgr-form-field' }, [
-                    h('label', null, getString(strings, 'rangeEnd', 'Fin (AAAA-MM-JJ HH:MM)')),
-                    h('input', {
-                        type: 'text',
-                        value: form.event_range_end || '',
-                        placeholder: '2024-05-01 18:00',
-                        onChange: function (e) { onChangeForm('event_range_end', e.target.value); },
-                    }),
-                ]),
-            ]),
+            scheduleMode === 'range' && (function () {
+                var rangeStartParts = splitDateTimeParts(form.event_range_start);
+                var rangeEndParts = splitDateTimeParts(form.event_range_end);
+                return h('div', { class: 'mj-regmgr-form-grid' }, [
+                    h('div', { class: 'mj-regmgr-form-field' }, [
+                        h('label', null, getString(strings, 'rangeStart', 'Debut')),
+                        h('div', { class: 'mj-regmgr-form-datetime' }, [
+                            h('input', {
+                                type: 'date',
+                                value: rangeStartParts.date,
+                                onChange: function (e) {
+                                    var nextDate = e.target.value;
+                                    var nextValue = mergeDateTimeParts(nextDate, splitDateTimeParts(form.event_range_start).time);
+                                    onChangeForm('event_range_start', nextValue);
+                                },
+                            }),
+                            h('input', {
+                                type: 'time',
+                                step: '60',
+                                value: rangeStartParts.time,
+                                onChange: function (e) {
+                                    var nextTime = e.target.value;
+                                    var nextValue = mergeDateTimeParts(splitDateTimeParts(form.event_range_start).date, nextTime);
+                                    onChangeForm('event_range_start', nextValue);
+                                },
+                            }),
+                        ]),
+                    ]),
+                    h('div', { class: 'mj-regmgr-form-field' }, [
+                        h('label', null, getString(strings, 'rangeEnd', 'Fin')),
+                        h('div', { class: 'mj-regmgr-form-datetime' }, [
+                            h('input', {
+                                type: 'date',
+                                value: rangeEndParts.date,
+                                onChange: function (e) {
+                                    var nextDate = e.target.value;
+                                    var nextValue = mergeDateTimeParts(nextDate, splitDateTimeParts(form.event_range_end).time);
+                                    onChangeForm('event_range_end', nextValue);
+                                },
+                            }),
+                            h('input', {
+                                type: 'time',
+                                step: '60',
+                                value: rangeEndParts.time,
+                                onChange: function (e) {
+                                    var nextTime = e.target.value;
+                                    var nextValue = mergeDateTimeParts(splitDateTimeParts(form.event_range_end).date, nextTime);
+                                    onChangeForm('event_range_end', nextValue);
+                                },
+                            }),
+                        ]),
+                    ]),
+                ]);
+            })(),
 
             scheduleMode === 'recurring' && h('div', { class: 'mj-regmgr-form-grid' }, [
                 h('div', { class: 'mj-regmgr-form-field' }, [
