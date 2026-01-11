@@ -542,6 +542,12 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
             return array_values($targets);
         }
 
+        $member_target = defined('MjContactMessages::TARGET_MEMBER')
+            ? constant('MjContactMessages::TARGET_MEMBER')
+            : 'member';
+
+        $append_target($member_target, $member_id);
+
         if ($is_animateur || $is_coordinateur) {
             $append_target(MjContactMessages::TARGET_ANIMATEUR, $member_id);
             $append_target(MjContactMessages::TARGET_ANIMATEUR, 0);
@@ -581,6 +587,16 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
             return $reference > 0
                 ? MjContactMessages::TARGET_COORDINATEUR . ':' . $reference
                 : MjContactMessages::TARGET_COORDINATEUR;
+        }
+
+        $member_target = defined('MjContactMessages::TARGET_MEMBER')
+            ? constant('MjContactMessages::TARGET_MEMBER')
+            : 'member';
+
+        if ($target_type === $member_target) {
+            return $reference > 0
+                ? $member_target . ':' . $reference
+                : $member_target;
         }
 
         return $target_type;

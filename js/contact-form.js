@@ -84,6 +84,20 @@
         if (!payload.recipient) {
             return false;
         }
+        var recipientsValid = false;
+        if (payload.recipient) {
+            try {
+                var decodedRecipients = JSON.parse(payload.recipient);
+                if (Array.isArray(decodedRecipients) && decodedRecipients.length > 0) {
+                    recipientsValid = true;
+                }
+            } catch (error) {
+                recipientsValid = !!payload.recipient;
+            }
+        }
+        if (!recipientsValid) {
+            return false;
+        }
         if (!payload.message) {
             return false;
         }
@@ -96,19 +110,22 @@
             return;
         }
 
-        var generalValue = $.trim(($form.data('general-value') || '').toString());
-        var $generalToggle = $form.find('[data-recipient-general]');
-        if ($generalToggle.length && $generalToggle.prop('checked') && generalValue) {
-            $hiddenRecipient.val(generalValue);
-            return;
-        }
+        var selections = [];
 
-        var $checkedIndividual = $form.find('input[name="recipient_individual"]:checked');
-        if ($checkedIndividual.length) {
-            $hiddenRecipient.val($.trim($checkedIndividual.val()));
-        } else {
-            $hiddenRecipient.val('');
-        }
+        $form.find('.mj-contact-form__recipient-input:checked').each(function () {
+            var $input = $(this);
+            if ($input.is('[data-recipient-general]') || $input.is('[data-recipient-youth-toggle]')) {
+                return;
+            }
+
+            var value = $.trim(($input.val() || '').toString());
+            if (value && $.inArray(value, selections) === -1) {
+                selections.push(value);
+            }
+        });
+
+        var serialized = selections.length ? JSON.stringify(selections) : '[]';
+        $hiddenRecipient.val(serialized);
     }
 
     function refreshRecipientSelection($form) {
@@ -116,11 +133,6 @@
         if ($options.length === 0) {
             return;
         }
-
-        syncRecipientField($form);
-
-        var $hiddenRecipient = $form.find('[data-recipient-field]');
-        var selectedValue = $hiddenRecipient.length ? $.trim($hiddenRecipient.val()) : '';
 
         $options.each(function () {
             var $option = $(this);
@@ -130,58 +142,80 @@
                 return;
             }
 
-            var optionValue = $.trim(($input.val() || '').toString());
-            if (selectedValue && optionValue === selectedValue) {
+            if ($input.prop('checked')) {
                 $option.addClass('is-selected');
             } else {
                 $option.removeClass('is-selected');
             }
         });
 
+        syncRecipientField($form);
         toggleIndividualListVisibility($form);
     }
 
     function toggleIndividualListVisibility($form) {
-        var $list = $form.find('[data-recipient-list]');
-        if ($list.length === 0) {
-            return;
-        }
+        $form.find('[data-recipient-list]').removeClass('is-hidden');
+    }
 
+    function applyMasterSelections($form) {
         var $generalToggle = $form.find('[data-recipient-general]');
         if ($generalToggle.length && $generalToggle.prop('checked')) {
-            $list.addClass('is-hidden');
-        } else {
-            $list.removeClass('is-hidden');
+            $form.find('[data-recipient-staff]').prop('checked', true);
+        }
+
+        var $youthToggle = $form.find('[data-recipient-youth-toggle]');
+        if ($youthToggle.length && $youthToggle.prop('checked')) {
+            $form.find('[data-recipient-youth]').prop('checked', true);
+        }
+    }
+
+    function synchronizeMasterFromIndividuals($form) {
+        var $generalToggle = $form.find('[data-recipient-general]');
+        if ($generalToggle.length) {
+            var $staff = $form.find('[data-recipient-staff]');
+            var staffCount = $staff.length;
+            if (staffCount > 0) {
+                var staffChecked = $staff.filter(':checked').length;
+                $generalToggle.prop('checked', staffChecked > 0 && staffChecked === staffCount);
+            }
+        }
+
+        var $youthToggle = $form.find('[data-recipient-youth-toggle]');
+        if ($youthToggle.length) {
+            var $youth = $form.find('[data-recipient-youth]');
+            var youthCount = $youth.length;
+            if (youthCount > 0) {
+                var youthChecked = $youth.filter(':checked').length;
+                $youthToggle.prop('checked', youthChecked > 0 && youthChecked === youthCount);
+            }
         }
     }
 
     function initializeRecipientSelection($context) {
         $context.find('.mj-contact-form__form').each(function () {
-            refreshRecipientSelection($(this));
+            var $form = $(this);
+            applyMasterSelections($form);
+            synchronizeMasterFromIndividuals($form);
+            refreshRecipientSelection($form);
         });
     }
 
     $(document).on('change', '.mj-contact-form__recipient-input', function () {
         var $input = $(this);
         var $form = $input.closest('.mj-contact-form__form');
+        var isChecked = $input.prop('checked');
 
         if ($input.is('[data-recipient-general]')) {
-            if ($input.prop('checked')) {
-                $form.find('input[name="recipient_individual"]').prop('checked', false);
-            } else {
-                if (!$form.find('input[name="recipient_individual"]:checked').length) {
-                    var $first = $form.find('input[name="recipient_individual"]').first();
-                    if ($first.length) {
-                        $first.prop('checked', true);
-                    }
-                }
+            $form.find('[data-recipient-staff]').prop('checked', isChecked);
+            if (!isChecked) {
+                $form.find('[data-recipient-youth-toggle]').prop('checked', false);
+                $form.find('[data-recipient-youth]').prop('checked', false);
             }
-        } else {
-            if ($input.prop('checked')) {
-                $form.find('[data-recipient-general]').prop('checked', false);
-            }
+        } else if ($input.is('[data-recipient-youth-toggle]')) {
+            $form.find('[data-recipient-youth]').prop('checked', isChecked);
         }
 
+        synchronizeMasterFromIndividuals($form);
         refreshRecipientSelection($form);
     });
 

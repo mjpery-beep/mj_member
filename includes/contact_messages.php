@@ -1,9 +1,21 @@
 <?php
 
 use Mj\Member\Classes\MjRoles;
+use Mj\Member\Core\Config;
 
 if (!defined('ABSPATH')) {
     exit;
+}
+
+if (!function_exists('mj_member_contact_member_target_key')) {
+    /**
+     * @return string
+     */
+    function mj_member_contact_member_target_key() {
+        return defined('MjContactMessages::TARGET_MEMBER')
+            ? constant('MjContactMessages::TARGET_MEMBER')
+            : 'member';
+    }
 }
 
 if (!function_exists('mj_member_contact_get_default_avatar')) {
@@ -199,6 +211,26 @@ if (!function_exists('mj_member_get_contact_recipient_options')) {
     function mj_member_get_contact_recipient_options() {
         $options = array();
 
+        $current_member = function_exists('mj_member_get_current_member') ? mj_member_get_current_member() : null;
+        $current_role = '';
+        if ($current_member && isset($current_member->role)) {
+            $current_role = sanitize_key((string) $current_member->role);
+        }
+
+        $member_target = mj_member_contact_member_target_key();
+
+        $allow_member_targets = false;
+        if ($current_role !== '' && MjRoles::isAnimateurOrCoordinateur($current_role)) {
+            $allow_member_targets = true;
+        }
+
+        if (!$allow_member_targets && class_exists('\Mj\Member\Core\Config')) {
+            $capability = Config::contactCapability();
+            if (is_string($capability) && $capability !== '' && current_user_can($capability)) {
+                $allow_member_targets = true;
+            }
+        }
+
         if (class_exists('MjMembers')) {
             $role_labels = MjMembers::getRoleLabels();
 
@@ -283,6 +315,63 @@ if (!function_exists('mj_member_get_contact_recipient_options')) {
                     ));
                 }
             }
+
+            if ($allow_member_targets) {
+                $youth_filters = array('role' => MjRoles::JEUNE);
+                if (defined('Mj\\Member\\Classes\\Crud\\MjMembers::STATUS_ACTIVE')) {
+                    $youth_filters['status'] = \Mj\Member\Classes\Crud\MjMembers::STATUS_ACTIVE;
+                }
+
+                $youth_limit = (int) apply_filters('mj_member_contact_youth_recipient_limit', 200);
+                if ($youth_limit < 0) {
+                    $youth_limit = 0;
+                }
+
+                $jeunes = MjMembers::getAll($youth_limit, 0, 'last_name', 'ASC', '', $youth_filters);
+                if (!empty($jeunes) && is_array($jeunes)) {
+                    foreach ($jeunes as $index => $jeune) {
+                        if (!isset($jeune->id)) {
+                            continue;
+                        }
+
+                        $first_name = isset($jeune->first_name) ? sanitize_text_field((string) $jeune->first_name) : '';
+                        $last_name = isset($jeune->last_name) ? sanitize_text_field((string) $jeune->last_name) : '';
+                        $full_name = trim($first_name . ' ' . $last_name);
+                        if ($full_name === '') {
+                            $full_name = sprintf(__('Membre #%d', 'mj-member'), (int) $jeune->id);
+                        }
+
+                        $role_key = isset($jeune->role) ? sanitize_key((string) $jeune->role) : MjRoles::JEUNE;
+                        $role_label = isset($role_labels[$role_key]) ? $role_labels[$role_key] : __('Jeune', 'mj-member');
+
+                        $email_value = isset($jeune->email) ? sanitize_email((string) $jeune->email) : '';
+                        if ($email_value === '' || !is_email($email_value)) {
+                            continue;
+                        }
+
+                        $description = '';
+                        if (!empty($jeune->description_courte)) {
+                            $description = sanitize_text_field((string) $jeune->description_courte);
+                        }
+                        if ($description === '') {
+                            $description = __('Jeune membre de la MJ.', 'mj-member');
+                        }
+
+                        $options[] = mj_member_contact_format_recipient_option(array(
+                            'value' => $member_target . ':' . (int) $jeune->id,
+                            'label' => $full_name,
+                            'type' => $member_target,
+                            'reference' => (int) $jeune->id,
+                            'role' => $role_key,
+                            'role_label' => $role_label,
+                            'member' => $jeune,
+                            'email' => $email_value,
+                            'description' => $description,
+                            'cover_theme' => ($index % 4 === 0) ? 'emerald' : '',
+                        ));
+                    }
+                }
+            }
         }
 
         $general_option = mj_member_contact_format_recipient_option(array(
@@ -334,6 +423,8 @@ if (!function_exists('mj_member_parse_contact_recipient_choice')) {
                 'label' => __('Toute l\'équipe', 'mj-member'),
             );
         }
+
+        $member_target = mj_member_contact_member_target_key();
 
         if ($choice === MjContactMessages::TARGET_COORDINATEUR) {
             return array(
@@ -401,6 +492,39 @@ if (!function_exists('mj_member_parse_contact_recipient_choice')) {
             );
         }
 
+        if ($choice === $member_target) {
+            return array(
+                'type' => $member_target,
+                'reference' => 0,
+                'label' => __('Jeunes', 'mj-member'),
+            );
+        }
+
+        if (strpos($choice, $member_target . ':') === 0) {
+            $parts = explode(':', $choice);
+            $member_id = isset($parts[1]) ? (int) $parts[1] : 0;
+            if ($member_id <= 0) {
+                return new WP_Error('mj_contact_invalid_recipient', __('Destinataire introuvable.', 'mj-member'));
+            }
+
+            $label = sprintf(__('Jeune #%d', 'mj-member'), $member_id);
+            if (class_exists('MjMembers')) {
+                $row = MjMembers::getById($member_id);
+                if ($row && isset($row->first_name, $row->last_name)) {
+                    $candidate = trim($row->first_name . ' ' . $row->last_name);
+                    if ($candidate !== '') {
+                        $label = $candidate;
+                    }
+                }
+            }
+
+            return array(
+                'type' => $member_target,
+                'reference' => $member_id,
+                'label' => $label,
+            );
+        }
+
         return new WP_Error('mj_contact_invalid_recipient', __('Destinataire introuvable.', 'mj-member'));
     }
 }
@@ -416,7 +540,30 @@ if (!function_exists('mj_member_handle_contact_message_submission')) {
         $sender_email = isset($_POST['email']) ? sanitize_email(wp_unslash($_POST['email'])) : '';
         $subject = isset($_POST['subject']) ? sanitize_text_field(wp_unslash($_POST['subject'])) : '';
         $message = isset($_POST['message']) ? wp_kses_post(wp_unslash($_POST['message'])) : '';
-        $choice = isset($_POST['recipient']) ? sanitize_text_field(wp_unslash($_POST['recipient'])) : '';
+        $recipient_raw = isset($_POST['recipient']) ? wp_unslash($_POST['recipient']) : '';
+        $recipient_raw = is_string($recipient_raw) ? trim($recipient_raw) : '';
+        $recipient_sanitized = sanitize_text_field($recipient_raw);
+        $choice_list = array();
+
+        if ($recipient_raw !== '') {
+            $decoded_choices = json_decode($recipient_raw, true);
+            if (is_array($decoded_choices)) {
+                foreach ($decoded_choices as $decoded_choice) {
+                    $candidate = sanitize_text_field((string) $decoded_choice);
+                    if ($candidate !== '') {
+                        $choice_list[] = $candidate;
+                    }
+                }
+            }
+        }
+
+        if (empty($choice_list) && $recipient_sanitized !== '') {
+            $choice_list[] = $recipient_sanitized;
+        }
+
+        if (!empty($choice_list)) {
+            $choice_list = array_values(array_unique($choice_list));
+        }
         $posted_member_id = isset($_POST['member_id']) ? (int) wp_unslash($_POST['member_id']) : 0;
         $parent_message_id = isset($_POST['parent_message_id']) ? (int) wp_unslash($_POST['parent_message_id']) : 0;
         if ($parent_message_id <= 0 && isset($_POST['parent_id'])) {
@@ -510,21 +657,34 @@ if (!function_exists('mj_member_handle_contact_message_submission')) {
             }
         }
 
+        $recipient_specs = array();
+
         if ($parent_message instanceof stdClass && isset($parent_message->target_type)) {
             $target_type = sanitize_key((string) $parent_message->target_type);
             if ($target_type === '') {
                 $target_type = MjContactMessages::TARGET_ALL;
             }
 
-            $recipient = array(
+            $recipient_specs[] = array(
                 'type' => $target_type,
                 'reference' => isset($parent_message->target_reference) ? (int) $parent_message->target_reference : 0,
                 'label' => isset($parent_message->target_label) ? sanitize_text_field((string) $parent_message->target_label) : '',
             );
         } else {
-            $recipient = mj_member_parse_contact_recipient_choice($choice);
-            if (is_wp_error($recipient)) {
-                wp_send_json_error(array('message' => $recipient->get_error_message()), 400);
+            if (empty($choice_list)) {
+                wp_send_json_error(array('message' => __('Veuillez sélectionner au moins un destinataire.', 'mj-member')), 400);
+            }
+
+            if (in_array(MjContactMessages::TARGET_ALL, $choice_list, true) && count($choice_list) > 1) {
+                $choice_list = array(MjContactMessages::TARGET_ALL);
+            }
+
+            foreach ($choice_list as $choice_item) {
+                $recipient = mj_member_parse_contact_recipient_choice($choice_item);
+                if (is_wp_error($recipient)) {
+                    wp_send_json_error(array('message' => $recipient->get_error_message()), 400);
+                }
+                $recipient_specs[] = $recipient;
             }
         }
 
@@ -603,21 +763,53 @@ if (!function_exists('mj_member_handle_contact_message_submission')) {
             wp_send_json_success($payload);
         }
 
-        $created_message_id = MjContactMessages::create(array(
-            'sender_name' => $sender_name,
-            'sender_email' => $sender_email,
-            'subject' => $subject,
-            'message' => $message,
-            'target_type' => $recipient['type'],
-            'target_reference' => $recipient['reference'],
-            'target_label' => $recipient['label'],
-            'source_url' => $source_url,
-            'meta' => $meta,
-            'user_id' => $user_id,
-        ));
+        $recipient_total = count($recipient_specs);
+        $created_message_ids = array();
+        $creation_error = null;
 
-        if (is_wp_error($created_message_id)) {
-            wp_send_json_error(array('message' => $created_message_id->get_error_message()), 500);
+        foreach ($recipient_specs as $recipient) {
+            $created_message_id = MjContactMessages::create(array(
+                'sender_name' => $sender_name,
+                'sender_email' => $sender_email,
+                'subject' => $subject,
+                'message' => $message,
+                'target_type' => $recipient['type'],
+                'target_reference' => $recipient['reference'],
+                'target_label' => $recipient['label'],
+                'source_url' => $source_url,
+                'meta' => $meta,
+                'user_id' => $user_id,
+            ));
+
+            if (is_wp_error($created_message_id)) {
+                $creation_error = $created_message_id;
+                break;
+            }
+
+            $created_message_ids[] = (int) $created_message_id;
+        }
+
+        if ($creation_error instanceof WP_Error) {
+            foreach ($created_message_ids as $created_message_id) {
+                $cleanup = MjContactMessages::delete($created_message_id);
+                if (is_wp_error($cleanup)) {
+                    // Ignore cleanup failures; the original error will be surfaced.
+                }
+            }
+
+            wp_send_json_error(array('message' => $creation_error->get_error_message()), 500);
+        }
+
+        if ($recipient_total > 1) {
+            $response_message = sprintf(
+                _n(
+                    'Merci ! Votre message a été envoyé à %d destinataire.',
+                    'Merci ! Votre message a été envoyé à %d destinataires.',
+                    $recipient_total,
+                    'mj-member'
+                ),
+                $recipient_total
+            );
         }
 
         $payload = array('message' => $response_message);

@@ -102,13 +102,44 @@ foreach ($recipients as $recipient) {
     $individual_recipients[] = $recipient;
 }
 
+$member_target_key = 'member';
+if (function_exists('mj_member_contact_member_target_key')) {
+    $member_target_key = mj_member_contact_member_target_key();
+} elseif (defined('MjContactMessages::TARGET_MEMBER')) {
+    $member_target_key = constant('MjContactMessages::TARGET_MEMBER');
+}
+
+$staff_recipients = array();
+$youth_recipients = array();
+
+foreach ($individual_recipients as $recipient) {
+    $recipient_type = isset($recipient['type']) ? (string) $recipient['type'] : '';
+    if ($recipient_type === $member_target_key) {
+        $youth_recipients[] = $recipient;
+    } else {
+        $staff_recipients[] = $recipient;
+    }
+}
+
+$youth_count = count($youth_recipients);
+$youth_bulk_value = $member_target_key;
+
 $general_value = $general_option !== null && isset($general_option['value']) ? (string) $general_option['value'] : '';
-$default_selected_value = $general_value;
-if ($default_selected_value === '' && !empty($individual_recipients)) {
+$default_selected_values = array();
+
+if (!empty($individual_recipients)) {
     $first_individual = reset($individual_recipients);
     if ($first_individual && isset($first_individual['value'])) {
-        $default_selected_value = (string) $first_individual['value'];
+        $default_selected_values[] = (string) $first_individual['value'];
     }
+} elseif ($general_value !== '') {
+    $default_selected_values[] = $general_value;
+}
+
+$default_selected_values = array_values(array_filter(array_unique(array_map('strval', $default_selected_values))));
+$default_recipient_json = wp_json_encode($default_selected_values);
+if (!is_string($default_recipient_json) || $default_recipient_json === '') {
+    $default_recipient_json = '[]';
 }
 
 $input_index = 0;
@@ -162,7 +193,7 @@ $current_url = esc_url(add_query_arg(array()));
         <div class="mj-contact-form__layout">
             <div class="mj-contact-form__form-wrapper">
                 <form class="mj-contact-form__form" method="post" novalidate data-general-value="<?php echo esc_attr($general_value); ?>">
-        <input type="hidden" name="recipient" value="<?php echo esc_attr($default_selected_value); ?>" data-recipient-field>
+        <input type="hidden" name="recipient" value="<?php echo esc_attr($default_recipient_json); ?>" data-recipient-field>
         <?php if ($member_card_available) : ?>
             <input type="hidden" name="name" value="<?php echo esc_attr($prefill_name); ?>">
             <input type="hidden" name="email" value="<?php echo esc_attr($prefill_email); ?>">
@@ -232,7 +263,7 @@ $current_url = esc_url(add_query_arg(array()));
                         }
                         $input_id = 'mj-contact-recipient-' . $input_index;
                         $input_index++;
-                        $is_selected = ($default_selected_value !== '' && $value === $default_selected_value);
+                        $is_selected = in_array($value, $default_selected_values, true);
                         $option_classes = array('mj-contact-form__recipient-option', 'mj-contact-form__recipient-option--general');
                         if ($is_selected) {
                             $option_classes[] = 'is-selected';
@@ -277,9 +308,9 @@ $current_url = esc_url(add_query_arg(array()));
                         </div>
                     <?php endif; ?>
 
-                    <?php if (!empty($individual_recipients)) : ?>
+                    <?php if (!empty($staff_recipients)) : ?>
                         <div class="mj-contact-form__recipient-list" data-recipient-list>
-                            <?php foreach ($individual_recipients as $recipient) :
+                            <?php foreach ($staff_recipients as $recipient) :
                                 $value = isset($recipient['value']) ? (string) $recipient['value'] : '';
                                 $label = isset($recipient['label']) ? (string) $recipient['label'] : $value;
                                 $role_label = isset($recipient['role_label']) ? (string) $recipient['role_label'] : '';
@@ -298,8 +329,8 @@ $current_url = esc_url(add_query_arg(array()));
                                 }
                                 $input_id = 'mj-contact-recipient-' . $input_index;
                                 $input_index++;
-                                $is_selected = ($default_selected_value !== '' && $value === $default_selected_value);
-                                $option_classes = array('mj-contact-form__recipient-option');
+                                $is_selected = in_array($value, $default_selected_values, true);
+                                $option_classes = array('mj-contact-form__recipient-option', 'mj-contact-form__recipient-option--checkbox');
                                 if ($is_selected) {
                                     $option_classes[] = 'is-selected';
                                 }
@@ -313,8 +344,10 @@ $current_url = esc_url(add_query_arg(array()));
                                     <input
                                         id="<?php echo esc_attr($input_id); ?>"
                                         class="mj-contact-form__recipient-input"
-                                        type="radio"
-                                        name="recipient_individual"
+                                        type="checkbox"
+                                        name="recipient_individual[]"
+                                        data-recipient-individual
+                                            data-recipient-staff
                                         value="<?php echo esc_attr($value); ?>"
                                         <?php checked($is_selected); ?>
                                     >
@@ -337,6 +370,107 @@ $current_url = esc_url(add_query_arg(array()));
                                     </span>
                                 </label>
                             <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($youth_recipients)) : ?>
+                        <div class="mj-contact-form__recipient-youth" data-recipient-list>
+                            <div class="mj-contact-form__recipient-youth-header">
+                                <span class="mj-contact-form__recipient-youth-title">
+                                    <?php esc_html_e('Jeunes', 'mj-member'); ?>
+                                    <?php if ($youth_count > 0) : ?>
+                                        <span class="mj-contact-form__recipient-youth-count"><?php echo esc_html(number_format_i18n($youth_count)); ?></span>
+                                    <?php endif; ?>
+                                </span>
+                                <?php
+                                $input_id = 'mj-contact-recipient-' . $input_index;
+                                $input_index++;
+                                $is_selected = in_array($youth_bulk_value, $default_selected_values, true);
+                                $option_classes = array('mj-contact-form__recipient-option', 'mj-contact-form__recipient-option--action', 'mj-contact-form__recipient-option--checkbox');
+                                if ($is_selected) {
+                                    $option_classes[] = 'is-selected';
+                                }
+                                $option_class_attr = implode(' ', $option_classes);
+                                ?>
+                                <label class="<?php echo esc_attr($option_class_attr); ?>" for="<?php echo esc_attr($input_id); ?>">
+                                    <input
+                                        id="<?php echo esc_attr($input_id); ?>"
+                                        class="mj-contact-form__recipient-input"
+                                        type="checkbox"
+                                        name="recipient_individual[]"
+                                        data-recipient-individual
+                                            data-recipient-youth-toggle
+                                        value="<?php echo esc_attr($youth_bulk_value); ?>"
+                                        <?php checked($is_selected); ?>
+                                    >
+                                    <span class="mj-contact-form__recipient-body">
+                                        <span class="mj-contact-form__recipient-action-label"><?php esc_html_e('Envoyer a tout les jeunes', 'mj-member'); ?></span>
+                                    </span>
+                                </label>
+                            </div>
+
+                            <div class="mj-contact-form__recipient-list mj-contact-form__recipient-list--youth">
+                                <?php foreach ($youth_recipients as $recipient) :
+                                    $value = isset($recipient['value']) ? (string) $recipient['value'] : '';
+                                    $label = isset($recipient['label']) ? (string) $recipient['label'] : $value;
+                                    $role_label = isset($recipient['role_label']) ? (string) $recipient['role_label'] : '';
+                                    $is_cover = !empty($recipient['is_cover']);
+                                    $cover_theme = isset($recipient['cover_theme']) ? (string) $recipient['cover_theme'] : '';
+                                    $avatar = isset($recipient['avatar']) && is_array($recipient['avatar']) ? $recipient['avatar'] : array();
+                                    $avatar_url = isset($avatar['url']) ? (string) $avatar['url'] : '';
+                                    $avatar_alt = isset($avatar['alt']) && $avatar['alt'] !== '' ? (string) $avatar['alt'] : $label;
+                                    $avatar_initials = isset($avatar['initials']) ? (string) $avatar['initials'] : '';
+                                    if ($avatar_initials === '') {
+                                        if (function_exists('mb_substr')) {
+                                            $avatar_initials = strtoupper(mb_substr($label, 0, 2, 'UTF-8'));
+                                        } else {
+                                            $avatar_initials = strtoupper(substr($label, 0, 2));
+                                        }
+                                    }
+                                    $input_id = 'mj-contact-recipient-' . $input_index;
+                                    $input_index++;
+                                    $is_selected = in_array($value, $default_selected_values, true);
+                                    $option_classes = array('mj-contact-form__recipient-option', 'mj-contact-form__recipient-option--youth', 'mj-contact-form__recipient-option--checkbox');
+                                    if ($is_selected) {
+                                        $option_classes[] = 'is-selected';
+                                    }
+                                    if ($is_cover) {
+                                        $option_classes[] = 'mj-contact-form__recipient-option--cover';
+                                    }
+                                    $option_class_attr = implode(' ', $option_classes);
+                                    $cover_theme_attr = $cover_theme !== '' ? ' data-cover-theme="' . esc_attr($cover_theme) . '"' : '';
+                                    ?>
+                                    <label class="<?php echo esc_attr($option_class_attr); ?>"<?php echo $cover_theme_attr; ?> for="<?php echo esc_attr($input_id); ?>">
+                                        <input
+                                            id="<?php echo esc_attr($input_id); ?>"
+                                            class="mj-contact-form__recipient-input"
+                                            type="checkbox"
+                                            name="recipient_individual[]"
+                                            data-recipient-individual
+                                                data-recipient-youth
+                                            value="<?php echo esc_attr($value); ?>"
+                                            <?php checked($is_selected); ?>
+                                        >
+                                        <span class="mj-contact-form__recipient-body">
+                                            <span class="mj-contact-form__recipient-visual">
+                                                <?php if ($avatar_url !== '') : ?>
+                                                    <span class="mj-contact-form__recipient-photo">
+                                                        <img src="<?php echo esc_url($avatar_url); ?>" alt="<?php echo esc_attr($avatar_alt); ?>" loading="lazy">
+                                                    </span>
+                                                <?php else : ?>
+                                                    <span class="mj-contact-form__recipient-initials"><?php echo esc_html($avatar_initials); ?></span>
+                                                <?php endif; ?>
+                                            </span>
+                                            <span class="mj-contact-form__recipient-content">
+                                                <span class="mj-contact-form__recipient-name"><?php echo esc_html($label); ?></span>
+                                                <?php if ($role_label !== '') : ?>
+                                                    <span class="mj-contact-form__recipient-role"><?php echo esc_html($role_label); ?></span>
+                                                <?php endif; ?>
+                                            </span>
+                                        </span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
                         </div>
                     <?php endif; ?>
                 </div>

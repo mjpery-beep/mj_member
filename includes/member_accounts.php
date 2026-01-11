@@ -4,6 +4,7 @@ use Mj\Member\Core\Config;
 use Mj\Member\Core\Logger;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\MjPayments;
+use Mj\Member\Classes\Crud\MjEventLocations;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -675,15 +676,50 @@ if (!function_exists('mj_member_get_member_registrations')) {
 
                     $start = isset($occurrence['start']) ? sanitize_text_field((string) $occurrence['start']) : '';
                     $label = isset($occurrence['label']) ? sanitize_text_field((string) $occurrence['label']) : '';
+                    $end = isset($occurrence['end']) ? sanitize_text_field((string) $occurrence['end']) : '';
 
                     if ($start === '' && $label === '') {
                         continue;
                     }
 
-                    $occurrence_entries[] = array(
+                    $entry_payload = array(
                         'start' => $start,
                         'label' => $label !== '' ? $label : $start,
                     );
+
+                    if ($end !== '') {
+                        $entry_payload['end'] = $end;
+                    }
+
+                    $occurrence_entries[] = $entry_payload;
+                }
+            }
+
+            $available_occurrence_entries = array();
+            if (!empty($registration['available_occurrences']) && is_array($registration['available_occurrences'])) {
+                foreach ($registration['available_occurrences'] as $occurrence) {
+                    if (!is_array($occurrence)) {
+                        continue;
+                    }
+
+                    $start = isset($occurrence['start']) ? sanitize_text_field((string) $occurrence['start']) : '';
+                    $label = isset($occurrence['label']) ? sanitize_text_field((string) $occurrence['label']) : '';
+                    $end = isset($occurrence['end']) ? sanitize_text_field((string) $occurrence['end']) : '';
+
+                    if ($start === '' && $label === '') {
+                        continue;
+                    }
+
+                    $entry_payload = array(
+                        'start' => $start,
+                        'label' => $label !== '' ? $label : $start,
+                    );
+
+                    if ($end !== '') {
+                        $entry_payload['end'] = $end;
+                    }
+
+                    $available_occurrence_entries[] = $entry_payload;
                 }
             }
 
@@ -715,8 +751,56 @@ if (!function_exists('mj_member_get_member_registrations')) {
             $calendar_label = isset($registration['calendar_label']) ? sanitize_text_field((string) $registration['calendar_label']) : '';
             $time_label = isset($registration['time_label']) ? sanitize_text_field((string) $registration['time_label']) : '';
 
+            $registration_id_value = isset($registration['registration_id']) ? (int) $registration['registration_id'] : (isset($registration['id']) ? (int) $registration['id'] : 0);
+            if ($registration_id_value < 0) {
+                $registration_id_value = 0;
+            }
+
+            $event_id_value = isset($registration['event_id']) ? (int) $registration['event_id'] : 0;
+            if ($event_id_value < 0) {
+                $event_id_value = 0;
+            }
+
+            $member_id_value = isset($registration['member_id']) ? (int) $registration['member_id'] : 0;
+            if ($member_id_value < 0) {
+                $member_id_value = 0;
+            }
+
+            $guardian_id_value = isset($registration['guardian_id']) ? (int) $registration['guardian_id'] : 0;
+            if ($guardian_id_value < 0) {
+                $guardian_id_value = 0;
+            }
+
+            $can_manage_occurrences = !empty($registration['can_manage_occurrences']);
+
+            $location_id_value = isset($registration['location_id']) ? (int) $registration['location_id'] : 0;
+            if ($location_id_value < 0) {
+                $location_id_value = 0;
+            }
+
+            $location_media_payload = array(
+                'id' => 0,
+                'url' => '',
+                'alt' => '',
+            );
+            if (!empty($registration['location_media']) && is_array($registration['location_media'])) {
+                if (isset($registration['location_media']['id'])) {
+                    $location_media_payload['id'] = (int) $registration['location_media']['id'];
+                }
+                if (!empty($registration['location_media']['url'])) {
+                    $location_media_payload['url'] = esc_url_raw((string) $registration['location_media']['url']);
+                }
+                if (!empty($registration['location_media']['alt'])) {
+                    $location_media_payload['alt'] = sanitize_text_field((string) $registration['location_media']['alt']);
+                }
+            }
+
             $sanitized[] = array(
                 'id' => isset($registration['id']) ? (int) $registration['id'] : 0,
+                'registration_id' => $registration_id_value,
+                'event_id' => $event_id_value,
+                'member_id' => $member_id_value,
+                'guardian_id' => $guardian_id_value,
                 'title' => $title,
                 'status' => $status,
                 'status_label' => $status_label,
@@ -724,6 +808,8 @@ if (!function_exists('mj_member_get_member_registrations')) {
                 'start_date' => $start_date,
                 'end_date' => $end_date,
                 'location' => $location,
+                'location_id' => $location_id_value,
+                'location_media' => $location_media_payload,
                 'actions' => $actions,
                 'notes' => isset($registration['notes']) ? wp_kses_post($registration['notes']) : '',
                 'permalink' => $permalink,
@@ -732,6 +818,8 @@ if (!function_exists('mj_member_get_member_registrations')) {
                 'occurrence_scope' => $occurrence_scope,
                 'occurrence_count' => $occurrence_count,
                 'occurrences' => $occurrence_entries,
+                'available_occurrences' => $available_occurrence_entries,
+                'can_manage_occurrences' => $can_manage_occurrences,
                 'cover' => $cover_payload,
                 'is_free' => $is_free,
                 'price_value' => $price_value,
@@ -1163,6 +1251,7 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
                 $location_join = " LEFT JOIN {$locations_table} AS loc ON loc.id = events.location_id";
                 $location_fields[] = 'loc.name AS location_name';
                 $location_fields[] = 'loc.city AS location_city';
+                $location_fields[] = 'loc.cover_id AS location_cover_id';
             }
         }
 
@@ -1190,6 +1279,7 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
             'events.article_id',
             'events.prix',
             'events.cover_id AS cover_id',
+            'events.location_id AS event_location_id',
             'events.free_participation',
             'events.occurrence_selection_mode',
         );
@@ -1309,6 +1399,47 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
                 if (!empty($row->location_city)) {
                     $location_label .= ' (' . sanitize_text_field((string) $row->location_city) . ')';
                 }
+            }
+
+            $location_id = isset($row->event_location_id) ? (int) $row->event_location_id : 0;
+            if ($location_id < 0) {
+                $location_id = 0;
+            }
+
+            $location_cover_id = isset($row->location_cover_id) ? (int) $row->location_cover_id : 0;
+            if ($location_cover_id <= 0 && $location_id > 0 && class_exists(MjEventLocations::class)) {
+                $location_object = MjEventLocations::find($location_id);
+                if ($location_object && isset($location_object->cover_id)) {
+                    $location_cover_id = (int) $location_object->cover_id;
+                }
+            }
+
+            $location_media = array(
+                'id' => 0,
+                'url' => '',
+                'alt' => $location_label !== '' ? $location_label : '',
+            );
+
+            if ($location_cover_id > 0) {
+                $location_media['id'] = $location_cover_id;
+                $location_image = wp_get_attachment_image_src($location_cover_id, 'medium_large');
+                if (!$location_image) {
+                    $location_image = wp_get_attachment_image_src($location_cover_id, 'medium');
+                }
+                if ($location_image) {
+                    $location_media['url'] = esc_url_raw($location_image[0]);
+                }
+
+                $alt_text = get_post_meta($location_cover_id, '_wp_attachment_image_alt', true);
+                if (is_string($alt_text) && trim($alt_text) !== '') {
+                    $location_media['alt'] = sanitize_text_field($alt_text);
+                } elseif ($location_media['alt'] === '' && $location_label !== '') {
+                    $location_media['alt'] = sanitize_text_field($location_label);
+                }
+            }
+
+            if ($location_media['alt'] === '') {
+                $location_media['alt'] = $location_label !== '' ? $location_label : __('Lieu MJ', 'mj-member');
             }
 
             $payment_status_raw = isset($row->payment_status) ? sanitize_key((string) $row->payment_status) : 'unpaid';
@@ -1473,7 +1604,7 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
                     $time_label = $start_date;
                     $segment_start = $start_date;
                     if ($start_time !== '') {
-                        $segment_start = sprintf('%s · %s', $start_date, $start_time);
+                        $segment_start = sprintf('%s - %s', $start_date, $start_time);
                         $time_label = $segment_start;
                     }
 
@@ -1488,16 +1619,16 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
 
                         $segment_end = $end_date;
                         if ($end_time !== '') {
-                            $segment_end = sprintf('%s · %s', $end_date, $end_time);
+                            $segment_end = sprintf('%s - %s', $end_date, $end_time);
                         }
 
                         if ($end_date !== $start_date) {
-                            $time_label = sprintf('%s → %s', $segment_start, $segment_end);
+                            $time_label = sprintf('%s to %s', $segment_start, $segment_end);
                         } elseif ($end_time !== '' && $end_time !== $start_time) {
                             if ($start_time !== '') {
-                                $time_label = sprintf('%s · %s → %s', $start_date, $start_time, $end_time);
+                                $time_label = sprintf('%s - %s to %s', $start_date, $start_time, $end_time);
                             } else {
-                                $time_label = sprintf('%s → %s', $start_date, $end_time);
+                                $time_label = sprintf('%s to %s', $start_date, $end_time);
                             }
                         }
                     }
@@ -1618,6 +1749,10 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
             }
 
             $can_manage_occurrences = ($occurrence_selection_mode === 'member_choice') && !empty($available_occurrence_details);
+            if ($can_manage_occurrences && in_array($schedule_mode, array('fixed', 'range'), true)) {
+                // Fixed or multi-day stage events cannot adjust individual occurrences.
+                $can_manage_occurrences = false;
+            }
 
             if (!empty($row->notes)) {
                 $notes_segments[] = '<strong>' . esc_html__('Note', 'mj-member') . '</strong> : ' . esc_html(wp_strip_all_tags((string) $row->notes));
@@ -1641,6 +1776,8 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
                 'start_date' => $start_raw,
                 'end_date' => $end_raw,
                 'location' => $location_label,
+                'location_id' => $location_id,
+                'location_media' => $location_media,
                 'actions' => $actions,
                 'notes' => $notes_html,
                 'permalink' => $permalink_url,

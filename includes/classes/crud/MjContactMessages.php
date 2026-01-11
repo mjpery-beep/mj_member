@@ -16,6 +16,7 @@ class MjContactMessages implements CrudRepositoryInterface {
 
     const TARGET_ANIMATEUR = 'animateur';
     const TARGET_COORDINATEUR = 'coordinateur';
+    const TARGET_MEMBER = 'member';
     const TARGET_ALL = 'all';
 
     /**
@@ -45,6 +46,7 @@ class MjContactMessages implements CrudRepositoryInterface {
         return array(
             self::TARGET_ANIMATEUR => __('Animateur', 'mj-member'),
             self::TARGET_COORDINATEUR => __('Coordinateur', 'mj-member'),
+            self::TARGET_MEMBER => __('Jeune', 'mj-member'),
             self::TARGET_ALL => __('Tous', 'mj-member'),
         );
     }
@@ -910,7 +912,7 @@ class MjContactMessages implements CrudRepositoryInterface {
      */
     private static function normalize_target($type, $reference, $label) {
         $type = sanitize_key((string) $type);
-        if (!in_array($type, array(self::TARGET_ANIMATEUR, self::TARGET_COORDINATEUR, self::TARGET_ALL), true)) {
+        if (!in_array($type, array(self::TARGET_ANIMATEUR, self::TARGET_COORDINATEUR, self::TARGET_MEMBER, self::TARGET_ALL), true)) {
             $type = self::TARGET_ALL;
         }
 
@@ -924,6 +926,8 @@ class MjContactMessages implements CrudRepositoryInterface {
             $target_labels = self::get_target_labels();
             if ($type === self::TARGET_ANIMATEUR && $reference) {
                 $label = sprintf(__('Animateur #%d', 'mj-member'), $reference);
+            } elseif ($type === self::TARGET_MEMBER && $reference) {
+                $label = sprintf(__('Membre #%d', 'mj-member'), $reference);
             } elseif (isset($target_labels[$type])) {
                 $label = $target_labels[$type];
             }

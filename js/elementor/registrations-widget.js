@@ -604,12 +604,18 @@
             shouldOpen = state.panel.hidden;
         }
         state.panel.hidden = !shouldOpen;
+        if (state.manageButton) {
+            state.manageButton.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+        }
         state.root.setAttribute('data-manager-open', shouldOpen ? '1' : '0');
         if (!shouldOpen) {
             state.pendingSelection = new Set(state.currentSelection);
             state.pendingSelectionLookup = buildSelectionLookup(state.currentSelection);
             refreshState(state, false);
             showFeedback(state.feedback, '', false);
+            if (state.manageButton) {
+                state.manageButton.focus();
+            }
         } else if (state.panel) {
             state.panel.focus();
         }

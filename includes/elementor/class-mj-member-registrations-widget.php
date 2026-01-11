@@ -254,86 +254,114 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
         if (!$styles_printed) {
             $styles_printed = true;
             echo '<style>'
-                . '.mj-member-registrations{display:grid;gap:24px;}'
-                . '.mj-member-registrations__title{margin:0;font-size:1.6rem;font-weight:700;color:#0f172a;}'
-                . '.mj-member-registrations__list{list-style:none;margin:0;padding:0;display:grid;gap:24px;}'
-                . '.mj-member-registrations__item{border:1px solid #e2e8f0;border-radius:14px;padding:26px;background:#ffffff;box-shadow:0 12px 28px rgba(15,23,42,0.08);}'
-                . '.mj-member-registrations__layout{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:28px;align-items:start;}'
-                . '.mj-member-registrations__details{display:grid;gap:20px;}'
-                . '.mj-member-registrations__content{display:grid;gap:18px;}'
-                . '.mj-member-registrations__media{position:relative;overflow:hidden;border-radius:14px;background:linear-gradient(135deg,rgba(15,23,42,0.85),rgba(37,99,235,0.65));width:100%;max-width:260px;justify-self:start;}'
-                . '.mj-member-registrations__media::before{content:"";display:block;padding-top:100%;}'
+                . '.mj-member-registrations{display:grid;gap:32px;color:#0f172a;}'
+                . '.mj-member-registrations__header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:18px;}'
+                . '.mj-member-registrations__heading{display:grid;gap:6px;min-width:220px;}'
+                . '.mj-member-registrations__title{margin:0;font-size:1.75rem;font-weight:700;color:#0f172a;}'
+                . '.mj-member-registrations__subtitle{margin:0;font-size:0.95rem;color:#475569;}'
+                . '.mj-member-registrations__tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}'
+                . '.mj-member-registrations__search{position:relative;}'
+                . '.mj-member-registrations__search input{width:260px;max-width:100%;border:1px solid #cbd5f5;border-radius:999px;padding:10px 16px;font-size:0.92rem;color:#0f172a;background:#ffffff;box-shadow:0 12px 26px rgba(15,23,42,0.08);transition:border-color 0.2s ease,box-shadow 0.2s ease;}'
+                . '.mj-member-registrations__search input:focus{outline:none;border-color:#2563eb;box-shadow:0 16px 32px rgba(37,99,235,0.18);}'
+                . '.mj-member-registrations__filter{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:14px;border:1px solid #cbd5f5;background:#f8fafc;color:#1f2937;font-size:0.9rem;font-weight:600;cursor:pointer;box-shadow:0 10px 22px rgba(15,23,42,0.08);transition:background 0.2s ease,border-color 0.2s ease;}'
+                . '.mj-member-registrations__filter:hover{background:#e2e8f0;border-color:#a8c1ff;}'
+                . '.mj-member-registrations__filter:focus-visible{outline:2px solid #2563eb;outline-offset:2px;}'
+                . '.mj-member-registrations__list{list-style:none;margin:0;padding:0;display:grid;gap:28px;}'
+                . '.mj-member-registrations__item{background:#ffffff;border:1px solid #e2e8f0;border-radius:22px;box-shadow:0 22px 48px rgba(15,23,42,0.08);padding:30px;display:grid;gap:24px;}'
+                . '.mj-member-registrations__layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(320px,0.95fr);gap:32px;align-items:flex-start;}'
+                . '.mj-member-registrations__event{display:flex;gap:24px;align-items:flex-start;}'
+                . '.mj-member-registrations__media{flex:0 0 140px;height:140px;border-radius:18px;overflow:hidden;position:relative;background:linear-gradient(135deg,#1d4ed8,#2563eb);box-shadow:0 18px 36px rgba(37,99,235,0.22);}'
                 . '.mj-member-registrations__media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}'
-                . '.mj-member-registrations__header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:18px;}'
-                . '.mj-member-registrations__name{margin:0;font-size:1.15rem;font-weight:700;color:#0f172a;}'
+                . '.mj-member-registrations__info{display:grid;gap:16px;flex:1;}'
+                . '.mj-member-registrations__meta{display:grid;gap:10px;}'
+                . '.mj-member-registrations__name{margin:0;font-size:1.2rem;font-weight:700;color:#0f172a;}'
                 . '.mj-member-registrations__name a{color:inherit;text-decoration:none;}'
                 . '.mj-member-registrations__name a:hover{text-decoration:underline;}'
-                . '.mj-member-registrations__badge{display:inline-flex;align-items:center;padding:5px 12px;border-radius:999px;font-size:0.78rem;font-weight:600;background:#e0f2fe;color:#0369a1;white-space:nowrap;}'
+                . '.mj-member-registrations__badges{display:flex;flex-wrap:wrap;gap:10px;}'
+                . '.mj-member-registrations__badge{padding:5px 14px;border-radius:999px;font-size:0.78rem;font-weight:600;background:#dbeafe;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.05em;}'
                 . '.mj-member-registrations__item.status-confirmed .mj-member-registrations__badge{background:#dcfce7;color:#166534;}'
                 . '.mj-member-registrations__item.status-pending .mj-member-registrations__badge{background:#fef3c7;color:#92400e;}'
                 . '.mj-member-registrations__item.status-cancelled .mj-member-registrations__badge{background:#fee2e2;color:#b91c1c;}'
                 . '.mj-member-registrations__item.status-waitlist .mj-member-registrations__badge{background:#ede9fe;color:#5b21b6;}'
-                . '.mj-member-registrations__meta-list{list-style:none;margin:0;padding:0;display:grid;gap:10px;}'
-                . '.mj-member-registrations__meta-item{display:flex;gap:10px;align-items:flex-start;color:#334155;font-size:0.92rem;}'
+                . '.mj-member-registrations__meta-list{list-style:none;margin:0;padding:0;display:grid;gap:8px;font-size:0.95rem;color:#475569;}'
+                . '.mj-member-registrations__meta-item{display:flex;gap:12px;}'
                 . '.mj-member-registrations__meta-label{min-width:130px;font-weight:600;color:#1e293b;}'
-                . '.mj-member-registrations__meta-value{flex:1;word-break:break-word;}'
-                . '.mj-member-registrations__notes{margin:0;padding:14px;border-radius:10px;background:#f8fafc;color:#1f2937;font-size:0.92rem;}'
-                . '.mj-member-registrations__actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px;justify-content:flex-start;}'
-                . '.mj-member-registrations__action{display:inline-flex;align-items:center;gap:10px;padding:10px 20px;border-radius:999px;border:1px solid #1d4ed8;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#ffffff;font-size:0.92rem;font-weight:600;text-decoration:none;box-shadow:0 10px 24px rgba(37,99,235,0.18);transition:transform 0.2s ease,box-shadow 0.2s ease;}'
-                . '.mj-member-registrations__action:hover{transform:translateY(-1px);box-shadow:0 14px 28px rgba(37,99,235,0.24);}'
+                . '.mj-member-registrations__meta-value{flex:1;}'
+                . '.mj-member-registrations__location-media{margin-top:18px;width:148px;max-width:100%;height:96px;border-radius:16px;overflow:hidden;box-shadow:0 16px 34px rgba(15,23,42,0.12);background:#e2e8f0;}'
+                . '.mj-member-registrations__location-media img{width:100%;height:100%;object-fit:cover;}'
+                . '.mj-member-registrations__notes{margin:0;padding:16px;border-radius:14px;background:#f8fafc;color:#1f2937;font-size:0.92rem;line-height:1.5;}'
+                . '.mj-member-registrations__actions{display:flex;flex-wrap:wrap;gap:12px;}'
+                . '.mj-member-registrations__action{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:14px;border:1px solid #1d4ed8;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#ffffff;font-size:0.92rem;font-weight:600;text-decoration:none;box-shadow:0 16px 34px rgba(37,99,235,0.24);transition:transform 0.2s ease,box-shadow 0.2s ease;}'
+                . '.mj-member-registrations__action:hover{transform:translateY(-1px);box-shadow:0 22px 40px rgba(37,99,235,0.28);}'
                 . '.mj-member-registrations__action:focus-visible{outline:2px solid #1d4ed8;outline-offset:2px;}'
-                . '.mj-member-registrations__action-icon{font-size:1.1rem;line-height:1;transition:transform 0.2s ease;}'
-                . '.mj-member-registrations__action:hover .mj-member-registrations__action-icon{transform:translateX(4px);}'
-                . '.mj-member-registrations__agenda{border:1px solid #dbeafe;border-radius:12px;background:#f5f9ff;padding:20px;}'
-                . '.mj-member-registrations__agenda-title{margin:0 0 12px;font-size:1rem;font-weight:700;color:#0f172a;}'
-                . '.mj-member-registrations__calendar{display:grid;gap:6px;margin:0 0 16px;}'
-                . '.mj-member-registrations__calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;}'
-                . '.mj-member-registrations__calendar-day{display:flex;align-items:center;justify-content:center;padding:8px 0;border-radius:10px;background:#e2e8f0;color:#475569;font-size:0.72rem;font-weight:600;text-transform:uppercase;line-height:1;transition:background-color 0.2s ease,color 0.2s ease;}'
-                . '.mj-member-registrations__calendar-day.is-available{background:#dbeafe;color:#1d4ed8;}'
-                . '.mj-member-registrations__calendar-day.is-selected{background:#2563eb;color:#ffffff;box-shadow:0 8px 18px rgba(37,99,235,0.18);}'
-                . '.mj-member-registrations__calendar-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:0.72rem;color:#475569;margin:0;}'
-                . '.mj-member-registrations__calendar-legend-item{display:inline-flex;align-items:center;gap:6px;}'
-                . '.mj-member-registrations__calendar-legend-dot{width:10px;height:10px;border-radius:50%;background:#dbeafe;box-shadow:0 0 0 1px rgba(15,23,42,0.08) inset;}'
-                . '.mj-member-registrations__calendar-legend-dot.is-selected{background:#2563eb;}'
-                . '.mj-member-registrations__agenda-list{margin:0;padding-left:18px;list-style:disc;color:#1f2937;font-size:0.9rem;display:grid;gap:8px;}'
-                . '.mj-member-registrations__agenda-item{line-height:1.5;}'
-                . '.mj-member-registrations__agenda-empty{margin:0;font-size:0.9rem;color:#475569;}'
-                . '.mj-member-registrations__agenda-more{margin:12px 0 0;font-size:0.85rem;color:#334155;}'
-                . '.mj-member-registrations__manager{margin-top:18px;display:grid;gap:14px;}'
-                . '.mj-member-registrations__manage-button{display:inline-flex;align-items:center;gap:10px;padding:10px 18px;border-radius:999px;border:1px solid #1d4ed8;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#ffffff;font-size:0.92rem;font-weight:600;cursor:pointer;transition:transform 0.2s ease,box-shadow 0.2s ease;box-shadow:0 10px 24px rgba(37,99,235,0.18);}'
-                . '.mj-member-registrations__manage-button:hover{transform:translateY(-1px);box-shadow:0 14px 28px rgba(37,99,235,0.24);}'
-                . '.mj-member-registrations__manage-button:focus-visible{outline:2px solid #1d4ed8;outline-offset:2px;}'
-                . '.mj-member-registrations__manager-panel{display:grid;gap:18px;padding:18px;border:1px solid #dbeafe;border-radius:14px;background:#ffffff;box-shadow:0 12px 28px rgba(15,23,42,0.08);}'
+                . '.mj-member-registrations__action-icon{font-size:1.1rem;line-height:1;}'
+                . '.mj-member-registrations__calendar-card{display:grid;gap:18px;background:#f8fbff;border:1px solid #dbeafe;border-radius:20px;padding:20px;box-shadow:0 12px 26px rgba(15,23,42,0.08);}'
+                . '.mj-member-registrations__calendar-top{display:flex;align-items:center;justify-content:space-between;gap:12px;}'
+                . '.mj-member-registrations__calendar-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}'
+                . '.mj-member-registrations__calendar-month{font-size:1.05rem;font-weight:700;color:#0f172a;}'
+                . '.mj-member-registrations__calendar-nav{display:flex;align-items:center;gap:6px;}'
+                . '.mj-member-registrations__calendar-nav button{width:34px;height:34px;border-radius:10px;border:1px solid #cbd5f5;background:#ffffff;color:#1d4ed8;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background 0.2s ease,border-color 0.2s ease,color 0.2s ease;}'
+                . '.mj-member-registrations__calendar-nav button:hover{background:#e0ecff;border-color:#2563eb;color:#0f172a;}'
+                . '.mj-member-registrations__calendar-nav button:focus-visible{outline:2px solid #2563eb;outline-offset:2px;}'
+                . '.mj-member-registrations__manage-button{display:inline-flex;align-items:center;gap:8px;padding:9px 18px;border-radius:12px;border:1px solid #2563eb;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#ffffff;font-size:0.9rem;font-weight:600;cursor:pointer;box-shadow:0 18px 34px rgba(37,99,235,0.22);transition:transform 0.2s ease,box-shadow 0.2s ease;}'
+                . '.mj-member-registrations__manage-button:hover{transform:translateY(-1px);box-shadow:0 24px 44px rgba(37,99,235,0.28);}'
+                . '.mj-member-registrations__calendar-weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;font-size:0.75rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;text-align:center;}'
+                . '.mj-member-registrations__calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}'
+                . '.mj-member-registrations__calendar-cell{padding:12px 0;border-radius:12px;border:1px solid #e2e8f0;background:#ffffff;color:#0f172a;font-weight:600;text-align:center;box-shadow:0 4px 10px rgba(15,23,42,0.06);transition:background 0.2s ease,border-color 0.2s ease,color 0.2s ease;}'
+                . '.mj-member-registrations__calendar-cell.is-muted{color:#94a3b8;background:#f1f5f9;border-style:dashed;}'
+                . '.mj-member-registrations__calendar-cell.is-available{border-color:#93c5fd;background:#e8f2ff;color:#1d4ed8;}'
+                . '.mj-member-registrations__calendar-cell.is-selected{background:#2563eb;border-color:#1d4ed8;color:#ffffff;box-shadow:0 18px 32px rgba(37,99,235,0.25);}'
+                . '.mj-member-registrations__calendar-cell[data-today="1"]::after{content:"";position:absolute;bottom:8px;left:50%;width:6px;height:6px;border-radius:50%;background:#1d4ed8;transform:translateX(-50%);}'
+                . '.mj-member-registrations__calendar-cell{position:relative;}'
+                . '.mj-member-registrations__selection{border-top:1px solid #dbeafe;padding-top:14px;display:grid;gap:12px;}'
+                . '.mj-member-registrations__selection-heading{display:grid;gap:4px;}'
+                . '.mj-member-registrations__selection-title{font-size:0.95rem;font-weight:700;color:#1e293b;margin:0;}'
+                . '.mj-member-registrations__selection-note{margin:0;font-size:0.82rem;color:#64748b;}'
+                . '.mj-member-registrations__agenda-list{margin:0;padding-left:18px;list-style:disc;color:#1f2937;font-size:0.88rem;display:grid;gap:8px;}'
+                . '.mj-member-registrations__agenda-item{line-height:1.4;}'
+                . '.mj-member-registrations__agenda-empty{margin:0;font-size:0.9rem;color:#64748b;}'
+                . '.mj-member-registrations__agenda-more{margin:0;font-size:0.82rem;color:#2563eb;font-weight:600;}'
+                . '.mj-member-registrations__manager{display:grid;gap:16px;}'
+                . '.mj-member-registrations__manager-panel{display:grid;gap:16px;padding:20px;border-radius:18px;border:1px solid #dbeafe;background:#ffffff;box-shadow:0 20px 44px rgba(15,23,42,0.12);}'
                 . '.mj-member-registrations__manager-header{display:grid;gap:6px;}'
-                . '.mj-member-registrations__manager-title{margin:0;font-size:1rem;font-weight:700;color:#0f172a;}'
+                . '.mj-member-registrations__manager-title{margin:0;font-size:1.05rem;font-weight:700;color:#0f172a;}'
                 . '.mj-member-registrations__manager-help{margin:0;font-size:0.9rem;color:#475569;}'
                 . '.mj-member-registrations__manager-form{display:grid;gap:16px;}'
-                . '.mj-member-registrations__manager-list{display:grid;gap:10px;}'
-                . '.mj-member-registrations__manager-option{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:10px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;transition:border-color 0.2s ease,background-color 0.2s ease;}'
-                . '.mj-member-registrations__manager-option.is-past{opacity:0.65;}'
-                . '.mj-member-registrations__manager-checkbox{width:18px;height:18px;}'
-                . '.mj-member-registrations__manager-checkmark{width:18px;height:18px;border-radius:6px;border:2px solid #2563eb;background:linear-gradient(135deg,#2563eb,#1d4ed8);display:inline-flex;align-items:center;justify-content:center;position:relative;}'
-                . '.mj-member-registrations__manager-checkbox:not(:checked) + .mj-member-registrations__manager-checkmark{background:transparent;border-color:#cbd5f5;}'
+                . '.mj-member-registrations__manager-list{display:grid;gap:10px;max-height:280px;overflow:auto;padding-right:4px;}'
+                . '.mj-member-registrations__manager-option{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:12px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;transition:border-color 0.2s ease,background-color 0.2s ease;}'
+                . '.mj-member-registrations__manager-option.is-past{opacity:0.6;}'
                 . '.mj-member-registrations__manager-checkbox{position:absolute;opacity:0;width:18px;height:18px;}'
-                . '.mj-member-registrations__manager-option input{position:relative;}'
+                . '.mj-member-registrations__manager-checkmark{width:18px;height:18px;border-radius:6px;border:2px solid #2563eb;background:#ffffff;display:inline-flex;align-items:center;justify-content:center;}'
+                . '.mj-member-registrations__manager-option input:checked ~ .mj-member-registrations__manager-checkmark{background:linear-gradient(135deg,#2563eb,#1d4ed8);border-color:#1d4ed8;}'
                 . '.mj-member-registrations__manager-option input:checked ~ .mj-member-registrations__manager-label{font-weight:600;color:#1d4ed8;}'
-                . '.mj-member-registrations__manager-option.is-past input ~ .mj-member-registrations__manager-label{color:#94a3b8;}'
                 . '.mj-member-registrations__manager-label{font-size:0.92rem;color:#1f2937;}'
-                . '.mj-member-registrations__manager-actions{display:flex;flex-wrap:wrap;gap:12px;justify-content:flex-end;}'
-                . '.mj-member-registrations__manager-cancel{display:inline-flex;align-items:center;gap:8px;padding:9px 18px;border-radius:999px;border:1px solid #cbd5f5;background:#f8fafc;color:#1f2937;font-size:0.88rem;font-weight:600;cursor:pointer;}'
-                . '.mj-member-registrations__manager-submit{display:inline-flex;align-items:center;gap:10px;padding:10px 20px;border-radius:999px;border:1px solid #1d4ed8;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#ffffff;font-size:0.9rem;font-weight:600;cursor:pointer;box-shadow:0 10px 24px rgba(37,99,235,0.18);}'
+                . '.mj-member-registrations__manager-actions{display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap;}'
+                . '.mj-member-registrations__manager-cancel{padding:10px 18px;border-radius:12px;border:1px solid #cbd5f5;background:#f8fafc;color:#1f2937;font-size:0.88rem;font-weight:600;cursor:pointer;}'
+                . '.mj-member-registrations__manager-submit{padding:10px 20px;border-radius:12px;border:1px solid #2563eb;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#ffffff;font-size:0.9rem;font-weight:600;cursor:pointer;box-shadow:0 16px 34px rgba(37,99,235,0.24);}'
                 . '.mj-member-registrations__manager-submit:disabled{opacity:0.55;cursor:not-allowed;box-shadow:none;}'
                 . '.mj-member-registrations__manager-feedback{margin:0;font-size:0.85rem;color:#475569;}'
                 . '.mj-member-registrations__manager-feedback.is-error{color:#b91c1c;}'
                 . '.mj-member-registrations__empty{margin:0;font-size:0.95rem;color:#6c757d;}'
-                . '@media (max-width: 960px){.mj-member-registrations__layout{grid-template-columns:1fr;}.mj-member-registrations__agenda{order:2;}.mj-member-registrations__details{order:1;}.mj-member-registrations__action{width:100%;justify-content:center;}}'
+                . '@media (max-width:1180px){.mj-member-registrations__layout{grid-template-columns:1fr;}.mj-member-registrations__calendar-card{order:2;}.mj-member-registrations__event{flex-direction:column;}.mj-member-registrations__media{width:100%;max-width:260px;height:auto;padding-bottom:56%;}}'
+                . '@media (max-width:640px){.mj-member-registrations__item{padding:22px;}.mj-member-registrations__search input{width:100%;}.mj-member-registrations__calendar-grid,.mj-member-registrations__calendar-weekdays{gap:4px;}.mj-member-registrations__calendar-cell{padding:10px 0;}}'
                 . '</style>';
         }
 
         echo '<div class="mj-member-registrations">';
-        if ($title !== '') {
-            echo '<h3 class="mj-member-registrations__title">' . esc_html($title) . '</h3>';
-        }
+        $heading_title = $title !== '' ? $title : __('Mes inscriptions', 'mj-member');
+        echo '<div class="mj-member-registrations__header">';
+        echo '<div class="mj-member-registrations__heading">';
+        echo '<h3 class="mj-member-registrations__title">' . esc_html($heading_title) . '</h3>';
+        echo '<p class="mj-member-registrations__subtitle">' . esc_html__('Suivez et ajustez vos occurrences à venir.', 'mj-member') . '</p>';
+        echo '</div>';
+        echo '<div class="mj-member-registrations__tools">';
+        echo '<label class="mj-member-registrations__search">';
+        echo '<span class="screen-reader-text">' . esc_html__('Rechercher une inscription', 'mj-member') . '</span>';
+        echo '<input type="search" data-mj-registrations-search placeholder="' . esc_attr__('Rechercher une inscription…', 'mj-member') . '" autocomplete="off" />';
+        echo '</label>';
+        echo '<button type="button" class="mj-member-registrations__filter" data-mj-registrations-filter>' . esc_html__('Filtres', 'mj-member') . '</button>';
+        echo '</div>';
+        echo '</div>';
 
         if (empty($registrations)) {
             echo '<p class="mj-member-registrations__empty">' . esc_html($empty_message) . '</p>';
@@ -377,76 +405,30 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                 $cover_alt = wp_strip_all_tags($cover_alt);
             }
 
-            $schedule_label = isset($entry['schedule_label']) ? trim((string) $entry['schedule_label']) : '';
-            $calendar_label = isset($entry['calendar_label']) ? trim((string) $entry['calendar_label']) : '';
-            $time_label = isset($entry['time_label']) ? trim((string) $entry['time_label']) : '';
             $price_label = isset($entry['price_label']) ? trim((string) $entry['price_label']) : '';
             $payment_label = isset($entry['payment_status_label']) ? trim((string) $entry['payment_status_label']) : '';
             $is_free = !empty($entry['is_free']);
+            $location_label_value = !empty($entry['location']) ? trim((string) $entry['location']) : '';
+            $price_value_text = (!$is_free && $price_label !== '') ? $price_label : '';
+            $location_media_url = '';
+            $location_media_alt = '';
+            if (!empty($entry['location_media']) && is_array($entry['location_media'])) {
+                if (!empty($entry['location_media']['url'])) {
+                    $location_media_url = esc_url($entry['location_media']['url']);
+                }
+                if (!empty($entry['location_media']['alt'])) {
+                    $location_media_alt = sanitize_text_field($entry['location_media']['alt']);
+                }
+            }
+            if ($location_media_alt === '' && $location_label_value !== '') {
+                $location_media_alt = sanitize_text_field($location_label_value);
+            }
 
             $meta_rows = array();
             if ($show_type && !empty($entry['type'])) {
                 $meta_rows[] = array(
                     'label' => __('Type', 'mj-member'),
                     'value' => $entry['type'],
-                );
-            }
-
-            if ($schedule_label !== '') {
-                $meta_rows[] = array(
-                    'label' => __('Récurrence', 'mj-member'),
-                    'value' => $schedule_label,
-                );
-            }
-
-            if ($calendar_label !== '') {
-                $meta_rows[] = array(
-                    'label' => __('Prochaine séance', 'mj-member'),
-                    'value' => $calendar_label,
-                );
-            }
-
-            $date_range = '';
-            if ($show_dates) {
-                $date_range = self::format_date_range(isset($entry['start_date']) ? $entry['start_date'] : '', isset($entry['end_date']) ? $entry['end_date'] : '');
-                if ($date_range !== '') {
-                    $meta_rows[] = array(
-                        'label' => __('Dates', 'mj-member'),
-                        'value' => $date_range,
-                    );
-                }
-            }
-
-            if ($time_label !== '' && $time_label !== $date_range) {
-                $meta_rows[] = array(
-                    'label' => __('Horaires', 'mj-member'),
-                    'value' => $time_label,
-                );
-            }
-
-            if (!empty($entry['location'])) {
-                $meta_rows[] = array(
-                    'label' => __('Lieu', 'mj-member'),
-                    'value' => $entry['location'],
-                );
-            }
-
-            if ($price_label !== '') {
-                $meta_rows[] = array(
-                    'label' => __('Tarif', 'mj-member'),
-                    'value' => $price_label,
-                );
-            } elseif ($is_free) {
-                $meta_rows[] = array(
-                    'label' => __('Tarif', 'mj-member'),
-                    'value' => __('Gratuit', 'mj-member'),
-                );
-            }
-
-            if (!$is_free && $payment_label !== '') {
-                $meta_rows[] = array(
-                    'label' => __('Paiement', 'mj-member'),
-                    'value' => $payment_label,
                 );
             }
 
@@ -461,6 +443,8 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
 
             $all_occurrences = (!empty($entry['occurrences']) && is_array($entry['occurrences'])) ? $entry['occurrences'] : array();
             $available_occurrences = (!empty($entry['available_occurrences']) && is_array($entry['available_occurrences'])) ? $entry['available_occurrences'] : array();
+            $occurrence_payload = self::normalize_occurrence_payload($all_occurrences);
+            $available_payload = self::normalize_occurrence_payload($available_occurrences);
             $calendar_slots = self::build_weekday_calendar_slots($available_occurrences, $all_occurrences);
             $display_limit = 8;
             $display_occurrences = array_slice($all_occurrences, 0, $display_limit);
@@ -474,6 +458,27 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                     continue;
                 }
                 $occurrence_items[] = $formatted_occurrence;
+            }
+
+            if ($location_label_value !== '') {
+                $meta_rows[] = array(
+                    'label' => __('Lieu', 'mj-member'),
+                    'value' => $location_label_value,
+                );
+            }
+
+            if ($price_value_text !== '') {
+                $meta_rows[] = array(
+                    'label' => __('Tarif', 'mj-member'),
+                    'value' => $price_value_text,
+                );
+            }
+
+            if (!$is_free && $payment_label !== '') {
+                $meta_rows[] = array(
+                    'label' => __('Paiement', 'mj-member'),
+                    'value' => $payment_label,
+                );
             }
 
             $displayed_count = count($occurrence_items);
@@ -516,21 +521,41 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
             $guardian_id = isset($entry['guardian_id']) ? absint($entry['guardian_id']) : 0;
             $can_manage_occurrences_entry = !empty($entry['can_manage_occurrences']);
 
+            $manager_config = array();
+            if ($can_manage_occurrences_entry && !empty($available_payload) && $event_id > 0 && $member_id > 0) {
+                $manager_config = array(
+                    'eventId' => $event_id,
+                    'memberId' => $member_id,
+                    'registrationId' => $registration_id,
+                    'occurrenceScope' => $occurrence_scope,
+                    'occurrenceCount' => $occurrence_count,
+                    'occurrences' => $occurrence_payload,
+                    'availableOccurrences' => $available_payload,
+                    'canManageOccurrences' => true,
+                );
+
+                if ($guardian_id > 0) {
+                    $manager_config['guardianId'] = $guardian_id;
+                }
+
+                self::ensure_script_localized();
+            }
+
             echo '<li class="mj-member-registrations__item ' . esc_attr('status-' . $status_key) . '" data-mj-registrations-item="1" data-event-id="' . esc_attr($event_id) . '" data-registration-id="' . esc_attr($registration_id) . '" data-member-id="' . esc_attr($member_id) . '">';
             echo '<div class="mj-member-registrations__layout">';
 
-            echo '<div class="mj-member-registrations__details">';
+            echo '<div class="mj-member-registrations__event">';
             if ($cover_url !== '') {
                 echo '<figure class="mj-member-registrations__media">';
                 echo '<img src="' . esc_url($cover_url) . '" alt="' . esc_attr($cover_alt) . '" loading="lazy" decoding="async" />';
                 echo '</figure>';
             }
 
-            echo '<div class="mj-member-registrations__content">';
-            echo '<div class="mj-member-registrations__header">';
+            echo '<div class="mj-member-registrations__info">';
+            echo '<div class="mj-member-registrations__meta">';
             echo '<h4 class="mj-member-registrations__name">' . $title_markup . '</h4>';
             if ($badge_html !== '') {
-                echo $badge_html;
+                echo '<div class="mj-member-registrations__badges">' . $badge_html . '</div>';
             }
             echo '</div>';
 
@@ -550,6 +575,12 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                 echo '</ul>';
             }
 
+            if ($location_media_url !== '') {
+                echo '<div class="mj-member-registrations__location-media">';
+                echo '<img src="' . esc_url($location_media_url) . '" alt="' . esc_attr($location_media_alt) . '" loading="lazy" decoding="async" />';
+                echo '</div>';
+            }
+
             if (!empty($entry['notes'])) {
                 echo '<div class="mj-member-registrations__notes">' . wp_kses_post($entry['notes']) . '</div>';
             }
@@ -562,22 +593,58 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                     }
                     $target = !empty($action['target']) ? $action['target'] : '_self';
                     $rel_attr = ($target === '_blank') ? ' rel="noopener"' : '';
-                    echo '<a class="mj-member-registrations__action" href="' . esc_url($action['url']) . '" target="' . esc_attr($target) . '"' . $rel_attr . '><span>' . esc_html($action['label']) . '</span><span class="mj-member-registrations__action-icon" aria-hidden="true">→</span></a>';
+                    echo '<a class="mj-member-registrations__action" href="' . esc_url($action['url']) . '" target="' . esc_attr($target) . '"' . $rel_attr . '><span>' . esc_html($action['label']) . '</span><span class="mj-member-registrations__action-icon" aria-hidden="true">&rarr;</span></a>';
                 }
                 echo '</div>';
             }
 
             echo '</div>';
+
+            if (!empty($manager_config)) {
+                $config_json = wp_json_encode($manager_config);
+                if (is_string($config_json) && $config_json !== '') {
+                    $panel_id = function_exists('wp_unique_id') ? wp_unique_id('mj-registrations-panel-') : uniqid('mj-registrations-panel-');
+                    $title_id = $panel_id . '-title';
+                    $help_id = $panel_id . '-help';
+
+                    echo '<div class="mj-member-registrations__manager" data-mj-registrations-entry data-manager-open="0" data-config="' . esc_attr($config_json) . '">';
+                    echo '<button type="button" class="mj-member-registrations__manage-button" data-mj-registrations-manage aria-haspopup="dialog" aria-expanded="false" aria-controls="' . esc_attr($panel_id) . '">' . esc_html__('Gérer mes séances', 'mj-member') . '</button>';
+                    echo '<div class="mj-member-registrations__manager-panel" id="' . esc_attr($panel_id) . '" data-mj-registrations-panel hidden tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="' . esc_attr($title_id) . '" aria-describedby="' . esc_attr($help_id) . '">';
+                    echo '<div class="mj-member-registrations__manager-header">';
+                    echo '<h5 class="mj-member-registrations__manager-title" id="' . esc_attr($title_id) . '" data-mj-registrations-panel-title>' . esc_html__('Choisis tes séances', 'mj-member') . '</h5>';
+                    echo '<p class="mj-member-registrations__manager-help" id="' . esc_attr($help_id) . '" data-mj-registrations-panel-help>' . esc_html__('Sélectionne les séances auxquelles tu participes.', 'mj-member') . '</p>';
+                    echo '</div>';
+                    echo '<form class="mj-member-registrations__manager-form" data-mj-registrations-form novalidate>';
+                    echo '<div class="mj-member-registrations__manager-list" data-mj-registrations-list></div>';
+                    echo '<p class="mj-member-registrations__manager-feedback" data-mj-registrations-feedback role="alert"></p>';
+                    echo '<div class="mj-member-registrations__manager-actions">';
+                    echo '<button type="button" class="mj-member-registrations__manager-cancel" data-mj-registrations-cancel>' . esc_html__('Annuler', 'mj-member') . '</button>';
+                    echo '<button type="submit" class="mj-member-registrations__manager-submit" data-mj-registrations-submit>' . esc_html__('Enregistrer', 'mj-member') . '</button>';
+                    echo '</div>';
+                    echo '</form>';
+                    echo '</div>';
+                    echo '</div>';
+                }
+            }
+
             echo '</div>';
 
-            echo '<div class="mj-member-registrations__agenda" data-mj-registrations-agenda data-occurrence-scope="' . esc_attr($occurrence_scope) . '">';
-            echo '<p class="mj-member-registrations__agenda-title" data-mj-registrations-agenda-title>' . esc_html($agenda_title) . '</p>';
+            echo '<aside class="mj-member-registrations__calendar-card" data-mj-registrations-agenda data-occurrence-scope="' . esc_attr($occurrence_scope) . '">';
+            echo '<div class="mj-member-registrations__calendar-top">';
+            echo '<div class="mj-member-registrations__calendar-meta">';
+            echo '<span class="mj-member-registrations__calendar-month" data-mj-registrations-agenda-title>' . esc_html($agenda_title) . '</span>';
+            echo '</div>';
+            echo '</div>';
 
             if (!empty($calendar_slots)) {
-                echo '<div class="mj-member-registrations__calendar">';
+                echo '<div class="mj-member-registrations__calendar-weekdays" aria-hidden="true">';
+                foreach ($calendar_slots as $slot) {
+                    echo '<span>' . esc_html($slot['short_label']) . '</span>';
+                }
+                echo '</div>';
                 echo '<div class="mj-member-registrations__calendar-grid" role="list">';
                 foreach ($calendar_slots as $slot) {
-                    $day_classes = array('mj-member-registrations__calendar-day');
+                    $day_classes = array('mj-member-registrations__calendar-cell');
                     if (!empty($slot['available'])) {
                         $day_classes[] = 'is-available';
                     }
@@ -590,12 +657,13 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                     echo '<span class="' . esc_attr(implode(' ', $day_classes)) . '" role="listitem" data-weekday="' . esc_attr($weekday_key) . '" data-weekday-label="' . esc_attr($weekday_label) . '" aria-label="' . esc_attr($aria_label) . '">' . esc_html($slot['short_label']) . '</span>';
                 }
                 echo '</div>';
-                echo '<div class="mj-member-registrations__calendar-legend">';
-                echo '<span class="mj-member-registrations__calendar-legend-item"><span class="mj-member-registrations__calendar-legend-dot is-available"></span>' . esc_html__('Séances possibles', 'mj-member') . '</span>';
-                echo '<span class="mj-member-registrations__calendar-legend-item"><span class="mj-member-registrations__calendar-legend-dot is-selected"></span>' . esc_html__('Sélectionnées', 'mj-member') . '</span>';
-                echo '</div>';
-                echo '</div>';
             }
+
+            echo '<div class="mj-member-registrations__selection">';
+            echo '<div class="mj-member-registrations__selection-heading">';
+            echo '<p class="mj-member-registrations__selection-title">' . esc_html__('Jours sélectionnés', 'mj-member') . '</p>';
+            echo '<p class="mj-member-registrations__selection-note">' . esc_html__('Séances sélectionnées', 'mj-member') . '</p>';
+            echo '</div>';
 
             $list_hidden_attr = $displayed_count > 0 ? '' : ' hidden';
             echo '<ul class="mj-member-registrations__agenda-list" data-mj-registrations-agenda-list' . $list_hidden_attr . '>';
@@ -617,12 +685,90 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
             }
 
             echo '</div>';
+            echo '</aside>';
 
             echo '</div>';
             echo '</li>';
         }
         echo '</ul>';
         echo '</div>';
+    }
+
+    private static function ensure_script_localized() {
+        static $localized = false;
+
+        if ($localized) {
+            return;
+        }
+
+        $handle = 'mj-member-registrations-widget';
+        if (!wp_script_is($handle, 'registered')) {
+            return;
+        }
+
+        $strings = array(
+            'locale' => get_locale(),
+            'calendarStateNone' => __('Aucune séance prévue', 'mj-member'),
+            'calendarStateSelected' => __('Séance sélectionnée', 'mj-member'),
+            'calendarStateAvailable' => __('Séance possible', 'mj-member'),
+            'calendarDay' => __('Jour de séance', 'mj-member'),
+            'agendaTitleDefault' => __('Agenda', 'mj-member'),
+            'agendaTitleCustom' => __('Jours sélectionnés', 'mj-member'),
+            'agendaTitleAll' => __('Occurrences de l’événement', 'mj-member'),
+            'agendaEmptyUnknown' => __('Agenda à confirmer.', 'mj-member'),
+            'agendaEmptyAll' => __('Inscription valable pour toutes les occurrences de l’événement.', 'mj-member'),
+            'agendaEmptyCustom' => __('Aucune occurrence sélectionnée pour cette inscription.', 'mj-member'),
+            'moreOne' => __('+ %d autre occurrence', 'mj-member'),
+            'moreMany' => __('+ %d autres occurrences', 'mj-member'),
+            'panelHelpAll' => __('Toutes les occurrences sont actuellement incluses.', 'mj-member'),
+            'panelHelpCustom' => __('Sélectionne les séances auxquelles tu participes.', 'mj-member'),
+            'panelTitle' => __('Choisis tes séances', 'mj-member'),
+            'selectionRequired' => __('Merci de sélectionner au moins une occurrence.', 'mj-member'),
+            'error' => __('Une erreur est survenue. Merci de réessayer.', 'mj-member'),
+            'noChange' => __('Aucun changement détecté.', 'mj-member'),
+            'loading' => __('En cours...', 'mj-member'),
+            'success' => __('Occurrences mises à jour.', 'mj-member'),
+            'submitLabel' => __('Enregistrer', 'mj-member'),
+        );
+
+        $data = array(
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('mj-member-event-register'),
+            'strings' => $strings,
+        );
+
+        wp_localize_script($handle, 'mjMemberRegistrationsWidget', $data);
+        $localized = true;
+    }
+
+    /**
+     * @param array<int,array<string,mixed>> $occurrences
+     * @return array<int,array<string,string>>
+     */
+    private static function normalize_occurrence_payload(array $occurrences) {
+        $normalized = array();
+
+        foreach ($occurrences as $occurrence) {
+            if (!is_array($occurrence)) {
+                continue;
+            }
+
+            $start = isset($occurrence['start']) ? trim((string) $occurrence['start']) : '';
+            $end = isset($occurrence['end']) ? trim((string) $occurrence['end']) : '';
+            $label = isset($occurrence['label']) ? trim((string) $occurrence['label']) : '';
+
+            if ($start === '' && $label === '') {
+                continue;
+            }
+
+            $normalized[] = array(
+                'start' => $start,
+                'end' => $end,
+                'label' => $label,
+            );
+        }
+
+        return $normalized;
     }
 
     private static function format_date($value) {
@@ -641,7 +787,7 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
         $end_label = $end !== '' ? self::format_date($end) : '';
 
         if ($start_label !== '' && $end_label !== '' && $start_label !== $end_label) {
-            return $start_label . ' → ' . $end_label;
+            return $start_label . ' - ' . $end_label;
         }
 
         if ($end_label !== '' && $start_label === '') {
@@ -671,7 +817,7 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                 $end_time = ($end_ts !== false && $end_ts) ? self::format_time_label($end_ts) : '';
 
                 if ($weekday_label !== '' && $start_time !== '' && $end_time !== '') {
-                    return trim($weekday_label . ' ' . $start_time . ' → ' . $end_time);
+                    return trim($weekday_label . ' ' . $start_time . ' - ' . $end_time);
                 }
 
                 if ($weekday_label !== '' && $start_time !== '') {
@@ -679,7 +825,7 @@ class Mj_Member_Elementor_Registrations_Widget extends Widget_Base {
                 }
 
                 if ($start_time !== '' && $end_time !== '') {
-                    return $start_time . ' → ' . $end_time;
+                    return $start_time . ' - ' . $end_time;
                 }
             }
         }
