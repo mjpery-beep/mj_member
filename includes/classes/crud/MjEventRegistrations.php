@@ -866,6 +866,7 @@ class MjEventRegistrations implements CrudRepositoryInterface {
             'scope' => 'all',
             'count' => 0,
             'occurrences' => array(),
+            'all_occurrences' => array(),
         );
 
         if (!$registration || !class_exists('MjEventAttendance')) {
@@ -907,7 +908,15 @@ class MjEventRegistrations implements CrudRepositoryInterface {
                                 continue;
                             }
                             $label = isset($occurrence_entry['label']) ? sanitize_text_field((string) $occurrence_entry['label']) : self::format_occurrence_label($normalized_start);
-                            $occurrence_map[$normalized_start] = $label;
+                            $end_value = '';
+                            if (!empty($occurrence_entry['end'])) {
+                                $end_value = sanitize_text_field((string) $occurrence_entry['end']);
+                            }
+                            $occurrence_map[$normalized_start] = array(
+                                'start' => $normalized_start,
+                                'end' => $end_value,
+                                'label' => $label,
+                            );
                         }
                     }
                 }
@@ -916,6 +925,20 @@ class MjEventRegistrations implements CrudRepositoryInterface {
         }
 
         $occurrence_list = array();
+        $all_occurrence_list = array();
+        if (!empty($occurrence_map)) {
+            foreach ($occurrence_map as $normalized => $data) {
+                $entry = is_array($data) ? $data : array('label' => $data, 'start' => $normalized, 'end' => '');
+                $label = isset($entry['label']) && $entry['label'] !== '' ? $entry['label'] : self::format_occurrence_label($normalized);
+                $end_value = isset($entry['end']) ? sanitize_text_field((string) $entry['end']) : '';
+                $all_occurrence_list[] = array(
+                    'start' => $normalized,
+                    'end' => $end_value,
+                    'label' => sanitize_text_field((string) $label),
+                );
+            }
+        }
+
         if ($scope === 'custom' && !empty($assignments['occurrences']) && is_array($assignments['occurrences'])) {
             $unique = array();
             foreach ($assignments['occurrences'] as $occurrence_entry) {
@@ -927,20 +950,21 @@ class MjEventRegistrations implements CrudRepositoryInterface {
             }
             if (!empty($unique)) {
                 foreach (array_keys($unique) as $normalized) {
-                    $label = isset($occurrence_map[$normalized]) ? $occurrence_map[$normalized] : self::format_occurrence_label($normalized);
+                    $entry = isset($occurrence_map[$normalized]) && is_array($occurrence_map[$normalized])
+                        ? $occurrence_map[$normalized]
+                        : null;
+                    $label = ($entry && !empty($entry['label'])) ? $entry['label'] : self::format_occurrence_label($normalized);
+                    $label = sanitize_text_field((string) $label);
+                    $end_value = ($entry && !empty($entry['end'])) ? sanitize_text_field((string) $entry['end']) : '';
                     $occurrence_list[] = array(
                         'start' => $normalized,
+                        'end' => $end_value,
                         'label' => $label,
                     );
                 }
             }
-        } elseif ($scope === 'all' && !empty($occurrence_map)) {
-            foreach ($occurrence_map as $normalized => $label) {
-                $occurrence_list[] = array(
-                    'start' => $normalized,
-                    'label' => $label,
-                );
-            }
+        } elseif ($scope === 'all' && !empty($all_occurrence_list)) {
+            $occurrence_list = $all_occurrence_list;
         }
 
         if (count($occurrence_list) > 50) {
@@ -949,6 +973,7 @@ class MjEventRegistrations implements CrudRepositoryInterface {
 
         $summary['scope'] = $scope;
         $summary['occurrences'] = $occurrence_list;
+        $summary['all_occurrences'] = $all_occurrence_list;
         if ($scope === 'custom') {
             $summary['count'] = count($occurrence_list);
         } elseif ($scope === 'all') {
@@ -1032,6 +1057,7 @@ class MjEventRegistrations implements CrudRepositoryInterface {
             'occurrence_scope' => isset($occurrence_summary['scope']) ? sanitize_key((string) $occurrence_summary['scope']) : 'all',
             'occurrence_count' => isset($occurrence_summary['count']) ? (int) $occurrence_summary['count'] : 0,
             'occurrence_details' => self::sanitize_occurrence_details(isset($occurrence_summary['occurrences']) ? $occurrence_summary['occurrences'] : array()),
+            'available_occurrences' => self::sanitize_occurrence_details(isset($occurrence_summary['all_occurrences']) ? $occurrence_summary['all_occurrences'] : array()),
         );
     }
 
@@ -1051,11 +1077,13 @@ class MjEventRegistrations implements CrudRepositoryInterface {
             }
             $start = isset($occurrence['start']) ? sanitize_text_field((string) $occurrence['start']) : '';
             $label = isset($occurrence['label']) ? sanitize_text_field((string) $occurrence['label']) : '';
+            $end = isset($occurrence['end']) ? sanitize_text_field((string) $occurrence['end']) : '';
             if ($start === '' && $label === '') {
                 continue;
             }
             $sanitized[] = array(
                 'start' => $start,
+                'end' => $end,
                 'label' => $label !== '' ? $label : self::format_occurrence_label($start),
             );
         }

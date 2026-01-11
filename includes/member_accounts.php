@@ -687,6 +687,34 @@ if (!function_exists('mj_member_get_member_registrations')) {
                 }
             }
 
+            $cover_payload = array(
+                'id' => 0,
+                'url' => '',
+                'alt' => '',
+            );
+            if (!empty($registration['cover']) && is_array($registration['cover'])) {
+                if (isset($registration['cover']['id'])) {
+                    $cover_payload['id'] = (int) $registration['cover']['id'];
+                }
+                if (!empty($registration['cover']['url'])) {
+                    $cover_payload['url'] = esc_url_raw((string) $registration['cover']['url']);
+                }
+                if (!empty($registration['cover']['alt'])) {
+                    $cover_payload['alt'] = sanitize_text_field((string) $registration['cover']['alt']);
+                }
+            }
+
+            $is_free = !empty($registration['is_free']);
+            $price_value = isset($registration['price_value']) ? (float) $registration['price_value'] : 0.0;
+            $price_label = isset($registration['price_label']) ? sanitize_text_field((string) $registration['price_label']) : '';
+
+            $schedule_mode = isset($registration['schedule_mode']) ? sanitize_key((string) $registration['schedule_mode']) : '';
+            $schedule_label = isset($registration['schedule_label']) ? sanitize_text_field((string) $registration['schedule_label']) : '';
+            $schedule_frequency = isset($registration['schedule_frequency']) ? sanitize_key((string) $registration['schedule_frequency']) : '';
+
+            $calendar_label = isset($registration['calendar_label']) ? sanitize_text_field((string) $registration['calendar_label']) : '';
+            $time_label = isset($registration['time_label']) ? sanitize_text_field((string) $registration['time_label']) : '';
+
             $sanitized[] = array(
                 'id' => isset($registration['id']) ? (int) $registration['id'] : 0,
                 'title' => $title,
@@ -704,6 +732,15 @@ if (!function_exists('mj_member_get_member_registrations')) {
                 'occurrence_scope' => $occurrence_scope,
                 'occurrence_count' => $occurrence_count,
                 'occurrences' => $occurrence_entries,
+                'cover' => $cover_payload,
+                'is_free' => $is_free,
+                'price_value' => $price_value,
+                'price_label' => $price_label,
+                'schedule_mode' => $schedule_mode,
+                'schedule_label' => $schedule_label,
+                'schedule_frequency' => $schedule_frequency,
+                'calendar_label' => $calendar_label,
+                'time_label' => $time_label,
             );
 
             if ((int) $args['limit'] > 0 && count($sanitized) >= (int) $args['limit']) {
@@ -1152,6 +1189,9 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
             'events.recurrence_until',
             'events.article_id',
             'events.prix',
+            'events.cover_id AS cover_id',
+            'events.free_participation',
+            'events.occurrence_selection_mode',
         );
 
         if (!empty($location_fields)) {
@@ -1277,11 +1317,203 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
             }
             $payment_status_label = isset($payment_labels[$payment_status_raw]) ? $payment_labels[$payment_status_raw] : $payment_status_raw;
 
+            $cover = array(
+                'id' => 0,
+                'url' => '',
+                'alt' => '',
+            );
+            if (isset($row->cover_id)) {
+                $cover_id = (int) $row->cover_id;
+                if ($cover_id > 0) {
+                    $cover['id'] = $cover_id;
+                    $cover_image = wp_get_attachment_image_src($cover_id, 'large');
+                    if ($cover_image) {
+                        $cover['url'] = esc_url_raw($cover_image[0]);
+                    } else {
+                        $cover_fallback = wp_get_attachment_image_src($cover_id, 'medium');
+                        if ($cover_fallback) {
+                            $cover['url'] = esc_url_raw($cover_fallback[0]);
+                        }
+                    }
+
+                    $alt_text = get_post_meta($cover_id, '_wp_attachment_image_alt', true);
+                    if (!is_string($alt_text) || trim($alt_text) === '') {
+                        $alt_text = isset($row->title) ? (string) $row->title : '';
+                    }
+                    if ($alt_text !== '') {
+                        $cover['alt'] = sanitize_text_field($alt_text);
+                    }
+                }
+            }
+
+            if ($cover['url'] === '' && !empty($row->article_id)) {
+                $article_id = (int) $row->article_id;
+                if ($article_id > 0) {
+                    $article_thumb_id = get_post_thumbnail_id($article_id);
+                    if ($article_thumb_id) {
+                        $cover_image = wp_get_attachment_image_src($article_thumb_id, 'large');
+                        if ($cover_image) {
+                            $cover['id'] = (int) $article_thumb_id;
+                            $cover['url'] = esc_url_raw($cover_image[0]);
+                        } else {
+                            $cover_fallback = wp_get_attachment_image_src($article_thumb_id, 'medium');
+                            if ($cover_fallback) {
+                                $cover['id'] = (int) $article_thumb_id;
+                                $cover['url'] = esc_url_raw($cover_fallback[0]);
+                            }
+                        }
+
+                        if ($cover['alt'] === '') {
+                            $alt_text = get_post_meta($article_thumb_id, '_wp_attachment_image_alt', true);
+                            if (!is_string($alt_text) || trim($alt_text) === '') {
+                                $alt_text = isset($row->title) ? (string) $row->title : '';
+                            }
+                            if ($alt_text !== '') {
+                                $cover['alt'] = sanitize_text_field($alt_text);
+                            }
+                        }
+                    }
+                }
+            }
+
+            $price_value = 0.0;
+            if (isset($row->prix)) {
+                $price_raw = $row->prix;
+                if (is_numeric($price_raw)) {
+                    $price_value = (float) $price_raw;
+                } elseif (is_string($price_raw)) {
+                    $normalized_price = str_replace(' ', '', str_replace(',', '.', $price_raw));
+                    if (is_numeric($normalized_price)) {
+                        $price_value = (float) $normalized_price;
+                    }
+                }
+            }
+            $free_participation = isset($row->free_participation) ? (int) $row->free_participation : 0;
+            $is_free = $free_participation === 1 || $price_value <= 0.0;
+            $price_label = '';
+            if (!$is_free) {
+                $price_label = sprintf('%s €', number_format_i18n($price_value, 2));
+                $price_label = sanitize_text_field($price_label);
+            }
+
+            $schedule_mode = isset($row->schedule_mode) ? sanitize_key((string) $row->schedule_mode) : 'fixed';
+            if ($schedule_mode === '') {
+                $schedule_mode = 'fixed';
+            }
+
+            $schedule_payload = array();
+            if (!empty($row->schedule_payload)) {
+                if (is_array($row->schedule_payload)) {
+                    $schedule_payload = $row->schedule_payload;
+                } else {
+                    $decoded_payload = json_decode((string) $row->schedule_payload, true);
+                    if (is_array($decoded_payload)) {
+                        $schedule_payload = $decoded_payload;
+                    }
+                }
+            }
+
+            $schedule_label = '';
+            $schedule_frequency = '';
+            if ($schedule_mode === 'recurring') {
+                $schedule_frequency = isset($schedule_payload['frequency']) ? sanitize_key((string) $schedule_payload['frequency']) : 'weekly';
+                if ($schedule_frequency === 'monthly') {
+                    $schedule_label = __('Récurrence mensuelle', 'mj-member');
+                } else {
+                    $schedule_label = __('Récurrence hebdomadaire', 'mj-member');
+                    $schedule_frequency = 'weekly';
+                }
+            } elseif ($schedule_mode === 'range') {
+                $schedule_label = __('Stage sur plusieurs jours', 'mj-member');
+            } elseif ($schedule_mode === 'series') {
+                $schedule_label = __('Série de dates programmées', 'mj-member');
+            } else {
+                $schedule_label = __('Événement ponctuel', 'mj-member');
+            }
+            $schedule_label = sanitize_text_field($schedule_label);
+
+            $calendar_label = '';
+            if (class_exists('\\Mj\\Member\\Classes\\View\\Schedule\\ScheduleDisplayHelper')) {
+                try {
+                    $occurrence_feed = array();
+                    if (class_exists('Mj\\Member\\Classes\\MjEventSchedule')) {
+                        $occurrence_feed = \Mj\Member\Classes\MjEventSchedule::build_all_occurrences($row);
+                    }
+                    $calendar_label = \Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper::buildCalendarLabel(
+                        $row,
+                        is_array($occurrence_feed) ? $occurrence_feed : array(),
+                        array(
+                            'variant' => 'event-schedule-calendar',
+                        )
+                    );
+                } catch (\Throwable $exception) {
+                    $calendar_label = '';
+                }
+            }
+            if ($calendar_label !== '') {
+                $calendar_label = sanitize_text_field($calendar_label);
+            }
+
+            $time_label = '';
+            if ($start_raw !== '') {
+                if (function_exists('mj_member_format_event_datetime_range')) {
+                    $time_label = mj_member_format_event_datetime_range($start_raw, $end_raw !== '' ? $end_raw : $start_raw);
+                } elseif ($start_ts > 0) {
+                    $date_format = get_option('date_format', 'd/m/Y');
+                    $time_format = get_option('time_format', 'H:i');
+
+                    if (function_exists('wp_date')) {
+                        $start_date = wp_date($date_format, $start_ts);
+                        $start_time = wp_date($time_format, $start_ts);
+                    } else {
+                        $start_date = date_i18n($date_format, $start_ts, false);
+                        $start_time = date_i18n($time_format, $start_ts, false);
+                    }
+
+                    $time_label = $start_date;
+                    $segment_start = $start_date;
+                    if ($start_time !== '') {
+                        $segment_start = sprintf('%s · %s', $start_date, $start_time);
+                        $time_label = $segment_start;
+                    }
+
+                    if ($end_ts > 0) {
+                        if (function_exists('wp_date')) {
+                            $end_date = wp_date($date_format, $end_ts);
+                            $end_time = wp_date($time_format, $end_ts);
+                        } else {
+                            $end_date = date_i18n($date_format, $end_ts, false);
+                            $end_time = date_i18n($time_format, $end_ts, false);
+                        }
+
+                        $segment_end = $end_date;
+                        if ($end_time !== '') {
+                            $segment_end = sprintf('%s · %s', $end_date, $end_time);
+                        }
+
+                        if ($end_date !== $start_date) {
+                            $time_label = sprintf('%s → %s', $segment_start, $segment_end);
+                        } elseif ($end_time !== '' && $end_time !== $start_time) {
+                            if ($start_time !== '') {
+                                $time_label = sprintf('%s · %s → %s', $start_date, $start_time, $end_time);
+                            } else {
+                                $time_label = sprintf('%s → %s', $start_date, $end_time);
+                            }
+                        }
+                    }
+                }
+            }
+            if ($time_label !== '') {
+                $time_label = sanitize_text_field($time_label);
+            }
+
             $occurrence_scope = 'all';
             $occurrence_count = 0;
             $occurrence_details = array();
+            $available_occurrence_details = array();
 
             $notes_segments = array();
+            $occurrence_summary = null;
 
             if (method_exists('MjEventRegistrations', 'build_occurrence_summary')) {
                 $occurrence_summary = MjEventRegistrations::build_occurrence_summary($row);
@@ -1299,15 +1531,52 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
 
                             $start = isset($occurrence['start']) ? sanitize_text_field((string) $occurrence['start']) : '';
                             $label = isset($occurrence['label']) ? sanitize_text_field((string) $occurrence['label']) : '';
+                            $end = isset($occurrence['end']) ? sanitize_text_field((string) $occurrence['end']) : '';
 
                             if ($start === '' && $label === '') {
                                 continue;
                             }
 
-                            $occurrence_details[] = array(
+                            $detail = array(
                                 'start' => $start,
                                 'label' => $label !== '' ? $label : $start,
                             );
+
+                            if ($end !== '') {
+                                $detail['end'] = $end;
+                            }
+
+                            $occurrence_details[] = $detail;
+                        }
+                    }
+
+                    if (!empty($occurrence_summary['all_occurrences']) && is_array($occurrence_summary['all_occurrences'])) {
+                        $seen_available = array();
+                        foreach ($occurrence_summary['all_occurrences'] as $occurrence) {
+                            if (!is_array($occurrence)) {
+                                continue;
+                            }
+
+                            $start = isset($occurrence['start']) ? sanitize_text_field((string) $occurrence['start']) : '';
+                            $label = isset($occurrence['label']) ? sanitize_text_field((string) $occurrence['label']) : '';
+                            $end = isset($occurrence['end']) ? sanitize_text_field((string) $occurrence['end']) : '';
+
+                            if ($start === '' || isset($seen_available[$start])) {
+                                continue;
+                            }
+
+                            $seen_available[$start] = true;
+
+                            $detail = array(
+                                'start' => $start,
+                                'label' => $label !== '' ? $label : $start,
+                            );
+
+                            if ($end !== '') {
+                                $detail['end'] = $end;
+                            }
+
+                            $available_occurrence_details[] = $detail;
                         }
                     }
 
@@ -1317,6 +1586,38 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
                     }
                 }
             }
+
+            if (empty($available_occurrence_details) && is_array($occurrence_summary) && !empty($occurrence_summary['all_occurrences']) && is_array($occurrence_summary['all_occurrences'])) {
+                foreach ($occurrence_summary['all_occurrences'] as $occurrence) {
+                    if (!is_array($occurrence)) {
+                        continue;
+                    }
+
+                    $start = isset($occurrence['start']) ? sanitize_text_field((string) $occurrence['start']) : '';
+                    if ($start === '') {
+                        continue;
+                    }
+
+                    $label = isset($occurrence['label']) ? sanitize_text_field((string) $occurrence['label']) : $start;
+                    $entry = array(
+                        'start' => $start,
+                        'label' => $label,
+                    );
+
+                    if (!empty($occurrence['end'])) {
+                        $entry['end'] = sanitize_text_field((string) $occurrence['end']);
+                    }
+
+                    $available_occurrence_details[] = $entry;
+                }
+            }
+
+            $occurrence_selection_mode = isset($row->occurrence_selection_mode) ? sanitize_key((string) $row->occurrence_selection_mode) : 'member_choice';
+            if ($occurrence_selection_mode === '') {
+                $occurrence_selection_mode = 'member_choice';
+            }
+
+            $can_manage_occurrences = ($occurrence_selection_mode === 'member_choice') && !empty($available_occurrence_details);
 
             if (!empty($row->notes)) {
                 $notes_segments[] = '<strong>' . esc_html__('Note', 'mj-member') . '</strong> : ' . esc_html(wp_strip_all_tags((string) $row->notes));
@@ -1329,6 +1630,10 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
 
             $result_entries[] = array(
                 'id' => isset($row->id) ? (int) $row->id : 0,
+                'registration_id' => isset($row->id) ? (int) $row->id : 0,
+                'event_id' => isset($row->event_id) ? (int) $row->event_id : 0,
+                'member_id' => isset($row->member_id) ? (int) $row->member_id : $member_id,
+                'guardian_id' => isset($row->guardian_id) ? (int) $row->guardian_id : 0,
                 'title' => isset($row->title) ? sanitize_text_field((string) $row->title) : __('Événement MJ', 'mj-member'),
                 'status' => $output_status,
                 'status_label' => sanitize_text_field($status_label),
@@ -1340,10 +1645,22 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
                 'notes' => $notes_html,
                 'permalink' => $permalink_url,
                 'payment_status' => $payment_status_raw,
-                'payment_status_label' => $payment_status_label,
+                'payment_status_label' => sanitize_text_field($payment_status_label),
                 'occurrence_scope' => $occurrence_scope,
                 'occurrence_count' => $occurrence_count,
                 'occurrences' => $occurrence_details,
+                'available_occurrences' => $available_occurrence_details,
+                'occurrence_selection_mode' => $occurrence_selection_mode,
+                'can_manage_occurrences' => $can_manage_occurrences,
+                'cover' => $cover,
+                'is_free' => $is_free,
+                'price_value' => $price_value,
+                'price_label' => $price_label,
+                'schedule_mode' => $schedule_mode,
+                'schedule_label' => $schedule_label,
+                'schedule_frequency' => $schedule_frequency,
+                'calendar_label' => $calendar_label,
+                'time_label' => $time_label,
             );
         }
 

@@ -4543,6 +4543,7 @@ function mj_regmgr_get_member_registrations() {
     $status_labels = MjEventRegistrations::get_status_labels();
 
     $events_cache = array();
+    $event_cover_cache = array();
     $occurrence_cache = array();
     $now_timestamp = current_time('timestamp');
 
@@ -4589,6 +4590,71 @@ function mj_regmgr_get_member_registrations() {
             $events_cache[$event_id] = $event ? $event : null;
         }
 
+        $event = ($event_id > 0 && isset($events_cache[$event_id])) ? $events_cache[$event_id] : null;
+
+        if ($event_id > 0 && !array_key_exists($event_id, $event_cover_cache)) {
+            $cover_payload = array(
+                'id' => 0,
+                'url' => '',
+                'alt' => '',
+            );
+
+            if ($event && !empty($event->cover_id)) {
+                $cover_id = (int) $event->cover_id;
+                if ($cover_id > 0) {
+                    $cover_payload['id'] = $cover_id;
+
+                    $cover_source = wp_get_attachment_image_src($cover_id, 'large');
+                    if ($cover_source) {
+                        $cover_payload['url'] = esc_url_raw($cover_source[0]);
+                    } else {
+                        $cover_fallback = wp_get_attachment_image_src($cover_id, 'medium');
+                        if ($cover_fallback) {
+                            $cover_payload['url'] = esc_url_raw($cover_fallback[0]);
+                        }
+                    }
+
+                    $alt_meta = get_post_meta($cover_id, '_wp_attachment_image_alt', true);
+                    if (is_string($alt_meta) && trim($alt_meta) !== '') {
+                        $cover_payload['alt'] = sanitize_text_field($alt_meta);
+                    } elseif ($event && !empty($event->title)) {
+                        $cover_payload['alt'] = sanitize_text_field((string) $event->title);
+                    }
+                }
+            }
+
+            if ($cover_payload['url'] === '' && $event && !empty($event->article_id)) {
+                $article_id = (int) $event->article_id;
+                if ($article_id > 0) {
+                    $article_thumb_id = get_post_thumbnail_id($article_id);
+                    if ($article_thumb_id) {
+                        $cover_source = wp_get_attachment_image_src($article_thumb_id, 'large');
+                        if ($cover_source) {
+                            $cover_payload['id'] = (int) $article_thumb_id;
+                            $cover_payload['url'] = esc_url_raw($cover_source[0]);
+                        } else {
+                            $cover_fallback = wp_get_attachment_image_src($article_thumb_id, 'medium');
+                            if ($cover_fallback) {
+                                $cover_payload['id'] = (int) $article_thumb_id;
+                                $cover_payload['url'] = esc_url_raw($cover_fallback[0]);
+                            }
+                        }
+
+                        if ($cover_payload['alt'] === '') {
+                            $alt_meta = get_post_meta($article_thumb_id, '_wp_attachment_image_alt', true);
+                            if (is_string($alt_meta) && trim($alt_meta) !== '') {
+                                $cover_payload['alt'] = sanitize_text_field($alt_meta);
+                            } elseif ($event && !empty($event->title)) {
+                                $cover_payload['alt'] = sanitize_text_field((string) $event->title);
+                            }
+                        }
+                    }
+                }
+            }
+
+            $event_cover_cache[$event_id] = $cover_payload;
+        }
+
         if (!array_key_exists($event_id, $occurrence_cache)) {
             $event_occurrences = array();
 
@@ -4629,6 +4695,7 @@ function mj_regmgr_get_member_registrations() {
             $occurrence_cache[$event_id] = $event_occurrences;
         }
 
+        $event_cover = isset($event_cover_cache[$event_id]) ? $event_cover_cache[$event_id] : array('id' => 0, 'url' => '', 'alt' => '');
         $event = ($event_id > 0 && isset($events_cache[$event_id])) ? $events_cache[$event_id] : null;
         $event_title = $event ? $event->title : __('Événement supprimé', 'mj-member');
 
@@ -4687,6 +4754,7 @@ function mj_regmgr_get_member_registrations() {
             'id' => isset($reg->id) ? (int) $reg->id : 0,
             'eventId' => $event_id,
             'eventTitle' => $event_title,
+            'eventCover' => $event_cover,
             'status' => $status_key,
             'statusLabel' => isset($status_labels[$status_key]) ? $status_labels[$status_key] : $status_key,
             'createdAt' => isset($reg->created_at) ? $reg->created_at : null,

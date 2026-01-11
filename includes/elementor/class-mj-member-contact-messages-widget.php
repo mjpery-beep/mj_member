@@ -174,7 +174,7 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
             }
         }
 
-        $recipient_target_specs = $this->build_recipient_target_queries($member_id, $member_role);
+        $recipient_target_specs = $this->build_recipient_target_queries($member_id, $member_role, $can_moderate);
 
         $messages_payload = array();
         $status_labels = MjContactMessages::get_status_labels();
@@ -491,41 +491,56 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
     /**
      * @param int $member_id
      * @param string $member_role
+     * @param bool $include_global
      * @return array<int,array<string,mixed>>
      */
-    private function build_recipient_target_queries($member_id, $member_role) {
+    private function build_recipient_target_queries($member_id, $member_role, $include_global = false) {
         $member_id = (int) $member_id;
         $member_role = sanitize_key((string) $member_role);
 
         $targets = array();
 
         $append_target = static function ($type, $reference = null) use (&$targets) {
-            $key = $type . '|' . ($reference === null ? 'null' : (string) (int) $reference);
+            $normalized_reference = null;
+            if ($reference !== null) {
+                $candidate = (int) $reference;
+                if ($candidate > 0) {
+                    $normalized_reference = $candidate;
+                }
+            }
+
+            $key = $type . '|' . ($normalized_reference === null ? 'null' : (string) $normalized_reference);
             if (isset($targets[$key])) {
                 return;
             }
 
             $entry = array('type' => $type);
-            if ($reference !== null) {
-                $entry['reference'] = (int) $reference;
+            if ($normalized_reference !== null) {
+                $entry['reference'] = $normalized_reference;
             }
 
             $targets[$key] = $entry;
         };
+        $is_animateur = false;
+        $is_coordinateur = false;
 
-        $append_target(MjContactMessages::TARGET_ALL, null);
+        if (class_exists('Mj\\Member\\Classes\\MjRoles')) {
+            $is_animateur = \Mj\Member\Classes\MjRoles::isAnimateur($member_role);
+            $is_coordinateur = \Mj\Member\Classes\MjRoles::isCoordinateur($member_role);
+        } else {
+            $is_animateur = ($member_role === 'animateur');
+            $is_coordinateur = ($member_role === 'coordinateur');
+        }
+
+        $should_include_global = $include_global || $is_animateur || $is_coordinateur;
+
+        if ($should_include_global) {
+            $append_target(MjContactMessages::TARGET_ALL, null);
+        }
 
         if ($member_id <= 0) {
             return array_values($targets);
         }
-
-        // Utiliser MjRoles pour les vérifications de rôles
-        $is_animateur = class_exists('Mj\\Member\\Classes\\MjRoles') 
-            ? \Mj\Member\Classes\MjRoles::isAnimateur($member_role)
-            : ($member_role === \Mj\Member\Classes\MjRoles::ANIMATEUR);
-        $is_coordinateur = class_exists('Mj\\Member\\Classes\\MjRoles')
-            ? \Mj\Member\Classes\MjRoles::isCoordinateur($member_role)
-            : ($member_role === \Mj\Member\Classes\MjRoles::COORDINATEUR);
 
         if ($is_animateur || $is_coordinateur) {
             $append_target(MjContactMessages::TARGET_ANIMATEUR, $member_id);
