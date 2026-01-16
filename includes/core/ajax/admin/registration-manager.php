@@ -1412,6 +1412,8 @@ function mj_regmgr_get_event_details() {
         $front_url = get_permalink($event->article_id);
     }
 
+    $event_page_url = apply_filters('mj_member_event_permalink', '', $event);
+
     $registration_payload = mj_regmgr_decode_json_field(isset($event->registration_payload) ? $event->registration_payload : array());
     $attendance_show_all_members = !empty($registration_payload['attendance_show_all_members']);
     if (!$attendance_show_all_members && isset($event->attendance_show_all_members)) {
@@ -1456,6 +1458,7 @@ function mj_regmgr_get_event_details() {
             'location' => $location,
             'animateurs' => $animateurs,
             'frontUrl' => $front_url ?: null,
+            'eventPageUrl' => !empty($event_page_url) ? $event_page_url : null,
             'articleId' => !empty($event->article_id) ? (int) $event->article_id : null,
             'occurrenceSelectionMode' => isset($event->occurrence_selection_mode) && $event->occurrence_selection_mode !== ''
                 ? $event->occurrence_selection_mode
@@ -3888,209 +3891,6 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
     $series_items_clean = array();
     $recurrence_until_value = '';
 
-    if ($schedule_mode === 'fixed') {
-        $fixed_date = isset($form_values['schedule_fixed_date']) ? sanitize_text_field($form_values['schedule_fixed_date']) : '';
-        $fixed_start = isset($form_values['schedule_fixed_start_time']) ? sanitize_text_field($form_values['schedule_fixed_start_time']) : '';
-        $fixed_end = isset($form_values['schedule_fixed_end_time']) ? sanitize_text_field($form_values['schedule_fixed_end_time']) : '';
-
-        if ($fixed_date === '' || $fixed_start === '') {
-            $errors[] = __('La date et l\'heure de début sont obligatoires pour un horaire fixe.', 'mj-member');
-        } else {
-            $start_datetime = DateTime::createFromFormat('Y-m-d H:i', $fixed_date . ' ' . $fixed_start, $timezone);
-            $end_datetime = $fixed_end !== '' ? DateTime::createFromFormat('Y-m-d H:i', $fixed_date . ' ' . $fixed_end, $timezone) : null;
-
-            if (!$start_datetime) {
-                $errors[] = __('La date de début est invalide.', 'mj-member');
-            } else {
-                if ($end_datetime && $end_datetime <= $start_datetime) {
-                    $errors[] = __('L\'heure de fin doit être postérieure à l\'heure de début.', 'mj-member');
-                } elseif (!$end_datetime) {
-                    $end_datetime = clone $start_datetime;
-                }
-
-                if ($end_datetime instanceof DateTime) {
-                    $date_debut = $start_datetime->format('Y-m-d H:i:s');
-                    $date_fin = $end_datetime->format('Y-m-d H:i:s');
-                }
-            }
-        }
-
-        $schedule_payload = array(
-            'mode' => 'fixed',
-            'date' => $fixed_date,
-            'start_time' => $fixed_start,
-            'end_time' => $fixed_end,
-        );
-    } elseif ($schedule_mode === 'range') {
-        $range_start_raw = isset($form_values['schedule_range_start']) ? $form_values['schedule_range_start'] : '';
-        $range_end_raw = isset($form_values['schedule_range_end']) ? $form_values['schedule_range_end'] : '';
-
-        $range_start = mj_regmgr_parse_event_datetime($range_start_raw);
-        $range_end = mj_regmgr_parse_event_datetime($range_end_raw);
-
-        if ($range_start === '' || $range_end === '') {
-            $errors[] = __('Les dates de début et de fin de la plage sont obligatoires.', 'mj-member');
-        } elseif (strtotime($range_end) < strtotime($range_start)) {
-            $errors[] = __('La date de fin doit être postérieure à la date de début.', 'mj-member');
-        } else {
-            $date_debut = $range_start;
-            $date_fin = $range_end;
-        }
-
-        $schedule_payload = array(
-            'mode' => 'range',
-            'start' => (string) $range_start_raw,
-            'end' => (string) $range_end_raw,
-        );
-    } elseif ($schedule_mode === 'recurring') {
-        $recurring_start_date = isset($form_values['schedule_recurring_start_date']) ? sanitize_text_field($form_values['schedule_recurring_start_date']) : '';
-        $recurring_start_time = isset($form_values['schedule_recurring_start_time']) ? sanitize_text_field($form_values['schedule_recurring_start_time']) : '';
-        $recurring_end_time = isset($form_values['schedule_recurring_end_time']) ? sanitize_text_field($form_values['schedule_recurring_end_time']) : '';
-
-        if ($recurring_start_date === '' || $recurring_start_time === '') {
-            $errors[] = __('La date et l\'heure de début de la récurrence sont obligatoires.', 'mj-member');
-        } else {
-            $start_datetime = DateTime::createFromFormat('Y-m-d H:i', $recurring_start_date . ' ' . $recurring_start_time, $timezone);
-            if (!$start_datetime) {
-                $errors[] = __('La date de début de la récurrence est invalide.', 'mj-member');
-            } else {
-                $end_datetime = DateTime::createFromFormat('Y-m-d H:i', $recurring_start_date . ' ' . $recurring_end_time, $timezone);
-                if (!$end_datetime) {
-                    $errors[] = __('L\'heure de fin de la récurrence est invalide.', 'mj-member');
-                } else {
-                    if ($end_datetime <= $start_datetime) {
-                        $end_datetime->modify('+1 day');
-                    }
-                    $date_debut = $start_datetime->format('Y-m-d H:i:s');
-                    $date_fin = $end_datetime->format('Y-m-d H:i:s');
-                }
-            }
-        }
-
-        $frequency = isset($form_values['schedule_recurring_frequency']) ? sanitize_key((string) $form_values['schedule_recurring_frequency']) : 'weekly';
-        if (!in_array($frequency, array('weekly', 'monthly'), true)) {
-            $frequency = 'weekly';
-        }
-        $interval = isset($form_values['schedule_recurring_interval']) ? max(1, (int) $form_values['schedule_recurring_interval']) : 1;
-        $schedule_exceptions = mj_regmgr_resolve_schedule_exceptions($form_values, $meta);
-        $recurrence_until_value = mj_regmgr_parse_recurrence_until(isset($form_values['recurrence_until']) ? $form_values['recurrence_until'] : '', $recurring_end_time, $timezone);
-
-        if ($frequency === 'weekly') {
-            $weekdays = array();
-            if (isset($form_values['schedule_recurring_weekdays']) && is_array($form_values['schedule_recurring_weekdays'])) {
-                foreach ($form_values['schedule_recurring_weekdays'] as $weekday) {
-                    $weekday = sanitize_key($weekday);
-                    if (isset($schedule_weekdays[$weekday])) {
-                        $weekdays[$weekday] = $weekday;
-                    }
-                }
-            }
-            if (empty($weekdays)) {
-                $errors[] = __('Sélectionnez au moins un jour pour la récurrence hebdomadaire.', 'mj-member');
-            }
-
-            $weekday_times = isset($form_values['schedule_weekday_times']) ? mj_regmgr_sanitize_weekday_times($form_values['schedule_weekday_times'], $schedule_weekdays) : array();
-            $show_date_range = !empty($form_values['schedule_show_date_range']);
-
-            $schedule_payload = array(
-                'mode' => 'recurring',
-                'frequency' => 'weekly',
-                'interval' => $interval,
-                'weekdays' => array_values($weekdays),
-                'weekday_times' => $weekday_times,
-                'start_time' => $recurring_start_time,
-                'end_time' => $recurring_end_time,
-                'start_date' => $recurring_start_date,
-                'show_date_range' => $show_date_range,
-                'exceptions' => $schedule_exceptions,
-                'until' => $recurrence_until_value,
-            );
-        } else {
-            $ordinal = isset($form_values['schedule_recurring_month_ordinal']) ? sanitize_key((string) $form_values['schedule_recurring_month_ordinal']) : 'first';
-            if (!isset($schedule_month_ordinals[$ordinal])) {
-                $ordinal = 'first';
-            }
-            $weekday = isset($form_values['schedule_recurring_month_weekday']) ? sanitize_key((string) $form_values['schedule_recurring_month_weekday']) : 'saturday';
-            if (!isset($schedule_weekdays[$weekday])) {
-                $weekday = 'saturday';
-            }
-            $show_date_range = !empty($form_values['schedule_show_date_range']);
-
-            $schedule_payload = array(
-                'mode' => 'recurring',
-                'frequency' => 'monthly',
-                'interval' => $interval,
-                'ordinal' => $ordinal,
-                'weekday' => $weekday,
-                'start_time' => $recurring_start_time,
-                'end_time' => $recurring_end_time,
-                'start_date' => $recurring_start_date,
-                'show_date_range' => $show_date_range,
-                'exceptions' => $schedule_exceptions,
-                'until' => $recurrence_until_value,
-            );
-        }
-
-        $schedule_payload['exceptions'] = $schedule_exceptions;
-
-        $form_values['schedule_exceptions'] = $schedule_exceptions;
-    } elseif ($schedule_mode === 'series') {
-        $series = isset($form_values['schedule_series_items']) && is_array($form_values['schedule_series_items']) ? $form_values['schedule_series_items'] : array();
-        $earliest = null;
-        $latest = null;
-
-        foreach ($series as $item) {
-            if (!is_array($item)) {
-                continue;
-            }
-
-            $date_value = isset($item['date']) ? sanitize_text_field($item['date']) : '';
-            $start_value = isset($item['start_time']) ? sanitize_text_field($item['start_time']) : '';
-            $end_value = isset($item['end_time']) ? sanitize_text_field($item['end_time']) : '';
-
-            if ($date_value === '' || $start_value === '') {
-                continue;
-            }
-
-            $start_datetime = DateTime::createFromFormat('Y-m-d H:i', $date_value . ' ' . $start_value, $timezone);
-            if (!$start_datetime) {
-                continue;
-            }
-            $end_datetime = null;
-            if ($end_value !== '') {
-                $end_datetime = DateTime::createFromFormat('Y-m-d H:i', $date_value . ' ' . $end_value, $timezone);
-            }
-            if (!$end_datetime || $end_datetime <= $start_datetime) {
-                $end_datetime = clone $start_datetime;
-                $end_datetime->modify('+1 hour');
-            }
-
-            $series_items_clean[] = array(
-                'date' => $date_value,
-                'start_time' => $start_value,
-                'end_time' => $end_value,
-            );
-
-            if (!$earliest || $start_datetime < $earliest) {
-                $earliest = clone $start_datetime;
-            }
-            if (!$latest || $end_datetime > $latest) {
-                $latest = clone $end_datetime;
-            }
-        }
-
-        if (empty($series_items_clean)) {
-            $errors[] = __('Ajoutez au moins une date valide pour la série.', 'mj-member');
-        } else {
-            $date_debut = $earliest->format('Y-m-d H:i:s');
-            $date_fin = $latest->format('Y-m-d H:i:s');
-        }
-
-        $schedule_payload = array(
-            'mode' => 'series',
-            'items' => $series_items_clean,
-        );
-    }
 
     if ($date_debut === '' && !empty($form_values['date_debut'])) {
         $parsed = mj_regmgr_parse_event_datetime($form_values['date_debut']);

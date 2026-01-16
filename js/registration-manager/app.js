@@ -8,15 +8,15 @@
 
     var preact = global.preact;
     var hooks = global.preactHooks;
+    var render = global.preactRender || (preact && preact.render);
 
-    if (!preact || !hooks) {
+    if (!preact || !hooks || typeof render !== 'function') {
         console.warn('[MjRegMgr] Preact must be loaded before the registration manager.');
         return;
     }
 
     var h = preact.h;
     var Fragment = preact.Fragment;
-    var render = preact.render;
     var useState = hooks.useState;
     var useEffect = hooks.useEffect;
     var useCallback = hooks.useCallback;
@@ -24,24 +24,24 @@
     var useRef = hooks.useRef;
 
     // Import des modules
-    var Services = global.MjRegMgrServices;
     var Utils = global.MjRegMgrUtils;
     var EventsComps = global.MjRegMgrEvents;
     var RegComps = global.MjRegMgrRegistrations;
-    var AttendanceComps = global.MjRegMgrAttendance;
     var Modals = global.MjRegMgrModals;
+    var Services = global.MjRegMgrServices;
+    var AttendanceComps = global.MjRegMgrAttendance;
     var EventEditorModule = global.MjRegMgrEventEditor;
     var EventEditor = EventEditorModule ? EventEditorModule.EventEditor : null;
 
-    if (!Services || !Utils || !EventsComps || !RegComps || !AttendanceComps || !Modals) {
+    if (!Utils || !EventsComps || !RegComps || !Modals || !Services || !AttendanceComps) {
         console.warn('[MjRegMgr] Modules manquants');
         return;
     }
 
     var getString = Utils.getString;
     var classNames = Utils.classNames;
-    var useToasts = Utils.useToasts;
     var useModal = Utils.useModal;
+    var useToasts = Utils.useToasts;
 
     var EventsSidebar = EventsComps.EventsSidebar;
     var RegistrationsList = RegComps.RegistrationsList;
@@ -305,18 +305,35 @@
 
                 // Boutons d'action
                 h('div', { class: 'mj-regmgr-event-detail__actions' }, [
-                    // Lien vers la page front
+                    // Lien vers EventPage
+                    event.eventPageUrl && h('a', {
+                        href: event.eventPageUrl,
+                        target: '_blank',
+                        rel: 'noopener noreferrer',
+                        class: 'mj-btn mj-btn--primary',
+                    }, [
+                        h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                            h('rect', { x: 3, y: 4, width: 18, height: 18, rx: 2, ry: 2 }),
+                            h('line', { x1: 16, y1: 2, x2: 16, y2: 6 }),
+                            h('line', { x1: 8, y1: 2, x2: 8, y2: 6 }),
+                            h('line', { x1: 3, y1: 10, x2: 21, y2: 10 }),
+                        ]),
+                        getString(strings, 'openEventPage', 'Voir la page événement'),
+                    ]),
+
+                    // Lien vers la page front (article lié)
                     event.frontUrl && h('a', {
                         href: event.frontUrl,
                         target: '_blank',
-                        class: 'mj-btn mj-btn--primary',
+                        rel: 'noopener noreferrer',
+                        class: 'mj-btn mj-btn--secondary',
                     }, [
                         h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
                             h('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
                             h('polyline', { points: '15 3 21 3 21 9' }),
                             h('line', { x1: 10, y1: 14, x2: 21, y2: 3 }),
                         ]),
-                        'Voir sur le site',
+                        getString(strings, 'viewLinkedArticle', 'Voir sur le site'),
                     ]),
 
                     // Bouton suppression
@@ -411,8 +428,16 @@
         var setPivotDate = _pivotDate[1];
 
         useEffect(function () {
-            setPivotDate(initialPivotDate);
-        }, [initialPivotDate]);
+            if (!(initialPivotDate instanceof Date) || Number.isNaN(initialPivotDate.getTime())) {
+                return;
+            }
+            setPivotDate(function () {
+                if (viewMode === 'week') {
+                    return alignDateToWeekStart(initialPivotDate);
+                }
+                return new Date(initialPivotDate.getFullYear(), initialPivotDate.getMonth(), 1);
+            });
+        }, [initialPivotDate, viewMode]);
 
         var _viewMode = useState('quarter');
         var viewMode = _viewMode[0];
@@ -458,9 +483,17 @@
         var statusOptions = useMemo(function () {
             return [
                 { value: 'planned', label: getString(strings, 'occurrenceStatusPlanned', 'Prévu') },
-                { value: 'confirmed', label: getString(strings, 'occurrenceStatusConfirmed', 'Désactivé') },
+                { value: 'confirmed', label: getString(strings, 'occurrenceStatusConfirmed', 'Confirmée') },
                 { value: 'cancelled', label: getString(strings, 'occurrenceStatusCancelled', 'Annulé') },
             ];
+        }, [strings]);
+
+        var statusLabelMap = useMemo(function () {
+            return {
+                planned: getString(strings, 'occurrenceStatusPlanned', 'Prévu'),
+                confirmed: getString(strings, 'occurrenceStatusConfirmed', 'Confirmée'),
+                cancelled: getString(strings, 'occurrenceStatusCancelled', 'Annulé'),
+            };
         }, [strings]);
 
         var weekdayLabels = useMemo(function () {
@@ -504,10 +537,179 @@
             return buildQuarterMonths(pivotDate, resolvedLocale, occurrencesByDate, selectedOccurrenceId);
         }, [pivotDate, resolvedLocale, occurrencesByDate, selectedOccurrenceId, viewMode]);
 
+        var singleMonthOverview = useMemo(function () {
+            if (!(pivotDate instanceof Date) || Number.isNaN(pivotDate.getTime())) {
+                return null;
+            }
+            var monthDate = new Date(pivotDate.getFullYear(), pivotDate.getMonth(), 1);
+            return buildMonthOverview(monthDate, resolvedLocale, occurrencesByDate, selectedOccurrenceId);
+        }, [pivotDate, resolvedLocale, occurrencesByDate, selectedOccurrenceId]);
+
+        var weekOverview = useMemo(function () {
+            if (viewMode !== 'week') {
+                return null;
+            }
+            return buildWeekOverview(pivotDate, occurrencesByDate, selectedOccurrenceId);
+        }, [pivotDate, occurrencesByDate, selectedOccurrenceId, viewMode]);
+
+        var calendarMonths = viewMode === 'month'
+            ? (singleMonthOverview ? [singleMonthOverview] : [])
+            : months;
+
+        var weekTimeScale = useMemo(function () {
+            if (!weekOverview) {
+                return {
+                    min: 9 * 60,
+                    max: 17 * 60,
+                    range: 8 * 60,
+                    ticks: [],
+                };
+            }
+            var minMinutes = weekOverview.minMinutes;
+            var maxMinutes = weekOverview.maxMinutes;
+            var paddedMin = Math.max(0, Math.floor((minMinutes - 30) / 60) * 60);
+            var paddedMax = Math.min(24 * 60, Math.ceil((maxMinutes + 30) / 60) * 60);
+            if (paddedMax <= paddedMin) {
+                paddedMax = Math.min(24 * 60, paddedMin + 120);
+            }
+            var ticks = [];
+            for (var cursor = paddedMin; cursor <= paddedMax; cursor += 60) {
+                ticks.push({
+                    minutes: cursor,
+                    label: formatPreviewTime(minutesToTime(cursor)),
+                });
+            }
+            return {
+                min: paddedMin,
+                max: paddedMax,
+                range: Math.max(60, paddedMax - paddedMin),
+                ticks: ticks,
+            };
+        }, [weekOverview]);
+
+        var WEEK_VIEW_HEIGHT = 560;
+        var WEEK_CREATION_STEP_MINUTES = 15;
+        var WEEK_CREATION_DEFAULT_DURATION = 60;
+        var weekTimelineRange = Math.max(60, weekTimeScale.range || 0);
+
+        var weekRangeLabel = useMemo(function () {
+            if (!weekOverview) {
+                return '';
+            }
+            var start = weekOverview.start;
+            var end = weekOverview.end;
+            if (!(start instanceof Date) || Number.isNaN(start.getTime()) || !(end instanceof Date) || Number.isNaN(end.getTime())) {
+                return '';
+            }
+            var options = { day: 'numeric', month: 'short' };
+            var startLabel;
+            var endLabel;
+            try {
+                startLabel = start.toLocaleDateString(resolvedLocale, options);
+            } catch (error) {
+                startLabel = start.toLocaleDateString('fr', options);
+            }
+            try {
+                endLabel = end.toLocaleDateString(resolvedLocale, options);
+            } catch (error2) {
+                endLabel = end.toLocaleDateString('fr', options);
+            }
+            var template = getString(strings, 'occurrenceWeekRange', 'Semaine du {start} au {end}');
+            return template.replace('{start}', startLabel).replace('{end}', endLabel);
+        }, [weekOverview, resolvedLocale, strings]);
+
+        var handleWeekColumnBackgroundClick = useCallback(function (day, event) {
+            if (!day || !weekOverview || !weekTimeScale || typeof event !== 'object') {
+                return;
+            }
+            var target = event.currentTarget;
+            if (!target || typeof target.getBoundingClientRect !== 'function') {
+                return;
+            }
+            var rect = target.getBoundingClientRect();
+            var pointerY = typeof event.clientY === 'number' ? event.clientY : rect.top;
+            var offsetY = pointerY - rect.top;
+            if (offsetY < 0) {
+                offsetY = 0;
+            }
+            var height = rect.height > 0 ? rect.height : 1;
+            var ratio = offsetY / height;
+            if (!Number.isFinite(ratio)) {
+                ratio = 0;
+            }
+            ratio = Math.min(1, Math.max(0, ratio));
+            var rawMinutes = weekTimeScale.min + (ratio * weekTimelineRange);
+            var snappedStart = Math.floor(rawMinutes / WEEK_CREATION_STEP_MINUTES) * WEEK_CREATION_STEP_MINUTES;
+            var safeMaxStart = weekTimeScale.max - WEEK_CREATION_STEP_MINUTES;
+            if (safeMaxStart < weekTimeScale.min) {
+                safeMaxStart = weekTimeScale.min;
+            }
+            if (snappedStart < weekTimeScale.min) {
+                snappedStart = weekTimeScale.min;
+            }
+            if (snappedStart > safeMaxStart) {
+                snappedStart = safeMaxStart;
+            }
+            var snappedEnd = snappedStart + WEEK_CREATION_DEFAULT_DURATION;
+            if (snappedEnd > weekTimeScale.max) {
+                snappedEnd = weekTimeScale.max;
+                snappedStart = Math.max(weekTimeScale.min, snappedEnd - WEEK_CREATION_DEFAULT_DURATION);
+            }
+            if (snappedEnd <= snappedStart) {
+                snappedEnd = Math.min(weekTimeScale.max, snappedStart + WEEK_CREATION_STEP_MINUTES);
+            }
+            var startTime = minutesToTime(snappedStart);
+            var endTime = minutesToTime(snappedEnd);
+            setSelectedOccurrenceId(null);
+            setEditorState(function () {
+                var next = createEditorState(null);
+                next.date = day.iso;
+                next.startTime = startTime;
+                next.endTime = endTime;
+                next.status = 'planned';
+                next.reason = '';
+                return next;
+            });
+        }, [weekOverview, weekTimeScale, weekTimelineRange, setSelectedOccurrenceId, setEditorState]);
+
         var _generatorState = useState(createGeneratorState(initialPivotDate));
         var generatorState = _generatorState[0];
         var setGeneratorState = _generatorState[1];
 
+        var safeGeneratorState = generatorState && typeof generatorState === 'object'
+            ? generatorState
+            : createGeneratorState(initialPivotDate);
+
+        var generatorDays = safeGeneratorState.days && typeof safeGeneratorState.days === 'object'
+            ? safeGeneratorState.days
+            : {};
+        var generatorMode = typeof safeGeneratorState.mode === 'string'
+            ? safeGeneratorState.mode
+            : 'weekly';
+        var generatorFrequency = typeof safeGeneratorState.frequency === 'string'
+            ? safeGeneratorState.frequency
+            : 'every_week';
+        var generatorOverrides = safeGeneratorState.timeOverrides && typeof safeGeneratorState.timeOverrides === 'object'
+            ? safeGeneratorState.timeOverrides
+            : {};
+        var generatorStartDate = typeof safeGeneratorState.startDate === 'string'
+            ? safeGeneratorState.startDate
+            : '';
+        var generatorEndDate = typeof safeGeneratorState.endDate === 'string'
+            ? safeGeneratorState.endDate
+            : '';
+        var generatorStartTime = typeof safeGeneratorState.startTime === 'string'
+            ? safeGeneratorState.startTime
+            : '';
+        var generatorEndTime = typeof safeGeneratorState.endTime === 'string'
+            ? safeGeneratorState.endTime
+            : '';
+        var generatorMonthlyOrdinal = typeof safeGeneratorState.monthlyOrdinal === 'string'
+            ? safeGeneratorState.monthlyOrdinal
+            : 'first';
+        var generatorMonthlyWeekday = typeof safeGeneratorState.monthlyWeekday === 'string'
+            ? safeGeneratorState.monthlyWeekday
+            : 'mon';
         useEffect(function () {
             if (!eventGeneratorPlan) {
                 return;
@@ -570,6 +772,269 @@
             setSchedulePreviewAutoSync(initialSchedulePreview !== '');
         }, [initialSchedulePreview]);
 
+        var selectedDayOccurrences = useMemo(function () {
+            if (!selectedOccurrence || !selectedOccurrence.date) {
+                return [];
+            }
+            return occurrencesByDate[selectedOccurrence.date] || [selectedOccurrence];
+        }, [selectedOccurrence, occurrencesByDate]);
+
+        var sidebarContent = h('div', { class: 'mj-regmgr-occurrence__sidebar' }, [
+            !shouldShowEditorCard && h('p', { class: 'mj-regmgr-occurrence__hint mj-regmgr-occurrence__hint--empty' },
+                getString(strings, 'occurrenceEmptySelection', 'Sélectionnez une date dans le calendrier pour commencer.')
+            ),
+            shouldShowEditorCard && h('div', { class: 'mj-regmgr-occurrence__card' }, [
+                h('h2', null, editorCardTitle),
+                selectedOccurrence && selectedDayOccurrences.length > 1 && h('div', { class: 'mj-regmgr-occurrence__occurrence-list' }, selectedDayOccurrences.map(function (item) {
+                    var chipStatus = item && typeof item.status === 'string' ? normalizeOccurrenceStatus(item.status) : '';
+                    return h('button', {
+                        key: item.id,
+                        type: 'button',
+                        class: classNames('mj-regmgr-occurrence__occurrence-chip', {
+                            'mj-regmgr-occurrence__occurrence-chip--active': item.id === selectedOccurrenceId,
+                        }, chipStatus ? 'mj-regmgr-occurrence__occurrence-chip--status-' + chipStatus : null),
+                        onClick: function () { setSelectedOccurrenceId(item.id); },
+                    }, item.startTime + ' - ' + item.endTime);
+                })),
+                h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                    h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceDateLabel', 'Date')),
+                    h('input', {
+                        type: 'date',
+                        class: 'mj-regmgr-occurrence__input',
+                        value: editorState.date,
+                        onInput: function (event) { handleEditorChange('date', event.currentTarget.value); },
+                    }),
+                ]),
+                h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                    h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceTypeLabel', 'Type')),
+                    h('select', {
+                        class: 'mj-regmgr-occurrence__input',
+                        value: editorState.status,
+                        onInput: function (event) { handleEditorChange('status', event.currentTarget.value); },
+                    }, statusOptions.map(function (option) {
+                        return h('option', { key: option.value, value: option.value }, option.label);
+                    })),
+                ]),
+                editorState.status === 'cancelled' && h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                    h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceReasonLabel', 'Motif d\'annulation')),
+                    h('input', {
+                        type: 'text',
+                        class: 'mj-regmgr-occurrence__input',
+                        value: editorState.reason,
+                        placeholder: getString(strings, 'occurrenceReasonPlaceholder', 'Ex: Problème technique'),
+                        onInput: function (event) { handleEditorChange('reason', event.currentTarget.value); },
+                    }),
+                ]),
+                h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
+                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceStartLabel', 'Heure de début')),
+                        h('input', {
+                            type: 'time',
+                            class: 'mj-regmgr-occurrence__input',
+                            value: editorState.startTime,
+                            onInput: function (event) { handleEditorChange('startTime', event.currentTarget.value); },
+                        }),
+                    ]),
+                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceEndLabel', 'Heure de fin')),
+                        h('input', {
+                            type: 'time',
+                            class: 'mj-regmgr-occurrence__input',
+                            value: editorState.endTime,
+                            onInput: function (event) { handleEditorChange('endTime', event.currentTarget.value); },
+                        }),
+                    ]),
+                ]),
+                h('div', { class: 'mj-regmgr-occurrence__actions' }, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--primary',
+                        onClick: handleUpdateOccurrence,
+                        disabled: isPersisting,
+                    }, editorState.id
+                        ? getString(strings, 'occurrenceUpdateButton', 'Modifier cette occurrence')
+                        : getString(strings, 'occurrenceCreateButton', 'Créer l\'occurrence')
+                    ),
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--secondary',
+                        onClick: handleCancelEdit,
+                    }, getString(strings, 'occurrenceCancelButton', 'Annuler')),
+                    selectedOccurrenceId && h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--danger',
+                        onClick: handleDeleteOccurrence,
+                        disabled: isPersisting,
+                    }, getString(strings, 'occurrenceDeleteButton', 'Supprimer')),
+                ]),
+                localOccurrences.length > 0 && h('div', { class: 'mj-regmgr-occurrence__delete-all' }, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--danger',
+                        onClick: handleDeleteAllOccurrences,
+                        disabled: isPersisting,
+                    }, getString(strings, 'occurrenceDeleteAllButton', 'Supprimer toutes les occurrences')),
+                ]),
+            ]),
+            h('div', { class: 'mj-regmgr-occurrence__card' }, [
+                h('h2', null, getString(strings, 'occurrenceGeneratorTitle', 'Générer des occurrences')),
+                h('p', { class: 'mj-regmgr-occurrence__description' },
+                    getString(strings, 'occurrenceGeneratorDescription', 'Planifiez la récurrence automatique de cet événement.')
+                ),
+                h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                    h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorModeLabel', 'Mode')),
+                    h('select', {
+                        class: 'mj-regmgr-occurrence__input',
+                        value: generatorMode,
+                        onInput: function (event) { handleGeneratorChange('mode', event.currentTarget.value); },
+                    }, [
+                        h('option', { value: 'weekly' }, getString(strings, 'occurrenceGeneratorModeWeekly', 'Hebdomadaire')),
+                        h('option', { value: 'monthly' }, getString(strings, 'occurrenceGeneratorModeMonthly', 'Mensuel')),
+                        h('option', { value: 'custom' }, getString(strings, 'occurrenceGeneratorModeCustom', 'Personnalisé')),
+                    ]),
+                ]),
+                generatorMode === 'weekly' && h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                    h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorFrequencyLabel', 'Fréquence')),
+                    h('select', {
+                        class: 'mj-regmgr-occurrence__input',
+                        value: generatorFrequency,
+                        onInput: function (event) { handleGeneratorChange('frequency', event.currentTarget.value); },
+                    }, [
+                        h('option', { value: 'every_week' }, getString(strings, 'occurrenceGeneratorEveryWeek', 'Chaque semaine')),
+                        h('option', { value: 'every_two_weeks' }, getString(strings, 'occurrenceGeneratorEveryTwoWeeks', 'Toutes les deux semaines')),
+                    ]),
+                ]),
+                generatorMode === 'monthly' && h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
+                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorMonthlyOrdinalLabel', 'Ordre dans le mois')),
+                        h('select', {
+                            class: 'mj-regmgr-occurrence__input',
+                            value: generatorMonthlyOrdinal,
+                            onInput: function (event) { handleGeneratorChange('monthlyOrdinal', event.currentTarget.value); },
+                        }, monthlyOrdinalOptions.map(function (option) {
+                            return h('option', { key: option.value, value: option.value }, option.label);
+                        })),
+                    ]),
+                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorMonthlyWeekdayLabel', 'Jour de la semaine')),
+                        h('select', {
+                            class: 'mj-regmgr-occurrence__input',
+                            value: generatorMonthlyWeekday,
+                            onInput: function (event) { handleGeneratorChange('monthlyWeekday', event.currentTarget.value); },
+                        }, OCCURRENCE_WEEKDAY_KEYS.map(function (dayKey, index) {
+                            return h('option', { key: dayKey, value: dayKey }, weekdayFullLabels[index] || weekdayLabels[index]);
+                        })),
+                    ]),
+                ]),
+                h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
+                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorStartDate', 'Date de début')),
+                        h('input', {
+                            type: 'date',
+                            class: 'mj-regmgr-occurrence__input',
+                            value: generatorStartDate,
+                            onInput: function (event) { handleGeneratorChange('startDate', event.currentTarget.value); },
+                        }),
+                    ]),
+                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorEndDate', 'Date de fin')),
+                        h('input', {
+                            type: 'date',
+                            class: 'mj-regmgr-occurrence__input',
+                            value: generatorEndDate,
+                            min: generatorStartDate || undefined,
+                            onInput: function (event) { handleGeneratorChange('endDate', event.currentTarget.value); },
+                        }),
+                    ]),
+                ]),
+                h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
+                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceStartLabel', 'Heure de début')),
+                        h('input', {
+                            type: 'time',
+                            class: 'mj-regmgr-occurrence__input',
+                            value: generatorStartTime,
+                            onInput: function (event) { handleGeneratorChange('startTime', event.currentTarget.value); },
+                        }),
+                    ]),
+                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceEndLabel', 'Heure de fin')),
+                        h('input', {
+                            type: 'time',
+                            class: 'mj-regmgr-occurrence__input',
+                            value: generatorEndTime,
+                            onInput: function (event) { handleGeneratorChange('endTime', event.currentTarget.value); },
+                        }),
+                    ]),
+                ]),
+                generatorMode === 'weekly' && h('div', { class: 'mj-regmgr-occurrence__days' }, OCCURRENCE_WEEKDAY_KEYS.map(function (dayKey, index) {
+                    var isActive = !!generatorDays[dayKey];
+                    var override = generatorOverrides[dayKey] || null;
+                    var startValue = override && override.start ? override.start : generatorStartTime;
+                    var endValue = override && override.end ? override.end : generatorEndTime;
+                    var hasOverride = !!(override && (override.start || override.end));
+                    return h('label', {
+                        key: dayKey,
+                        class: classNames('mj-regmgr-occurrence__day-row', {
+                            'mj-regmgr-occurrence__day-row--active': isActive,
+                            'mj-regmgr-occurrence__day-row--override': hasOverride,
+                        }),
+                    }, [
+                        h('input', {
+                            type: 'checkbox',
+                            class: 'mj-regmgr-occurrence__day-row-checkbox',
+                            checked: isActive,
+                            onChange: function () { handleGeneratorDayToggle(dayKey); },
+                        }),
+                        h('span', { class: 'mj-regmgr-occurrence__day-row-label' }, weekdayLabels[index]),
+                        h('span', { class: 'mj-regmgr-occurrence__day-row-times' }, [
+                            h('input', {
+                                type: 'time',
+                                class: classNames('mj-regmgr-occurrence__day-row-input', 'mj-regmgr-occurrence__day-row-input--start', {
+                                    'mj-regmgr-occurrence__day-row-input--override': hasOverride && !!(override && override.start),
+                                }),
+                                value: startValue || '',
+                                disabled: !isActive,
+                                onInput: function (event) { handleGeneratorTimeChange(dayKey, 'start', event.currentTarget.value); },
+                            }),
+                            h('span', { class: 'mj-regmgr-occurrence__day-row-separator' }, ' - '),
+                            h('input', {
+                                type: 'time',
+                                class: classNames('mj-regmgr-occurrence__day-row-input', 'mj-regmgr-occurrence__day-row-input--end', {
+                                    'mj-regmgr-occurrence__day-row-input--override': hasOverride && !!(override && override.end),
+                                }),
+                                value: endValue || '',
+                                disabled: !isActive,
+                                onInput: function (event) { handleGeneratorTimeChange(dayKey, 'end', event.currentTarget.value); },
+                            }),
+                        ]),
+                    ]);
+                })),
+                h('div', { class: 'mj-regmgr-occurrence__generator-actions' }, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--primary',
+                        onClick: handleAddOccurrences,
+                        disabled: isPersisting,
+                    }, getString(strings, 'occurrenceGeneratorAddButton', 'Ajouter les occurrences')),
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--secondary',
+                        onClick: handleUpdateSchedulePreview,
+                        disabled: isPersisting,
+                        style: { marginLeft: '0.75rem' },
+                    }, getString(strings, 'occurrenceGeneratorPreviewButton', 'Mettre à jour l\'horaire')),
+                ]),
+                schedulePreviewVisible && h('div', { class: 'mj-regmgr-occurrence__preview' }, [
+                    h('span', { class: 'mj-regmgr-occurrence__preview-label' }, getString(strings, 'occurrenceGeneratorPreviewLabel', 'Aperçu de l\'horaire')),
+                    h('p', { class: 'mj-regmgr-occurrence__preview-value' }, schedulePreview && schedulePreview.trim() !== ''
+                        ? schedulePreview
+                        : getString(strings, 'occurrenceSchedulePreviewEmpty', 'Aucun horaire détecté')
+                    ),
+                ]),
+            ]),
+        ]);
+
         var handleGeneratorTimeChange = useCallback(function (dayKey, field, value) {
             if (!dayKey || (field !== 'start' && field !== 'end')) {
                 return;
@@ -597,13 +1062,6 @@
             setSchedulePreviewVisible(true);
             setSchedulePreviewAutoSync(true);
         }, [buildGeneratorPlan, computeSchedulePreview]);
-
-        var selectedDayOccurrences = useMemo(function () {
-            if (!selectedOccurrence || !selectedOccurrence.date) {
-                return [];
-            }
-            return occurrencesByDate[selectedOccurrence.date] || [selectedOccurrence];
-        }, [selectedOccurrence, occurrencesByDate]);
 
         var persistOccurrences = useCallback(function (nextList, rollback, previewOverride) {
             if (!onPersistOccurrences) {
@@ -766,7 +1224,7 @@
 
         var handleGeneratorDayToggle = useCallback(function (dayKey) {
             setGeneratorState(function (prev) {
-                var nextDays = Object.assign({}, prev.days);
+                var nextDays = Object.assign({}, prev && typeof prev.days === 'object' ? prev.days : {});
                 var nextOverrides = Object.assign({}, prev.timeOverrides || {});
                 var nextValue = !nextDays[dayKey];
                 nextDays[dayKey] = nextValue;
@@ -802,13 +1260,17 @@
 
         var handleShiftPivot = useCallback(function (offset) {
             setPivotDate(function (current) {
-                var reference = current instanceof Date
-                    ? new Date(current.getFullYear(), current.getMonth() + offset, 1)
+                var reference = current instanceof Date && !Number.isNaN(current.getTime())
+                    ? new Date(current.getTime())
                     : new Date();
                 reference.setHours(0, 0, 0, 0);
-                return reference;
+                if (viewMode === 'week') {
+                    var shifted = new Date(reference.getFullYear(), reference.getMonth(), reference.getDate() + (offset * 7));
+                    return alignDateToWeekStart(shifted);
+                }
+                return new Date(reference.getFullYear(), reference.getMonth() + offset, 1);
             });
-        }, []);
+        }, [viewMode]);
 
         var handleDeleteAllOccurrences = useCallback(function () {
             if (localOccurrences.length === 0) {
@@ -842,7 +1304,9 @@
             });
         }, [localOccurrences, strings, selectedOccurrenceId, editorState, persistOccurrences, schedulePreview, schedulePreviewVisible, schedulePreviewAutoSync]);
 
-        var generatorOverrides = generatorState.timeOverrides || {};
+        var generatorOverrides = generatorState && generatorState.timeOverrides && typeof generatorState.timeOverrides === 'object'
+            ? generatorState.timeOverrides
+            : {};
         var WEEKLY_GENERATION_LIMIT = 8;
         var WEEKLY_GENERATION_HARD_CAP = 208; // safeguard (~4 years weekly)
         var MONTHLY_GENERATION_LIMIT = 12;
@@ -850,12 +1314,17 @@
         var DAY_IN_MS = 24 * 60 * 60 * 1000;
 
         var buildGeneratorPlan = useCallback(function () {
-            var startDate = parseISODate(generatorState.startDate);
+            var startDateValue = typeof safeGeneratorState.startDate === 'string'
+                ? safeGeneratorState.startDate
+                : '';
+            var startDate = parseISODate(startDateValue);
             if (!startDate) {
                 return { additions: [], plan: null };
             }
 
-            var endDateInput = typeof generatorState.endDate === 'string' ? generatorState.endDate.trim() : '';
+            var endDateInput = typeof safeGeneratorState.endDate === 'string'
+                ? safeGeneratorState.endDate.trim()
+                : '';
             var hasEndDateInput = endDateInput !== '';
             var endDate = hasEndDateInput
                 ? parseISODate(endDateInput)
@@ -870,19 +1339,27 @@
 
             var additions = [];
             var plan = {
-                mode: generatorState.mode,
+                mode: generatorMode,
                 startDateISO: formatISODate(startDate),
                 endDateISO: endDate ? formatISODate(endDate) : '',
-                startTime: generatorState.startTime,
-                endTime: generatorState.endTime,
-                frequency: generatorState.frequency || 'every_week',
+                startTime: typeof safeGeneratorState.startTime === 'string'
+                    ? safeGeneratorState.startTime
+                    : '',
+                endTime: typeof safeGeneratorState.endTime === 'string'
+                    ? safeGeneratorState.endTime
+                    : '',
+                frequency: generatorFrequency,
                 days: [],
                 overrides: generatorOverrides,
-                monthlyOrdinal: generatorState.monthlyOrdinal || 'first',
-                monthlyWeekday: generatorState.monthlyWeekday || 'mon',
+                monthlyOrdinal: typeof safeGeneratorState.monthlyOrdinal === 'string'
+                    ? safeGeneratorState.monthlyOrdinal
+                    : 'first',
+                monthlyWeekday: typeof safeGeneratorState.monthlyWeekday === 'string'
+                    ? safeGeneratorState.monthlyWeekday
+                    : 'mon',
             };
 
-            if (generatorState.mode === 'monthly') {
+            if (generatorMode === 'monthly') {
                 var ordinalKey = plan.monthlyOrdinal;
                 var weekdayKey = plan.monthlyWeekday;
                 var monthWeekdayIndex = OCCURRENCE_WEEKDAY_TO_JS_INDEX[weekdayKey];
@@ -897,8 +1374,8 @@
                 while (monthIterations < monthlyCap) {
                     var candidate = findNthWeekdayOfMonth(monthCursor, monthWeekdayIndex, ordinalKey);
                     if (candidate && candidate >= startDate && (!endDate || candidate <= endDate)) {
-                        var timeStart = generatorState.startTime;
-                        var timeEnd = generatorState.endTime;
+                        var timeStart = plan.startTime;
+                        var timeEnd = plan.endTime;
                         if (timeStart && timeEnd) {
                             var candidateIso = formatISODate(candidate);
                             var additionSeed = localOccurrences.length + additions.length;
@@ -943,13 +1420,13 @@
             }
 
             var selectedKeys = OCCURRENCE_WEEKDAY_KEYS.filter(function (key) {
-                return !!generatorState.days[key];
+                return !!generatorDays[key];
             });
             if (selectedKeys.length === 0) {
                 return { additions: [], plan: plan };
             }
 
-            var interval = generatorState.frequency === 'every_two_weeks' ? 14 : 7;
+            var interval = generatorFrequency === 'every_two_weeks' ? 14 : 7;
             selectedKeys.forEach(function (dayKey) {
                 var targetIndex = OCCURRENCE_WEEKDAY_TO_INDEX[dayKey];
                 var firstDate = findNextWeekday(startDate, targetIndex);
@@ -967,8 +1444,8 @@
                     }
                     var iso = formatISODate(candidateDate);
                     var override = generatorOverrides[dayKey] || null;
-                    var dayStart = override && override.start ? override.start : generatorState.startTime;
-                    var dayEnd = override && override.end ? override.end : generatorState.endTime;
+                    var dayStart = override && override.start ? override.start : plan.startTime;
+                    var dayEnd = override && override.end ? override.end : plan.endTime;
                     if (dayStart && dayEnd) {
                         var additionSeed = localOccurrences.length + additions.length;
                         additions.push({
@@ -1005,7 +1482,7 @@
             }
 
             return { additions: additions, plan: plan };
-        }, [generatorState, generatorOverrides, localOccurrences]);
+        }, [generatorState, generatorOverrides, generatorDays, generatorMode, generatorFrequency, localOccurrences]);
 
         var computeSchedulePreview = useCallback(function (planResult) {
             var plan = planResult && planResult.plan ? planResult.plan : null;
@@ -1033,13 +1510,24 @@
             }
         }, [schedulePreviewAutoSync, buildGeneratorPlan, computeSchedulePreview, schedulePreview]);
 
+        var headingSubLabel = null;
+        if (viewMode === 'week' && weekRangeLabel) {
+            headingSubLabel = weekRangeLabel;
+        } else if (pivotDate instanceof Date && !Number.isNaN(pivotDate.getTime())) {
+            if (viewMode === 'quarter') {
+                headingSubLabel = getString(strings, 'occurrenceQuarterRange', 'Vue trimestrielle');
+            } else if (viewMode === 'month') {
+                headingSubLabel = singleMonthOverview
+                    ? singleMonthOverview.label
+                    : getString(strings, 'occurrenceMonthRange', 'Vue mensuelle');
+            }
+        }
+
         return h('div', { class: 'mj-regmgr-occurrence' }, [
             h('div', { class: 'mj-regmgr-occurrence__header' }, [
                 h('div', { class: 'mj-regmgr-occurrence__heading' }, [
                     h('h2', null, getString(strings, 'occurrencePanelTitle', 'Gestionnaire d\'occurrences')),
-                    pivotDate && viewMode === 'quarter' && h('span', { class: 'mj-regmgr-occurrence__subheading' },
-                        getString(strings, 'occurrenceQuarterRange', 'Vue trimestrielle')
-                    ),
+                    headingSubLabel && h('span', { class: 'mj-regmgr-occurrence__subheading' }, headingSubLabel),
                 ]),
                 h('div', { class: 'mj-regmgr-occurrence__header-controls' }, [
                     h('div', { class: 'mj-regmgr-occurrence__nav' }, [
@@ -1071,6 +1559,13 @@
                         h('button', {
                             type: 'button',
                             class: classNames('mj-regmgr-occurrence__view-button', {
+                                'mj-regmgr-occurrence__view-button--active': viewMode === 'month',
+                            }),
+                            onClick: function () { setViewMode('month'); },
+                        }, getString(strings, 'occurrenceViewMonth', 'Mois')),
+                        h('button', {
+                            type: 'button',
+                            class: classNames('mj-regmgr-occurrence__view-button', {
                                 'mj-regmgr-occurrence__view-button--active': viewMode === 'week',
                             }),
                             onClick: function () { setViewMode('week'); },
@@ -1079,9 +1574,9 @@
                 ]),
             ]),
 
-            viewMode === 'quarter' && h('div', { class: 'mj-regmgr-occurrence__body' }, [
+            (viewMode === 'quarter' || viewMode === 'month') && h('div', { class: 'mj-regmgr-occurrence__body' }, [
                 h('div', { class: 'mj-regmgr-occurrence__calendar' }, [
-                    h('div', { class: 'mj-regmgr-occurrence__months' }, months.map(function (month) {
+                    h('div', { class: 'mj-regmgr-occurrence__months' }, calendarMonths.map(function (month) {
                         return h('div', { key: month.key, class: 'mj-regmgr-occurrence__month' }, [
                             h('div', { class: 'mj-regmgr-occurrence__month-header' }, month.label),
                             h('div', { class: 'mj-regmgr-occurrence__weekdays' }, weekdayLabels.map(function (label, index) {
@@ -1111,266 +1606,141 @@
                         ]);
                     })),
                 ]),
-                h('div', { class: 'mj-regmgr-occurrence__sidebar' }, [
-                    !shouldShowEditorCard && h('p', { class: 'mj-regmgr-occurrence__hint mj-regmgr-occurrence__hint--empty' },
-                        getString(strings, 'occurrenceEmptySelection', 'Sélectionnez une date dans le calendrier pour commencer.')
-                    ),
-                    shouldShowEditorCard && h('div', { class: 'mj-regmgr-occurrence__card' }, [
-                        h('h2', null, editorCardTitle),
-                        selectedOccurrence && selectedDayOccurrences.length > 1 && h('div', { class: 'mj-regmgr-occurrence__occurrence-list' }, selectedDayOccurrences.map(function (item) {
-                            var chipStatus = item && typeof item.status === 'string' ? normalizeOccurrenceStatus(item.status) : '';
-                            return h('button', {
-                                key: item.id,
-                                type: 'button',
-                                class: classNames('mj-regmgr-occurrence__occurrence-chip', {
-                                    'mj-regmgr-occurrence__occurrence-chip--active': item.id === selectedOccurrenceId,
-                                }, chipStatus ? 'mj-regmgr-occurrence__occurrence-chip--status-' + chipStatus : null),
-                                onClick: function () { setSelectedOccurrenceId(item.id); },
-                            }, item.startTime + ' - ' + item.endTime);
-                        })),
-                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceDateLabel', 'Date')),
-                            h('input', {
-                                type: 'date',
-                                class: 'mj-regmgr-occurrence__input',
-                                value: editorState.date,
-                                onInput: function (event) { handleEditorChange('date', event.currentTarget.value); },
-                            }),
-                        ]),
-                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceTypeLabel', 'Type')),
-                            h('select', {
-                                class: 'mj-regmgr-occurrence__input',
-                                value: editorState.status,
-                                onInput: function (event) { handleEditorChange('status', event.currentTarget.value); },
-                            }, statusOptions.map(function (option) {
-                                return h('option', { key: option.value, value: option.value }, option.label);
-                            })),
-                        ]),
-                        editorState.status === 'cancelled' && h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceReasonLabel', 'Motif d\'annulation')),
-                            h('input', {
-                                type: 'text',
-                                class: 'mj-regmgr-occurrence__input',
-                                value: editorState.reason,
-                                placeholder: getString(strings, 'occurrenceReasonPlaceholder', 'Ex: Problème technique'),
-                                onInput: function (event) { handleEditorChange('reason', event.currentTarget.value); },
-                            }),
-                        ]),
-                        h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
-                            h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                                h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceStartLabel', 'Heure de début')),
-                                h('input', {
-                                    type: 'time',
-                                    class: 'mj-regmgr-occurrence__input',
-                                    value: editorState.startTime,
-                                    onInput: function (event) { handleEditorChange('startTime', event.currentTarget.value); },
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                                h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceEndLabel', 'Heure de fin')),
-                                h('input', {
-                                    type: 'time',
-                                    class: 'mj-regmgr-occurrence__input',
-                                    value: editorState.endTime,
-                                    onInput: function (event) { handleEditorChange('endTime', event.currentTarget.value); },
-                                }),
-                            ]),
-                        ]),
-                        h('div', { class: 'mj-regmgr-occurrence__actions' }, [
-                            h('button', {
-                                type: 'button',
-                                class: 'mj-btn mj-btn--primary',
-                                onClick: handleUpdateOccurrence,
-                                disabled: isPersisting,
-                            }, editorState.id
-                                ? getString(strings, 'occurrenceUpdateButton', 'Modifier cette occurrence')
-                                : getString(strings, 'occurrenceCreateButton', 'Créer l\'occurrence')
-                            ),
-                            h('button', {
-                                type: 'button',
-                                class: 'mj-btn mj-btn--secondary',
-                                onClick: handleCancelEdit,
-                            }, getString(strings, 'occurrenceCancelButton', 'Annuler')),
-                            selectedOccurrenceId && h('button', {
-                                type: 'button',
-                                class: 'mj-btn mj-btn--danger',
-                                onClick: handleDeleteOccurrence,
-                                disabled: isPersisting,
-                            }, getString(strings, 'occurrenceDeleteButton', 'Supprimer')),
-                        ]),
-                        localOccurrences.length > 0 && h('div', { class: 'mj-regmgr-occurrence__delete-all' }, [
-                            h('button', {
-                                type: 'button',
-                                class: 'mj-btn mj-btn--danger',
-                                onClick: handleDeleteAllOccurrences,
-                                disabled: isPersisting,
-                            }, getString(strings, 'occurrenceDeleteAllButton', 'Supprimer toutes les occurrences')),
-                        ]),
-                    ]),
-                    h('div', { class: 'mj-regmgr-occurrence__card' }, [
-                        h('h2', null, getString(strings, 'occurrenceGeneratorTitle', 'Générer des occurrences')),
-                        h('p', { class: 'mj-regmgr-occurrence__description' },
-                            getString(strings, 'occurrenceGeneratorDescription', 'Planifiez la récurrence automatique de cet événement.')
-                        ),
-                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorModeLabel', 'Mode')),
-                            h('select', {
-                                class: 'mj-regmgr-occurrence__input',
-                                value: generatorState.mode,
-                                onInput: function (event) { handleGeneratorChange('mode', event.currentTarget.value); },
-                            }, [
-                                h('option', { value: 'weekly' }, getString(strings, 'occurrenceGeneratorModeWeekly', 'Hebdomadaire')),
-                                h('option', { value: 'monthly' }, getString(strings, 'occurrenceGeneratorModeMonthly', 'Mensuel')),
-                                h('option', { value: 'custom' }, getString(strings, 'occurrenceGeneratorModeCustom', 'Personnalisé')),
-                            ]),
-                        ]),
-                        generatorState.mode === 'weekly' && h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorFrequencyLabel', 'Fréquence')),
-                            h('select', {
-                                class: 'mj-regmgr-occurrence__input',
-                                value: generatorState.frequency,
-                                onInput: function (event) { handleGeneratorChange('frequency', event.currentTarget.value); },
-                            }, [
-                                h('option', { value: 'every_week' }, getString(strings, 'occurrenceGeneratorEveryWeek', 'Chaque semaine')),
-                                h('option', { value: 'every_two_weeks' }, getString(strings, 'occurrenceGeneratorEveryTwoWeeks', 'Toutes les deux semaines')),
-                            ]),
-                        ]),
-                        generatorState.mode === 'monthly' && h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
-                            h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                                h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorMonthlyOrdinalLabel', 'Ordre dans le mois')),
-                                h('select', {
-                                    class: 'mj-regmgr-occurrence__input',
-                                    value: generatorState.monthlyOrdinal,
-                                    onInput: function (event) { handleGeneratorChange('monthlyOrdinal', event.currentTarget.value); },
-                                }, monthlyOrdinalOptions.map(function (option) {
-                                    return h('option', { key: option.value, value: option.value }, option.label);
-                                })),
-                            ]),
-                            h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                                h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorMonthlyWeekdayLabel', 'Jour de la semaine')),
-                                h('select', {
-                                    class: 'mj-regmgr-occurrence__input',
-                                    value: generatorState.monthlyWeekday,
-                                    onInput: function (event) { handleGeneratorChange('monthlyWeekday', event.currentTarget.value); },
-                                }, OCCURRENCE_WEEKDAY_KEYS.map(function (dayKey, index) {
-                                    return h('option', { key: dayKey, value: dayKey }, weekdayFullLabels[index] || weekdayLabels[index]);
-                                })),
-                            ]),
-                        ]),
-                        h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
-                            h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                                h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorStartDate', 'Date de début')),
-                                h('input', {
-                                    type: 'date',
-                                    class: 'mj-regmgr-occurrence__input',
-                                    value: generatorState.startDate,
-                                    onInput: function (event) { handleGeneratorChange('startDate', event.currentTarget.value); },
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                                h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorEndDate', 'Date de fin')),
-                                h('input', {
-                                    type: 'date',
-                                    class: 'mj-regmgr-occurrence__input',
-                                    value: generatorState.endDate || '',
-                                    min: generatorState.startDate || undefined,
-                                    onInput: function (event) { handleGeneratorChange('endDate', event.currentTarget.value); },
-                                }),
-                            ]),
-                        ]),
-                        h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
-                            h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                                h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceStartLabel', 'Heure de début')),
-                                h('input', {
-                                    type: 'time',
-                                    class: 'mj-regmgr-occurrence__input',
-                                    value: generatorState.startTime,
-                                    onInput: function (event) { handleGeneratorChange('startTime', event.currentTarget.value); },
-                                }),
-                            ]),
-                            h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                                h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceEndLabel', 'Heure de fin')),
-                                h('input', {
-                                    type: 'time',
-                                    class: 'mj-regmgr-occurrence__input',
-                                    value: generatorState.endTime,
-                                    onInput: function (event) { handleGeneratorChange('endTime', event.currentTarget.value); },
-                                }),
-                            ]),
-                        ]),
-                        generatorState.mode === 'weekly' && h('div', { class: 'mj-regmgr-occurrence__days' }, OCCURRENCE_WEEKDAY_KEYS.map(function (dayKey, index) {
-                            var isActive = !!generatorState.days[dayKey];
-                            var override = generatorOverrides[dayKey] || null;
-                            var startValue = override && override.start ? override.start : generatorState.startTime;
-                            var endValue = override && override.end ? override.end : generatorState.endTime;
-                            var hasOverride = !!(override && (override.start || override.end));
-                            return h('label', {
-                                key: dayKey,
-                                class: classNames('mj-regmgr-occurrence__day-row', {
-                                    'mj-regmgr-occurrence__day-row--active': isActive,
-                                    'mj-regmgr-occurrence__day-row--override': hasOverride,
-                                }),
-                            }, [
-                                h('input', {
-                                    type: 'checkbox',
-                                    class: 'mj-regmgr-occurrence__day-row-checkbox',
-                                    checked: isActive,
-                                    onChange: function () { handleGeneratorDayToggle(dayKey); },
-                                }),
-                                h('span', { class: 'mj-regmgr-occurrence__day-row-label' }, weekdayLabels[index]),
-                                h('span', { class: 'mj-regmgr-occurrence__day-row-times' }, [
-                                    h('input', {
-                                        type: 'time',
-                                        class: classNames('mj-regmgr-occurrence__day-row-input', 'mj-regmgr-occurrence__day-row-input--start', {
-                                            'mj-regmgr-occurrence__day-row-input--override': hasOverride && !!(override && override.start),
-                                        }),
-                                        value: startValue || '',
-                                        disabled: !isActive,
-                                        onInput: function (event) { handleGeneratorTimeChange(dayKey, 'start', event.currentTarget.value); },
-                                    }),
-                                    h('span', { class: 'mj-regmgr-occurrence__day-row-separator' }, ' - '),
-                                    h('input', {
-                                        type: 'time',
-                                        class: classNames('mj-regmgr-occurrence__day-row-input', 'mj-regmgr-occurrence__day-row-input--end', {
-                                            'mj-regmgr-occurrence__day-row-input--override': hasOverride && !!(override && override.end),
-                                        }),
-                                        value: endValue || '',
-                                        disabled: !isActive,
-                                        onInput: function (event) { handleGeneratorTimeChange(dayKey, 'end', event.currentTarget.value); },
-                                    }),
-                                ]),
-                            ]);
-                        })),
-                        h('div', { class: 'mj-regmgr-occurrence__generator-actions' }, [
-                            h('button', {
-                                type: 'button',
-                                class: 'mj-btn mj-btn--primary',
-                                onClick: handleAddOccurrences,
-                                disabled: isPersisting,
-                            }, getString(strings, 'occurrenceGeneratorAddButton', 'Ajouter les occurrences')),
-                            h('button', {
-                                type: 'button',
-                                class: 'mj-btn mj-btn--secondary',
-                                onClick: handleUpdateSchedulePreview,
-                                disabled: isPersisting,
-                                style: { marginLeft: '0.75rem' },
-                            }, getString(strings, 'occurrenceGeneratorPreviewButton', 'Mettre à jour l\'horaire')),
-                        ]),
-                        schedulePreviewVisible && h('div', { class: 'mj-regmgr-occurrence__preview' }, [
-                            h('span', { class: 'mj-regmgr-occurrence__preview-label' }, getString(strings, 'occurrenceGeneratorPreviewLabel', 'Aperçu de l\'horaire')),
-                            h('p', { class: 'mj-regmgr-occurrence__preview-value' }, schedulePreview && schedulePreview.trim() !== ''
-                                ? schedulePreview
-                                : getString(strings, 'occurrenceSchedulePreviewEmpty', 'Aucun horaire détecté')
-                            ),
-                        ]),
-                    ]),
-                ]),
+                sidebarContent,
             ]),
 
-            viewMode === 'week' && h('div', { class: 'mj-regmgr-occurrence__placeholder' },
-                getString(strings, 'occurrenceWeekPlaceholder', 'La vue semaine sera bientôt disponible.')
-            ),
+            viewMode === 'week' && h('div', { class: 'mj-regmgr-occurrence__body' }, [
+                weekOverview
+                    ? h('div', { class: 'mj-regmgr-occurrence__week-view' }, [
+                        h('div', { class: 'mj-regmgr-occurrence__week-grid' }, [
+                            h('div', { class: 'mj-regmgr-occurrence__week-time' }, [
+                                h('div', { class: 'mj-regmgr-occurrence__week-time-header' },
+                                    getString(strings, 'occurrenceWeekTimeColumn', 'Horaires')
+                                ),
+                                h('div', {
+                                    class: 'mj-regmgr-occurrence__week-time-scale',
+                                    style: { height: WEEK_VIEW_HEIGHT + 'px' },
+                                }, weekTimeScale.ticks.map(function (tick, index) {
+                                    var topRatio = (tick.minutes - weekTimeScale.min) / weekTimelineRange;
+                                    var top = Math.max(0, Math.min(1, topRatio)) * WEEK_VIEW_HEIGHT;
+                                    return h('div', {
+                                        key: 'time-' + tick.minutes,
+                                        class: classNames('mj-regmgr-occurrence__week-time-marker', {
+                                            'mj-regmgr-occurrence__week-time-marker--first': index === 0,
+                                        }),
+                                        style: { top: top + 'px' },
+                                    }, [
+                                        h('span', { class: 'mj-regmgr-occurrence__week-time-label' }, tick.label),
+                                    ]);
+                                })),
+                            ]),
+                            weekOverview.days.map(function (day) {
+                                var weekdayIndex = typeof day.weekdayIndex === 'number' ? day.weekdayIndex : 0;
+                                var weekdayLabel = weekdayLabels[weekdayIndex] || '';
+                                var dateLabel = '';
+                                if (day.date instanceof Date && !Number.isNaN(day.date.getTime())) {
+                                    try {
+                                        dateLabel = capitalizeLabel(day.date.toLocaleDateString(resolvedLocale, { day: 'numeric', month: 'short' }));
+                                    } catch (error) {
+                                        dateLabel = capitalizeLabel(day.date.toLocaleDateString('fr', { day: 'numeric', month: 'short' }));
+                                    }
+                                }
+                                var combinedLabel = weekdayLabel ? (weekdayLabel + ' ' + dateLabel) : dateLabel;
+                                var hasOccurrences = Array.isArray(day.occurrences) && day.occurrences.length > 0;
+                                return h('div', {
+                                    key: day.iso,
+                                    class: classNames('mj-regmgr-occurrence__week-column', {
+                                        'mj-regmgr-occurrence__week-column--today': !!day.isToday,
+                                        'mj-regmgr-occurrence__week-column--selected': !!day.isSelected,
+                                    }),
+                                }, [
+                                    h('div', { class: 'mj-regmgr-occurrence__week-column-header' }, [
+                                        combinedLabel && h('span', { class: 'mj-regmgr-occurrence__week-column-title' }, combinedLabel),
+                                        day.timeSummary && h('span', { class: 'mj-regmgr-occurrence__week-column-summary' }, day.timeSummary),
+                                        hasOccurrences && h('span', { class: 'mj-regmgr-occurrence__week-column-count' }, day.occurrences.length),
+                                    ]),
+                                    h('div', {
+                                        class: 'mj-regmgr-occurrence__week-column-body',
+                                        style: { height: WEEK_VIEW_HEIGHT + 'px' },
+                                        onClick: function (event) {
+                                            if (event.target === event.currentTarget) {
+                                                handleSelectDay(day);
+                                            }
+                                        },
+                                    }, [
+                                        h('div', { class: 'mj-regmgr-occurrence__week-guides' }, weekTimeScale.ticks.map(function (tick, index) {
+                                            var guideRatio = (tick.minutes - weekTimeScale.min) / weekTimelineRange;
+                                            var guideTop = Math.max(0, Math.min(1, guideRatio)) * WEEK_VIEW_HEIGHT;
+                                            return h('div', {
+                                                key: day.iso + '-guide-' + tick.minutes,
+                                                class: classNames('mj-regmgr-occurrence__week-guide', {
+                                                    'mj-regmgr-occurrence__week-guide--first': index === 0,
+                                                }),
+                                                style: { top: guideTop + 'px' },
+                                            });
+                                        })),
+                                        !hasOccurrences && h('div', { class: 'mj-regmgr-occurrence__week-empty' },
+                                            getString(strings, 'occurrenceWeekEmptyDay', 'Aucune occurrence planifiée')
+                                        ),
+                                        hasOccurrences && day.occurrences.map(function (occurrence) {
+                                            var startMinutes = typeof occurrence.startMinutes === 'number'
+                                                ? occurrence.startMinutes
+                                                : parseTimeToMinutes(occurrence.startTime);
+                                            var endMinutes = typeof occurrence.endMinutes === 'number'
+                                                ? occurrence.endMinutes
+                                                : parseTimeToMinutes(occurrence.endTime);
+                                            if (startMinutes === null) {
+                                                startMinutes = weekTimeScale.min;
+                                            }
+                                            if (endMinutes === null) {
+                                                endMinutes = startMinutes + 60;
+                                            }
+                                            var effectiveStart = Math.max(weekTimeScale.min, startMinutes);
+                                            var effectiveEnd = Math.min(weekTimeScale.max, Math.max(endMinutes, effectiveStart + 30));
+                                            var blockTop = ((effectiveStart - weekTimeScale.min) / weekTimelineRange) * WEEK_VIEW_HEIGHT;
+                                            var blockHeight = ((effectiveEnd - effectiveStart) / weekTimelineRange) * WEEK_VIEW_HEIGHT;
+                                            if (blockHeight < 24) {
+                                                blockHeight = 24;
+                                            }
+                                            var statusKey = occurrence.status ? normalizeOccurrenceStatus(occurrence.status) : 'planned';
+                                            var isSelectedBlock = selectedOccurrenceId === occurrence.id;
+                                            var ariaLabel = formatTimeRange(occurrence.startTime, occurrence.endTime);
+                                            return h('button', {
+                                                key: occurrence.id,
+                                                type: 'button',
+                                                class: classNames('mj-regmgr-occurrence__week-block',
+                                                    statusKey ? 'mj-regmgr-occurrence__week-block--status-' + statusKey : null,
+                                                    {
+                                                        'mj-regmgr-occurrence__week-block--selected': isSelectedBlock,
+                                                    }
+                                                ),
+                                                style: {
+                                                    top: blockTop + 'px',
+                                                    height: blockHeight + 'px',
+                                                },
+                                                onClick: function (event) {
+                                                    event.stopPropagation();
+                                                    setSelectedOccurrenceId(occurrence.id);
+                                                },
+                                                'aria-label': ariaLabel,
+                                            }, [
+                                                h('span', { class: 'mj-regmgr-occurrence__week-block-time' }, formatPreviewRange(occurrence.startTime, occurrence.endTime)),
+                                                statusLabelMap[statusKey] && h('span', { class: 'mj-regmgr-occurrence__week-block-status' }, statusLabelMap[statusKey]),
+                                                occurrence.status === 'cancelled' && occurrence.reason && h('span', { class: 'mj-regmgr-occurrence__week-block-reason' }, occurrence.reason),
+                                            ]);
+                                        }),
+                                    ]),
+                                ]);
+                            }),
+                        ]),
+                    ])
+                    : h('div', { class: 'mj-regmgr-occurrence__week-view mj-regmgr-occurrence__week-view--empty' }, [
+                        h('div', { class: 'mj-regmgr-occurrence__placeholder' },
+                            getString(strings, 'occurrenceWeekPlaceholder', 'Aucune occurrence à afficher.')
+                        ),
+                    ]),
+                sidebarContent,
+            ]),
         ]);
     }
 
@@ -2082,6 +2452,98 @@
             months.push(buildMonthOverview(monthDate, locale, occurrencesByDate, selectedId));
         }
         return months;
+    }
+
+    function alignDateToWeekStart(date) {
+        var reference = date instanceof Date && !Number.isNaN(date.getTime())
+            ? new Date(date.getTime())
+            : new Date();
+        reference.setHours(0, 0, 0, 0);
+        var jsIndex = reference.getDay();
+        var diff = (jsIndex + 6) % 7;
+        reference.setDate(reference.getDate() - diff);
+        reference.setHours(0, 0, 0, 0);
+        return reference;
+    }
+
+    function buildWeekOverview(pivotDate, occurrencesByDate, selectedId) {
+        if (!(pivotDate instanceof Date) || Number.isNaN(pivotDate.getTime())) {
+            return null;
+        }
+        var start = alignDateToWeekStart(pivotDate);
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        var days = [];
+        var minMinutes = null;
+        var maxMinutes = null;
+        for (var offset = 0; offset < 7; offset++) {
+            var current = new Date(start.getFullYear(), start.getMonth(), start.getDate() + offset);
+            current.setHours(0, 0, 0, 0);
+            var iso = formatISODate(current);
+            var sourceList = occurrencesByDate[iso] || [];
+            var occurrences = [];
+            sourceList.forEach(function (occ, index) {
+                if (!occ) {
+                    return;
+                }
+                var normalized = Object.assign({}, occ);
+                normalized.id = occ.id ? String(occ.id) : ('occurrence-' + iso + '-' + index);
+                normalized.status = normalizeOccurrenceStatus(occ.status);
+                var startValue = typeof occ.startMinutes === 'number'
+                    ? occ.startMinutes
+                    : parseTimeToMinutes(occ.startTime);
+                var endValue = typeof occ.endMinutes === 'number'
+                    ? occ.endMinutes
+                    : parseTimeToMinutes(occ.endTime);
+                if (startValue === null) {
+                    startValue = 9 * 60;
+                }
+                if (endValue === null || endValue <= startValue) {
+                    endValue = startValue + 60;
+                }
+                normalized.startMinutes = startValue;
+                normalized.endMinutes = endValue;
+                if (minMinutes === null || startValue < minMinutes) {
+                    minMinutes = startValue;
+                }
+                if (maxMinutes === null || endValue > maxMinutes) {
+                    maxMinutes = endValue;
+                }
+                occurrences.push(normalized);
+            });
+            var weekdayIndex = (current.getDay() + 6) % 7;
+            var dayStatus = deriveDayStatus(occurrences);
+            var normalizedSelectedId = selectedId ? String(selectedId) : '';
+            var isSelected = !!(normalizedSelectedId && occurrences.some(function (item) {
+                return item && item.id === normalizedSelectedId;
+            }));
+            days.push({
+                key: iso,
+                iso: iso,
+                date: current,
+                weekdayIndex: weekdayIndex,
+                dayNumber: current.getDate(),
+                occurrences: occurrences,
+                timeSummary: deriveOccurrenceTimeSummary(occurrences),
+                status: dayStatus,
+                isSelected: isSelected,
+                isToday: isSameDate(current, today),
+            });
+        }
+        if (minMinutes === null || maxMinutes === null) {
+            minMinutes = 9 * 60;
+            maxMinutes = 17 * 60;
+        }
+        var end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+        end.setHours(0, 0, 0, 0);
+        return {
+            key: 'week-' + formatISODate(start),
+            start: start,
+            end: end,
+            days: days,
+            minMinutes: minMinutes,
+            maxMinutes: maxMinutes,
+        };
     }
 
     function buildMonthOverview(monthDate, locale, occurrencesByDate, selectedId) {

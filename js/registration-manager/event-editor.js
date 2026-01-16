@@ -2927,6 +2927,8 @@
     }
 
     function ScheduleEditor(props) {
+        return null;
+        /* Planification UI disabled.
         var form = props && props.form ? props.form : {};
         var meta = props && props.meta ? props.meta : {};
         var options = props && props.options ? props.options : {};
@@ -3501,6 +3503,7 @@
             renderRecurringMode(),
             renderSeriesMode(),
         ]);
+    */
     }
 
     function EventEditor(props) {
@@ -4119,6 +4122,24 @@
                 return;
             }
             var payloadForm = Object.assign({}, formState);
+            var activeScheduleMode = normalizeScheduleMode(payloadForm.event_schedule_mode);
+            if (activeScheduleMode === 'fixed') {
+                var startParts = splitDateTimeParts(payloadForm.event_date_start);
+                var endParts = splitDateTimeParts(payloadForm.event_date_end);
+                if (!payloadForm.event_fixed_date && startParts.date) {
+                    payloadForm.event_fixed_date = startParts.date;
+                }
+                if (!payloadForm.event_fixed_start_time && startParts.time) {
+                    payloadForm.event_fixed_start_time = startParts.time;
+                }
+                if (!payloadForm.event_fixed_end_time) {
+                    if (endParts.time) {
+                        payloadForm.event_fixed_end_time = endParts.time;
+                    } else if (startParts.time) {
+                        payloadForm.event_fixed_end_time = startParts.time;
+                    }
+                }
+            }
             payloadForm.event_series_items = JSON.stringify(seriesItems);
             var normalizedScheduleExceptions = normalizeScheduleExceptions(metaState.scheduleExceptions);
             if (Object.prototype.hasOwnProperty.call(payloadForm, 'event_emoji')) {
@@ -4631,23 +4652,6 @@
                         ]),
                     ]),
                 ]),
-
-                h(ScheduleEditor, {
-                    form: formState,
-                    meta: metaState,
-                    options: initialOptions,
-                    strings: strings,
-                    onChangeForm: updateFormValue,
-                    onChangeMeta: updateMetaValue,
-                    onToggleWeekday: toggleWeekday,
-                    onOpenExceptionDialog: openExceptionDialog,
-                    onWeekdayTimeChange: updateWeekdayTime,
-                    seriesItems: seriesItems,
-                    onAddSeriesItem: handleSeriesAdd,
-                    onUpdateSeriesItem: handleSeriesUpdate,
-                    onRemoveSeriesItem: handleSeriesRemove,
-                }),
-
             ]),
 
             Modal && h(Modal, {

@@ -259,128 +259,26 @@ if (!function_exists('mj_member_admin_resolve_weekly_anchor')) {
         foreach ($weekdays as $weekday_key) {
             $normalized = sanitize_key((string) $weekday_key);
             if ($normalized !== '') {
-                $normalized_weekdays[$normalized] = true;
-            }
-        }
-
-        $normalized_times = array();
-        foreach ($weekday_times as $weekday_key => $time_info) {
-            $normalized_key = sanitize_key((string) $weekday_key);
-            if ($normalized_key === '') {
-                continue;
-            }
-            $normalized_times[$normalized_key] = $time_info;
-            if (!isset($normalized_weekdays[$normalized_key])) {
-                $normalized_weekdays[$normalized_key] = true;
-            }
-        }
-
-        if (empty($normalized_weekdays)) {
-            return null;
-        }
-
-        $search_weekdays = array_keys($normalized_weekdays);
-        $week_order = array('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday');
-        usort(
-            $search_weekdays,
-            static function ($left, $right) use ($week_order) {
-                $left_index = array_search($left, $week_order, true);
-                $right_index = array_search($right, $week_order, true);
-                if ($left_index === false) {
-                    $left_index = 7;
+                <?php
+                $occurrence_editor = isset($form_values['occurrence_editor']) && is_array($form_values['occurrence_editor'])
+                    ? $form_values['occurrence_editor']
+                    : array();
+                $occurrence_items = isset($occurrence_editor['items']) && is_array($occurrence_editor['items'])
+                    ? $occurrence_editor['items']
+                    : array();
+                $occurrence_items_json = wp_json_encode($occurrence_items);
+                if (!is_string($occurrence_items_json)) {
+                    $occurrence_items_json = '[]';
                 }
-                if ($right_index === false) {
-                    $right_index = 7;
-                }
-                return $left_index <=> $right_index;
-            }
-        );
-
-        $cursor = clone $anchor;
-        for ($i = 0; $i < 14; $i++) {
-            $weekday_key = sanitize_key(strtolower($cursor->format('l')));
-            if (!in_array($weekday_key, $search_weekdays, true)) {
-                $cursor->modify('+1 day');
-                continue;
-            }
-
-            $time_info = isset($normalized_times[$weekday_key]) ? $normalized_times[$weekday_key] : array();
-            $start_candidate = mj_member_admin_first_non_empty_value($time_info, array('start', 'start_time', 'startTime', 'from'));
-            if ($start_candidate === '') {
-                $cursor->modify('+1 day');
-                continue;
-            }
-            $end_candidate = mj_member_admin_first_non_empty_value($time_info, array('end', 'end_time', 'endTime', 'to'));
-
-            return array(
-                'date' => $cursor->format('Y-m-d'),
-                'start_time' => $start_candidate,
-                'end_time' => $end_candidate,
-            );
-        }
-
-        $fallback = null;
-        foreach ($normalized_times as $weekday_key => $time_info) {
-            $start_candidate = mj_member_admin_first_non_empty_value($time_info, array('start', 'start_time', 'startTime', 'from'));
-            if ($start_candidate === '') {
-                continue;
-            }
-            $weekday_index = mj_member_admin_weekday_index($weekday_key);
-            if ($weekday_index === null) {
-                continue;
-            }
-            if ($fallback === null || $weekday_index < $fallback['weekday_index']) {
-                $fallback = array(
-                    'weekday_index' => $weekday_index,
-                    'weekday' => $weekday_key,
-                    'start_time' => $start_candidate,
-                    'end_time' => mj_member_admin_first_non_empty_value($time_info, array('end', 'end_time', 'endTime', 'to')),
-                );
-            }
-        }
-
-        if ($fallback !== null) {
-            $current_index = (int) $anchor->format('N');
-            $offset = ($fallback['weekday_index'] - $current_index + 7) % 7;
-            $adjusted = clone $anchor;
-            if ($offset > 0) {
-                $adjusted->modify('+' . $offset . ' days');
-            }
-
-            return array(
-                'date' => $adjusted->format('Y-m-d'),
-                'start_time' => $fallback['start_time'],
-                'end_time' => $fallback['end_time'],
-            );
-        }
-
-        return null;
-    }
-}
-
-if (!function_exists('mj_member_occurrence_datetime_to_iso')) {
-    function mj_member_occurrence_datetime_to_iso($value) {
-        $value = trim((string) $value);
-        if ($value === '') {
-            return '';
-        }
-
-        return str_replace(' ', 'T', substr($value, 0, 16));
-    }
-}
-
-if (!function_exists('mj_member_normalize_occurrence_editor_item')) {
-    function mj_member_normalize_occurrence_editor_item(array $occurrence) {
-        $start = isset($occurrence['start']) ? trim((string) $occurrence['start']) : '';
-        $end = isset($occurrence['end']) ? trim((string) $occurrence['end']) : '';
-        if ($start === '' || $end === '') {
-            return array();
-        }
-
-        $status = isset($occurrence['status']) ? sanitize_key((string) $occurrence['status']) : MjEventOccurrences::STATUS_ACTIVE;
-        if ($status === '' || $status === MjEventOccurrences::STATUS_SUPPRIME) {
-            $status = MjEventOccurrences::STATUS_ACTIVE;
-        }
+                ?>
+                <tr class="mj-event-planification-hidden" style="display:none;">
+                    <th scope="row"></th>
+                    <td>
+                        <input type="hidden" id="mj-event-date-start" name="event_date_start" value="<?php echo esc_attr($form_values['date_debut']); ?>" />
+                        <input type="hidden" id="mj-event-date-end" name="event_date_end" value="<?php echo esc_attr($form_values['date_fin']); ?>" />
+                        <input type="hidden" id="mj-event-occurrences-payload" name="event_occurrences_payload" value="<?php echo esc_attr($occurrence_items_json); ?>" />
+                    </td>
+                </tr>
 
         $meta_value = array();
         if (isset($occurrence['meta']) && is_array($occurrence['meta'])) {

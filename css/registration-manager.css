@@ -6756,6 +6756,222 @@ input.mj-regmgr-search-input__field {
     flex-direction: column;
 }
 
+.mj-regmgr-occurrence__week-view {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+.mj-regmgr-occurrence__week-view--empty {
+    justify-content: center;
+}
+
+.mj-regmgr-occurrence__week-grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: 96px repeat(7, minmax(140px, 140px));
+    min-width: 100%;
+}
+
+.mj-regmgr-occurrence__week-time {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.mj-regmgr-occurrence__week-time-header {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--regmgr-gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.mj-regmgr-occurrence__week-time-scale {
+    position: relative;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius);
+    background: var(--regmgr-gray-50);
+}
+
+.mj-regmgr-occurrence__week-time-marker {
+    position: absolute;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    pointer-events: none;
+}
+
+.mj-regmgr-occurrence__week-time-marker::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--regmgr-gray-200);
+}
+
+.mj-regmgr-occurrence__week-time-marker--first::after {
+    background: var(--regmgr-gray-300);
+}
+
+.mj-regmgr-occurrence__week-time-label {
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--regmgr-gray-500);
+    min-width: 40px;
+}
+
+.mj-regmgr-occurrence__week-column {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.mj-regmgr-occurrence__week-column--today .mj-regmgr-occurrence__week-column-header {
+    color: var(--regmgr-primary);
+}
+
+.mj-regmgr-occurrence__week-column--selected .mj-regmgr-occurrence__week-column-body {
+    border-color: var(--regmgr-primary);
+    box-shadow: 0 0 0 2px var(--regmgr-primary-light) inset;
+}
+
+.mj-regmgr-occurrence__week-column-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-weight: 600;
+    color: var(--regmgr-gray-600);
+}
+
+.mj-regmgr-occurrence__week-column-title {
+    font-size: 13px;
+}
+
+.mj-regmgr-occurrence__week-column-summary {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--regmgr-gray-400);
+}
+
+.mj-regmgr-occurrence__week-column-count {
+    margin-left: auto;
+    font-size: 11px;
+    background: var(--regmgr-gray-200);
+    color: var(--regmgr-gray-600);
+    border-radius: 999px;
+    padding: 2px 8px;
+}
+
+.mj-regmgr-occurrence__week-column-body {
+    position: relative;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius);
+    background: #fff;
+    overflow: hidden;
+}
+
+.mj-regmgr-occurrence__week-guides {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.mj-regmgr-occurrence__week-guide {
+    position: absolute;
+    left: 0;
+    right: 0;
+    border-top: 1px dashed var(--regmgr-gray-200);
+}
+
+.mj-regmgr-occurrence__week-guide--first {
+    border-top-style: solid;
+    border-top-color: var(--regmgr-gray-300);
+}
+
+.mj-regmgr-occurrence__week-block {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    border-radius: var(--regmgr-radius-sm);
+    border: 1px solid transparent;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: left;
+    color: var(--regmgr-gray-700);
+    box-shadow: var(--regmgr-shadow);
+    transition: transform var(--regmgr-transition), box-shadow var(--regmgr-transition);
+}
+
+.mj-regmgr-occurrence__week-block:hover,
+.mj-regmgr-occurrence__week-block:focus {
+    transform: translateY(-2px);
+    box-shadow: var(--regmgr-shadow-md);
+}
+
+.mj-regmgr-occurrence__week-block:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--regmgr-primary-light);
+}
+
+.mj-regmgr-occurrence__week-block--status-planned {
+    background: var(--regmgr-primary-light);
+    border-color: rgba(37, 99, 235, 0.3);
+}
+
+.mj-regmgr-occurrence__week-block--status-confirmed {
+    background: var(--regmgr-success-light);
+    border-color: rgba(16, 185, 129, 0.35);
+}
+
+.mj-regmgr-occurrence__week-block--status-cancelled {
+    background: var(--regmgr-danger-light);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+.mj-regmgr-occurrence__week-block--selected {
+    border-color: var(--regmgr-primary);
+    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.2);
+}
+
+.mj-regmgr-occurrence__week-block-time {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.mj-regmgr-occurrence__week-block-status {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--regmgr-gray-500);
+}
+
+.mj-regmgr-occurrence__week-block-reason {
+    font-size: 11px;
+    color: var(--regmgr-danger);
+}
+
+.mj-regmgr-occurrence__week-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--regmgr-gray-400);
+    pointer-events: none;
+    text-align: center;
+    padding: 0 16px;
+}
+
 .mj-regmgr-occurrence__month-header {
     padding: 12px 14px;
     font-weight: 600;
@@ -7119,6 +7335,7 @@ input.mj-regmgr-search-input__field {
     }
 
     .mj-regmgr-occurrence__calendar,
+    .mj-regmgr-occurrence__week-view,
     .mj-regmgr-occurrence__sidebar {
         width: 100%;
     }

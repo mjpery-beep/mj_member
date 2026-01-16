@@ -1371,27 +1371,65 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
             $fixed_date = isset($form_values['schedule_fixed_date']) ? sanitize_text_field($form_values['schedule_fixed_date']) : '';
             $fixed_start = isset($form_values['schedule_fixed_start_time']) ? sanitize_text_field($form_values['schedule_fixed_start_time']) : '';
             $fixed_end = isset($form_values['schedule_fixed_end_time']) ? sanitize_text_field($form_values['schedule_fixed_end_time']) : '';
+            $date_debut_raw = isset($form_values['date_debut']) ? $form_values['date_debut'] : '';
+            $date_fin_raw = isset($form_values['date_fin']) ? $form_values['date_fin'] : '';
 
-            if ($fixed_date === '' || $fixed_start === '') {
-                $errors[] = __('La date et l\'heure de début sont obligatoires pour un horaire fixe.', 'mj-member');
-            } else {
+            $start_datetime = null;
+            $end_datetime = null;
+
+            if ($fixed_date !== '' && $fixed_start !== '') {
                 $start_datetime = DateTime::createFromFormat('Y-m-d H:i', $fixed_date . ' ' . $fixed_start, $timezone);
-                $end_datetime = $fixed_end !== '' ? DateTime::createFromFormat('Y-m-d H:i', $fixed_date . ' ' . $fixed_end, $timezone) : null;
+            }
 
-                if (!$start_datetime) {
-                    $errors[] = __('La date de début est invalide.', 'mj-member');
-                } else {
-                    if ($end_datetime && $end_datetime <= $start_datetime) {
-                        $errors[] = __('L\'heure de fin doit être postérieure à l\'heure de début.', 'mj-member');
-                    } elseif (!$end_datetime) {
-                        $end_datetime = clone $start_datetime;
-                    }
-
-                    if ($end_datetime instanceof DateTime) {
-                        $date_debut = $start_datetime->format('Y-m-d H:i:s');
-                        $date_fin = $end_datetime->format('Y-m-d H:i:s');
+            if (!$start_datetime && $date_debut_raw !== '') {
+                $parsed_start = mj_regmgr_parse_event_datetime($date_debut_raw);
+                if ($parsed_start !== '') {
+                    $start_datetime = DateTime::createFromFormat('Y-m-d H:i:s', $parsed_start, $timezone);
+                    if ($start_datetime instanceof DateTime) {
+                        if ($fixed_date === '') {
+                            $fixed_date = $start_datetime->format('Y-m-d');
+                        }
+                        if ($fixed_start === '') {
+                            $fixed_start = $start_datetime->format('H:i');
+                        }
                     }
                 }
+            }
+
+            $has_fixed_inputs = ($fixed_date !== '' || $fixed_start !== '' || $fixed_end !== '');
+            $allow_empty_schedule = ($status === MjEvents::STATUS_DRAFT);
+
+
+            if ($fixed_end !== '' && $fixed_date !== '') {
+                $end_datetime = DateTime::createFromFormat('Y-m-d H:i', $fixed_date . ' ' . $fixed_end, $timezone);
+            }
+
+            if (!$end_datetime && $date_fin_raw !== '') {
+                $parsed_end = mj_regmgr_parse_event_datetime($date_fin_raw);
+                if ($parsed_end !== '') {
+                    $end_datetime = DateTime::createFromFormat('Y-m-d H:i:s', $parsed_end, $timezone);
+                    if ($end_datetime instanceof DateTime && $fixed_end === '') {
+                        $fixed_end = $end_datetime->format('H:i');
+                    }
+                }
+            }
+
+            $end_provided = ($fixed_end !== '' || $date_fin_raw !== '');
+
+            if ($start_datetime instanceof DateTime) {
+                if (!($end_datetime instanceof DateTime)) {
+                    $end_datetime = clone $start_datetime;
+                }
+
+                if ($end_provided && $end_datetime <= $start_datetime) {
+                    $errors[] = __('L\'heure de fin doit être postérieure à l\'heure de début.', 'mj-member');
+                } else {
+                    $date_debut = $start_datetime->format('Y-m-d H:i:s');
+                    $date_fin = $end_datetime->format('Y-m-d H:i:s');
+                }
+            } elseif ($allow_empty_schedule) {
+                $date_debut = '';
+                $date_fin = '';
             }
 
             $schedule_payload = array(
