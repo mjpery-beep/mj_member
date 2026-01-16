@@ -849,7 +849,7 @@
                     h('button', {
                         type: 'button',
                         class: 'mj-btn mj-btn--primary',
-                        onClick: handleUpdateOccurrence,
+                        onClick: function (e) { handleUpdateOccurrence(e); },
                         disabled: isPersisting,
                     }, editorState.id
                         ? getString(strings, 'occurrenceUpdateButton', 'Modifier cette occurrence')
@@ -858,12 +858,12 @@
                     h('button', {
                         type: 'button',
                         class: 'mj-btn mj-btn--secondary',
-                        onClick: handleCancelEdit,
+                        onClick: function (e) { handleCancelEdit(e); },
                     }, getString(strings, 'occurrenceCancelButton', 'Annuler')),
                     selectedOccurrenceId && h('button', {
                         type: 'button',
                         class: 'mj-btn mj-btn--danger',
-                        onClick: handleDeleteOccurrence,
+                        onClick: function (e) { handleDeleteOccurrence(e); },
                         disabled: isPersisting,
                     }, getString(strings, 'occurrenceDeleteButton', 'Supprimer')),
                 ]),
@@ -871,7 +871,7 @@
                     h('button', {
                         type: 'button',
                         class: 'mj-btn mj-btn--danger',
-                        onClick: handleDeleteAllOccurrences,
+                        onClick: function (e) { handleDeleteAllOccurrences(e); },
                         disabled: isPersisting,
                     }, getString(strings, 'occurrenceDeleteAllButton', 'Supprimer toutes les occurrences')),
                 ]),
@@ -1014,13 +1014,13 @@
                     h('button', {
                         type: 'button',
                         class: 'mj-btn mj-btn--primary',
-                        onClick: handleAddOccurrences,
+                        onClick: function (e) { handleAddOccurrences(e); },
                         disabled: isPersisting,
                     }, getString(strings, 'occurrenceGeneratorAddButton', 'Ajouter les occurrences')),
                     h('button', {
                         type: 'button',
                         class: 'mj-btn mj-btn--secondary',
-                        onClick: handleUpdateSchedulePreview,
+                        onClick: function (e) { handleUpdateSchedulePreview(e); },
                         disabled: isPersisting,
                         style: { marginLeft: '0.75rem' },
                     }, getString(strings, 'occurrenceGeneratorPreviewButton', 'Mettre à jour l\'horaire')),
@@ -1163,6 +1163,7 @@
         }, [editorState, localOccurrences, selectedOccurrenceId, persistOccurrences]);
 
         var handleDeleteOccurrence = useCallback(function () {
+            console.log('Deleting occurrence', selectedOccurrenceId);   
             if (!selectedOccurrenceId) {
                 return;
             }
@@ -1273,6 +1274,7 @@
         }, [viewMode]);
 
         var handleDeleteAllOccurrences = useCallback(function () {
+            console.log('Deleting all occurrences');
             if (localOccurrences.length === 0) {
                 return;
             }
@@ -5180,7 +5182,7 @@
                     sidebarMode === 'events' && selectedEvent && h('button', {
                         type: 'button',
                         class: 'mj-regmgr__back-btn',
-                        onClick: handleBackToEvents,
+                        onClick: function (e) { handleBackToEvents(e); },
                     }, [
                         h('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
                             h('polyline', { points: '15 18 9 12 15 6' }),
@@ -5192,7 +5194,7 @@
                     sidebarMode === 'members' && selectedMember && h('button', {
                         type: 'button',
                         class: 'mj-regmgr__back-btn',
-                        onClick: handleBackToEvents,
+                        onClick: function (e) { handleBackToEvents(e); },
                     }, [
                         h('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
                             h('polyline', { points: '15 18 9 12 15 6' }),
