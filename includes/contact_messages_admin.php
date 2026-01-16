@@ -864,6 +864,74 @@ if (!function_exists('mj_member_handle_contact_message_toggle_read')) {
     add_action('admin_post_mj_member_toggle_contact_message_read', 'mj_member_handle_contact_message_toggle_read');
 }
 
+if (!function_exists('mj_member_handle_contact_message_archive')) {
+    function mj_member_handle_contact_message_archive() {
+        $contactCapability = Config::contactCapability();
+
+        if (!current_user_can($contactCapability)) {
+            wp_die(esc_html__('Accès refusé.', 'mj-member'));
+        }
+
+        $message_id = isset($_POST['message_id']) ? (int) $_POST['message_id'] : 0;
+        $target_state = isset($_POST['target_state']) ? sanitize_key(wp_unslash($_POST['target_state'])) : 'archive';
+        $nonce = isset($_POST['_wpnonce']) ? sanitize_text_field(wp_unslash($_POST['_wpnonce'])) : '';
+        $redirect_to_raw = isset($_POST['redirect_to']) ? esc_url_raw(wp_unslash($_POST['redirect_to'])) : '';
+        $redirect_target = $redirect_to_raw !== '' ? wp_validate_redirect($redirect_to_raw, '') : '';
+
+        $success = false;
+        $success_notice = ($target_state === 'restore') ? 'restored' : 'archived';
+
+        if ($message_id > 0 && $nonce !== '' && wp_verify_nonce($nonce, 'mj-member-archive-contact-message-' . $message_id)) {
+            $message = MjContactMessages::get($message_id);
+
+            if ($message) {
+                if ($target_state === 'restore') {
+                    $restore_status = isset($_POST['restore_status']) ? sanitize_key(wp_unslash($_POST['restore_status'])) : '';
+                    $status_labels = MjContactMessages::get_status_labels();
+                    if ($restore_status === '' || !isset($status_labels[$restore_status]) || $restore_status === MjContactMessages::STATUS_ARCHIVED) {
+                        $restore_status = MjContactMessages::STATUS_IN_PROGRESS;
+                    }
+
+                    $result = MjContactMessages::update($message_id, array('status' => $restore_status));
+                    if (!is_wp_error($result)) {
+                        $success = true;
+                        MjContactMessages::record_activity($message_id, 'restored', array(
+                            'note' => __('Message restauré.', 'mj-member'),
+                        ));
+                    }
+                } else {
+                    $result = MjContactMessages::update($message_id, array(
+                        'status' => MjContactMessages::STATUS_ARCHIVED,
+                        'is_read' => 1,
+                    ));
+
+                    if (!is_wp_error($result)) {
+                        $success = true;
+                        MjContactMessages::record_activity($message_id, 'archived', array(
+                            'note' => __('Message archivé.', 'mj-member'),
+                        ));
+                    }
+                }
+            }
+        }
+
+        $redirect = mj_member_contact_messages_prepare_redirect(
+            $redirect_target,
+            $success,
+            $success_notice,
+            'archive-error',
+            $success_notice,
+            'archive-error',
+            array('page' => 'mj_contact_messages')
+        );
+
+        wp_safe_redirect($redirect);
+        exit;
+    }
+
+    add_action('admin_post_mj_member_archive_contact_message', 'mj_member_handle_contact_message_archive');
+}
+
 if (!function_exists('mj_member_handle_contact_message_delete')) {
     function mj_member_handle_contact_message_delete() {
         $contactCapability = Config::contactCapability();
@@ -1140,6 +1208,12 @@ if (!function_exists('mj_member_contact_messages_get_notice')) {
                 return array(array('type' => 'success', 'message' => __('Message supprimé.', 'mj-member')));
             case 'delete-error':
                 return array(array('type' => 'error', 'message' => __('Impossible de supprimer le message.', 'mj-member')));
+            case 'archived':
+                return array(array('type' => 'success', 'message' => __('Message archivé.', 'mj-member')));
+            case 'restored':
+                return array(array('type' => 'success', 'message' => __('Message restauré.', 'mj-member')));
+            case 'archive-error':
+                return array(array('type' => 'error', 'message' => __('Impossible d’archiver le message.', 'mj-member')));
             default:
                 return array();
         }

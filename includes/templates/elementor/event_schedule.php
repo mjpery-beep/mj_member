@@ -48,32 +48,44 @@ $date_format_map = array(
 );
 $date_format_pattern = isset($date_format_map[$date_format_setting]) ? $date_format_map[$date_format_setting] : $date_format_map['full'];
 
-$format_time = static function (string $value) use ($time_format_pattern): string {
+$site_timezone = wp_timezone();
+if (!($site_timezone instanceof \DateTimeZone)) {
+    $site_timezone = new \DateTimeZone('UTC');
+}
+
+$format_time = static function (string $value) use ($time_format_pattern, $site_timezone): string {
     $value = trim($value);
     if ($value === '') {
         return '';
     }
 
-    $timestamp = strtotime($value);
-    if ($timestamp === false) {
+    try {
+        $datetime = new \DateTimeImmutable($value, $site_timezone);
+    } catch (\Exception $exception) {
         return '';
     }
 
-    return wp_date($time_format_pattern, $timestamp);
+    return $datetime->format($time_format_pattern);
 };
 
-$format_time_string = static function (string $value) use ($time_format_pattern): string {
+$format_time_string = static function (string $value) use ($time_format_pattern, $site_timezone): string {
     $value = trim($value);
     if ($value === '') {
         return '';
     }
 
-    $timestamp = strtotime('1970-01-01 ' . $value);
-    if ($timestamp === false) {
+    $time_candidate = $value;
+    if (preg_match('/^\d{1,2}:\d{2}$/', $time_candidate)) {
+        $time_candidate .= ':00';
+    }
+
+    try {
+        $datetime = new \DateTimeImmutable('1970-01-01 ' . $time_candidate, $site_timezone);
+    } catch (\Exception $exception) {
         return '';
     }
 
-    return wp_date($time_format_pattern, $timestamp);
+    return $datetime->format($time_format_pattern);
 };
 
 $format_day = static function (string $value): string {
@@ -111,6 +123,60 @@ $blank_weekly_schedule = static function (bool $showDateRange = false): array {
     );
 };
 
+$sanitize_time_value = static function ($value): string {
+    if (is_string($value)) {
+        $candidate = trim($value);
+    } elseif (is_numeric($value)) {
+        $candidate = trim((string) $value);
+    } else {
+        return '';
+    }
+
+    if ($candidate === '') {
+        return '';
+    }
+
+    if (preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $candidate)) {
+        return $candidate;
+    }
+
+    if (preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/', $candidate)) {
+        return substr($candidate, 0, 5);
+    }
+
+    return '';
+};
+
+$sanitize_date_value = static function ($value): string {
+    if (!is_string($value)) {
+        return '';
+    }
+
+    $candidate = trim($value);
+    if ($candidate === '') {
+        return '';
+    }
+
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $candidate)) {
+        return '';
+    }
+
+    return $candidate;
+};
+
+$to_bool = static function ($value, bool $default = false): bool {
+    if (is_bool($value)) {
+        return $value;
+    }
+
+    $filtered = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+    if ($filtered !== null) {
+        return (bool) $filtered;
+    }
+
+    return $default;
+};
+
 $decode_schedule_payload = static function ($payload): array {
     if (is_string($payload) && $payload !== '') {
         $decoded = json_decode($payload, true);
@@ -124,6 +190,370 @@ $decode_schedule_payload = static function ($payload): array {
     }
 
     return array();
+};
+
+$sanitize_occurrence_generator_plan = static function (array $input) use ($sanitize_time_value, $sanitize_date_value, $to_bool): array {
+    $knownKeys = array(
+        'mode',
+        'frequency',
+        'startDate',
+        'startDateISO',
+        'endDate',
+        'endDateISO',
+        'startTime',
+        'endTime',
+        'days',
+        'overrides',
+        'timeOverrides',
+        'monthlyOrdinal',
+        'monthlyWeekday',
+        'explicitStart',
+        '_explicitStart',
+        'version',
+    );
+
+    $hasKnown = false;
+    foreach ($knownKeys as $key) {
+        if (array_key_exists($key, $input)) {
+            $hasKnown = true;
+            break;
+        }
+    }
+
+    if (!$hasKnown) {
+        return array();
+    }
+
+    $weekdayKeys = array('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun');
+
+    $mode = isset($input['mode']) ? sanitize_key((string) $input['mode']) : '';
+    if (!in_array($mode, array('weekly', 'monthly', 'custom'), true)) {
+        $mode = 'weekly';
+    }
+
+    $frequency = isset($input['frequency']) ? sanitize_key((string) $input['frequency']) : '';
+    if (!in_array($frequency, array('every_week', 'every_two_weeks'), true)) {
+        $frequency = 'every_week';
+    }
+
+    $startDate = '';
+    foreach (array('startDateISO', 'startDate') as $key) {
+        if (!isset($input[$key])) {
+            continue;
+        }
+        $candidate = $sanitize_date_value($input[$key]);
+        if ($candidate !== '') {
+            $startDate = $candidate;
+            break;
+        }
+    }
+
+    $endDate = '';
+    foreach (array('endDateISO', 'endDate') as $key) {
+        if (!isset($input[$key])) {
+            continue;
+        }
+        $candidate = $sanitize_date_value($input[$key]);
+        if ($candidate !== '') {
+            $endDate = $candidate;
+            break;
+        }
+    }
+
+    $startTime = $sanitize_time_value(isset($input['startTime']) ? $input['startTime'] : '');
+    $endTime = $sanitize_time_value(isset($input['endTime']) ? $input['endTime'] : '');
+
+    $days = array();
+    foreach ($weekdayKeys as $weekday) {
+        $days[$weekday] = false;
+    }
+
+    if (isset($input['days']) && is_array($input['days'])) {
+        $daysSource = $input['days'];
+        if (array_values($daysSource) === $daysSource) {
+            foreach ($daysSource as $value) {
+                $weekday = sanitize_key((string) $value);
+                if (isset($days[$weekday])) {
+                    $days[$weekday] = true;
+                }
+            }
+        } else {
+            foreach ($daysSource as $weekday => $flag) {
+                $weekdayKey = sanitize_key((string) $weekday);
+                if (isset($days[$weekdayKey])) {
+                    $days[$weekdayKey] = !empty($flag);
+                }
+            }
+        }
+    }
+
+    $overrides = array();
+    $overridesSource = array();
+    if (isset($input['overrides']) && is_array($input['overrides'])) {
+        $overridesSource = $input['overrides'];
+    } elseif (isset($input['timeOverrides']) && is_array($input['timeOverrides'])) {
+        $overridesSource = $input['timeOverrides'];
+    }
+
+    foreach ($overridesSource as $weekday => $times) {
+        $weekdayKey = sanitize_key((string) $weekday);
+        if (!isset($days[$weekdayKey]) || !is_array($times)) {
+            continue;
+        }
+
+        $entry = array();
+        if (isset($times['start'])) {
+            $sanitized = $sanitize_time_value($times['start']);
+            if ($sanitized !== '') {
+                $entry['start'] = $sanitized;
+            }
+        }
+        if (isset($times['end'])) {
+            $sanitized = $sanitize_time_value($times['end']);
+            if ($sanitized !== '') {
+                $entry['end'] = $sanitized;
+            }
+        }
+
+        if (!empty($entry)) {
+            $overrides[$weekdayKey] = $entry;
+        }
+    }
+
+    $monthlyOrdinal = isset($input['monthlyOrdinal']) ? sanitize_key((string) $input['monthlyOrdinal']) : '';
+    if (!in_array($monthlyOrdinal, array('first', 'second', 'third', 'fourth', 'last'), true)) {
+        $monthlyOrdinal = 'first';
+    }
+
+    $monthlyWeekday = isset($input['monthlyWeekday']) ? sanitize_key((string) $input['monthlyWeekday']) : '';
+    if (!in_array($monthlyWeekday, $weekdayKeys, true)) {
+        $monthlyWeekday = 'mon';
+    }
+
+    $explicitStart = false;
+    foreach (array('explicitStart', '_explicitStart') as $flagKey) {
+        if (array_key_exists($flagKey, $input)) {
+            $explicitStart = $to_bool($input[$flagKey], $explicitStart);
+        }
+    }
+    if ($startDate !== '') {
+        $explicitStart = true;
+    }
+
+    return array(
+        'mode' => $mode,
+        'frequency' => $frequency,
+        'start_date' => $startDate,
+        'end_date' => $endDate,
+        'start_time' => $startTime,
+        'end_time' => $endTime,
+        'days' => $days,
+        'overrides' => $overrides,
+        'monthly_ordinal' => $monthlyOrdinal,
+        'monthly_weekday' => $monthlyWeekday,
+        'explicit_start' => $explicitStart,
+    );
+};
+
+$extract_occurrence_generator_plan = static function (array $payload) use ($sanitize_occurrence_generator_plan): array {
+    $candidates = array();
+
+    if (isset($payload['occurrence_generator']) && is_array($payload['occurrence_generator'])) {
+        $candidates[] = $payload['occurrence_generator'];
+    }
+
+    if (isset($payload['occurrenceGenerator']) && is_array($payload['occurrenceGenerator'])) {
+        $candidates[] = $payload['occurrenceGenerator'];
+    }
+
+    foreach ($candidates as $candidate) {
+        $plan = $sanitize_occurrence_generator_plan($candidate);
+        if (empty($plan)) {
+            continue;
+        }
+
+        if (isset($payload['monthlyOrdinal'])) {
+            $ordinal = sanitize_key((string) $payload['monthlyOrdinal']);
+            if ($ordinal !== '') {
+                $plan['monthly_ordinal'] = $ordinal;
+            }
+        }
+
+        if (isset($payload['monthlyWeekday'])) {
+            $weekday = sanitize_key((string) $payload['monthlyWeekday']);
+            if ($weekday !== '') {
+                $plan['monthly_weekday'] = $weekday;
+            }
+        }
+
+        return $plan;
+    }
+
+    return array();
+};
+
+$build_weekly_schedule_from_generator = static function (array $plan, bool $showDateRange) use ($format_time_for_display, $blank_weekly_schedule): array {
+    $weekdayLabels = array(
+        'monday' => __('Lundi', 'mj-member'),
+        'tuesday' => __('Mardi', 'mj-member'),
+        'wednesday' => __('Mercredi', 'mj-member'),
+        'thursday' => __('Jeudi', 'mj-member'),
+        'friday' => __('Vendredi', 'mj-member'),
+        'saturday' => __('Samedi', 'mj-member'),
+        'sunday' => __('Dimanche', 'mj-member'),
+    );
+
+    $dayMap = array(
+        'mon' => 'monday',
+        'tue' => 'tuesday',
+        'wed' => 'wednesday',
+        'thu' => 'thursday',
+        'fri' => 'friday',
+        'sat' => 'saturday',
+        'sun' => 'sunday',
+    );
+
+    $days = array();
+    $planDays = isset($plan['days']) && is_array($plan['days']) ? $plan['days'] : array();
+    $overrides = isset($plan['overrides']) && is_array($plan['overrides']) ? $plan['overrides'] : array();
+    $defaultStart = isset($plan['start_time']) ? (string) $plan['start_time'] : '';
+    $defaultEnd = isset($plan['end_time']) ? (string) $plan['end_time'] : '';
+
+    foreach ($dayMap as $short => $long) {
+        if (empty($planDays[$short])) {
+            continue;
+        }
+
+        $startTime = $defaultStart;
+        $endTime = $defaultEnd;
+
+        if (isset($overrides[$short]) && is_array($overrides[$short])) {
+            $override = $overrides[$short];
+            if (isset($override['start']) && $override['start'] !== '') {
+                $startTime = (string) $override['start'];
+            }
+            if (isset($override['end']) && $override['end'] !== '') {
+                $endTime = (string) $override['end'];
+            }
+        }
+
+        $startFormatted = $format_time_for_display($startTime);
+        $endFormatted = $format_time_for_display($endTime);
+
+        $timeRange = '';
+        if ($startFormatted !== '' && $endFormatted !== '') {
+            $timeRange = $startFormatted . ' - ' . $endFormatted;
+        } elseif ($startFormatted !== '') {
+            $timeRange = sprintf(__('à partir de %s', 'mj-member'), $startFormatted);
+        } elseif ($endFormatted !== '') {
+            $timeRange = $endFormatted;
+        }
+
+        $days[] = array(
+            'key' => $long,
+            'label' => isset($weekdayLabels[$long]) ? $weekdayLabels[$long] : $long,
+            'start_time' => $startTime,
+            'end_time' => $endTime,
+            'start_formatted' => $startFormatted,
+            'end_formatted' => $endFormatted,
+            'time_range' => $timeRange,
+        );
+    }
+
+    if (empty($days)) {
+        return $blank_weekly_schedule($showDateRange);
+    }
+
+    return array(
+        'is_weekly' => true,
+        'is_monthly' => false,
+        'is_series' => false,
+        'show_date_range' => $showDateRange,
+        'monthly_label' => '',
+        'time_range' => '',
+        'days' => $days,
+        'series_items' => array(),
+    );
+};
+
+$build_monthly_schedule_from_generator = static function (array $plan, bool $showDateRange) use ($format_time_for_display, $blank_weekly_schedule): array {
+    $weekdayLabels = array(
+        'monday' => __('Lundi', 'mj-member'),
+        'tuesday' => __('Mardi', 'mj-member'),
+        'wednesday' => __('Mercredi', 'mj-member'),
+        'thursday' => __('Jeudi', 'mj-member'),
+        'friday' => __('Vendredi', 'mj-member'),
+        'saturday' => __('Samedi', 'mj-member'),
+        'sunday' => __('Dimanche', 'mj-member'),
+    );
+
+    $ordinalLabels = array(
+        'first' => __('1er', 'mj-member'),
+        'second' => __('2ème', 'mj-member'),
+        'third' => __('3ème', 'mj-member'),
+        'fourth' => __('4ème', 'mj-member'),
+        'last' => __('Dernier', 'mj-member'),
+    );
+
+    $dayMap = array(
+        'mon' => 'monday',
+        'tue' => 'tuesday',
+        'wed' => 'wednesday',
+        'thu' => 'thursday',
+        'fri' => 'friday',
+        'sat' => 'saturday',
+        'sun' => 'sunday',
+    );
+
+    $ordinalKey = isset($plan['monthly_ordinal']) ? (string) $plan['monthly_ordinal'] : 'first';
+    $weekdayShort = isset($plan['monthly_weekday']) ? (string) $plan['monthly_weekday'] : 'mon';
+    $weekdayKey = isset($dayMap[$weekdayShort]) ? $dayMap[$weekdayShort] : $weekdayShort;
+
+    $ordinalLabel = isset($ordinalLabels[$ordinalKey]) ? $ordinalLabels[$ordinalKey] : $ordinalKey;
+    $weekdayLabel = isset($weekdayLabels[$weekdayKey]) ? $weekdayLabels[$weekdayKey] : $weekdayKey;
+
+    $defaultStart = isset($plan['start_time']) ? (string) $plan['start_time'] : '';
+    $defaultEnd = isset($plan['end_time']) ? (string) $plan['end_time'] : '';
+
+    $overrides = isset($plan['overrides']) && is_array($plan['overrides']) ? $plan['overrides'] : array();
+    if (isset($overrides[$weekdayShort]) && is_array($overrides[$weekdayShort])) {
+        $override = $overrides[$weekdayShort];
+        if (isset($override['start']) && $override['start'] !== '') {
+            $defaultStart = (string) $override['start'];
+        }
+        if (isset($override['end']) && $override['end'] !== '') {
+            $defaultEnd = (string) $override['end'];
+        }
+    }
+
+    $startFormatted = $format_time_for_display($defaultStart);
+    $endFormatted = $format_time_for_display($defaultEnd);
+
+    $timeRange = '';
+    if ($startFormatted !== '' && $endFormatted !== '') {
+        $timeRange = $startFormatted . ' - ' . $endFormatted;
+    } elseif ($startFormatted !== '') {
+        $timeRange = sprintf(__('à partir de %s', 'mj-member'), $startFormatted);
+    } elseif ($endFormatted !== '') {
+        $timeRange = $endFormatted;
+    }
+
+    $monthlyLabel = trim(implode(' ', array_filter(array($ordinalLabel, $weekdayLabel, __('du mois', 'mj-member')))));
+
+    if ($monthlyLabel === '') {
+        return $blank_weekly_schedule($showDateRange);
+    }
+
+    return array(
+        'is_weekly' => false,
+        'is_monthly' => true,
+        'is_series' => false,
+        'show_date_range' => $showDateRange,
+        'monthly_label' => $monthlyLabel,
+        'time_range' => $timeRange,
+        'days' => array(),
+        'series_items' => array(),
+    );
 };
 
 $build_recurring_weekly_schedule = static function (array $payload, bool $showDateRange) use ($format_time_for_display, $blank_weekly_schedule): array {
@@ -382,16 +812,26 @@ if ($event_for_schedule) {
 
 $schedule_payload = $decode_schedule_payload($schedule_payload_raw);
 $show_date_range = !empty($schedule_payload['show_date_range']);
+$generator_plan = $extract_occurrence_generator_plan($schedule_payload);
 
 $weekly_schedule = $blank_weekly_schedule($show_date_range);
 if ($schedule_mode === 'series') {
     $weekly_schedule = $build_series_schedule_data($schedule_payload, $show_date_range);
 } elseif ($schedule_mode === 'recurring') {
-    $frequency = isset($schedule_payload['frequency']) ? (string) $schedule_payload['frequency'] : '';
-    if ($frequency === 'monthly') {
-        $weekly_schedule = $build_monthly_schedule_data($schedule_payload, $show_date_range);
+    if (!empty($generator_plan)) {
+        $plan_mode = isset($generator_plan['mode']) ? (string) $generator_plan['mode'] : 'weekly';
+        if ($plan_mode === 'monthly') {
+            $weekly_schedule = $build_monthly_schedule_from_generator($generator_plan, $show_date_range);
+        } else {
+            $weekly_schedule = $build_weekly_schedule_from_generator($generator_plan, $show_date_range);
+        }
     } else {
-        $weekly_schedule = $build_recurring_weekly_schedule($schedule_payload, $show_date_range);
+        $frequency = isset($schedule_payload['frequency']) ? (string) $schedule_payload['frequency'] : '';
+        if ($frequency === 'monthly') {
+            $weekly_schedule = $build_monthly_schedule_data($schedule_payload, $show_date_range);
+        } else {
+            $weekly_schedule = $build_recurring_weekly_schedule($schedule_payload, $show_date_range);
+        }
     }
 }
 

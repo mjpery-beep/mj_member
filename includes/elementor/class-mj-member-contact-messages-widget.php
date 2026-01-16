@@ -239,7 +239,7 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
             $messages_payload = $this->format_messages_for_template($messages, $status_labels, array(
                 'can_moderate' => true,
                 'include_activity' => true,
-                'include_full' => false,
+                'include_full' => true,
                 'owner_view' => false,
                 'activity_actions' => array(),
             ));
@@ -417,6 +417,7 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
             $is_unread = MjContactMessages::is_unread($message);
             $reply_subject = $subject !== '' ? sprintf(__('Re: %s', 'mj-member'), $subject) : __('Réponse à votre message', 'mj-member');
             $activity_entries = array();
+            $is_archived = ($status_key === MjContactMessages::STATUS_ARCHIVED);
 
             if (!empty($options['include_activity'])) {
                 $raw_entries = MjContactMessages::get_activity_entries($message);
@@ -456,6 +457,22 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
                 }
             }
 
+            $search_terms_parts = array(
+                $subject,
+                $sender_name,
+                $sender_email,
+                $target_label,
+                $status_label,
+                $excerpt,
+            );
+            $search_terms = sanitize_text_field(trim(implode(' ', array_filter($search_terms_parts))));
+            $archive_nonce = !empty($options['can_moderate'])
+                ? wp_create_nonce('mj-member-archive-contact-message-' . (int) $message->id)
+                : '';
+            $delete_nonce = !empty($options['can_moderate'])
+                ? wp_create_nonce('mj-member-delete-contact-message-' . (int) $message->id)
+                : '';
+
             $items[] = array(
                 'id' => (int) $message->id,
                 'status_key' => $status_key,
@@ -466,6 +483,7 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
                 'target_label' => $target_label,
                 'is_unread' => $is_unread,
                 'is_read' => !$is_unread,
+                'is_archived' => $is_archived,
                 'date_human' => $created_at ? date_i18n(get_option('date_format'), $created_at) : '',
                 'time_human' => $created_at ? date_i18n(get_option('time_format'), $created_at) : '',
                 'timestamp' => $created_at ? $created_at : 0,
@@ -482,6 +500,9 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
                 'target_reference' => isset($message->target_reference) ? (int) $message->target_reference : 0,
                 'recipient_choice' => self::build_recipient_choice($message),
                 'quick_reply_subject' => $reply_subject,
+                'archive_nonce' => $archive_nonce,
+                'delete_nonce' => $delete_nonce,
+                'search_terms' => $search_terms,
             );
         }
 

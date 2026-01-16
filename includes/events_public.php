@@ -2298,6 +2298,49 @@ if (!function_exists('mj_member_get_event_recurring_summary')) {
     }
 }
 
+if (!function_exists('mj_member_parse_event_datetime_local')) {
+    /**
+     * Convertit une valeur en DateTimeImmutable alignée sur le fuseau horaire WordPress.
+     *
+     * @param mixed $value
+     * @return DateTimeImmutable|null
+     */
+    function mj_member_parse_event_datetime_local($value) {
+        if ($value instanceof DateTimeInterface) {
+            $immutable = new DateTimeImmutable('@' . $value->getTimestamp());
+            return $immutable->setTimezone(wp_timezone());
+        }
+
+        if (!is_scalar($value)) {
+            return null;
+        }
+
+        $raw = trim((string) $value);
+        if ($raw === '' || $raw === '0000-00-00 00:00:00') {
+            return null;
+        }
+
+        $timezone = wp_timezone();
+        $patterns = array('Y-m-d H:i:s', 'Y-m-d H:i', 'Y-m-d');
+
+        foreach ($patterns as $pattern) {
+            $parsed = DateTimeImmutable::createFromFormat($pattern, $raw, $timezone);
+            if ($parsed instanceof DateTimeImmutable) {
+                return $parsed;
+            }
+        }
+
+        if (function_exists('date_create_immutable')) {
+            $fallback = date_create_immutable($raw, $timezone);
+            if ($fallback instanceof DateTimeImmutable) {
+                return $fallback;
+            }
+        }
+
+        return null;
+    }
+}
+
 if (!function_exists('mj_member_format_event_datetime_range')) {
     /**
      * Format a human readable datetime range for events.
@@ -2307,24 +2350,23 @@ if (!function_exists('mj_member_format_event_datetime_range')) {
      * @return string
      */
     function mj_member_format_event_datetime_range($start, $end) {
-        $start = trim((string) $start);
-        $end = trim((string) $end);
+        $start = mj_member_parse_event_datetime_local($start);
+        $end = mj_member_parse_event_datetime_local($end);
 
-        if ($start === '' && $end === '') {
+        if (!$start && !$end) {
             return '';
         }
 
-        $start_ts = $start !== '' ? strtotime($start) : false;
-        $end_ts = $end !== '' ? strtotime($end) : false;
+        $date_format = get_option('date_format', 'd/m/Y');
+        $time_format = get_option('time_format', 'H:i');
 
-        if (!$start_ts && !$end_ts) {
-            return '';
-        }
+        $start_ts = $start ? $start->getTimestamp() : null;
+        $end_ts = $end ? $end->getTimestamp() : null;
 
-        if ($start_ts && $end_ts) {
+        if ($start && $end) {
             if ($start_ts === $end_ts) {
-                $date_label = wp_date(get_option('date_format', 'd/m/Y'), $start_ts);
-                $time_label = wp_date(get_option('time_format', 'H:i'), $start_ts);
+                $date_label = wp_date($date_format, (int) $start_ts);
+                $time_label = wp_date($time_format, (int) $start_ts);
 
                 if ($time_label !== '') {
                     return sprintf(
@@ -2334,28 +2376,28 @@ if (!function_exists('mj_member_format_event_datetime_range')) {
                     );
                 }
 
-                return wp_date(get_option('date_format', 'd/m/Y H:i'), $start_ts);
+                return wp_date(get_option('date_format', 'd/m/Y H:i'), (int) $start_ts);
             }
 
-            if (wp_date('d/m/Y', $start_ts) === wp_date('d/m/Y', $end_ts)) {
+            if ($start->format('Ymd') === $end->format('Ymd')) {
                 return sprintf(
                     '%s %s - %s',
-                    wp_date(get_option('date_format', 'd/m/Y'), $start_ts),
-                    wp_date(get_option('time_format', 'H:i'), $start_ts),
-                    wp_date(get_option('time_format', 'H:i'), $end_ts)
+                    wp_date($date_format, (int) $start_ts),
+                    wp_date($time_format, (int) $start_ts),
+                    wp_date($time_format, (int) $end_ts)
                 );
             }
 
             return sprintf(
                 '%s &rarr; %s',
-                wp_date(get_option('date_format', 'd/m/Y H:i'), $start_ts),
-                wp_date(get_option('date_format', 'd/m/Y H:i'), $end_ts)
+                wp_date(get_option('date_format', 'd/m/Y H:i'), (int) $start_ts),
+                wp_date(get_option('date_format', 'd/m/Y H:i'), (int) $end_ts)
             );
         }
 
-        if ($start_ts) {
-            $date_label = wp_date(get_option('date_format', 'd/m/Y'), $start_ts);
-            $time_label = wp_date(get_option('time_format', 'H:i'), $start_ts);
+        if ($start) {
+            $date_label = wp_date($date_format, (int) $start_ts);
+            $time_label = wp_date($time_format, (int) $start_ts);
 
             if ($time_label !== '') {
                 return sprintf(
@@ -2365,10 +2407,10 @@ if (!function_exists('mj_member_format_event_datetime_range')) {
                 );
             }
 
-            return wp_date(get_option('date_format', 'd/m/Y H:i'), $start_ts);
+            return wp_date(get_option('date_format', 'd/m/Y H:i'), (int) $start_ts);
         }
 
-        return wp_date(get_option('date_format', 'd/m/Y H:i'), $end_ts);
+        return wp_date(get_option('date_format', 'd/m/Y H:i'), (int) $end_ts);
     }
 }
 

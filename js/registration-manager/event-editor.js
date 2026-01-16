@@ -197,6 +197,22 @@
         return rawGetString(strings, key, defaultValue);
     }
 
+    function formatTemplate(template, replacements) {
+        if (!template) {
+            return '';
+        }
+        var result = String(template);
+        if (!replacements || typeof replacements !== 'object') {
+            return result;
+        }
+        Object.keys(replacements).forEach(function (repKey) {
+            var token = '{' + repKey + '}';
+            var value = replacements[repKey];
+            result = result.split(token).join(value);
+        });
+        return result;
+    }
+
     function splitDateTimeParts(value) {
         if (!value) {
             return { date: '', time: '' };
@@ -227,6 +243,43 @@
             return cleanDate;
         }
         return cleanDate + ' ' + cleanTime;
+    }
+
+    function normalizeScheduleMode(value) {
+        var mode = typeof value === 'string' ? value : '';
+        if (mode === 'fixed' || mode === 'range' || mode === 'recurring' || mode === 'series') {
+            return mode;
+        }
+        return 'fixed';
+    }
+
+    function formatDateTimeLocalValue(value) {
+        if (!value) {
+            return '';
+        }
+        var parts = splitDateTimeParts(value);
+        if (!parts.date) {
+            return '';
+        }
+        if (!parts.time) {
+            return parts.date;
+        }
+        var time = parts.time.length > 5 ? parts.time.slice(0, 5) : parts.time;
+        return parts.date + 'T' + time;
+    }
+
+    function normalizeDateTimeLocalValue(value) {
+        if (!value) {
+            return '';
+        }
+        var normalized = String(value).replace('T', ' ').trim();
+        if (normalized === '') {
+            return '';
+        }
+        if (/^[0-9]{4}-[0-9]{2}-[0-9]{2}\s[0-9]{2}:[0-9]{2}$/.test(normalized)) {
+            return normalized + ':00';
+        }
+        return normalized;
     }
 
     function normalizeErrorKey(message) {
@@ -601,6 +654,23 @@
         return '';
     }
 
+    function formatDateTimeLabel(value) {
+        if (!value) {
+            return '';
+        }
+        var parts = splitDateTimeParts(value);
+        if (!parts.date) {
+            return String(value);
+        }
+        var dateObj = parseIsoDate(parts.date);
+        var dateLabel = dateObj ? formatDateDisplay(dateObj) : parts.date;
+        if (parts.time) {
+            var time = parts.time.length > 5 ? parts.time.slice(0, 5) : parts.time;
+            return dateLabel + ' ' + time;
+        }
+        return dateLabel;
+    }
+
     function addDays(date, amount) {
         var next = new Date(date.getTime());
         next.setDate(next.getDate() + amount);
@@ -802,6 +872,203 @@
 
         baseConfig.weekdays = config.weekdays || [];
         return buildRecurringWeeklyAgenda(baseConfig);
+    }
+
+    function copyWeekdayTimes(source) {
+        var result = {};
+        if (!source || typeof source !== 'object') {
+            return result;
+        }
+        Object.keys(source).forEach(function (weekday) {
+            if (!Object.prototype.hasOwnProperty.call(source, weekday)) {
+                return;
+            }
+            var entry = source[weekday];
+            if (!entry || typeof entry !== 'object') {
+                return;
+            }
+            result[weekday] = {
+                start: entry.start ? String(entry.start) : '',
+                end: entry.end ? String(entry.end) : '',
+            };
+        });
+        return result;
+    }
+
+    function createSchedulePayloadSnapshot(mode, form, context) {
+        var payload = { mode: normalizeScheduleMode(mode) };
+        var extras = context && typeof context === 'object' ? context : {};
+        var exceptions = Array.isArray(extras.exceptions) ? extras.exceptions : [];
+        var seriesItems = Array.isArray(extras.seriesItems) ? extras.seriesItems : [];
+        var weekdayTimesSource = extras.weekdayTimes || {};
+        var showDateRange = !!extras.showDateRange;
+
+        if (payload.mode === 'fixed') {
+            payload.date = form.event_fixed_date || '';
+            payload.start_time = form.event_fixed_start_time || '';
+            payload.end_time = form.event_fixed_end_time || '';
+        } else if (payload.mode === 'range') {
+            payload.start = form.event_range_start || '';
+            payload.end = form.event_range_end || '';
+        } else if (payload.mode === 'recurring') {
+            payload.frequency = form.event_recurring_frequency === 'monthly' ? 'monthly' : 'weekly';
+            payload.interval = form.event_recurring_interval ? parseInt(form.event_recurring_interval, 10) || 1 : 1;
+            payload.weekdays = ensureArray(form.event_recurring_weekdays);
+            payload.weekday_times = copyWeekdayTimes(weekdayTimesSource);
+            payload.start_date = form.event_recurring_start_date || '';
+            payload.start_time = form.event_recurring_start_time || '';
+            payload.end_time = form.event_recurring_end_time || '';
+            payload.ordinal = form.event_recurring_month_ordinal || 'first';
+            payload.weekday = form.event_recurring_month_weekday || 'saturday';
+            payload.until = form.event_recurring_until || '';
+            payload.show_date_range = showDateRange;
+            payload.exceptions = normalizeScheduleExceptions(extras.exceptions);
+        } else if (payload.mode === 'series') {
+            payload.items = seriesItems.map(function (item) {
+                return {
+                    date: item && item.date ? item.date : '',
+                    start_time: item && item.start_time ? item.start_time : '',
+                    end_time: item && item.end_time ? item.end_time : '',
+                };
+            });
+        }
+
+        payload.version = payload.version || 'event-editor';
+        return payload;
+    }
+
+    function groupRecurringAgendaEntries(entries, strings) {
+        var list = Array.isArray(entries) ? entries : [];
+        if (!list.length) {
+            return {
+                groups: [],
+                stats: { total: 0, cancelled: 0, excluded: 0 },
+            };
+        }
+
+        var map = {};
+        var stats = { total: list.length, cancelled: 0, excluded: 0 };
+
+        list.forEach(function (entry) {
+            if (!entry || !entry.date) {
+                return;
+            }
+            var dateObj = parseIsoDate(entry.date);
+            var weekStart = dateObj ? startOfWeek(dateObj) : null;
+            var weekKey = weekStart ? formatIsoDate(weekStart) : entry.date;
+            if (!map[weekKey]) {
+                map[weekKey] = {
+                    key: weekKey,
+                    date: weekStart,
+                    entries: [],
+                    cancelled: 0,
+                    excluded: 0,
+                };
+            }
+            var group = map[weekKey];
+            var cloned = Object.assign({}, entry);
+            if (entry.disabled) {
+                if (entry.reason) {
+                    group.cancelled += 1;
+                    stats.cancelled += 1;
+                } else {
+                    group.excluded += 1;
+                    stats.excluded += 1;
+                }
+            }
+            group.entries.push(cloned);
+        });
+
+        var groups = Object.keys(map).sort().map(function (key) {
+            var bucket = map[key];
+            var labelDate = bucket.date ? formatDateDisplay(bucket.date) : key;
+            var label = formatTemplate(getString(strings, 'recurringAgendaWeekLabel', 'Semaine du {date}'), { date: labelDate });
+            var parts = [
+                formatTemplate(getString(strings, 'recurringAgendaWeekOccurrences', '{count} occurrence(s)'), { count: bucket.entries.length }),
+            ];
+            if (bucket.cancelled > 0) {
+                parts.push(formatTemplate(getString(strings, 'recurringAgendaWeekCancelled', '{count} annulee(s)'), { count: bucket.cancelled }));
+            }
+            if (bucket.excluded > 0) {
+                parts.push(formatTemplate(getString(strings, 'recurringAgendaWeekExcluded', '{count} exclue(s)'), { count: bucket.excluded }));
+            }
+            var summary = parts.join(' · ');
+            var entriesWithMeta = bucket.entries.map(function (entry) {
+                return Object.assign({}, entry, {
+                    weekLabel: label,
+                    weekSummary: summary,
+                });
+            });
+            return {
+                key: key,
+                label: label,
+                summary: summary,
+                entries: entriesWithMeta,
+                cancelled: bucket.cancelled,
+                excluded: bucket.excluded,
+            };
+        });
+
+        return {
+            groups: groups,
+            stats: stats,
+        };
+    }
+
+    function computeOccurrenceSummary(schedulePayload) {
+        if (!schedulePayload || typeof schedulePayload !== 'object') {
+            return null;
+        }
+        var occurrences = Array.isArray(schedulePayload.occurrences) ? schedulePayload.occurrences : [];
+        var items = Array.isArray(schedulePayload.items) ? schedulePayload.items : [];
+        var source = occurrences.length > 0 ? occurrences : items;
+        if (!source.length) {
+            return { count: 0 };
+        }
+        var first = null;
+        var last = null;
+        source.forEach(function (entry) {
+            if (!entry || typeof entry !== 'object') {
+                return;
+            }
+            var start = '';
+            var end = '';
+            if (entry.start) {
+                start = String(entry.start);
+            } else if (entry.date && entry.start_time) {
+                start = entry.date + ' ' + entry.start_time;
+            } else if (entry.date) {
+                start = String(entry.date);
+            }
+            if (entry.end) {
+                end = String(entry.end);
+            } else if (entry.date && entry.end_time) {
+                end = entry.date + ' ' + entry.end_time;
+            } else if (entry.date && entry.start_time) {
+                end = entry.date + ' ' + entry.start_time;
+            } else if (entry.date) {
+                end = String(entry.date);
+            }
+            if (start) {
+                if (!first || start < first) {
+                    first = start;
+                }
+            }
+            if (end) {
+                if (!last || end > last) {
+                    last = end;
+                }
+            } else if (start) {
+                if (!last || start > last) {
+                    last = start;
+                }
+            }
+        });
+        return {
+            count: source.length,
+            first: first,
+            last: last,
+        };
     }
 
     function normalizeEmojiSearchValue(value) {
@@ -2660,432 +2927,356 @@
     }
 
     function ScheduleEditor(props) {
-        var form = props.form;
-        var meta = props.meta;
-        var options = props.options || {};
-        var strings = props.strings || {};
-        var onChangeForm = props.onChangeForm;
-        var onChangeMeta = props.onChangeMeta;
-        var onToggleWeekday = props.onToggleWeekday;
-        var onWeekdayTimeChange = props.onWeekdayTimeChange;
-        var seriesItems = props.seriesItems || [];
-        var onAddSeriesItem = props.onAddSeriesItem;
-        var onUpdateSeriesItem = props.onUpdateSeriesItem;
-        var onRemoveSeriesItem = props.onRemoveSeriesItem;
+        var form = props && props.form ? props.form : {};
+        var meta = props && props.meta ? props.meta : {};
+        var options = props && props.options ? props.options : {};
+        var strings = props && props.strings ? props.strings : {};
 
-        var scheduleMode = form.event_schedule_mode || 'fixed';
-        var scheduleWeekdays = options.schedule_weekdays || {};
-        var scheduleMonthOrdinals = options.schedule_month_ordinals || {};
-        var currentWeekdays = ensureArray(form.event_recurring_weekdays);
-        var showDateRange = !!meta.scheduleShowDateRange;
-        var weekdayTimes = meta.scheduleWeekdayTimes || {};
-        var scheduleExceptions = normalizeScheduleExceptions(meta.scheduleExceptions);
-        var _a = useState(true);
-        var isAgendaCollapsed = _a[0];
-        var setAgendaCollapsed = _a[1];
+        var onChangeForm = typeof props.onChangeForm === 'function' ? props.onChangeForm : function () {};
+        var onChangeMeta = typeof props.onChangeMeta === 'function' ? props.onChangeMeta : function () {};
+        var onToggleWeekday = typeof props.onToggleWeekday === 'function' ? props.onToggleWeekday : function () {};
         var onOpenExceptionDialog = typeof props.onOpenExceptionDialog === 'function' ? props.onOpenExceptionDialog : function () {};
+        var onWeekdayTimeChange = typeof props.onWeekdayTimeChange === 'function' ? props.onWeekdayTimeChange : function () {};
+        var onAddSeriesItem = typeof props.onAddSeriesItem === 'function' ? props.onAddSeriesItem : function () {};
+        var onUpdateSeriesItem = typeof props.onUpdateSeriesItem === 'function' ? props.onUpdateSeriesItem : function () {};
+        var onRemoveSeriesItem = typeof props.onRemoveSeriesItem === 'function' ? props.onRemoveSeriesItem : function () {};
 
-        var frequency = form.event_recurring_frequency || 'weekly';
-        var interval = form.event_recurring_interval || 1;
+        var seriesItems = Array.isArray(props.seriesItems) ? props.seriesItems : [];
 
-        var toggleAgendaCollapsed = useCallback(function () {
-            setAgendaCollapsed(function (prev) { return !prev; });
+        var metaMode = meta && meta.scheduleMode ? normalizeScheduleMode(meta.scheduleMode) : null;
+        var formMode = form && form.event_schedule_mode ? normalizeScheduleMode(form.event_schedule_mode) : null;
+        var payloadMode = meta && meta.schedulePayload && meta.schedulePayload.mode ? normalizeScheduleMode(meta.schedulePayload.mode) : null;
+        var scheduleMode = normalizeScheduleMode(formMode || metaMode || payloadMode || 'fixed');
+
+        var scheduleWeekdayTimes = meta && meta.scheduleWeekdayTimes && typeof meta.scheduleWeekdayTimes === 'object'
+            ? meta.scheduleWeekdayTimes
+            : {};
+        var scheduleExceptions = normalizeScheduleExceptions(meta && meta.scheduleExceptions);
+        var showDateRange = !!(meta && meta.scheduleShowDateRange);
+
+        var weekdayEntries = useMemo(function () {
+            var source = options && options.schedule_weekdays && typeof options.schedule_weekdays === 'object'
+                ? options.schedule_weekdays
+                : null;
+            if (source) {
+                return Object.keys(source).map(function (key) {
+                    return { key: key, label: source[key] }; 
+                }).filter(function (entry) { return entry.label !== undefined; });
+            }
+            return WEEKDAY_KEYS.map(function (key) {
+                return { key: key, label: key.charAt(0).toUpperCase() + key.slice(1) };
+            });
+        }, [options && options.schedule_weekdays]);
+
+        var ordinalEntries = useMemo(function () {
+            var source = options && options.schedule_month_ordinals && typeof options.schedule_month_ordinals === 'object'
+                ? options.schedule_month_ordinals
+                : null;
+            if (source) {
+                return Object.keys(source).map(function (key) {
+                    return { key: key, label: source[key] };
+                }).filter(function (entry) { return entry.label !== undefined; });
+            }
+            return [
+                { key: 'first', label: '1er' },
+                { key: 'second', label: '2e' },
+                { key: 'third', label: '3e' },
+                { key: 'fourth', label: '4e' },
+                { key: 'last', label: 'Dernier' },
+            ];
+        }, [options && options.schedule_month_ordinals]);
+
+        var selectedWeekdays = ensureArray(form.event_recurring_weekdays);
+        var recurringFrequency = form.event_recurring_frequency === 'monthly' ? 'monthly' : 'weekly';
+
+        var scheduleContext = useMemo(function () {
+            return {
+                exceptions: scheduleExceptions,
+                weekdayTimes: scheduleWeekdayTimes,
+                seriesItems: seriesItems,
+                showDateRange: showDateRange,
+            };
+        }, [scheduleExceptions, scheduleWeekdayTimes, seriesItems, showDateRange]);
+
+        var schedulePayload = useMemo(function () {
+            var base = createSchedulePayloadSnapshot(scheduleMode, form, scheduleContext);
+            var existing = meta && meta.schedulePayload && typeof meta.schedulePayload === 'object'
+                ? meta.schedulePayload
+                : null;
+            if (existing) {
+                if (!base.occurrence_generator && existing.occurrence_generator) {
+                    base.occurrence_generator = existing.occurrence_generator;
+                }
+                if (!base.occurrence_generator && existing.occurrenceGenerator) {
+                    base.occurrence_generator = existing.occurrenceGenerator;
+                }
+                if (!base.occurrences && Array.isArray(existing.occurrences) && existing.occurrences.length > 0) {
+                    base.occurrences = existing.occurrences.slice();
+                }
+            }
+            return base;
+        }, [scheduleMode, form, scheduleContext, meta && meta.schedulePayload]);
+
+        var schedulePayloadJson = useMemo(function () {
+            try {
+                return JSON.stringify(schedulePayload);
+            } catch (serializationError) {
+                return '';
+            }
+        }, [schedulePayload]);
+
+        var metaPayloadJson = useMemo(function () {
+            var source = meta && meta.schedulePayload ? meta.schedulePayload : {};
+            try {
+                return JSON.stringify(source);
+            } catch (serializationError) {
+                return '';
+            }
+        }, [meta && meta.schedulePayload]);
+
+        useEffect(function () {
+            var currentMetaMode = meta && meta.scheduleMode ? normalizeScheduleMode(meta.scheduleMode) : '';
+            if (scheduleMode !== currentMetaMode) {
+                onChangeMeta('scheduleMode', scheduleMode);
+            }
+        }, [meta && meta.scheduleMode, scheduleMode, onChangeMeta]);
+
+        useEffect(function () {
+            var currentFormMode = form && form.event_schedule_mode ? normalizeScheduleMode(form.event_schedule_mode) : '';
+            if (scheduleMode !== currentFormMode) {
+                onChangeForm('event_schedule_mode', scheduleMode);
+            }
+        }, [form && form.event_schedule_mode, scheduleMode, onChangeForm]);
+
+        useEffect(function () {
+            if (schedulePayloadJson !== metaPayloadJson) {
+                onChangeMeta('schedulePayload', schedulePayload);
+            }
+        }, [schedulePayloadJson, metaPayloadJson, onChangeMeta, schedulePayload]);
+
+        var _agendaExpanded = useState(false);
+        var agendaExpanded = _agendaExpanded[0];
+        var setAgendaExpanded = _agendaExpanded[1];
+
+        useEffect(function () {
+            setAgendaExpanded(false);
+        }, [scheduleMode, schedulePayloadJson]);
+
+        var recurringAgenda = useMemo(function () {
+            if (scheduleMode !== 'recurring') {
+                return null;
+            }
+            var agendaConfig = {
+                startDate: schedulePayload.start_date || '',
+                untilDate: schedulePayload.until || '',
+                interval: schedulePayload.interval || 1,
+                startTime: schedulePayload.start_time || '',
+                endTime: schedulePayload.end_time || '',
+                weekdays: schedulePayload.frequency === 'weekly' ? ensureArray(schedulePayload.weekdays) : [],
+                weekdayTimes: schedulePayload.frequency === 'weekly' ? schedulePayload.weekday_times || {} : {},
+                frequency: schedulePayload.frequency || 'weekly',
+                monthOrdinal: schedulePayload.ordinal || 'first',
+                monthWeekday: schedulePayload.weekday || 'saturday',
+                exceptions: schedulePayload.exceptions || scheduleExceptions,
+                maxOccurrences: MAX_PREVIEW_OCCURRENCES,
+            };
+            var occurrences = buildRecurringAgenda(agendaConfig);
+            return groupRecurringAgendaEntries(occurrences, strings);
+        }, [scheduleMode, schedulePayload, scheduleExceptions, strings]);
+
+        var recurringStats = recurringAgenda ? recurringAgenda.stats : { total: 0, cancelled: 0, excluded: 0 };
+        var recurringGroups = recurringAgenda ? recurringAgenda.groups : [];
+
+        var handleModeChange = useCallback(function (event) {
+            var nextValue = event && event.target ? event.target.value : event;
+            var normalized = normalizeScheduleMode(nextValue);
+            onChangeForm('event_schedule_mode', normalized);
+            onChangeMeta('scheduleMode', normalized);
+        }, [onChangeForm, onChangeMeta]);
+
+        var handleShowDateRangeToggle = useCallback(function (event) {
+            var checked = !!(event && event.target && event.target.checked);
+            onChangeMeta('scheduleShowDateRange', checked);
+        }, [onChangeMeta]);
+
+        var syncFixedBoundaries = useCallback(function (dateValue, startValue, endValue) {
+            var startDateTime = mergeDateTimeParts(dateValue, startValue);
+            var endDateTime = mergeDateTimeParts(dateValue, endValue);
+            if (startDateTime !== (form.event_date_start || '')) {
+                onChangeForm('event_date_start', startDateTime);
+            }
+            if (endDateTime !== (form.event_date_end || '')) {
+                onChangeForm('event_date_end', endDateTime);
+            }
+        }, [form.event_date_start, form.event_date_end, onChangeForm]);
+
+        var handleFixedFieldChange = useCallback(function (key, value) {
+            onChangeForm(key, value);
+            var nextDate = key === 'event_fixed_date' ? value : (form.event_fixed_date || '');
+            var nextStart = key === 'event_fixed_start_time' ? value : (form.event_fixed_start_time || '');
+            var nextEnd = key === 'event_fixed_end_time' ? value : (form.event_fixed_end_time || '');
+            syncFixedBoundaries(nextDate, nextStart, nextEnd);
+        }, [form.event_fixed_date, form.event_fixed_start_time, form.event_fixed_end_time, syncFixedBoundaries, onChangeForm]);
+
+        var handleRangeFieldChange = useCallback(function (key, value) {
+            onChangeForm(key, value);
+            var nextStart = key === 'event_range_start' ? value : (form.event_range_start || '');
+            var nextEnd = key === 'event_range_end' ? value : (form.event_range_end || '');
+            if (nextStart !== (form.event_date_start || '')) {
+                onChangeForm('event_date_start', nextStart);
+            }
+            if (nextEnd !== (form.event_date_end || '')) {
+                onChangeForm('event_date_end', nextEnd);
+            }
+        }, [form.event_range_start, form.event_range_end, form.event_date_start, form.event_date_end, onChangeForm]);
+
+        var handleRecurringFieldChange = useCallback(function (key, value) {
+            onChangeForm(key, value);
+            var nextStartDate = key === 'event_recurring_start_date' ? value : (form.event_recurring_start_date || '');
+            var nextStartTime = key === 'event_recurring_start_time' ? value : (form.event_recurring_start_time || '');
+            var nextEndTime = key === 'event_recurring_end_time' ? value : (form.event_recurring_end_time || '');
+            var fallbackStart = mergeDateTimeParts(nextStartDate, nextStartTime);
+            if (fallbackStart !== (form.event_date_start || '')) {
+                onChangeForm('event_date_start', fallbackStart);
+            }
+            var fallbackEnd = mergeDateTimeParts(nextStartDate, nextEndTime || nextStartTime);
+            if (fallbackEnd !== (form.event_date_end || '')) {
+                onChangeForm('event_date_end', fallbackEnd);
+            }
+        }, [form.event_recurring_start_date, form.event_recurring_start_time, form.event_recurring_end_time, form.event_date_start, form.event_date_end, onChangeForm]);
+
+        var handleWeekdayTimeChange = useCallback(function (weekday, field, event) {
+            var value = event && event.target ? event.target.value : event;
+            onWeekdayTimeChange(weekday, field, value);
+        }, [onWeekdayTimeChange]);
+
+        var toggleAgendaVisibility = useCallback(function () {
+            setAgendaExpanded(function (prev) { return !prev; });
         }, []);
 
-        var agendaOccurrences = useMemo(function () {
-            if (scheduleMode !== 'recurring') {
-                return [];
+        var recurringAgendaSummary = formatTemplate(
+            getString(strings, 'recurringAgendaTotalLabel', 'Occurrences') + ': {count}',
+            { count: recurringStats.total }
+        );
+        var recurringCancelledSummary = formatTemplate(
+            getString(strings, 'recurringAgendaCancelledLabel', 'Annulees') + ': {count}',
+            { count: recurringStats.cancelled }
+        );
+        var recurringExcludedSummary = formatTemplate(
+            getString(strings, 'recurringAgendaExcludedLabel', 'Exclusions') + ': {count}',
+            { count: recurringStats.excluded }
+        );
+
+        var renderFixedMode = function () {
+            if (scheduleMode !== 'fixed') {
+                return null;
             }
-            return buildRecurringAgenda({
-                startDate: form.event_recurring_start_date,
-                startTime: form.event_recurring_start_time,
-                endTime: form.event_recurring_end_time,
-                frequency: frequency,
-                interval: interval,
-                weekdays: currentWeekdays,
-                weekdayTimes: weekdayTimes,
-                monthOrdinal: form.event_recurring_month_ordinal,
-                monthWeekday: form.event_recurring_month_weekday,
-                untilDate: form.event_recurring_until,
-                exceptions: scheduleExceptions,
-            });
-        }, [scheduleMode, form.event_recurring_start_date, form.event_recurring_start_time, form.event_recurring_end_time, frequency, interval, JSON.stringify(currentWeekdays), JSON.stringify(weekdayTimes), form.event_recurring_month_ordinal, form.event_recurring_month_weekday, form.event_recurring_until, JSON.stringify(scheduleExceptions)]);
-
-
-        var agendaCounts = useMemo(function () {
-            var info = {
-                total: agendaOccurrences.length,
-                cancelled: 0,
-                excluded: 0,
-            };
-            agendaOccurrences.forEach(function (occurrence) {
-                if (!occurrence || !occurrence.disabled) {
-                    return;
-                }
-                if (occurrence.reason) {
-                    info.cancelled += 1;
-                } else {
-                    info.excluded += 1;
-                }
-            });
-            return info;
-        }, [agendaOccurrences]);
-        var agendaWeeks = useMemo(function () {
-            if (!agendaOccurrences.length) {
-                return [];
-            }
-            var weekMap = {};
-            agendaOccurrences.forEach(function (occurrence) {
-                if (!occurrence || !occurrence.date) {
-                    return;
-                }
-                var parsedDate = parseIsoDate(occurrence.date);
-                if (!parsedDate) {
-                    return;
-                }
-                var weekStartDate = startOfWeek(parsedDate);
-                var weekKey = formatIsoDate(weekStartDate);
-                if (!weekKey) {
-                    return;
-                }
-                if (!weekMap[weekKey]) {
-                    weekMap[weekKey] = {
-                        key: weekKey,
-                        weekStart: weekStartDate,
-                        occurrences: [],
-                        cancelled: 0,
-                        excluded: 0,
-                    };
-                }
-                var bucket = weekMap[weekKey];
-                bucket.occurrences.push(Object.assign({}, occurrence));
-                if (occurrence.disabled) {
-                    if (occurrence.reason) {
-                        bucket.cancelled += 1;
-                    } else {
-                        bucket.excluded += 1;
-                    }
-                }
-            });
-            return Object.keys(weekMap).sort().map(function (weekKey) {
-                var group = weekMap[weekKey];
-                group.total = group.occurrences.length;
-                return group;
-            });
-        }, [agendaOccurrences]);
-        var cancelledCount = agendaCounts.cancelled;
-        var excludedCount = agendaCounts.excluded;
-        var hasOccurrences = agendaCounts.total > 0;
-        var toggleLabel = isAgendaCollapsed
-            ? getString(strings, 'recurringAgendaToggleShow', 'Afficher les occurrences')
-            : getString(strings, 'recurringAgendaToggleHide', 'Masquer les occurrences');
-        if (hasOccurrences) {
-            toggleLabel = toggleLabel + ' (' + agendaCounts.total + ')';
-        }
-        var agendaSummary = hasOccurrences
-            ? (function () {
-                var parts = [];
-                var totalLabel = getString(strings, 'recurringAgendaTotalLabel', 'Occurrences');
-                var cancelledLabel = getString(strings, 'recurringAgendaCancelledLabel', 'Annulees');
-                var excludedLabel = getString(strings, 'recurringAgendaExcludedLabel', 'Exclusions');
-                parts.push(totalLabel + ': ' + agendaCounts.total);
-                if (cancelledCount > 0) {
-                    parts.push(cancelledLabel + ': ' + cancelledCount);
-                }
-                if (excludedCount > 0) {
-                    parts.push(excludedLabel + ': ' + excludedCount);
-                }
-                return parts.join(' · ');
-            })()
-            : '';
-        var showAgendaSummary = !!agendaSummary && hasOccurrences && isAgendaCollapsed;
-        var shouldShowAgendaList = !isAgendaCollapsed;
-
-        return h('div', { class: 'mj-regmgr-event-editor__section' }, [
-            h('div', { class: 'mj-regmgr-event-editor__section-header' }, [
-                h('h2', null, getString(strings, 'scheduleSection', 'Planification')),
-                h('p', { class: 'mj-regmgr-event-editor__section-hint' }, getString(strings, 'scheduleSectionHint', 'Ajustez les dates et horaires de l\'evenement.')),
-            ]),
-
-            h('div', { class: 'mj-regmgr-form-grid' }, [
-                h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
-                    h('label', null, getString(strings, 'scheduleMode', 'Mode de planification')),
-                    h('select', {
-                        value: scheduleMode,
-                        onChange: function (e) {
-                            var value = e.target.value;
-                            onChangeForm('event_schedule_mode', value);
-                            onChangeMeta('scheduleMode', value);
-                        },
-                    }, [
-                        h('option', { value: 'fixed' }, getString(strings, 'scheduleModeFixed', 'Date unique')),
-                        h('option', { value: 'range' }, getString(strings, 'scheduleModeRange', 'Plage de dates')),
-                        h('option', { value: 'recurring' }, getString(strings, 'scheduleModeRecurring', 'Recurrent')),
-                        h('option', { value: 'series' }, getString(strings, 'scheduleModeSeries', 'Serie personnalisee')),
-                    ]),
-                ]),
-            ]),
-
-            scheduleMode === 'fixed' && h('div', { class: 'mj-regmgr-form-grid' }, [
+            return h('div', { class: 'mj-regmgr-form-grid' }, [
                 h('div', { class: 'mj-regmgr-form-field' }, [
-                    h('label', null, getString(strings, 'fixedDate', 'Date')),
+                    h('label', null, getString(strings, 'fixedDate', 'Jour')),
                     h('input', {
                         type: 'date',
                         value: form.event_fixed_date || '',
-                        onChange: function (e) { onChangeForm('event_fixed_date', e.target.value); },
+                        onChange: function (e) { handleFixedFieldChange('event_fixed_date', e.target.value); },
                     }),
                 ]),
                 h('div', { class: 'mj-regmgr-form-field' }, [
-                    h('label', null, getString(strings, 'fixedStartTime', 'Heure de debut')),
+                    h('label', null, getString(strings, 'fixedStartTime', 'Debut')),
                     h('input', {
                         type: 'time',
-                        value: form.event_fixed_start_time || '',
-                        onChange: function (e) { onChangeForm('event_fixed_start_time', e.target.value); },
+                        value: formatTimeValue(form.event_fixed_start_time || ''),
+                        onChange: function (e) { handleFixedFieldChange('event_fixed_start_time', e.target.value); },
                     }),
                 ]),
                 h('div', { class: 'mj-regmgr-form-field' }, [
-                    h('label', null, getString(strings, 'fixedEndTime', 'Heure de fin')),
+                    h('label', null, getString(strings, 'fixedEndTime', 'Fin')),
                     h('input', {
                         type: 'time',
-                        value: form.event_fixed_end_time || '',
-                        onChange: function (e) { onChangeForm('event_fixed_end_time', e.target.value); },
+                        value: formatTimeValue(form.event_fixed_end_time || ''),
+                        onChange: function (e) { handleFixedFieldChange('event_fixed_end_time', e.target.value); },
                     }),
+                    h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'fixedHint', 'Utilisez cette option pour un evenement sur une seule journee avec un creneau horaire.')),
                 ]),
-            ]),
+            ]);
+        };
 
-            scheduleMode === 'range' && (function () {
-                var rangeStartParts = splitDateTimeParts(form.event_range_start);
-                var rangeEndParts = splitDateTimeParts(form.event_range_end);
-                return h('div', { class: 'mj-regmgr-form-grid' }, [
-                    h('div', { class: 'mj-regmgr-form-field' }, [
-                        h('label', null, getString(strings, 'rangeStart', 'Debut')),
-                        h('div', { class: 'mj-regmgr-form-datetime' }, [
-                            h('input', {
-                                type: 'date',
-                                value: rangeStartParts.date,
-                                onChange: function (e) {
-                                    var nextDate = e.target.value;
-                                    var nextValue = mergeDateTimeParts(nextDate, splitDateTimeParts(form.event_range_start).time);
-                                    onChangeForm('event_range_start', nextValue);
-                                },
-                            }),
-                            h('input', {
-                                type: 'time',
-                                step: '60',
-                                value: rangeStartParts.time,
-                                onChange: function (e) {
-                                    var nextTime = e.target.value;
-                                    var nextValue = mergeDateTimeParts(splitDateTimeParts(form.event_range_start).date, nextTime);
-                                    onChangeForm('event_range_start', nextValue);
-                                },
-                            }),
-                        ]),
-                    ]),
-                    h('div', { class: 'mj-regmgr-form-field' }, [
-                        h('label', null, getString(strings, 'rangeEnd', 'Fin')),
-                        h('div', { class: 'mj-regmgr-form-datetime' }, [
-                            h('input', {
-                                type: 'date',
-                                value: rangeEndParts.date,
-                                onChange: function (e) {
-                                    var nextDate = e.target.value;
-                                    var nextValue = mergeDateTimeParts(nextDate, splitDateTimeParts(form.event_range_end).time);
-                                    onChangeForm('event_range_end', nextValue);
-                                },
-                            }),
-                            h('input', {
-                                type: 'time',
-                                step: '60',
-                                value: rangeEndParts.time,
-                                onChange: function (e) {
-                                    var nextTime = e.target.value;
-                                    var nextValue = mergeDateTimeParts(splitDateTimeParts(form.event_range_end).date, nextTime);
-                                    onChangeForm('event_range_end', nextValue);
-                                },
-                            }),
-                        ]),
-                    ]),
-                ]);
-            })(),
-
-            scheduleMode === 'recurring' && h('div', { class: 'mj-regmgr-form-grid' }, [
+        var renderRangeMode = function () {
+            if (scheduleMode !== 'range') {
+                return null;
+            }
+            return h('div', { class: 'mj-regmgr-form-grid' }, [
                 h('div', { class: 'mj-regmgr-form-field' }, [
-                    h('label', null, getString(strings, 'recurringStartDate', 'Date de debut')),
+                    h('label', null, getString(strings, 'rangeStart', 'Debut')),
                     h('input', {
-                        type: 'date',
-                        value: form.event_recurring_start_date || '',
-                        onChange: function (e) { onChangeForm('event_recurring_start_date', e.target.value); },
-                    }),
-                ]),
-                frequency !== 'weekly' && h('div', { class: 'mj-regmgr-form-field' }, [
-                    h('label', null, getString(strings, 'recurringStartTime', 'Heure de debut')),
-                    h('input', {
-                        type: 'time',
-                        value: form.event_recurring_start_time || '',
-                        onChange: function (e) { onChangeForm('event_recurring_start_time', e.target.value); },
-                    }),
-                ]),
-                frequency !== 'weekly' && h('div', { class: 'mj-regmgr-form-field' }, [
-                    h('label', null, getString(strings, 'recurringEndTime', 'Heure de fin')),
-                    h('input', {
-                        type: 'time',
-                        value: form.event_recurring_end_time || '',
-                        onChange: function (e) { onChangeForm('event_recurring_end_time', e.target.value); },
+                        type: 'datetime-local',
+                        value: formatDateTimeLocalValue(form.event_range_start || ''),
+                        onChange: function (e) { handleRangeFieldChange('event_range_start', normalizeDateTimeLocalValue(e.target.value)); },
                     }),
                 ]),
                 h('div', { class: 'mj-regmgr-form-field' }, [
-                    h('label', null, getString(strings, 'recurringFrequency', 'Frequence')),
-                    h('select', {
-                        value: frequency,
-                        onChange: function (e) { onChangeForm('event_recurring_frequency', e.target.value); },
-                    }, [
-                        h('option', { value: 'weekly' }, getString(strings, 'recurringWeekly', 'Hebdomadaire')),
-                        h('option', { value: 'monthly' }, getString(strings, 'recurringMonthly', 'Mensuel')),
-                    ]),
-                ]),
-                h('div', { class: 'mj-regmgr-form-field' }, [
-                    h('label', null, getString(strings, 'recurringInterval', 'Intervalle')),
+                    h('label', null, getString(strings, 'rangeEnd', 'Fin')),
                     h('input', {
-                        type: 'number',
-                        min: '1',
-                        step: '1',
-                        value: interval,
-                        onChange: function (e) {
-                            var raw = e.target.value;
-                            var value = raw === '' ? '' : Math.max(1, parseInt(raw, 10) || 1);
-                            onChangeForm('event_recurring_interval', value);
-                        },
+                        type: 'datetime-local',
+                        value: formatDateTimeLocalValue(form.event_range_end || ''),
+                        onChange: function (e) { handleRangeFieldChange('event_range_end', normalizeDateTimeLocalValue(e.target.value)); },
                     }),
+                    h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'rangeHint', 'Choisissez cette option pour un evenement etale sur plusieurs jours.')),
                 ]),
-                h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--checkbox-row' }, [
-                    h('label', null, getString(strings, 'recurringShowDateRange', 'Afficher la plage de dates dans les details')),
-                    h('input', {
-                        type: 'checkbox',
-                        checked: showDateRange,
-                        onChange: function (e) { onChangeMeta('scheduleShowDateRange', e.target.checked); },
-                    }),
-                ]),
-            ]),
+            ]);
+        };
 
-            scheduleMode === 'recurring' && h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full mj-regmgr-event-editor__agenda' }, [
-                h('div', { class: 'mj-regmgr-agenda__legend' }, [
-                    h('span', { class: 'mj-regmgr-form-label' }, getString(strings, 'recurringAgendaTitle', 'Occurrences planifiees')),
-                    h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'recurringAgendaHint', 'Cliquez sur une date pour la desactiver ou la reactiver.')),
-                ]),
-                h('div', { class: 'mj-regmgr-agenda__controls' }, [
-                    showAgendaSummary ? h('p', { class: 'mj-regmgr-agenda__summary' }, agendaSummary) : null,
-                    h('button', {
-                        type: 'button',
-                        class: 'mj-btn mj-btn--ghost mj-btn--small mj-regmgr-agenda__toggle',
-                        onClick: toggleAgendaCollapsed,
-                        'aria-expanded': (!isAgendaCollapsed).toString(),
-                    }, toggleLabel),
-                ]),
-                shouldShowAgendaList
-                    ? (hasOccurrences && agendaWeeks.length > 0
-                        ? h('div', { class: 'mj-regmgr-agenda', role: 'list' }, agendaWeeks.map(function (weekGroup) {
-                            var weekLabelTemplate = getString(strings, 'recurringAgendaWeekLabel', 'Semaine du {date}');
-                            var weekLabelDate = formatDateDisplay(weekGroup.weekStart);
-                            var weekLabel = weekLabelTemplate.replace('{date}', weekLabelDate || weekGroup.key);
-                            var weekSummaryParts = [];
-                            var occurrencesLabel = getString(strings, 'recurringAgendaWeekOccurrences', '{count} occurrence(s)').replace('{count}', String(weekGroup.total));
-                            weekSummaryParts.push(occurrencesLabel);
-                            if (weekGroup.cancelled > 0) {
-                                weekSummaryParts.push(getString(strings, 'recurringAgendaWeekCancelled', '{count} annulee(s)').replace('{count}', String(weekGroup.cancelled)));
-                            }
-                            if (weekGroup.excluded > 0) {
-                                weekSummaryParts.push(getString(strings, 'recurringAgendaWeekExcluded', '{count} exclue(s)').replace('{count}', String(weekGroup.excluded)));
-                            }
-                            var weekSummary = weekSummaryParts.join(' · ');
-                            return h('section', {
-                                key: weekGroup.key,
-                                class: 'mj-regmgr-agenda__week',
-                                role: 'group',
-                                'aria-label': weekSummary ? weekLabel + ' (' + weekSummary + ')' : weekLabel,
-                            }, [
-                                h('header', { class: 'mj-regmgr-agenda__week-header' }, [
-                                    h('span', { class: 'mj-regmgr-agenda__week-label' }, weekLabel),
-                                    weekSummary ? h('span', { class: 'mj-regmgr-agenda__week-summary' }, weekSummary) : null,
-                                ]),
-                                h('div', { class: 'mj-regmgr-agenda__week-items', role: 'list' }, weekGroup.occurrences.map(function (occurrence, index) {
-                                    var itemKey = occurrence.date || (weekGroup.key + '-' + index);
-                                    var badge = null;
-                                    if (occurrence.disabled) {
-                                        var badgeText = occurrence.reason
-                                            ? getString(strings, 'recurringAgendaCancelled', 'Annule')
-                                            : getString(strings, 'recurringAgendaDisabled', 'Exclu');
-                                        badge = h('span', { class: 'mj-regmgr-agenda__badge' }, badgeText);
-                                    }
-                                    return h('button', {
-                                        key: itemKey,
-                                        type: 'button',
-                                        class: classNames('mj-regmgr-agenda__item', {
-                                            'mj-regmgr-agenda__item--disabled': occurrence.disabled,
-                                            'mj-regmgr-agenda__item--cancelled': occurrence.disabled && !!occurrence.reason,
-                                            'mj-regmgr-agenda__item--excluded': occurrence.disabled && !occurrence.reason,
-                                        }),
-                                        onClick: function () {
-                                            if (occurrence.date) {
-                                                onOpenExceptionDialog(Object.assign({}, occurrence, {
-                                                    weekLabel: weekLabel,
-                                                    weekSummary: weekSummary,
-                                                }));
-                                            }
-                                        },
-                                        'aria-pressed': occurrence.disabled ? 'true' : 'false',
-                                        role: 'listitem',
-                                    }, [
-                                        h('span', { class: 'mj-regmgr-agenda__date' }, occurrence.dateLabel || occurrence.date || ''),
-                                        occurrence.timeLabel ? h('span', { class: 'mj-regmgr-agenda__time' }, occurrence.timeLabel) : null,
-                                        badge,
-                                        occurrence.disabled && occurrence.reason ? h('span', { class: 'mj-regmgr-agenda__note' }, occurrence.reason) : null,
-                                    ]);
-                                })),
-                            ]);
-                        }))
-                        : h('div', { class: 'mj-regmgr-agenda mj-regmgr-agenda--empty' }, getString(strings, 'recurringAgendaEmpty', 'Configurez la recurrence pour visualiser les occurrences.')))
-                    : null,
-            ]),
-
-            scheduleMode === 'recurring' && frequency === 'weekly' && h('div', { class: 'mj-regmgr-event-editor__weekdays' }, [
-                h('div', { class: 'mj-regmgr-event-editor__weekdays-list' }, Object.keys(scheduleWeekdays).map(function (key) {
-                    var label = scheduleWeekdays[key];
-                    var isActive = currentWeekdays.indexOf(key) !== -1;
-                    var times = weekdayTimes[key] || { start: '', end: '' };
-                    return h('div', { key: key, class: classNames('mj-regmgr-weekday', { 'mj-regmgr-weekday--active': isActive }) }, [
-                        h('label', { class: 'mj-regmgr-weekday__label' }, [
+        var renderRecurringWeekdays = function () {
+            if (recurringFrequency !== 'weekly') {
+                return null;
+            }
+            return h('div', { class: 'mj-regmgr-recurring-weekdays' }, [
+                h('p', { class: 'mj-regmgr-form-label' }, getString(strings, 'recurringWeekly', 'Hebdomadaire')),
+                h('div', { class: 'mj-regmgr-recurring-weekdays__list' }, weekdayEntries.map(function (entry) {
+                    var isChecked = selectedWeekdays.indexOf(entry.key) !== -1;
+                    var timeEntry = scheduleWeekdayTimes[entry.key] || { start: '', end: '' };
+                    return h('div', { key: entry.key, class: 'mj-regmgr-recurring-weekday' }, [
+                        h('label', { class: 'mj-regmgr-checkbox' }, [
                             h('input', {
                                 type: 'checkbox',
-                                checked: isActive,
-                                onChange: function () { onToggleWeekday(key); },
+                                checked: isChecked,
+                                onChange: function () { onToggleWeekday(entry.key); },
                             }),
-                            h('span', null, label),
+                            h('span', null, entry.label),
                         ]),
-                        isActive && h('div', { class: 'mj-regmgr-weekday__times' }, [
+                        h('div', { class: 'mj-regmgr-recurring-weekday__times' }, [
                             h('input', {
                                 type: 'time',
-                                value: times.start || '',
-                                onChange: function (e) { onWeekdayTimeChange(key, 'start', e.target.value); },
+                                value: formatTimeValue(timeEntry.start || ''),
+                                disabled: !isChecked,
+                                onChange: function (e) { handleWeekdayTimeChange(entry.key, 'start', e); },
+                                'aria-label': entry.label + ' ' + getString(strings, 'recurringStartTime', 'Debut'),
                             }),
-                            h('span', { class: 'mj-regmgr-weekday__time-sep' }, '-'),
                             h('input', {
                                 type: 'time',
-                                value: times.end || '',
-                                onChange: function (e) { onWeekdayTimeChange(key, 'end', e.target.value); },
+                                value: formatTimeValue(timeEntry.end || ''),
+                                disabled: !isChecked,
+                                onChange: function (e) { handleWeekdayTimeChange(entry.key, 'end', e); },
+                                'aria-label': entry.label + ' ' + getString(strings, 'recurringEndTime', 'Fin'),
                             }),
                         ]),
                     ]);
                 })),
-            ]),
+                h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'recurringWeekdaysHint', "Cochez les jours souhaites et definissez les plages horaires pour chaque jour (optionnel).")),
+            ]);
+        };
 
-            scheduleMode === 'recurring' && frequency === 'monthly' && h('div', { class: 'mj-regmgr-form-grid' }, [
+        var renderRecurringMonthly = function () {
+            if (recurringFrequency !== 'monthly') {
+                return null;
+            }
+            return h('div', { class: 'mj-regmgr-form-grid' }, [
                 h('div', { class: 'mj-regmgr-form-field' }, [
                     h('label', null, getString(strings, 'recurringOrdinal', 'Ordre')),
                     h('select', {
                         value: form.event_recurring_month_ordinal || 'first',
                         onChange: function (e) { onChangeForm('event_recurring_month_ordinal', e.target.value); },
-                    }, Object.keys(scheduleMonthOrdinals).map(function (key) {
-                        return h('option', { key: key, value: key }, scheduleMonthOrdinals[key]);
+                    }, ordinalEntries.map(function (option) {
+                        return h('option', { key: option.key, value: option.key }, option.label);
                     })),
                 ]),
                 h('div', { class: 'mj-regmgr-form-field' }, [
@@ -3093,58 +3284,222 @@
                     h('select', {
                         value: form.event_recurring_month_weekday || 'saturday',
                         onChange: function (e) { onChangeForm('event_recurring_month_weekday', e.target.value); },
-                    }, Object.keys(scheduleWeekdays).map(function (key) {
-                        return h('option', { key: key, value: key }, scheduleWeekdays[key]);
+                    }, weekdayEntries.map(function (option) {
+                        return h('option', { key: option.key, value: option.key }, option.label);
                     })),
                 ]),
-            ]),
+            ]);
+        };
 
-            scheduleMode === 'recurring' && h('div', { class: 'mj-regmgr-form-grid' }, [
-                h('div', { class: 'mj-regmgr-form-field' }, [
-                    h('label', null, getString(strings, 'recurringUntil', 'Jusqu\'au (optionnel)')),
-                    h('input', {
-                        type: 'date',
-                        value: form.event_recurring_until || '',
-                        onChange: function (e) { onChangeForm('event_recurring_until', e.target.value); },
-                    }),
-                ]),
-            ]),
-
-            scheduleMode === 'series' && h('div', { class: 'mj-regmgr-event-editor__series' }, [
-                h('div', { class: 'mj-regmgr-event-editor__series-header' }, [
-                    h('p', null, getString(strings, 'seriesDescription', 'Ajoutez chaque date de l\'evenement.')),
-                    h('button', {
-                        type: 'button',
-                        class: 'mj-btn mj-btn--secondary mj-btn--small',
-                        onClick: onAddSeriesItem,
-                    }, getString(strings, 'seriesAdd', 'Ajouter une date')),
-                ]),
-                seriesItems.length === 0 && h('p', { class: 'mj-regmgr-event-editor__series-empty' }, getString(strings, 'seriesEmpty', 'Aucune date ajoutee.')),
-                seriesItems.length > 0 && h('div', { class: 'mj-regmgr-event-editor__series-list' }, seriesItems.map(function (item, index) {
-                    return h('div', { key: index, class: 'mj-regmgr-event-editor__series-row' }, [
+        var renderRecurringMode = function () {
+            if (scheduleMode !== 'recurring') {
+                return null;
+            }
+            return h('div', { class: 'mj-regmgr-recurring' }, [
+                h('div', { class: 'mj-regmgr-form-grid' }, [
+                    h('div', { class: 'mj-regmgr-form-field' }, [
+                        h('label', null, getString(strings, 'recurringFrequency', 'Frequence')),
+                        h('select', {
+                            value: recurringFrequency,
+                            onChange: function (e) { onChangeForm('event_recurring_frequency', e.target.value === 'monthly' ? 'monthly' : 'weekly'); },
+                        }, [
+                            h('option', { value: 'weekly' }, getString(strings, 'recurringWeekly', 'Hebdomadaire')),
+                            h('option', { value: 'monthly' }, getString(strings, 'recurringMonthly', 'Mensuel')),
+                        ]),
+                    ]),
+                    h('div', { class: 'mj-regmgr-form-field' }, [
+                        h('label', null, getString(strings, 'recurringInterval', 'Intervalle')),
+                        h('input', {
+                            type: 'number',
+                            min: '1',
+                            value: form.event_recurring_interval || 1,
+                            onChange: function (e) { onChangeForm('event_recurring_interval', e.target.value === '' ? '' : parseInt(e.target.value, 10) || 1); },
+                        }),
+                    ]),
+                    h('div', { class: 'mj-regmgr-form-field' }, [
+                        h('label', null, getString(strings, 'recurringStartDate', 'Jour')),
                         h('input', {
                             type: 'date',
-                            value: item.date || '',
-                            onChange: function (e) { onUpdateSeriesItem(index, 'date', e.target.value); },
+                            value: form.event_recurring_start_date || '',
+                            onChange: function (e) { handleRecurringFieldChange('event_recurring_start_date', e.target.value); },
                         }),
+                    ]),
+                    h('div', { class: 'mj-regmgr-form-field' }, [
+                        h('label', null, getString(strings, 'recurringStartTime', 'Debut')),
                         h('input', {
                             type: 'time',
-                            value: item.start_time || '',
-                            onChange: function (e) { onUpdateSeriesItem(index, 'start_time', e.target.value); },
+                            value: formatTimeValue(form.event_recurring_start_time || ''),
+                            onChange: function (e) { handleRecurringFieldChange('event_recurring_start_time', e.target.value); },
                         }),
+                    ]),
+                    h('div', { class: 'mj-regmgr-form-field' }, [
+                        h('label', null, getString(strings, 'recurringEndTime', 'Fin')),
                         h('input', {
                             type: 'time',
-                            value: item.end_time || '',
-                            onChange: function (e) { onUpdateSeriesItem(index, 'end_time', e.target.value); },
+                            value: formatTimeValue(form.event_recurring_end_time || ''),
+                            onChange: function (e) { handleRecurringFieldChange('event_recurring_end_time', e.target.value); },
                         }),
+                    ]),
+                    h('div', { class: 'mj-regmgr-form-field' }, [
+                        h('label', null, getString(strings, 'recurringUntil', "Jusqu au (optionnel)")),
+                        h('input', {
+                            type: 'date',
+                            value: form.event_recurring_until || '',
+                            onChange: function (e) { onChangeForm('event_recurring_until', e.target.value); },
+                        }),
+                        h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'recurringUntilHint', 'Laisser vide pour poursuivre la recurrence sans date de fin.')),
+                    ]),
+                    h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--checkbox mj-regmgr-form-field--full' }, [
+                        h('label', { class: 'mj-regmgr-checkbox' }, [
+                            h('input', {
+                                type: 'checkbox',
+                                checked: showDateRange,
+                                onChange: handleShowDateRangeToggle,
+                            }),
+                            h('span', null, getString(strings, 'recurringShowDateRange', 'Masquer la periode (date de debut et date de fin) sur la page evenement')),
+                        ]),
+                    ]),
+                ]),
+                renderRecurringWeekdays(),
+                renderRecurringMonthly(),
+                h('div', { class: 'mj-regmgr-recurring-agenda' }, [
+                    h('div', { class: 'mj-regmgr-recurring-agenda__header' }, [
+                        h('div', null, [
+                            h('h3', null, getString(strings, 'recurringAgendaTitle', 'Occurrences planifiees')),
+                            h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'recurringAgendaHint', 'Cliquez sur une date pour la desactiver ou la reactiver.')),
+                        ]),
+                        h('div', { class: 'mj-regmgr-recurring-agenda__summary' }, [
+                            h('span', null, recurringAgendaSummary),
+                            h('span', null, recurringCancelledSummary),
+                            h('span', null, recurringExcludedSummary),
+                        ]),
                         h('button', {
                             type: 'button',
                             class: 'mj-btn mj-btn--ghost mj-btn--small',
-                            onClick: function () { onRemoveSeriesItem(index); },
-                        }, getString(strings, 'remove', 'Supprimer')),
+                            onClick: toggleAgendaVisibility,
+                        }, agendaExpanded
+                            ? getString(strings, 'recurringAgendaToggleHide', 'Masquer les occurrences')
+                            : getString(strings, 'recurringAgendaToggleShow', 'Afficher les occurrences')),
+                    ]),
+                    agendaExpanded ? (recurringGroups.length > 0
+                        ? h('div', { class: 'mj-regmgr-recurring-agenda__groups' }, recurringGroups.map(function (group) {
+                            return h('div', { key: group.key, class: 'mj-regmgr-recurring-agenda__group' }, [
+                                h('div', { class: 'mj-regmgr-recurring-agenda__group-header' }, [
+                                    h('strong', null, group.label),
+                                    h('span', null, group.summary),
+                                ]),
+                                h('div', { class: 'mj-regmgr-recurring-agenda__items' }, group.entries.map(function (entry, entryIndex) {
+                                    var isCancelled = !!entry.reason;
+                                    var isDisabled = !!entry.disabled;
+                                    var statusLabel = '';
+                                    if (isDisabled) {
+                                        statusLabel = isCancelled
+                                            ? getString(strings, 'recurringAgendaCancelled', 'Annule')
+                                            : getString(strings, 'recurringAgendaDisabled', 'Exclu');
+                                    }
+                                    return h('button', {
+                                        key: group.key + '-' + entryIndex,
+                                        type: 'button',
+                                        class: classNames('mj-regmgr-recurring-agenda__item', {
+                                            'mj-regmgr-recurring-agenda__item--disabled': isDisabled,
+                                            'mj-regmgr-recurring-agenda__item--cancelled': isCancelled,
+                                        }),
+                                        onClick: function () { onOpenExceptionDialog(entry); },
+                                    }, [
+                                        h('span', { class: 'mj-regmgr-recurring-agenda__item-date' }, entry.dateLabel || entry.date),
+                                        entry.timeLabel ? h('span', { class: 'mj-regmgr-recurring-agenda__item-time' }, entry.timeLabel) : null,
+                                        statusLabel ? h('span', { class: 'mj-regmgr-recurring-agenda__item-status' }, statusLabel) : null,
+                                        entry.reason ? h('span', { class: 'mj-regmgr-recurring-agenda__item-reason' }, entry.reason) : null,
+                                    ]);
+                                })),
+                            ]);
+                        }))
+                        : h('p', { class: 'mj-regmgr-recurring-agenda__empty' }, getString(strings, 'recurringAgendaEmpty', 'Configurez la recurrence pour visualiser les occurrences.')))
+                        : null,
+                ]),
+            ]);
+        };
+
+        var renderSeriesItems = function () {
+            return h('div', { class: 'mj-regmgr-series-items' }, [
+                seriesItems.length === 0 ? h('p', { class: 'mj-regmgr-series-items__empty' }, getString(strings, 'seriesEmpty', 'Aucune date ajoutee.')) : null,
+                seriesItems.map(function (item, index) {
+                    return h('div', { key: index, class: 'mj-regmgr-form-grid mj-regmgr-series-items__row' }, [
+                        h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', null, getString(strings, 'fixedDate', 'Jour')),
+                            h('input', {
+                                type: 'date',
+                                value: item.date || '',
+                                onChange: function (e) { onUpdateSeriesItem(index, 'date', e.target.value); },
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', null, getString(strings, 'recurringStartTime', 'Debut')),
+                            h('input', {
+                                type: 'time',
+                                value: formatTimeValue(item.start_time || ''),
+                                onChange: function (e) { onUpdateSeriesItem(index, 'start_time', e.target.value); },
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', null, getString(strings, 'recurringEndTime', 'Fin')),
+                            h('input', {
+                                type: 'time',
+                                value: formatTimeValue(item.end_time || ''),
+                                onChange: function (e) { onUpdateSeriesItem(index, 'end_time', e.target.value); },
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--actions' }, [
+                            h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                onClick: function () { onRemoveSeriesItem(index); },
+                            }, getString(strings, 'remove', 'Supprimer')),
+                        ]),
                     ]);
-                })),
+                }),
+                h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--ghost',
+                    onClick: onAddSeriesItem,
+                }, getString(strings, 'seriesAdd', 'Ajouter une date')),
+            ]);
+        };
+
+        var renderSeriesMode = function () {
+            if (scheduleMode !== 'series') {
+                return null;
+            }
+            return h('div', { class: 'mj-regmgr-series' }, [
+                h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'seriesDescription', 'Ajoutez chaque date de facon individuelle. Utilisez ce mode pour un planning non recurrent.')),
+                renderSeriesItems(),
+            ]);
+        };
+
+        return h('div', { class: 'mj-regmgr-event-editor__section' }, [
+            h('div', { class: 'mj-regmgr-event-editor__section-header' }, [
+                h('h2', null, getString(strings, 'scheduleSection', 'Planification')),
+                h('p', { class: 'mj-regmgr-event-editor__section-hint' }, getString(strings, 'scheduleSectionHint', "Definissez les dates et la frequence de l evenement.")),
             ]),
+            h('div', { class: 'mj-regmgr-form-grid' }, [
+                h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
+                    h('label', null, getString(strings, 'scheduleMode', 'Mode de planification')),
+                    h('select', {
+                        value: scheduleMode,
+                        onChange: handleModeChange,
+                    }, [
+                        h('option', { value: 'fixed' }, getString(strings, 'scheduleModeFixed', 'Date fixe (debut et fin le meme jour)')),
+                        h('option', { value: 'range' }, getString(strings, 'scheduleModeRange', 'Plage de dates (plusieurs jours consecutifs)')),
+                        h('option', { value: 'recurring' }, getString(strings, 'scheduleModeRecurring', 'Recurrence (hebdomadaire ou mensuelle)')),
+                        h('option', { value: 'series' }, getString(strings, 'scheduleModeSeries', 'Serie de dates personnalisees')),
+                    ]),
+                    h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'scheduleModeHint', 'Choisissez la facon de planifier l evenement; les sections ci dessous s adaptent au mode selectionne.')),
+                ]),
+            ]),
+            renderFixedMode(),
+            renderRangeMode(),
+            renderRecurringMode(),
+            renderSeriesMode(),
         ]);
     }
 

@@ -48,6 +48,83 @@
     color: rgba(71, 85, 105, 0.9);
 }
 
+.mj-contact-messages__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.mj-contact-messages__filters {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.mj-contact-messages__filter-button {
+    appearance: none;
+    border: 1px solid rgba(148, 163, 184, 0.55);
+    background: rgba(248, 250, 255, 0.72);
+    color: rgba(51, 65, 85, 0.95);
+    border-radius: 999px;
+    padding: 0.38rem 0.95rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.mj-contact-messages__filter-button:hover,
+.mj-contact-messages__filter-button:focus-visible {
+    border-color: rgba(79, 70, 229, 0.5);
+    color: rgba(79, 70, 229, 0.95);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.18);
+    outline: none;
+}
+
+.mj-contact-messages__filter-button.is-active {
+    background: var(--mj-contact-messages-badge-bg);
+    border-color: var(--mj-contact-messages-badge-bg);
+    color: var(--mj-contact-messages-badge-color);
+    box-shadow: 0 10px 24px rgba(79, 70, 229, 0.25);
+}
+
+.mj-contact-messages__filter-button.is-active:focus-visible {
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.28);
+}
+
+.mj-contact-messages__search {
+    position: relative;
+    flex: 1 1 220px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.mj-contact-messages__search-input {
+    width: 100%;
+    max-width: 280px;
+    padding: 0.45rem 0.9rem;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.65);
+    background: rgba(255, 255, 255, 0.9);
+    font-size: 0.9rem;
+    color: rgba(30, 41, 59, 0.94);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.mj-contact-messages__search-input::placeholder {
+    color: rgba(100, 116, 139, 0.7);
+}
+
+.mj-contact-messages__search-input:focus {
+    outline: none;
+    border-color: rgba(79, 70, 229, 0.6);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.16);
+}
+
 .mj-contact-messages__notice,
 .mj-contact-messages__empty {
     border: 1px dashed rgba(148, 163, 184, 0.4);
@@ -57,6 +134,16 @@
     line-height: 1.45;
     color: rgba(71, 85, 105, 0.9);
     background: rgba(248, 250, 255, 0.6);
+}
+
+.mj-contact-messages__filter-empty {
+    margin-top: 0.6rem;
+    padding: 0.85rem 1rem;
+    border-radius: 14px;
+    border: 1px dashed rgba(148, 163, 184, 0.45);
+    background: rgba(248, 250, 255, 0.72);
+    font-size: 0.9rem;
+    color: rgba(51, 65, 85, 0.85);
 }
 
 .mj-contact-messages__list {
@@ -99,6 +186,16 @@
     border-radius: 50%;
     background: var(--mj-contact-messages-badge-bg);
     box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.15);
+}
+
+.mj-contact-messages__item.is-archived {
+    border-style: dashed;
+    background: linear-gradient(180deg, rgba(248, 250, 255, 0.96) 0%, rgba(241, 245, 249, 0.9) 100%);
+    opacity: 0.92;
+}
+
+.mj-contact-messages__item.is-hidden {
+    display: none;
 }
 
 .mj-contact-messages__panel {
@@ -639,6 +736,10 @@
     display: inline-flex;
 }
 
+.mj-contact-messages__archive-form {
+    display: inline-flex;
+}
+
 .mj-contact-messages__action-btn {
     display: inline-flex;
     align-items: center;
@@ -672,6 +773,41 @@
 .mj-contact-messages__action-btn--reply:hover,
 .mj-contact-messages__action-btn--reply:focus-visible {
     background: linear-gradient(135deg, #4338ca, #6d28d9);
+}
+
+.mj-contact-messages__action-btn--archive {
+    background: linear-gradient(135deg, #f97316, #fb923c);
+    border-color: transparent;
+    color: #ffffff;
+}
+
+.mj-contact-messages__action-btn--archive:hover,
+.mj-contact-messages__action-btn--archive:focus-visible {
+    background: linear-gradient(135deg, #ea580c, #f97316);
+    color: #ffffff;
+}
+
+.mj-contact-messages__action-btn--delete {
+    background: linear-gradient(135deg, #dc2626, #ef4444);
+    border-color: transparent;
+    color: #ffffff;
+}
+
+.mj-contact-messages__action-btn--delete:hover,
+.mj-contact-messages__action-btn--delete:focus-visible {
+    background: linear-gradient(135deg, #b91c1c, #dc2626);
+    color: #ffffff;
+}
+
+.mj-contact-messages__archive-label {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.38rem 0.85rem;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.3);
+    color: rgba(30, 41, 59, 0.82);
+    font-size: 0.78rem;
+    font-weight: 600;
 }
 
 .mj-contact-messages__reply-form {

@@ -108,7 +108,7 @@ function mj_member_get_event_registrations_table_name() {
     return $cached;
 }
 
-function mj_member_get_event_occurrences_table_name() {
+function mj_member_get_event_date_occurrences_table_name() {
     static $cached = null;
     if ($cached !== null) {
         return $cached;
@@ -116,6 +116,8 @@ function mj_member_get_event_occurrences_table_name() {
 
     global $wpdb;
     $candidates = array(
+        $wpdb->prefix . 'mj_event_date_occurrences',
+        $wpdb->prefix . 'event_date_occurrences',
         $wpdb->prefix . 'mj_event_occurrences',
         $wpdb->prefix . 'event_occurrences',
     );
@@ -129,6 +131,10 @@ function mj_member_get_event_occurrences_table_name() {
 
     $cached = $candidates[0];
     return $cached;
+}
+
+function mj_member_get_event_occurrences_table_name() {
+    return mj_member_get_event_date_occurrences_table_name();
 }
 
 function mj_member_get_event_locations_table_name() {
@@ -153,6 +159,66 @@ function mj_member_get_event_locations_table_name() {
 
     $cached = $candidates[0];
     return $cached;
+}
+
+function mj_member_ensure_event_schedule_columns_fallback() {
+    global $wpdb;
+
+    if (!isset($wpdb) || !is_object($wpdb)) {
+        return;
+    }
+
+    $candidates = array(
+        $wpdb->prefix . 'mj_events',
+        $wpdb->prefix . 'events',
+    );
+
+    foreach ($candidates as $events_table) {
+        if ($events_table === '') {
+            continue;
+        }
+
+        $table_pattern = $wpdb->esc_like($events_table);
+        $table_like = $wpdb->prepare('SHOW TABLES LIKE %s', $table_pattern);
+        $table_name = $wpdb->get_var($table_like);
+        if ($table_name !== $events_table) {
+            continue;
+        }
+
+        $table_sql = '`' . esc_sql($events_table) . '`';
+
+        $schedule_mode_exists = $wpdb->get_var("SHOW COLUMNS FROM {$table_sql} LIKE 'schedule_mode'");
+        if (empty($schedule_mode_exists)) {
+            $guardian_column_exists = $wpdb->get_var("SHOW COLUMNS FROM {$table_sql} LIKE 'allow_guardian_registration'");
+            if (!empty($guardian_column_exists)) {
+                $wpdb->query("ALTER TABLE {$table_sql} ADD COLUMN schedule_mode varchar(20) NOT NULL DEFAULT 'fixed' AFTER allow_guardian_registration");
+            } else {
+                $wpdb->query("ALTER TABLE {$table_sql} ADD COLUMN schedule_mode varchar(20) NOT NULL DEFAULT 'fixed'");
+            }
+        }
+
+        $schedule_payload_exists = $wpdb->get_var("SHOW COLUMNS FROM {$table_sql} LIKE 'schedule_payload'");
+        if (empty($schedule_payload_exists)) {
+            $schedule_mode_exists = $wpdb->get_var("SHOW COLUMNS FROM {$table_sql} LIKE 'schedule_mode'");
+            if (!empty($schedule_mode_exists)) {
+                $wpdb->query("ALTER TABLE {$table_sql} ADD COLUMN schedule_payload longtext DEFAULT NULL AFTER schedule_mode");
+            } else {
+                $wpdb->query("ALTER TABLE {$table_sql} ADD COLUMN schedule_payload longtext DEFAULT NULL");
+            }
+        }
+
+        $index_exists = $wpdb->get_var("SHOW INDEX FROM {$table_sql} WHERE Key_name = 'idx_schedule_mode'");
+        if (empty($index_exists)) {
+            $wpdb->query("ALTER TABLE {$table_sql} ADD KEY idx_schedule_mode (schedule_mode)");
+        }
+
+        $wpdb->query("UPDATE {$table_sql} SET schedule_mode = 'fixed' WHERE schedule_mode IS NULL OR schedule_mode = ''");
+    }
+}
+add_action('plugins_loaded', 'mj_member_ensure_event_schedule_columns_fallback', 1);
+add_action('init', 'mj_member_ensure_event_schedule_columns_fallback', 4);
+if (!did_action('plugins_loaded')) {
+    mj_member_ensure_event_schedule_columns_fallback();
 }
 
 function mj_member_get_event_animateurs_table_name() {
@@ -771,6 +837,8 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_6($wpdb);
     mj_member_upgrade_to_2_38($wpdb);
     mj_member_upgrade_to_2_39($wpdb);
+    mj_member_upgrade_to_2_40($wpdb);
+    mj_member_upgrade_to_2_41($wpdb);
     mj_member_upgrade_to_2_7($wpdb);
     mj_member_upgrade_to_2_8($wpdb);
     mj_member_upgrade_to_2_9($wpdb);
@@ -1974,13 +2042,14 @@ function mj_member_upgrade_to_2_30($wpdb) {
         event_id bigint(20) unsigned NOT NULL,
         start_at datetime NOT NULL,
         end_at datetime NOT NULL,
-        source varchar(20) NOT NULL DEFAULT 'generated',
+        status varchar(20) NOT NULL DEFAULT 'active',
+        source varchar(40) NOT NULL DEFAULT 'manual',
         meta longtext DEFAULT NULL,
         created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
         KEY idx_event_start (event_id, start_at),
-        KEY idx_event_source (event_id, source)
+        KEY idx_event_status (event_id, status)
     ) {$charset_collate};";
 
     dbDelta($sql);
@@ -2187,6 +2256,149 @@ function mj_member_upgrade_to_2_39($wpdb) {
     }
 
     mj_member_convert_table_to_utf8mb4($todos_table);
+}
+
+function mj_member_upgrade_to_2_40($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $target_table = $wpdb->prefix . 'mj_event_date_occurrences';
+    $legacy_tables = array(
+        $wpdb->prefix . 'mj_event_occurrences',
+        $wpdb->prefix . 'event_occurrences',
+        $wpdb->prefix . 'event_date_occurrences',
+    );
+
+    // Rename legacy tables to the new canonical name when possible.
+    if (!mj_member_table_exists($target_table)) {
+        foreach ($legacy_tables as $legacy_table) {
+            if ($legacy_table === $target_table) {
+                continue;
+            }
+
+            if (mj_member_table_exists($legacy_table)) {
+                $wpdb->query(sprintf('ALTER TABLE `%s` RENAME TO `%s`', esc_sql($legacy_table), esc_sql($target_table)));
+                break;
+            }
+        }
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    if (!mj_member_table_exists($target_table)) {
+        $sql = "CREATE TABLE {$target_table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            event_id bigint(20) unsigned NOT NULL,
+            start_at datetime NOT NULL,
+            end_at datetime NOT NULL,
+            status varchar(20) NOT NULL DEFAULT 'active',
+            source varchar(40) NOT NULL DEFAULT 'manual',
+            meta longtext DEFAULT NULL,
+            created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_event_start (event_id, start_at),
+            KEY idx_event_status (event_id, status)
+        ) {$charset_collate};";
+
+        dbDelta($sql);
+    }
+
+    if (mj_member_table_exists($target_table)) {
+        if (!mj_member_column_exists($target_table, 'status')) {
+            $wpdb->query("ALTER TABLE {$target_table} ADD COLUMN status varchar(20) NOT NULL DEFAULT 'active' AFTER end_at");
+        }
+
+        if (!mj_member_column_exists($target_table, 'source')) {
+            $wpdb->query("ALTER TABLE {$target_table} ADD COLUMN source varchar(40) NOT NULL DEFAULT 'manual' AFTER status");
+        }
+
+        if (!mj_member_column_exists($target_table, 'created_at')) {
+            $wpdb->query("ALTER TABLE {$target_table} ADD COLUMN created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER meta");
+        }
+
+        if (!mj_member_column_exists($target_table, 'updated_at')) {
+            $wpdb->query("ALTER TABLE {$target_table} ADD COLUMN updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at");
+        }
+
+        // Ensure status has only canonical values.
+        $wpdb->query($wpdb->prepare(
+            "UPDATE {$target_table} SET status = %s WHERE status IS NULL OR status = ''",
+            'active'
+        ));
+
+        if (!mj_member_index_exists($target_table, 'idx_event_status')) {
+            $wpdb->query("ALTER TABLE {$target_table} ADD KEY idx_event_status (event_id, status)");
+        }
+
+        if (mj_member_index_exists($target_table, 'idx_event_source')) {
+            $wpdb->query("ALTER TABLE {$target_table} DROP INDEX idx_event_source");
+        }
+    }
+
+    // Ensure event scheduling columns remain available for the calendar flows.
+    $events_table = mj_member_get_events_table_name();
+    if ($events_table && mj_member_table_exists($events_table)) {
+        if (!mj_member_column_exists($events_table, 'schedule_mode')) {
+            $wpdb->query("ALTER TABLE {$events_table} ADD COLUMN schedule_mode varchar(20) NOT NULL DEFAULT 'fixed' AFTER allow_guardian_registration");
+        }
+
+        if (!mj_member_column_exists($events_table, 'schedule_payload')) {
+            $wpdb->query("ALTER TABLE {$events_table} ADD COLUMN schedule_payload longtext DEFAULT NULL AFTER schedule_mode");
+        }
+
+        if (!mj_member_index_exists($events_table, 'idx_schedule_mode')) {
+            $wpdb->query("ALTER TABLE {$events_table} ADD KEY idx_schedule_mode (schedule_mode)");
+        }
+    }
+}
+
+function mj_member_upgrade_to_2_41($wpdb) {
+    $members_table = $wpdb->prefix . 'mj_members';
+
+    if (!mj_member_table_exists($members_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($members_table, 'school')) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN school varchar(150) DEFAULT NULL AFTER postal_code");
+    }
+
+    if (!mj_member_column_exists($members_table, 'birth_country')) {
+        $after_column = mj_member_column_exists($members_table, 'school') ? 'school' : 'postal_code';
+        $after_sql = esc_sql($after_column);
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN birth_country varchar(120) DEFAULT NULL AFTER {$after_sql}");
+    }
+
+    if (!mj_member_column_exists($members_table, 'nationality')) {
+        $after_column = 'postal_code';
+        if (mj_member_column_exists($members_table, 'birth_country')) {
+            $after_column = 'birth_country';
+        } elseif (mj_member_column_exists($members_table, 'school')) {
+            $after_column = 'school';
+        }
+        $after_sql = esc_sql($after_column);
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN nationality varchar(120) DEFAULT NULL AFTER {$after_sql}");
+    }
+
+    if (!mj_member_column_exists($members_table, 'why_mj')) {
+        $after_column = mj_member_column_exists($members_table, 'description_longue') ? 'description_longue' : 'description_courte';
+        $after_sql = esc_sql($after_column);
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN why_mj text DEFAULT NULL AFTER {$after_sql}");
+    }
+
+    if (!mj_member_column_exists($members_table, 'how_mj')) {
+        if (mj_member_column_exists($members_table, 'why_mj')) {
+            $after_column = 'why_mj';
+        } elseif (mj_member_column_exists($members_table, 'description_longue')) {
+            $after_column = 'description_longue';
+        } else {
+            $after_column = 'description_courte';
+        }
+        $after_sql = esc_sql($after_column);
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN how_mj text DEFAULT NULL AFTER {$after_sql}");
+    }
 }
 
 function mj_member_upgrade_to_2_5($wpdb) {
@@ -2630,9 +2842,14 @@ function mj_install()
         address varchar(250) DEFAULT NULL,
         city varchar(120) DEFAULT NULL,
         postal_code varchar(20) DEFAULT NULL,
+        school varchar(150) DEFAULT NULL,
+        birth_country varchar(120) DEFAULT NULL,
+        nationality varchar(120) DEFAULT NULL,
         notes text DEFAULT NULL,
         description_courte varchar(255) DEFAULT NULL,
         description_longue longtext DEFAULT NULL,
+        why_mj text DEFAULT NULL,
+        how_mj text DEFAULT NULL,
         wp_user_id bigint(20) UNSIGNED DEFAULT NULL,
         date_inscription datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
         date_last_payement datetime DEFAULT NULL,

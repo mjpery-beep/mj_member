@@ -42,6 +42,7 @@ function mj_member_import_members_page() {
         'preview' => array(),
         'token' => '',
         'mapping' => array(),
+        'defaults' => array(),
         'duplicate_mode' => 'skip',
         'report' => null,
         'original_name' => '',
@@ -141,7 +142,8 @@ function mj_member_import_members_page() {
                 $token = isset($_POST['import_token']) ? sanitize_text_field(wp_unslash($_POST['import_token'])) : '';
                 $duplicate_mode = isset($_POST['duplicate_mode']) ? sanitize_key(wp_unslash($_POST['duplicate_mode'])) : 'skip';
                 $mapping_input = isset($_POST['mapping']) && is_array($_POST['mapping']) ? $_POST['mapping'] : array();
-                $process = mj_member_import_process($token, $duplicate_mode, $mapping_input, $available_fields);
+                $defaults_input = isset($_POST['defaults']) && is_array($_POST['defaults']) ? $_POST['defaults'] : array();
+                $process = mj_member_import_process($token, $duplicate_mode, $mapping_input, $available_fields, $defaults_input);
 
                 if (is_wp_error($process)) {
                     Logger::error('CSV import failed', array(
@@ -158,6 +160,7 @@ function mj_member_import_members_page() {
                         $state['preview'] = isset($recovery['preview']) ? $recovery['preview'] : array();
                         $state['token'] = isset($recovery['token']) ? $recovery['token'] : '';
                         $state['mapping'] = isset($recovery['mapping']) ? $recovery['mapping'] : array();
+                        $state['defaults'] = isset($recovery['defaults']) ? $recovery['defaults'] : array();
                         $state['duplicate_mode'] = isset($recovery['duplicate_mode']) ? $recovery['duplicate_mode'] : 'skip';
                         $state['original_name'] = isset($recovery['original_name']) ? $recovery['original_name'] : '';
                         $view_stage = 'mapping';
@@ -268,6 +271,7 @@ function mj_member_import_render_mapping_form($state, $available_fields, $target
     $mapping = $state['mapping'];
     $duplicate_mode = $state['duplicate_mode'];
     $original_name = $state['original_name'];
+    $defaults = isset($state['defaults']) && is_array($state['defaults']) ? $state['defaults'] : array();
     ?>
     <h2><?php esc_html_e('Etape 2 - Associer les colonnes', 'mj-member'); ?></h2>
     <?php if ($original_name) : ?>
@@ -306,6 +310,53 @@ function mj_member_import_render_mapping_form($state, $available_fields, $target
                     </td>
                 </tr>
             <?php endforeach; ?>
+            </tbody>
+        </table>
+
+        <h3><?php esc_html_e('Valeurs par défaut', 'mj-member'); ?></h3>
+        <p><?php esc_html_e('Ces valeurs sont appliquées quand aucune colonne n’est associée ou quand la donnée CSV est vide.', 'mj-member'); ?></p>
+        <table class="widefat striped">
+            <thead>
+            <tr>
+                <th><?php esc_html_e('Champ', 'mj-member'); ?></th>
+                <th><?php esc_html_e('Valeur par défaut', 'mj-member'); ?></th>
+            </tr>
+            </thead>
+            <tbody>
+            <?php
+            $booleanDefaultFields = array(
+                'is_volunteer' => __('Bénévole (oui/non)', 'mj-member'),
+                'requires_payment' => __('Cotisation requise (oui/non)', 'mj-member'),
+                'newsletter_opt_in' => __('Newsletter (oui/non)', 'mj-member'),
+                'sms_opt_in' => __('SMS (oui/non)', 'mj-member'),
+            );
+            foreach ($booleanDefaultFields as $fieldKey => $label) :
+                $selectedDefault = isset($defaults[$fieldKey]) ? $defaults[$fieldKey] : '';
+                ?>
+                <tr>
+                    <td><?php echo esc_html($label); ?></td>
+                    <td>
+                        <select name="defaults[<?php echo esc_attr($fieldKey); ?>]">
+                            <option value="" <?php selected($selectedDefault, ''); ?>><?php esc_html_e('Aucune valeur par défaut', 'mj-member'); ?></option>
+                            <option value="1" <?php selected($selectedDefault, '1'); ?>><?php esc_html_e('Oui', 'mj-member'); ?></option>
+                            <option value="0" <?php selected($selectedDefault, '0'); ?>><?php esc_html_e('Non', 'mj-member'); ?></option>
+                        </select>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            <?php
+            $statusDefault = isset($defaults['status']) ? $defaults['status'] : '';
+            ?>
+            <tr>
+                <td><?php esc_html_e('Statut (active/inactive)', 'mj-member'); ?></td>
+                <td>
+                    <select name="defaults[status]">
+                        <option value="" <?php selected($statusDefault, ''); ?>><?php esc_html_e('Aucune valeur par défaut', 'mj-member'); ?></option>
+                        <option value="<?php echo esc_attr(MjMembers::STATUS_ACTIVE); ?>" <?php selected($statusDefault, MjMembers::STATUS_ACTIVE); ?>><?php esc_html_e('Active', 'mj-member'); ?></option>
+                        <option value="<?php echo esc_attr(MjMembers::STATUS_INACTIVE); ?>" <?php selected($statusDefault, MjMembers::STATUS_INACTIVE); ?>><?php esc_html_e('Inactive', 'mj-member'); ?></option>
+                    </select>
+                </td>
+            </tr>
             </tbody>
         </table>
 
@@ -1119,7 +1170,7 @@ function mj_member_import_handle_upload() {
     );
 }
 
-function mj_member_import_process($token, $duplicate_mode, $mapping_input, $available_fields) {
+function mj_member_import_process($token, $duplicate_mode, $mapping_input, $available_fields, $defaults_input = array()) {
     if ($token === '') {
         return new WP_Error('mj-import-missing-token', __('Token d\'import manquant, veuillez recommencer.', 'mj-member'));
     }
@@ -1166,10 +1217,39 @@ function mj_member_import_process($token, $duplicate_mode, $mapping_input, $avai
             'preview' => $preview,
             'token' => $token,
             'mapping' => $mapping_input,
+            'defaults' => $defaults_input,
             'duplicate_mode' => $duplicate_mode,
             'original_name' => $original_name,
         ));
         return $error;
+    }
+
+    $defaults = array(
+        'is_volunteer' => null,
+        'requires_payment' => null,
+        'newsletter_opt_in' => null,
+        'sms_opt_in' => null,
+        'status' => '',
+    );
+
+    $booleanDefaultKeys = array('is_volunteer', 'requires_payment', 'newsletter_opt_in', 'sms_opt_in');
+    foreach ($booleanDefaultKeys as $defaultKey) {
+        if (!array_key_exists($defaultKey, $defaults_input)) {
+            continue;
+        }
+        $value = $defaults_input[$defaultKey];
+        if ($value === '1' || $value === 1 || $value === true) {
+            $defaults[$defaultKey] = 1;
+        } elseif ($value === '0' || $value === 0 || $value === false) {
+            $defaults[$defaultKey] = 0;
+        }
+    }
+
+    if (isset($defaults_input['status'])) {
+        $status_default = sanitize_key($defaults_input['status']);
+        if (in_array($status_default, array(MjMembers::STATUS_ACTIVE, MjMembers::STATUS_INACTIVE), true)) {
+            $defaults['status'] = $status_default;
+        }
     }
 
     if ($duplicate_mode !== 'update') {
@@ -1207,6 +1287,26 @@ function mj_member_import_process($token, $duplicate_mode, $mapping_input, $avai
 
         $payload = array();
         $row_warnings = array();
+        $guardian_id = null;
+        $guardian_email_value = '';
+        $guardian_first_name = '';
+        $guardian_last_name = '';
+
+        if ($defaults['requires_payment'] !== null) {
+            $payload['requires_payment'] = (int) $defaults['requires_payment'];
+        }
+        if ($defaults['is_volunteer'] !== null) {
+            $payload['is_volunteer'] = (int) $defaults['is_volunteer'];
+        }
+        if ($defaults['newsletter_opt_in'] !== null) {
+            $payload['newsletter_opt_in'] = (int) $defaults['newsletter_opt_in'];
+        }
+        if ($defaults['sms_opt_in'] !== null) {
+            $payload['sms_opt_in'] = (int) $defaults['sms_opt_in'];
+        }
+        if ($defaults['status'] !== '') {
+            $payload['status'] = $defaults['status'];
+        }
 
         $first_name = mj_member_import_get_mapped_value($row, $mapping['first_name']);
         $last_name = mj_member_import_get_mapped_value($row, $mapping['last_name']);
@@ -1311,11 +1411,86 @@ function mj_member_import_process($token, $duplicate_mode, $mapping_input, $avai
             }
         }
 
+        if (isset($mapping['school'])) {
+            $school_value = mj_member_import_get_mapped_value($row, $mapping['school']);
+            if ($school_value !== '') {
+                $payload['school'] = $school_value;
+            }
+        }
+
+        if (isset($mapping['birth_country'])) {
+            $birth_country_value = mj_member_import_get_mapped_value($row, $mapping['birth_country']);
+            if ($birth_country_value !== '') {
+                $payload['birth_country'] = $birth_country_value;
+            }
+        }
+
+        if (isset($mapping['nationality'])) {
+            $nationality_value = mj_member_import_get_mapped_value($row, $mapping['nationality']);
+            if ($nationality_value !== '') {
+                $payload['nationality'] = $nationality_value;
+            }
+        }
+
         if (isset($mapping['notes'])) {
             $notes = mj_member_import_get_mapped_value($row, $mapping['notes']);
             if ($notes !== '') {
                 $payload['notes'] = $notes;
             }
+        }
+
+        if (isset($mapping['guardian_email'])) {
+            $guardian_raw = mj_member_import_get_mapped_value($row, $mapping['guardian_email']);
+            if ($guardian_raw !== '') {
+                $guardian_email = sanitize_email($guardian_raw);
+                if ($guardian_email && is_email($guardian_email)) {
+                    $guardian_email_value = $guardian_email;
+                    $guardian = MjMembers::getByEmail($guardian_email);
+                    if ($guardian && MjRoles::isTuteur($guardian->role)) {
+                        $guardian_id = (int) $guardian->id;
+                        $payload['guardian_id'] = $guardian_id;
+                    }
+                } else {
+                    $row_warnings[] = __('Email tuteur invalide ignoré.', 'mj-member');
+                }
+            }
+        }
+
+        if (isset($mapping['guardian_first_name'])) {
+            $guardian_first_name_raw = mj_member_import_get_mapped_value($row, $mapping['guardian_first_name']);
+            if ($guardian_first_name_raw !== '') {
+                $guardian_first_name = $guardian_first_name_raw;
+            }
+        }
+
+        if (isset($mapping['guardian_last_name'])) {
+            $guardian_last_name_raw = mj_member_import_get_mapped_value($row, $mapping['guardian_last_name']);
+            if ($guardian_last_name_raw !== '') {
+                $guardian_last_name = $guardian_last_name_raw;
+            }
+        }
+
+        if (!$guardian_id && $guardian_first_name !== '' && $guardian_last_name !== '') {
+            $guardian_payload = array(
+                'first_name' => $guardian_first_name,
+                'last_name' => $guardian_last_name,
+                'status' => MjMembers::STATUS_ACTIVE,
+            );
+            if ($guardian_email_value !== '') {
+                $guardian_payload['email'] = $guardian_email_value;
+            }
+
+            $guardian_result = MjMembers::upsertGuardian($guardian_payload);
+            if (is_wp_error($guardian_result)) {
+                $row_warnings[] = sprintf(__('Création du tuteur impossible : %s', 'mj-member'), $guardian_result->get_error_message());
+            } elseif ($guardian_result) {
+                $guardian_id = (int) $guardian_result;
+                $payload['guardian_id'] = $guardian_id;
+            } else {
+                $row_warnings[] = __('Création du tuteur impossible, importé comme autonome.', 'mj-member');
+            }
+        } elseif (!$guardian_id && ($guardian_email_value !== '' || $guardian_first_name !== '' || $guardian_last_name !== '')) {
+            $row_warnings[] = __('Création du tuteur impossible, importé comme autonome.', 'mj-member');
         }
 
         if (isset($mapping['description_courte'])) {
@@ -1329,6 +1504,20 @@ function mj_member_import_process($token, $duplicate_mode, $mapping_input, $avai
             $desc_long = mj_member_import_get_mapped_value($row, $mapping['description_longue']);
             if ($desc_long !== '') {
                 $payload['description_longue'] = $desc_long;
+            }
+        }
+
+        if (isset($mapping['why_mj'])) {
+            $why_value = mj_member_import_get_mapped_value($row, $mapping['why_mj']);
+            if ($why_value !== '') {
+                $payload['why_mj'] = $why_value;
+            }
+        }
+
+        if (isset($mapping['how_mj'])) {
+            $how_value = mj_member_import_get_mapped_value($row, $mapping['how_mj']);
+            if ($how_value !== '') {
+                $payload['how_mj'] = $how_value;
             }
         }
 
@@ -1368,21 +1557,19 @@ function mj_member_import_process($token, $duplicate_mode, $mapping_input, $avai
             }
         }
 
-        $guardian_id = null;
-        if (isset($mapping['guardian_email'])) {
-            $guardian_raw = mj_member_import_get_mapped_value($row, $mapping['guardian_email']);
-            if ($guardian_raw !== '') {
-                $guardian_email = sanitize_email($guardian_raw);
-                if ($guardian_email && is_email($guardian_email)) {
-                    $guardian = MjMembers::getByEmail($guardian_email);
-                    if ($guardian && MjRoles::isTuteur($guardian->role)) {
-                        $guardian_id = (int) $guardian->id;
-                        $payload['guardian_id'] = $guardian_id;
-                    } else {
-                        $row_warnings[] = __('Tuteur introuvable, importé comme autonome.', 'mj-member');
-                    }
+        if (isset($mapping['date_inscription'])) {
+            $inscription_raw = mj_member_import_get_mapped_value($row, $mapping['date_inscription']);
+            if ($inscription_raw !== '') {
+                $inscription_date = mj_member_import_parse_datetime($inscription_raw);
+                if ($inscription_date !== null) {
+                    $payload['date_inscription'] = $inscription_date;
                 } else {
-                    $row_warnings[] = __('Email tuteur invalide ignoré.', 'mj-member');
+                    $parsed_date_only = mj_member_import_parse_date($inscription_raw);
+                    if ($parsed_date_only !== null) {
+                        $payload['date_inscription'] = $parsed_date_only . ' 00:00:00';
+                    } else {
+                        $row_warnings[] = __('Date d\'inscription invalide ignorée.', 'mj-member');
+                    }
                 }
             }
         }
@@ -1472,7 +1659,15 @@ function mj_member_import_get_available_fields() {
         'newsletter_opt_in' => __('Newsletter (oui/non)', 'mj-member'),
         'sms_opt_in' => __('SMS (oui/non)', 'mj-member'),
         'date_last_payement' => __('Date du dernier paiement', 'mj-member'),
-        'guardian_email' => __('Email du tuteur (pour les jeunes)', 'mj-member'),
+        'guardian_email' => __('Email du tuteur (optionnel)', 'mj-member'),
+        'guardian_first_name' => __('Prénom du tuteur (création)', 'mj-member'),
+        'guardian_last_name' => __('Nom du tuteur (création)', 'mj-member'),
+        'school' => __('École', 'mj-member'),
+        'birth_country' => __('Pays de naissance', 'mj-member'),
+        'nationality' => __('Nationalité', 'mj-member'),
+        'date_inscription' => __('Date d\'inscription', 'mj-member'),
+        'why_mj' => __('Pourquoi es-tu à la MJ ?', 'mj-member'),
+        'how_mj' => __('Comment es-tu arrivé à la MJ ?', 'mj-member'),
     );
 }
 

@@ -49,6 +49,7 @@ add_action('wp_ajax_mj_regmgr_save_member_note', 'mj_regmgr_save_member_note');
 add_action('wp_ajax_mj_regmgr_delete_member_note', 'mj_regmgr_delete_member_note');
 add_action('wp_ajax_mj_regmgr_get_payment_qr', 'mj_regmgr_get_payment_qr');
 add_action('wp_ajax_mj_regmgr_update_occurrences', 'mj_regmgr_update_occurrences');
+add_action('wp_ajax_mj_regmgr_save_event_occurrences', 'mj_regmgr_save_event_occurrences');
 add_action('wp_ajax_mj_regmgr_get_location', 'mj_regmgr_get_location');
 add_action('wp_ajax_mj_regmgr_save_location', 'mj_regmgr_save_location');
 
@@ -64,6 +65,7 @@ add_action('wp_ajax_mj_regmgr_update_member_photo', 'mj_regmgr_update_member_pho
 add_action('wp_ajax_mj_regmgr_delete_member_photo', 'mj_regmgr_delete_member_photo');
 add_action('wp_ajax_mj_regmgr_delete_member_message', 'mj_regmgr_delete_member_message');
 add_action('wp_ajax_mj_regmgr_reset_member_password', 'mj_regmgr_reset_member_password');
+add_action('wp_ajax_mj_regmgr_delete_member', 'mj_regmgr_delete_member');
 
 /**
  * Verify nonce and check user permissions
@@ -329,6 +331,696 @@ function mj_regmgr_format_time_compact($datetime_value) {
     return wp_date('H:i', $timestamp);
 }
 
+function mj_regmgr_occurrence_status_from_front($status) {
+    $candidate = sanitize_key((string) $status);
+    switch ($candidate) {
+        case 'confirmed':
+            return MjEventOccurrences::STATUS_ACTIVE;
+        case 'cancelled':
+            return MjEventOccurrences::STATUS_ANNULE;
+        case 'postponed':
+            return MjEventOccurrences::STATUS_REPORTE;
+        case 'planned':
+        case 'pending':
+        default:
+            return MjEventOccurrences::STATUS_A_CONFIRMER;
+    }
+}
+
+function mj_regmgr_occurrence_status_to_front($status) {
+    $candidate = sanitize_key((string) $status);
+    switch ($candidate) {
+        case MjEventOccurrences::STATUS_ACTIVE:
+            return 'confirmed';
+        case MjEventOccurrences::STATUS_ANNULE:
+            return 'cancelled';
+        case MjEventOccurrences::STATUS_REPORTE:
+            return 'planned';
+        case MjEventOccurrences::STATUS_A_CONFIRMER:
+        default:
+            return 'planned';
+    }
+}
+
+function mj_regmgr_sanitize_time_value($value) {
+    if (!is_string($value)) {
+        return '';
+    }
+
+    $trimmed = trim($value);
+    if ($trimmed === '') {
+        return '';
+    }
+    if (preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $trimmed)) {
+        return $trimmed;
+    }
+
+    if (preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/', $trimmed)) {
+        return substr($trimmed, 0, 5);
+    }
+
+    return '';
+}
+
+function mj_regmgr_sanitize_date_value($value) {
+    if (!is_string($value)) {
+        return '';
+    }
+
+    $trimmed = trim($value);
+    if ($trimmed === '') {
+        return '';
+    }
+
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $trimmed)) {
+        return '';
+    }
+
+    return $trimmed;
+}
+
+function mj_regmgr_sanitize_occurrence_generator_plan($input) {
+    if (!is_array($input)) {
+        return array();
+    }
+
+    $known_keys = array(
+        'mode',
+        'frequency',
+        'startDate',
+        'startDateISO',
+        'endDate',
+        'endDateISO',
+        'startTime',
+        'endTime',
+        'days',
+        'overrides',
+        'timeOverrides',
+        'monthlyOrdinal',
+        'monthlyWeekday',
+        'explicitStart',
+        '_explicitStart',
+        'version',
+    );
+
+    $has_any = false;
+    foreach ($known_keys as $key) {
+        if (array_key_exists($key, $input)) {
+            $has_any = true;
+            break;
+        }
+    }
+
+    if (!$has_any) {
+        return array();
+    }
+
+    $weekday_keys = array('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun');
+
+    $mode = isset($input['mode']) ? sanitize_key($input['mode']) : '';
+    if (!in_array($mode, array('weekly', 'monthly', 'custom'), true)) {
+        $mode = 'weekly';
+    }
+
+    $frequency = isset($input['frequency']) ? sanitize_key($input['frequency']) : '';
+    if (!in_array($frequency, array('every_week', 'every_two_weeks'), true)) {
+        $frequency = 'every_week';
+    }
+
+    $start_candidates = array();
+    if (isset($input['startDateISO'])) {
+        $start_candidates[] = $input['startDateISO'];
+    }
+    if (isset($input['startDate'])) {
+        $start_candidates[] = $input['startDate'];
+    }
+
+    $start_date = '';
+    foreach ($start_candidates as $candidate) {
+        $candidate = mj_regmgr_sanitize_date_value($candidate);
+        if ($candidate !== '') {
+            $start_date = $candidate;
+            break;
+        }
+    }
+
+    $end_candidates = array();
+    if (isset($input['endDateISO'])) {
+        $end_candidates[] = $input['endDateISO'];
+    }
+    if (isset($input['endDate'])) {
+        $end_candidates[] = $input['endDate'];
+    }
+
+    $end_date = '';
+    foreach ($end_candidates as $candidate) {
+        $candidate = mj_regmgr_sanitize_date_value($candidate);
+        if ($candidate !== '') {
+            $end_date = $candidate;
+            break;
+        }
+    }
+
+    $start_time = isset($input['startTime']) ? mj_regmgr_sanitize_time_value($input['startTime']) : '';
+    $end_time = isset($input['endTime']) ? mj_regmgr_sanitize_time_value($input['endTime']) : '';
+
+    $days = array();
+    $days_source = isset($input['days']) ? $input['days'] : array();
+    foreach ($weekday_keys as $weekday) {
+        $value = false;
+        if (is_array($days_source)) {
+            if (array_values($days_source) === $days_source) {
+                $normalized_source = array_map('sanitize_key', $days_source);
+                $value = in_array($weekday, $normalized_source, true);
+            } elseif (array_key_exists($weekday, $days_source)) {
+                $value = !empty($days_source[$weekday]);
+            }
+        }
+        $days[$weekday] = $value ? true : false;
+    }
+
+    $overrides = array();
+    $overrides_source = array();
+    if (isset($input['overrides']) && is_array($input['overrides'])) {
+        $overrides_source = $input['overrides'];
+    } elseif (isset($input['timeOverrides']) && is_array($input['timeOverrides'])) {
+        $overrides_source = $input['timeOverrides'];
+    }
+
+    foreach ($weekday_keys as $weekday) {
+        if (!isset($overrides_source[$weekday]) || !is_array($overrides_source[$weekday])) {
+            continue;
+        }
+
+        $entry = array();
+        if (isset($overrides_source[$weekday]['start'])) {
+            $override_start = mj_regmgr_sanitize_time_value($overrides_source[$weekday]['start']);
+            if ($override_start !== '') {
+                $entry['start'] = $override_start;
+            }
+        }
+        if (isset($overrides_source[$weekday]['end'])) {
+            $override_end = mj_regmgr_sanitize_time_value($overrides_source[$weekday]['end']);
+            if ($override_end !== '') {
+                $entry['end'] = $override_end;
+            }
+        }
+        if (!empty($entry)) {
+            $overrides[$weekday] = $entry;
+        }
+    }
+
+    $monthly_ordinal = isset($input['monthlyOrdinal']) ? sanitize_key($input['monthlyOrdinal']) : '';
+    if (!in_array($monthly_ordinal, array('first', 'second', 'third', 'fourth', 'last'), true)) {
+        $monthly_ordinal = 'first';
+    }
+
+    $monthly_weekday = isset($input['monthlyWeekday']) ? sanitize_key($input['monthlyWeekday']) : '';
+    if (!in_array($monthly_weekday, $weekday_keys, true)) {
+        $monthly_weekday = 'mon';
+    }
+
+    $explicit_start = false;
+    if (isset($input['explicitStart'])) {
+        $explicit_start = mj_regmgr_to_bool($input['explicitStart'], false);
+    } elseif (isset($input['_explicitStart'])) {
+        $explicit_start = mj_regmgr_to_bool($input['_explicitStart'], false);
+    }
+    if ($start_date !== '') {
+        $explicit_start = true;
+    }
+
+    return array(
+        'version' => 'occurrence-editor',
+        'mode' => $mode,
+        'frequency' => $frequency,
+        'startDate' => $start_date,
+        'endDate' => $end_date,
+        'startTime' => $start_time,
+        'endTime' => $end_time,
+        'days' => $days,
+        'overrides' => $overrides,
+        'monthlyOrdinal' => $monthly_ordinal,
+        'monthlyWeekday' => $monthly_weekday,
+        'explicitStart' => $explicit_start,
+    );
+}
+
+function mj_regmgr_derive_generator_plan_from_schedule($schedule_payload) {
+    if (!is_array($schedule_payload)) {
+        return array();
+    }
+
+    $mode = isset($schedule_payload['mode']) ? sanitize_key($schedule_payload['mode']) : '';
+    if ($mode !== 'recurring') {
+        return array();
+    }
+
+    $weekday_keys = array('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun');
+    $days_map = array();
+    foreach ($weekday_keys as $weekday_key) {
+        $days_map[$weekday_key] = false;
+    }
+
+    if (isset($schedule_payload['weekdays']) && is_array($schedule_payload['weekdays'])) {
+        foreach ($schedule_payload['weekdays'] as $weekday) {
+            $weekday = sanitize_key($weekday);
+            if (isset($days_map[$weekday])) {
+                $days_map[$weekday] = true;
+            }
+        }
+    }
+
+    $weekday_times = array();
+    if (isset($schedule_payload['weekday_times']) && is_array($schedule_payload['weekday_times'])) {
+        foreach ($schedule_payload['weekday_times'] as $weekday => $time_info) {
+            $weekday = sanitize_key($weekday);
+            if (!isset($days_map[$weekday])) {
+                $days_map[$weekday] = true;
+            }
+            if (is_array($time_info)) {
+                $weekday_times[$weekday] = $time_info;
+            }
+        }
+    }
+
+    $base_start_time = isset($schedule_payload['start_time']) ? mj_regmgr_sanitize_time_value($schedule_payload['start_time']) : '';
+    $base_end_time = isset($schedule_payload['end_time']) ? mj_regmgr_sanitize_time_value($schedule_payload['end_time']) : '';
+
+    $overrides = array();
+    foreach ($days_map as $weekday => $is_active) {
+        if (!$is_active) {
+            continue;
+        }
+
+        $specific = isset($weekday_times[$weekday]) && is_array($weekday_times[$weekday]) ? $weekday_times[$weekday] : array();
+        $specific_start = isset($specific['start']) ? mj_regmgr_sanitize_time_value($specific['start']) : '';
+        $specific_end = isset($specific['end']) ? mj_regmgr_sanitize_time_value($specific['end']) : '';
+
+        if ($specific_start === '' && $base_start_time !== '') {
+            $specific_start = $base_start_time;
+        }
+        if ($specific_end === '' && $base_end_time !== '') {
+            $specific_end = $base_end_time;
+        }
+
+        if ($specific_start !== '' || $specific_end !== '') {
+            $entry = array();
+            if ($specific_start !== '') {
+                $entry['start'] = $specific_start;
+            }
+            if ($specific_end !== '') {
+                $entry['end'] = $specific_end;
+            }
+            $overrides[$weekday] = $entry;
+        }
+    }
+
+    $start_date = '';
+    if (isset($schedule_payload['start_date'])) {
+        $start_date = mj_regmgr_sanitize_date_value($schedule_payload['start_date']);
+    }
+
+    $end_date = '';
+    if (isset($schedule_payload['end_date'])) {
+        $end_date = mj_regmgr_sanitize_date_value($schedule_payload['end_date']);
+    }
+    if ($end_date === '' && isset($schedule_payload['until'])) {
+        $until_candidate = (string) $schedule_payload['until'];
+        if ($until_candidate !== '') {
+            $end_date = mj_regmgr_sanitize_date_value(substr($until_candidate, 0, 10));
+        }
+    }
+
+    $frequency_source = isset($schedule_payload['frequency']) ? sanitize_key($schedule_payload['frequency']) : 'weekly';
+    $interval = isset($schedule_payload['interval']) ? max(1, (int) $schedule_payload['interval']) : 1;
+
+    $plan_mode = $frequency_source === 'monthly' ? 'monthly' : 'weekly';
+    $plan_frequency = ($interval >= 2) ? 'every_two_weeks' : 'every_week';
+
+    $plan = array(
+        'version' => 'occurrence-editor',
+        'mode' => $plan_mode,
+        'frequency' => $plan_frequency,
+        'startDate' => $start_date,
+        'endDate' => $end_date,
+        'startTime' => $base_start_time,
+        'endTime' => $base_end_time,
+        'days' => $days_map,
+        'overrides' => $overrides,
+        'explicitStart' => $start_date !== '',
+    );
+
+    if ($plan_mode === 'monthly') {
+        $ordinal = isset($schedule_payload['ordinal']) ? sanitize_key($schedule_payload['ordinal']) : '';
+        if ($ordinal !== '') {
+            $plan['monthlyOrdinal'] = $ordinal;
+        }
+        $weekday = isset($schedule_payload['weekday']) ? sanitize_key($schedule_payload['weekday']) : '';
+        if ($weekday !== '') {
+            $plan['monthlyWeekday'] = $weekday;
+            if (isset($plan['days'][$weekday])) {
+                $plan['days'][$weekday] = true;
+            }
+        }
+    }
+
+    return mj_regmgr_sanitize_occurrence_generator_plan($plan);
+}
+
+function mj_regmgr_merge_generator_plans(array $primary, array $fallback) {
+    if (empty($primary)) {
+        return $fallback;
+    }
+    if (empty($fallback)) {
+        return mj_regmgr_sanitize_occurrence_generator_plan($primary);
+    }
+
+    $merged = $primary;
+
+    if (isset($fallback['days']) && is_array($fallback['days'])) {
+        $merged_days = isset($merged['days']) && is_array($merged['days']) ? $merged['days'] : array();
+        foreach ($fallback['days'] as $weekday => $flag) {
+            if (!isset($merged_days[$weekday]) || $merged_days[$weekday] === false) {
+                $merged_days[$weekday] = !empty($flag);
+            }
+        }
+        $merged['days'] = $merged_days;
+    }
+
+    if (isset($fallback['overrides']) && is_array($fallback['overrides'])) {
+        $merged_overrides = isset($merged['overrides']) && is_array($merged['overrides']) ? $merged['overrides'] : array();
+        foreach ($fallback['overrides'] as $weekday => $override) {
+            if (!is_array($override)) {
+                continue;
+            }
+
+            if (!isset($merged_overrides[$weekday]) || !is_array($merged_overrides[$weekday]) || empty($merged_overrides[$weekday])) {
+                $merged_overrides[$weekday] = $override;
+                continue;
+            }
+
+            $current = $merged_overrides[$weekday];
+
+            if ((!isset($current['start']) || $current['start'] === '') && isset($override['start']) && $override['start'] !== '') {
+                $current['start'] = $override['start'];
+            }
+
+            if ((!isset($current['end']) || $current['end'] === '') && isset($override['end']) && $override['end'] !== '') {
+                $current['end'] = $override['end'];
+            }
+
+            $merged_overrides[$weekday] = $current;
+        }
+        $merged['overrides'] = $merged_overrides;
+    }
+
+    $simple_keys = array('mode', 'frequency', 'startDate', 'endDate', 'startTime', 'endTime', 'monthlyOrdinal', 'monthlyWeekday');
+    foreach ($simple_keys as $key) {
+        if ((!isset($merged[$key]) || $merged[$key] === '' || $merged[$key] === null) && isset($fallback[$key])) {
+            $merged[$key] = $fallback[$key];
+        }
+    }
+
+    if (empty($merged['explicitStart']) && !empty($fallback['explicitStart'])) {
+        $merged['explicitStart'] = true;
+    }
+
+    if (empty($merged['version'])) {
+        $merged['version'] = 'occurrence-editor';
+    }
+
+    return mj_regmgr_sanitize_occurrence_generator_plan($merged);
+}
+
+function mj_regmgr_extract_occurrence_generator_from_payload($payload) {
+    if (!is_array($payload)) {
+        return array();
+    }
+
+    if (isset($payload['occurrence_generator']) && is_array($payload['occurrence_generator'])) {
+        return mj_regmgr_sanitize_occurrence_generator_plan($payload['occurrence_generator']);
+    }
+
+    if (isset($payload['occurrenceGenerator']) && is_array($payload['occurrenceGenerator'])) {
+        return mj_regmgr_sanitize_occurrence_generator_plan($payload['occurrenceGenerator']);
+    }
+
+    $derived = mj_regmgr_derive_generator_plan_from_schedule($payload);
+    if (!empty($derived)) {
+        return $derived;
+    }
+
+    return array();
+}
+
+function mj_regmgr_extract_occurrence_generator_from_event($event) {
+    if (!$event || !isset($event->schedule_payload)) {
+        return array();
+    }
+
+    $payload = mj_regmgr_decode_json_field($event->schedule_payload);
+    if (!is_array($payload)) {
+        return array();
+    }
+
+    return mj_regmgr_extract_occurrence_generator_from_payload($payload);
+}
+
+function mj_regmgr_schedule_payload_has_occurrence_entities($payload) {
+    if (!is_array($payload)) {
+        return false;
+    }
+
+    $collections = array();
+    if (isset($payload['occurrences']) && is_array($payload['occurrences'])) {
+        $collections[] = $payload['occurrences'];
+    }
+    if (isset($payload['items']) && is_array($payload['items'])) {
+        $collections[] = $payload['items'];
+    }
+
+    foreach ($collections as $entries) {
+        foreach ($entries as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            foreach ($entry as $value) {
+                if ($value !== null && $value !== '') {
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+function mj_regmgr_should_allow_occurrence_fallback($event) {
+    if (!$event) {
+        return false;
+    }
+
+    $schedule_mode = '';
+    if (is_object($event) && isset($event->schedule_mode)) {
+        $schedule_mode = sanitize_key((string) $event->schedule_mode);
+    } elseif (is_array($event) && isset($event['schedule_mode'])) {
+        $schedule_mode = sanitize_key((string) $event['schedule_mode']);
+    }
+
+    if ($schedule_mode === 'series' || $schedule_mode === 'recurring') {
+        return false;
+    }
+
+    $date_debut = isset($event->date_debut) ? (string) $event->date_debut : '';
+    if ($date_debut === '') {
+        return false;
+    }
+
+    $payload = mj_regmgr_decode_json_field(isset($event->schedule_payload) ? $event->schedule_payload : array());
+    if (!is_array($payload)) {
+        return true;
+    }
+
+    $mode = isset($payload['mode']) ? sanitize_key((string) $payload['mode']) : '';
+    $version = isset($payload['version']) ? sanitize_key((string) $payload['version']) : '';
+
+    if (($version === 'occurrence-editor' || $mode === 'series') && !mj_regmgr_schedule_payload_has_occurrence_entities($payload)) {
+        return false;
+    }
+
+    return true;
+}
+
+function mj_regmgr_prepare_event_occurrence_rows($input) {
+    $normalized = array(
+        'rows' => array(),
+        'stats' => array(
+            'min_start' => null,
+            'max_end' => null,
+        ),
+    );
+
+    if (!is_array($input)) {
+        return $normalized;
+    }
+
+    $timezone = function_exists('wp_timezone') ? wp_timezone() : new \DateTimeZone('UTC');
+
+    foreach ($input as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+
+        $date = isset($item['date']) ? sanitize_text_field($item['date']) : '';
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            continue;
+        }
+
+        $start_time = isset($item['startTime']) ? sanitize_text_field($item['startTime']) : '';
+        if (!preg_match('/^\d{2}:\d{2}$/', $start_time)) {
+            $start_time = '09:00';
+        }
+
+        $end_time = isset($item['endTime']) ? sanitize_text_field($item['endTime']) : '';
+        if (!preg_match('/^\d{2}:\d{2}$/', $end_time)) {
+            $end_time = $start_time;
+        }
+
+        $start_string = $date . ' ' . $start_time . ':00';
+        $end_string = $date . ' ' . $end_time . ':00';
+
+        $start_dt = \DateTime::createFromFormat('Y-m-d H:i:s', $start_string, $timezone);
+        if (!$start_dt instanceof \DateTime) {
+            $timestamp = strtotime($start_string);
+            if ($timestamp === false) {
+                continue;
+            }
+            $start_dt = new \DateTime('@' . $timestamp);
+            $start_dt->setTimezone($timezone);
+        }
+
+        $end_dt = \DateTime::createFromFormat('Y-m-d H:i:s', $end_string, $timezone);
+        if (!$end_dt instanceof \DateTime) {
+            $timestamp_end = strtotime($end_string);
+            if ($timestamp_end === false) {
+                $end_dt = clone $start_dt;
+                $end_dt->modify('+1 hour');
+            } else {
+                $end_dt = new \DateTime('@' . $timestamp_end);
+                $end_dt->setTimezone($timezone);
+            }
+        }
+
+        if ($end_dt <= $start_dt) {
+            $end_dt = clone $start_dt;
+            $end_dt->modify('+1 hour');
+        }
+
+        $status = mj_regmgr_occurrence_status_from_front(isset($item['status']) ? $item['status'] : '');
+        $source = isset($item['source']) ? sanitize_key((string) $item['source']) : '';
+        if ($source === '') {
+            $source = MjEventOccurrences::SOURCE_MANUAL;
+        }
+
+        $meta = array();
+        if (!empty($item['reason'])) {
+            $meta['reason'] = sanitize_text_field($item['reason']);
+        }
+        if (!empty($item['id'])) {
+            $meta['client_id'] = sanitize_text_field((string) $item['id']);
+        }
+        if ($status !== '') {
+            $meta['status'] = $status;
+        }
+
+        $start_formatted = $start_dt->format('Y-m-d H:i:s');
+        $end_formatted = $end_dt->format('Y-m-d H:i:s');
+
+        $row = array(
+            'start' => $start_formatted,
+            'end' => $end_formatted,
+            'status' => $status,
+            'source' => $source,
+            'meta' => !empty($meta) ? $meta : null,
+        );
+
+        $normalized['rows'][] = $row;
+
+        if ($normalized['stats']['min_start'] === null || strcmp($start_formatted, $normalized['stats']['min_start']) < 0) {
+            $normalized['stats']['min_start'] = $start_formatted;
+        }
+
+        if ($normalized['stats']['max_end'] === null || strcmp($end_formatted, $normalized['stats']['max_end']) > 0) {
+            $normalized['stats']['max_end'] = $end_formatted;
+        }
+    }
+
+    if (!empty($normalized['rows'])) {
+        usort(
+            $normalized['rows'],
+            static function ($left, $right) {
+                return strcmp($left['start'], $right['start']);
+            }
+        );
+    }
+
+    return $normalized;
+}
+
+function mj_regmgr_format_event_occurrences_for_front($occurrences) {
+    $formatted = array();
+    if (!is_array($occurrences)) {
+        return $formatted;
+    }
+
+    foreach ($occurrences as $occurrence) {
+        if (!is_array($occurrence)) {
+            continue;
+        }
+
+        $start = isset($occurrence['start']) ? (string) $occurrence['start'] : '';
+        if ($start === '') {
+            continue;
+        }
+
+        $end = isset($occurrence['end']) ? (string) $occurrence['end'] : '';
+        $status = isset($occurrence['status']) ? mj_regmgr_occurrence_status_to_front($occurrence['status']) : 'planned';
+        $reason = '';
+        if (isset($occurrence['meta'])) {
+            $meta = $occurrence['meta'];
+            if (is_string($meta)) {
+                $decoded_meta = json_decode($meta, true);
+                if (is_array($decoded_meta)) {
+                    $meta = $decoded_meta;
+                }
+            }
+            if (is_array($meta) && isset($meta['reason'])) {
+                $reason = sanitize_text_field((string) $meta['reason']);
+            }
+        }
+
+        $id = isset($occurrence['id']) ? $occurrence['id'] : (isset($occurrence['timestamp']) ? $occurrence['timestamp'] : md5($start));
+        $start_time = substr($start, 11, 5);
+        $end_time = $end !== '' ? substr($end, 11, 5) : '';
+
+        $formatted[] = array(
+            'id' => $id !== null ? (string) $id : md5($start),
+            'start' => $start,
+            'end' => $end,
+            'date' => substr($start, 0, 10),
+            'startTime' => preg_match('/^\d{2}:\d{2}$/', $start_time) ? $start_time : '',
+            'endTime' => preg_match('/^\d{2}:\d{2}$/', $end_time) ? $end_time : '',
+            'status' => $status,
+            'reason' => $reason,
+            'startFormatted' => mj_regmgr_format_date($start, true),
+            'endFormatted' => $end !== '' ? mj_regmgr_format_date($end, true) : '',
+        );
+    }
+
+    return $formatted;
+}
+
 function mj_regmgr_find_next_occurrence(array $occurrences) {
     if (empty($occurrences)) {
         return null;
@@ -510,6 +1202,13 @@ function mj_regmgr_build_event_schedule_info($event, $mode = '') {
             break;
     }
 
+    if (is_array($schedule_payload) && isset($schedule_payload['occurrence_summary'])) {
+        $custom_summary = trim((string) $schedule_payload['occurrence_summary']);
+        if ($custom_summary !== '') {
+            $summary = $custom_summary;
+        }
+    }
+
     return array(
         'summary' => $summary,
         'detail' => implode(' · ', array_filter($detail_parts)),
@@ -638,46 +1337,41 @@ function mj_regmgr_get_event_details() {
 
     // Get occurrences
     $occurrences = array();
-    $schedule_mode = $event->schedule_mode ?? 'fixed';
-    
-    if (class_exists('Mj\Member\Classes\MjEventSchedule')) {
-        // Utiliser la méthode statique get_occurrences
-        $raw_occurrences = MjEventSchedule::get_occurrences($event, array(
-            'max' => 100,
-            'include_past' => true,
-        ));
-        
-        // Formater les occurrences pour le frontend
-        foreach ($raw_occurrences as $occ) {
-            $start = $occ['start'] ?? ($occ['date'] ?? '');
-            $end = $occ['end'] ?? '';
-            
-            if (!empty($start)) {
-                $occurrences[] = array(
-                    'id' => $occ['id'] ?? md5($start),
-                    'start' => $start,
-                    'end' => $end,
-                    'date' => substr($start, 0, 10),
-                    'startFormatted' => mj_regmgr_format_date($start, true),
-                    'endFormatted' => $end ? mj_regmgr_format_date($end, true) : '',
-                );
-            }
-        }
+    $schedule_mode = isset($event->schedule_mode) && $event->schedule_mode !== ''
+        ? sanitize_key((string) $event->schedule_mode)
+        : 'fixed';
+
+    if (class_exists(MjEventSchedule::class)) {
+        $raw_occurrences = MjEventSchedule::get_occurrences(
+            $event,
+            array(
+                'max' => 100,
+                'include_past' => true,
+                'include_cancelled' => true,
+            )
+        );
+        $occurrences = mj_regmgr_format_event_occurrences_for_front($raw_occurrences);
     }
-    
+
     // Fallback: si pas d'occurrences mais event avec date, créer une occurrence unique
-    if (empty($occurrences) && !empty($event->date_debut)) {
+    if (empty($occurrences) && mj_regmgr_should_allow_occurrence_fallback($event)) {
+        $fallback_end = isset($event->date_fin) ? (string) $event->date_fin : '';
         $occurrences[] = array(
             'id' => 'single_' . $event->id,
-            'start' => $event->date_debut,
-            'end' => $event->date_fin ?? '',
-            'date' => substr($event->date_debut, 0, 10),
-            'startFormatted' => mj_regmgr_format_date($event->date_debut, true),
-            'endFormatted' => $event->date_fin ? mj_regmgr_format_date($event->date_fin, true) : '',
+            'start' => (string) $event->date_debut,
+            'end' => $fallback_end,
+            'date' => substr((string) $event->date_debut, 0, 10),
+            'startTime' => substr((string) $event->date_debut, 11, 5),
+            'endTime' => $fallback_end !== '' ? substr($fallback_end, 11, 5) : '',
+            'status' => 'planned',
+            'reason' => '',
+            'startFormatted' => mj_regmgr_format_date((string) $event->date_debut, true),
+            'endFormatted' => $fallback_end !== '' ? mj_regmgr_format_date($fallback_end, true) : '',
         );
     }
 
     $schedule_info = mj_regmgr_build_event_schedule_info($event, $schedule_mode);
+    $occurrence_generator_plan = mj_regmgr_extract_occurrence_generator_from_event($event);
 
     // Get location
     $location = null;
@@ -758,6 +1452,7 @@ function mj_regmgr_get_event_details() {
             'scheduleSummary' => isset($schedule_info['summary']) ? $schedule_info['summary'] : '',
             'scheduleDetail' => isset($schedule_info['detail']) ? $schedule_info['detail'] : '',
             'occurrences' => $occurrences,
+            'occurrenceGenerator' => $occurrence_generator_plan,
             'location' => $location,
             'animateurs' => $animateurs,
             'frontUrl' => $front_url ?: null,
@@ -2415,6 +3110,7 @@ function mj_regmgr_prepare_event_form_values($event, array $schedule_weekdays, a
             'capacity_total' => isset($event->capacity_total) ? (int) $event->capacity_total : 0,
             'capacity_waitlist' => isset($event->capacity_waitlist) ? (int) $event->capacity_waitlist : 0,
             'capacity_notify_threshold' => isset($event->capacity_notify_threshold) ? (int) $event->capacity_notify_threshold : 0,
+            'occurrenceGenerator' => mj_regmgr_extract_occurrence_generator_from_event($event),
             'free_participation' => !empty($event->free_participation),
             'registration_is_free_participation' => !empty($event->free_participation),
         ));
@@ -3106,6 +3802,32 @@ function mj_regmgr_resolve_schedule_exceptions(array $form_values, array $meta) 
 function mj_regmgr_build_event_update_payload($event, array $form_values, array $meta, array $references, array $schedule_weekdays, array $schedule_month_ordinals, array &$errors) {
     $errors = array();
 
+    $existing_generator_plan = mj_regmgr_extract_occurrence_generator_from_event($event);
+
+    $submitted_generator_plan = array();
+    $generator_plan_provided = false;
+
+    if (isset($meta['occurrenceGenerator'])) {
+        $generator_plan_provided = true;
+        $submitted_generator_plan = mj_regmgr_sanitize_occurrence_generator_plan($meta['occurrenceGenerator']);
+    } elseif (isset($meta['schedulePayload']) && is_array($meta['schedulePayload'])) {
+        $payload_plan = mj_regmgr_extract_occurrence_generator_from_payload($meta['schedulePayload']);
+        if (!empty($payload_plan) || array_key_exists('occurrence_generator', $meta['schedulePayload']) || array_key_exists('occurrenceGenerator', $meta['schedulePayload'])) {
+            $generator_plan_provided = true;
+            $submitted_generator_plan = $payload_plan;
+        }
+    } elseif (isset($form_values['occurrenceGenerator']) && is_array($form_values['occurrenceGenerator'])) {
+        $generator_plan_provided = true;
+        $submitted_generator_plan = mj_regmgr_sanitize_occurrence_generator_plan($form_values['occurrenceGenerator']);
+    } elseif (isset($form_values['schedule_payload']) && is_array($form_values['schedule_payload'])) {
+        if (array_key_exists('occurrence_generator', $form_values['schedule_payload']) || array_key_exists('occurrenceGenerator', $form_values['schedule_payload'])) {
+            $payload_plan = mj_regmgr_extract_occurrence_generator_from_payload($form_values['schedule_payload']);
+            if (!empty($payload_plan)) {
+                $submitted_generator_plan = $payload_plan;
+            }
+        }
+    }
+
     $title = isset($form_values['title']) ? sanitize_text_field((string) $form_values['title']) : '';
     if ($title === '') {
         $errors[] = __('Le titre est obligatoire.', 'mj-member');
@@ -3383,13 +4105,6 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
         }
     }
 
-    if ($date_debut === '') {
-        $errors[] = __('La date de début est obligatoire.', 'mj-member');
-    }
-    if ($date_fin === '') {
-        $errors[] = __('La date de fin est obligatoire.', 'mj-member');
-    }
-
     $date_fin_inscription_raw = isset($form_values['date_fin_inscription']) ? $form_values['date_fin_inscription'] : '';
     $date_fin_inscription = $date_fin_inscription_raw !== '' ? mj_regmgr_parse_event_datetime($date_fin_inscription_raw) : '';
 
@@ -3455,6 +4170,32 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
     $capacity_notified_value = ($previous_capacity_total === $capacity_total && $previous_capacity_threshold === $capacity_notify_threshold) ? $previous_capacity_notified : 0;
 
 
+    $derived_generator_plan = mj_regmgr_derive_generator_plan_from_schedule($schedule_payload);
+    if (!empty($derived_generator_plan)) {
+        if (!empty($submitted_generator_plan)) {
+            $submitted_generator_plan = mj_regmgr_merge_generator_plans($submitted_generator_plan, $derived_generator_plan);
+        } elseif (!empty($existing_generator_plan)) {
+            $existing_generator_plan = mj_regmgr_merge_generator_plans($existing_generator_plan, $derived_generator_plan);
+        } else {
+            $submitted_generator_plan = $derived_generator_plan;
+            $generator_plan_provided = true;
+        }
+    }
+
+    if (!is_array($schedule_payload)) {
+        $schedule_payload = array();
+    }
+
+    if (!empty($submitted_generator_plan)) {
+        $schedule_payload['occurrence_generator'] = $submitted_generator_plan;
+    } elseif ($generator_plan_provided) {
+        unset($schedule_payload['occurrence_generator'], $schedule_payload['occurrenceGenerator']);
+    } elseif (!isset($schedule_payload['occurrence_generator']) || !is_array($schedule_payload['occurrence_generator'])) {
+        if (!empty($existing_generator_plan)) {
+            $schedule_payload['occurrence_generator'] = $existing_generator_plan;
+        }
+    }
+
     $payload = array(
         'title' => $title,
         'status' => $status,
@@ -3465,10 +4206,6 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
         'description' => $description,
         'age_min' => $age_min,
         'age_max' => $age_max,
-        'date_debut' => $date_debut,
-            'scheduleSummary' => isset($schedule_info['summary']) ? $schedule_info['summary'] : '',
-            'scheduleDetail' => isset($schedule_info['detail']) ? $schedule_info['detail'] : '',
-        'date_fin' => $date_fin,
         'date_fin_inscription' => $date_fin_inscription !== '' ? $date_fin_inscription : null,
         'prix' => $price,
         'location_id' => $location_id,
@@ -3544,10 +4281,298 @@ function mj_regmgr_serialize_event_summary($event) {
         'capacityTotal' => isset($event->capacity_total) ? (int) $event->capacity_total : 0,
         'capacityWaitlist' => isset($event->capacity_waitlist) ? (int) $event->capacity_waitlist : 0,
         'prix' => isset($event->prix) ? (float) $event->prix : 0.0,
+        'occurrenceGenerator' => mj_regmgr_extract_occurrence_generator_from_event($event),
         'scheduleMode' => $schedule_mode,
         'scheduleSummary' => isset($schedule_info['summary']) ? $schedule_info['summary'] : '',
         'scheduleDetail' => isset($schedule_info['detail']) ? $schedule_info['detail'] : '',
+        'occurrenceScheduleSummary' => isset($schedule_info['summary']) ? $schedule_info['summary'] : '',
+        'occurrence_schedule_summary' => isset($schedule_info['summary']) ? $schedule_info['summary'] : '',
     );
+}
+
+function mj_regmgr_save_event_occurrences() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) {
+        return;
+    }
+
+    $event_id = isset($_POST['eventId']) ? (int) $_POST['eventId'] : 0;
+    if ($event_id <= 0) {
+        wp_send_json_error(array('message' => __('ID événement invalide.', 'mj-member')), 400);
+        return;
+    }
+
+    $event = MjEvents::find($event_id);
+    if (!$event) {
+        wp_send_json_error(array('message' => __('Événement introuvable.', 'mj-member')), 404);
+        return;
+    }
+
+    $can_manage = current_user_can(Config::capability()) || !empty($auth['is_coordinateur']);
+    if (!$can_manage) {
+        if (!class_exists(MjEventAnimateurs::class) || !MjEventAnimateurs::member_is_assigned($event_id, $auth['member_id'])) {
+            wp_send_json_error(array('message' => __('Permissions insuffisantes pour modifier les occurrences de cet événement.', 'mj-member')), 403);
+            return;
+        }
+    }
+
+    $existing_schedule_payload = array();
+    if (!empty($event->schedule_payload)) {
+        $decoded_payload = mj_regmgr_decode_json_field($event->schedule_payload);
+        if (is_array($decoded_payload)) {
+            $existing_schedule_payload = $decoded_payload;
+        }
+    }
+    $existing_generator_plan = mj_regmgr_extract_occurrence_generator_from_payload($existing_schedule_payload);
+
+    $submitted_schedule_summary = '';
+    if (isset($_POST['scheduleSummary'])) {
+        $submitted_schedule_summary = trim((string) wp_unslash($_POST['scheduleSummary']));
+        if ($submitted_schedule_summary !== '' && function_exists('mb_substr')) {
+            $submitted_schedule_summary = mb_substr($submitted_schedule_summary, 0, 600);
+        } else {
+            $submitted_schedule_summary = substr($submitted_schedule_summary, 0, 600);
+        }
+        $submitted_schedule_summary = wp_strip_all_tags($submitted_schedule_summary);
+    }
+
+    $generator_plan_input = array();
+    $generator_plan_provided = false;
+    if (isset($_POST['generatorPlan'])) {
+        $generator_plan_provided = true;
+        $plan_candidate = wp_unslash($_POST['generatorPlan']);
+        if (is_string($plan_candidate)) {
+            $decoded_plan = json_decode($plan_candidate, true);
+            if (is_array($decoded_plan)) {
+                $generator_plan_input = $decoded_plan;
+            }
+        } elseif (is_array($plan_candidate)) {
+            $generator_plan_input = $plan_candidate;
+        }
+    }
+
+    $sanitized_generator_plan = array();
+    if ($generator_plan_provided) {
+        $sanitized_generator_plan = mj_regmgr_sanitize_occurrence_generator_plan($generator_plan_input);
+    }
+
+    $raw_occurrences = array();
+    if (isset($_POST['occurrences'])) {
+        $payload = $_POST['occurrences'];
+        if (is_string($payload)) {
+            $decoded = json_decode(wp_unslash($payload), true);
+            if (is_array($decoded)) {
+                $raw_occurrences = $decoded;
+            }
+        } elseif (is_array($payload)) {
+            foreach ($payload as $value) {
+                if (is_array($value)) {
+                    $raw_occurrences[] = $value;
+                } elseif (is_string($value)) {
+                    $decoded_value = json_decode(wp_unslash($value), true);
+                    if (is_array($decoded_value)) {
+                        $raw_occurrences[] = $decoded_value;
+                    }
+                }
+            }
+        }
+    }
+
+    if (empty($raw_occurrences)) {
+        $prefixed_candidates = array();
+        foreach ($_POST as $key => $value) {
+            if (strpos($key, 'occurrences[') === 0) {
+                $prefixed_candidates[] = $value;
+            }
+        }
+        if (!empty($prefixed_candidates)) {
+            foreach ($prefixed_candidates as $candidate) {
+                if (is_string($candidate)) {
+                    $decoded_candidate = json_decode(wp_unslash($candidate), true);
+                    if (is_array($decoded_candidate)) {
+                        $raw_occurrences[] = $decoded_candidate;
+                    }
+                } elseif (is_array($candidate)) {
+                    $raw_occurrences[] = $candidate;
+                }
+            }
+        }
+    }
+
+    $normalized = mj_regmgr_prepare_event_occurrence_rows($raw_occurrences);
+
+    $schedule_mode = isset($event->schedule_mode) && $event->schedule_mode !== ''
+        ? sanitize_key((string) $event->schedule_mode)
+        : 'fixed';
+
+    $schedule_payload_update = null;
+    if (!empty($normalized['rows'])) {
+        if ($schedule_mode === 'fixed') {
+            $min_start = $normalized['stats']['min_start'];
+            $max_end = $normalized['stats']['max_end'];
+            if ($min_start !== null && $max_end !== null) {
+                $schedule_payload_update = array(
+                    'mode' => 'fixed',
+                    'version' => 'occurrence-editor',
+                    'date' => substr($min_start, 0, 10),
+                    'start_time' => substr($min_start, 11, 5),
+                    'end_time' => substr($max_end, 11, 5),
+                );
+            }
+        } elseif ($schedule_mode === 'series') {
+            $occurrence_payload_items = array();
+            $series_items = array();
+            foreach ($normalized['rows'] as $row_item) {
+                $occurrence_payload_items[] = $row_item;
+                $series_items[] = array(
+                    'date' => substr($row_item['start'], 0, 10),
+                    'start_time' => substr($row_item['start'], 11, 5),
+                    'end_time' => substr($row_item['end'], 11, 5),
+                    'status' => isset($row_item['status']) ? $row_item['status'] : MjEventOccurrences::STATUS_ACTIVE,
+                );
+            }
+            $schedule_payload_update = array(
+                'mode' => 'series',
+                'version' => 'occurrence-editor',
+                'occurrences' => $occurrence_payload_items,
+                'items' => $series_items,
+            );
+        }
+    } else {
+        if ($schedule_mode === 'fixed') {
+            $schedule_payload_update = array(
+                'mode' => 'fixed',
+                'version' => 'occurrence-editor',
+            );
+        } elseif ($schedule_mode === 'series') {
+            $schedule_payload_update = array(
+                'mode' => 'series',
+                'version' => 'occurrence-editor',
+                'occurrences' => array(),
+                'items' => array(),
+            );
+        }
+    }
+
+    if ($schedule_payload_update === null) {
+        $existing_payload = $existing_schedule_payload;
+        if (!isset($existing_payload['mode']) && $schedule_mode !== '') {
+            $existing_payload['mode'] = $schedule_mode;
+        }
+        $existing_payload['occurrence_summary'] = $submitted_schedule_summary;
+        if (!isset($existing_payload['version']) || $existing_payload['version'] === '') {
+            $existing_payload['version'] = 'occurrence-editor';
+        }
+        $schedule_payload_update = $existing_payload;
+    } else {
+        $schedule_payload_update['occurrence_summary'] = $submitted_schedule_summary;
+        if (!isset($schedule_payload_update['version']) || $schedule_payload_update['version'] === '') {
+            $schedule_payload_update['version'] = 'occurrence-editor';
+        }
+    }
+
+    if ($generator_plan_provided) {
+        $schedule_payload_update['occurrence_generator'] = $sanitized_generator_plan;
+    } elseif (!empty($existing_generator_plan)) {
+        $schedule_payload_update['occurrence_generator'] = $existing_generator_plan;
+    }
+
+    $updates = array();
+    if (!empty($normalized['rows'])) {
+        if (!empty($normalized['stats']['min_start'])) {
+            $updates['date_debut'] = $normalized['stats']['min_start'];
+        }
+        if (!empty($normalized['stats']['max_end'])) {
+            $updates['date_fin'] = $normalized['stats']['max_end'];
+        }
+    } else {
+        $updates['date_debut'] = null;
+        $updates['date_fin'] = null;
+    }
+
+    if ($schedule_payload_update !== null) {
+        $updates['schedule_payload'] = $schedule_payload_update;
+    }
+
+    if (!empty($updates)) {
+        $update_result = MjEvents::update($event_id, $updates);
+        if (is_wp_error($update_result)) {
+            wp_send_json_error(array('message' => $update_result->get_error_message()), 500);
+            return;
+        }
+    }
+
+    MjEventOccurrences::replace_for_event($event_id, $normalized['rows']);
+
+    $refreshed_event = MjEvents::find($event_id);
+    if (!$refreshed_event) {
+        $refreshed_event = $event;
+    }
+
+    $schedule_mode = isset($refreshed_event->schedule_mode) && $refreshed_event->schedule_mode !== ''
+        ? sanitize_key((string) $refreshed_event->schedule_mode)
+        : 'fixed';
+    $schedule_info = mj_regmgr_build_event_schedule_info($refreshed_event, $schedule_mode);
+
+    $occurrence_rows = class_exists(MjEventSchedule::class)
+        ? MjEventSchedule::build_all_occurrences($refreshed_event)
+        : array();
+    $occurrence_payload = mj_regmgr_format_event_occurrences_for_front($occurrence_rows);
+
+    if (empty($occurrence_payload) && mj_regmgr_should_allow_occurrence_fallback($refreshed_event)) {
+        $fallback_end = isset($refreshed_event->date_fin) ? (string) $refreshed_event->date_fin : '';
+        $occurrence_payload[] = array(
+            'id' => 'event-' . $refreshed_event->id,
+            'start' => (string) $refreshed_event->date_debut,
+            'end' => $fallback_end,
+            'date' => substr((string) $refreshed_event->date_debut, 0, 10),
+            'startTime' => substr((string) $refreshed_event->date_debut, 11, 5),
+            'endTime' => $fallback_end !== '' ? substr($fallback_end, 11, 5) : '',
+            'status' => 'planned',
+            'reason' => '',
+            'startFormatted' => mj_regmgr_format_date((string) $refreshed_event->date_debut, true),
+            'endFormatted' => $fallback_end !== '' ? mj_regmgr_format_date($fallback_end, true) : '',
+        );
+    }
+
+    $response_event = array(
+        'id' => isset($refreshed_event->id) ? (int) $refreshed_event->id : $event_id,
+        'occurrences' => $occurrence_payload,
+        'dateDebut' => isset($refreshed_event->date_debut) ? (string) $refreshed_event->date_debut : '',
+        'dateFin' => isset($refreshed_event->date_fin) ? (string) $refreshed_event->date_fin : '',
+        'dateDebutFormatted' => mj_regmgr_format_date(isset($refreshed_event->date_debut) ? $refreshed_event->date_debut : '', true),
+        'dateFinFormatted' => mj_regmgr_format_date(isset($refreshed_event->date_fin) ? $refreshed_event->date_fin : '', true),
+        'scheduleSummary' => isset($schedule_info['summary']) ? $schedule_info['summary'] : '',
+        'scheduleDetail' => isset($schedule_info['detail']) ? $schedule_info['detail'] : '',
+        'occurrenceScheduleSummary' => $submitted_schedule_summary !== ''
+            ? $submitted_schedule_summary
+            : (isset($schedule_info['summary']) ? $schedule_info['summary'] : ''),
+        'occurrenceGenerator' => mj_regmgr_extract_occurrence_generator_from_event($refreshed_event),
+    );
+
+    if (!empty($normalized['stats']['min_start'])) {
+        $response_event['dateDebut'] = $normalized['stats']['min_start'];
+        $response_event['dateDebutFormatted'] = mj_regmgr_format_date($normalized['stats']['min_start'], true);
+    }
+    if (!empty($normalized['stats']['max_end'])) {
+        $response_event['dateFin'] = $normalized['stats']['max_end'];
+        $response_event['dateFinFormatted'] = mj_regmgr_format_date($normalized['stats']['max_end'], true);
+    }
+
+    if (!empty($normalized['stats']['min_start']) || !empty($normalized['stats']['max_end'])) {
+        $refreshed_event = $refreshed_event ? $refreshed_event->with(array(
+            'date_debut' => !empty($normalized['stats']['min_start']) ? $normalized['stats']['min_start'] : $refreshed_event->date_debut,
+            'date_fin' => !empty($normalized['stats']['max_end']) ? $normalized['stats']['max_end'] : $refreshed_event->date_fin,
+        )) : $refreshed_event;
+    }
+
+    $event_summary = mj_regmgr_serialize_event_summary($refreshed_event);
+
+    wp_send_json_success(array(
+        'message' => __('Occurrences mises à jour.', 'mj-member'),
+        'event' => $response_event,
+        'eventSummary' => $event_summary,
+    ));
 }
 
 /**
@@ -4140,6 +5165,54 @@ function mj_regmgr_update_member() {
 
     wp_send_json_success(array(
         'message' => __('Membre mis à jour avec succès.', 'mj-member'),
+    ));
+}
+
+/**
+ * Delete a member from the directory
+ */
+function mj_regmgr_delete_member() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) {
+        return;
+    }
+
+    $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+    if ($member_id <= 0) {
+        wp_send_json_error(array('message' => __('Identifiant de membre invalide.', 'mj-member')));
+        return;
+    }
+
+    $can_delete = !empty($auth['is_coordinateur']) || current_user_can(Config::capability());
+    if (!$can_delete) {
+        wp_send_json_error(
+            array('message' => __('Vous ne pouvez pas supprimer ce membre.', 'mj-member')),
+            403
+        );
+        return;
+    }
+
+    $current_member_id = isset($auth['member_id']) ? (int) $auth['member_id'] : 0;
+    if ($current_member_id === $member_id) {
+        wp_send_json_error(array('message' => __('Vous ne pouvez pas supprimer votre propre fiche depuis cet écran.', 'mj-member')));
+        return;
+    }
+
+    $member = MjMembers::getById($member_id);
+    if (!$member) {
+        wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
+        return;
+    }
+
+    $result = MjMembers::delete($member_id);
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+        return;
+    }
+
+    wp_send_json_success(array(
+        'message' => __('Membre supprimé.', 'mj-member'),
+        'memberId' => $member_id,
     ));
 }
 

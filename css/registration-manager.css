@@ -16,6 +16,8 @@
     --regmgr-warning-light: #fef3c7;
     --regmgr-danger: #ef4444;
     --regmgr-danger-light: #fee2e2;
+    --regmgr-disabled: #6b7280;
+    --regmgr-disabled-light: #e5e7eb;
     --regmgr-gray-50: #f9fafb;
     --regmgr-gray-100: #c2c2c2;
     --regmgr-gray-200: #818181;
@@ -3467,42 +3469,29 @@ input.mj-regmgr-search-input__field {
 /* ============================================
    Responsive
    ============================================ */
+/* Tablet & mobile navigation (single panel) */
 @media (max-width: 1024px) {
     .mj-regmgr__layout {
         flex-direction: column;
         max-height: none;
-    }
-
-    .mj-regmgr-sidebar {
-        width: 100%;
-        max-height: 350px;
-        border-right: none;
-        border-bottom: 1px solid var(--regmgr-gray-200);
-    }
-
-    .mj-regmgr__main {
-        min-height: 500px;
-    }
-}
-
-/* Mobile navigation (show either sidebar or main content) */
-@media (max-width: 768px) {
-    .mj-regmgr__layout {
         position: relative;
     }
 
     .mj-regmgr-sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--regmgr-gray-200);
         max-height: none;
-        flex: 1;
         display: flex;
         flex-direction: column;
+        flex: 1;
     }
 
     .mj-regmgr__main {
         display: none;
+        min-height: 500px;
     }
 
-    /* When details are shown on mobile */
     .mj-regmgr__layout--mobile-details .mj-regmgr-sidebar {
         display: none;
     }
@@ -3513,7 +3502,6 @@ input.mj-regmgr-search-input__field {
         min-height: calc(100vh - 200px);
     }
 
-    /* Back button visible on mobile */
     .mj-regmgr__back-btn {
         display: flex;
         align-items: center;
@@ -3538,7 +3526,10 @@ input.mj-regmgr-search-input__field {
     .mj-regmgr__back-btn svg {
         flex-shrink: 0;
     }
+}
 
+/* Additional small-screen refinements */
+@media (max-width: 768px) {
     .mj-regmgr-filters {
         overflow-x: auto;
         flex-wrap: nowrap;
@@ -6627,6 +6618,531 @@ input.mj-regmgr-search-input__field {
 .mj-regmgr-weekday__times input[type='time'] {
     font-size: 10px;
 }
+
+/* ============================================
+   Occurrence Encoder
+   ============================================ */
+.mj-regmgr-occurrence {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    background: #fff;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius-lg);
+    padding: 24px;
+    box-shadow: var(--regmgr-shadow-md);
+    min-height: 520px;
+}
+
+.mj-regmgr-occurrence__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.mj-regmgr-occurrence__heading {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mj-regmgr-occurrence__subheading {
+    font-size: 13px;
+    color: var(--regmgr-gray-500);
+}
+
+.mj-regmgr-occurrence__header-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.mj-regmgr-occurrence__nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px;
+    background: var(--regmgr-gray-100);
+    border-radius: 999px;
+}
+
+.mj-regmgr-occurrence__nav-button {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: #fff;
+    color: var(--regmgr-gray-600);
+    border-radius: 50%;
+    box-shadow: var(--regmgr-shadow);
+    transition: all var(--regmgr-transition);
+}
+
+.mj-regmgr-occurrence__nav-button:hover,
+.mj-regmgr-occurrence__nav-button:focus {
+    color: var(--regmgr-primary);
+    transform: translateY(-1px);
+}
+
+.mj-regmgr-occurrence__nav-button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--regmgr-primary-light);
+}
+
+.mj-regmgr-occurrence__nav-icon {
+    font-size: 18px;
+    line-height: 1;
+}
+
+.mj-regmgr-occurrence__view-toggle {
+    display: inline-flex;
+    align-items: center;
+    background: var(--regmgr-gray-100);
+    border-radius: 999px;
+    padding: 4px;
+    gap: 6px;
+}
+
+.mj-regmgr-occurrence__view-button {
+    border: none;
+    background: transparent;
+    color: var(--regmgr-gray-500);
+    font-weight: 500;
+    padding: 6px 16px;
+    border-radius: 999px;
+    transition: all var(--regmgr-transition);
+}
+
+.mj-regmgr-occurrence__view-button:hover {
+    color: var(--regmgr-gray-700);
+}
+
+.mj-regmgr-occurrence__view-button--active {
+    background: #fff;
+    color: var(--regmgr-primary);
+    box-shadow: var(--regmgr-shadow);
+}
+
+.mj-regmgr-occurrence__body {
+    display: flex;
+    gap: 24px;
+    align-items: stretch;
+}
+
+.mj-regmgr-occurrence__calendar {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.mj-regmgr-occurrence__months {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.mj-regmgr-occurrence__month {
+    background: var(--regmgr-gray-50);
+    border-radius: var(--regmgr-radius);
+    border: 1px solid var(--regmgr-gray-200);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.mj-regmgr-occurrence__month-header {
+    padding: 12px 14px;
+    font-weight: 600;
+    color: var(--regmgr-gray-700);
+    background: #fff;
+    border-bottom: 1px solid var(--regmgr-gray-200);
+}
+
+.mj-regmgr-occurrence__weekdays,
+.mj-regmgr-occurrence__week {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.mj-regmgr-occurrence__weekday {
+    padding: 8px 6px;
+    font-size: 12px;
+    text-align: center;
+    color: var(--regmgr-gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: var(--regmgr-gray-100);
+}
+
+.mj-regmgr-occurrence__week {
+    gap: 2px;
+    padding: 6px;
+}
+
+.mj-regmgr-occurrence__day {
+    position: relative;
+    border: none;
+    border-radius: var(--regmgr-radius-sm);
+    padding: 12px 8px;
+    text-align: left;
+    background: #fff;
+    color: var(--regmgr-gray-700);
+    min-height: 56px;
+    box-shadow: var(--regmgr-shadow);
+    transition: all var(--regmgr-transition);
+}
+
+.mj-regmgr-occurrence__day:hover,
+.mj-regmgr-occurrence__day:focus {
+    outline: none;
+    transform: translateY(-1px);
+    box-shadow: var(--regmgr-shadow-md);
+}
+
+.mj-regmgr-occurrence__day:focus-visible {
+    box-shadow: 0 0 0 3px var(--regmgr-primary-light);
+}
+.mj-regmgr-occurrence__day {
+    background: var(--regmgr-gray-100);
+    color: var(--regmgr-gray-400);
+    box-shadow: none;
+}
+.mj-regmgr-occurrence__day--muted {
+    /* Hide filler days from adjacent months */
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.mj-regmgr-occurrence__day--selected {
+    border: 2px solid var(--regmgr-primary);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.mj-regmgr-occurrence__day--today::after {
+    content: '';
+    position: absolute;
+    right: 8px;
+    top: 8px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--regmgr-primary);
+}
+
+.mj-regmgr-occurrence__day--with-occurrence {
+    border-left: 4px solid var(--regmgr-primary);
+}
+
+.mj-regmgr-occurrence__day--status-planned {
+    border-left-color: var(--regmgr-warning);
+}
+
+.mj-regmgr-occurrence__day--status-confirmed {
+    border-left-color: var(--regmgr-disabled);
+}
+
+.mj-regmgr-occurrence__day--status-cancelled {
+    border-left-color: var(--regmgr-danger);
+}
+
+.mj-regmgr-occurrence__day-number {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.mj-regmgr-occurrence__day-time {
+    display: block;
+    margin-top: 4px;
+    font-size: 10px;
+    color: var(--regmgr-gray-400);
+}
+
+.mj-regmgr-occurrence__day-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--regmgr-primary);
+    border-radius: 999px;
+    padding: 2px 6px;
+    margin-top: 8px;
+}
+
+.mj-regmgr-occurrence__day-indicator--planned {
+    background: var(--regmgr-warning);
+}
+
+.mj-regmgr-occurrence__day-indicator--confirmed {
+    background: var(--regmgr-disabled);
+}
+
+.mj-regmgr-occurrence__day-indicator--cancelled {
+    background: var(--regmgr-danger);
+}
+
+.mj-regmgr-occurrence__sidebar {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.mj-regmgr-occurrence__card {
+    background: #fff;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: var(--regmgr-shadow);
+}
+
+.mj-regmgr-occurrence__occurrence-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.mj-regmgr-occurrence__occurrence-chip {
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: var(--regmgr-gray-600);
+    background: var(--regmgr-gray-50);
+    transition: all var(--regmgr-transition);
+}
+
+.mj-regmgr-occurrence__occurrence-chip--status-planned {
+    border-color: var(--regmgr-warning);
+    color: var(--regmgr-warning);
+    background: var(--regmgr-warning-light);
+}
+
+.mj-regmgr-occurrence__occurrence-chip--status-confirmed {
+    border-color: var(--regmgr-disabled);
+    color: var(--regmgr-disabled);
+    background: var(--regmgr-disabled-light);
+}
+
+.mj-regmgr-occurrence__occurrence-chip--status-cancelled {
+    border-color: var(--regmgr-danger);
+    color: var(--regmgr-danger);
+    background: var(--regmgr-danger-light);
+}
+
+.mj-regmgr-occurrence__occurrence-chip--active {
+    border-color: var(--regmgr-primary);
+    background: var(--regmgr-primary-light);
+    color: var(--regmgr-primary);
+}
+
+.mj-regmgr-occurrence__form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mj-regmgr-occurrence__form-row {
+    display: flex;
+    gap: 12px;
+}
+
+.mj-regmgr-occurrence__label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--regmgr-gray-600);
+}
+
+.mj-regmgr-occurrence__input {
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius);
+    padding: 8px 10px;
+    font-size: 13px;
+    background: #fff;
+    transition: border-color var(--regmgr-transition), box-shadow var(--regmgr-transition);
+}
+
+.mj-regmgr-occurrence__input:focus {
+    outline: none;
+    border-color: var(--regmgr-primary);
+    box-shadow: 0 0 0 3px var(--regmgr-primary-light);
+}
+
+.mj-regmgr-occurrence__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.mj-regmgr-occurrence__delete-all {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 8px;
+    border-top: 1px solid var(--regmgr-gray-200);
+}
+
+.mj-regmgr-occurrence__hint {
+    margin: 0;
+    font-size: 12px;
+    color: var(--regmgr-gray-500);
+}
+
+.mj-regmgr-occurrence__description {
+    margin: 0;
+    font-size: 13px;
+    color: var(--regmgr-gray-500);
+}
+
+.mj-regmgr-occurrence__days {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mj-regmgr-occurrence__day-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: 12px;
+    background: #fff;
+    font-size: 13px;
+    color: var(--regmgr-gray-600);
+    box-shadow: 0 1px 1px rgba(16, 24, 40, 0.04);
+    transition: border-color var(--regmgr-transition), box-shadow var(--regmgr-transition);
+}
+
+.mj-regmgr-occurrence__day-row--active {
+    border-color: var(--regmgr-primary);
+    box-shadow: 0 2px 6px rgba(10, 108, 218, 0.12);
+}
+
+.mj-regmgr-occurrence__day-row--override {
+    background: rgba(10, 108, 218, 0.06);
+}
+
+.mj-regmgr-occurrence__day-row-checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--regmgr-primary);
+}
+
+.mj-regmgr-occurrence__day-row-label {
+    font-weight: 600;
+    color: var(--regmgr-gray-700);
+}
+
+.mj-regmgr-occurrence__day-row-times {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--regmgr-font-mono, 'IBM Plex Mono', monospace);
+    font-size: 12px;
+    color: var(--regmgr-gray-600);
+}
+
+.mj-regmgr-occurrence__day-row-input {
+    width: 88px;
+    padding: 4px 6px;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: 6px;
+    background: var(--regmgr-gray-50);
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: 1.2;
+    transition: border-color var(--regmgr-transition), box-shadow var(--regmgr-transition);
+}
+
+.mj-regmgr-occurrence__day-row-input:focus {
+    outline: none;
+    border-color: var(--regmgr-primary);
+    box-shadow: 0 0 0 2px rgba(10, 108, 218, 0.12);
+}
+
+.mj-regmgr-occurrence__day-row-input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.mj-regmgr-occurrence__day-row-input--override {
+    background: #fff;
+    border-color: var(--regmgr-primary);
+    color: var(--regmgr-gray-700);
+}
+
+.mj-regmgr-occurrence__day-row-separator {
+    color: var(--regmgr-gray-400);
+}
+
+.mj-regmgr-occurrence__placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 240px;
+    padding: 24px;
+    border: 1px dashed var(--regmgr-gray-300);
+    border-radius: var(--regmgr-radius);
+    background: var(--regmgr-gray-50);
+    color: var(--regmgr-gray-500);
+    text-align: center;
+}
+
+.mj-regmgr__tab-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 24px;
+    background: #fff;
+    border: 1px dashed var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius-lg);
+    color: var(--regmgr-gray-500);
+    font-size: 15px;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .mj-regmgr-occurrence__body {
+        flex-direction: column;
+    }
+
+    .mj-regmgr-occurrence__calendar,
+    .mj-regmgr-occurrence__sidebar {
+        width: 100%;
+    }
+}
+
+@media (max-width: 640px) {
+    .mj-regmgr-occurrence {
+        padding: 16px;
+    }
+
+    .mj-regmgr-occurrence__months {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+
+    .mj-regmgr-occurrence__form-row {
+        flex-direction: column;
+    }
+
+    .mj-regmgr-occurrence__view-toggle {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
 /*============================================
    Media attachments tweaks
    ============================================ */

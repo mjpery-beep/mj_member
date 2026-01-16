@@ -4,8 +4,8 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-if (!class_exists('MjEventPhotos')) {
-    require_once plugin_dir_path(__FILE__) . 'classes/crud/MjEventPhotos.php';
+if (!class_exists('Mj\Member\Classes\Crud\MjEventPhotos')) {
+    return;
 }
 
 if (!function_exists('mj_member_event_photos_get_image_size_map')) {

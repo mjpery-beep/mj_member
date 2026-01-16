@@ -121,6 +121,9 @@
             return;
         }
 
+        $item.attr('data-is-unread', isUnread ? '1' : '0');
+        $item.data('isUnread', isUnread ? 1 : 0);
+
         if (isUnread) {
             $item.addClass('is-unread');
         } else {
@@ -191,6 +194,172 @@
             $pillIndicator.addClass('is-read').removeClass('is-unread');
             $pillText.text(label('badgeRead', 'Lu'));
         }
+    }
+
+    var FILTER_ALL = 'all';
+    var FILTER_UNREAD = 'unread';
+    var FILTER_ARCHIVED = 'archived';
+
+    function normalizeString(value) {
+        if (value === undefined || value === null) {
+            return '';
+        }
+
+        return String(value).toLowerCase().replace(/\s+/g, ' ').trim();
+    }
+
+    function getRootContainer($element) {
+        if (!$element || !$element.length) {
+            return $();
+        }
+
+        return $element.closest('.mj-contact-messages[data-mj-component="mj-contact-messages"]');
+    }
+
+    function updateFilterButtons($root, filter, $trigger) {
+        if (!$root || !$root.length) {
+            return;
+        }
+
+        var $buttons = $root.find('.mj-contact-messages__filter-button');
+        if (!$buttons.length) {
+            return;
+        }
+
+        $buttons.removeClass('is-active').attr('aria-pressed', 'false');
+
+        var $target = $trigger && $trigger.length ? $trigger : $buttons.filter('[data-filter="' + filter + '"]').first();
+        if (!$target.length) {
+            $target = $buttons.first();
+        }
+
+        $target.addClass('is-active').attr('aria-pressed', 'true');
+    }
+
+    function ensureFiltersState($root) {
+        if (!$root || !$root.length) {
+            return;
+        }
+
+        if (!$root.data('mjFiltersInitialized')) {
+            $root.data('mjFiltersInitialized', true);
+        }
+
+        if ($root.data('mjFilterValue') === undefined) {
+            $root.data('mjFilterValue', FILTER_ALL);
+        }
+
+        if ($root.data('mjSearchValue') === undefined) {
+            $root.data('mjSearchValue', '');
+        }
+    }
+
+    function applyFilters($root) {
+        if (!$root || !$root.length) {
+            return;
+        }
+
+        ensureFiltersState($root);
+
+        var filter = $root.data('mjFilterValue');
+        if (filter !== FILTER_UNREAD && filter !== FILTER_ARCHIVED) {
+            filter = FILTER_ALL;
+        }
+
+        var query = normalizeString($root.data('mjSearchValue'));
+
+        var $items = $root.find('.mj-contact-messages__list .mj-contact-messages__item');
+        var visibleCount = 0;
+
+        if (!$items.length) {
+            var $emptyPlaceholder = $root.find('.mj-contact-messages__filter-empty');
+            if ($emptyPlaceholder.length) {
+                $emptyPlaceholder.attr('aria-hidden', 'true').prop('hidden', true);
+            }
+            return;
+        }
+
+        $items.each(function () {
+            var $item = $(this);
+            var statusKey = normalizeString($item.data('statusKey'));
+            var unreadData = $item.data('isUnread');
+            var isUnread = unreadData === 1 || unreadData === '1' || unreadData === true;
+
+            var matchesFilter = true;
+            if (filter === FILTER_UNREAD) {
+                matchesFilter = isUnread;
+            } else if (filter === FILTER_ARCHIVED) {
+                matchesFilter = statusKey === 'archive';
+            }
+
+            var searchData = $item.data('search');
+            var searchContent = searchData !== undefined ? normalizeString(searchData) : normalizeString($item.text());
+            var matchesSearch = query === '' || searchContent.indexOf(query) !== -1;
+
+            var shouldShow = matchesFilter && matchesSearch;
+
+            if (shouldShow) {
+                $item.removeClass('is-hidden').attr('aria-hidden', 'false');
+                visibleCount += 1;
+            } else {
+                $item.addClass('is-hidden').attr('aria-hidden', 'true');
+                var panel = $item.find('.mj-contact-messages__panel').get(0);
+                if (panel) {
+                    panel.open = false;
+                }
+            }
+        });
+
+        var $empty = $root.find('.mj-contact-messages__filter-empty');
+        if ($empty.length) {
+            if (visibleCount === 0) {
+                $empty.attr('aria-hidden', 'false').prop('hidden', false);
+            } else {
+                $empty.attr('aria-hidden', 'true').prop('hidden', true);
+            }
+        }
+    }
+
+    function setActiveFilter($root, filter, $trigger) {
+        if (!$root || !$root.length) {
+            return;
+        }
+
+        ensureFiltersState($root);
+
+        if (filter !== FILTER_UNREAD && filter !== FILTER_ARCHIVED) {
+            filter = FILTER_ALL;
+        }
+
+        $root.data('mjFilterValue', filter);
+        updateFilterButtons($root, filter, $trigger);
+        applyFilters($root);
+    }
+
+    function setSearchTerm($root, term) {
+        if (!$root || !$root.length) {
+            return;
+        }
+
+        ensureFiltersState($root);
+
+        var normalized = normalizeString(term);
+        $root.data('mjSearchValue', normalized);
+        applyFilters($root);
+    }
+
+    function initializeFilters($roots) {
+        var $collection = $($roots);
+        if (!$collection.length) {
+            return;
+        }
+
+        $collection.each(function () {
+            var $root = $(this);
+            ensureFiltersState($root);
+            updateFilterButtons($root, $root.data('mjFilterValue') || FILTER_ALL);
+            applyFilters($root);
+        });
     }
 
     function handleSubmit(event) {
@@ -301,6 +470,50 @@
 
     $(document).on('click', '.mj-contact-messages__toggle-button', function (event) {
         event.stopPropagation();
+    });
+
+    $(document).on('click', '.mj-contact-messages__filter-button', function (event) {
+        event.preventDefault();
+
+        var $button = $(this);
+        var $root = getRootContainer($button);
+        if (!$root.length) {
+            return;
+        }
+
+        setActiveFilter($root, $button.data('filter'), $button);
+    });
+
+    $(document).on('input', '.mj-contact-messages__search-input', function () {
+        var $input = $(this);
+        var $root = getRootContainer($input);
+        if (!$root.length) {
+            return;
+        }
+
+        setSearchTerm($root, $input.val());
+    });
+
+    var scheduleInit = typeof Utils.domReady === 'function'
+        ? Utils.domReady
+        : function (callback) {
+            $(callback);
+        };
+
+    scheduleInit(function () {
+        initializeFilters($('.mj-contact-messages[data-mj-component="mj-contact-messages"]'));
+    });
+
+    $(document).on('mj-contact-messages:refresh', function (event, context) {
+        var $context = context ? $(context) : $('.mj-contact-messages[data-mj-component="mj-contact-messages"]');
+        initializeFilters($context);
+    });
+
+    $(document).on('submit', '.mj-contact-messages__delete-form', function (event) {
+        var confirmMessage = $(this).data('confirm');
+        if (confirmMessage && !window.confirm(confirmMessage)) {
+            event.preventDefault();
+        }
     });
 
     $(document).on('submit', '.mj-contact-messages__quick-reply-form', handleSubmit);

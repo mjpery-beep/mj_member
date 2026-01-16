@@ -9,6 +9,7 @@ use function sanitize_text_field;
 use function is_array;
 use function is_string;
 use function preg_match;
+use function wp_json_encode;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -44,6 +45,20 @@ final class EventFormDataMapper
         $frequency = isset($values['schedule_recurring_frequency']) ? (string) $values['schedule_recurring_frequency'] : 'weekly';
         $recurring_start_time = isset($values['schedule_recurring_start_time']) ? (string) $values['schedule_recurring_start_time'] : '';
         $recurring_end_time = isset($values['schedule_recurring_end_time']) ? (string) $values['schedule_recurring_end_time'] : '';
+
+        $occurrence_payload_items = array();
+        if (isset($values['occurrence_editor']) && is_array($values['occurrence_editor'])) {
+            $editor_config = $values['occurrence_editor'];
+            if (isset($editor_config['items']) && is_array($editor_config['items'])) {
+                $occurrence_payload_items = $editor_config['items'];
+            }
+        } elseif (isset($values['schedule_payload']) && is_array($values['schedule_payload']) && isset($values['schedule_payload']['occurrences']) && is_array($values['schedule_payload']['occurrences'])) {
+            $occurrence_payload_items = $values['schedule_payload']['occurrences'];
+        }
+        $occurrence_payload_json = wp_json_encode($occurrence_payload_items);
+        if (!is_string($occurrence_payload_json)) {
+            $occurrence_payload_json = '[]';
+        }
 
         return array(
             'event_title' => isset($values['title']) ? (string) $values['title'] : '',
@@ -88,6 +103,7 @@ final class EventFormDataMapper
             'event_date_deadline' => isset($values['date_fin_inscription']) ? (string) $values['date_fin_inscription'] : '',
             'event_price' => isset($values['prix']) ? (float) $values['prix'] : 0.0,
             'event_description' => isset($values['description']) ? (string) $values['description'] : '',
+            'event_occurrences_payload' => $occurrence_payload_json,
         );
     }
 
@@ -175,6 +191,21 @@ final class EventFormDataMapper
 
         if (array_key_exists('event_schedule_exceptions', $formData)) {
             $values['schedule_exceptions'] = self::sanitizeExceptionsField($formData['event_schedule_exceptions']);
+        }
+
+        if (array_key_exists('event_occurrences_payload', $formData)) {
+            $decoded_occurrences = json_decode((string) $formData['event_occurrences_payload'], true);
+            if (!is_array($decoded_occurrences)) {
+                $decoded_occurrences = array();
+            }
+            if (!isset($values['occurrence_editor']) || !is_array($values['occurrence_editor'])) {
+                $values['occurrence_editor'] = array();
+            }
+            $values['occurrence_editor']['items'] = $decoded_occurrences;
+            if (!isset($values['schedule_payload']) || !is_array($values['schedule_payload'])) {
+                $values['schedule_payload'] = array();
+            }
+            $values['schedule_payload']['occurrences'] = $decoded_occurrences;
         }
 
         return $values;

@@ -63,6 +63,9 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         'status' => 50,
         'description_courte' => 255,
         'card_access_key' => 64,
+        'school' => 150,
+        'birth_country' => 120,
+        'nationality' => 120,
     );
 
     /**
@@ -354,7 +357,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             return new WP_Error('mj_member_invalid_email', 'Adresse e-mail invalide.');
         }
 
-        if ($role !== self::ROLE_JEUNE && empty($email)) {
+        if ($role !== self::ROLE_JEUNE && $role !== self::ROLE_TUTEUR && empty($email)) {
             return new WP_Error('mj_member_email_required', 'Une adresse e-mail est requise pour ce role.');
         }
 
@@ -362,7 +365,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             'first_name' => $first_name,
             'nickname' => self::sanitizeOptionalText($data['nickname'] ?? ''),
             'last_name' => $last_name,
-            'email' => $email,
+            'email' => ($email !== null ? $email : ''),
             'phone' => self::sanitizeOptionalText($data['phone'] ?? ''),
             'birth_date' => self::sanitizeDate($data['birth_date'] ?? ''),
             'role' => $role,
@@ -372,9 +375,14 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             'address' => self::sanitizeOptionalText($data['address'] ?? ''),
             'city' => self::sanitizeOptionalText($data['city'] ?? ''),
             'postal_code' => self::sanitizeOptionalText($data['postal_code'] ?? ''),
+            'school' => self::sanitizeOptionalText($data['school'] ?? ''),
+            'birth_country' => self::sanitizeOptionalText($data['birth_country'] ?? ''),
+            'nationality' => self::sanitizeOptionalText($data['nationality'] ?? ''),
             'notes' => self::sanitizeNotes($data['notes'] ?? ''),
             'description_courte' => self::sanitizeOptionalText($data['description_courte'] ?? ''),
             'description_longue' => self::sanitizeNotes($data['description_longue'] ?? ''),
+            'why_mj' => self::sanitizeNotes($data['why_mj'] ?? ''),
+            'how_mj' => self::sanitizeNotes($data['how_mj'] ?? ''),
             'status' => $status,
             'date_last_payement' => self::sanitizeDateTime($data['date_last_payement'] ?? ''),
             'photo_id' => isset($data['photo_id']) ? intval($data['photo_id']) : null,
@@ -389,6 +397,11 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         $insert['notification_preferences'] = self::sanitizeNotificationPreferences($data['notification_preferences'] ?? null, $insert);
         $insert['card_access_key'] = self::generateCardAccessKey();
         $insert['anonymized_at'] = null;
+
+        $custom_inscription = self::sanitizeDateTime($data['date_inscription'] ?? '');
+        if ($custom_inscription !== null) {
+            $insert['date_inscription'] = $custom_inscription;
+        }
 
         $insert = self::enforceColumnLengths($insert);
         $insert = self::filterAvailableColumns($insert);
@@ -486,7 +499,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         $updates = array();
 
         $allowed_fields = array(
-            'first_name','last_name','nickname','email','phone','birth_date','role','guardian_id','is_autonomous','is_volunteer','requires_payment','address','city','postal_code','notes','description_courte','description_longue','work_schedule','status','date_last_payement','photo_id','photo_usage_consent','newsletter_opt_in','sms_opt_in','whatsapp_opt_in','notification_preferences','wp_user_id','card_access_key','anonymized_at'
+            'first_name','last_name','nickname','email','phone','birth_date','role','guardian_id','is_autonomous','is_volunteer','requires_payment','address','city','postal_code','school','birth_country','nationality','notes','description_courte','description_longue','why_mj','how_mj','work_schedule','status','date_inscription','date_last_payement','photo_id','photo_usage_consent','newsletter_opt_in','sms_opt_in','whatsapp_opt_in','notification_preferences','wp_user_id','card_access_key','anonymized_at'
         );
 
         foreach ($data as $field => $value) {
@@ -503,6 +516,9 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
                     $updates[$field] = sanitize_text_field($value);
                     break;
                 case 'nickname':
+                case 'school':
+                case 'birth_country':
+                case 'nationality':
                     $updates[$field] = self::sanitizeOptionalText($value);
                     break;
                 case 'phone':
@@ -512,19 +528,20 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
                     $updates[$field] = self::sanitizeOptionalText($value);
                     break;
                 case 'notes':
+                case 'description_longue':
+                case 'why_mj':
+                case 'how_mj':
                     $updates[$field] = self::sanitizeNotes($value);
                     break;
                 case 'description_courte':
                     $updates[$field] = self::sanitizeOptionalText($value);
                     break;
-                case 'description_longue':
-                    $updates[$field] = self::sanitizeNotes($value);
+                case 'date_inscription':
+                case 'date_last_payement':
+                    $updates[$field] = self::sanitizeDateTime($value);
                     break;
                 case 'birth_date':
                     $updates[$field] = self::sanitizeDate($value);
-                    break;
-                case 'date_last_payement':
-                    $updates[$field] = self::sanitizeDateTime($value);
                     break;
                 case 'role':
                     $updates[$field] = self::normalizeRole($value);
@@ -589,7 +606,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             return new WP_Error('mj_member_invalid_email', 'Adresse e-mail invalide.');
         }
 
-        if ($effective_role !== self::ROLE_JEUNE && array_key_exists('email', $updates) && empty($updates['email'])) {
+        if ($effective_role !== self::ROLE_JEUNE && $effective_role !== self::ROLE_TUTEUR && array_key_exists('email', $updates) && empty($updates['email'])) {
             return new WP_Error('mj_member_email_required', 'Une adresse e-mail est requise pour ce role.');
         }
 
@@ -1063,14 +1080,13 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         $first_name = sanitize_text_field($data['first_name'] ?? '');
         $last_name = sanitize_text_field($data['last_name'] ?? '');
 
-        if (empty($email) || empty($first_name) || empty($last_name)) {
+        if ($first_name === '' || $last_name === '') {
             return null;
         }
 
         $payload = array(
             'first_name' => $first_name,
             'last_name' => $last_name,
-            'email' => $email,
             'phone' => self::sanitizeOptionalText($data['phone'] ?? ''),
             'address' => self::sanitizeOptionalText($data['address'] ?? ''),
             'city' => self::sanitizeOptionalText($data['city'] ?? ''),
@@ -1081,6 +1097,10 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             'is_autonomous' => 1,
         );
 
+        if ($email !== '') {
+            $payload['email'] = $email;
+        }
+
         $payload = self::stripNulls($payload);
 
         $table = self::getTableName(self::TABLE_NAME);
@@ -1090,7 +1110,12 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         if ($target_id > 0) {
             $existing = self::getById($target_id);
             if ($existing && $existing->role === self::ROLE_TUTEUR) {
-                $update_result = self::update($target_id, $payload);
+                $update_payload = $payload;
+                if ($email === '') {
+                    unset($update_payload['email']);
+                }
+
+                $update_result = self::update($target_id, $update_payload);
                 if (is_wp_error($update_result)) {
                     return $update_result;
                 }
@@ -1099,17 +1124,37 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             }
         }
 
-        $existing_id = $wpdb->get_var(
-            $wpdb->prepare("SELECT id FROM $table WHERE email = %s AND role = %s", $email, self::ROLE_TUTEUR)
-        );
+        $existing_guardian = null;
+        if ($email !== '') {
+            $candidate = self::getByEmail($email);
+            if ($candidate && $candidate->role === self::ROLE_TUTEUR) {
+                $existing_guardian = $candidate;
+            }
+        }
 
-        if ($existing_id) {
-            $update_result = self::update((int) $existing_id, $payload);
+        if (!$existing_guardian) {
+            $candidate = self::findGuardianByName($first_name, $last_name);
+            if ($candidate && $candidate->role === self::ROLE_TUTEUR) {
+                $existing_guardian = $candidate;
+            }
+        }
+
+        if ($existing_guardian) {
+            $update_payload = $payload;
+            if ($email === '') {
+                unset($update_payload['email']);
+            }
+
+            $update_result = self::update((int) $existing_guardian->id, $update_payload);
             if (is_wp_error($update_result)) {
                 return $update_result;
             }
 
-            return (int) $existing_id;
+            return (int) $existing_guardian->id;
+        }
+
+        if ($email === '') {
+            $payload['email'] = '';
         }
 
         $payload['role'] = self::ROLE_TUTEUR;
@@ -1122,6 +1167,26 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         }
 
         return $created;
+    }
+
+    private static function findGuardianByName($first_name, $last_name) {
+        $table = self::getTableName(self::TABLE_NAME);
+        $wpdb = self::getWpdb();
+
+        $query = $wpdb->prepare(
+            "SELECT * FROM $table WHERE role = %s AND first_name = %s AND last_name = %s LIMIT 1",
+            self::ROLE_TUTEUR,
+            $first_name,
+            $last_name
+        );
+
+        if ($query === false) {
+            return null;
+        }
+
+        $row = $wpdb->get_row($query);
+
+        return $row ? MemberData::fromRow($row) : null;
     }
 
     public static function getNotificationPreferences($member_id) {

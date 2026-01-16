@@ -545,7 +545,15 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             if ($event_id <= 0) {
                 continue;
             }
-
+            if(isset($_GET['DEBUG']) && $event_id === 37)
+            {   
+                var_dump("start ", $event['schedule_payload']['items'][0]['start_time']);                 
+                var_dump("end ", $event['schedule_payload']['items'][0]['end_time']);    
+                /**
+                 * ici l'heure est correct
+                 * string(6) "start " string(5) "12:00" string(4) "end " string(5) "17:00" 
+                 */
+            }
             $title = isset($event['title']) ? sanitize_text_field($event['title']) : '';
             $slug = isset($event['slug']) ? sanitize_title($event['slug']) : '';
             $permalink = '';
@@ -691,7 +699,14 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         if ($end_ts_candidate === false || $end_ts_candidate <= $start_ts_candidate) {
                             $end_ts_candidate = $start_ts_candidate + HOUR_IN_SECONDS;
                         }
-
+                        if(isset($_GET['DEBUG']) && $event_id === 37)
+                        {   
+                            var_dump("Start/end ts ", $start_ts_candidate, $end_ts_candidate);                 
+                            /**
+                             * l'id 37 ne rentre pas ici
+                             * 
+                             */
+                        }
                         $schedule_occurrences[] = array(
                             'start' => wp_date('Y-m-d H:i:s', $start_ts_candidate, $timezone),
                             'end' => wp_date('Y-m-d H:i:s', $end_ts_candidate, $timezone),
@@ -706,7 +721,15 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 if (!is_array($occurrence)) {
                     continue;
                 }
-
+                if(isset($_GET['DEBUG']) && $event_id === 37)
+                {   
+                    var_dump("OC1", $occurrence);                 
+                    /**
+                     * ICI L'heure est déjà incorrecte (13h au lieu de 12h; 18h au lieu de 17h)
+                     * array(4) { ["start"]=> string(19) "2026-01-14 13:00:00" ["timestamp"]=> int(1768392000) ["end"]=> string(19) "2026-01-14 18:00:00" ["label"]=> string(44) "14 janvier 2026 - 12 h 00 min -> 17 h 00 min" } object(DateTimeImmutable)#4672 (3) { ["date"]=> string(26) "2026-01-14 13:00:00.000000" ["timezone_type"]=> int(3) ["timezone"]=> string(15) "Europe/Brussels" } object(DateTimeImmutable)#4166 (3) { ["date"]=> string(26) "2026-01-14 18:00:00.000000" ["timezone_type"]=> int(3) ["timezone"]=> string(15) "Europe/Brussels" }
+                     */
+                    
+                }
                 $occurrence_start_raw = isset($occurrence['start']) ? (string) $occurrence['start'] : '';
                 if ($occurrence_start_raw === '') {
                     continue;
@@ -740,20 +763,25 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     continue;
                 }
 
+                $normalized_start = wp_date('Y-m-d H:i:s', $start_ts, $timezone);
+                $raw_start_ts = $occurrence_start_dt instanceof \DateTimeImmutable ? $occurrence_start_dt->getTimestamp() : $start_ts;
+                $start_offset = $raw_start_ts - $start_ts;
+                $occurrence_start_dt = (new \DateTimeImmutable('@' . $start_ts))->setTimezone($timezone);
+
                 $normalized_entry = array(
-                    'start' => $occurrence_start_dt ? $occurrence_start_dt->format('Y-m-d H:i:s') : wp_date('Y-m-d H:i:s', $start_ts, $timezone),
+                    'start' => $normalized_start,
                     'timestamp' => $start_ts,
                 );
 
                 if (isset($occurrence['end']) && (string) $occurrence['end'] !== '') {
                     $end_dt = $create_datetime((string) $occurrence['end']);
-                    if ($end_dt) {
-                        $normalized_entry['end'] = $end_dt->format('Y-m-d H:i:s');
-                    } else {
-                        $end_ts_candidate = strtotime((string) $occurrence['end']);
-                        if ($end_ts_candidate !== false) {
-                            $normalized_entry['end'] = wp_date('Y-m-d H:i:s', $end_ts_candidate, $timezone);
+                    $end_ts_candidate = $end_dt instanceof \DateTimeImmutable ? $end_dt->getTimestamp() : strtotime((string) $occurrence['end']);
+                    if ($end_ts_candidate !== false && $end_ts_candidate !== null) {
+                        if ($start_offset !== 0) {
+                            $end_ts_candidate -= $start_offset;
                         }
+                        $end_dt = (new \DateTimeImmutable('@' . $end_ts_candidate))->setTimezone($timezone);
+                        $normalized_entry['end'] = $end_dt->format('Y-m-d H:i:s');
                     }
                 }
 
@@ -783,6 +811,15 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
                 $occurrence_start_dt = $create_datetime($occurrence_start_raw);
                 $start_ts = isset($occurrence['timestamp']) ? (int) $occurrence['timestamp'] : 0;
+                if(isset($_GET['DEBUG']) && $event_id === 37)
+                {   
+                    var_dump("OC2", $occurrence);                 
+                    /**
+                     * ICI L'heure est déjà incorrecte (13h au lieu de 12h; 18h au lieu de 17h)
+                     * array(4) { ["start"]=> string(19) "2026-01-14 13:00:00" ["timestamp"]=> int(1768392000) ["end"]=> string(19) "2026-01-14 18:00:00" ["label"]=> string(44) "14 janvier 2026 - 12 h 00 min -> 17 h 00 min" } object(DateTimeImmutable)#4672 (3) { ["date"]=> string(26) "2026-01-14 13:00:00.000000" ["timezone_type"]=> int(3) ["timezone"]=> string(15) "Europe/Brussels" } object(DateTimeImmutable)#4166 (3) { ["date"]=> string(26) "2026-01-14 18:00:00.000000" ["timezone_type"]=> int(3) ["timezone"]=> string(15) "Europe/Brussels" }
+                     */
+                    
+                }
                 if (!$occurrence_start_dt && $start_ts > 0) {
                     $occurrence_start_dt = (new \DateTimeImmutable('@' . $start_ts))->setTimezone($timezone);
                 }
@@ -804,6 +841,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 if (!$occurrence_start_dt) {
                     $occurrence_start_dt = (new \DateTimeImmutable('@' . $start_ts))->setTimezone($timezone);
                 }
+                $occurrence_start_dt = (new \DateTimeImmutable('@' . $start_ts))->setTimezone($timezone);
 
                 if ($start_ts < $range_start || $start_ts > $range_end) {
                     continue;
@@ -835,7 +873,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         $occurrence_end_ts = $occurrence_end_dt->getTimestamp();
                     }
                 }
-
+                if(isset($_GET['DEBUG']) && $event_id === 37)
+                {                    
+                    /**
+                     * ICI L'heure est déjà incorrecte (13h au lieu de 12h; 18h au lieu de 17h)
+                     */
+                    var_dump($occurrence_start_dt, $occurrence_end_dt);
+                }
                 $time_label = self::format_occurrence_time_label($occurrence_start_dt, $occurrence_end_dt);
                 $occurrence_key = $event_id . ':' . $start_ts;
 
@@ -1444,6 +1488,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             if (isset($event_entry['schedule_label']) && $event_entry['schedule_label'] !== '') {
                                 $meta_label = (string) $event_entry['schedule_label'];
                             } elseif (!empty($event_entry['time'])) {
+                                
+         
                                 $meta_label = (string) $event_entry['time'];
                             }
                             if ($meta_label !== '') {
@@ -2411,71 +2457,29 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
     }
 
     /**
-     * Formate le libellé horaire d'une occurrence en priorisant son fuseau horaire.
+     * Formate le libellé horaire d'une occurrence en respectant le fuseau WP.
      */
     private static function format_occurrence_time_label(\DateTimeImmutable $start, ?\DateTimeImmutable $end = null) {
-        $time_format = get_option('time_format', 'H:i');
-        $start_label = self::normalize_time_label($start->format($time_format));
-
         $timezone = wp_timezone();
         if (!($timezone instanceof \DateTimeZone)) {
             $timezone = new \DateTimeZone('UTC');
         }
 
-        if ($start_label === '') {
-            $start_label = self::normalize_time_label(wp_date($time_format, $start->getTimestamp(), $timezone));
-        }
+        $time_format = get_option('time_format', 'H:i');
+        $start_label = self::normalize_time_label(wp_date($time_format, $start->getTimestamp(), $timezone));
 
         if ($start_label === '') {
             return '';
         }
 
         if ($end instanceof \DateTimeImmutable) {
-            $end_label = self::normalize_time_label($end->format($time_format));
-            if ($end_label === '') {
-                $end_label = self::normalize_time_label(wp_date($time_format, $end->getTimestamp(), $timezone));
-            }
+            $end_label = self::normalize_time_label(wp_date($time_format, $end->getTimestamp(), $timezone));
             if ($end_label !== '' && $end_label !== $start_label) {
                 return $start_label . ' → ' . $end_label;
             }
         }
 
         return sprintf(__('À partir de %s', 'mj-member'), $start_label);
-    }
-
-    private static function format_fixed_occurrence_time_from_raw($start_raw, $end_raw) {
-        $start_time = self::extract_time_fragment($start_raw);
-        if ($start_time === '') {
-            return '';
-        }
-
-        $start_label = self::normalize_time_label($start_time);
-        if ($start_label === '') {
-            return '';
-        }
-
-        $end_time = self::extract_time_fragment($end_raw);
-        if ($end_time !== '') {
-            $end_label = self::normalize_time_label($end_time);
-            if ($end_label !== '' && $end_label !== $start_label) {
-                return $start_label . ' → ' . $end_label;
-            }
-        }
-
-        return sprintf(__('À partir de %s', 'mj-member'), $start_label);
-    }
-
-    private static function extract_time_fragment($value) {
-        $value = is_string($value) ? trim($value) : '';
-        if ($value === '') {
-            return '';
-        }
-
-        if (preg_match('/\b(\d{2}:\d{2})(?::\d{2})?\b/', $value, $matches)) {
-            return $matches[1];
-        }
-
-        return '';
     }
 
     private static function normalize_time_label($label) {

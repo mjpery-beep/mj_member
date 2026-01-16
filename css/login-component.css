@@ -822,7 +822,7 @@
 .mj-member-login-component__panel {
     position: absolute;
     top: calc(100% + 0.75rem);
-    left: 0;
+    left: -40px;
     min-width: 300px;
     max-width: min(380px, calc(100vw - 2rem));
     padding-top: 10px;
@@ -1328,6 +1328,13 @@
         margin-left: 0 !important;
         margin-bottom: 0 !important;
     }
+    .mj-member-login-component {
+        flex: 0 0 auto;
+        width: auto;
+    }
+    .mj-member-login-component__trigger {
+        width: auto !important;
+    }
     button.mj-member-login-component {
           min-width: 200px;
     }
@@ -1346,6 +1353,51 @@
     }
     .mj-member-account-menu--layout-desktop {
         display: none !important;
+    }
+}
+
+@media (max-width: 1024px) and (min-width: 769px) {
+    .mj-member-login-component__trigger-info,
+    .mj-member-login-component__trigger-label{
+        display: none !important;
+    }
+
+    /* Tablet layout: anchor the panel to the trigger's right edge */
+    .mj-member-login-component {
+        position: relative;
+    }
+
+    .mj-member-login-component__panel,
+    .mj-member-login-component--align-center .mj-member-login-component__panel,
+    .mj-member-login-component--align-right .mj-member-login-component__panel,
+    .mj-member-login-component--align-stretch .mj-member-login-component__panel {
+        position: absolute;
+        top: calc(100% + 0.75rem);
+        left: auto;
+        right: 0;
+        width: min(440px, calc(100vw - 36px));
+        max-width: 100%;
+        transform: translateY(-12px);
+        margin-top: 0;
+    }
+
+    .mj-member-login-component__panel.is-active,
+    .mj-member-login-component--align-center .mj-member-login-component__panel.is-active,
+    .mj-member-login-component--align-right .mj-member-login-component__panel.is-active,
+    .mj-member-login-component--align-stretch .mj-member-login-component__panel.is-active {
+        transform: translateY(0);
+    }
+
+    .mj-member-login-component__panel-arrow,
+    .mj-member-login-component--align-center .mj-member-login-component__panel-arrow,
+    .mj-member-login-component--align-right .mj-member-login-component__panel-arrow {
+        left: auto;
+        right: 6px;
+        transform: translateY(-50%) rotate(45deg);
+    }
+
+    .mj-member-login-component__panel-inner {
+        max-height: calc(100vh - 140px);
     }
 }
 

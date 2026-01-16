@@ -810,10 +810,22 @@ class MjMembers_List_Table extends WP_List_Table {
 
         $user_ids = array_unique(array_filter($user_ids));
         if (empty($user_ids)) {
-            foreach ($members as $member) {
-                $member->wp_user = null;
-                $member->wp_user_login = '';
-                $member->wp_user_email = '';
+            foreach ($members as $index => $member) {
+                $empty_user_payload = array(
+                    'wp_user'       => null,
+                    'wp_user_login' => '',
+                    'wp_user_email' => '',
+                    'wp_user_roles' => array(),
+                );
+
+                if ($member instanceof MemberData) {
+                    $members[$index] = $member->with($empty_user_payload);
+                } else {
+                    $member->wp_user = $empty_user_payload['wp_user'];
+                    $member->wp_user_login = $empty_user_payload['wp_user_login'];
+                    $member->wp_user_email = $empty_user_payload['wp_user_email'];
+                    $member->wp_user_roles = $empty_user_payload['wp_user_roles'];
+                }
             }
             return;
         }

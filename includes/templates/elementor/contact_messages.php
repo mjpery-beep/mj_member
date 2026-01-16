@@ -32,6 +32,7 @@ $owner_reply_sender_email = isset($owner_reply_config['sender_email']) ? (string
 $owner_reply_member_id = isset($owner_reply_config['member_id']) ? (int) $owner_reply_config['member_id'] : 0;
 $owner_reply_source = isset($owner_reply_config['source']) ? (string) $owner_reply_config['source'] : '';
 $owner_reply_ready = $owner_reply_enabled && $owner_reply_can_send && $owner_reply_ajax_url !== '' && $owner_reply_nonce !== '';
+$search_input_id = function_exists('wp_unique_id') ? wp_unique_id('mj-contact-messages-search-') : 'mj-contact-messages-search-' . uniqid();
 
 $notice_key = isset($_GET['mj_contact_notice']) ? sanitize_key(wp_unslash($_GET['mj_contact_notice'])) : '';
 $notice_message = '';
@@ -86,6 +87,16 @@ if ($notice_key !== '') {
             $notice_message = __('Impossible de mettre à jour l’état de lecture.', 'mj-member');
             $notice_type = 'error';
             break;
+        case 'archived':
+            $notice_message = __('Message archivé.', 'mj-member');
+            break;
+        case 'restored':
+            $notice_message = __('Message restauré.', 'mj-member');
+            break;
+        case 'archive-error':
+            $notice_message = __('Impossible d’archiver le message.', 'mj-member');
+            $notice_type = 'error';
+            break;
         default:
             $notice_message = '';
     }
@@ -109,6 +120,20 @@ if ($notice_message !== '' && $notice_detail !== '') {
         <?php if ($notice_message !== '') : ?>
             <div class="mj-contact-messages__flash mj-contact-messages__flash--<?php echo esc_attr($notice_type); ?>">
                 <?php echo esc_html($notice_message); ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($can_view) : ?>
+            <div class="mj-contact-messages__toolbar" data-mj-element="toolbar">
+                <div class="mj-contact-messages__filters" role="group" aria-label="<?php esc_attr_e('Filtrer les messages', 'mj-member'); ?>">
+                    <button type="button" class="mj-contact-messages__filter-button is-active" data-filter="all" aria-pressed="true"><?php esc_html_e('Tous', 'mj-member'); ?></button>
+                    <button type="button" class="mj-contact-messages__filter-button" data-filter="unread" aria-pressed="false"><?php esc_html_e('Non lus', 'mj-member'); ?></button>
+                    <button type="button" class="mj-contact-messages__filter-button" data-filter="archived" aria-pressed="false"><?php esc_html_e('Archivés', 'mj-member'); ?></button>
+                </div>
+                <div class="mj-contact-messages__search">
+                    <label class="screen-reader-text" for="<?php echo esc_attr($search_input_id); ?>"><?php esc_html_e('Rechercher dans les messages', 'mj-member'); ?></label>
+                    <input type="search" id="<?php echo esc_attr($search_input_id); ?>" class="mj-contact-messages__search-input" placeholder="<?php esc_attr_e('Rechercher un message…', 'mj-member'); ?>" autocomplete="off">
+                </div>
             </div>
         <?php endif; ?>
 
@@ -145,6 +170,17 @@ if ($notice_message !== '' && $notice_detail !== '') {
                     $toggle_action_label = $is_unread ? $mark_read_label : $mark_unread_label;
                     $state_indicator_class = $is_unread ? ' is-unread' : ' is-read';
                     $toggle_action_class = $toggle_state === 'read' ? ' is-action-read' : ' is-action-unread';
+                    $is_archived = !empty($message['is_archived']);
+                    $archive_nonce = isset($message['archive_nonce']) ? (string) $message['archive_nonce'] : '';
+                    $delete_nonce = isset($message['delete_nonce']) ? (string) $message['delete_nonce'] : '';
+                    $search_terms = isset($message['search_terms']) ? (string) $message['search_terms'] : '';
+                    $item_classes = 'mj-contact-messages__item';
+                    if ($is_unread) {
+                        $item_classes .= ' is-unread';
+                    }
+                    if ($is_archived) {
+                        $item_classes .= ' is-archived';
+                    }
 
                     $sender_parts = array();
                     if ($sender_name !== '') {
@@ -182,7 +218,7 @@ if ($notice_message !== '' && $notice_detail !== '') {
                     $quick_reply_available = $message_owner_view && $owner_reply_ready && $recipient_choice !== '';
                     $panel_open = false;
                     ?>
-                    <li class="mj-contact-messages__item<?php echo $is_unread ? ' is-unread' : ''; ?>" data-message-id="<?php echo esc_attr($message_id); ?>">
+                    <li class="<?php echo esc_attr($item_classes); ?>" data-message-id="<?php echo esc_attr($message_id); ?>" data-status-key="<?php echo esc_attr($status_key); ?>" data-is-unread="<?php echo $is_unread ? '1' : '0'; ?>" data-is-archived="<?php echo $is_archived ? '1' : '0'; ?>" data-search="<?php echo esc_attr($search_terms); ?>">
                         <details class="mj-contact-messages__panel" data-message-id="<?php echo esc_attr($message_id); ?>"<?php echo $panel_open ? ' open' : ''; ?>>
                             <summary class="mj-contact-messages__summary">
                                 <div class="mj-contact-messages__summary-main">
@@ -228,7 +264,7 @@ if ($notice_message !== '' && $notice_detail !== '') {
                             </summary>
 
                             <div class="mj-contact-messages__panel-body">
-                                <?php if ($message_owner_view && $full_message_raw !== '') : ?>
+                                <?php if (($message_owner_view || $message_can_moderate) && $full_message_raw !== '') : ?>
                                     <div class="mj-contact-messages__content">
                                         <?php echo wp_kses_post(wpautop($full_message_raw)); ?>
                                     </div>
@@ -357,6 +393,29 @@ if ($notice_message !== '' && $notice_detail !== '') {
                                             <span class="mj-contact-messages__link mj-contact-messages__link--preview"><?php esc_html_e('Adresse email manquante', 'mj-member'); ?></span>
                                         <?php endif; ?>
 
+                                        <?php if ($message_can_moderate && $message_id > 0 && !$is_archived && $archive_nonce !== '') : ?>
+                                            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="mj-contact-messages__action-form mj-contact-messages__archive-form">
+                                                <input type="hidden" name="action" value="mj_member_archive_contact_message">
+                                                <input type="hidden" name="message_id" value="<?php echo esc_attr($message_id); ?>">
+                                                <input type="hidden" name="target_state" value="archive">
+                                                <input type="hidden" name="redirect_to" value="<?php echo esc_attr($redirect_base); ?>">
+                                                <input type="hidden" name="_wpnonce" value="<?php echo esc_attr($archive_nonce); ?>">
+                                                <button type="submit" class="mj-contact-messages__action-btn mj-contact-messages__action-btn--archive"><?php esc_html_e('Archiver', 'mj-member'); ?></button>
+                                            </form>
+                                        <?php elseif ($message_can_moderate && $is_archived) : ?>
+                                            <span class="mj-contact-messages__archive-label"><?php esc_html_e('Archivé', 'mj-member'); ?></span>
+                                        <?php endif; ?>
+
+                                        <?php if ($message_can_moderate && $message_id > 0 && $delete_nonce !== '') : ?>
+                                            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="mj-contact-messages__action-form mj-contact-messages__delete-form" data-confirm="<?php echo esc_attr(__('Voulez-vous vraiment supprimer ce message ?', 'mj-member')); ?>">
+                                                <input type="hidden" name="action" value="mj_member_delete_contact_message">
+                                                <input type="hidden" name="message_id" value="<?php echo esc_attr($message_id); ?>">
+                                                <input type="hidden" name="redirect_to" value="<?php echo esc_attr($redirect_base); ?>">
+                                                <input type="hidden" name="_wpnonce" value="<?php echo esc_attr($delete_nonce); ?>">
+                                                <button type="submit" class="mj-contact-messages__action-btn mj-contact-messages__action-btn--delete"><?php esc_html_e('Supprimer', 'mj-member'); ?></button>
+                                            </form>
+                                        <?php endif; ?>
+
                                         <?php if ($message_can_moderate && $view_url !== '' && $view_url !== '#') : ?>
                                             <a class="mj-contact-messages__link mj-contact-messages__link--admin" href="<?php echo esc_url($view_url); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e('Admin', 'mj-member'); ?></a>
                                         <?php elseif ($is_preview && $view_url === '#') : ?>
@@ -369,6 +428,9 @@ if ($notice_message !== '' && $notice_detail !== '') {
                     </li>
                 <?php endforeach; ?>
             </ul>
+            <div class="mj-contact-messages__filter-empty" data-mj-element="filter-empty" aria-live="polite" hidden>
+                <?php esc_html_e('Aucun message ne correspond à ces critères.', 'mj-member'); ?>
+            </div>
         <?php endif; ?>
 
         <?php if ($can_moderate && $view_all_url !== '') : ?>

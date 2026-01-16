@@ -1,10 +1,12 @@
 <?php
 
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\Crud\MjEventOccurrences;
 use Mj\Member\Classes\Forms\EventFormDataMapper;
 use Mj\Member\Classes\Forms\EventFormFactory;
 use Mj\Member\Classes\Forms\EventFormOptionsBuilder;
 use Mj\Member\Classes\MjRoles;
+use Mj\Member\Classes\MjEventSchedule;
 use Mj\Member\Classes\Value\EventLocationData;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -353,6 +355,130 @@ if (!function_exists('mj_member_admin_resolve_weekly_anchor')) {
         }
 
         return null;
+    }
+}
+
+if (!function_exists('mj_member_occurrence_datetime_to_iso')) {
+    function mj_member_occurrence_datetime_to_iso($value) {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        return str_replace(' ', 'T', substr($value, 0, 16));
+    }
+}
+
+if (!function_exists('mj_member_normalize_occurrence_editor_item')) {
+    function mj_member_normalize_occurrence_editor_item(array $occurrence) {
+        $start = isset($occurrence['start']) ? trim((string) $occurrence['start']) : '';
+        $end = isset($occurrence['end']) ? trim((string) $occurrence['end']) : '';
+        if ($start === '' || $end === '') {
+            return array();
+        }
+
+        $status = isset($occurrence['status']) ? sanitize_key((string) $occurrence['status']) : MjEventOccurrences::STATUS_ACTIVE;
+        if ($status === '' || $status === MjEventOccurrences::STATUS_SUPPRIME) {
+            $status = MjEventOccurrences::STATUS_ACTIVE;
+        }
+
+        $meta_value = array();
+        if (isset($occurrence['meta']) && is_array($occurrence['meta'])) {
+            $meta_value = $occurrence['meta'];
+        }
+
+        return array(
+            'id' => isset($occurrence['id']) ? (int) $occurrence['id'] : 0,
+            'eventId' => isset($occurrence['event_id']) ? (int) $occurrence['event_id'] : 0,
+            'start' => $start,
+            'end' => $end,
+            'startIso' => mj_member_occurrence_datetime_to_iso($start),
+            'endIso' => mj_member_occurrence_datetime_to_iso($end),
+            'status' => $status,
+            'source' => isset($occurrence['source']) ? sanitize_key((string) $occurrence['source']) : 'manual',
+            'label' => isset($occurrence['label']) ? sanitize_text_field((string) $occurrence['label']) : '',
+            'isPast' => !empty($occurrence['is_past']),
+            'meta' => $meta_value,
+        );
+    }
+}
+
+if (!function_exists('mj_member_build_occurrence_editor_fallback_item')) {
+    function mj_member_build_occurrence_editor_fallback_item(array $form_values) {
+        $start_source = isset($form_values['date_debut']) ? $form_values['date_debut'] : '';
+        $end_source = isset($form_values['date_fin']) ? $form_values['date_fin'] : '';
+
+        $start = mj_member_parse_event_datetime($start_source);
+        $end = mj_member_parse_event_datetime($end_source);
+
+        if ($start === '' || $end === '') {
+            return array();
+        }
+
+        $start_ts = strtotime($start);
+        $end_ts = strtotime($end);
+        if ($start_ts !== false && $end_ts !== false && $end_ts <= $start_ts) {
+            $end_ts = $start_ts + HOUR_IN_SECONDS;
+            $timezone = wp_timezone();
+            $end = wp_date('Y-m-d H:i:s', $end_ts, $timezone);
+        }
+
+        return array(
+            'id' => 0,
+            'event_id' => 0,
+            'start' => $start,
+            'end' => $end,
+            'status' => MjEventOccurrences::STATUS_ACTIVE,
+            'source' => 'manual',
+            'meta' => array(),
+            'is_past' => false,
+            'label' => '',
+        );
+    }
+}
+
+if (!function_exists('mj_member_build_occurrence_editor_config')) {
+    function mj_member_build_occurrence_editor_config($event, array $form_values) {
+        $items = array();
+
+        if ($event) {
+            $occurrences = MjEventSchedule::build_all_occurrences($event);
+            foreach ($occurrences as $occurrence) {
+                if (!is_array($occurrence)) {
+                    continue;
+                }
+
+                $normalized = mj_member_normalize_occurrence_editor_item($occurrence);
+                if (!empty($normalized)) {
+                    $items[] = $normalized;
+                }
+            }
+        }
+
+        if (empty($items)) {
+            $fallback = mj_member_build_occurrence_editor_fallback_item($form_values);
+            if (!empty($fallback)) {
+                $normalized_fallback = mj_member_normalize_occurrence_editor_item($fallback);
+                if (!empty($normalized_fallback)) {
+                    $items[] = $normalized_fallback;
+                }
+            }
+        }
+
+        $status_labels = array(
+            MjEventOccurrences::STATUS_ACTIVE => __('Programmée', 'mj-member'),
+            MjEventOccurrences::STATUS_A_CONFIRMER => __('À confirmer', 'mj-member'),
+            MjEventOccurrences::STATUS_REPORTE => __('Reportée', 'mj-member'),
+            MjEventOccurrences::STATUS_ANNULE => __('Annulée', 'mj-member'),
+        );
+
+        return array(
+            'items' => $items,
+            'statusLabels' => $status_labels,
+            'defaultStatus' => MjEventOccurrences::STATUS_ACTIVE,
+            'timezone' => wp_timezone_string(),
+            'now' => current_time('timestamp'),
+        );
     }
 }
 
@@ -711,6 +837,15 @@ wp_enqueue_script(
     $adminEventsJsVersion,
     true
 );
+$occurrenceEditorJsPath = $basePath . 'includes/js/admin-occurrence-editor.js';
+$occurrenceEditorJsVersion = file_exists($occurrenceEditorJsPath) ? filemtime($occurrenceEditorJsPath) : $pluginVersion;
+wp_enqueue_script(
+    'mj-admin-occurrence-editor',
+    $baseUrl . 'includes/js/admin-occurrence-editor.js',
+    array('jquery', 'mj-admin-events'),
+    $occurrenceEditorJsVersion,
+    true
+);
 $type_color_palette = method_exists('MjEvents', 'get_type_colors') ? MjEvents::get_type_colors() : array();
 $type_colors_payload = array();
 if (!empty($type_color_palette)) {
@@ -755,6 +890,19 @@ wp_localize_script(
             'viewArticle' => __('Voir l’article sur le site', 'mj-member'),
             'noPreview' => __('Cet article ne comporte pas d’aperçu disponible.', 'mj-member'),
             'noImage' => __('Cet article ne possède pas d’image mise en avant.', 'mj-member'),
+        ),
+        'occurrenceEditor' => array(
+            'modalTitleCreate' => __('Nouvelle occurrence', 'mj-member'),
+            'modalTitleEdit' => __('Modifier l’occurrence', 'mj-member'),
+            'startLabel' => __('Début', 'mj-member'),
+            'endLabel' => __('Fin', 'mj-member'),
+            'statusLabel' => __('Statut', 'mj-member'),
+            'saveLabel' => __('Enregistrer', 'mj-member'),
+            'cancelLabel' => __('Annuler', 'mj-member'),
+            'validationRequired' => __('Merci de renseigner les dates de début et de fin.', 'mj-member'),
+            'validationOrder' => __('L’heure de fin doit être postérieure au début.', 'mj-member'),
+            'removeConfirm' => __('Supprimer cette occurrence ?', 'mj-member'),
+            'duplicateHint' => __('Duplicata créé à partir de la dernière occurrence.', 'mj-member'),
         ),
         'series' => array(
             'missingDate' => __('Veuillez choisir une date valide.', 'mj-member'),
@@ -992,7 +1140,9 @@ if ($event) {
         }
     }
 
-}
+    }
+
+$form_values['occurrence_editor'] = mj_member_build_occurrence_editor_config($event, $form_values);
 
     $current_type_key = isset($form_values['type']) ? sanitize_key((string) $form_values['type']) : '';
     $default_accent_color = '';
@@ -1054,6 +1204,10 @@ $current_event_location = null;
 $event_location_preview_html = '';
 $capacity_counts = array('active' => 0, 'waitlist' => 0);
 $capacity_notified_flag = false;
+$submitted_occurrence_editor_items = array();
+$occurrence_storage_items = array();
+$occurrence_schedule_series_items = array();
+$occurrence_bounds = array('start' => '', 'end' => '');
 
 $symfony_request = null;
 $symfony_request_class = '\\Symfony\\Component\\HttpFoundation\\Request';
@@ -1151,6 +1305,70 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
     $weekday_times = array();
     $show_date_range = false;
     $series_payload_items = array();
+
+    $occurrence_payload_raw = isset($_POST['event_occurrences_payload']) ? wp_unslash((string) $_POST['event_occurrences_payload']) : '';
+    if ($occurrence_payload_raw !== '') {
+        $decoded_occurrence_payload = json_decode($occurrence_payload_raw, true);
+        if (is_array($decoded_occurrence_payload)) {
+            $now_reference = current_time('timestamp');
+            foreach ($decoded_occurrence_payload as $occurrence_entry) {
+                if (!is_array($occurrence_entry)) {
+                    continue;
+                }
+
+                $normalized_occurrence = mj_member_normalize_occurrence_editor_item($occurrence_entry);
+                if (empty($normalized_occurrence)) {
+                    continue;
+                }
+
+                $start_value = mj_member_parse_event_datetime($normalized_occurrence['start']);
+                $end_value = mj_member_parse_event_datetime($normalized_occurrence['end']);
+                if ($start_value === '' || $end_value === '') {
+                    continue;
+                }
+
+                $start_timestamp = strtotime($start_value);
+                $end_timestamp = strtotime($end_value);
+                if ($start_timestamp === false || $end_timestamp === false) {
+                    continue;
+                }
+                if ($end_timestamp <= $start_timestamp) {
+                    continue;
+                }
+
+                $normalized_occurrence['start'] = $start_value;
+                $normalized_occurrence['end'] = $end_value;
+                $normalized_occurrence['startIso'] = mj_member_occurrence_datetime_to_iso($start_value);
+                $normalized_occurrence['endIso'] = mj_member_occurrence_datetime_to_iso($end_value);
+                $normalized_occurrence['isPast'] = $start_timestamp < $now_reference;
+
+                $submitted_occurrence_editor_items[] = $normalized_occurrence;
+            }
+        }
+    }
+
+    if (!empty($submitted_occurrence_editor_items)) {
+        usort(
+            $submitted_occurrence_editor_items,
+            static function ($left, $right) {
+                $left_start = isset($left['start']) ? $left['start'] : '';
+                $right_start = isset($right['start']) ? $right['start'] : '';
+                if ($left_start === $right_start) {
+                    $left_id = isset($left['id']) ? (int) $left['id'] : 0;
+                    $right_id = isset($right['id']) ? (int) $right['id'] : 0;
+                    return $left_id <=> $right_id;
+                }
+                return strcmp((string) $left_start, (string) $right_start);
+            }
+        );
+
+        $occurrence_bounds['start'] = isset($submitted_occurrence_editor_items[0]['start']) ? (string) $submitted_occurrence_editor_items[0]['start'] : '';
+        $last_occurrence = end($submitted_occurrence_editor_items);
+        $occurrence_bounds['end'] = isset($last_occurrence['end']) ? (string) $last_occurrence['end'] : '';
+        reset($submitted_occurrence_editor_items);
+
+        $schedule_mode_input = 'series';
+    }
 
     if ($schedule_mode_input === 'recurring') {
         $weekday_times_input = isset($_POST['event_weekday_times']) ? $_POST['event_weekday_times'] : array();
@@ -1438,81 +1656,156 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
                 'end' => $range_end_input,
             );
         } elseif ($schedule_mode_input === 'series') {
-            $series_raw = isset($_POST['event_series_items']) ? wp_unslash($_POST['event_series_items']) : '[]';
-            $series_decoded = json_decode($series_raw, true);
-            if (!is_array($series_decoded)) {
-                $series_decoded = array();
-            }
+            if (!empty($submitted_occurrence_editor_items)) {
+                $occurrence_storage_items = array();
+                $occurrence_schedule_series_items = array();
 
-            $timezone = wp_timezone();
-            $earliest_start = null;
-            $latest_end = null;
+                foreach ($submitted_occurrence_editor_items as $editor_item) {
+                    $start_value = isset($editor_item['start']) ? (string) $editor_item['start'] : '';
+                    $end_value = isset($editor_item['end']) ? (string) $editor_item['end'] : '';
+                    if ($start_value === '' || $end_value === '') {
+                        continue;
+                    }
 
-            foreach ($series_decoded as $series_entry) {
-                if (!is_array($series_entry)) {
-                    continue;
+                    $status_value = isset($editor_item['status']) ? sanitize_key((string) $editor_item['status']) : MjEventOccurrences::STATUS_ACTIVE;
+                    if ($status_value === '' || $status_value === MjEventOccurrences::STATUS_SUPPRIME) {
+                        $status_value = MjEventOccurrences::STATUS_ACTIVE;
+                    }
+
+                    $source_value = isset($editor_item['source']) && $editor_item['source'] !== '' ? sanitize_key((string) $editor_item['source']) : 'manual';
+                    $meta_value = isset($editor_item['meta']) && is_array($editor_item['meta']) ? $editor_item['meta'] : array();
+
+                    $occurrence_storage_items[] = array(
+                        'start' => $start_value,
+                        'end' => $end_value,
+                        'status' => $status_value,
+                        'source' => $source_value,
+                        'meta' => $meta_value,
+                    );
+
+                    $occurrence_schedule_series_items[] = array(
+                        'date' => substr($start_value, 0, 10),
+                        'start_time' => substr($start_value, 11, 5),
+                        'end_time' => substr($end_value, 11, 5),
+                        'status' => $status_value,
+                    );
                 }
 
-                $date_value = isset($series_entry['date']) ? sanitize_text_field($series_entry['date']) : '';
-                $start_value = isset($series_entry['start_time']) ? sanitize_text_field($series_entry['start_time']) : '';
-                $end_value = isset($series_entry['end_time']) ? sanitize_text_field($series_entry['end_time']) : '';
+                if (empty($occurrence_storage_items)) {
+                    $errors[] = 'Ajoutez au moins une occurrence pour l evenement.';
+                    $schedule_payload = array(
+                        'mode' => 'series',
+                        'version' => 'occurrence-editor',
+                        'occurrences' => array(),
+                        'items' => array(),
+                    );
+                } else {
+                    $series_payload_items = $occurrence_schedule_series_items;
+                    $occurrence_bounds_start = $occurrence_bounds['start'] !== '' ? $occurrence_bounds['start'] : $occurrence_storage_items[0]['start'];
+                    $occurrence_bounds_end = $occurrence_bounds['end'] !== '' ? $occurrence_bounds['end'] : $occurrence_storage_items[count($occurrence_storage_items) - 1]['end'];
 
-                if ($date_value === '' || $start_value === '') {
-                    continue;
+                    $date_debut = $occurrence_bounds_start;
+                    $date_fin = $occurrence_bounds_end;
+                    $date_debut_input = mj_member_occurrence_datetime_to_iso($occurrence_bounds_start);
+                    $date_fin_input = mj_member_occurrence_datetime_to_iso($occurrence_bounds_end);
+                    if ($date_debut_input === '') {
+                        $date_debut_input = str_replace(' ', 'T', substr($occurrence_bounds_start, 0, 16));
+                    }
+                    if ($date_fin_input === '') {
+                        $date_fin_input = str_replace(' ', 'T', substr($occurrence_bounds_end, 0, 16));
+                    }
+
+                    $schedule_payload = array(
+                        'mode' => 'series',
+                        'version' => 'occurrence-editor',
+                        'occurrences' => $occurrence_storage_items,
+                        'items' => $occurrence_schedule_series_items,
+                    );
+                }
+            } else {
+                $series_raw = isset($_POST['event_series_items']) ? wp_unslash($_POST['event_series_items']) : '[]';
+                $series_decoded = json_decode($series_raw, true);
+                if (!is_array($series_decoded)) {
+                    $series_decoded = array();
                 }
 
-                $start_datetime = DateTime::createFromFormat('Y-m-d H:i', $date_value . ' ' . $start_value, $timezone);
-                if (!$start_datetime) {
-                    $start_datetime = DateTime::createFromFormat('Y-m-d H:i:s', $date_value . ' ' . $start_value, $timezone);
-                }
-                if (!$start_datetime) {
-                    continue;
-                }
+                $timezone = wp_timezone();
+                $earliest_start = null;
+                $latest_end = null;
 
-                $end_datetime = null;
-                if ($end_value !== '') {
-                    $end_datetime = DateTime::createFromFormat('Y-m-d H:i', $date_value . ' ' . $end_value, $timezone);
+                foreach ($series_decoded as $series_entry) {
+                    if (!is_array($series_entry)) {
+                        continue;
+                    }
+
+                    $date_value = isset($series_entry['date']) ? sanitize_text_field($series_entry['date']) : '';
+                    $start_value = isset($series_entry['start_time']) ? sanitize_text_field($series_entry['start_time']) : '';
+                    $end_value = isset($series_entry['end_time']) ? sanitize_text_field($series_entry['end_time']) : '';
+
+                    if ($date_value === '' || $start_value === '') {
+                        continue;
+                    }
+
+                    $start_datetime = DateTime::createFromFormat('Y-m-d H:i', $date_value . ' ' . $start_value, $timezone);
+                    if (!$start_datetime) {
+                        $start_datetime = DateTime::createFromFormat('Y-m-d H:i:s', $date_value . ' ' . $start_value, $timezone);
+                    }
+                    if (!$start_datetime) {
+                        continue;
+                    }
+
+                    $end_datetime = null;
+                    if ($end_value !== '') {
+                        $end_datetime = DateTime::createFromFormat('Y-m-d H:i', $date_value . ' ' . $end_value, $timezone);
+                        if (!$end_datetime) {
+                            $end_datetime = DateTime::createFromFormat('Y-m-d H:i:s', $date_value . ' ' . $end_value, $timezone);
+                        }
+                    }
                     if (!$end_datetime) {
-                        $end_datetime = DateTime::createFromFormat('Y-m-d H:i:s', $date_value . ' ' . $end_value, $timezone);
+                        $end_datetime = clone $start_datetime;
+                        $end_datetime->modify('+1 hour');
+                    }
+
+                    if ($end_datetime <= $start_datetime) {
+                        $errors[] = "L'heure de fin doit etre posterieure a l'heure de debut pour chaque date de la serie.";
+                        continue;
+                    }
+
+                    $series_payload_items[] = array(
+                        'date' => $date_value,
+                        'start_time' => $start_value,
+                        'end_time' => $end_value !== '' ? $end_value : $start_value,
+                    );
+
+                    $start_ts = $start_datetime->getTimestamp();
+                    $end_ts = $end_datetime->getTimestamp();
+                    if ($earliest_start === null || $start_ts < $earliest_start) {
+                        $earliest_start = $start_ts;
+                    }
+                    if ($latest_end === null || $end_ts > $latest_end) {
+                        $latest_end = $end_ts;
                     }
                 }
-                if (!$end_datetime) {
-                    $end_datetime = clone $start_datetime;
-                    $end_datetime->modify('+1 hour');
+
+                if ($earliest_start === null || $latest_end === null) {
+                    $errors[] = 'Ajoutez au moins une occurrence a la serie.';
+                } else {
+                    $start_datetime = new DateTime('@' . $earliest_start);
+                    $end_datetime = new DateTime('@' . $latest_end);
+                    $start_datetime->setTimezone($timezone);
+                    $end_datetime->setTimezone($timezone);
+
+                    $date_debut = $start_datetime->format('Y-m-d H:i:s');
+                    $date_fin = $end_datetime->format('Y-m-d H:i:s');
+                    $date_debut_input = $start_datetime->format('Y-m-d\TH:i');
+                    $date_fin_input = $end_datetime->format('Y-m-d\TH:i');
                 }
 
-                if ($end_datetime <= $start_datetime) {
-                    $errors[] = "L'heure de fin doit etre posterieure a l'heure de debut pour chaque date de la serie.";
-                    continue;
-                }
-
-                $series_payload_items[] = array(
-                    'date' => $date_value,
-                    'start_time' => $start_value,
-                    'end_time' => $end_value,
+                $schedule_payload = array(
+                    'mode' => 'series',
+                    'items' => $series_payload_items,
                 );
-
-                if (!$earliest_start || $start_datetime < $earliest_start) {
-                    $earliest_start = clone $start_datetime;
-                }
-                if (!$latest_end || $end_datetime > $latest_end) {
-                    $latest_end = clone $end_datetime;
-                }
             }
-
-            if (empty($series_payload_items)) {
-                $errors[] = 'Ajoutez au moins une date valide pour la serie.';
-            } else {
-                $date_debut = $earliest_start->format('Y-m-d H:i:s');
-                $date_fin = $latest_end->format('Y-m-d H:i:s');
-                $date_debut_input = $earliest_start->format('Y-m-d\TH:i');
-                $date_fin_input = $latest_end->format('Y-m-d\TH:i');
-            }
-
-            $schedule_payload = array(
-                'mode' => 'series',
-                'items' => $series_payload_items,
-            );
         } else {
             $date_debut = mj_member_parse_event_datetime($date_debut_input);
             $date_fin = mj_member_parse_event_datetime($date_fin_input);
@@ -1689,6 +1982,22 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
     $form_values['registration_is_free_participation'] = $free_participation_flag === 1;
     $form_values['registration_payload'] = $registration_payload_for_storage;
 
+    if (!empty($submitted_occurrence_editor_items)) {
+        $occurrence_editor_status_labels = array(
+            MjEventOccurrences::STATUS_ACTIVE => __('Programmée', 'mj-member'),
+            MjEventOccurrences::STATUS_A_CONFIRMER => __('À confirmer', 'mj-member'),
+            MjEventOccurrences::STATUS_REPORTE => __('Reportée', 'mj-member'),
+            MjEventOccurrences::STATUS_ANNULE => __('Annulée', 'mj-member'),
+        );
+        $form_values['occurrence_editor'] = array(
+            'items' => $submitted_occurrence_editor_items,
+            'statusLabels' => $occurrence_editor_status_labels,
+            'defaultStatus' => MjEventOccurrences::STATUS_ACTIVE,
+            'timezone' => wp_timezone_string(),
+            'now' => current_time('timestamp'),
+        );
+    }
+
     if (empty($errors)) {
         $capacity_notified_value = 0;
         if ($action === 'edit' && $event) {
@@ -1743,6 +2052,9 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
                 $success_message = 'Evenement cree avec succes.';
                 $action = 'edit';
                 $event_id = $new_id;
+                if (!empty($occurrence_storage_items)) {
+                    MjEventOccurrences::replace_for_event($event_id, $occurrence_storage_items);
+                }
                 if (class_exists('MjEventAnimateurs')) {
                     MjEventAnimateurs::sync_for_event($event_id, $animateur_ids_list);
                 }
@@ -1807,6 +2119,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
                             $form_values['article_cat'] = (int) $article_terms[0]->term_id;
                         }
                     }
+                    $form_values['occurrence_editor'] = mj_member_build_occurrence_editor_config($event, $form_values);
                 }
                 if (class_exists('MjEventAnimateurs')) {
                     $synced_ids = MjEventAnimateurs::get_ids_by_event($event_id);
@@ -1830,6 +2143,9 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
                 $errors[] = $update_result->get_error_message();
             } elseif ($update_result) {
                 $success_message = 'Evenement mis a jour avec succes.';
+                if (!empty($occurrence_storage_items)) {
+                    MjEventOccurrences::replace_for_event($event_id, $occurrence_storage_items);
+                }
                 if (class_exists('MjEventAnimateurs')) {
                     MjEventAnimateurs::sync_for_event($event_id, $animateur_ids_list);
                 }
@@ -1887,6 +2203,7 @@ if ((($has_symfony_request && $symfony_request) ? $symfony_request->isMethod('PO
                             $form_values['article_cat'] = (int) $article_terms[0]->term_id;
                         }
                     }
+                    $form_values['occurrence_editor'] = mj_member_build_occurrence_editor_config($event, $form_values);
                 }
                 if (class_exists('MjEventAnimateurs')) {
                     $synced_ids = MjEventAnimateurs::get_ids_by_event($event_id);
@@ -2549,16 +2866,6 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
         </div>
     <?php endif; ?>
 
-    <?php
-    $series_items_json = '[]';
-    if (!empty($form_values['schedule_series_items']) && is_array($form_values['schedule_series_items'])) {
-        $encoded_series = wp_json_encode(array_values($form_values['schedule_series_items']));
-        if (is_string($encoded_series) && $encoded_series !== '') {
-            $series_items_json = $encoded_series;
-        }
-    }
-    ?>
-
     <form method="post" class="mj-event-form" action="<?php echo esc_url($form_action_url); ?>">
         <?php wp_nonce_field('mj_event_form', 'mj_event_nonce'); ?>
 
@@ -2969,308 +3276,128 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                     <input type="number" id="mj-event-age-max" name="event_age_max" min="0" max="120" value="<?php echo esc_attr((int) $form_values['age_max']); ?>" style="width:70px;" />
                 </td>
             </tr>
+            <?php
+            $occurrence_editor_config = isset($form_values['occurrence_editor']) && is_array($form_values['occurrence_editor']) ? $form_values['occurrence_editor'] : array();
+            $occurrence_items = isset($occurrence_editor_config['items']) && is_array($occurrence_editor_config['items']) ? $occurrence_editor_config['items'] : array();
+            $occurrence_config_json = wp_json_encode($occurrence_editor_config);
+            if (!is_string($occurrence_config_json)) {
+                $occurrence_config_json = '{}';
+            }
+            $occurrence_items_json = wp_json_encode($occurrence_items);
+            if (!is_string($occurrence_items_json)) {
+                $occurrence_items_json = '[]';
+            }
+            $occurrence_status_labels = isset($occurrence_editor_config['statusLabels']) && is_array($occurrence_editor_config['statusLabels']) ? $occurrence_editor_config['statusLabels'] : array();
+            $occurrence_timezone = isset($occurrence_editor_config['timezone']) ? (string) $occurrence_editor_config['timezone'] : wp_timezone_string();
+            $occurrence_now = isset($occurrence_editor_config['now']) ? (int) $occurrence_editor_config['now'] : current_time('timestamp');
+            $occurrence_date_format = get_option('date_format', 'd/m/Y');
+            $occurrence_time_format = get_option('time_format', 'H:i');
+            ?>
             <tr class="mj-event-section-heading">
                 <th colspan="2">
                     <div class="mj-event-section-heading__content">
                         <h3 class="mj-event-section-heading__title"><?php esc_html_e('Planification', 'mj-member'); ?></h3>
-                        <p class="mj-event-section-heading__hint"><?php esc_html_e("Définissez les dates et la fréquence de l'événement.", 'mj-member'); ?></p>
+                        <p class="mj-event-section-heading__hint"><?php esc_html_e("Définissez les occurrences de l’événement et leur statut.", 'mj-member'); ?></p>
                     </div>
                 </th>
             </tr>
             <tr>
-                <th scope="row">Planification</th>
+                <th scope="row"><?php esc_html_e('Occurrences', 'mj-member'); ?></th>
                 <td>
-                    <fieldset class="mj-event-schedule-mode">
-                        <legend class="screen-reader-text">Mode de planification</legend>
-                        <label class="mj-event-schedule-mode__option">
-                            <input type="radio" name="event_schedule_mode" value="fixed" <?php checked($form_values['schedule_mode'], 'fixed'); ?> />
-                            Date fixe (debut et fin le meme jour)
-                        </label>
-                        <label class="mj-event-schedule-mode__option">
-                            <input type="radio" name="event_schedule_mode" value="range" <?php checked($form_values['schedule_mode'], 'range'); ?> />
-                            Plage de dates (plusieurs jours consecutifs)
-                        </label>
-                        <label class="mj-event-schedule-mode__option">
-                            <input type="radio" name="event_schedule_mode" value="recurring" <?php checked($form_values['schedule_mode'], 'recurring'); ?> />
-                            Recurrence (hebdomadaire ou mensuelle)
-                        </label>
-                        <label class="mj-event-schedule-mode__option">
-                            <input type="radio" name="event_schedule_mode" value="series" <?php checked($form_values['schedule_mode'], 'series'); ?> />
-                            Serie de dates personnalisees
-                        </label>
-                    </fieldset>
-                    <p class="description">Choisissez la facon de planifier l evenement; les sections ci-dessous s adaptent au mode selectionne.</p>
                     <input type="hidden" id="mj-event-date-start" name="event_date_start" value="<?php echo esc_attr($form_values['date_debut']); ?>" />
                     <input type="hidden" id="mj-event-date-end" name="event_date_end" value="<?php echo esc_attr($form_values['date_fin']); ?>" />
-                </td>
-            </tr>
-            <tr class="mj-schedule-section<?php echo $form_values['schedule_mode'] === 'fixed' ? ' is-active' : ''; ?>" data-schedule-mode="fixed">
-                <th scope="row">Date fixe</th>
-                <td>
-                    <div class="mj-schedule-card">
-                        <strong>Jour et horaire</strong>
-                        <div class="mj-schedule-inline">
-                            <label for="mj-event-fixed-date">Jour</label>
-                            <input type="date" id="mj-event-fixed-date" name="event_fixed_date" value="<?php echo esc_attr($form_values['schedule_fixed_date']); ?>" />
-                            <label for="mj-event-fixed-start-time">Debut</label>
-                            <input type="time" id="mj-event-fixed-start-time" name="event_fixed_start_time" value="<?php echo esc_attr($form_values['schedule_fixed_start_time']); ?>" />
-                            <label for="mj-event-fixed-end-time">Fin</label>
-                            <input type="time" id="mj-event-fixed-end-time" name="event_fixed_end_time" value="<?php echo esc_attr($form_values['schedule_fixed_end_time']); ?>" />
+                    <input type="hidden" id="mj-event-occurrences-payload" name="event_occurrences_payload" value="<?php echo esc_attr($occurrence_items_json); ?>" />
+                    <div
+                        id="mj-event-occurrence-editor"
+                        class="mj-occurrence-editor"
+                        data-config="<?php echo esc_attr($occurrence_config_json); ?>"
+                        data-timezone="<?php echo esc_attr($occurrence_timezone); ?>"
+                        data-now="<?php echo esc_attr((string) $occurrence_now); ?>"
+                    >
+                        <div class="mj-occurrence-editor__intro">
+                            <p class="description"><?php esc_html_e('Chaque occurrence correspond à une séance ou une journée proposée aux membres. Ajoutez, modifiez ou retirez les occurrences pour contrôler le calendrier de l’événement.', 'mj-member'); ?></p>
+                            <p class="description mj-occurrence-editor__timezone">
+                                <?php esc_html_e('Fuseau horaire', 'mj-member'); ?> : <strong><?php echo esc_html($occurrence_timezone); ?></strong>
+                            </p>
                         </div>
-                        <p class="description">Utilisez cette option pour un evenement sur une seule journee avec un creneau horaire.</p>
-                    </div>
-                </td>
-            </tr>
-            <tr class="mj-schedule-section<?php echo $form_values['schedule_mode'] === 'range' ? ' is-active' : ''; ?>" data-schedule-mode="range">
-                <th scope="row">Plage de dates</th>
-                <td>
-                    <div class="mj-schedule-card">
-                        <strong>Intervalle</strong>
-                        <?php
-                        $timezone = wp_timezone();
-
-                        $range_start_hidden = '';
-                        $range_start_date = '';
-                        $range_start_time = '';
-
-                        if (!empty($form_values['schedule_range_start'])) {
-                            $range_start_candidate = str_replace(' ', 'T', (string) $form_values['schedule_range_start']);
-                            try {
-                                $range_start_dt = new DateTimeImmutable($range_start_candidate, $timezone);
-                                $range_start_date = $range_start_dt->format('Y-m-d');
-                                $range_start_time = $range_start_dt->format('H:i');
-                                $range_start_hidden = $range_start_time !== ''
-                                    ? $range_start_dt->format('Y-m-d\TH:i')
-                                    : $range_start_date;
-                            } catch (Exception $e) {
-                                $range_start_hidden = sanitize_text_field((string) $form_values['schedule_range_start']);
-                                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $range_start_hidden)) {
-                                    $range_start_date = $range_start_hidden;
-                                }
-                            }
-                        }
-
-                        $range_end_hidden = '';
-                        $range_end_date = '';
-                        $range_end_time = '';
-
-                        if (!empty($form_values['schedule_range_end'])) {
-                            $range_end_candidate = str_replace(' ', 'T', (string) $form_values['schedule_range_end']);
-                            try {
-                                $range_end_dt = new DateTimeImmutable($range_end_candidate, $timezone);
-                                $range_end_date = $range_end_dt->format('Y-m-d');
-                                $range_end_time = $range_end_dt->format('H:i');
-                                $range_end_hidden = $range_end_time !== ''
-                                    ? $range_end_dt->format('Y-m-d\TH:i')
-                                    : $range_end_date;
-                            } catch (Exception $e) {
-                                $range_end_hidden = sanitize_text_field((string) $form_values['schedule_range_end']);
-                                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $range_end_hidden)) {
-                                    $range_end_date = $range_end_hidden;
-                                }
-                            }
-                        }
-                        ?>
-                        <div class="mj-schedule-inline">
-                            <label for="mj-event-range-start">Debut</label>
-                            <input type="hidden" id="mj-event-range-start" name="event_range_start" value="<?php echo esc_attr($range_start_hidden); ?>" data-range-hidden="start" />
-                            <div class="mj-form-datetime" data-range-field="start">
-                                <div class="mj-form-datetime__column">
-                                    <span class="mj-form-datetime__label" aria-hidden="true"><?php esc_html_e('Date', 'mj-member'); ?></span>
-                                    <input
-                                        type="date"
-                                        id="mj-event-range-start-date"
-                                        name="event_range_start_date"
-                                        value="<?php echo esc_attr($range_start_date); ?>"
-                                        class="mj-form-datetime__input"
-                                        aria-label="<?php esc_attr_e('Date de début de la plage', 'mj-member'); ?>"
-                                        required
-                                    />
-                                </div>
-                                <div class="mj-form-datetime__column">
-                                    <span class="mj-form-datetime__label" aria-hidden="true"><?php esc_html_e('Heure', 'mj-member'); ?></span>
-                                    <input
-                                        type="time"
-                                        id="mj-event-range-start-time"
-                                        name="event_range_start_time"
-                                        value="<?php echo esc_attr($range_start_time); ?>"
-                                        class="mj-form-datetime__input"
-                                        aria-label="<?php esc_attr_e('Heure de début de la plage', 'mj-member'); ?>"
-                                        required
-                                    />
-                                </div>
-                            </div>
-                            <label for="mj-event-range-end">Fin</label>
-                            <input type="hidden" id="mj-event-range-end" name="event_range_end" value="<?php echo esc_attr($range_end_hidden); ?>" data-range-hidden="end" />
-                            <div class="mj-form-datetime" data-range-field="end">
-                                <div class="mj-form-datetime__column">
-                                    <span class="mj-form-datetime__label" aria-hidden="true"><?php esc_html_e('Date', 'mj-member'); ?></span>
-                                    <input
-                                        type="date"
-                                        id="mj-event-range-end-date"
-                                        name="event_range_end_date"
-                                        value="<?php echo esc_attr($range_end_date); ?>"
-                                        class="mj-form-datetime__input"
-                                        aria-label="<?php esc_attr_e('Date de fin de la plage', 'mj-member'); ?>"
-                                        required
-                                    />
-                                </div>
-                                <div class="mj-form-datetime__column">
-                                    <span class="mj-form-datetime__label" aria-hidden="true"><?php esc_html_e('Heure', 'mj-member'); ?></span>
-                                    <input
-                                        type="time"
-                                        id="mj-event-range-end-time"
-                                        name="event_range_end_time"
-                                        value="<?php echo esc_attr($range_end_time); ?>"
-                                        class="mj-form-datetime__input"
-                                        aria-label="<?php esc_attr_e('Heure de fin de la plage', 'mj-member'); ?>"
-                                        required
-                                    />
-                                </div>
-                            </div>
+                        <div class="mj-occurrence-editor__actions">
+                            <button type="button" class="button button-secondary mj-occurrence-editor__add" data-action="occurrence-add"><?php esc_html_e('Ajouter une occurrence', 'mj-member'); ?></button>
+                            <button type="button" class="button mj-occurrence-editor__duplicate" data-action="occurrence-duplicate" style="margin-left:8px;">
+                                <?php esc_html_e('Dupliquer la dernière occurrence', 'mj-member'); ?>
+                            </button>
                         </div>
-                        <p class="description">Choisissez cette option pour un evenement etale sur plusieurs jours et précisez les horaires.</p>
-                    </div>
-                </td>
-            </tr>
-            <tr class="mj-schedule-section<?php echo $form_values['schedule_mode'] === 'recurring' ? ' is-active' : ''; ?>" data-schedule-mode="recurring">
-                <th scope="row">Recurrence</th>
-                <td>
-                    <div class="mj-schedule-card">
-                        <strong>Premiere occurrence</strong>
-                        <div class="mj-schedule-inline">
-                            <label for="mj-event-recurring-start-date">Jour</label>
-                            <input type="date" id="mj-event-recurring-start-date" name="event_recurring_start_date" value="<?php echo esc_attr($form_values['schedule_recurring_start_date']); ?>" />
-                        </div>
-
-                        <strong>Frequence</strong>
-                        <div class="mj-schedule-inline">
-                            <label for="mj-event-recurring-frequency" class="screen-reader-text">Frequence</label>
-                            <select id="mj-event-recurring-frequency" name="event_recurring_frequency">
-                                <option value="weekly"<?php selected($form_values['schedule_recurring_frequency'], 'weekly'); ?>>Hebdomadaire</option>
-                                <option value="monthly"<?php selected($form_values['schedule_recurring_frequency'], 'monthly'); ?>>Mensuelle</option>
-                            </select>
-                            <label for="mj-event-recurring-interval">Toutes les</label>
-                            <input type="number" id="mj-event-recurring-interval" name="event_recurring_interval" min="1" value="<?php echo esc_attr((int) $form_values['schedule_recurring_interval']); ?>" style="width:70px;" />
-                            <span>semaine(s) / mois</span>
-                        </div>
-
-                        <div class="mj-recurring-section mj-recurring-weekly" style="margin-bottom:10px;">
-                            <strong>Jours concernes et plages horaires</strong>
-                            <p class="description" style="margin-top:4px;margin-bottom:8px;">Cochez les jours souhaités et définissez les plages horaires pour chaque jour (optionnel : si vide, utilise l'horaire de la première occurrence).</p>
-                            <div class="mj-recurring-weekdays-grid" style="margin-top:6px;">
-                                <?php foreach ($schedule_weekdays as $weekday_key => $weekday_label) : ?>
-                                    <?php 
-                                    $weekday_checked = in_array($weekday_key, $form_values['schedule_recurring_weekdays'], true);
-                                    $weekday_start = isset($form_values['schedule_weekday_times'][$weekday_key]['start']) ? $form_values['schedule_weekday_times'][$weekday_key]['start'] : '';
-                                    $weekday_end = isset($form_values['schedule_weekday_times'][$weekday_key]['end']) ? $form_values['schedule_weekday_times'][$weekday_key]['end'] : '';
-                                    ?>
-                                    <div class="mj-weekday-row" style="display:flex; align-items:center; gap:12px; padding:8px 12px; margin-bottom:4px; background:<?php echo $weekday_checked ? '#f0f7ff' : '#f9f9f9'; ?>; border-radius:6px; border:1px solid <?php echo $weekday_checked ? '#2271b1' : '#ddd'; ?>;" data-weekday="<?php echo esc_attr($weekday_key); ?>">
-                                        <label style="display:flex; align-items:center; gap:6px; min-width:120px; cursor:pointer;">
-                                            <input type="checkbox" name="event_recurring_weekdays[]" value="<?php echo esc_attr($weekday_key); ?>" <?php checked($weekday_checked, true); ?> class="mj-weekday-checkbox" />
-                                            <span style="font-weight:500;"><?php echo esc_html($weekday_label); ?></span>
-                                        </label>
-                                        <div class="mj-weekday-times" style="display:<?php echo $weekday_checked ? 'flex' : 'none'; ?>; align-items:center; gap:8px;">
-                                            <label style="font-size:12px; color:#666;">Début</label>
-                                            <input type="time" name="event_weekday_times[<?php echo esc_attr($weekday_key); ?>][start]" value="<?php echo esc_attr($weekday_start); ?>" style="padding:4px 8px;" />
-                                            <label style="font-size:12px; color:#666;">Fin</label>
-                                            <input type="time" name="event_weekday_times[<?php echo esc_attr($weekday_key); ?>][end]" value="<?php echo esc_attr($weekday_end); ?>" style="padding:4px 8px;" />
-                                        </div>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-
-                        <div class="mj-recurring-section mj-recurring-monthly" style="margin-bottom:10px;">
-                            <strong>Periodicite mensuelle</strong>
-                            <div class="mj-schedule-inline">
-                                <label for="mj-event-recurring-month-ordinal" class="screen-reader-text">Occurrence dans le mois</label>
-                                <select id="mj-event-recurring-month-ordinal" name="event_recurring_month_ordinal">
-                                    <?php foreach ($schedule_month_ordinals as $ordinal_key => $ordinal_label) : ?>
-                                        <option value="<?php echo esc_attr($ordinal_key); ?>"<?php selected($form_values['schedule_recurring_month_ordinal'], $ordinal_key); ?>><?php echo esc_html($ordinal_label); ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                                <label for="mj-event-recurring-month-weekday" class="screen-reader-text">Jour cible</label>
-                                <select id="mj-event-recurring-month-weekday" name="event_recurring_month_weekday">
-                                    <?php foreach ($schedule_weekdays as $weekday_key => $weekday_label) : ?>
-                                        <option value="<?php echo esc_attr($weekday_key); ?>"<?php selected($form_values['schedule_recurring_month_weekday'], $weekday_key); ?>><?php echo esc_html($weekday_label); ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                            <p class="description">Exemple : "1er samedi".</p>
-                        </div>
-
-                        <strong>Fin de la recurrence</strong>
-                        <div class="mj-schedule-inline">
-                            <label for="mj-event-recurring-until" class="screen-reader-text">Fin de la recurrence</label>
-                            <input type="date" id="mj-event-recurring-until" name="event_recurring_until" value="<?php echo esc_attr($form_values['recurrence_until']); ?>" />
-                            <span class="description">(optionnel)</span>
-                        </div>
-                        <p class="description">Laisser vide pour poursuivre la recurrence sans date de fin.</p>
-
-                        <div style="margin-top:16px;">
-                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                                <input type="checkbox" name="event_recurring_show_date_range" value="1" <?php checked($form_values['schedule_show_date_range'], true); ?> />
-                                <span>Masquer la période (date de début et date de fin) sur la page événement</span>
-                            </label>
-                        </div>
-                    </div>
-                </td>
-            </tr>
-            <tr class="mj-schedule-section<?php echo $form_values['schedule_mode'] === 'series' ? ' is-active' : ''; ?>" data-schedule-mode="series">
-                <th scope="row">Serie personnalisee</th>
-                <td>
-                    <div class="mj-schedule-card">
-                        <strong>Occurrences personnalisees</strong>
-                        <p class="description">Ajoutez chaque date de facon individuelle. Utilisez ce mode pour un planning non recurrent.</p>
-                        <div class="mj-series-builder">
-                            <div class="mj-series-builder__inputs">
-                                <label for="mj-event-series-date">Date</label>
-                                <input type="date" id="mj-event-series-date" autocomplete="off" />
-                                <label for="mj-event-series-start">Debut</label>
-                                <input type="time" id="mj-event-series-start" autocomplete="off" />
-                                <label for="mj-event-series-end">Fin</label>
-                                <input type="time" id="mj-event-series-end" autocomplete="off" />
-                                <button type="button" class="button button-secondary" id="mj-event-series-add">Ajouter la date</button>
-                            </div>
-                            <table class="mj-series-builder__table widefat fixed striped" id="mj-event-series-table">
-                                <thead>
-                                    <tr>
-                                        <th scope="col">Date</th>
-                                        <th scope="col">Debut</th>
-                                        <th scope="col">Fin</th>
-                                        <th scope="col" class="mj-series-builder__actions"></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php if (!empty($form_values['schedule_series_items'])) : ?>
-                                        <?php foreach ($form_values['schedule_series_items'] as $series_index => $series_item) : ?>
+                        <div class="mj-occurrence-editor__alerts" aria-live="polite"></div>
+                        <div class="mj-occurrence-editor__list">
+                            <?php if (!empty($occurrence_items)) : ?>
+                                <table class="widefat fixed striped mj-occurrence-editor__table">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col"><?php esc_html_e('Début', 'mj-member'); ?></th>
+                                            <th scope="col"><?php esc_html_e('Fin', 'mj-member'); ?></th>
+                                            <th scope="col"><?php esc_html_e('Statut', 'mj-member'); ?></th>
+                                            <th scope="col" class="mj-occurrence-editor__column--actions"><?php esc_html_e('Actions', 'mj-member'); ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($occurrence_items as $occurrence_index => $occurrence_item) : ?>
                                             <?php
-                                            $series_date = isset($series_item['date']) ? sanitize_text_field($series_item['date']) : '';
-                                            $series_start = isset($series_item['start_time']) ? sanitize_text_field($series_item['start_time']) : '';
-                                            $series_end = isset($series_item['end_time']) ? sanitize_text_field($series_item['end_time']) : '';
-                                            $series_end_display = ($series_end !== '') ? $series_end : '--';
+                                            $start_raw = isset($occurrence_item['start']) ? (string) $occurrence_item['start'] : '';
+                                            $end_raw = isset($occurrence_item['end']) ? (string) $occurrence_item['end'] : '';
+                                            $status_raw = isset($occurrence_item['status']) ? sanitize_key((string) $occurrence_item['status']) : '';
+                                            $status_label = isset($occurrence_status_labels[$status_raw]) ? $occurrence_status_labels[$status_raw] : $status_raw;
+                                            if ($status_label === '') {
+                                                $status_label = ucfirst($status_raw);
+                                            }
+                                            $start_display = $start_raw;
+                                            $end_display = $end_raw;
+                                            $timezone_object = wp_timezone();
+                                            try {
+                                                if ($start_raw !== '') {
+                                                    $start_dt = new DateTimeImmutable($start_raw, $timezone_object);
+                                                    $start_display = date_i18n($occurrence_date_format, $start_dt->getTimestamp()) . ' - ' . date_i18n($occurrence_time_format, $start_dt->getTimestamp());
+                                                }
+                                            } catch (Exception $e) {
+                                                $start_display = $start_raw;
+                                            }
+                                            try {
+                                                if ($end_raw !== '') {
+                                                    $end_dt = new DateTimeImmutable($end_raw, $timezone_object);
+                                                    $end_display = date_i18n($occurrence_date_format, $end_dt->getTimestamp()) . ' - ' . date_i18n($occurrence_time_format, $end_dt->getTimestamp());
+                                                }
+                                            } catch (Exception $e) {
+                                                $end_display = $end_raw;
+                                            }
+                                            $row_classes = array('mj-occurrence-editor__row');
+                                            if (!empty($occurrence_item['isPast'])) {
+                                                $row_classes[] = 'is-past';
+                                            }
+                                            $row_class_attr = implode(' ', array_map('sanitize_html_class', $row_classes));
+                                            $occurrence_id = isset($occurrence_item['id']) ? (int) $occurrence_item['id'] : 0;
                                             ?>
-                                            <tr data-series-index="<?php echo esc_attr((int) $series_index); ?>">
-                                                <td><span class="mj-series-builder__cell"><?php echo esc_html($series_date); ?></span></td>
-                                                <td><span class="mj-series-builder__cell"><?php echo esc_html($series_start); ?></span></td>
-                                                <td><span class="mj-series-builder__cell"><?php echo esc_html($series_end_display); ?></span></td>
-                                                <td class="mj-series-builder__actions">
-                                                    <button type="button" class="button button-link-delete mj-event-series-remove" data-series-index="<?php echo esc_attr((int) $series_index); ?>">Supprimer</button>
+                                            <tr
+                                                class="<?php echo esc_attr($row_class_attr); ?>"
+                                                data-occurrence-index="<?php echo esc_attr((string) $occurrence_index); ?>"
+                                                data-occurrence-id="<?php echo esc_attr((string) $occurrence_id); ?>"
+                                                data-occurrence-start="<?php echo esc_attr($start_raw); ?>"
+                                                data-occurrence-end="<?php echo esc_attr($end_raw); ?>"
+                                                data-occurrence-status="<?php echo esc_attr($status_raw); ?>"
+                                            >
+                                                <td data-column="start"><?php echo esc_html($start_display); ?></td>
+                                                <td data-column="end"><?php echo esc_html($end_display); ?></td>
+                                                <td data-column="status"><?php echo esc_html($status_label); ?></td>
+                                                <td class="mj-occurrence-editor__actions-cell">
+                                                    <button type="button" class="button button-link mj-occurrence-editor__edit" data-action="occurrence-edit"><?php esc_html_e('Modifier', 'mj-member'); ?></button>
+                                                    <button type="button" class="button button-link-delete mj-occurrence-editor__remove" data-action="occurrence-remove"><?php esc_html_e('Supprimer', 'mj-member'); ?></button>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
-                                        <tr id="mj-event-series-empty" style="display:none;">
-                                            <td colspan="4" class="mj-series-builder__empty">Aucune date ajoutee pour le moment.</td>
-                                        </tr>
-                                    <?php else : ?>
-                                        <tr id="mj-event-series-empty">
-                                            <td colspan="4" class="mj-series-builder__empty">Aucune date ajoutee pour le moment.</td>
-                                        </tr>
-                                    <?php endif; ?>
-                                </tbody>
-                            </table>
-                            <input type="hidden" id="mj-event-series-items" name="event_series_items" value="<?php echo esc_attr($series_items_json); ?>" />
+                                    </tbody>
+                                </table>
+                            <?php else : ?>
+                                <p class="mj-occurrence-editor__empty">
+                                    <?php esc_html_e('Aucune occurrence n’est planifiée pour le moment. Ajoutez une première occurrence pour initialiser le planning.', 'mj-member'); ?>
+                                </p>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </td>

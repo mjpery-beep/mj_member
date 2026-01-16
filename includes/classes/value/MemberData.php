@@ -28,6 +28,11 @@ if (!defined('ABSPATH')) {
  * @property-read string|null $city
  * @property-read string|null $postal_code
  * @property-read string|null $country
+ * @property-read string|null $school
+ * @property-read string|null $birth_country
+ * @property-read string|null $nationality
+ * @property-read string|null $why_mj
+ * @property-read string|null $how_mj
  * @property-read string|null $status
  * @property-read string|null $description_courte
  * @property-read string|null $description_longue
@@ -69,6 +74,11 @@ final class MemberData implements JsonSerializable {
         'city',
         'postal_code',
         'country',
+        'school',
+        'birth_country',
+        'nationality',
+        'why_mj',
+        'how_mj',
         'status',
         'description_courte',
         'description_longue',
