@@ -2411,29 +2411,71 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
     }
 
     /**
-     * Formate le libellé horaire d'une occurrence en respectant le fuseau WP.
+     * Formate le libellé horaire d'une occurrence en priorisant son fuseau horaire.
      */
     private static function format_occurrence_time_label(\DateTimeImmutable $start, ?\DateTimeImmutable $end = null) {
+        $time_format = get_option('time_format', 'H:i');
+        $start_label = self::normalize_time_label($start->format($time_format));
+
         $timezone = wp_timezone();
         if (!($timezone instanceof \DateTimeZone)) {
             $timezone = new \DateTimeZone('UTC');
         }
 
-        $time_format = get_option('time_format', 'H:i');
-        $start_label = self::normalize_time_label(wp_date($time_format, $start->getTimestamp(), $timezone));
+        if ($start_label === '') {
+            $start_label = self::normalize_time_label(wp_date($time_format, $start->getTimestamp(), $timezone));
+        }
 
         if ($start_label === '') {
             return '';
         }
 
         if ($end instanceof \DateTimeImmutable) {
-            $end_label = self::normalize_time_label(wp_date($time_format, $end->getTimestamp(), $timezone));
+            $end_label = self::normalize_time_label($end->format($time_format));
+            if ($end_label === '') {
+                $end_label = self::normalize_time_label(wp_date($time_format, $end->getTimestamp(), $timezone));
+            }
             if ($end_label !== '' && $end_label !== $start_label) {
                 return $start_label . ' → ' . $end_label;
             }
         }
 
         return sprintf(__('À partir de %s', 'mj-member'), $start_label);
+    }
+
+    private static function format_fixed_occurrence_time_from_raw($start_raw, $end_raw) {
+        $start_time = self::extract_time_fragment($start_raw);
+        if ($start_time === '') {
+            return '';
+        }
+
+        $start_label = self::normalize_time_label($start_time);
+        if ($start_label === '') {
+            return '';
+        }
+
+        $end_time = self::extract_time_fragment($end_raw);
+        if ($end_time !== '') {
+            $end_label = self::normalize_time_label($end_time);
+            if ($end_label !== '' && $end_label !== $start_label) {
+                return $start_label . ' → ' . $end_label;
+            }
+        }
+
+        return sprintf(__('À partir de %s', 'mj-member'), $start_label);
+    }
+
+    private static function extract_time_fragment($value) {
+        $value = is_string($value) ? trim($value) : '';
+        if ($value === '') {
+            return '';
+        }
+
+        if (preg_match('/\b(\d{2}:\d{2})(?::\d{2})?\b/', $value, $matches)) {
+            return $matches[1];
+        }
+
+        return '';
     }
 
     private static function normalize_time_label($label) {

@@ -348,6 +348,7 @@
 
 .mj-member-events-calendar__day.is-today {
     background: #009A93BA;
+    border-radius: 0;
 }
 
 .mj-member-events-calendar__day.is-closure {
