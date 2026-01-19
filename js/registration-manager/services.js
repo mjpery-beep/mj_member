@@ -64,7 +64,21 @@
          * @param {string} [abortKey] - Clé pour annulation
          * @returns {Promise<Object>}
          */
-        function post(action, data, abortKey) {
+        function post(action, data, options) {
+            var abortKey = null;
+            var customNonce = null;
+
+            if (typeof options === 'string') {
+                abortKey = options;
+            } else if (options && typeof options === 'object') {
+                if (typeof options.abortKey === 'string' && options.abortKey !== '') {
+                    abortKey = options.abortKey;
+                }
+                if (typeof options.nonce === 'string' && options.nonce !== '') {
+                    customNonce = options.nonce;
+                }
+            }
+
             if (abortKey) {
                 abort(abortKey);
             }
@@ -76,7 +90,7 @@
 
             var formData = new FormData();
             formData.append('action', action);
-            formData.append('nonce', nonce);
+            formData.append('nonce', customNonce || nonce);
 
             Object.keys(data || {}).forEach(function (key) {
                 var value = data[key];
@@ -417,6 +431,33 @@
             resetMemberPassword: function (memberId) {
                 return post('mj_regmgr_reset_member_password', {
                     memberId: memberId,
+                });
+            },
+
+            /**
+             * Crée ou met à jour le compte WordPress associé à un membre
+             */
+            linkMemberAccount: function (memberId, payload) {
+                if (!memberId) {
+                    return Promise.reject(new Error('memberId is required'));
+                }
+
+                var data = {
+                    member_id: memberId,
+                    role: payload && payload.role ? payload.role : '',
+                };
+
+                if (payload && typeof payload.manualLogin === 'string') {
+                    data.manual_login = payload.manualLogin;
+                }
+
+                if (payload && typeof payload.manualPassword === 'string') {
+                    data.manual_password = payload.manualPassword;
+                }
+
+                return post('mj_link_member_user', data, {
+                    nonce: config.accountLinkNonce || '',
+                    abortKey: 'member-account-' + memberId,
                 });
             },
 

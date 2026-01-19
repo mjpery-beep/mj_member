@@ -77,6 +77,7 @@
     var CreateEventModal = Modals.CreateEventModal;
     var CreateMemberModal = Modals.CreateMemberModal;
     var MemberNotesModal = Modals.MemberNotesModal;
+    var MemberAccountModal = Modals.MemberAccountModal;
     var QRCodeModal = Modals.QRCodeModal;
     var OccurrencesModal = Modals.OccurrencesModal;
     var LocationModal = Modals.LocationModal;
@@ -3245,6 +3246,7 @@
         var qrModal = useModal();
         var occurrencesModal = useModal();
         var locationModal = useModal();
+        var accountModal = useModal();
 
         // State
         var _events = useState([]);
@@ -4538,6 +4540,51 @@
                 });
         }, [api, showSuccess, showError]);
 
+        var handleLinkMemberAccount = useCallback(function (memberId, payload) {
+            if (!memberId) {
+                return Promise.reject(new Error('memberId is required'));
+            }
+
+            if (!config.canManageAccounts) {
+                return Promise.reject(new Error('Accès refusé.'));
+            }
+
+            return api.linkMemberAccount(memberId, payload || {})
+                .then(function (result) {
+                    loadMemberDetails(memberId);
+                    loadMembers(membersPagination.page);
+
+                    var successMessage = getString(strings, 'memberAccountSuccessUpdate', 'Compte WordPress mis à jour avec succès.');
+                    if (result && result.created) {
+                        successMessage = getString(strings, 'memberAccountSuccessCreate', 'Compte WordPress créé et lié avec succès.');
+                    }
+                    if (result && result.message) {
+                        successMessage = result.message;
+                    }
+
+                    showSuccess(successMessage);
+                    return result;
+                })
+                .catch(function (err) {
+                    var errorMessage = err && err.message ? err.message : 'Erreur lors de la mise à jour du compte WordPress.';
+                    showError(errorMessage);
+                    throw err;
+                });
+        }, [api, loadMemberDetails, loadMembers, membersPagination.page, showSuccess, showError, strings, config.canManageAccounts]);
+
+        var handleOpenAccountModal = useCallback(function (memberData) {
+            if (!config.canManageAccounts) {
+                return;
+            }
+
+            var targetMember = memberData && memberData.id ? memberData : memberDetails;
+            if (!targetMember) {
+                return;
+            }
+
+            accountModal.open({ member: targetMember });
+        }, [config.canManageAccounts, memberDetails, accountModal]);
+
         // Payer la cotisation via Stripe - retourne le résultat complet avec qrUrl
         var handlePayMembershipOnline = useCallback(function (memberId) {
             return api.createMembershipPaymentLink(memberId)
@@ -5287,7 +5334,7 @@
                             onUpdateMember: handleUpdateMember,
                             onPayMembershipOnline: handlePayMembershipOnline,
                             onMarkMembershipPaid: handleMarkMembershipPaid,
-                            onResetPassword: handleResetMemberPassword,
+                            onManageAccount: config.canManageAccounts ? handleOpenAccountModal : null,
                             onUpdateIdea: handleUpdateMemberIdea,
                             onUpdatePhoto: handleUpdateMemberPhoto,
                             onDeletePhoto: handleDeleteMemberPhoto,
@@ -5343,6 +5390,24 @@
                 strings: strings,
                 loading: notesLoading,
                 currentMemberId: config.memberId,
+            }),
+
+            MemberAccountModal && config.canManageAccounts && h(MemberAccountModal, {
+                isOpen: accountModal.isOpen,
+                onClose: accountModal.close,
+                member: (function () {
+                    if (accountModal.data && accountModal.data.member) {
+                        if (memberDetails && accountModal.data.member.id === memberDetails.id) {
+                            return memberDetails;
+                        }
+                        return accountModal.data.member;
+                    }
+                    return memberDetails;
+                })(),
+                roles: config.accountRoles || {},
+                onSubmit: handleLinkMemberAccount,
+                onResetPassword: handleResetMemberPassword,
+                strings: strings,
             }),
 
             h(QRCodeModal, {

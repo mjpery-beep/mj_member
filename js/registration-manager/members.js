@@ -204,7 +204,6 @@
         var onUpdateMember = props.onUpdateMember;
         var onPayMembershipOnline = props.onPayMembershipOnline;
         var onMarkMembershipPaid = props.onMarkMembershipPaid;
-        var onResetPassword = typeof props.onResetPassword === 'function' ? props.onResetPassword : null;
         var onUpdateIdea = typeof props.onUpdateIdea === 'function' ? props.onUpdateIdea : null;
         var onUpdatePhoto = typeof props.onUpdatePhoto === 'function' ? props.onUpdatePhoto : null;
         var onDeletePhoto = typeof props.onDeletePhoto === 'function' ? props.onDeletePhoto : null;
@@ -212,6 +211,7 @@
         var onDeleteRegistration = typeof props.onDeleteRegistration === 'function' ? props.onDeleteRegistration : null;
         var onDeleteMember = typeof props.onDeleteMember === 'function' ? props.onDeleteMember : null;
         var onOpenMember = typeof props.onOpenMember === 'function' ? props.onOpenMember : null;
+        var onManageAccount = typeof props.onManageAccount === 'function' ? props.onManageAccount : null;
         var pendingEditRequest = props.pendingEditRequest || null;
         var onPendingEditHandled = typeof props.onPendingEditHandled === 'function' ? props.onPendingEditHandled : null;
 
@@ -238,10 +238,6 @@
         var _paymentProcessing = useState(false);
         var paymentProcessing = _paymentProcessing[0];
         var setPaymentProcessing = _paymentProcessing[1];
-
-        var _resettingPassword = useState(false);
-        var resettingPassword = _resettingPassword[0];
-        var setResettingPassword = _resettingPassword[1];
 
         var _deletingMember = useState(false);
         var deletingMember = _deletingMember[0];
@@ -328,7 +324,6 @@
                 setEditingPhotoId(null);
                 setPhotoDraft({ caption: '', status: 'approved' });
                 setPhotoSaving(false);
-                setResettingPassword(false);
                 setDeletingMember(false);
             }
         }, [member ? member.id : null]);
@@ -412,6 +407,13 @@
         var canDeleteMember = !!(config && config.canDeleteMember && onDeleteMember);
 
         var guardian = member.guardian;
+        var guardianDisplayName = '';
+        if (typeof member.guardianName === 'string' && member.guardianName.trim() !== '') {
+            guardianDisplayName = member.guardianName.trim();
+        } else if (guardian) {
+            var combinedName = ((guardian.firstName || '') + ' ' + (guardian.lastName || '')).trim();
+            guardianDisplayName = combinedName !== '' ? combinedName : guardian.email || '';
+        }
         var guardianEditUrl = guardian && guardian.id && config && config.adminMemberUrl
             ? config.adminMemberUrl + guardian.id
             : null;
@@ -631,19 +633,12 @@
         var memberId = member && member.id ? member.id : null;
         var hasLinkedAccount = member && member.userId ? true : false;
 
-        var handleResetPassword = useCallback(function () {
-            if (!onResetPassword || !memberId || !hasLinkedAccount) {
+        var handleOpenAccountModal = useCallback(function () {
+            if (!onManageAccount || !member) {
                 return;
             }
-            setResettingPassword(true);
-            Promise.resolve(onResetPassword(memberId))
-                .catch(function () {
-                    // Feedback déjà géré côté parent
-                })
-                .finally(function () {
-                    setResettingPassword(false);
-                });
-        }, [onResetPassword, memberId, hasLinkedAccount]);
+            onManageAccount(member);
+        }, [onManageAccount, member]);
 
         // Calculate age
         var age = null;
@@ -689,9 +684,10 @@
         var smsLabel = getString(strings, 'chipSMS', 'SMS');
         var whatsappLabel = getString(strings, 'chipWhatsapp', 'WhatsApp');
         var photoConsentLabel = getString(strings, 'chipPhotoConsent', 'Consentement photo');
-        var resetPasswordLabel = getString(strings, 'resetPassword', 'Réinitialiser le mot de passe');
-        var resetPasswordUnavailableLabel = getString(strings, 'resetPasswordUnavailable', 'Compte WordPress non lié');
-        var resetPasswordProcessingLabel = getString(strings, 'resetPasswordProcessing', 'Réinitialisation...');
+        var accountButtonLinked = getString(strings, 'memberAccountLinked', 'Modifier le compte WordPress');
+        var accountButtonUnlinked = getString(strings, 'memberAccountUnlinked', 'Lier un compte WordPress');
+        var accountStatusLinked = getString(strings, 'memberAccountStatusLinked', 'Un compte WordPress est lié à ce membre.');
+        var accountStatusUnlinked = getString(strings, 'memberAccountStatusUnlinked', 'Aucun compte WordPress n\'est encore lié.');
 
         var messageStatusLabels = {
             'nouveau': 'Nouveau',
@@ -756,22 +752,22 @@
                             }),
                         ]),
                     ]),
-                    onResetPassword && h('button', {
+                    onManageAccount && config && config.canManageAccounts && h('button', {
                         type: 'button',
                         class: 'mj-btn mj-btn--icon mj-btn--secondary',
-                        onClick: handleResetPassword,
-                        disabled: !hasLinkedAccount || resettingPassword,
-                        title: resettingPassword ? resetPasswordProcessingLabel : (hasLinkedAccount ? resetPasswordLabel : resetPasswordUnavailableLabel),
-                        'aria-label': resettingPassword ? resetPasswordProcessingLabel : (hasLinkedAccount ? resetPasswordLabel : resetPasswordUnavailableLabel),
+                        onClick: handleOpenAccountModal,
+                        title: hasLinkedAccount ? accountButtonLinked : accountButtonUnlinked,
+                        'aria-label': hasLinkedAccount ? accountButtonLinked : accountButtonUnlinked,
+                        'data-status': hasLinkedAccount ? 'linked' : 'unlinked',
+                        'data-tooltip': hasLinkedAccount ? accountStatusLinked : accountStatusUnlinked,
                     }, [
-                        resettingPassword
-                            ? h('span', { class: 'mj-regmgr-loading__spinner', style: { width: '16px', height: '16px' } })
-                            : h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                                h('circle', { cx: 7, cy: 12, r: 3 }),
-                                h('line', { x1: 10, y1: 12, x2: 21, y2: 12 }),
-                                h('line', { x1: 17, y1: 12, x2: 17, y2: 16 }),
-                                h('line', { x1: 14, y1: 12, x2: 14, y2: 14 }),
-                            ]),
+                        h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, [
+                            h('circle', { cx: 7, cy: 7, r: 3 }),
+                            h('path', { d: 'M12 18c0-3-2.5-5-5-5s-5 2-5 5' }),
+                            h('path', { d: 'M15 7.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0z' }),
+                            h('path', { d: 'M17.5 10v2' }),
+                            h('path', { d: 'M16 15l2 2 3-3' }),
+                        ]),
                     ]),
                     canDeleteMember && h('button', {
                         type: 'button',
@@ -1053,7 +1049,7 @@
                                     age !== null && ' (' + age + ' ans)',
                                 ]),
                             ]),
-                            member.guardianName && h('div', { class: 'mj-regmgr-member-detail__row mj-regmgr-member-detail__row--guardian' }, [
+                            guardianDisplayName && h('div', { class: 'mj-regmgr-member-detail__row mj-regmgr-member-detail__row--guardian' }, [
                                 h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
                                     h('path', { d: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' }),
                                     h('circle', { cx: 9, cy: 7, r: 4 }),
@@ -1064,7 +1060,7 @@
                                     guardian ? h(MemberAvatar, { member: guardian, size: 'small' }) : null,
                                     h('div', { class: 'mj-regmgr-guardian__info' }, [
                                         h('span', { class: 'mj-regmgr-guardian__label' }, 'Tuteur référent'),
-                                        h('span', { class: 'mj-regmgr-guardian__name' }, member.guardianName),
+                                        h('span', { class: 'mj-regmgr-guardian__name' }, guardianDisplayName),
                                     ]),
                                 ]),
                                 canEditGuardianInline
@@ -1609,6 +1605,20 @@
                                     child.membershipYear && h('span', { class: 'mj-regmgr-child-card__year' }, child.membershipYear),
                                 ]),
                                 h('div', { class: 'mj-regmgr-child-card__actions' }, [
+                                    onOpenMember && child && child.id && h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                        onClick: function () {
+                                            onOpenMember(child, { edit: true });
+                                        },
+                                        title: 'Éditer le jeune',
+                                    }, [
+                                        h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                            h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
+                                            h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+                                        ]),
+                                        h('span', { class: 'mj-regmgr-child-card__action-label' }, 'Éditer le jeune'),
+                                    ]),
                                     config.adminMemberUrl && h('a', {
                                         href: config.adminMemberUrl + child.id,
                                         target: '_blank',

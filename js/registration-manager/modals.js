@@ -892,6 +892,354 @@
     }
 
     // ============================================
+    // MEMBER ACCOUNT MODAL
+    // ============================================
+
+    function MemberAccountModal(props) {
+        var isOpen = props.isOpen;
+        var onClose = props.onClose;
+        var member = props.member;
+        var rolesMap = props.roles || {};
+        var onSubmit = props.onSubmit;
+        var onResetPassword = props.onResetPassword;
+        var strings = props.strings || {};
+
+        var roleKeys = Object.keys(rolesMap);
+        var roleKeysKey = roleKeys.join('|');
+
+        var _role = useState('');
+        var role = _role[0];
+        var setRole = _role[1];
+
+        var _manualLogin = useState('');
+        var manualLogin = _manualLogin[0];
+        var setManualLogin = _manualLogin[1];
+
+        var _manualPassword = useState('');
+        var manualPassword = _manualPassword[0];
+        var setManualPassword = _manualPassword[1];
+
+        var _submitting = useState(false);
+        var submitting = _submitting[0];
+        var setSubmitting = _submitting[1];
+
+        var _error = useState('');
+        var error = _error[0];
+        var setError = _error[1];
+
+        var _statusMessage = useState('');
+        var statusMessage = _statusMessage[0];
+        var setStatusMessage = _statusMessage[1];
+
+        var _resultData = useState(null);
+        var resultData = _resultData[0];
+        var setResultData = _resultData[1];
+
+        var _copyFeedback = useState('');
+        var copyFeedback = _copyFeedback[0];
+        var setCopyFeedback = _copyFeedback[1];
+
+        var _resetting = useState(false);
+        var resetting = _resetting[0];
+        var setResetting = _resetting[1];
+
+        var modalTitle = getString(strings, 'memberAccountModalTitle', 'Gestion du compte WordPress');
+        var modalDescription = getString(strings, 'memberAccountModalDescription', 'Créez, liez ou mettez à jour le compte WordPress associé à ce membre.');
+        var accountLabel = getString(strings, 'memberAccount', 'Compte WordPress');
+        var accountLinkedText = getString(strings, 'memberAccountStatusLinked', 'Un compte WordPress est lié à ce membre.');
+        var accountUnlinkedText = getString(strings, 'memberAccountStatusUnlinked', 'Aucun compte WordPress n\'est encore lié.');
+        var roleLabel = getString(strings, 'memberAccountRoleLabel', 'Rôle WordPress attribué');
+        var rolePlaceholder = getString(strings, 'memberAccountRolePlaceholder', 'Sélectionnez un rôle…');
+        var loginLabel = getString(strings, 'memberAccountLoginLabel', 'Identifiant WordPress');
+        var loginPlaceholder = getString(strings, 'memberAccountLoginPlaceholder', 'ex : prenom.nom');
+        var loginHelp = getString(strings, 'memberAccountLoginHelp', 'Laissez vide pour proposer un identifiant automatiquement.');
+        var passwordLabel = getString(strings, 'memberAccountPasswordLabel', 'Mot de passe');
+        var passwordHelp = getString(strings, 'memberAccountPasswordHelp', 'Laissez vide pour générer un mot de passe sécurisé automatiquement.');
+        var generatePasswordLabel = getString(strings, 'memberAccountGeneratePassword', 'Générer un mot de passe sécurisé');
+        var copyPasswordLabel = getString(strings, 'memberAccountCopyPassword', 'Copier le mot de passe');
+        var copyPasswordSuccess = getString(strings, 'memberAccountPasswordCopied', 'Mot de passe copié dans le presse-papiers.');
+        var submitCreateLabel = getString(strings, 'memberAccountSubmitCreate', 'Créer et lier le compte');
+        var submitUpdateLabel = getString(strings, 'memberAccountSubmitUpdate', 'Mettre à jour le compte');
+        var successCreateLabel = getString(strings, 'memberAccountSuccessCreate', 'Compte WordPress créé et lié avec succès.');
+        var successUpdateLabel = getString(strings, 'memberAccountSuccessUpdate', 'Compte WordPress mis à jour avec succès.');
+        var resetEmailLabel = getString(strings, 'memberAccountResetEmail', 'Envoyer un email de réinitialisation');
+        var resetEmailSuccess = getString(strings, 'memberAccountResetEmailSuccess', 'Email de réinitialisation envoyé.');
+        var noRolesMessage = getString(strings, 'memberAccountNoRoles', 'Aucun rôle WordPress n\'est disponible pour votre compte.');
+
+        var memberName = member ? [(member.firstName || ''), (member.lastName || '')].join(' ').trim() : '';
+
+        var baseLinked = member && member.hasLinkedAccount ? true : false;
+        if (resultData && (resultData.created || (resultData.login && resultData.login !== ''))) {
+            baseLinked = true;
+        }
+        var isLinked = baseLinked;
+
+        useEffect(function () {
+            if (!isOpen) {
+                return;
+            }
+            var defaultRole = '';
+            if (member && member.accountRole && Object.prototype.hasOwnProperty.call(rolesMap, member.accountRole)) {
+                defaultRole = member.accountRole;
+            } else if (roleKeys.length > 0) {
+                defaultRole = roleKeys[0];
+            }
+            setRole(defaultRole);
+            setManualLogin(member && member.accountLogin ? member.accountLogin : '');
+            setManualPassword('');
+            setError('');
+            setStatusMessage('');
+            setResultData(null);
+            setCopyFeedback('');
+            setResetting(false);
+        }, [isOpen, member ? member.id : null, roleKeysKey]);
+
+        var generatePassword = useCallback(function () {
+            var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789@$!?';
+            var length = 12;
+            var generated = '';
+            for (var i = 0; i < length; i += 1) {
+                generated += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            setManualPassword(generated);
+            setCopyFeedback('');
+        }, []);
+
+        var handleCopyPassword = useCallback(function () {
+            if (!manualPassword) {
+                return;
+            }
+
+            var text = manualPassword;
+
+            if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                navigator.clipboard.writeText(text)
+                    .then(function () {
+                        setCopyFeedback(copyPasswordSuccess);
+                    })
+                    .catch(function () {
+                        setCopyFeedback(copyPasswordSuccess);
+                    });
+                return;
+            }
+
+            try {
+                var textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.setAttribute('readonly', '');
+                textarea.style.position = 'absolute';
+                textarea.style.left = '-9999px';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                setCopyFeedback(copyPasswordSuccess);
+            } catch (err) {
+                setCopyFeedback(copyPasswordSuccess);
+            }
+        }, [manualPassword, copyPasswordSuccess]);
+
+        var handleSubmit = useCallback(function (event) {
+            event.preventDefault();
+
+            if (submitting) {
+                return;
+            }
+
+            if (!member || !member.id) {
+                setError('Membre introuvable.');
+                return;
+            }
+
+            if (typeof onSubmit !== 'function') {
+                setError('Action indisponible.');
+                return;
+            }
+
+            if (roleKeys.length > 0 && !role) {
+                setError(noRolesMessage);
+                return;
+            }
+
+            setSubmitting(true);
+            setError('');
+            setStatusMessage('');
+
+            onSubmit(member.id, {
+                role: roleKeys.length > 0 ? role : (member && member.accountRole ? member.accountRole : ''),
+                manualLogin: manualLogin.trim(),
+                manualPassword: manualPassword.trim(),
+            })
+                .then(function (result) {
+                    var message = result && result.message ? result.message : (isLinked ? successUpdateLabel : successCreateLabel);
+                    setStatusMessage(message);
+
+                    if (result && result.member_login) {
+                        setManualLogin(result.member_login);
+                    } else if (result && result.login) {
+                        setManualLogin(result.login);
+                    }
+
+                    if (result && result.generated_password) {
+                        setManualPassword(result.generated_password);
+                        setCopyFeedback('');
+                    }
+
+                    setResultData({
+                        login: result ? (result.member_login || result.login || manualLogin.trim()) : manualLogin.trim(),
+                        generatedPassword: result && result.generated_password ? result.generated_password : manualPassword.trim(),
+                        created: !!(result && result.user_id) || !!(result && result.created),
+                    });
+
+                    setSubmitting(false);
+                })
+                .catch(function (err) {
+                    setSubmitting(false);
+                    setError(err && err.message ? err.message : 'Erreur lors de la mise à jour.');
+                });
+        }, [submitting, member, onSubmit, role, manualLogin, manualPassword, noRolesMessage, isLinked, successUpdateLabel, successCreateLabel]);
+
+        var handleResetEmail = useCallback(function () {
+            if (resetting || typeof onResetPassword !== 'function' || !member || !member.id) {
+                return;
+            }
+
+            setResetting(true);
+            setStatusMessage('');
+
+            Promise.resolve(onResetPassword(member.id))
+                .then(function () {
+                    setStatusMessage(resetEmailSuccess);
+                })
+                .catch(function (err) {
+                    setError(err && err.message ? err.message : 'Erreur lors de l\'envoi de l\'email.');
+                })
+                .finally(function () {
+                    setResetting(false);
+                });
+        }, [resetting, onResetPassword, member, resetEmailSuccess]);
+
+        var submitLabel = isLinked ? submitUpdateLabel : submitCreateLabel;
+        var disableSubmit = submitting || (roleKeys.length > 0 && !role);
+
+        var footer = h(Fragment, null, [
+            h('button', {
+                type: 'button',
+                class: 'mj-btn mj-btn--secondary',
+                onClick: onClose,
+                disabled: submitting,
+            }, getString(strings, 'cancel', 'Annuler')),
+            h('button', {
+                type: 'submit',
+                form: 'member-account-form',
+                class: 'mj-btn mj-btn--primary',
+                disabled: disableSubmit,
+            }, submitting ? getString(strings, 'loading', 'Chargement...') : submitLabel),
+        ]);
+
+        return h(Modal, {
+            isOpen: isOpen,
+            onClose: onClose,
+            title: modalTitle,
+            size: 'medium',
+            footer: footer,
+        }, [
+            !member && h('p', { class: 'mj-regmgr-modal__description' }, getString(strings, 'loading', 'Chargement...')),
+
+            member && h('form', {
+                id: 'member-account-form',
+                class: 'mj-regmgr-form',
+                onSubmit: handleSubmit,
+            }, [
+                h('p', { class: 'mj-regmgr-modal__description' }, modalDescription),
+                memberName && h('p', { class: 'mj-regmgr-modal__description' }, accountLabel + ' · ' + memberName),
+                h('p', { class: 'mj-regmgr-modal__description' }, isLinked ? accountLinkedText : accountUnlinkedText),
+
+                statusMessage && h('p', { class: 'mj-regmgr-modal__description' }, statusMessage),
+                error && h('div', { class: 'mj-regmgr-alert mj-regmgr-alert--error' }, error),
+
+                roleKeys.length === 0 && h('p', { class: 'mj-regmgr-modal__description' }, noRolesMessage),
+
+                roleKeys.length > 0 && h('div', { class: 'mj-regmgr-form__group' }, [
+                    h('label', { for: 'member-account-role' }, roleLabel + ' *'),
+                    h('select', {
+                        id: 'member-account-role',
+                        class: 'mj-regmgr-select',
+                        value: role,
+                        onChange: function (e) { setRole(e.target.value); },
+                        disabled: submitting,
+                    }, [
+                        role === '' && h('option', { value: '' }, rolePlaceholder),
+                        roleKeys.map(function (key) {
+                            return h('option', { key: key, value: key }, rolesMap[key]);
+                        }),
+                    ]),
+                ]),
+
+                h('div', { class: 'mj-regmgr-form__group' }, [
+                    h('label', { for: 'member-account-login' }, loginLabel),
+                    h('input', {
+                        type: 'text',
+                        id: 'member-account-login',
+                        class: 'mj-regmgr-input',
+                        value: manualLogin,
+                        onInput: function (e) { setManualLogin(e.target.value); },
+                        placeholder: loginPlaceholder,
+                        disabled: submitting,
+                    }),
+                    h('p', { class: 'mj-regmgr-modal__description' }, loginHelp),
+                ]),
+
+                h('div', { class: 'mj-regmgr-form__group' }, [
+                    h('label', { for: 'member-account-password' }, passwordLabel),
+                    h('input', {
+                        type: 'text',
+                        id: 'member-account-password',
+                        class: 'mj-regmgr-input',
+                        value: manualPassword,
+                        onInput: function (e) {
+                            setManualPassword(e.target.value);
+                            setCopyFeedback('');
+                        },
+                        placeholder: '••••••••',
+                        disabled: submitting,
+                    }),
+                    h('p', { class: 'mj-regmgr-modal__description' }, passwordHelp),
+                    h('div', { class: 'mj-regmgr-modal__actions' }, [
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--secondary mj-btn--small',
+                            onClick: generatePassword,
+                            disabled: submitting,
+                        }, generatePasswordLabel),
+                        manualPassword && h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--ghost mj-btn--small',
+                            onClick: handleCopyPassword,
+                            disabled: submitting,
+                        }, copyPasswordLabel),
+                    ]),
+                    copyFeedback && h('p', { class: 'mj-regmgr-modal__description' }, copyFeedback),
+                ]),
+
+                resultData && h('div', { class: 'mj-regmgr-form__group' }, [
+                    resultData.login && h('p', { class: 'mj-regmgr-modal__description' }, accountLabel + ' · ' + resultData.login),
+                    resultData.generatedPassword && h('p', { class: 'mj-regmgr-modal__description' }, passwordLabel + ' · ' + resultData.generatedPassword),
+                ]),
+
+                typeof onResetPassword === 'function' && isLinked && h('div', { class: 'mj-regmgr-form__group' }, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--ghost mj-btn--small',
+                        onClick: handleResetEmail,
+                        disabled: resetting,
+                    }, resetting ? getString(strings, 'loading', 'Chargement...') : resetEmailLabel),
+                ]),
+            ]),
+        ]);
+    }
+
+    // ============================================
     // QR CODE MODAL
     // ============================================
 
@@ -1624,6 +1972,7 @@
         CreateEventModal: CreateEventModal,
         CreateMemberModal: CreateMemberModal,
         MemberNotesModal: MemberNotesModal,
+        MemberAccountModal: MemberAccountModal,
         QRCodeModal: QRCodeModal,
         OccurrencesModal: OccurrencesModal,
         LocationModal: LocationModal,

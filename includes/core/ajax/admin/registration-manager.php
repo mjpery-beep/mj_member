@@ -4656,6 +4656,12 @@ function mj_regmgr_get_member_details() {
         'postalCode' => $memberData->postal_code ?? '',
         'avatarUrl' => mj_regmgr_get_member_avatar_url((int) $memberData->id),
         'userId' => $memberData->wp_user_id ?? null,
+        'hasLinkedAccount' => !empty($memberData->wp_user_id),
+        'accountLogin' => isset($memberData->member_account_login) ? (string) $memberData->member_account_login : '',
+        'accountEmail' => '',
+        'accountRole' => '',
+        'accountRoleLabel' => '',
+        'accountEditUrl' => '',
         'createdAt' => $memberData->created_at ?? null,
         'dateInscription' => $memberData->date_inscription ?? null,
         'status' => $memberData->status ?? 'active',
@@ -4677,6 +4683,31 @@ function mj_regmgr_get_member_details() {
         'photoId' => $memberData->get('photo_id', null),
         'guardian' => null,
     );
+
+    if ($member['hasLinkedAccount']) {
+        $user_object = get_user_by('id', (int) $member['userId']);
+        if ($user_object) {
+            $member['accountEmail'] = $user_object->user_email ?? '';
+            if ($member['accountLogin'] === '') {
+                $member['accountLogin'] = $user_object->user_login;
+            }
+
+            if (!empty($user_object->roles) && is_array($user_object->roles)) {
+                $primary_role = reset($user_object->roles);
+                if (is_string($primary_role) && $primary_role !== '') {
+                    $member['accountRole'] = $primary_role;
+                    $role_object = get_role($primary_role);
+                    if ($role_object && isset($role_object->name)) {
+                        $member['accountRoleLabel'] = translate_user_role($role_object->name);
+                    } else {
+                        $member['accountRoleLabel'] = ucfirst(str_replace('_', ' ', $primary_role));
+                    }
+                }
+            }
+
+            $member['accountEditUrl'] = get_edit_user_link($user_object->ID);
+        }
+    }
 
     // Add guardian info if exists
     if (!empty($memberData->guardian_id)) {

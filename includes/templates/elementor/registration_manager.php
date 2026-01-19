@@ -41,6 +41,15 @@ $allow_manual_payment = !empty($settings['allow_manual_payment']) && $settings['
 $allow_delete_registration = !empty($settings['allow_delete_registration']) && $settings['allow_delete_registration'] === 'yes';
 $allow_create_member = !empty($settings['allow_create_member']) && $settings['allow_create_member'] === 'yes';
 
+$can_manage_accounts = current_user_can(Config::capability()) && (current_user_can('create_users') || current_user_can('promote_users'));
+$account_roles = array();
+if ($can_manage_accounts && function_exists('get_editable_roles')) {
+    $editable_roles = get_editable_roles();
+    foreach ($editable_roles as $role_key => $role_data) {
+        $account_roles[$role_key] = translate_user_role($role_data['name']);
+    }
+}
+
 // Aperçu Elementor
 if ($is_preview) {
     $preview_events = array(
@@ -378,6 +387,9 @@ $config_json = wp_json_encode(array(
     'allowManualPayment' => $allow_manual_payment,
     'allowDeleteRegistration' => $allow_delete_registration,
     'allowCreateMember' => $allow_create_member,
+    'canManageAccounts' => $can_manage_accounts,
+    'accountLinkNonce' => $can_manage_accounts ? wp_create_nonce('mj_link_member_user') : '',
+    'accountRoles' => $account_roles,
     'canCreateEvent' => current_user_can(Config::capability()),
     'canDeleteEvent' => current_user_can(Config::capability()) || $is_coordinateur,
     'canManageLocations' => current_user_can(Config::capability()) || $is_coordinateur,
@@ -473,6 +485,30 @@ $config_json = wp_json_encode(array(
         'showQRCode' => __('Afficher QR Code', 'mj-member'),
         'contactWhatsapp' => __('Contacter sur WhatsApp', 'mj-member'),
         'memberProfile' => __('Profil', 'mj-member'),
+        'memberAccount' => __('Compte WordPress', 'mj-member'),
+        'memberAccountLinked' => __('Modifier le compte WordPress', 'mj-member'),
+        'memberAccountUnlinked' => __('Lier un compte WordPress', 'mj-member'),
+        'memberAccountStatusLinked' => __('Un compte WordPress est lié à ce membre.', 'mj-member'),
+        'memberAccountStatusUnlinked' => __('Aucun compte WordPress n\'est encore lié.', 'mj-member'),
+        'memberAccountModalTitle' => __('Gestion du compte WordPress', 'mj-member'),
+        'memberAccountModalDescription' => __('Créez, liez ou mettez à jour le compte WordPress associé à ce membre.', 'mj-member'),
+        'memberAccountRoleLabel' => __('Rôle WordPress attribué', 'mj-member'),
+        'memberAccountRolePlaceholder' => __('Sélectionnez un rôle…', 'mj-member'),
+        'memberAccountLoginLabel' => __('Identifiant WordPress', 'mj-member'),
+        'memberAccountLoginPlaceholder' => __('ex : prenom.nom', 'mj-member'),
+        'memberAccountLoginHelp' => __('Laissez vide pour proposer un identifiant automatiquement.', 'mj-member'),
+        'memberAccountPasswordLabel' => __('Mot de passe', 'mj-member'),
+        'memberAccountPasswordHelp' => __('Laissez vide pour générer un mot de passe sécurisé automatiquement.', 'mj-member'),
+        'memberAccountGeneratePassword' => __('Générer un mot de passe sécurisé', 'mj-member'),
+        'memberAccountCopyPassword' => __('Copier le mot de passe', 'mj-member'),
+        'memberAccountPasswordCopied' => __('Mot de passe copié dans le presse-papiers.', 'mj-member'),
+        'memberAccountSubmitCreate' => __('Créer et lier le compte', 'mj-member'),
+        'memberAccountSubmitUpdate' => __('Mettre à jour le compte', 'mj-member'),
+        'memberAccountSuccessCreate' => __('Compte WordPress créé et lié avec succès.', 'mj-member'),
+        'memberAccountSuccessUpdate' => __('Compte WordPress mis à jour avec succès.', 'mj-member'),
+        'memberAccountResetEmail' => __('Envoyer un email de réinitialisation', 'mj-member'),
+        'memberAccountResetEmailSuccess' => __('Email de réinitialisation envoyé.', 'mj-member'),
+        'memberAccountNoRoles' => __('Aucun rôle WordPress n\'est disponible pour votre compte.', 'mj-member'),
         'deleteMember' => __('Supprimer le membre', 'mj-member'),
         'deleteMemberConfirm' => __('Voulez-vous vraiment supprimer ce membre ? Cette action est irréversible.', 'mj-member'),
         'deleteMemberProcessing' => __('Suppression...', 'mj-member'),
