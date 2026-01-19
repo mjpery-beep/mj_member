@@ -183,13 +183,18 @@
             /**
              * Sauvegarde les occurrences d'un événement
              */
-            saveEventOccurrences: function (eventId, occurrences, scheduleSummary, generatorPlan) {
-                return post('mj_regmgr_save_event_occurrences', {
+            saveEventOccurrences: function (eventId, occurrences, scheduleSummary, generatorPlan, options) {
+                var requestOptions = options && typeof options === 'object' ? options : null;
+                var payload = {
                     eventId: eventId,
                     occurrences: occurrences || [],
                     scheduleSummary: typeof scheduleSummary === 'string' ? scheduleSummary : '',
                     generatorPlan: generatorPlan || null,
-                });
+                };
+                if (requestOptions && Object.prototype.hasOwnProperty.call(requestOptions, 'forceEmpty')) {
+                    payload.forceEmpty = !!requestOptions.forceEmpty;
+                }
+                return post('mj_regmgr_save_event_occurrences', payload);
             },
 
             /**

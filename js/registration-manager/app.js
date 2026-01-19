@@ -32,6 +32,33 @@
     var AttendanceComps = global.MjRegMgrAttendance;
     var EventEditorModule = global.MjRegMgrEventEditor;
     var EventEditor = EventEditorModule ? EventEditorModule.EventEditor : null;
+    var TabsModule = global.MjRegMgrTabs;
+    var createOccurrenceTab = TabsModule && typeof TabsModule.createOccurrenceTab === 'function'
+        ? TabsModule.createOccurrenceTab
+        : null;
+    var OCCURRENCE_TAB_KEY = TabsModule && typeof TabsModule.OCCURRENCE_TAB_KEY === 'string'
+        ? TabsModule.OCCURRENCE_TAB_KEY
+        : 'occurrence-encoder';
+    var TabsComponent = TabsModule && typeof TabsModule.Tabs === 'function'
+        ? TabsModule.Tabs
+        : null;
+    var ensureRegistrationsTab = TabsModule && typeof TabsModule.ensureRegistrationsTab === 'function'
+        ? TabsModule.ensureRegistrationsTab
+        : function (tabs, fallback) {
+            var safeTabs = Array.isArray(tabs) ? tabs.filter(function (tab) { return !!tab; }) : [];
+            var fallbackLabel = fallback && fallback.label ? fallback.label : 'Inscriptions';
+            var fallbackBadge = fallback && typeof fallback.badge === 'number' ? fallback.badge : 0;
+            var exists = safeTabs.some(function (tab) { return tab && tab.key === 'registrations'; });
+            if (exists) {
+                return safeTabs;
+            }
+            var fallbackTab = {
+                key: 'registrations',
+                label: fallbackLabel,
+                badge: fallbackBadge,
+            };
+            return [fallbackTab].concat(safeTabs);
+        };
 
     if (!Utils || !EventsComps || !RegComps || !Modals || !Services || !AttendanceComps) {
         console.warn('[MjRegMgr] Modules manquants');
@@ -2973,90 +3000,6 @@
         return 'occ-' + cleanDate + '-' + cleanTime + '-' + seed;
     }
 
-    function Tabs(props) {
-        var originalTabs = Array.isArray(props.tabs) ? props.tabs.slice() : [];
-        var fallbackRegistrationsTab = props.fallbackRegistrationsTab;
-        var activeTab = props.activeTab;
-        var onChange = props.onChange;
-        var shouldEnsureRegistrationsTab = props.ensureRegistrationsTab !== false;
-
-        var tabs = originalTabs;
-        var hasRegistrationsTab = tabs.some(function (tab) {
-            return tab && tab.key === 'registrations';
-        });
-
-        if (shouldEnsureRegistrationsTab && !hasRegistrationsTab) {
-            var fallback = fallbackRegistrationsTab || {
-                key: 'registrations',
-                label: 'Inscriptions',
-                badge: 0,
-            };
-
-            tabs = [fallback].concat(tabs);
-        }
-
-        return h('div', { class: 'mj-regmgr-tabs', role: 'tablist' },
-            tabs.map(function (tab) {
-                return h('button', {
-                    key: tab.key,
-                    type: 'button',
-                    class: classNames('mj-regmgr-tab', {
-                        'mj-regmgr-tab--active': activeTab === tab.key,
-                    }),
-                    role: 'tab',
-                    'aria-selected': activeTab === tab.key ? 'true' : 'false',
-                    onClick: function () { onChange(tab.key); },
-                }, [
-                    tab.icon && h('span', { class: 'mj-regmgr-tab__icon', dangerouslySetInnerHTML: { __html: tab.icon } }),
-                    h('span', null, tab.label),
-                    tab.badge !== undefined && h('span', { class: 'mj-regmgr-tab__badge' }, tab.badge),
-                ]);
-            })
-        );
-    }
-    /**
-     *  Assure la présence de l'onglet "Inscriptions" dans une liste d'onglets.
-     */
-    function ensureRegistrationsTab(tabs, fallback) {
-        var fallbackLabel = fallback && fallback.label ? fallback.label : 'Inscriptions';
-        var fallbackBadge = fallback && typeof fallback.badge === 'number' ? fallback.badge : 0;
-
-        var safeTabs = Array.isArray(tabs) ? tabs.filter(function (tab) { return !!tab; }) : [];
-        var existingIndex = -1;
-
-        for (var i = 0; i < safeTabs.length; i++) {
-            var tab = safeTabs[i];
-            if (tab && tab.key === 'registrations') {
-                existingIndex = i;
-                break;
-            }
-        }
-
-        if (existingIndex !== -1) {
-            var current = safeTabs[existingIndex];
-            var normalized = Object.assign({}, current, {
-                key: 'registrations',
-                label: current && current.label ? current.label : fallbackLabel,
-            });
-
-            if (normalized.badge === undefined) {
-                normalized.badge = fallbackBadge;
-            }
-
-            safeTabs[existingIndex] = normalized;
-            return safeTabs;
-        }
-
-        var fallbackTab = {
-            key: 'registrations',
-            label: fallbackLabel,
-            badge: fallbackBadge,
-        };
-
-        safeTabs.unshift(fallbackTab);
-        return safeTabs;
-    }
-
     // ============================================
     // TOASTS
     // ============================================
@@ -5047,8 +4990,13 @@
         var registrationsCount = Array.isArray(registrations) ? registrations.length : 0;
         var registrationsTabLabel = getString(strings, 'tabRegistrations', 'Inscriptions');
 
-        var occurrenceTabKey = 'occurrence-encoder';
-        var occurrenceTabLabel = getString(strings, 'tabOccurrenceEncoder', 'Occurence de date');
+        var occurrenceTab = createOccurrenceTab
+            ? createOccurrenceTab(strings)
+            : {
+                key: OCCURRENCE_TAB_KEY,
+                label: getString(strings, 'tabOccurrenceEncoder', 'Occurence de date'),
+            };
+        var occurrenceTabKey = occurrenceTab.key || OCCURRENCE_TAB_KEY;
         var shouldShowOccurrenceTab = !!selectedEvent;
 
         var tabs = [
@@ -5068,10 +5016,7 @@
         ];
 
         if (shouldShowOccurrenceTab) {
-            tabs.push({
-                key: occurrenceTabKey,
-                label: occurrenceTabLabel,
-            });
+            tabs.push(Object.assign({}, occurrenceTab));
         }
 
         if (EventEditor) {
@@ -5233,7 +5178,7 @@
                     // Contenu événement sélectionné
                     sidebarMode === 'events' && selectedEvent && h('div', { class: 'mj-regmgr__content' }, [
                         // Onglets
-                        h(Tabs, {
+                        TabsComponent && h(TabsComponent, {
                             tabs: tabs,
                             fallbackRegistrationsTab: {
                                 key: 'registrations',

@@ -309,6 +309,7 @@ final class AssetsManager
         self::registerScript('mj-member-regmgr-members', 'js/registration-manager/members.js', array('mj-member-regmgr-registrations'));
         self::registerScript('mj-member-regmgr-event-editor', 'js/registration-manager/event-editor.js', array('mj-member-regmgr-hooks', 'mj-member-regmgr-emoji-picker'));
         self::registerScript('mj-member-regmgr-modals', 'js/registration-manager/modals.js', array('mj-member-regmgr-hooks'));
+        self::registerScript('mj-member-regmgr-tabs', 'js/registration-manager/tabs.js', array('mj-member-regmgr-hooks', 'mj-member-utils'));
         self::registerScript('mj-member-regmgr-app', 'js/registration-manager/app.js', array(
             'mj-member-regmgr-services',
             'mj-member-regmgr-hooks',
@@ -318,6 +319,7 @@ final class AssetsManager
             'mj-member-regmgr-members',
             'mj-member-regmgr-event-editor',
             'mj-member-regmgr-modals',
+            'mj-member-regmgr-tabs',
         ));
     }
 
