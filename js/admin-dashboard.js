@@ -11,6 +11,10 @@
     var CHART_JS_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js';
     var chartJsReadyPromise = null;
     var scriptPromises = {};
+    var LEAFLET_SCRIPT_ID = 'mj-member-leaflet';
+    var LEAFLET_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';
+    var LEAFLET_STYLESHEET_ID = 'mj-member-leaflet-css';
+    var LEAFLET_STYLESHEET_URL = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';
 
     var COLOR_PALETTE = [
         '#6366f1', // indigo
@@ -83,6 +87,184 @@
         }
 
         return chartJsReadyPromise;
+    }
+
+    function ensureLeaflet() {
+        if (typeof window !== 'undefined' && window.L && typeof window.L.map === 'function') {
+            return Promise.resolve(window.L);
+        }
+
+        if (scriptPromises.leaflet) {
+            return scriptPromises.leaflet;
+        }
+
+        scriptPromises.leaflet = new Promise(function(resolve, reject) {
+            if (typeof document === 'undefined') {
+                reject(new Error('document unavailable'));
+                return;
+            }
+
+            var existingStylesheet = document.getElementById(LEAFLET_STYLESHEET_ID);
+            if (!existingStylesheet) {
+                var link = document.createElement('link');
+                link.id = LEAFLET_STYLESHEET_ID;
+                link.rel = 'stylesheet';
+                link.href = LEAFLET_STYLESHEET_URL;
+                document.head.appendChild(link);
+            }
+
+            function resolveLeaflet() {
+                if (window.L && typeof window.L.map === 'function') {
+                    resolve(window.L);
+                } else {
+                    reject(new Error('Leaflet namespace unavailable'));
+                }
+            }
+
+            var existingScript = document.getElementById(LEAFLET_SCRIPT_ID);
+            if (existingScript) {
+                if (existingScript.getAttribute('data-loaded') === 'true') {
+                    resolveLeaflet();
+                    return;
+                }
+
+                existingScript.addEventListener('load', function handleLoad() {
+                    existingScript.removeEventListener('load', handleLoad);
+                    resolveLeaflet();
+                });
+                existingScript.addEventListener('error', function handleError() {
+                    existingScript.removeEventListener('error', handleError);
+                    reject(new Error('Unable to load Leaflet script'));
+                });
+                return;
+            }
+
+            var script = document.createElement('script');
+            script.id = LEAFLET_SCRIPT_ID;
+            script.src = LEAFLET_SCRIPT_URL;
+            script.async = true;
+            script.onload = function() {
+                script.setAttribute('data-loaded', 'true');
+                resolveLeaflet();
+            };
+            script.onerror = function() {
+                reject(new Error('Unable to load Leaflet script'));
+            };
+            document.head.appendChild(script);
+        });
+
+        scriptPromises.leaflet = scriptPromises.leaflet.catch(function(error) {
+            delete scriptPromises.leaflet;
+            throw error;
+        });
+
+        return scriptPromises.leaflet;
+    }
+
+    function parseNumber(value) {
+        var number = parseFloat(value);
+        if (typeof number !== 'number' || !isFinite(number)) {
+            return null;
+        }
+        return number;
+    }
+
+    function formatDescriptor(value) {
+        if (typeof value !== 'string') {
+            return '';
+        }
+        var trimmed = value.replace(/[_-]+/g, ' ').trim();
+        if (trimmed === '') {
+            return '';
+        }
+        return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    }
+
+    function mergeMapOptions(defaults, overrides) {
+        var result = Object.assign({}, defaults);
+        if (!overrides || typeof overrides !== 'object') {
+            return result;
+        }
+
+        Object.keys(overrides).forEach(function(key) {
+            if (key === 'center' && overrides.center) {
+                var center = overrides.center;
+                if (center && typeof center === 'object') {
+                    if (typeof center.lat === 'function' && typeof center.lng === 'function') {
+                        result.center = center;
+                    } else {
+                        var lat = parseNumber(center.lat);
+                        var lng = parseNumber(center.lng);
+                        if (lat !== null && lng !== null) {
+                            result.center = { lat: lat, lng: lng };
+                        }
+                    }
+                }
+            } else {
+                result[key] = overrides[key];
+            }
+        });
+
+        return result;
+    }
+
+    function createInfoContent(item, strings) {
+        var container = document.createElement('div');
+        container.className = 'mj-members-map__info-window';
+
+        var title = document.createElement('strong');
+        title.textContent = item.label || '';
+        container.appendChild(title);
+
+        var addressLines = [];
+        if (item.address) {
+            addressLines.push(item.address);
+        }
+        var localityParts = [];
+        if (item.postalCode) {
+            localityParts.push(item.postalCode);
+        }
+        if (item.city) {
+            localityParts.push(item.city);
+        }
+        if (localityParts.length) {
+            addressLines.push(localityParts.join(' '));
+        }
+        if (item.country) {
+            addressLines.push(item.country);
+        }
+
+        if (addressLines.length) {
+            var addressEl = document.createElement('p');
+            addressEl.style.margin = '6px 0 0';
+            addressEl.style.fontSize = '12px';
+            addressEl.textContent = addressLines.join(', ');
+            container.appendChild(addressEl);
+        }
+
+        var descriptorLines = [];
+        if (item.role) {
+            var roleLabel = formatDescriptor(item.role);
+            if (roleLabel) {
+                descriptorLines.push(strings.roleLabel ? strings.roleLabel.replace('%s', roleLabel) : 'Rôle : ' + roleLabel);
+            }
+        }
+        if (item.status) {
+            var statusLabel = formatDescriptor(item.status);
+            if (statusLabel) {
+                descriptorLines.push(strings.statusLabel ? strings.statusLabel.replace('%s', statusLabel) : 'Statut : ' + statusLabel);
+            }
+        }
+
+        descriptorLines.forEach(function(line) {
+            var lineEl = document.createElement('p');
+            lineEl.style.margin = '4px 0 0';
+            lineEl.style.fontSize = '12px';
+            lineEl.textContent = line;
+            container.appendChild(lineEl);
+        });
+
+        return container;
     }
 
     /**
@@ -348,6 +530,298 @@
     }
 
     /**
+     * Initialize map for member markers
+     */
+    function initMembersMap() {
+        var container = document.getElementById('mj-dashboard-members-map');
+        if (!container) {
+            return;
+        }
+
+        var config = parseConfig(container.getAttribute('data-config'));
+        if (!config) {
+            return;
+        }
+
+        var markersData = Array.isArray(config.markers) ? config.markers : [];
+        if (markersData.length === 0) {
+            return;
+        }
+
+        var strings = config.strings && typeof config.strings === 'object' ? config.strings : {};
+        var settings = config.settings && typeof config.settings === 'object' ? config.settings : {};
+        var tileLayerConfig = config.tileLayer && typeof config.tileLayer === 'object' ? config.tileLayer : {};
+        var geocodeConfig = config.geocode && typeof config.geocode === 'object' ? config.geocode : {};
+        var messageEl = container.parentElement ? container.parentElement.querySelector('.mj-members-map__message') : null;
+        if (messageEl && strings.loading) {
+            messageEl.textContent = strings.loading;
+            messageEl.classList.remove('is-hidden');
+        }
+
+        ensureLeaflet().then(function(L) {
+            var mapOptions = config.options && typeof config.options === 'object' ? config.options : {};
+            var allowedOptionKeys = ['preferCanvas', 'zoomControl', 'boxZoom', 'doubleClickZoom', 'dragging', 'scrollWheelZoom', 'zoomSnap', 'zoomDelta', 'trackResize', 'touchZoom'];
+            var leafletOptions = {};
+            allowedOptionKeys.forEach(function(key) {
+                if (Object.prototype.hasOwnProperty.call(mapOptions, key)) {
+                    leafletOptions[key] = mapOptions[key];
+                }
+            });
+
+            var fitPadding = parseInt(settings.fitPadding, 10);
+            if (!Number.isFinite(fitPadding) || fitPadding < 0) {
+                fitPadding = 32;
+            }
+            var maxAutoZoom = parseInt(settings.autoFitMaxZoom, 10);
+            if (!Number.isFinite(maxAutoZoom) || maxAutoZoom <= 0) {
+                maxAutoZoom = 14;
+            }
+
+            var map = L.map(container, leafletOptions);
+
+            function scheduleInvalidate(delay) {
+                var wait = Number.isFinite(delay) && delay >= 0 ? delay : 0;
+                setTimeout(function() {
+                    if (map && typeof map.invalidateSize === 'function') {
+                        map.invalidateSize();
+                    }
+                }, wait);
+            }
+
+            var initialCenter = mapOptions.center && typeof mapOptions.center === 'object' ? mapOptions.center : null;
+            var initialLat = initialCenter ? parseNumber(initialCenter.lat) : null;
+            var initialLng = initialCenter ? parseNumber(initialCenter.lng) : null;
+            var initialZoom = mapOptions.zoom !== undefined ? parseInt(mapOptions.zoom, 10) : null;
+            if (initialLat !== null && initialLng !== null) {
+                map.setView([initialLat, initialLng], Number.isFinite(initialZoom) ? initialZoom : 5);
+            } else {
+                map.setView([20, 0], 2);
+            }
+
+            scheduleInvalidate(80);
+            map.whenReady(function() {
+                scheduleInvalidate(0);
+                scheduleInvalidate(300);
+            });
+
+            var tileUrl = typeof tileLayerConfig.url === 'string' && tileLayerConfig.url !== '' ? tileLayerConfig.url : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+            var tileOptions = tileLayerConfig.options && typeof tileLayerConfig.options === 'object' ? tileLayerConfig.options : {};
+            if (typeof tileLayerConfig.attribution === 'string' && tileLayerConfig.attribution !== '') {
+                tileOptions = Object.assign({}, tileOptions, { attribution: tileLayerConfig.attribution });
+            }
+            var tileLayer = L.tileLayer(tileUrl, tileOptions).addTo(map);
+
+            var markersLayer = L.layerGroup().addTo(map);
+            var bounds = null;
+            var hasVisibleMarker = false;
+            var fatalStatus = null;
+
+            function hideMessage() {
+                if (messageEl) {
+                    messageEl.classList.add('is-hidden');
+                }
+            }
+
+            function showMessage(text) {
+                if (messageEl) {
+                    if (typeof text === 'string') {
+                        messageEl.textContent = text;
+                    }
+                    messageEl.classList.remove('is-hidden');
+                }
+            }
+
+            function extendBounds(lat, lng) {
+                if (!bounds) {
+                    bounds = L.latLngBounds([lat, lng], [lat, lng]);
+                } else {
+                    bounds.extend([lat, lng]);
+                }
+            }
+
+            var singleMarkerZoom = parseInt(mapOptions.singleMarkerZoom, 10);
+            if (!Number.isFinite(singleMarkerZoom) || singleMarkerZoom <= 0) {
+                singleMarkerZoom = maxAutoZoom;
+            }
+            if (!Number.isFinite(singleMarkerZoom) || singleMarkerZoom <= 0) {
+                singleMarkerZoom = 14;
+            }
+
+            function attachMarker(item, position) {
+                var lat = parseNumber(position.lat);
+                var lng = parseNumber(position.lng);
+                if (lat === null || lng === null) {
+                    return;
+                }
+
+                var marker = L.marker([lat, lng], { title: item.label || '' });
+                var infoContent = createInfoContent(item, strings);
+                var popupHtml = '';
+                if (infoContent) {
+                    popupHtml = typeof infoContent.outerHTML === 'string' ? infoContent.outerHTML : (infoContent.innerHTML || '');
+                }
+                if (popupHtml) {
+                    marker.bindPopup(popupHtml);
+                }
+                marker.addTo(markersLayer);
+                extendBounds(lat, lng);
+                hasVisibleMarker = true;
+                hideMessage();
+                scheduleInvalidate(0);
+                scheduleInvalidate(250);
+            }
+
+            var geocodeQueue = [];
+
+            markersData.forEach(function(item) {
+                var lat = parseNumber(item.latitude);
+                var lng = parseNumber(item.longitude);
+
+                if (lat !== null && lng !== null) {
+                    attachMarker(item, { lat: lat, lng: lng });
+                } else if (typeof item.query === 'string' && item.query !== '') {
+                    geocodeQueue.push(item);
+                }
+            });
+
+            var geocodeEndpoint = typeof geocodeConfig.endpoint === 'string' && geocodeConfig.endpoint !== '' ? geocodeConfig.endpoint : 'https://nominatim.openstreetmap.org/search';
+            var baseParamsObject = geocodeConfig.params && typeof geocodeConfig.params === 'object' ? geocodeConfig.params : {};
+            var geocodeEmail = typeof geocodeConfig.email === 'string' && geocodeConfig.email !== '' ? geocodeConfig.email : '';
+            var baseParams = {};
+            Object.keys(baseParamsObject).forEach(function(key) {
+                var value = baseParamsObject[key];
+                if (value !== undefined && value !== null) {
+                    baseParams[key] = String(value);
+                }
+            });
+            if (!baseParams.format) {
+                baseParams.format = 'json';
+            }
+            if (!baseParams.limit) {
+                baseParams.limit = '1';
+            }
+            if (!baseParams.addressdetails) {
+                baseParams.addressdetails = '0';
+            }
+            if (geocodeEmail) {
+                baseParams.email = geocodeEmail;
+            }
+
+            function buildGeocodeUrl(query) {
+                var parts = [];
+                Object.keys(baseParams).forEach(function(key) {
+                    parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(baseParams[key]));
+                });
+                parts.push('q=' + encodeURIComponent(query));
+                var delimiter = geocodeEndpoint.indexOf('?') === -1 ? '?' : '&';
+                return geocodeEndpoint + delimiter + parts.join('&');
+            }
+
+            function geocodeItem(item) {
+                return fetch(buildGeocodeUrl(item.query), {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                }).then(function(response) {
+                    if (!response.ok) {
+                        if (response.status === 403 || response.status === 429 || response.status === 503) {
+                            fatalStatus = 'limit';
+                        }
+                        throw new Error('Geocode request failed with status ' + response.status);
+                    }
+                    return response.json();
+                }).then(function(results) {
+                    if (!Array.isArray(results) || results.length === 0) {
+                        console.warn('MJ Member Map: no geocode results for', item);
+                        return;
+                    }
+                    var location = results[0];
+                    var lat = parseNumber(location.lat);
+                    var lng = parseNumber(location.lon);
+                    if (lat === null || lng === null) {
+                        console.warn('MJ Member Map: invalid coordinates for', item);
+                        return;
+                    }
+                    attachMarker(item, { lat: lat, lng: lng });
+                }).catch(function(error) {
+                    console.warn('MJ Member Map: geocode failed', error);
+                });
+            }
+
+            var batchSize = parseInt(settings.geocodeBatchSize, 10);
+            if (!Number.isFinite(batchSize) || batchSize < 1) {
+                batchSize = 1;
+            }
+            var delay = parseInt(settings.geocodeDelay, 10);
+            if (!Number.isFinite(delay) || delay < 0) {
+                delay = 1200;
+            }
+
+            function processQueue() {
+                if (geocodeQueue.length === 0) {
+                    return Promise.resolve();
+                }
+
+                var batch = geocodeQueue.splice(0, batchSize);
+                return Promise.all(batch.map(geocodeItem)).then(function() {
+                    if (geocodeQueue.length === 0) {
+                        return;
+                    }
+                    return new Promise(function(resolve) {
+                        setTimeout(function() {
+                            resolve(processQueue());
+                        }, delay);
+                    });
+                });
+            }
+
+            processQueue().catch(function(queueError) {
+                console.warn('MJ Member Map: geocode queue error', queueError);
+            }).then(function() {
+                if (fatalStatus && !hasVisibleMarker) {
+                    showMessage(strings.loadError || 'Carte indisponible.');
+                    return;
+                }
+
+                if (hasVisibleMarker && bounds && typeof bounds.isValid === 'function' && bounds.isValid()) {
+                    if (typeof bounds.getSouthWest === 'function' && typeof bounds.getNorthEast === 'function' && bounds.getSouthWest().equals(bounds.getNorthEast())) {
+                        var center = bounds.getCenter();
+                        map.setView(center, singleMarkerZoom);
+                    } else {
+                        map.fitBounds(bounds, { padding: [fitPadding, fitPadding], maxZoom: maxAutoZoom });
+                    }
+                    scheduleInvalidate(0);
+                    scheduleInvalidate(250);
+                    hideMessage();
+                } else if (hasVisibleMarker && bounds) {
+                    map.fitBounds(bounds, { padding: [fitPadding, fitPadding], maxZoom: maxAutoZoom });
+                    scheduleInvalidate(0);
+                    scheduleInvalidate(250);
+                    hideMessage();
+                } else {
+                    showMessage(strings.noMarkers || 'Aucun membre géolocalisable.');
+                }
+            });
+
+            tileLayer.on('load', function() {
+                scheduleInvalidate(0);
+                scheduleInvalidate(250);
+                if (hasVisibleMarker) {
+                    hideMessage();
+                }
+            });
+        }).catch(function(error) {
+            console.error('MJ Member Dashboard failed to load the map library', error);
+            var fallbackMessage = strings.loadError || 'Carte indisponible.';
+            if (messageEl) {
+                messageEl.textContent = fallbackMessage;
+                messageEl.classList.remove('is-hidden');
+            }
+        });
+    }
+
+    /**
      * Initialize all dashboard charts
      */
     function initDashboardCharts() {
@@ -433,11 +907,25 @@
         }
     }
 
+    function initDashboard() {
+        try {
+            initDashboardCharts();
+        } catch (chartError) {
+            console.error('MJ Member Dashboard: charts initialization failed', chartError);
+        }
+
+        try {
+            initMembersMap();
+        } catch (mapError) {
+            console.error('MJ Member Dashboard: map initialization failed', mapError);
+        }
+    }
+
     // Initialize on DOM ready
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initDashboardCharts);
+        document.addEventListener('DOMContentLoaded', initDashboard);
     } else {
-        initDashboardCharts();
+        initDashboard();
     }
 
 })();

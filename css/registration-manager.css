@@ -4537,6 +4537,25 @@ input.mj-regmgr-search-input__field {
     border-bottom: 1px solid var(--regmgr-gray-200);
 }
 
+.mj-regmgr-member-detail__avatar-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-width: 120px;
+}
+
+.mj-regmgr-member-detail__avatar-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.mj-regmgr-member-detail__avatar-actions .mj-btn {
+    width: 100%;
+}
+
 .mj-regmgr-member-detail__identity {
     flex: 1;
 }
@@ -7377,4 +7396,72 @@ input.mj-regmgr-search-input__field {
 }
 .media-attachments-filter-heading{
     display: none !important;
+}
+
+/* ============================================
+   AVATAR CAPTURE MODAL
+   ============================================ */
+.mj-regmgr-avatar-capture {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.mj-regmgr-avatar-capture__member {
+    margin: 0;
+    font-weight: 600;
+    color: var(--regmgr-gray-700);
+}
+
+.mj-regmgr-avatar-capture__viewer {
+    position: relative;
+    border-radius: var(--regmgr-radius-lg);
+    background: var(--regmgr-gray-900);
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.25);
+}
+
+.mj-regmgr-avatar-capture__video,
+.mj-regmgr-avatar-capture__preview {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.mj-regmgr-avatar-capture__canvas {
+    display: none;
+}
+
+.mj-regmgr-avatar-capture__instructions {
+    margin: 0;
+    font-size: 14px;
+    color: var(--regmgr-gray-600);
+}
+
+.mj-regmgr-avatar-capture__hint {
+    margin: 0;
+    font-size: 13px;
+    color: var(--regmgr-gray-500);
+}
+
+.mj-regmgr-avatar-capture__error {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: var(--regmgr-radius);
+    background: var(--regmgr-danger-light);
+    color: var(--regmgr-danger);
+    font-size: 13px;
+}
+
+.mj-regmgr-avatar-capture__actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+}
+
+.mj-regmgr-avatar-capture__actions .mj-btn {
+    min-width: 120px;
 }

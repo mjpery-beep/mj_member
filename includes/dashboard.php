@@ -26,6 +26,75 @@ function mj_member_dashboard_page() {
     $elementor_widgets = function_exists('mj_member_get_elementor_widgets_catalog') ? mj_member_get_elementor_widgets_catalog() : array();
     $elementor_overview = function_exists('mj_member_get_elementor_widgets_overview') ? mj_member_get_elementor_widgets_overview() : array();
 
+    $member_map_markers = mj_member_get_member_map_markers();
+    $member_map_markers = is_array($member_map_markers) ? array_values($member_map_markers) : array();
+    $member_map_marker_count = count($member_map_markers);
+    $member_map_geocode_batch = (int) apply_filters('mj_member_dashboard_map_geocode_batch_size', 1);
+    $member_map_geocode_batch = max(1, $member_map_geocode_batch);
+    $member_map_geocode_delay = (int) apply_filters('mj_member_dashboard_map_geocode_delay_ms', 1200);
+    $member_map_geocode_delay = max(0, $member_map_geocode_delay);
+    $member_map_auto_fit_max_zoom = (int) apply_filters('mj_member_dashboard_map_auto_fit_max_zoom', 14);
+    $member_map_auto_fit_max_zoom = max(1, $member_map_auto_fit_max_zoom);
+    $member_map_fit_padding = (int) apply_filters('mj_member_dashboard_map_fit_padding', 32);
+    $member_map_fit_padding = max(0, $member_map_fit_padding);
+
+    $member_map_options = apply_filters('mj_member_dashboard_map_options', array());
+    if (!is_array($member_map_options)) {
+        $member_map_options = array();
+    }
+
+    $tile_url = (string) apply_filters('mj_member_dashboard_map_tile_url', 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+    $tile_attribution = (string) apply_filters('mj_member_dashboard_map_tile_attribution', '&copy; OpenStreetMap contributors');
+    $tile_options = apply_filters('mj_member_dashboard_map_tile_options', array(
+        'maxZoom' => 19,
+    ));
+    if (!is_array($tile_options)) {
+        $tile_options = array();
+    }
+
+    $geocode_endpoint = (string) apply_filters('mj_member_dashboard_map_geocode_endpoint', 'https://nominatim.openstreetmap.org/search');
+    $geocode_params = apply_filters('mj_member_dashboard_map_geocode_params', array(
+        'format' => 'json',
+        'limit' => 1,
+        'addressdetails' => 0,
+    ));
+    if (!is_array($geocode_params)) {
+        $geocode_params = array();
+    }
+    $geocode_email = (string) apply_filters('mj_member_dashboard_map_geocode_email', '');
+
+    $member_map_config = array(
+        'markers' => $member_map_markers,
+        'options' => $member_map_options,
+        'settings' => array(
+            'geocodeBatchSize' => $member_map_geocode_batch,
+            'geocodeDelay' => $member_map_geocode_delay,
+            'autoFitMaxZoom' => $member_map_auto_fit_max_zoom,
+            'fitPadding' => $member_map_fit_padding,
+        ),
+        'tileLayer' => array(
+            'url' => $tile_url,
+            'attribution' => $tile_attribution,
+            'options' => $tile_options,
+        ),
+        'geocode' => array(
+            'endpoint' => $geocode_endpoint,
+            'params' => $geocode_params,
+            'email' => $geocode_email,
+        ),
+        'strings' => array(
+            'geocodeFailed' => __('Adresse introuvable pour %s.', 'mj-member'),
+            'noMarkers' => __('Aucun membre géolocalisable pour le moment.', 'mj-member'),
+            'loading' => __('Chargement de la carte des membres...', 'mj-member'),
+            'roleLabel' => __('Rôle : %s', 'mj-member'),
+            'statusLabel' => __('Statut : %s', 'mj-member'),
+            'loadError' => __('Impossible de charger la carte OpenStreetMap.', 'mj-member'),
+        ),
+    );
+
+    $member_map_loading_text = $member_map_config['strings']['loading'];
+    $member_map_no_markers_text = $member_map_config['strings']['noMarkers'];
+
     $timezone = wp_timezone();
 
     // Préparer les données pour les graphiques Chart.js
@@ -166,6 +235,31 @@ function mj_member_dashboard_page() {
         <?php endif; ?>
 
         <div class="mj-dashboard-panels">
+            <div class="mj-dashboard-panel mj-dashboard-panel--members-map">
+                <h2><?php esc_html_e('Carte des membres', 'mj-member'); ?></h2>
+                <?php if ($member_map_marker_count === 0) : ?>
+                    <p class="mj-members-map__empty"><?php echo esc_html($member_map_no_markers_text); ?></p>
+                <?php else : ?>
+                    <div class="mj-members-map">
+                        <div class="mj-members-map__canvas-wrapper">
+                            <div
+                                id="mj-dashboard-members-map"
+                                class="mj-members-map__canvas"
+                                data-config="<?php echo esc_attr(wp_json_encode($member_map_config)); ?>"
+                                aria-label="<?php esc_attr_e('Localisation des membres MJ', 'mj-member'); ?>"
+                                role="img"
+                            ></div>
+                            <div class="mj-members-map__message"><?php echo esc_html($member_map_loading_text); ?></div>
+                        </div>
+                        <p class="mj-members-map__footnote">
+                            <?php
+                            /* translators: %s: number of members displayed on the map. */
+                            printf(esc_html__('Affichage de %s membre(s) géolocalisables.', 'mj-member'), esc_html(number_format_i18n($member_map_marker_count)));
+                            ?>
+                        </p>
+                    </div>
+                <?php endif; ?>
+            </div>
             <div class="mj-dashboard-panel mj-dashboard-panel--membership">
                 <h2><?php esc_html_e('Cotisations à surveiller', 'mj-member'); ?></h2>
                 <?php if ((int) $membership_summary['requires_payment_total'] === 0) : ?>
@@ -1248,6 +1342,195 @@ function mj_member_format_hour_week_range(int $weekKey, string $fallbackStart = 
         'end' => $endDate,
         'week_number' => $weekNumber,
     );
+}
+
+function mj_member_get_member_map_markers() {
+    if (!class_exists(MjMembers::class)) {
+        return array();
+    }
+
+    global $wpdb;
+
+    $table = MjMembers::getTableName(MjMembers::TABLE_NAME);
+    if (empty($table)) {
+        return array();
+    }
+
+    $limit = (int) apply_filters('mj_member_dashboard_map_member_limit', 250);
+    if ($limit <= 0) {
+        $limit = 250;
+    }
+
+    $column_candidates = array(
+        'id',
+        'first_name',
+        'last_name',
+        'nickname',
+        'email',
+        'role',
+        'status',
+        'address',
+        'city',
+        'postal_code',
+        'country',
+    );
+
+    $select_columns = array();
+    foreach ($column_candidates as $candidate) {
+        if (MjMembers::hasColumn($candidate)) {
+            $select_columns[] = $candidate;
+        }
+    }
+
+    if (empty($select_columns) || !in_array('id', $select_columns, true)) {
+        return array();
+    }
+
+    $columns_sql = implode(', ', $select_columns);
+
+    $has_address_column = in_array('address', $select_columns, true);
+    $has_city_column = in_array('city', $select_columns, true);
+    $has_postal_column = in_array('postal_code', $select_columns, true);
+    $has_country_column = in_array('country', $select_columns, true);
+
+    $address_conditions = array();
+    if ($has_address_column) {
+        $address_conditions[] = "(address IS NOT NULL AND address <> '')";
+    }
+    if ($has_city_column) {
+        $address_conditions[] = "(city IS NOT NULL AND city <> '')";
+    }
+    if ($has_postal_column) {
+        $address_conditions[] = "(postal_code IS NOT NULL AND postal_code <> '')";
+    }
+    if ($has_country_column) {
+        $address_conditions[] = "(country IS NOT NULL AND country <> '')";
+    }
+
+    if (empty($address_conditions)) {
+        return array();
+    }
+
+    $where_address = "(\n            " . implode("\n            OR ", $address_conditions) . "\n        )";
+
+    $status_sql = '';
+    $status_params = array();
+    $status_filter = apply_filters('mj_member_dashboard_map_status_filter', null);
+    if (is_array($status_filter) && !empty($status_filter)) {
+        $sanitized_statuses = array();
+        foreach ($status_filter as $status_value) {
+            $status_value = sanitize_key((string) $status_value);
+            if ($status_value === '') {
+                continue;
+            }
+            $sanitized_statuses[] = $status_value;
+        }
+
+        if (!empty($sanitized_statuses)) {
+            $placeholders = implode(',', array_fill(0, count($sanitized_statuses), '%s'));
+            $status_sql = " AND status IN ({$placeholders})";
+            $status_params = $sanitized_statuses;
+        }
+    }
+
+    $default_order_parts = array();
+    if ($has_city_column) {
+        $default_order_parts[] = 'city ASC';
+    }
+    if (in_array('last_name', $select_columns, true)) {
+        $default_order_parts[] = 'last_name ASC';
+    }
+    if (in_array('first_name', $select_columns, true)) {
+        $default_order_parts[] = 'first_name ASC';
+    }
+    if (empty($default_order_parts)) {
+        $default_order_parts[] = 'id ASC';
+    }
+
+    $default_order_sql = implode(', ', $default_order_parts);
+    $order_sql = apply_filters('mj_member_dashboard_map_order_clause', $default_order_sql);
+    $order_sql = is_string($order_sql) && $order_sql !== '' ? $order_sql : $default_order_sql;
+
+    $sql = "
+        SELECT {$columns_sql}
+        FROM {$table}
+        WHERE {$where_address}{$status_sql}
+        ORDER BY {$order_sql}
+        LIMIT %d
+    ";
+
+    $prepared = $wpdb->prepare($sql, array_merge($status_params, array($limit)));
+    $rows = $wpdb->get_results($prepared);
+    if (!is_array($rows) || empty($rows)) {
+        return array();
+    }
+
+    $markers = array();
+    foreach ($rows as $row) {
+        $id = isset($row->id) ? (int) $row->id : 0;
+        if ($id <= 0) {
+            continue;
+        }
+
+        $first_name = isset($row->first_name) ? sanitize_text_field((string) $row->first_name) : '';
+        $last_name = isset($row->last_name) ? sanitize_text_field((string) $row->last_name) : '';
+        $nickname = isset($row->nickname) ? sanitize_text_field((string) $row->nickname) : '';
+        $email = isset($row->email) ? sanitize_email((string) $row->email) : '';
+        $label = trim($first_name . ' ' . $last_name);
+        if ($label === '') {
+            if ($nickname !== '') {
+                $label = $nickname;
+            } elseif ($email !== '') {
+                $label = $email;
+            } else {
+                /* translators: %d: member identifier. */
+                $label = sprintf(__('Membre #%d', 'mj-member'), $id);
+            }
+        }
+
+        $address_line = $has_address_column && isset($row->address) ? sanitize_textarea_field((string) $row->address) : '';
+        $city = $has_city_column && isset($row->city) ? sanitize_text_field((string) $row->city) : '';
+        $postal_code = $has_postal_column && isset($row->postal_code) ? sanitize_text_field((string) $row->postal_code) : '';
+        $country = $has_country_column && isset($row->country) ? sanitize_text_field((string) $row->country) : '';
+
+        $address_parts = array();
+        if ($address_line !== '') {
+            $address_parts[] = $address_line;
+        }
+
+        $city_part = trim($postal_code . ' ' . $city);
+        if ($city_part !== '') {
+            $address_parts[] = $city_part;
+        }
+
+        if ($country !== '') {
+            $address_parts[] = $country;
+        }
+
+        $geocode_query = implode(', ', $address_parts);
+        if ($geocode_query === '') {
+            continue;
+        }
+
+        $role = isset($row->role) ? sanitize_key((string) $row->role) : '';
+        $status = isset($row->status) ? sanitize_key((string) $row->status) : '';
+
+        $markers[] = array(
+            'id' => $id,
+            'label' => $label,
+            'address' => $address_line,
+            'city' => $city,
+            'postalCode' => $postal_code,
+            'country' => $country,
+            'status' => $status,
+            'role' => $role,
+            'query' => $geocode_query,
+            'latitude' => null,
+            'longitude' => null,
+        );
+    }
+
+    return apply_filters('mj_member_dashboard_map_markers', $markers);
 }
 
 function mj_member_get_membership_due_summary() {

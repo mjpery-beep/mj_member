@@ -22,6 +22,7 @@
     var useEffect = hooks.useEffect;
     var useCallback = hooks.useCallback;
     var useMemo = hooks.useMemo;
+    var useRef = hooks.useRef;
 
     var formatDate = Utils.formatDate;
     var classNames = Utils.classNames;
@@ -207,6 +208,9 @@
         var onUpdateIdea = typeof props.onUpdateIdea === 'function' ? props.onUpdateIdea : null;
         var onUpdatePhoto = typeof props.onUpdatePhoto === 'function' ? props.onUpdatePhoto : null;
         var onDeletePhoto = typeof props.onDeletePhoto === 'function' ? props.onDeletePhoto : null;
+        var onUpdateAvatar = typeof props.onUpdateAvatar === 'function' ? props.onUpdateAvatar : null;
+        var onRemoveAvatar = typeof props.onRemoveAvatar === 'function' ? props.onRemoveAvatar : null;
+        var onCaptureAvatar = typeof props.onCaptureAvatar === 'function' ? props.onCaptureAvatar : null;
         var onDeleteMessage = typeof props.onDeleteMessage === 'function' ? props.onDeleteMessage : null;
         var onDeleteRegistration = typeof props.onDeleteRegistration === 'function' ? props.onDeleteRegistration : null;
         var onDeleteMember = typeof props.onDeleteMember === 'function' ? props.onDeleteMember : null;
@@ -287,6 +291,11 @@
         var photoSaving = _photoSaving[0];
         var setPhotoSaving = _photoSaving[1];
 
+        var _avatarSaving = useState(false);
+        var avatarSaving = _avatarSaving[0];
+        var setAvatarSaving = _avatarSaving[1];
+        var avatarFrameRef = useRef(null);
+
         var buildInitialEditData = function (sourceMember) {
             var base = sourceMember || {};
             return {
@@ -324,6 +333,7 @@
                 setEditingPhotoId(null);
                 setPhotoDraft({ caption: '', status: 'approved' });
                 setPhotoSaving(false);
+                setAvatarSaving(false);
                 setDeletingMember(false);
             }
         }, [member ? member.id : null]);
@@ -345,6 +355,16 @@
             member ? member.id : null,
             onPendingEditHandled,
         ]);
+
+        useEffect(function () {
+            return function () {
+                if (avatarFrameRef.current && typeof avatarFrameRef.current.off === 'function') {
+                    avatarFrameRef.current.off('select');
+                    avatarFrameRef.current.off('open');
+                }
+                avatarFrameRef.current = null;
+            };
+        }, []);
 
         if (loading) {
             return h('div', { class: 'mj-regmgr-member-detail mj-regmgr-member-detail--loading' }, [
@@ -405,8 +425,19 @@
         var communicationDisabledLabel = getString(strings, 'communicationDisabled', 'Désactivé');
         var allowDeleteRegistration = !!(config && config.allowDeleteRegistration);
         var canDeleteMember = !!(config && config.canDeleteMember && onDeleteMember);
+        var canChangeAvatar = !!(config && config.canChangeMemberAvatar && (onUpdateAvatar || onRemoveAvatar || onCaptureAvatar));
+        var changeAvatarLabel = getString(strings, 'memberAvatarChange', 'Changer la photo de profil');
+        var removeAvatarLabel = getString(strings, 'memberAvatarRemove', 'Retirer la photo');
+        var removeAvatarConfirmLabel = getString(strings, 'memberAvatarRemoveConfirm', 'Retirer la photo actuelle de ce membre ?');
+        var avatarUploadingLabel = getString(strings, 'memberAvatarUploading', 'Mise à jour de la photo...');
+        var avatarMediaUnavailableLabel = getString(strings, 'memberAvatarMediaUnavailable', 'La médiathèque WordPress est indisponible sur cette page.');
+        var avatarLibraryTitle = getString(strings, 'memberAvatarLibraryTitle', 'Sélectionner une image pour le membre');
+        var avatarLibraryButton = getString(strings, 'memberAvatarLibraryButton', 'Utiliser cette image');
+        var captureAvatarLabel = getString(strings, 'memberAvatarCapture', 'Prendre une photo');
 
         var guardian = member.guardian;
+        var memberPhotoId = member && member.photoId ? parseInt(member.photoId, 10) : 0;
+        var memberHasCustomAvatar = memberPhotoId > 0;
         var guardianDisplayName = '';
         if (typeof member.guardianName === 'string' && member.guardianName.trim() !== '') {
             guardianDisplayName = member.guardianName.trim();
@@ -443,6 +474,122 @@
                 newData[field] = !!e.target.checked;
                 setEditData(newData);
             };
+        };
+
+        var handleCaptureClick = function () {
+            if (!canChangeAvatar || !member || !member.id || !onCaptureAvatar) {
+                return;
+            }
+            onCaptureAvatar(member, {
+                onUploadStart: function () { setAvatarSaving(true); },
+                onUploadEnd: function () { setAvatarSaving(false); },
+                onUploadError: function () { setAvatarSaving(false); },
+            });
+        };
+
+        var handleAvatarPick = function () {
+            if (!canChangeAvatar || !member || !member.id || !onUpdateAvatar || avatarSaving) {
+                return;
+            }
+
+            if (typeof window === 'undefined' || !window.wp || !window.wp.media || typeof window.wp.media !== 'function') {
+                if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+                    window.alert(avatarMediaUnavailableLabel);
+                }
+                return;
+            }
+
+            var frame = avatarFrameRef.current;
+            if (!frame) {
+                frame = window.wp.media({
+                    title: avatarLibraryTitle,
+                    button: { text: avatarLibraryButton },
+                    library: { type: 'image' },
+                    multiple: false,
+                });
+                avatarFrameRef.current = frame;
+            }
+
+            if (frame && typeof frame.off === 'function') {
+                frame.off('select');
+                frame.off('open');
+            }
+
+            if (frame) {
+                frame.on('open', function () {
+                    var state = typeof frame.state === 'function' ? frame.state() : null;
+                    if (!state || typeof state.get !== 'function') {
+                        return;
+                    }
+                    var selection = state.get('selection');
+                    if (!selection || typeof selection.reset !== 'function') {
+                        return;
+                    }
+                    if (memberHasCustomAvatar && memberPhotoId) {
+                        var attachment = window.wp.media.attachment(memberPhotoId);
+                        if (attachment) {
+                            attachment.fetch();
+                            selection.reset([attachment]);
+                            return;
+                        }
+                    }
+                    selection.reset([]);
+                });
+
+                frame.on('select', function () {
+                    var state = typeof frame.state === 'function' ? frame.state() : null;
+                    if (!state || typeof state.get !== 'function') {
+                        return;
+                    }
+                    var selection = state.get('selection');
+                    if (!selection || typeof selection.first !== 'function') {
+                        return;
+                    }
+                    var attachmentModel = selection.first();
+                    if (!attachmentModel) {
+                        return;
+                    }
+                    var attachmentData = attachmentModel.toJSON ? attachmentModel.toJSON() : attachmentModel;
+                    if (!attachmentData || !attachmentData.id) {
+                        return;
+                    }
+                    setAvatarSaving(true);
+                    Promise.resolve(onUpdateAvatar(member.id, attachmentData.id))
+                        .catch(function (error) {
+                            if (error && error.message) {
+                                console.error('[MjRegMgr] Avatar update failed:', error.message);
+                            }
+                        })
+                        .finally(function () {
+                            setAvatarSaving(false);
+                        });
+                });
+
+                frame.open();
+            }
+        };
+
+        var handleAvatarRemove = function () {
+            if (!canChangeAvatar || !member || !member.id || !onRemoveAvatar || !memberHasCustomAvatar || avatarSaving) {
+                return;
+            }
+
+            if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+                if (!window.confirm(removeAvatarConfirmLabel)) {
+                    return;
+                }
+            }
+
+            setAvatarSaving(true);
+            Promise.resolve(onRemoveAvatar(member.id))
+                .catch(function (error) {
+                    if (error && error.message) {
+                        console.error('[MjRegMgr] Avatar remove failed:', error.message);
+                    }
+                })
+                .finally(function () {
+                    setAvatarSaving(false);
+                });
         };
 
         var handleDeleteMember = function () {
@@ -727,7 +874,38 @@
         return h('div', { class: 'mj-regmgr-member-detail' }, [
             // Header avec avatar
             h('div', { class: 'mj-regmgr-member-detail__header' }, [
-                h(MemberAvatar, { member: member, size: 'large' }),
+                h('div', {
+                    class: 'mj-regmgr-member-detail__avatar-wrapper',
+                    'aria-busy': avatarSaving ? 'true' : 'false',
+                }, [
+                    h(MemberAvatar, { member: member, size: 'large' }),
+                    canChangeAvatar && h('div', { class: 'mj-regmgr-member-detail__avatar-actions' }, [
+                        onCaptureAvatar && h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--primary mj-btn--small',
+                            onClick: handleCaptureClick,
+                            disabled: avatarSaving,
+                            title: avatarSaving ? avatarUploadingLabel : captureAvatarLabel,
+                            'aria-label': avatarSaving ? avatarUploadingLabel : captureAvatarLabel,
+                        }, avatarSaving ? avatarUploadingLabel : captureAvatarLabel),
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--secondary mj-btn--small',
+                            onClick: handleAvatarPick,
+                            disabled: avatarSaving,
+                            title: avatarSaving ? avatarUploadingLabel : changeAvatarLabel,
+                            'aria-label': avatarSaving ? avatarUploadingLabel : changeAvatarLabel,
+                        }, avatarSaving ? avatarUploadingLabel : changeAvatarLabel),
+                        memberHasCustomAvatar && onRemoveAvatar && h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--ghost mj-btn--small',
+                            onClick: handleAvatarRemove,
+                            disabled: avatarSaving,
+                            title: avatarSaving ? avatarUploadingLabel : removeAvatarLabel,
+                            'aria-label': avatarSaving ? avatarUploadingLabel : removeAvatarLabel,
+                        }, avatarSaving ? avatarUploadingLabel : removeAvatarLabel),
+                    ]),
+                ]),
                 h('div', { class: 'mj-regmgr-member-detail__identity' }, [
                     h('h2', { class: 'mj-regmgr-member-detail__name' }, 
                         (member.firstName || '') + ' ' + (member.lastName || '')

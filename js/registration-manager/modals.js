@@ -91,6 +91,29 @@
         return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(query);
     }
 
+    function dataUrlToBlob(dataUrl) {
+        if (!dataUrl || typeof dataUrl !== 'string') {
+            return null;
+        }
+        var parts = dataUrl.split(',');
+        if (parts.length < 2) {
+            return null;
+        }
+        var mimeMatch = parts[0].match(/:(.*?);/);
+        var mime = mimeMatch && mimeMatch[1] ? mimeMatch[1] : 'image/jpeg';
+        try {
+            var binaryString = global.atob(parts[1]);
+            var len = binaryString.length;
+            var bytes = new Uint8Array(len);
+            for (var i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return new Blob([bytes], { type: mime });
+        } catch (e) {
+            return null;
+        }
+    }
+
     // ============================================
     // MODAL BASE
     // ============================================
@@ -1966,6 +1989,285 @@
             ]));
     }
 
+    // ============================================
+    // AVATAR CAPTURE MODAL
+    // ============================================
+
+    function AvatarCaptureModal(props) {
+        var isOpen = props.isOpen;
+        var onClose = props.onClose || function () {};
+        var onCapture = typeof props.onCapture === 'function' ? props.onCapture : null;
+        var strings = props.strings || {};
+        var member = props.member || null;
+
+        var videoRef = useRef(null);
+        var canvasRef = useRef(null);
+        var streamRef = useRef(null);
+
+        var _initializing = useState(false);
+        var initializing = _initializing[0];
+        var setInitializing = _initializing[1];
+
+        var _error = useState('');
+        var error = _error[0];
+        var setError = _error[1];
+
+        var _snapshot = useState(null);
+        var snapshot = _snapshot[0];
+        var setSnapshot = _snapshot[1];
+
+        var _saving = useState(false);
+        var saving = _saving[0];
+        var setSaving = _saving[1];
+
+        var title = getString(strings, 'memberAvatarCaptureTitle', 'Prendre une photo');
+        var instructions = getString(strings, 'memberAvatarCaptureInstructions', 'Positionnez le membre dans le cadre puis appuyez sur "Capturer"');
+        var permissionHint = getString(strings, 'memberAvatarCaptureGrant', 'Autorisez l\'accès à la caméra si demandé.');
+        var captureLabel = getString(strings, 'memberAvatarCaptureTake', 'Capturer');
+        var retakeLabel = getString(strings, 'memberAvatarCaptureRetake', 'Reprendre');
+        var confirmLabel = getString(strings, 'memberAvatarCaptureConfirm', 'Utiliser cette photo');
+        var cancelLabel = getString(strings, 'memberAvatarCaptureCancel', 'Annuler');
+        var unsupportedMessage = getString(strings, 'memberAvatarCaptureUnsupported', 'La capture photo n\'est pas supportée sur ce navigateur.');
+        var genericError = getString(strings, 'memberAvatarCaptureError', 'Impossible d\'accéder à la caméra.');
+        var savingLabel = getString(strings, 'memberAvatarCaptureSaving', 'Enregistrement...');
+
+        var memberName = member ? ((member.firstName || '') + ' ' + (member.lastName || '')).trim() : '';
+
+        var stopStream = useCallback(function () {
+            var current = streamRef.current;
+            if (current && current.getTracks) {
+                current.getTracks().forEach(function (track) {
+                    try {
+                        track.stop();
+                    } catch (e) {
+                        // ignore
+                    }
+                });
+            }
+            streamRef.current = null;
+            if (videoRef.current) {
+                videoRef.current.srcObject = null;
+            }
+        }, []);
+
+        var startStream = useCallback(function () {
+            stopStream();
+            if (!global.navigator || !global.navigator.mediaDevices || typeof global.navigator.mediaDevices.getUserMedia !== 'function') {
+                setError(unsupportedMessage);
+                return;
+            }
+            setInitializing(true);
+            setError('');
+            global.navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+                .then(function (stream) {
+                    streamRef.current = stream;
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = stream;
+                        var playPromise = videoRef.current.play();
+                        if (playPromise && typeof playPromise.catch === 'function') {
+                            playPromise.catch(function (err) {
+                                console.warn('[MjRegMgr] Impossible de lancer la vidéo de capture', err);
+                            });
+                        }
+                    }
+                })
+                .catch(function (err) {
+                    var message = genericError;
+                    if (err && err.message) {
+                        message += ' ' + err.message;
+                    }
+                    setError(message);
+                })
+                .finally(function () {
+                    setInitializing(false);
+                });
+        }, [genericError, stopStream, unsupportedMessage]);
+
+        useEffect(function () {
+            if (!isOpen) {
+                stopStream();
+                setSaving(false);
+                setInitializing(false);
+                setError('');
+                setSnapshot(function (prev) {
+                    if (prev && prev.url) {
+                        global.URL.revokeObjectURL(prev.url);
+                    }
+                    return null;
+                });
+                return;
+            }
+
+            setSaving(false);
+            setError('');
+            setSnapshot(function (prev) {
+                if (prev && prev.url) {
+                    global.URL.revokeObjectURL(prev.url);
+                }
+                return null;
+            });
+            startStream();
+
+            return function () {
+                stopStream();
+            };
+        }, [isOpen, startStream, stopStream]);
+
+        useEffect(function () {
+            return function () {
+                var snap = snapshot;
+                if (snap && snap.url) {
+                    global.URL.revokeObjectURL(snap.url);
+                }
+            };
+        }, [snapshot]);
+
+        var handleCapture = useCallback(function () {
+            if (initializing || saving || snapshot) {
+                return;
+            }
+            var video = videoRef.current;
+            var canvas = canvasRef.current;
+            if (!video || !canvas) {
+                return;
+            }
+            var width = video.videoWidth;
+            var height = video.videoHeight;
+            if (!width || !height) {
+                setError(genericError);
+                return;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            var context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, width, height);
+
+            var handleBlob = function (blob) {
+                if (!blob) {
+                    setError(genericError);
+                    return;
+                }
+                var objectUrl = global.URL.createObjectURL(blob);
+                setSnapshot({ blob: blob, url: objectUrl });
+                stopStream();
+            };
+
+            if (typeof canvas.toBlob === 'function') {
+                canvas.toBlob(function (blob) {
+                    handleBlob(blob);
+                }, 'image/jpeg', 0.92);
+            } else {
+                var dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+                handleBlob(dataUrlToBlob(dataUrl));
+            }
+        }, [genericError, initializing, saving, snapshot, stopStream]);
+
+        var handleRetake = useCallback(function () {
+            if (snapshot && snapshot.url) {
+                global.URL.revokeObjectURL(snapshot.url);
+            }
+            setSnapshot(null);
+            setError('');
+            if (isOpen) {
+                startStream();
+            }
+        }, [isOpen, snapshot, startStream]);
+
+        var handleConfirm = useCallback(function () {
+            if (!snapshot || !snapshot.blob || !onCapture || saving) {
+                return;
+            }
+            setSaving(true);
+            Promise.resolve(onCapture(snapshot.blob))
+                .then(function () {
+                    if (snapshot && snapshot.url) {
+                        global.URL.revokeObjectURL(snapshot.url);
+                    }
+                    setSnapshot(null);
+                })
+                .catch(function (err) {
+                    if (err && err.message) {
+                        setError(err.message);
+                    } else {
+                        setError(genericError);
+                    }
+                })
+                .finally(function () {
+                    setSaving(false);
+                });
+        }, [genericError, onCapture, saving, snapshot]);
+
+        var handleCancel = useCallback(function () {
+            if (saving) {
+                return;
+            }
+            onClose();
+        }, [onClose, saving]);
+
+        var footer = h('div', { class: 'mj-regmgr-avatar-capture__actions' }, [
+            h('button', {
+                type: 'button',
+                class: 'mj-btn mj-btn--ghost',
+                onClick: handleCancel,
+                disabled: saving,
+            }, cancelLabel),
+            snapshot ? h(Fragment, null, [
+                h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--secondary',
+                    onClick: handleRetake,
+                    disabled: saving,
+                }, retakeLabel),
+                h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--primary',
+                    onClick: handleConfirm,
+                    disabled: saving,
+                }, saving ? savingLabel : confirmLabel),
+            ]) : h('button', {
+                type: 'button',
+                class: 'mj-btn mj-btn--primary',
+                onClick: handleCapture,
+                disabled: initializing || saving || !!error,
+            }, initializing ? savingLabel : captureLabel),
+        ]);
+
+        return h(Modal, {
+            isOpen: isOpen,
+            onClose: handleCancel,
+            title: title,
+            size: 'large',
+            footer: footer,
+        }, [
+            h('div', { class: 'mj-regmgr-avatar-capture' }, [
+                memberName && h('p', { class: 'mj-regmgr-avatar-capture__member' }, memberName),
+                h('div', { class: 'mj-regmgr-avatar-capture__viewer' }, [
+                    snapshot
+                        ? h('img', {
+                            src: snapshot.url,
+                            alt: title,
+                            class: 'mj-regmgr-avatar-capture__preview',
+                        })
+                        : h('video', {
+                            ref: videoRef,
+                            class: 'mj-regmgr-avatar-capture__video',
+                            playsInline: true,
+                            autoPlay: true,
+                            muted: true,
+                        }),
+                    h('canvas', {
+                        ref: canvasRef,
+                        class: 'mj-regmgr-avatar-capture__canvas',
+                    }),
+                ]),
+                h('p', { class: 'mj-regmgr-avatar-capture__instructions' }, instructions),
+                !snapshot && !error && h('p', { class: 'mj-regmgr-avatar-capture__hint' }, permissionHint),
+                error && h('div', { class: 'mj-regmgr-avatar-capture__error' }, error),
+            ]),
+        ]);
+    }
+
     global.MjRegMgrModals = {
         Modal: Modal,
         AddParticipantModal: AddParticipantModal,
@@ -1976,6 +2278,7 @@
         QRCodeModal: QRCodeModal,
         OccurrencesModal: OccurrencesModal,
         LocationModal: LocationModal,
+        AvatarCaptureModal: AvatarCaptureModal,
     };
 
 })(window);

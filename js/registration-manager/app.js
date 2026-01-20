@@ -81,6 +81,7 @@
     var QRCodeModal = Modals.QRCodeModal;
     var OccurrencesModal = Modals.OccurrencesModal;
     var LocationModal = Modals.LocationModal;
+    var AvatarCaptureModal = Modals.AvatarCaptureModal;
 
     // ============================================
     // EVENT DETAIL PANEL
@@ -3247,6 +3248,7 @@
         var occurrencesModal = useModal();
         var locationModal = useModal();
         var accountModal = useModal();
+        var avatarCaptureModal = useModal();
 
         // State
         var _events = useState([]);
@@ -4291,6 +4293,101 @@
                     throw err;
                 });
         }, [api, showSuccess, showError, loadMemberDetails]);
+
+        var handleUpdateMemberAvatar = useCallback(function (memberId, photoId) {
+            var targetId = parseInt(memberId, 10);
+            if (!targetId || targetId <= 0) {
+                return Promise.resolve();
+            }
+            var attachmentId = parseInt(photoId, 10);
+            if (!attachmentId || attachmentId <= 0) {
+                return Promise.resolve();
+            }
+            return api.updateMember(targetId, { photoId: attachmentId })
+                .then(function (result) {
+                    showSuccess(getString(strings, 'memberAvatarUpdated', 'Photo de profil mise à jour.'));
+                    loadMemberDetails(targetId);
+                    loadMembers(membersPagination.page);
+                    return result;
+                })
+                .catch(function (err) {
+                    var message = err && err.message
+                        ? err.message
+                        : getString(strings, 'memberAvatarUpdateError', 'Impossible de mettre à jour la photo de profil.');
+                    showError(message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails, loadMembers, membersPagination.page, strings]);
+
+        var handleCaptureMemberAvatar = useCallback(function (memberData, lifecycle) {
+            if (!memberData || !memberData.id) {
+                return;
+            }
+            avatarCaptureModal.open({
+                member: memberData,
+                lifecycle: lifecycle || {},
+            });
+        }, [avatarCaptureModal]);
+
+        var handleConfirmAvatarCapture = useCallback(function (blob) {
+            var modalData = avatarCaptureModal.data || {};
+            var targetMember = modalData.member || null;
+            var lifecycle = modalData.lifecycle || {};
+            var targetId = targetMember && targetMember.id ? parseInt(targetMember.id, 10) : 0;
+            if (!targetId || targetId <= 0 || !blob) {
+                return Promise.reject(new Error('Membre introuvable.'));
+            }
+
+            if (lifecycle && typeof lifecycle.onUploadStart === 'function') {
+                try { lifecycle.onUploadStart(); } catch (e) { /* ignore */ }
+            }
+
+            return api.captureMemberAvatar(targetId, blob)
+                .then(function (result) {
+                    if (lifecycle && typeof lifecycle.onUploadEnd === 'function') {
+                        try { lifecycle.onUploadEnd(); } catch (e) { /* ignore */ }
+                    }
+                    var successMessage = result && result.message
+                        ? result.message
+                        : getString(strings, 'memberAvatarUpdated', 'Photo de profil mise à jour.');
+                    showSuccess(successMessage);
+                    loadMemberDetails(targetId);
+                    loadMembers(membersPagination.page);
+                    avatarCaptureModal.close();
+                    return result;
+                })
+                .catch(function (err) {
+                    if (lifecycle && typeof lifecycle.onUploadError === 'function') {
+                        try { lifecycle.onUploadError(err); } catch (e) { /* ignore */ }
+                    }
+                    var message = err && err.message
+                        ? err.message
+                        : getString(strings, 'memberAvatarUpdateError', 'Impossible de mettre à jour la photo de profil.');
+                    showError(message);
+                    throw err;
+                });
+        }, [api, avatarCaptureModal, showSuccess, loadMemberDetails, loadMembers, membersPagination.page, strings, showError]);
+
+        var handleRemoveMemberAvatar = useCallback(function (memberId) {
+            var targetId = parseInt(memberId, 10);
+            if (!targetId || targetId <= 0) {
+                return Promise.resolve();
+            }
+            return api.updateMember(targetId, { photoId: 0 })
+                .then(function (result) {
+                    showSuccess(getString(strings, 'memberAvatarRemoved', 'Photo de profil retirée.'));
+                    loadMemberDetails(targetId);
+                    loadMembers(membersPagination.page);
+                    return result;
+                })
+                .catch(function (err) {
+                    var message = err && err.message
+                        ? err.message
+                        : getString(strings, 'memberAvatarUpdateError', 'Impossible de mettre à jour la photo de profil.');
+                    showError(message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails, loadMembers, membersPagination.page, strings]);
 
         var handleDeleteMemberRegistration = useCallback(function (registration) {
             if (!registration || !registration.id) {
@@ -5338,6 +5435,9 @@
                             onUpdateIdea: handleUpdateMemberIdea,
                             onUpdatePhoto: handleUpdateMemberPhoto,
                             onDeletePhoto: handleDeleteMemberPhoto,
+                            onCaptureAvatar: handleCaptureMemberAvatar,
+                            onUpdateAvatar: handleUpdateMemberAvatar,
+                            onRemoveAvatar: handleRemoveMemberAvatar,
                             onDeleteRegistration: handleDeleteMemberRegistration,
                             onOpenMember: handleViewMemberFromRegistration,
                             pendingEditRequest: pendingMemberEdit,
@@ -5438,6 +5538,22 @@
                 location: locationModalState.location,
                 mode: locationModalState.mode,
                 strings: strings,
+            }),
+
+            AvatarCaptureModal && h(AvatarCaptureModal, {
+                isOpen: avatarCaptureModal.isOpen,
+                onClose: avatarCaptureModal.close,
+                member: (function () {
+                    if (!avatarCaptureModal.data || !avatarCaptureModal.data.member) {
+                        return null;
+                    }
+                    if (memberDetails && avatarCaptureModal.data.member.id === memberDetails.id) {
+                        return memberDetails;
+                    }
+                    return avatarCaptureModal.data.member;
+                })(),
+                strings: strings,
+                onCapture: handleConfirmAvatarCapture,
             }),
 
             // Toasts

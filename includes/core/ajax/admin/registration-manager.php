@@ -63,6 +63,7 @@ add_action('wp_ajax_mj_regmgr_create_membership_payment_link', 'mj_regmgr_create
 add_action('wp_ajax_mj_regmgr_update_member_idea', 'mj_regmgr_update_member_idea');
 add_action('wp_ajax_mj_regmgr_update_member_photo', 'mj_regmgr_update_member_photo');
 add_action('wp_ajax_mj_regmgr_delete_member_photo', 'mj_regmgr_delete_member_photo');
+add_action('wp_ajax_mj_regmgr_capture_member_photo', 'mj_regmgr_capture_member_photo');
 add_action('wp_ajax_mj_regmgr_delete_member_message', 'mj_regmgr_delete_member_message');
 add_action('wp_ajax_mj_regmgr_reset_member_password', 'mj_regmgr_reset_member_password');
 add_action('wp_ajax_mj_regmgr_delete_member', 'mj_regmgr_delete_member');
@@ -4480,6 +4481,13 @@ function mj_regmgr_ensure_notes_table() {
 }
 
 /**
+ * Backward compatibility wrapper for legacy hooks expecting this function.
+ */
+function mj_regmgr_create_notes_table_if_not_exists() {
+    mj_regmgr_ensure_notes_table();
+}
+
+/**
  * Get members list with filtering and pagination
  */
 function mj_regmgr_get_members() {
@@ -4981,6 +4989,29 @@ function mj_regmgr_update_member() {
     if (array_key_exists('photoUsageConsent', $data)) {
         $update_data['photo_usage_consent'] = mj_regmgr_to_bool($data['photoUsageConsent']) ? 1 : 0;
     }
+    if (array_key_exists('photoId', $data)) {
+        $raw_photo_id = (int) $data['photoId'];
+        if ($raw_photo_id > 0) {
+            if (!current_user_can('upload_files')) {
+                wp_send_json_error(array('message' => __('Vous ne pouvez pas gérer la médiathèque.', 'mj-member')));
+                return;
+            }
+
+            $attachment = get_post($raw_photo_id);
+            if (!$attachment || 'attachment' !== $attachment->post_type) {
+                wp_send_json_error(array('message' => __('Fichier de média introuvable.', 'mj-member')));
+                return;
+            }
+            if (!wp_attachment_is_image($raw_photo_id)) {
+                wp_send_json_error(array('message' => __('Le fichier sélectionné n\'est pas une image.', 'mj-member')));
+                return;
+            }
+
+            $update_data['photo_id'] = $raw_photo_id;
+        } else {
+            $update_data['photo_id'] = 0;
+        }
+    }
 
     if (empty($update_data)) {
         wp_send_json_error(array('message' => __('Aucune donnée à mettre à jour.', 'mj-member')));
@@ -4994,9 +5025,16 @@ function mj_regmgr_update_member() {
         return;
     }
 
-    wp_send_json_success(array(
+    $response = array(
         'message' => __('Membre mis à jour avec succès.', 'mj-member'),
-    ));
+    );
+
+    if (array_key_exists('photo_id', $update_data)) {
+        $response['photoId'] = (int) $update_data['photo_id'];
+        $response['avatarUrl'] = mj_regmgr_get_member_avatar_url($member_id);
+    }
+
+    wp_send_json_success($response);
 }
 
 /**
@@ -5187,6 +5225,114 @@ function mj_regmgr_update_member_idea() {
     wp_send_json_success(array(
         'message' => __('Idée mise à jour.', 'mj-member'),
         'idea' => $response,
+    ));
+}
+
+/**
+ * Capture and assign a new member photo via direct upload
+ */
+function mj_regmgr_capture_member_photo() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) {
+        return;
+    }
+
+    if (!current_user_can('upload_files')) {
+        wp_send_json_error(array('message' => __('Vous ne pouvez pas gérer la médiathèque.', 'mj-member')));
+        return;
+    }
+
+    $member_id = isset($_POST['memberId']) ? (int) $_POST['memberId'] : 0;
+    if ($member_id <= 0) {
+        wp_send_json_error(array('message' => __('Identifiant de membre invalide.', 'mj-member')));
+        return;
+    }
+
+    $member = MjMembers::getById($member_id);
+    if (!$member) {
+        wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
+        return;
+    }
+
+    $can_change = !empty($auth['is_coordinateur']) || current_user_can(Config::capability());
+    if (!$can_change) {
+        wp_send_json_error(array('message' => __('Accès refusé pour mettre à jour cette photo.', 'mj-member')), 403);
+        return;
+    }
+
+    if (!isset($_FILES['photo'])) {
+        wp_send_json_error(array('message' => __('Aucune photo reçue.', 'mj-member')));
+        return;
+    }
+
+    $file = $_FILES['photo'];
+    if (empty($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) {
+        wp_send_json_error(array('message' => __('Le fichier envoyé est invalide.', 'mj-member')));
+        return;
+    }
+
+    $file_check = wp_check_filetype_and_ext($file['tmp_name'], $file['name']);
+    if (empty($file_check['type']) || strpos($file_check['type'], 'image/') !== 0) {
+        wp_send_json_error(array('message' => __('Le fichier sélectionné n\'est pas une image.', 'mj-member')));
+        return;
+    }
+
+    require_once ABSPATH . 'wp-admin/includes/file.php';
+    require_once ABSPATH . 'wp-admin/includes/media.php';
+    require_once ABSPATH . 'wp-admin/includes/image.php';
+
+    $upload_overrides = array(
+        'test_form' => false,
+        'mimes' => array(
+            'jpg|jpeg|jpe' => 'image/jpeg',
+            'png' => 'image/png',
+            'gif' => 'image/gif',
+            'webp' => 'image/webp',
+        ),
+    );
+
+    $uploaded = wp_handle_upload($file, $upload_overrides);
+    if (isset($uploaded['error'])) {
+        wp_send_json_error(array('message' => $uploaded['error']));
+        return;
+    }
+
+    $filename = $uploaded['file'];
+    $attachment = array(
+        'guid' => $uploaded['url'],
+        'post_mime_type' => $file_check['type'],
+        'post_title' => sanitize_text_field(pathinfo($filename, PATHINFO_FILENAME)),
+        'post_content' => '',
+        'post_status' => 'inherit',
+    );
+
+    $attachment_id = wp_insert_attachment($attachment, $filename);
+    if (is_wp_error($attachment_id)) {
+        if (file_exists($filename)) {
+            wp_delete_file($filename);
+        }
+        wp_send_json_error(array('message' => $attachment_id->get_error_message()));
+        return;
+    }
+
+    $metadata = wp_generate_attachment_metadata($attachment_id, $filename);
+    if (!is_wp_error($metadata)) {
+        wp_update_attachment_metadata($attachment_id, $metadata);
+    }
+
+    $update = MjMembers::update($member_id, array('photo_id' => $attachment_id));
+    if (is_wp_error($update)) {
+        wp_delete_attachment($attachment_id, true);
+        wp_send_json_error(array('message' => $update->get_error_message()));
+        return;
+    }
+
+    $avatar_url = mj_regmgr_get_member_avatar_url($member_id);
+
+    wp_send_json_success(array(
+        'message' => __('Photo de profil mise à jour.', 'mj-member'),
+        'photoId' => $attachment_id,
+        'avatarUrl' => $avatar_url,
     ));
 }
 

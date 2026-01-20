@@ -110,6 +110,9 @@
                             formData.append(key + '[' + index + ']', item);
                         });
                     }
+                } else if ((typeof File !== 'undefined' && value instanceof File) || (typeof Blob !== 'undefined' && value instanceof Blob)) {
+                    var fileName = typeof value.name === 'string' && value.name !== '' ? value.name : (key + '.jpg');
+                    formData.append(key, value, fileName);
                 } else if (typeof value === 'object') {
                     formData.append(key, JSON.stringify(value));
                 } else {
@@ -413,6 +416,18 @@
                 return post('mj_regmgr_update_member', {
                     memberId: memberId,
                     data: data,
+                });
+            },
+
+            captureMemberAvatar: function (memberId, file) {
+                if (!memberId || !file) {
+                    return Promise.reject(new Error('memberId and file are required'));
+                }
+                return post('mj_regmgr_capture_member_photo', {
+                    memberId: memberId,
+                    photo: file,
+                }, {
+                    abortKey: 'member-avatar-' + memberId,
                 });
             },
 
