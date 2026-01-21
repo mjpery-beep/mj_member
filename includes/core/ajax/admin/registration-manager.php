@@ -439,7 +439,7 @@ function mj_regmgr_sanitize_occurrence_generator_plan($input) {
     $weekday_keys = array('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun');
 
     $mode = isset($input['mode']) ? sanitize_key($input['mode']) : '';
-    if (!in_array($mode, array('weekly', 'monthly', 'custom'), true)) {
+    if (!in_array($mode, array('weekly', 'monthly', 'range', 'custom'), true)) {
         $mode = 'weekly';
     }
 

@@ -1,4 +1,6 @@
-{% if date_range_label %}
+{% if summary %}
+<p class="mj-event-page__date generate-from-helpers">{{ summary }}</p>
+{% elseif date_range_label %}
 <p class="mj-event-page__date generate-from-helpers">{{ date_range_label }}</p>
 {% elseif primary_label %}
 <p class="mj-event-page__date generate-from-helpers">{{ primary_label }}</p>

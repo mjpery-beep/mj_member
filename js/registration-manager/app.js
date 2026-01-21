@@ -919,7 +919,7 @@
                     }, [
                         h('option', { value: 'weekly' }, getString(strings, 'occurrenceGeneratorModeWeekly', 'Hebdomadaire')),
                         h('option', { value: 'monthly' }, getString(strings, 'occurrenceGeneratorModeMonthly', 'Mensuel')),
-                        h('option', { value: 'custom' }, getString(strings, 'occurrenceGeneratorModeCustom', 'Personnalisé')),
+                        h('option', { value: 'range' }, getString(strings, 'occurrenceGeneratorModeRange', 'Plage de dates')),
                     ]),
                 ]),
                 generatorMode === 'weekly' && h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
@@ -1342,6 +1342,8 @@
         var WEEKLY_GENERATION_HARD_CAP = 208; // safeguard (~4 years weekly)
         var MONTHLY_GENERATION_LIMIT = 12;
         var MONTHLY_GENERATION_HARD_CAP = 120; // safeguard (10 years monthly)
+        var RANGE_GENERATION_LIMIT = 31; // safeguard (~1 month)
+        var RANGE_GENERATION_HARD_CAP = 366; // safeguard (1 year)
         var DAY_IN_MS = 24 * 60 * 60 * 1000;
 
         var buildGeneratorPlan = useCallback(function () {
@@ -1389,6 +1391,38 @@
                     ? safeGeneratorState.monthlyWeekday
                     : 'mon',
             };
+
+            if (generatorMode === 'range') {
+                var rangeEndDate = endDate && endDate >= startDate ? endDate : startDate;
+                var rangeStartTime = plan.startTime;
+                var rangeEndTime = plan.endTime;
+                if (!rangeStartTime || !rangeEndTime) {
+                    return { additions: [], plan: plan };
+                }
+
+                plan.endDateISO = rangeEndDate ? formatISODate(rangeEndDate) : plan.endDateISO;
+                additions = [];
+
+                var rangeIterations = 0;
+                var rangeCap = allowExtendedCap ? RANGE_GENERATION_HARD_CAP : RANGE_GENERATION_LIMIT;
+                var cursor = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+                while (cursor <= rangeEndDate && rangeIterations < rangeCap) {
+                    var cursorIso = formatISODate(cursor);
+                    var additionSeed = localOccurrences.length + additions.length;
+                    additions.push({
+                        id: generateOccurrenceId(cursorIso, rangeStartTime, additionSeed),
+                        date: cursorIso,
+                        startTime: rangeStartTime,
+                        endTime: rangeEndTime,
+                        status: 'planned',
+                        reason: '',
+                    });
+                    rangeIterations += 1;
+                    cursor = addDays(cursor, 1);
+                }
+
+                return { additions: additions, plan: plan };
+            }
 
             if (generatorMode === 'monthly') {
                 var ordinalKey = plan.monthlyOrdinal;
@@ -2082,6 +2116,58 @@
         return summary;
     }
 
+    function buildRangePreview(plan, locale, strings) {
+        if (!plan) {
+            return '';
+        }
+
+        var startISO = typeof plan.startDateISO === 'string' && plan.startDateISO !== ''
+            ? plan.startDateISO
+            : (typeof plan.startDate === 'string' ? plan.startDate : '');
+        if (!startISO) {
+            return '';
+        }
+        var endISO = typeof plan.endDateISO === 'string' && plan.endDateISO !== ''
+            ? plan.endDateISO
+            : (typeof plan.endDate === 'string' ? plan.endDate : startISO);
+
+        var startDate = parseISODate(startISO);
+        if (!startDate) {
+            return '';
+        }
+        var endDate = parseISODate(endISO);
+        if (!endDate || endDate < startDate) {
+            endDate = startDate;
+        }
+
+        var includeStartYear = startDate.getFullYear() !== endDate.getFullYear();
+        var includeEndMonth = includeStartYear || startDate.getMonth() !== endDate.getMonth();
+        var includeEndYear = includeStartYear;
+
+        var startLabel = formatDateForLocale(startDate, locale, true, includeStartYear);
+        var endLabel = formatDateForLocale(endDate, locale, includeEndMonth, includeEndYear);
+        if (!startLabel || !endLabel) {
+            return '';
+        }
+
+        var startTimeLabel = formatPreviewTime(plan.startTime);
+        var endTimeLabel = formatPreviewTime(plan.endTime);
+
+        if (startTimeLabel && endTimeLabel) {
+            var pattern = getString(strings, 'occurrencePreviewRangePattern', 'Du {{startDay}} à {{endDay}} de {{startTime}} à {{endTime}}');
+            return pattern
+                .replace('{{startDay}}', startLabel)
+                .replace('{{endDay}}', endLabel)
+                .replace('{{startTime}}', startTimeLabel)
+                .replace('{{endTime}}', endTimeLabel);
+        }
+
+        var fallbackPattern = getString(strings, 'occurrencePreviewRangeDatesOnly', 'Du {{startDay}} à {{endDay}}');
+        return fallbackPattern
+            .replace('{{startDay}}', startLabel)
+            .replace('{{endDay}}', endLabel);
+    }
+
     function buildSingleDatePreview(occurrences, locale) {
         if (!occurrences || occurrences.length === 0) {
             return '';
@@ -2230,6 +2316,13 @@
         var monthlyOrdinalOptions = context && context.monthlyOrdinalOptions ? context.monthlyOrdinalOptions : [];
         var locale = context && context.locale ? context.locale : 'fr';
         var strings = context && context.strings ? context.strings : {};
+
+        if (plan && plan.mode === 'range') {
+            var rangePreview = buildRangePreview(plan, locale, strings);
+            if (rangePreview) {
+                return rangePreview;
+            }
+        }
 
         if (plan && plan.mode === 'weekly') {
             var weeklyPreview = buildWeeklyPreviewFromPlan(plan, weekdayFullLabels, strings);
@@ -2726,6 +2819,8 @@
         var mode = typeof plan.mode === 'string' ? plan.mode.trim().toLowerCase() : '';
         if (mode === 'monthly') {
             normalized.mode = 'monthly';
+        } else if (mode === 'range') {
+            normalized.mode = 'range';
         } else if (mode === 'custom') {
             normalized.mode = 'custom';
         } else {

@@ -25,6 +25,8 @@
 
             {% if hero.schedule_component %}
                 {{ hero.schedule_component|raw }}
+            {% elseif schedule_summary %}
+                <p class="mj-event-page__date">{{ schedule_summary }}</p>
             {% elseif display_label %}
                 <p class="mj-event-page__date">{{ display_label }}</p>
             {% endif %}
