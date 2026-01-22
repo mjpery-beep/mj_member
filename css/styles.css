@@ -56,6 +56,129 @@
     flex-wrap: wrap;
 }
 
+.mj-contact-messages__pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem;
+    padding-top: 1rem;
+    margin-top: 0.75rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.32);
+    padding-bottom: 0.5rem;
+}
+
+.mj-contact-messages__pagination-info {
+    font-size: 0.82rem;
+    color: rgba(71, 85, 105, 0.85);
+}
+
+.mj-contact-messages__pagination-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: rgba(248, 250, 255, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 999px;
+    padding: 0.35rem 0.65rem;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+
+.mj-contact-messages__pagination-pages {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.mj-contact-messages__pagination-pages-item {
+    display: flex;
+}
+
+.mj-contact-messages__pagination-ellipsis {
+    color: rgba(71, 85, 105, 0.7);
+    font-size: 0.82rem;
+    line-height: 1;
+    padding: 0 0.2rem;
+}
+
+.mj-contact-messages__pagination-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(79, 70, 229, 0.24);
+    background: rgba(79, 70, 229, 0.08);
+    color: rgba(55, 48, 163, 0.82);
+    border-radius: 999px;
+    padding: 0.38rem 0.9rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.mj-contact-messages__pagination-link:hover,
+.mj-contact-messages__pagination-link:focus-visible {
+    background: rgba(79, 70, 229, 0.16);
+    border-color: rgba(79, 70, 229, 0.32);
+    color: #2e26a1;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.16);
+    outline: none;
+}
+
+.mj-contact-messages__pagination-link.is-disabled,
+.mj-contact-messages__pagination-link[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.5;
+    background: rgba(148, 163, 184, 0.12);
+    border-color: rgba(148, 163, 184, 0.22);
+    color: rgba(100, 116, 139, 0.65);
+    box-shadow: none;
+    pointer-events: none;
+}
+
+.mj-contact-messages__pagination-link--number {
+    min-width: 2.25rem;
+    height: 2.25rem;
+}
+
+.mj-contact-messages__pagination-link--number.is-current {
+    background: var(--mj-contact-messages-badge-bg);
+    border-color: var(--mj-contact-messages-badge-bg);
+    color: var(--mj-contact-messages-badge-color);
+    cursor: default;
+    box-shadow: 0 10px 24px rgba(79, 70, 229, 0.25);
+}
+
+.mj-contact-messages__pagination-link--number.is-current:hover,
+.mj-contact-messages__pagination-link--number.is-current:focus-visible {
+    background: var(--mj-contact-messages-badge-bg);
+    border-color: var(--mj-contact-messages-badge-bg);
+    color: var(--mj-contact-messages-badge-color);
+    box-shadow: 0 10px 24px rgba(79, 70, 229, 0.25);
+}
+
+.mj-contact-messages__pagination-link--prev,
+.mj-contact-messages__pagination-link--next {
+    gap: 0.35rem;
+    padding-inline: 0.75rem;
+}
+
+.mj-contact-messages__pagination-link--prev .mj-contact-messages__pagination-icon,
+.mj-contact-messages__pagination-link--next .mj-contact-messages__pagination-icon {
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+.mj-contact-messages__pagination-link--prev.is-disabled .mj-contact-messages__pagination-icon,
+.mj-contact-messages__pagination-link--next.is-disabled .mj-contact-messages__pagination-icon {
+    opacity: 0.8;
+}
+
 .mj-contact-messages__filters {
     display: inline-flex;
     align-items: center;

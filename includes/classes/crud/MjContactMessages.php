@@ -81,6 +81,133 @@ class MjContactMessages implements CrudRepositoryInterface {
     }
 
     /**
+     * Construit la portée SQL des messages visibles pour un utilisateur donné.
+     *
+     * @param int   $user_id Identifiant utilisateur.
+     * @param array $args    Options de portée (attribution, cibles, identité).
+     * @param array $params  Paramètres accumulés pour $wpdb->prepare.
+     *
+     * @return string Clause WHERE (sans le mot-clé) ou chaîne vide si aucune portée.
+     */
+    private static function build_user_visibility_clause($user_id, array $args, array &$params) {
+        global $wpdb;
+
+        $defaults = array(
+            'include_assigned' => true,
+            'include_all_targets' => false,
+            'extra_targets' => array(),
+            'member_id' => 0,
+            'sender_email' => '',
+            'include_owner' => false,
+        );
+
+        $args = wp_parse_args($args, $defaults);
+
+        $conditions = array();
+        $params = array();
+
+        $user_id = (int) $user_id;
+        $member_id = (int) $args['member_id'];
+        $sender_email = sanitize_email($args['sender_email']);
+
+        if (!empty($args['include_owner'])) {
+            $owner_clauses = array();
+            $owner_params = array();
+
+            if ($member_id > 0) {
+                $owner_clauses[] = '(meta IS NOT NULL AND meta LIKE %s)';
+                $owner_params[] = '%' . $wpdb->esc_like('"member_id":"' . $member_id . '"') . '%';
+            }
+
+            if ($sender_email !== '') {
+                $owner_clauses[] = 'sender_email = %s';
+                $owner_params[] = $sender_email;
+            }
+
+            if (!empty($owner_clauses)) {
+                $conditions[] = '(' . implode(' OR ', $owner_clauses) . ')';
+                $params = array_merge($params, $owner_params);
+            }
+        }
+
+        $assignment_clauses = array();
+        $assignment_params = array();
+
+        if (!empty($args['include_assigned']) && $user_id > 0) {
+            $assignment_clauses[] = 'assigned_to = %d';
+            $assignment_params[] = $user_id;
+        }
+
+        if (!empty($args['include_all_targets'])) {
+            $assignment_clauses[] = 'target_type = %s';
+            $assignment_params[] = self::TARGET_ALL;
+        }
+
+        $extra_target_map = array();
+        if (!empty($args['extra_targets']) && is_array($args['extra_targets'])) {
+            foreach ($args['extra_targets'] as $spec) {
+                if (!is_array($spec)) {
+                    continue;
+                }
+
+                $type = isset($spec['type']) ? sanitize_key($spec['type']) : '';
+                if ($type === '') {
+                    continue;
+                }
+
+                $reference = null;
+                if (array_key_exists('reference', $spec) && $spec['reference'] !== null) {
+                    $reference = (int) $spec['reference'];
+                    if ($reference < 0) {
+                        $reference = 0;
+                    }
+                }
+
+                if (!empty($args['include_all_targets']) && $type === self::TARGET_ALL && ($reference === null || $reference === 0)) {
+                    continue;
+                }
+
+                $key = $type . '|' . ($reference === null ? 'null' : (string) $reference);
+                if (isset($extra_target_map[$key])) {
+                    continue;
+                }
+
+                $extra_target_map[$key] = array(
+                    'type' => $type,
+                    'reference' => $reference,
+                );
+            }
+        }
+
+        if (!empty($extra_target_map)) {
+            foreach ($extra_target_map as $entry) {
+                $target_type = $entry['type'];
+                $target_reference = $entry['reference'];
+
+                if ($target_reference !== null) {
+                    $assignment_clauses[] = '(target_type = %s AND target_reference = %d)';
+                    $assignment_params[] = $target_type;
+                    $assignment_params[] = $target_reference;
+                } else {
+                    $assignment_clauses[] = 'target_type = %s';
+                    $assignment_params[] = $target_type;
+                }
+            }
+        }
+
+        if (!empty($assignment_clauses)) {
+            $conditions[] = '(' . implode(' OR ', $assignment_clauses) . ')';
+            $params = array_merge($params, $assignment_params);
+        }
+
+        if (empty($conditions)) {
+            return '';
+        }
+
+        return '(' . implode(' OR ', $conditions) . ')';
+    }
+
+    /**
      * @param array<string,mixed> $data
      * @return int|WP_Error
      */
@@ -410,6 +537,122 @@ class MjContactMessages implements CrudRepositoryInterface {
     }
 
     /**
+     * Récupère les messages visibles par un utilisateur avec pagination consolidée.
+     *
+     * @param int   $user_id Identifiant WordPress.
+     * @param array $args    Options de requête (pagination, états, filtres).
+     *
+     * @return array<int,object>
+     */
+    public static function query_for_user($user_id, array $args = array()) {
+        global $wpdb;
+        $table = self::get_table_name();
+
+        $defaults = array(
+            'per_page' => 50,
+            'paged' => 1,
+            'order' => 'DESC',
+            'orderby' => 'created_at',
+            'status' => '',
+            'read_state' => '',
+            'search' => '',
+            'date_start' => '',
+            'date_end' => '',
+            'include_assigned' => true,
+            'include_all_targets' => false,
+            'extra_targets' => array(),
+            'member_id' => 0,
+            'sender_email' => '',
+            'include_owner' => false,
+        );
+
+        $args = wp_parse_args($args, $defaults);
+
+        $visibility_params = array();
+        $visibility_clause = self::build_user_visibility_clause($user_id, $args, $visibility_params);
+
+        if ($visibility_clause === '') {
+            return array();
+        }
+
+        $where = array($visibility_clause);
+        $params = $visibility_params;
+
+        $status = $args['status'] !== '' ? self::sanitize_status($args['status']) : '';
+        if ($status !== '') {
+            $where[] = 'status = %s';
+            $params[] = $status;
+        }
+
+        $read_state = sanitize_key($args['read_state']);
+        if ($read_state === 'unread') {
+            $where[] = 'is_read = 0';
+        } elseif ($read_state === 'read') {
+            $where[] = 'is_read = 1';
+        }
+
+        $date_start = sanitize_text_field($args['date_start']);
+        if ($date_start !== '') {
+            $where[] = 'created_at >= %s';
+            $params[] = $date_start;
+        }
+
+        $date_end = sanitize_text_field($args['date_end']);
+        if ($date_end !== '') {
+            $where[] = 'created_at <= %s';
+            $params[] = $date_end;
+        }
+
+        $search = isset($args['search']) ? trim((string) $args['search']) : '';
+        if ($search !== '') {
+            $like = '%' . $wpdb->esc_like($search) . '%';
+            $where[] = '(sender_name LIKE %s OR sender_email LIKE %s OR subject LIKE %s OR message LIKE %s)';
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+        }
+
+        $where_sql = implode(' AND ', $where);
+
+        /**
+         * Permet de filtrer la clause WHERE utilisée pour la requête consolidée utilisateur.
+         *
+         * @param string $where_sql Clause WHERE sans le mot-clé.
+         * @param int    $user_id    Identifiant ciblé.
+         * @param array  $args       Arguments de requête.
+         */
+        $where_sql = apply_filters('mj_member_contact_messages_user_query_where', $where_sql, $user_id, $args);
+
+        /**
+         * Permet de filtrer les paramètres de la requête consolidée utilisateur.
+         *
+         * @param array<int,mixed> $params Paramètres pour $wpdb->prepare.
+         * @param int              $user_id Identifiant ciblé.
+         * @param array            $args    Arguments de requête.
+         */
+        $params = apply_filters('mj_member_contact_messages_user_query_params', $params, $user_id, $args);
+
+        $order = strtoupper((string) $args['order']);
+        $order = in_array($order, array('ASC', 'DESC'), true) ? $order : 'DESC';
+        $allowed_orderby = array('created_at', 'updated_at', 'status');
+        $orderby = in_array($args['orderby'], $allowed_orderby, true) ? $args['orderby'] : 'created_at';
+
+        $per_page = max(1, (int) $args['per_page']);
+        $paged = max(1, (int) $args['paged']);
+        $offset = ($paged - 1) * $per_page;
+
+        $sql = "SELECT * FROM {$table} WHERE {$where_sql} ORDER BY {$orderby} {$order} LIMIT %d OFFSET %d";
+        $params[] = $per_page;
+        $params[] = $offset;
+
+        $prepared = $wpdb->prepare($sql, $params);
+        $results = $wpdb->get_results($prepared);
+
+        return is_array($results) ? $results : array();
+    }
+
+    /**
      * @param array<string,mixed> $args
      * @return int
      */
@@ -523,6 +766,106 @@ class MjContactMessages implements CrudRepositoryInterface {
     }
 
     /**
+     * Compte les messages visibles par un utilisateur dans la vue consolidée.
+     *
+     * @param int   $user_id Identifiant WordPress.
+     * @param array $args    Filtres supplémentaires (état, recherche, cibles…).
+     *
+     * @return int
+     */
+    public static function count_for_user($user_id, array $args = array()) {
+        global $wpdb;
+        $table = self::get_table_name();
+
+        $defaults = array(
+            'status' => '',
+            'read_state' => '',
+            'search' => '',
+            'date_start' => '',
+            'date_end' => '',
+            'include_assigned' => true,
+            'include_all_targets' => false,
+            'extra_targets' => array(),
+            'member_id' => 0,
+            'sender_email' => '',
+            'include_owner' => false,
+        );
+
+        $args = wp_parse_args($args, $defaults);
+
+        $visibility_params = array();
+        $visibility_clause = self::build_user_visibility_clause($user_id, $args, $visibility_params);
+
+        if ($visibility_clause === '') {
+            return 0;
+        }
+
+        $where = array($visibility_clause);
+        $params = $visibility_params;
+
+        $status = $args['status'] !== '' ? self::sanitize_status($args['status']) : '';
+        if ($status !== '') {
+            $where[] = 'status = %s';
+            $params[] = $status;
+        }
+
+        $read_state = sanitize_key($args['read_state']);
+        if ($read_state === 'unread') {
+            $where[] = 'is_read = 0';
+        } elseif ($read_state === 'read') {
+            $where[] = 'is_read = 1';
+        }
+
+        $date_start = sanitize_text_field($args['date_start']);
+        if ($date_start !== '') {
+            $where[] = 'created_at >= %s';
+            $params[] = $date_start;
+        }
+
+        $date_end = sanitize_text_field($args['date_end']);
+        if ($date_end !== '') {
+            $where[] = 'created_at <= %s';
+            $params[] = $date_end;
+        }
+
+        $search = isset($args['search']) ? trim((string) $args['search']) : '';
+        if ($search !== '') {
+            $like = '%' . $wpdb->esc_like($search) . '%';
+            $where[] = '(sender_name LIKE %s OR sender_email LIKE %s OR subject LIKE %s OR message LIKE %s)';
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+        }
+
+        $where_sql = implode(' AND ', $where);
+
+        /**
+         * Filtre la clause WHERE utilisée pour le comptage consolidé utilisateur.
+         *
+         * @param string $where_sql Clause WHERE sans le mot-clé.
+         * @param int    $user_id    Identifiant utilisateur.
+         * @param array  $args       Arguments fournis.
+         */
+        $where_sql = apply_filters('mj_member_contact_messages_user_count_where', $where_sql, $user_id, $args);
+
+        /**
+         * Filtre les paramètres utilisés pour le comptage consolidé utilisateur.
+         *
+         * @param array<int,mixed> $params Paramètres pour $wpdb->prepare.
+         * @param int              $user_id Identifiant utilisateur.
+         * @param array            $args    Arguments fournis.
+         */
+        $params = apply_filters('mj_member_contact_messages_user_count_params', $params, $user_id, $args);
+
+        $sql = "SELECT COUNT(DISTINCT id) FROM {$table} WHERE {$where_sql}";
+        $prepared = $wpdb->prepare($sql, $params);
+        $count = $wpdb->get_var($prepared);
+
+        return $count ? (int) $count : 0;
+    }
+
+    /**
      * Compte les messages non lus pertinents pour un utilisateur donné.
      *
      * @param int   $user_id
@@ -550,72 +893,25 @@ class MjContactMessages implements CrudRepositoryInterface {
 
         $member_id = isset($args['member_id']) ? (int) $args['member_id'] : 0;
         $sender_email = isset($args['sender_email']) ? sanitize_email($args['sender_email']) : '';
+        $extra_targets = !empty($args['extra_targets']) && is_array($args['extra_targets']) ? $args['extra_targets'] : array();
 
-        $conditions = array();
+        $visibility_args = array(
+            'include_assigned' => true,
+            'include_all_targets' => !empty($args['include_all_targets']),
+            'extra_targets' => $extra_targets,
+            'member_id' => $member_id,
+            'sender_email' => $sender_email,
+            'include_owner' => ($member_id > 0 || $sender_email !== ''),
+        );
+
         $params = array();
+        $visibility_clause = self::build_user_visibility_clause($user_id, $visibility_args, $params);
 
-        $owner_clauses = array();
-        $owner_params = array();
-
-        if ($member_id > 0) {
-            $owner_clauses[] = '(meta IS NOT NULL AND meta LIKE %s)';
-            $owner_params[] = '%' . $wpdb->esc_like('"member_id":"' . $member_id . '"') . '%';
-        }
-
-        if ($sender_email !== '') {
-            $owner_clauses[] = 'sender_email = %s';
-            $owner_params[] = $sender_email;
-        }
-
-        if (!empty($owner_clauses)) {
-            $conditions[] = '(' . implode(' OR ', $owner_clauses) . ')';
-            $params = array_merge($params, $owner_params);
-        }
-
-        $assignment_clauses = array();
-        $assignment_params = array();
-
-        $assignment_clauses[] = 'assigned_to = %d';
-        $assignment_params[] = $user_id;
-
-        if (!empty($args['include_all_targets'])) {
-            $assignment_clauses[] = 'target_type = %s';
-            $assignment_params[] = self::TARGET_ALL;
-        }
-
-        if (!empty($args['extra_targets']) && is_array($args['extra_targets'])) {
-            foreach ($args['extra_targets'] as $target_spec) {
-                if (!is_array($target_spec)) {
-                    continue;
-                }
-
-                $target_type = isset($target_spec['type']) ? sanitize_key($target_spec['type']) : '';
-                if ($target_type === '') {
-                    continue;
-                }
-
-                if (array_key_exists('reference', $target_spec)) {
-                    $reference = (int) $target_spec['reference'];
-                    $assignment_clauses[] = '(target_type = %s AND target_reference = %d)';
-                    $assignment_params[] = $target_type;
-                    $assignment_params[] = $reference;
-                } else {
-                    $assignment_clauses[] = 'target_type = %s';
-                    $assignment_params[] = $target_type;
-                }
-            }
-        }
-
-        if (!empty($assignment_clauses)) {
-            $conditions[] = '(' . implode(' OR ', $assignment_clauses) . ')';
-            $params = array_merge($params, $assignment_params);
-        }
-
-        if (empty($conditions)) {
+        if ($visibility_clause === '') {
             return 0;
         }
 
-        $where = 'is_read = 0 AND (' . implode(' OR ', $conditions) . ')';
+        $where = 'is_read = 0 AND ' . $visibility_clause;
 
         /**
          * Permet de filtrer les conditions utilisées pour le comptage des messages non lus.
@@ -626,6 +922,13 @@ class MjContactMessages implements CrudRepositoryInterface {
          */
         $where = apply_filters('mj_member_contact_messages_unread_where', $where, $user_id, $args);
 
+        /**
+         * Permet de filtrer les paramètres utilisés pour le comptage des messages non lus.
+         *
+         * @param array<int,mixed> $params Paramètres pour $wpdb->prepare.
+         * @param int              $user_id Identifiant utilisateur ciblé.
+         * @param array            $args   Arguments supplémentaires.
+         */
         $params = apply_filters('mj_member_contact_messages_unread_params', $params, $user_id, $args);
 
         $sql = "SELECT COUNT(DISTINCT id) FROM {$table} WHERE {$where}";

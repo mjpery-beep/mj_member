@@ -5,6 +5,9 @@ if (!defined('ABSPATH')) {
 }
 
 use Elementor\Controls_Manager;
+use Elementor\Group_Control_Border;
+use Elementor\Group_Control_Box_Shadow;
+use Elementor\Group_Control_Typography;
 use Elementor\Widget_Base;
 use Mj\Member\Core\Config;
 
@@ -59,12 +62,13 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
         ));
 
         $this->add_control('items_per_page', array(
-            'label' => __('Nombre de messages', 'mj-member'),
+            'label' => __('Messages par page', 'mj-member'),
             'type' => Controls_Manager::NUMBER,
             'min' => 1,
-            'max' => 20,
+            'max' => 200,
             'step' => 1,
-            'default' => 5,
+            'default' => 50,
+            'description' => __('Détermine combien de messages sont chargés par page.', 'mj-member'),
         ));
 
         $this->add_control('show_unread_only', array(
@@ -111,6 +115,164 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
             ),
         ));
 
+        $this->add_control('pagination_style_heading', array(
+            'label' => __('Pagination', 'mj-member'),
+            'type' => Controls_Manager::HEADING,
+            'separator' => 'before',
+        ));
+
+        $this->add_group_control(Group_Control_Typography::get_type(), array(
+            'name' => 'pagination_info_typography',
+            'label' => __('Typographie des infos', 'mj-member'),
+            'selector' => '{{WRAPPER}} .mj-contact-messages__pagination-info',
+        ));
+
+        $this->add_control('pagination_info_color', array(
+            'label' => __('Couleur des infos', 'mj-member'),
+            'type' => Controls_Manager::COLOR,
+            'selectors' => array(
+                '{{WRAPPER}} .mj-contact-messages__pagination-info' => 'color: {{VALUE}};',
+            ),
+        ));
+
+        $this->add_group_control(Group_Control_Typography::get_type(), array(
+            'name' => 'pagination_links_typography',
+            'label' => __('Typographie des liens', 'mj-member'),
+            'selector' => '{{WRAPPER}} .mj-contact-messages__pagination-link',
+        ));
+
+        $this->add_control('pagination_controls_background', array(
+            'label' => __('Fond du conteneur', 'mj-member'),
+            'type' => Controls_Manager::COLOR,
+            'selectors' => array(
+                '{{WRAPPER}} .mj-contact-messages__pagination-controls' => 'background-color: {{VALUE}};',
+            ),
+        ));
+
+        $this->add_control('pagination_controls_gap', array(
+            'label' => __('Espacement interne', 'mj-member'),
+            'type' => Controls_Manager::SLIDER,
+            'size_units' => array('px', 'rem'),
+            'range' => array(
+                'px' => array('min' => 0, 'max' => 40),
+                'rem' => array('min' => 0, 'max' => 3, 'step' => 0.05),
+            ),
+            'selectors' => array(
+                '{{WRAPPER}} .mj-contact-messages__pagination-controls' => 'padding: {{SIZE}}{{UNIT}};',
+            ),
+        ));
+
+        $this->add_group_control(Group_Control_Border::get_type(), array(
+            'name' => 'pagination_controls_border',
+            'selector' => '{{WRAPPER}} .mj-contact-messages__pagination-controls',
+        ));
+
+        $this->add_group_control(Group_Control_Box_Shadow::get_type(), array(
+            'name' => 'pagination_controls_shadow',
+            'selector' => '{{WRAPPER}} .mj-contact-messages__pagination-controls',
+        ));
+
+        $this->add_control('pagination_controls_radius', array(
+            'label' => __('Rayon des angles', 'mj-member'),
+            'type' => Controls_Manager::SLIDER,
+            'size_units' => array('px', 'rem'),
+            'range' => array(
+                'px' => array('min' => 0, 'max' => 60),
+                'rem' => array('min' => 0, 'max' => 4, 'step' => 0.05),
+            ),
+            'selectors' => array(
+                '{{WRAPPER}} .mj-contact-messages__pagination-controls' => 'border-radius: {{SIZE}}{{UNIT}};',
+            ),
+        ));
+
+        $this->add_control('pagination_link_color', array(
+            'label' => __('Couleur des liens', 'mj-member'),
+            'type' => Controls_Manager::COLOR,
+            'selectors' => array(
+                '{{WRAPPER}} .mj-contact-messages__pagination-link' => 'color: {{VALUE}};',
+            ),
+        ));
+
+        $this->add_control('pagination_link_background', array(
+            'label' => __('Fond des liens', 'mj-member'),
+            'type' => Controls_Manager::COLOR,
+            'selectors' => array(
+                '{{WRAPPER}} .mj-contact-messages__pagination-link' => 'background-color: {{VALUE}};',
+            ),
+        ));
+
+        $this->add_control('pagination_link_border_color', array(
+            'label' => __('Bordure des liens', 'mj-member'),
+            'type' => Controls_Manager::COLOR,
+            'selectors' => array(
+                '{{WRAPPER}} .mj-contact-messages__pagination-link' => 'border-color: {{VALUE}};',
+            ),
+        ));
+
+        $this->add_control('pagination_link_radius', array(
+            'label' => __('Arrondi des liens', 'mj-member'),
+            'type' => Controls_Manager::SLIDER,
+            'size_units' => array('px', 'rem'),
+            'range' => array(
+                'px' => array('min' => 0, 'max' => 60),
+                'rem' => array('min' => 0, 'max' => 4, 'step' => 0.05),
+            ),
+            'selectors' => array(
+                '{{WRAPPER}} .mj-contact-messages__pagination-link' => 'border-radius: {{SIZE}}{{UNIT}};',
+            ),
+        ));
+
+        $this->add_control('pagination_link_hover_heading', array(
+            'label' => __('État survol/actif', 'mj-member'),
+            'type' => Controls_Manager::HEADING,
+            'separator' => 'before',
+        ));
+
+        $this->add_control('pagination_link_hover_color', array(
+            'label' => __('Couleur au survol', 'mj-member'),
+            'type' => Controls_Manager::COLOR,
+            'selectors' => array(
+                '{{WRAPPER}} .mj-contact-messages__pagination-link:hover, {{WRAPPER}} .mj-contact-messages__pagination-link:focus-visible' => 'color: {{VALUE}};',
+            ),
+        ));
+
+        $this->add_control('pagination_link_hover_background', array(
+            'label' => __('Fond au survol', 'mj-member'),
+            'type' => Controls_Manager::COLOR,
+            'selectors' => array(
+                '{{WRAPPER}} .mj-contact-messages__pagination-link:hover, {{WRAPPER}} .mj-contact-messages__pagination-link:focus-visible' => 'background-color: {{VALUE}};',
+            ),
+        ));
+
+        $this->add_control('pagination_link_active_color', array(
+            'label' => __('Couleur active', 'mj-member'),
+            'type' => Controls_Manager::COLOR,
+            'selectors' => array(
+                '{{WRAPPER}} .mj-contact-messages__pagination-link--number.is-current' => 'color: {{VALUE}};',
+            ),
+        ));
+
+        $this->add_control('pagination_link_active_background', array(
+            'label' => __('Fond actif', 'mj-member'),
+            'type' => Controls_Manager::COLOR,
+            'selectors' => array(
+                '{{WRAPPER}} .mj-contact-messages__pagination-link--number.is-current' => 'background-color: {{VALUE}};',
+            ),
+        ));
+
+        $this->add_control('pagination_link_active_border', array(
+            'label' => __('Bordure active', 'mj-member'),
+            'type' => Controls_Manager::COLOR,
+            'selectors' => array(
+                '{{WRAPPER}} .mj-contact-messages__pagination-link--number.is-current' => 'border-color: {{VALUE}};',
+            ),
+        ));
+
+        $this->add_group_control(Group_Control_Box_Shadow::get_type(), array(
+            'name' => 'pagination_link_active_shadow',
+            'selector' => '{{WRAPPER}} .mj-contact-messages__pagination-link--number.is-current',
+        ));
+
         $this->end_controls_section();
     }
 
@@ -125,9 +287,26 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
         }
 
         $description = isset($settings['description']) ? $settings['description'] : '';
-        $limit = isset($settings['items_per_page']) ? (int) $settings['items_per_page'] : 5;
-        if ($limit <= 0) {
-            $limit = 5;
+        $default_per_page = 50;
+        $per_page_setting = isset($settings['items_per_page']) ? (int) $settings['items_per_page'] : $default_per_page;
+        if ($per_page_setting <= 0) {
+            $per_page_setting = $default_per_page;
+        }
+
+        $max_per_page = (int) apply_filters('mj_member_contact_messages_max_per_page', 200);
+        if ($max_per_page < 1) {
+            $max_per_page = 200;
+        }
+
+        $per_page = min($max_per_page, max(1, $per_page_setting));
+
+        $page_param = 'mj_contact_page';
+        $current_page = 1;
+        if (isset($_GET[$page_param])) {
+            $requested_page = (int) wp_unslash($_GET[$page_param]);
+            if ($requested_page > 0) {
+                $current_page = $requested_page;
+            }
         }
 
         $show_unread_only = !empty($settings['show_unread_only']) && $settings['show_unread_only'] === 'yes';
@@ -176,150 +355,121 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
 
         $recipient_target_specs = $this->build_recipient_target_queries($member_id, $member_role, $can_moderate);
 
+        $sanitized_targets = array();
+        if (!empty($recipient_target_specs)) {
+            foreach ($recipient_target_specs as $spec) {
+                if (!is_array($spec) || empty($spec['type'])) {
+                    continue;
+                }
+
+                $type = sanitize_key($spec['type']);
+                if ($type === '') {
+                    continue;
+                }
+
+                $entry = array('type' => $type);
+                if (array_key_exists('reference', $spec)) {
+                    $entry['reference'] = (int) $spec['reference'];
+                }
+
+                $sanitized_targets[] = $entry;
+            }
+        }
+
         $messages_payload = array();
         $status_labels = MjContactMessages::get_status_labels();
         $view_all_url = admin_url('admin.php?page=mj_contact_messages');
-        $current_url = $this->get_current_url();
-        $redirect_base = $can_moderate ? esc_url_raw(remove_query_arg(array('mj_contact_notice'), $current_url)) : '';
+        $current_url = function_exists('mj_member_get_current_url') ? mj_member_get_current_url() : $this->get_current_url();
+        $current_url = is_string($current_url) ? html_entity_decode($current_url) : $current_url;
+
+        $base_query_params = array();
+        if (!empty($_GET) && is_array($_GET)) {
+            foreach ($_GET as $key => $value) {
+                if ($key === 'mj_contact_notice' || $key === $page_param) {
+                    continue;
+                }
+
+                $sanitized_key = sanitize_key($key);
+                if ($sanitized_key === '') {
+                    continue;
+                }
+
+                if (is_array($value)) {
+                    continue;
+                }
+
+                $base_query_params[$sanitized_key] = sanitize_text_field((string) wp_unslash($value));
+            }
+        }
+
+        $current_url_without_page = remove_query_arg($page_param, $current_url);
+        $pagination_base_candidate = add_query_arg($base_query_params, $current_url_without_page);
+        $pagination_base_clean = remove_query_arg($page_param, $pagination_base_candidate);
+        $pagination_base_url = $pagination_base_clean;
+
+        $has_owner_identity = ($member_id > 0 || $current_user_email !== '');
+        $include_owner_messages = !$can_moderate && $has_owner_identity;
+
+        $total_items = 0;
+        $total_pages = 0;
+        $should_query = false;
 
         if ($can_moderate) {
-            $assigned_args = array(
-                'per_page' => $limit,
-                'paged' => 1,
-                'order' => 'DESC',
-                'orderby' => 'created_at',
-                'assigned_to' => $current_user_id,
+            $should_query = true;
+        } elseif ($is_logged_in && ($has_owner_identity || !empty($sanitized_targets))) {
+            $should_query = true;
+            $can_view = true;
+        }
+
+        if ($should_query) {
+            $common_args = array(
+                'read_state' => $show_unread_only ? 'unread' : '',
+                'include_assigned' => $can_moderate,
+                'include_all_targets' => false,
+                'extra_targets' => $sanitized_targets,
+                'member_id' => $member_id,
+                'sender_email' => $current_user_email,
+                'include_owner' => $include_owner_messages,
             );
 
-            $all_targets_args = array(
-                'per_page' => $limit,
-                'paged' => 1,
-                'order' => 'DESC',
-                'orderby' => 'created_at',
-                'target_type' => MjContactMessages::TARGET_ALL,
-            );
+            $total_items = MjContactMessages::count_for_user($current_user_id, $common_args);
+            $total_pages = $total_items > 0 ? (int) ceil($total_items / $per_page) : 0;
 
-            if ($show_unread_only) {
-                $assigned_args['read_state'] = 'unread';
-                $all_targets_args['read_state'] = 'unread';
+            if ($total_pages > 0 && $current_page > $total_pages) {
+                $current_page = $total_pages;
             }
 
-            $assigned_messages = MjContactMessages::query($assigned_args);
-            $all_target_messages = MjContactMessages::query($all_targets_args);
-
-            $message_sets = array($assigned_messages, $all_target_messages);
-
-            if (!empty($recipient_target_specs)) {
-                foreach ($recipient_target_specs as $spec) {
-                    if (!isset($spec['type']) || $spec['type'] === MjContactMessages::TARGET_ALL) {
-                        continue;
-                    }
-
-                    $recipient_args = array(
-                        'per_page' => $limit,
-                        'paged' => 1,
-                        'order' => 'DESC',
-                        'orderby' => 'created_at',
-                        'target_type' => $spec['type'],
-                    );
-
-                    if (array_key_exists('reference', $spec)) {
-                        $recipient_args['target_reference'] = $spec['reference'];
-                    }
-
-                    if ($show_unread_only) {
-                        $recipient_args['read_state'] = 'unread';
-                    }
-
-                    $message_sets[] = MjContactMessages::query($recipient_args);
-                }
+            if ($total_pages === 0) {
+                $current_page = 1;
             }
 
-            $messages = $this->merge_message_sets($message_sets, $limit);
+            $query_args = $common_args;
+            $query_args['per_page'] = $per_page;
+            $query_args['paged'] = $current_page;
+
+            $messages = MjContactMessages::query_for_user($current_user_id, $query_args);
             $messages_payload = $this->format_messages_for_template($messages, $status_labels, array(
-                'can_moderate' => true,
+                'can_moderate' => $can_moderate,
                 'include_activity' => true,
                 'include_full' => true,
-                'owner_view' => false,
-                'activity_actions' => array(),
+                'owner_view' => !$can_moderate,
+                'activity_actions' => $can_moderate ? array() : array('reply_sent', 'reply_owner', 'note'),
             ));
-        } elseif ($is_logged_in) {
-            $has_owner_identity = ($member_id > 0 || $current_user_email !== '');
-            $message_sets = array();
-
-            if ($has_owner_identity) {
-                $own_args = array(
-                    'per_page' => $limit,
-                    'paged' => 1,
-                    'order' => 'DESC',
-                    'orderby' => 'created_at',
-                );
-
-                if ($member_id > 0) {
-                    $own_args['member_id'] = $member_id;
-                }
-
-                if ($current_user_email !== '') {
-                    $own_args['sender_email'] = $current_user_email;
-                }
-
-                if ($show_unread_only) {
-                    $own_args['read_state'] = 'unread';
-                }
-
-                $own_messages = MjContactMessages::query($own_args);
-                if (!empty($own_messages)) {
-                    $message_sets[] = $own_messages;
-                }
-            }
-
-            if (!empty($recipient_target_specs)) {
-                foreach ($recipient_target_specs as $spec) {
-                    if (!isset($spec['type'])) {
-                        continue;
-                    }
-
-                    $recipient_args = array(
-                        'per_page' => $limit,
-                        'paged' => 1,
-                        'order' => 'DESC',
-                        'orderby' => 'created_at',
-                        'target_type' => $spec['type'],
-                    );
-
-                    if (array_key_exists('reference', $spec)) {
-                        $recipient_args['target_reference'] = $spec['reference'];
-                    }
-
-                    if ($show_unread_only) {
-                        $recipient_args['read_state'] = 'unread';
-                    }
-
-                    $recipient_messages = MjContactMessages::query($recipient_args);
-                    if (!empty($recipient_messages)) {
-                        $message_sets[] = $recipient_messages;
-                    }
-                }
-            }
-
-            $combined_messages = !empty($message_sets) ? $this->merge_message_sets($message_sets, $limit) : array();
-            $messages_payload = $this->format_messages_for_template($combined_messages, $status_labels, array(
-                'can_moderate' => false,
-                'include_activity' => true,
-                'include_full' => true,
-                'owner_view' => true,
-                'activity_actions' => array('reply_sent', 'reply_owner', 'note'),
-            ));
-
-            if ($has_owner_identity || !empty($recipient_target_specs)) {
-                $can_view = true;
-            }
+        } else {
+            $current_page = 1;
         }
 
         $is_preview = $this->is_elementor_preview_mode();
         if ($is_preview && empty($messages_payload)) {
             $messages_payload = $this->get_preview_messages();
             $can_view = true;
+            $total_items = count($messages_payload);
+            $total_pages = $total_items > 0 ? 1 : 0;
+            $current_page = 1;
+        }
+
+        if ($total_pages === 0) {
+            $current_page = 1;
         }
 
         $owner_view_active = !$can_moderate && $can_view;
@@ -329,6 +479,30 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
                 ? __('Vous n’avez pas encore de conversation.', 'mj-member')
                 : __('Aucun message disponible pour le moment.', 'mj-member'));
 
+        $range_start = $total_items > 0 ? (($current_page - 1) * $per_page) + 1 : 0;
+        $range_end = $total_items > 0 ? min($range_start + $per_page - 1, $total_items) : 0;
+
+        $pagination_url_builder = static function ($page_number) use ($page_param, $pagination_base_url) {
+            $base = remove_query_arg($page_param, $pagination_base_url);
+            if ($page_number > 1) {
+                $base = add_query_arg($page_param, $page_number, $base);
+            }
+
+            return $base;
+        };
+
+        $prev_url = '';
+        if ($current_page > 1 && $total_pages > 0) {
+            $prev_url = $pagination_url_builder(max(1, $current_page - 1));
+        }
+
+        $next_url = '';
+        if ($total_pages > 0 && $current_page < $total_pages) {
+            $next_url = $pagination_url_builder($current_page + 1);
+        }
+
+        $redirect_base = $pagination_url_builder($current_page);
+
         $owner_reply = array(
             'enabled' => $owner_view_active && !$is_preview,
             'can_send' => $current_user_email !== '',
@@ -337,7 +511,72 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
             'sender_name' => $current_user_name,
             'sender_email' => $current_user_email,
             'member_id' => $member_id,
-            'source' => $current_url,
+            'source' => $redirect_base,
+        );
+
+        $pagination_links = array();
+        if ($total_pages > 1) {
+            $window = 5;
+            $half_window = (int) floor($window / 2);
+            $start_page = max(1, $current_page - $half_window);
+            $end_page = min($total_pages, $current_page + $half_window);
+
+            if ($start_page <= 2) {
+                $start_page = 1;
+            }
+
+            if ($end_page >= $total_pages - 1) {
+                $end_page = $total_pages;
+            }
+
+            if ($start_page > 1) {
+                $pagination_links[] = array(
+                    'type' => 'page',
+                    'number' => 1,
+                    'url' => $pagination_url_builder(1),
+                    'current' => ($current_page === 1),
+                );
+
+                if ($start_page > 2) {
+                    $pagination_links[] = array('type' => 'ellipsis');
+                }
+            }
+
+            for ($page = $start_page; $page <= $end_page; $page++) {
+                $pagination_links[] = array(
+                    'type' => 'page',
+                    'number' => $page,
+                    'url' => $pagination_url_builder($page),
+                    'current' => ($page === $current_page),
+                );
+            }
+
+            if ($end_page < $total_pages) {
+                if ($end_page < $total_pages - 1) {
+                    $pagination_links[] = array('type' => 'ellipsis');
+                }
+
+                $pagination_links[] = array(
+                    'type' => 'page',
+                    'number' => $total_pages,
+                    'url' => $pagination_url_builder($total_pages),
+                    'current' => ($current_page === $total_pages),
+                );
+            }
+        }
+
+        $pagination = array(
+            'current_page' => $current_page,
+            'per_page' => $per_page,
+            'total_items' => $total_items,
+            'total_pages' => $total_pages,
+            'page_param' => $page_param,
+            'base_url' => $pagination_url_builder(1),
+            'prev_url' => $prev_url,
+            'next_url' => $next_url,
+            'range_start' => $range_start,
+            'range_end' => $range_end,
+            'links' => $pagination_links,
         );
 
         $template_path = Config::path() . 'includes/templates/elementor/contact_messages.php';
@@ -355,6 +594,7 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
             'is_preview' => $is_preview,
             'redirect_base' => $redirect_base,
             'owner_reply' => $owner_reply,
+            'pagination' => $pagination,
         );
 
         if (file_exists($template_path)) {

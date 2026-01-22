@@ -8,6 +8,50 @@ if (!defined('ABSPATH')) {
 
 AssetsManager::requirePackage('contact-messages');
 
+if (function_exists('wp_add_inline_style')) {
+    $pagination_inline_css = '.mj-contact-messages__pagination{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0.85rem;padding:1rem 0 0.5rem;margin-top:0.75rem;border-top:1px solid rgba(148,163,184,0.32);}'
+        .'.mj-contact-messages__pagination-info{font-size:0.82rem;color:rgba(71,85,105,0.85);}'
+        .'.mj-contact-messages__pagination-controls{display:inline-flex;align-items:center;gap:0.6rem;padding:0.35rem 0.65rem;border-radius:999px;border:1px solid rgba(148,163,184,0.35);background:rgba(248,250,255,0.7);box-shadow:0 8px 20px rgba(15,23,42,0.06);}'
+        .'.mj-contact-messages__pagination-pages{display:inline-flex;align-items:center;gap:0.45rem;list-style:none;margin:0;padding:0;}'
+        .'.mj-contact-messages__pagination-pages-item{display:flex;}'
+        .'.mj-contact-messages__pagination-ellipsis{color:rgba(71,85,105,0.7);font-size:0.82rem;line-height:1;padding:0 0.2rem;}'
+        .'.mj-contact-messages__pagination-link{display:inline-flex;align-items:center;justify-content:center;padding:0.38rem 0.9rem;border-radius:999px;border:1px solid rgba(79,70,229,0.24);background:rgba(79,70,229,0.08);color:rgba(55,48,163,0.82);font-size:0.82rem;font-weight:600;line-height:1;text-decoration:none;transition:background-color 0.18s ease,border-color 0.18s ease,color 0.18s ease,box-shadow 0.18s ease;}'
+        .'.mj-contact-messages__pagination-link:hover,.mj-contact-messages__pagination-link:focus-visible{background:rgba(79,70,229,0.16);border-color:rgba(79,70,229,0.32);color:#2e26a1;box-shadow:0 0 0 3px rgba(79,70,229,0.16);outline:none;}'
+        .'.mj-contact-messages__pagination-link.is-disabled,.mj-contact-messages__pagination-link[aria-disabled="true"]{cursor:not-allowed;opacity:0.5;background:rgba(148,163,184,0.12);border-color:rgba(148,163,184,0.22);color:rgba(100,116,139,0.65);box-shadow:none;pointer-events:none;}'
+        .'.mj-contact-messages__pagination-link--number{min-width:2.25rem;height:2.25rem;}'
+        .'.mj-contact-messages__pagination-link--number.is-current{background:var(--mj-contact-messages-badge-bg);border-color:var(--mj-contact-messages-badge-bg);color:var(--mj-contact-messages-badge-color);cursor:default;box-shadow:0 10px 24px rgba(79,70,229,0.25);}'
+        .'.mj-contact-messages__pagination-link--number.is-current:hover,.mj-contact-messages__pagination-link--number.is-current:focus-visible{background:var(--mj-contact-messages-badge-bg);border-color:var(--mj-contact-messages-badge-bg);color:var(--mj-contact-messages-badge-color);box-shadow:0 10px 24px rgba(79,70,229,0.25);}'
+        .'.mj-contact-messages__pagination-link--prev,.mj-contact-messages__pagination-link--next{gap:0.35rem;padding-inline:0.75rem;}'
+        .'.mj-contact-messages__pagination-link--prev .mj-contact-messages__pagination-icon,.mj-contact-messages__pagination-link--next .mj-contact-messages__pagination-icon{font-size:0.9rem;line-height:1;}'
+        .'.mj-contact-messages__pagination-link--prev.is-disabled .mj-contact-messages__pagination-icon,.mj-contact-messages__pagination-link--next.is-disabled .mj-contact-messages__pagination-icon{opacity:0.8;}';
+
+    wp_add_inline_style('mj-member-components', $pagination_inline_css);
+}
+
+static $mj_contact_messages_styles_printed = false;
+if (!$mj_contact_messages_styles_printed) {
+    $mj_contact_messages_styles_printed = true;
+    add_action('wp_print_footer_scripts', static function () {
+        echo '<style class="mj-contact-messages__pagination-style">'
+            .'.mj-contact-messages__pagination{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0.85rem;padding:1rem 0 0.5rem;margin-top:0.75rem;border-top:1px solid rgba(148,163,184,0.32);}'
+            .'.mj-contact-messages__pagination-info{font-size:0.82rem;color:rgba(71,85,105,0.85);}'
+            .'.mj-contact-messages__pagination-controls{display:inline-flex;align-items:center;gap:0.6rem;padding:0.35rem 0.65rem;border-radius:999px;border:1px solid rgba(148,163,184,0.35);background:rgba(248,250,255,0.7);box-shadow:0 8px 20px rgba(15,23,42,0.06);}'
+            .'.mj-contact-messages__pagination-pages{display:inline-flex;align-items:center;gap:0.45rem;list-style:none;margin:0;padding:0;}'
+            .'.mj-contact-messages__pagination-pages-item{display:flex;}'
+            .'.mj-contact-messages__pagination-ellipsis{color:rgba(71,85,105,0.7);font-size:0.82rem;line-height:1;padding:0 0.2rem;}'
+            .'.mj-contact-messages__pagination-link{display:inline-flex;align-items:center;justify-content:center;padding:0.38rem 0.9rem;border-radius:999px;border:1px solid rgba(79,70,229,0.24);background:rgba(79,70,229,0.08);color:rgba(55,48,163,0.82);font-size:0.82rem;font-weight:600;line-height:1;text-decoration:none;transition:background-color 0.18s ease,border-color 0.18s ease,color 0.18s ease,box-shadow 0.18s ease;}'
+            .'.mj-contact-messages__pagination-link:hover,.mj-contact-messages__pagination-link:focus-visible{background:rgba(79,70,229,0.16);border-color:rgba(79,70,229,0.32);color:#2e26a1;box-shadow:0 0 0 3px rgba(79,70,229,0.16);outline:none;}'
+            .'.mj-contact-messages__pagination-link.is-disabled,.mj-contact-messages__pagination-link[aria-disabled="true"]{cursor:not-allowed;opacity:0.5;background:rgba(148,163,184,0.12);border-color:rgba(148,163,184,0.22);color:rgba(100,116,139,0.65);box-shadow:none;pointer-events:none;}'
+            .'.mj-contact-messages__pagination-link--number{min-width:2.25rem;height:2.25rem;}'
+            .'.mj-contact-messages__pagination-link--number.is-current{background:var(--mj-contact-messages-badge-bg);border-color:var(--mj-contact-messages-badge-bg);color:var(--mj-contact-messages-badge-color);cursor:default;box-shadow:0 10px 24px rgba(79,70,229,0.25);}'
+            .'.mj-contact-messages__pagination-link--number.is-current:hover,.mj-contact-messages__pagination-link--number.is-current:focus-visible{background:var(--mj-contact-messages-badge-bg);border-color:var(--mj-contact-messages-badge-bg);color:var(--mj-contact-messages-badge-color);box-shadow:0 10px 24px rgba(79,70,229,0.25);}'
+            .'.mj-contact-messages__pagination-link--prev,.mj-contact-messages__pagination-link--next{gap:0.35rem;padding-inline:0.75rem;}'
+            .'.mj-contact-messages__pagination-link--prev .mj-contact-messages__pagination-icon,.mj-contact-messages__pagination-link--next .mj-contact-messages__pagination-icon{font-size:0.9rem;line-height:1;}'
+            .'.mj-contact-messages__pagination-link--prev.is-disabled .mj-contact-messages__pagination-icon,.mj-contact-messages__pagination-link--next.is-disabled .mj-contact-messages__pagination-icon{opacity:0.8;}'
+            .'</style>';
+    }, 99);
+}
+
 $template_data = isset($template_data) && is_array($template_data) ? $template_data : array();
 
 $title = isset($template_data['title']) ? (string) $template_data['title'] : '';
@@ -33,6 +77,119 @@ $owner_reply_member_id = isset($owner_reply_config['member_id']) ? (int) $owner_
 $owner_reply_source = isset($owner_reply_config['source']) ? (string) $owner_reply_config['source'] : '';
 $owner_reply_ready = $owner_reply_enabled && $owner_reply_can_send && $owner_reply_ajax_url !== '' && $owner_reply_nonce !== '';
 $search_input_id = function_exists('wp_unique_id') ? wp_unique_id('mj-contact-messages-search-') : 'mj-contact-messages-search-' . uniqid();
+
+$pagination_config = isset($template_data['pagination']) && is_array($template_data['pagination']) ? $template_data['pagination'] : array();
+$pagination_total_items = isset($pagination_config['total_items']) ? max(0, (int) $pagination_config['total_items']) : 0;
+$pagination_total_pages = isset($pagination_config['total_pages']) ? max(0, (int) $pagination_config['total_pages']) : 0;
+$pagination_current_page = isset($pagination_config['current_page']) ? max(1, (int) $pagination_config['current_page']) : 1;
+$pagination_range_start = isset($pagination_config['range_start']) ? max(0, (int) $pagination_config['range_start']) : 0;
+$pagination_range_end = isset($pagination_config['range_end']) ? max(0, (int) $pagination_config['range_end']) : 0;
+$pagination_prev_url = isset($pagination_config['prev_url']) ? (string) $pagination_config['prev_url'] : '';
+$pagination_next_url = isset($pagination_config['next_url']) ? (string) $pagination_config['next_url'] : '';
+$pagination_page_param = isset($pagination_config['page_param']) ? sanitize_key((string) $pagination_config['page_param']) : 'page';
+if ($pagination_page_param === '') {
+    $pagination_page_param = 'page';
+}
+$pagination_base_url = isset($pagination_config['base_url']) ? (string) $pagination_config['base_url'] : '';
+$pagination_base_url = $pagination_base_url !== '' ? html_entity_decode($pagination_base_url) : '';
+
+$pagination_links = array();
+if (isset($pagination_config['links']) && is_array($pagination_config['links'])) {
+    foreach ($pagination_config['links'] as $link_entry) {
+        if (!is_array($link_entry)) {
+            continue;
+        }
+
+        $type = isset($link_entry['type']) ? sanitize_key((string) $link_entry['type']) : '';
+        if ($type === '') {
+            continue;
+        }
+
+        if ($type === 'ellipsis') {
+            $pagination_links[] = array('type' => 'ellipsis');
+            continue;
+        }
+
+        $number = isset($link_entry['number']) ? (int) $link_entry['number'] : 0;
+        $url = isset($link_entry['url']) ? (string) $link_entry['url'] : '';
+        $current = !empty($link_entry['current']);
+
+        if ($number < 1 || $url === '') {
+            continue;
+        }
+
+        $pagination_links[] = array(
+            'type' => 'page',
+            'number' => $number,
+            'url' => $url,
+            'current' => $current,
+        );
+    }
+}
+
+if (empty($pagination_links) && $pagination_total_pages > 1 && $pagination_base_url !== '') {
+    $window = 5;
+    $half_window = (int) floor($window / 2);
+    $start_page = max(1, $pagination_current_page - $half_window);
+    $end_page = min($pagination_total_pages, $pagination_current_page + $half_window);
+
+    if ($start_page <= 2) {
+        $start_page = 1;
+    }
+
+    if ($end_page >= $pagination_total_pages - 1) {
+        $end_page = $pagination_total_pages;
+    }
+
+    $append_page = static function ($page_number) use ($pagination_base_url, $pagination_page_param) {
+        $clean_base = remove_query_arg($pagination_page_param, $pagination_base_url);
+
+        if ($page_number <= 1) {
+            return $clean_base;
+        }
+
+        return add_query_arg($pagination_page_param, $page_number, $clean_base);
+    };
+
+    if ($start_page > 1) {
+        $pagination_links[] = array(
+            'type' => 'page',
+            'number' => 1,
+            'url' => $append_page(1),
+            'current' => $pagination_current_page === 1,
+        );
+
+        if ($start_page > 2) {
+            $pagination_links[] = array(
+                'type' => 'ellipsis',
+            );
+        }
+    }
+
+    for ($page = $start_page; $page <= $end_page; $page++) {
+        $pagination_links[] = array(
+            'type' => 'page',
+            'number' => $page,
+            'url' => $append_page($page),
+            'current' => $page === $pagination_current_page,
+        );
+    }
+
+    if ($end_page < $pagination_total_pages) {
+        if ($end_page < $pagination_total_pages - 1) {
+            $pagination_links[] = array(
+                'type' => 'ellipsis',
+            );
+        }
+
+        $pagination_links[] = array(
+            'type' => 'page',
+            'number' => $pagination_total_pages,
+            'url' => $append_page($pagination_total_pages),
+            'current' => $pagination_current_page === $pagination_total_pages,
+        );
+    }
+}
 
 $notice_key = isset($_GET['mj_contact_notice']) ? sanitize_key(wp_unslash($_GET['mj_contact_notice'])) : '';
 $notice_message = '';
@@ -431,6 +588,94 @@ if ($notice_message !== '' && $notice_detail !== '') {
             <div class="mj-contact-messages__filter-empty" data-mj-element="filter-empty" aria-live="polite" hidden>
                 <?php esc_html_e('Aucun message ne correspond à ces critères.', 'mj-member'); ?>
             </div>
+            <?php if ($pagination_total_items > 0) : ?>
+                <nav class="mj-contact-messages__pagination" aria-label="<?php echo esc_attr__('Pagination des messages', 'mj-member'); ?>">
+                    <div class="mj-contact-messages__pagination-info">
+                        <?php
+                        printf(
+                            esc_html__('Messages %1$s à %2$s sur %3$s', 'mj-member'),
+                            number_format_i18n($pagination_range_start),
+                            number_format_i18n($pagination_range_end),
+                            number_format_i18n($pagination_total_items)
+                        );
+                        ?>
+                        <?php if ($pagination_total_pages > 1) : ?>
+                            <span class="mj-contact-messages__pagination-pages">
+                                <?php
+                                printf(
+                                    esc_html__('Page %1$s sur %2$s', 'mj-member'),
+                                    number_format_i18n($pagination_current_page),
+                                    number_format_i18n($pagination_total_pages)
+                                );
+                                ?>
+                            </span>
+                        <?php endif; ?>
+                    </div>
+                    <?php if ($pagination_total_pages > 1) : ?>
+                        <div class="mj-contact-messages__pagination-controls">
+                            <?php if ($pagination_prev_url !== '') : ?>
+                                <a class="mj-contact-messages__pagination-link mj-contact-messages__pagination-link--prev" href="<?php echo esc_url($pagination_prev_url); ?>">
+                                    <span class="mj-contact-messages__pagination-icon" aria-hidden="true">&#8592;</span>
+                                    <span><?php esc_html_e('Précédent', 'mj-member'); ?></span>
+                                </a>
+                            <?php else : ?>
+                                <span class="mj-contact-messages__pagination-link mj-contact-messages__pagination-link--prev is-disabled" aria-disabled="true">
+                                    <span class="mj-contact-messages__pagination-icon" aria-hidden="true">&#8592;</span>
+                                    <span><?php esc_html_e('Précédent', 'mj-member'); ?></span>
+                                </span>
+                            <?php endif; ?>
+
+                            <?php if (!empty($pagination_links)) : ?>
+                                <ul class="mj-contact-messages__pagination-pages" role="list">
+                                    <?php foreach ($pagination_links as $page_link) : ?>
+                                        <?php if (isset($page_link['type']) && $page_link['type'] === 'ellipsis') : ?>
+                                            <li class="mj-contact-messages__pagination-pages-item" aria-hidden="true" role="presentation">
+                                                <span class="mj-contact-messages__pagination-ellipsis">&hellip;</span>
+                                            </li>
+                                        <?php elseif (isset($page_link['type']) && $page_link['type'] === 'page') :
+                                            $page_number = isset($page_link['number']) ? (int) $page_link['number'] : 0;
+                                            $page_url = isset($page_link['url']) ? (string) $page_link['url'] : '';
+                                            $is_current = !empty($page_link['current']);
+                                            $page_number_label = number_format_i18n($page_number);
+                                            $page_aria_label = $is_current
+                                                ? sprintf(__('Page %s (actuelle)', 'mj-member'), $page_number_label)
+                                                : sprintf(__('Aller à la page %s', 'mj-member'), $page_number_label);
+                                            ?>
+                                            <li class="mj-contact-messages__pagination-pages-item" role="listitem">
+                                                <?php if ($is_current) : ?>
+                                                    <span class="mj-contact-messages__pagination-link mj-contact-messages__pagination-link--number is-current" aria-current="page" aria-label="<?php echo esc_attr($page_aria_label); ?>">
+                                                        <?php echo esc_html($page_number_label); ?>
+                                                    </span>
+                                                <?php elseif ($page_url !== '') : ?>
+                                                    <a class="mj-contact-messages__pagination-link mj-contact-messages__pagination-link--number" href="<?php echo esc_url($page_url); ?>" aria-label="<?php echo esc_attr($page_aria_label); ?>">
+                                                        <?php echo esc_html($page_number_label); ?>
+                                                    </a>
+                                                <?php else : ?>
+                                                    <span class="mj-contact-messages__pagination-link mj-contact-messages__pagination-link--number is-disabled" aria-disabled="true" aria-label="<?php echo esc_attr($page_aria_label); ?>">
+                                                        <?php echo esc_html($page_number_label); ?>
+                                                    </span>
+                                                <?php endif; ?>
+                                            </li>
+                                        <?php endif; ?>
+                                    <?php endforeach; ?>
+                                </ul>
+                            <?php endif; ?>
+
+                            <?php if ($pagination_next_url !== '') : ?>
+                                <a class="mj-contact-messages__pagination-link mj-contact-messages__pagination-link--next" href="<?php echo esc_url($pagination_next_url); ?>">
+                                    <span><?php esc_html_e('Suivant', 'mj-member'); ?></span>
+                                    <span class="mj-contact-messages__pagination-icon" aria-hidden="true">&#8594;</span>
+                                </a>
+                            <?php else : ?>
+                                <span class="mj-contact-messages__pagination-link mj-contact-messages__pagination-link--next is-disabled" aria-disabled="true">
+                                    <span><?php esc_html_e('Suivant', 'mj-member'); ?></span>
+                                    <span class="mj-contact-messages__pagination-icon" aria-hidden="true">&#8594;</span>
+                                </span>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                </nav>
+            <?php endif; ?>
         <?php endif; ?>
 
         <?php if ($can_moderate && $view_all_url !== '') : ?>
