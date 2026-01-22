@@ -793,9 +793,7 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
             $is_coordinateur = ($member_role === 'coordinateur');
         }
 
-        $should_include_global = $include_global || $is_animateur || $is_coordinateur;
-
-        if ($should_include_global) {
+        if ($include_global) {
             $append_target(MjContactMessages::TARGET_ALL, null);
         }
 
@@ -811,12 +809,18 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
 
         if ($is_animateur || $is_coordinateur) {
             $append_target(MjContactMessages::TARGET_ANIMATEUR, $member_id);
-            $append_target(MjContactMessages::TARGET_ANIMATEUR, 0);
+
+            if ($include_global) {
+                $append_target(MjContactMessages::TARGET_ANIMATEUR, 0);
+            }
         }
 
         if ($is_coordinateur) {
             $append_target(MjContactMessages::TARGET_COORDINATEUR, $member_id);
-            $append_target(MjContactMessages::TARGET_COORDINATEUR, 0);
+
+            if ($include_global) {
+                $append_target(MjContactMessages::TARGET_COORDINATEUR, 0);
+            }
         }
 
         return array_values($targets);

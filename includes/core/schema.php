@@ -421,6 +421,10 @@ function mj_member_get_idea_votes_table_name() {
     return $cached;
 }
 
+function mj_member_get_contact_message_recipients_table_name() {
+    global $wpdb;
+    return $wpdb->prefix . 'mj_contact_message_recipients';
+}
 function mj_member_ensure_auxiliary_tables() {
     global $wpdb;
     if ( ! function_exists('dbDelta') ) {
@@ -839,6 +843,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_39($wpdb);
     mj_member_upgrade_to_2_40($wpdb);
     mj_member_upgrade_to_2_41($wpdb);
+    mj_member_upgrade_to_2_42($wpdb);
     mj_member_upgrade_to_2_7($wpdb);
     mj_member_upgrade_to_2_8($wpdb);
     mj_member_upgrade_to_2_9($wpdb);
@@ -2398,6 +2403,195 @@ function mj_member_upgrade_to_2_41($wpdb) {
         }
         $after_sql = esc_sql($after_column);
         $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN how_mj text DEFAULT NULL AFTER {$after_sql}");
+    }
+}
+
+function mj_member_upgrade_to_2_42($wpdb) {
+    $messages_table = $wpdb->prefix . 'mj_contact_messages';
+    $recipients_table = mj_member_get_contact_message_recipients_table_name();
+
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql = "CREATE TABLE {$recipients_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        message_id bigint(20) unsigned NOT NULL,
+        recipient_type varchar(30) NOT NULL,
+        recipient_reference bigint(20) unsigned DEFAULT 0,
+        recipient_label varchar(190) DEFAULT '',
+        member_id bigint(20) unsigned DEFAULT NULL,
+        user_id bigint(20) unsigned DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY idx_message (message_id),
+        KEY idx_recipient (recipient_type, recipient_reference),
+        KEY idx_member (member_id),
+        KEY idx_user (user_id)
+    ) {$charset_collate};";
+
+    dbDelta($sql);
+
+    if (!mj_member_table_exists($messages_table) || !mj_member_table_exists($recipients_table)) {
+        return;
+    }
+
+    $existing = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$recipients_table}");
+    if ($existing > 0) {
+        return;
+    }
+
+    $members_table = $wpdb->prefix . 'mj_members';
+    $members_table_exists = mj_member_table_exists($members_table);
+    $member_cache = array();
+
+    $resolve_member = static function ($member_id) use (&$member_cache, $members_table_exists, $members_table, $wpdb) {
+        $member_id = (int) $member_id;
+        if ($member_id <= 0 || !$members_table_exists) {
+            return array('member_id' => 0, 'user_id' => 0);
+        }
+
+        if (isset($member_cache[$member_id])) {
+            return $member_cache[$member_id];
+        }
+
+        $row = $wpdb->get_row($wpdb->prepare("SELECT id, wp_user_id FROM {$members_table} WHERE id = %d", $member_id));
+        $resolved_member_id = ($row && isset($row->id)) ? (int) $row->id : 0;
+        $resolved_user_id = ($row && isset($row->wp_user_id) && (int) $row->wp_user_id > 0) ? (int) $row->wp_user_id : 0;
+
+        $member_cache[$member_id] = array(
+            'member_id' => $resolved_member_id,
+            'user_id' => $resolved_user_id,
+        );
+
+        return $member_cache[$member_id];
+    };
+
+    $batch = 200;
+    $offset = 0;
+
+    while (true) {
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT id, target_type, target_reference, target_label, meta FROM {$messages_table} ORDER BY id ASC LIMIT %d OFFSET %d",
+                (int) $batch,
+                (int) $offset
+            )
+        );
+
+        if (empty($rows)) {
+            break;
+        }
+
+        foreach ($rows as $row) {
+            if (!isset($row->id)) {
+                continue;
+            }
+
+            $recipient_map = array();
+
+            $append_recipient = static function ($type, $reference, $label = '') use (&$recipient_map) {
+                $type = sanitize_key((string) $type);
+                if ($type === '') {
+                    return;
+                }
+
+                $reference = (int) $reference;
+                if ($reference < 0) {
+                    $reference = 0;
+                }
+
+                $label = $label !== '' ? sanitize_text_field((string) $label) : '';
+                $map_key = $type . '|' . $reference;
+
+                if (!isset($recipient_map[$map_key])) {
+                    $recipient_map[$map_key] = array(
+                        'type' => $type,
+                        'reference' => $reference,
+                        'label' => $label,
+                    );
+                } else {
+                    if ($recipient_map[$map_key]['label'] === '' && $label !== '') {
+                        $recipient_map[$map_key]['label'] = $label;
+                    }
+                }
+            };
+
+            if (!empty($row->meta)) {
+                $decoded_meta = json_decode((string) $row->meta, true);
+                if (is_array($decoded_meta) && !empty($decoded_meta['recipient_keys'])) {
+                    $keys = explode('|', (string) $decoded_meta['recipient_keys']);
+                    foreach ($keys as $raw_key) {
+                        $raw_key = trim((string) $raw_key);
+                        if ($raw_key === '') {
+                            continue;
+                        }
+
+                        $type = $raw_key;
+                        $reference = 0;
+
+                        if (strpos($raw_key, ':') !== false) {
+                            list($raw_type, $raw_reference) = explode(':', $raw_key, 2);
+                            $type = $raw_type;
+                            $reference = (int) $raw_reference;
+                        }
+
+                        $append_recipient($type, $reference);
+                    }
+                }
+            }
+
+            $base_type = isset($row->target_type) ? sanitize_key((string) $row->target_type) : '';
+            if ($base_type === '') {
+                $base_type = 'all';
+            }
+
+            $base_reference = isset($row->target_reference) ? (int) $row->target_reference : 0;
+            if ($base_reference < 0) {
+                $base_reference = 0;
+            }
+
+            $base_label = isset($row->target_label) ? sanitize_text_field((string) $row->target_label) : '';
+            $append_recipient($base_type, $base_reference, $base_label);
+
+            if (empty($recipient_map)) {
+                continue;
+            }
+
+            $wpdb->delete($recipients_table, array('message_id' => (int) $row->id), array('%d'));
+
+            foreach ($recipient_map as $recipient_entry) {
+                $member_id = 0;
+                $user_id = 0;
+
+                if ($recipient_entry['reference'] > 0 && in_array($recipient_entry['type'], array('animateur', 'coordinateur', 'member'), true)) {
+                    $resolved = $resolve_member($recipient_entry['reference']);
+                    if (!empty($resolved['member_id'])) {
+                        $member_id = (int) $resolved['member_id'];
+                    }
+                    if (!empty($resolved['user_id'])) {
+                        $user_id = (int) $resolved['user_id'];
+                    }
+                }
+
+                $wpdb->insert(
+                    $recipients_table,
+                    array(
+                        'message_id' => (int) $row->id,
+                        'recipient_type' => $recipient_entry['type'],
+                        'recipient_reference' => (int) $recipient_entry['reference'],
+                        'recipient_label' => $recipient_entry['label'],
+                        'member_id' => $member_id > 0 ? $member_id : null,
+                        'user_id' => $user_id > 0 ? $user_id : null,
+                    ),
+                    array('%d', '%s', '%d', '%s', '%d', '%d')
+                );
+            }
+        }
+
+        $offset += $batch;
     }
 }
 

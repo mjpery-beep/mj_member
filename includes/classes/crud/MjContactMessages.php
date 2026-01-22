@@ -28,6 +28,32 @@ class MjContactMessages implements CrudRepositoryInterface {
     }
 
     /**
+     * @return string
+     */
+    public static function get_recipients_table_name() {
+        global $wpdb;
+        return $wpdb->prefix . 'mj_contact_message_recipients';
+    }
+
+    /**
+     * @return bool
+     */
+    private static function recipients_table_exists() {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        global $wpdb;
+        $table = self::get_recipients_table_name();
+        $like = $wpdb->esc_like($table);
+        $existing = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like));
+        $cached = ($existing === $table);
+
+        return $cached;
+    }
+
+    /**
      * @return array<string,string>
      */
     public static function get_status_labels() {
@@ -105,6 +131,8 @@ class MjContactMessages implements CrudRepositoryInterface {
 
         $conditions = array();
         $params = array();
+        $recipients_table = self::get_recipients_table_name();
+        $recipients_table_exists = self::recipients_table_exists();
 
         $user_id = (int) $user_id;
         $member_id = (int) $args['member_id'];
@@ -139,8 +167,17 @@ class MjContactMessages implements CrudRepositoryInterface {
         }
 
         if (!empty($args['include_all_targets'])) {
-            $assignment_clauses[] = 'target_type = %s';
-            $assignment_params[] = self::TARGET_ALL;
+            $meta_all_pattern = sprintf('%%"recipient_keys":"%%%s%%"', $wpdb->esc_like(self::TARGET_ALL));
+            if ($recipients_table_exists) {
+                $assignment_clauses[] = '(target_type = %s OR EXISTS (SELECT 1 FROM ' . $recipients_table . ' r WHERE r.message_id = id AND r.recipient_type = %s) OR (meta IS NOT NULL AND meta LIKE %s))';
+                $assignment_params[] = self::TARGET_ALL;
+                $assignment_params[] = self::TARGET_ALL;
+                $assignment_params[] = $meta_all_pattern;
+            } else {
+                $assignment_clauses[] = '(target_type = %s OR (meta IS NOT NULL AND meta LIKE %s))';
+                $assignment_params[] = self::TARGET_ALL;
+                $assignment_params[] = $meta_all_pattern;
+            }
         }
 
         $extra_target_map = array();
@@ -185,12 +222,32 @@ class MjContactMessages implements CrudRepositoryInterface {
                 $target_reference = $entry['reference'];
 
                 if ($target_reference !== null) {
-                    $assignment_clauses[] = '(target_type = %s AND target_reference = %d)';
-                    $assignment_params[] = $target_type;
-                    $assignment_params[] = $target_reference;
+                    $meta_pattern = sprintf('%%"recipient_keys":"%%%s%%"', $wpdb->esc_like($target_type . ':' . $target_reference));
+                    if ($recipients_table_exists) {
+                        $assignment_clauses[] = '((target_type = %s AND target_reference = %d) OR EXISTS (SELECT 1 FROM ' . $recipients_table . ' r WHERE r.message_id = id AND r.recipient_type = %s AND r.recipient_reference = %d) OR (meta IS NOT NULL AND meta LIKE %s))';
+                        $assignment_params[] = $target_type;
+                        $assignment_params[] = $target_reference;
+                        $assignment_params[] = $target_type;
+                        $assignment_params[] = $target_reference;
+                        $assignment_params[] = $meta_pattern;
+                    } else {
+                        $assignment_clauses[] = '((target_type = %s AND target_reference = %d) OR (meta IS NOT NULL AND meta LIKE %s))';
+                        $assignment_params[] = $target_type;
+                        $assignment_params[] = $target_reference;
+                        $assignment_params[] = $meta_pattern;
+                    }
                 } else {
-                    $assignment_clauses[] = 'target_type = %s';
-                    $assignment_params[] = $target_type;
+                    $meta_pattern = sprintf('%%"recipient_keys":"%%%s%%"', $wpdb->esc_like($target_type));
+                    if ($recipients_table_exists) {
+                        $assignment_clauses[] = '(target_type = %s OR EXISTS (SELECT 1 FROM ' . $recipients_table . ' r WHERE r.message_id = id AND r.recipient_type = %s) OR (meta IS NOT NULL AND meta LIKE %s))';
+                        $assignment_params[] = $target_type;
+                        $assignment_params[] = $target_type;
+                        $assignment_params[] = $meta_pattern;
+                    } else {
+                        $assignment_clauses[] = '(target_type = %s OR (meta IS NOT NULL AND meta LIKE %s))';
+                        $assignment_params[] = $target_type;
+                        $assignment_params[] = $meta_pattern;
+                    }
                 }
             }
         }
@@ -444,19 +501,32 @@ class MjContactMessages implements CrudRepositoryInterface {
             $params[] = $status;
         }
 
-        $target_type = sanitize_key($query_args['target_type']);
-        if ($target_type !== '') {
-            $where[] = 'target_type = %s';
-            $params[] = $target_type;
-        }
+        $target_type = isset($query_args['target_type']) ? sanitize_key($query_args['target_type']) : '';
+        $target_reference = null;
+        $target_reference_provided = false;
 
         if (array_key_exists('target_reference', $query_args)) {
             $target_reference_raw = $query_args['target_reference'];
             if ($target_reference_raw !== null && $target_reference_raw !== '') {
                 $target_reference = (int) $target_reference_raw;
-                $where[] = 'target_reference = %d';
-                $params[] = $target_reference;
+                $target_reference_provided = true;
             }
+        }
+
+        if ($target_type !== '' && $target_reference_provided) {
+            $meta_pattern = sprintf('%%"recipient_keys":"%%%s%%"', $wpdb->esc_like($target_type . ':' . $target_reference));
+            $where[] = '((target_type = %s AND target_reference = %d) OR (meta IS NOT NULL AND meta LIKE %s))';
+            $params[] = $target_type;
+            $params[] = $target_reference;
+            $params[] = $meta_pattern;
+        } elseif ($target_type !== '') {
+            $meta_pattern = sprintf('%%"recipient_keys":"%%%s%%"', $wpdb->esc_like($target_type));
+            $where[] = '(target_type = %s OR (meta IS NOT NULL AND meta LIKE %s))';
+            $params[] = $target_type;
+            $params[] = $meta_pattern;
+        } elseif ($target_reference_provided) {
+            $where[] = 'target_reference = %d';
+            $params[] = $target_reference;
         }
 
         $assigned_to = (int) $query_args['assigned_to'];
@@ -683,19 +753,32 @@ class MjContactMessages implements CrudRepositoryInterface {
             $params[] = $status;
         }
 
-        $target_type = sanitize_key($query_args['target_type']);
-        if ($target_type !== '') {
-            $where[] = 'target_type = %s';
-            $params[] = $target_type;
-        }
+        $target_type = isset($query_args['target_type']) ? sanitize_key($query_args['target_type']) : '';
+        $target_reference = null;
+        $target_reference_provided = false;
 
         if (array_key_exists('target_reference', $query_args)) {
             $target_reference_raw = $query_args['target_reference'];
             if ($target_reference_raw !== null && $target_reference_raw !== '') {
                 $target_reference = (int) $target_reference_raw;
-                $where[] = 'target_reference = %d';
-                $params[] = $target_reference;
+                $target_reference_provided = true;
             }
+        }
+
+        if ($target_type !== '' && $target_reference_provided) {
+            $meta_pattern = sprintf('%%"recipient_keys":"%%%s%%"', $wpdb->esc_like($target_type . ':' . $target_reference));
+            $where[] = '((target_type = %s AND target_reference = %d) OR (meta IS NOT NULL AND meta LIKE %s))';
+            $params[] = $target_type;
+            $params[] = $target_reference;
+            $params[] = $meta_pattern;
+        } elseif ($target_type !== '') {
+            $meta_pattern = sprintf('%%"recipient_keys":"%%%s%%"', $wpdb->esc_like($target_type));
+            $where[] = '(target_type = %s OR (meta IS NOT NULL AND meta LIKE %s))';
+            $params[] = $target_type;
+            $params[] = $meta_pattern;
+        } elseif ($target_reference_provided) {
+            $where[] = 'target_reference = %d';
+            $params[] = $target_reference;
         }
 
         $assigned_to = (int) $query_args['assigned_to'];
