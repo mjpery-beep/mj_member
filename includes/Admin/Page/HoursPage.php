@@ -6,6 +6,7 @@ use Mj\Member\Admin\RequestGuard;
 use Mj\Member\Classes\Crud\MjMemberHours;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Value\MemberData;
+use Mj\Member\Core\AssetsManager;
 use Mj\Member\Core\Config;
 use WP_User;
 
@@ -100,6 +101,85 @@ final class HoursPage
                 'barChartEmpty' => __('Aucune donnée disponible pour cette période.', 'mj-member'),
                 'renderError' => __('Impossible d’afficher le tableau de bord pour le moment. Merci de rafraîchir la page.', 'mj-member'),
             ),
+            'hourEncode' => self::prepareHourEncodeSettings($data),
+        );
+    }
+
+    /**
+     * Prépare la configuration de base pour le widget d’encodage des heures côté admin.
+     *
+     * @param array<string,mixed> $dashboardData
+     * @return array<string,mixed>
+     */
+    private static function prepareHourEncodeSettings(array $dashboardData): array
+    {
+        $currentTimestamp = current_time('timestamp');
+        $weekStartTimestamp = strtotime('monday this week', $currentTimestamp);
+        if (!is_int($weekStartTimestamp)) {
+            $weekStartTimestamp = $currentTimestamp;
+        }
+
+        $projectNames = array();
+        if (isset($dashboardData['projects']) && is_array($dashboardData['projects'])) {
+            foreach ($dashboardData['projects'] as $projectRow) {
+                if (!is_array($projectRow)) {
+                    continue;
+                }
+
+                $rawLabel = '';
+                if (isset($projectRow['raw_label'])) {
+                    $rawLabel = (string) $projectRow['raw_label'];
+                }
+                if ($rawLabel === '' && isset($projectRow['label']) && empty($projectRow['is_unassigned'])) {
+                    $rawLabel = (string) $projectRow['label'];
+                }
+
+                $sanitized = sanitize_text_field($rawLabel);
+                if ($sanitized === '') {
+                    continue;
+                }
+
+                $projectNames[] = $sanitized;
+            }
+        }
+
+        if (!empty($projectNames)) {
+            $projectNames = array_values(array_unique($projectNames));
+            sort($projectNames, SORT_NATURAL | SORT_FLAG_CASE);
+        }
+
+        $nonce = wp_create_nonce('mj-member-hour-encode');
+
+        return array(
+            'locale' => determine_locale(),
+            'weekStart' => wp_date('Y-m-d', $weekStartTimestamp),
+            'timezone' => wp_timezone_string(),
+            'introText' => '',
+            'ajax' => array(
+                'url' => esc_url_raw(admin_url('admin-ajax.php')),
+                'action' => 'mj_member_hour_encode_week',
+                'weekAction' => 'mj_member_hour_encode_week',
+                'createAction' => 'mj_member_hour_encode_create',
+                'updateAction' => 'mj_member_hour_encode_update',
+                'deleteAction' => 'mj_member_hour_encode_delete',
+                'renameProjectAction' => 'mj_member_hour_encode_rename_project',
+                'renameTaskAction' => 'mj_member_hour_encode_rename_task',
+                'nonce' => $nonce,
+                'renameNonce' => $nonce,
+                'staticParams' => array(),
+            ),
+            'entries' => array(),
+            'events' => array(),
+            'projects' => $projectNames,
+            'commonTasks' => self::taskSuggestions(),
+            'projectTotals' => array(),
+            'workSchedule' => array(),
+            'cumulativeBalance' => null,
+            'labels' => self::hourEncodeLabels(),
+            'capabilities' => array(
+                'canManage' => true,
+            ),
+            'isPreview' => false,
         );
     }
 
@@ -118,6 +198,8 @@ final class HoursPage
         $scriptVersion = file_exists($scriptPath) ? (string) filemtime($scriptPath) : Config::version();
         wp_enqueue_script('mj-member-admin-hours-dashboard', $scriptUrl, array(), $scriptVersion, true);
         wp_script_add_data('mj-member-admin-hours-dashboard', 'type', 'module');
+
+        AssetsManager::requirePackage('hour-encode');
 
         $inlineConfig = wp_json_encode($config);
         if (!is_string($inlineConfig)) {
@@ -244,6 +326,9 @@ final class HoursPage
             $entries = isset($row['entries']) ? (int) $row['entries'] : 0;
             $label = isset($memberLabels[$memberId]['label']) ? (string) $memberLabels[$memberId]['label'] : sprintf(__('Membre #%d', 'mj-member'), $memberId);
             $weeklyContractMinutes = isset($memberLabels[$memberId]['weekly_contract_minutes']) ? (int) $memberLabels[$memberId]['weekly_contract_minutes'] : 0;
+            $workSchedule = isset($memberLabels[$memberId]['work_schedule']) && is_array($memberLabels[$memberId]['work_schedule'])
+                ? $memberLabels[$memberId]['work_schedule']
+                : array();
 
             $contractMinutesByMember[$memberId] = $weeklyContractMinutes;
 
@@ -256,6 +341,8 @@ final class HoursPage
                 'projects' => $memberProjectsMap[$memberId] ?? array(),
                 'weekly_contract_minutes' => $weeklyContractMinutes,
                 'weekly_contract_human' => self::formatDuration($weeklyContractMinutes),
+                'work_schedule' => $workSchedule,
+                'cumulative_balance' => self::calculateCumulativeBalance($memberId, $workSchedule, $weeklyContractMinutes),
             );
 
             $totalMinutesFromMembers += $minutes;
@@ -1075,6 +1162,144 @@ final class HoursPage
         return max(0, $total);
     }
 
+    /**
+     * @param string|null $workScheduleJson
+     * @return array<int,array{day:string,start:string,end:string,break_minutes:int}>
+     */
+    private static function sanitizeWorkScheduleFromString(?string $workScheduleJson): array
+    {
+        if ($workScheduleJson === null || $workScheduleJson === '') {
+            return array();
+        }
+
+        $decoded = json_decode($workScheduleJson, true);
+        if (!is_array($decoded)) {
+            return array();
+        }
+
+        $schedule = array();
+
+        foreach ($decoded as $slot) {
+            if (!is_array($slot)) {
+                continue;
+            }
+
+            $day = isset($slot['day']) ? sanitize_key((string) $slot['day']) : '';
+            $start = self::sanitizeScheduleTimeField($slot['start'] ?? '');
+            $end = self::sanitizeScheduleTimeField($slot['end'] ?? '');
+            $breakMinutes = isset($slot['break_minutes']) ? (int) $slot['break_minutes'] : 0;
+
+            if ($day === '' || $start === '' || $end === '') {
+                continue;
+            }
+
+            $schedule[] = array(
+                'day' => $day,
+                'start' => $start,
+                'end' => $end,
+                'break_minutes' => max(0, $breakMinutes),
+            );
+        }
+
+        return $schedule;
+    }
+
+    /**
+     * @param string|mixed $value
+     */
+    private static function sanitizeScheduleTimeField($value): string
+    {
+        $value = is_string($value) ? trim(str_replace(',', ':', $value)) : '';
+        if ($value === '') {
+            return '';
+        }
+
+        if (preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/', $value, $matches) !== 1) {
+            return '';
+        }
+
+        $hour = (int) $matches[1];
+        $minute = (int) $matches[2];
+        $second = isset($matches[3]) ? (int) $matches[3] : 0;
+
+        if ($hour < 0 || $hour > 24 || $minute < 0 || $minute > 59 || $second < 0 || $second > 59) {
+            return '';
+        }
+
+        if ($hour === 24) {
+            if ($minute !== 0) {
+                return '';
+            }
+            return '24:00';
+        }
+
+        return sprintf('%02d:%02d', $hour, $minute);
+    }
+
+    private static function calculateCumulativeBalance(int $memberId, array $workSchedule, ?int $weeklyContractMinutes = null): ?array
+    {
+        if ($memberId <= 0) {
+            return null;
+        }
+
+        if ($weeklyContractMinutes === null) {
+            $weeklyContractMinutes = 0;
+            foreach ($workSchedule as $slot) {
+                if (!is_array($slot)) {
+                    continue;
+                }
+                $start = isset($slot['start']) ? (string) $slot['start'] : '';
+                $end = isset($slot['end']) ? (string) $slot['end'] : '';
+                if ($start === '' || $end === '') {
+                    continue;
+                }
+                $duration = self::calculateDurationMinutesForSchedule($start, $end);
+                if ($duration <= 0) {
+                    continue;
+                }
+                $break = isset($slot['break_minutes']) ? (int) $slot['break_minutes'] : 0;
+                $weeklyContractMinutes += max(0, $duration - max(0, $break));
+            }
+        }
+
+        if ($weeklyContractMinutes <= 0) {
+            return null;
+        }
+
+        global $wpdb;
+        $table = MjMemberHours::tableName();
+        $stats = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT MIN(activity_date) AS first_date, SUM(duration_minutes) AS total_minutes FROM {$table} WHERE member_id = %d",
+                $memberId
+            )
+        );
+
+        if (!$stats || empty($stats->first_date) || $stats->total_minutes === null) {
+            return null;
+        }
+
+        try {
+            $firstDate = new \DateTimeImmutable((string) $stats->first_date);
+            $today = new \DateTimeImmutable('today');
+        } catch (\Exception $exception) {
+            return null;
+        }
+
+        $daysDiff = (int) $firstDate->diff($today)->days;
+        $weeksDiff = max(1, (int) ceil($daysDiff / 7));
+        $expectedMinutes = $weeksDiff * $weeklyContractMinutes;
+        $actualMinutes = (int) $stats->total_minutes;
+
+        return array(
+            'expectedMinutes' => $expectedMinutes,
+            'actualMinutes' => $actualMinutes,
+            'balanceMinutes' => $actualMinutes - $expectedMinutes,
+            'firstDate' => $firstDate->format('Y-m-d'),
+            'weeksCount' => $weeksDiff,
+        );
+    }
+
     public static function prepareCalendarMonth(int $memberId, ?string $monthKey = null): array
     {
         if ($memberId <= 0) {
@@ -1610,13 +1835,15 @@ final class HoursPage
                     $label = sprintf(__('Membre #%d', 'mj-member'), $id);
                 }
 
-                $workSchedule = isset($row->work_schedule) ? (string) $row->work_schedule : '';
-                $weeklyContractMinutes = self::calculateWeeklyContractMinutesFromSchedule($workSchedule);
+                $workScheduleRaw = isset($row->work_schedule) ? (string) $row->work_schedule : '';
+                $sanitizedSchedule = self::sanitizeWorkScheduleFromString($workScheduleRaw);
+                $weeklyContractMinutes = self::calculateWeeklyContractMinutesFromSchedule($workScheduleRaw);
 
                 $labels[$id] = array(
                     'label' => $label,
                     'weekly_contract_minutes' => $weeklyContractMinutes,
                     'weekly_contract_human' => self::formatDuration($weeklyContractMinutes),
+                    'work_schedule' => $sanitizedSchedule,
                 );
             }
         }
@@ -1803,6 +2030,80 @@ final class HoursPage
         }
 
         return '';
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    private static function hourEncodeLabels(): array
+    {
+        return array(
+            'title' => __('Encodage des Heures de Travail', 'mj-member'),
+            'subtitle' => __('Enregistrez et suivez vos heures de travail pour la semaine.', 'mj-member'),
+            'weekRange' => __('Semaine du %s au %s', 'mj-member'),
+            'previousWeek' => __('Semaine précédente', 'mj-member'),
+            'nextWeek' => __('Semaine suivante', 'mj-member'),
+            'today' => __('Aujourd’hui', 'mj-member'),
+            'currentTime' => __('Maintenant', 'mj-member'),
+            'calendarTitle' => __('Calendrier', 'mj-member'),
+            'calendarPrevious' => __('Mois précédent', 'mj-member'),
+            'calendarNext' => __('Mois suivant', 'mj-member'),
+            'calendarWeekHours' => __('Heures', 'mj-member'),
+            'calendarEventsTitle' => __('Événements & fermetures', 'mj-member'),
+            'calendarEventsEmpty' => __('Aucun événement ou fermeture cette semaine.', 'mj-member'),
+            'calendarClosureTitle' => __('Fermeture', 'mj-member'),
+            'calendarClosureAllDay' => __('Toute la journée', 'mj-member'),
+            'calendarEventLabel' => __('Événement', 'mj-member'),
+            'totalWeek' => __('Total semaine', 'mj-member'),
+            'totalMonth' => __('Total mois', 'mj-member'),
+            'totalYear' => __('Total année', 'mj-member'),
+            'totalLifetime' => __('Total cumulé', 'mj-member'),
+            'statsWeek' => __('Semaine', 'mj-member'),
+            'statsMonth' => __('Mois', 'mj-member'),
+            'statsYear' => __('Année', 'mj-member'),
+            'statsTotal' => __('Total', 'mj-member'),
+            'export' => __('Exporter', 'mj-member'),
+            'hoursShort' => __('h', 'mj-member'),
+            'minutesShort' => __('min', 'mj-member'),
+            'emptyCalendar' => __('Le calendrier se chargera une fois les données récupérées.', 'mj-member'),
+            'suggestedTasks' => __('Tâches suggérées', 'mj-member'),
+            'pinnedProjects' => __('Projets épinglés', 'mj-member'),
+            'weekProjectsOnly' => __('Afficher uniquement les projets de la semaine', 'mj-member'),
+            'noWeeklyProjects' => __('Aucun projet encodé cette semaine.', 'mj-member'),
+            'projectPlaceholder' => __('Ajouter un projet…', 'mj-member'),
+            'addProjectAction' => __('Ajouter', 'mj-member'),
+            'addProjectShort' => __('Ajouter', 'mj-member'),
+            'loading' => __('Chargement…', 'mj-member'),
+            'noEvents' => __('Aucun événement planifié pour cette semaine.', 'mj-member'),
+            'fetchError' => __('Impossible de charger les données de la semaine.', 'mj-member'),
+            'noTasks' => __('Aucune suggestion disponible pour le moment.', 'mj-member'),
+            'noProjects' => __('Aucun projet enregistré pour le moment.', 'mj-member'),
+            'selectionTitle' => __('Encoder une nouvelle plage', 'mj-member'),
+            'selectionEditTitle' => __('Modifier la plage encodée', 'mj-member'),
+            'selectionDescription' => '',
+            'selectionTaskLabel' => __('Intitulé de la tâche', 'mj-member'),
+            'selectionProjectLabel' => __('Projet associé', 'mj-member'),
+            'selectionStartLabel' => __('Début', 'mj-member'),
+            'selectionEndLabel' => __('Fin', 'mj-member'),
+            'selectionDurationLabel' => __('Durée estimée', 'mj-member'),
+            'selectionConfirm' => __('Encoder cette plage', 'mj-member'),
+            'selectionUpdate' => __('Mettre à jour la plage', 'mj-member'),
+            'selectionCancel' => __('Annuler', 'mj-member'),
+            'selectionErrorRange' => __('Veuillez choisir une heure de fin postérieure à l’heure de début.', 'mj-member'),
+            'selectionErrorTask' => __('Veuillez saisir un intitulé.', 'mj-member'),
+            'selectionErrorOverlap' => __('Une plage est déjà encodée sur ces horaires.', 'mj-member'),
+            'selectionDelete' => __('Supprimer', 'mj-member'),
+            'selectionDeleteConfirm' => __('Voulez-vous vraiment supprimer cette plage ?', 'mj-member'),
+            'selectionDeleteSuccess' => __('Plage supprimée avec succès.', 'mj-member'),
+            'projectWithoutLabel' => __('Sans projet', 'mj-member'),
+            'selectProjectForTasks' => __('Sélectionnez un projet pour afficher les tâches associées.', 'mj-member'),
+            'projectTasksEmpty' => __('Aucune tâche enregistrée pour ce projet.', 'mj-member'),
+            'contractualHours' => __('Heures contractuelles', 'mj-member'),
+            'weekDifference' => __('Différence semaine', 'mj-member'),
+            'cumulativeDifference' => __('Solde cumulé', 'mj-member'),
+            'hoursToRecover' => __('à récupérer', 'mj-member'),
+            'hoursExtra' => __('en plus', 'mj-member'),
+        );
     }
 
     /**

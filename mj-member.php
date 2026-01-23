@@ -3,16 +3,21 @@
 /*
 Plugin Name: MJ Member
 Plugin URI: https://mj-pery.be
-Description: Gestion des membres avec table CRUD
-Version: 1.9.7
+Description: Gestion centralisée des membres, événements, inscriptions, paiements et communications de la MJ de Pery.
+Version: 2.21.0
+Requires at least: 6.4
+Tested up to: 6.4
+Requires PHP: 7.4
 Author: Simon
-Author URI: https://mj-pery.be
+Author URI: https://github.com/mjpery-beep/mj_member
 License: GPL2
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Text Domain: mj-member
-
+Domain Path: /languages
+Update URI: false
 
 */
+
 // Exit if accessed directly
 if ( ! defined( 'ABSPATH' ) ) {
     exit;

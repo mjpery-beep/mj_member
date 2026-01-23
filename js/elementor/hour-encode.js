@@ -183,6 +183,37 @@
                     if (!config.ajax.action && config.ajax.weekAction) {
                         config.ajax.action = config.ajax.weekAction;
                     }
+                    var staticParams = Object.create(null);
+                    if (config.ajax.staticParams && typeof config.ajax.staticParams === 'object') {
+                        Object.keys(config.ajax.staticParams).forEach(function(key) {
+                            if (typeof key !== 'string' || key === '') {
+                                return;
+                            }
+                            var value = config.ajax.staticParams[key];
+                            if (value === null || typeof value === 'undefined') {
+                                return;
+                            }
+                            if (Array.isArray(value)) {
+                                var cleaned = value.map(function(item) {
+                                    if (item === null || typeof item === 'undefined') {
+                                        return '';
+                                    }
+                                    return String(item);
+                                }).filter(function(item) {
+                                    return item !== '';
+                                });
+                                if (cleaned.length > 0) {
+                                    staticParams[key] = cleaned;
+                                }
+                            } else if (typeof value !== 'object') {
+                                var stringValue = String(value);
+                                if (stringValue !== '') {
+                                    staticParams[key] = stringValue;
+                                }
+                            }
+                        });
+                    }
+                    config.ajax.staticParams = staticParams;
                     config.entries = Array.isArray(config.entries) ? config.entries : [];
                     config.commonTasks = Array.isArray(config.commonTasks) ? config.commonTasks : [];
                     config.projects = Array.isArray(config.projects) ? config.projects : [];
@@ -262,6 +293,34 @@
                     config.isPreview = Boolean(config.isPreview);
 
                     return config;
+                }
+
+                function appendStaticParams(params, staticParams) {
+                    if (!params || typeof params.append !== 'function') {
+                        return;
+                    }
+                    if (!staticParams || typeof staticParams !== 'object') {
+                        return;
+                    }
+                    Object.keys(staticParams).forEach(function(key) {
+                        if (typeof key !== 'string' || key === '') {
+                            return;
+                        }
+                        var value = staticParams[key];
+                        if (value === null || typeof value === 'undefined') {
+                            return;
+                        }
+                        if (Array.isArray(value)) {
+                            value.forEach(function(item) {
+                                if (item === null || typeof item === 'undefined') {
+                                    return;
+                                }
+                                params.append(key, String(item));
+                            });
+                        } else {
+                            params.append(key, String(value));
+                        }
+                    });
                 }
 
                 function isString(value) {
@@ -5080,6 +5139,7 @@
                             params.append('action', action);
                             params.append('nonce', config.ajax.nonce || '');
                             params.append('week', normalizedWeek);
+                            appendStaticParams(params, config.ajax.staticParams);
 
                             return fetch(config.ajax.url, {
                                 method: 'POST',
@@ -5637,6 +5697,7 @@
                                     params.append('project_key', targetKey);
                                     params.append('old_label', previousValue);
                                     params.append('new_label', nextValue);
+                                    appendStaticParams(params, config.ajax.staticParams);
 
                                     setLoading(true);
 
@@ -5782,6 +5843,7 @@
                                     params.append('nonce', renameNonce);
                                     params.append('old_label', previousTaskValue);
                                     params.append('new_label', nextValue);
+                                    appendStaticParams(params, config.ajax.staticParams);
 
                                     setLoading(true);
 
@@ -5876,6 +5938,7 @@
                                 params.append('task_label', taskName);
                                 params.append('source_project', sourceProjectValue);
                                 params.append('target_project', targetProjectValue);
+                                appendStaticParams(params, config.ajax.staticParams);
 
                                 fetch(config.ajax.url, {
                                     method: 'POST',
@@ -6017,6 +6080,7 @@
                                 params.append('task', taskLabel);
                                 params.append('project', targetProjectValue);
                                 params.append('week', weekStart);
+                                appendStaticParams(params, config.ajax.staticParams);
 
                                 setLoading(true);
 
@@ -6238,6 +6302,7 @@
                             if (isEditing && selectedSlot.hourId) {
                                 params.append('entry_id', String(selectedSlot.hourId));
                             }
+                            appendStaticParams(params, config.ajax.staticParams);
 
                             fetch(config.ajax.url, {
                                 method: 'POST',
@@ -6396,6 +6461,7 @@
                             params.append('nonce', config.ajax.nonce || '');
                             params.append('entry_id', String(hourId));
                             params.append('week', weekStart);
+                            appendStaticParams(params, config.ajax.staticParams);
 
                             fetch(config.ajax.url, {
                                 method: 'POST',

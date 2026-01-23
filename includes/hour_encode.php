@@ -21,6 +21,68 @@ add_action('wp_ajax_mj_member_hour_encode_rename_project', 'mj_member_ajax_hour_
 add_action('wp_ajax_mj_member_hour_encode_rename_task', 'mj_member_ajax_hour_encode_rename_task');
 add_action('wp_ajax_mj_member_hour_encode_move_task_to_project', 'mj_member_ajax_hour_encode_move_task_to_project');
 
+function mj_member_hour_encode_user_can_manage_others() {
+    if (current_user_can('manage_options')) {
+        return true;
+    }
+
+    $managerCapability = Config::capability();
+    return $managerCapability !== '' && current_user_can($managerCapability);
+}
+
+function mj_member_hour_encode_resolve_target_member_id($userId) {
+    $userId = (int) $userId;
+    if ($userId <= 0) {
+        return new WP_Error('mj_member_invalid_user', __('Utilisateur non authentifié.', 'mj-member'));
+    }
+
+    $overrideRaw = '';
+    if (isset($_POST['member_id'])) {
+        $overrideRaw = sanitize_text_field(wp_unslash((string) $_POST['member_id']));
+    }
+    $overrideMemberId = $overrideRaw !== '' ? (int) $overrideRaw : 0;
+
+    if ($overrideMemberId > 0) {
+        if (!mj_member_hour_encode_user_can_manage_others()) {
+            return new WP_Error('mj_member_forbidden_override', __('Vous ne pouvez pas encoder pour ce membre.', 'mj-member'));
+        }
+
+        $overrideMember = MjMembers::getById($overrideMemberId);
+        if (!is_object($overrideMember) || empty($overrideMember->id)) {
+            return new WP_Error('mj_member_unknown_member', __('Membre cible introuvable.', 'mj-member'));
+        }
+
+        return (int) $overrideMember->id;
+    }
+
+    $memberRow = MjMembers::getByWpUserId($userId);
+    if (!is_object($memberRow) || empty($memberRow->id)) {
+        return new WP_Error('mj_member_member_missing', __('Impossible de déterminer le membre associé.', 'mj-member'));
+    }
+
+    return (int) $memberRow->id;
+}
+
+function mj_member_hour_encode_handle_member_error(WP_Error $error) {
+    $status = 400;
+
+    switch ($error->get_error_code()) {
+        case 'mj_member_invalid_user':
+            $status = 401;
+            break;
+        case 'mj_member_forbidden_override':
+            $status = 403;
+            break;
+        case 'mj_member_unknown_member':
+            $status = 404;
+            break;
+        default:
+            $status = 400;
+    }
+
+    wp_send_json_error(array('message' => $error->get_error_message()), $status);
+}
+
 /**
  * Retourne les événements planifiés pour la semaine demandée.
  */
@@ -41,15 +103,11 @@ function mj_member_ajax_hour_encode_week() {
         wp_send_json_error(array('message' => __('Utilisateur non authentifié.', 'mj-member')), 401);
     }
 
-    $memberRow = MjMembers::getByWpUserId($userId);
-    if (!$memberRow || empty($memberRow->id)) {
-        wp_send_json_error(array('message' => __('Impossible de déterminer le membre associé.', 'mj-member')), 400);
+    $memberIdResult = mj_member_hour_encode_resolve_target_member_id($userId);
+    if (is_wp_error($memberIdResult)) {
+        mj_member_hour_encode_handle_member_error($memberIdResult);
     }
-
-    $memberId = (int) $memberRow->id;
-    if ($memberId <= 0) {
-        wp_send_json_error(array('message' => __('Profil membre invalide.', 'mj-member')), 400);
-    }
+    $memberId = (int) $memberIdResult;
 
     $weekParam = isset($_POST['week']) ? sanitize_text_field(wp_unslash($_POST['week'])) : '';
     $timezone = wp_timezone();
@@ -136,15 +194,11 @@ function mj_member_ajax_hour_encode_create() {
         error_log('[mj-member][hour-encode] create request: ' . wp_json_encode($rawPayload));
     }
 
-    $memberRow = MjMembers::getByWpUserId($userId);
-    if (!$memberRow || empty($memberRow->id)) {
-        wp_send_json_error(array('message' => __('Impossible de déterminer le membre associé.', 'mj-member')), 400);
+    $memberIdResult = mj_member_hour_encode_resolve_target_member_id($userId);
+    if (is_wp_error($memberIdResult)) {
+        mj_member_hour_encode_handle_member_error($memberIdResult);
     }
-
-    $memberId = (int) $memberRow->id;
-    if ($memberId <= 0) {
-        wp_send_json_error(array('message' => __('Profil membre invalide.', 'mj-member')), 400);
-    }
+    $memberId = (int) $memberIdResult;
 
     if (!class_exists(MjMemberHours::class)) {
         wp_send_json_error(array('message' => __('Enregistrement des heures indisponible.', 'mj-member')), 500);
@@ -266,15 +320,11 @@ function mj_member_ajax_hour_encode_rename_project() {
         wp_send_json_error(array('message' => __('Fonctionnalité indisponible.', 'mj-member')), 500);
     }
 
-    $memberRow = MjMembers::getByWpUserId($userId);
-    if (!$memberRow || empty($memberRow->id)) {
-        wp_send_json_error(array('message' => __('Impossible de déterminer le membre associé.', 'mj-member')), 400);
+    $memberIdResult = mj_member_hour_encode_resolve_target_member_id($userId);
+    if (is_wp_error($memberIdResult)) {
+        mj_member_hour_encode_handle_member_error($memberIdResult);
     }
-
-    $memberId = (int) $memberRow->id;
-    if ($memberId <= 0) {
-        wp_send_json_error(array('message' => __('Profil membre invalide.', 'mj-member')), 400);
-    }
+    $memberId = (int) $memberIdResult;
 
     $projectKey = isset($_POST['project_key']) ? sanitize_text_field(wp_unslash((string) $_POST['project_key'])) : '';
     $oldLabel = isset($_POST['old_label']) ? sanitize_text_field(wp_unslash((string) $_POST['old_label'])) : '';
@@ -324,15 +374,11 @@ function mj_member_ajax_hour_encode_rename_task() {
         wp_send_json_error(array('message' => __('Fonctionnalité indisponible.', 'mj-member')), 500);
     }
 
-    $memberRow = MjMembers::getByWpUserId($userId);
-    if (!$memberRow || empty($memberRow->id)) {
-        wp_send_json_error(array('message' => __('Impossible de déterminer le membre associé.', 'mj-member')), 400);
+    $memberIdResult = mj_member_hour_encode_resolve_target_member_id($userId);
+    if (is_wp_error($memberIdResult)) {
+        mj_member_hour_encode_handle_member_error($memberIdResult);
     }
-
-    $memberId = (int) $memberRow->id;
-    if ($memberId <= 0) {
-        wp_send_json_error(array('message' => __('Profil membre invalide.', 'mj-member')), 400);
-    }
+    $memberId = (int) $memberIdResult;
 
     $oldLabel = isset($_POST['old_label']) ? sanitize_text_field(wp_unslash((string) $_POST['old_label'])) : '';
     $newLabel = isset($_POST['new_label']) ? sanitize_text_field(wp_unslash((string) $_POST['new_label'])) : '';
@@ -374,15 +420,11 @@ function mj_member_ajax_hour_encode_move_task_to_project() {
         wp_send_json_error(array('message' => __('Fonctionnalité indisponible.', 'mj-member')), 500);
     }
 
-    $memberRow = MjMembers::getByWpUserId($userId);
-    if (!$memberRow || empty($memberRow->id)) {
-        wp_send_json_error(array('message' => __('Impossible de déterminer le membre associé.', 'mj-member')), 400);
+    $memberIdResult = mj_member_hour_encode_resolve_target_member_id($userId);
+    if (is_wp_error($memberIdResult)) {
+        mj_member_hour_encode_handle_member_error($memberIdResult);
     }
-
-    $memberId = (int) $memberRow->id;
-    if ($memberId <= 0) {
-        wp_send_json_error(array('message' => __('Profil membre invalide.', 'mj-member')), 400);
-    }
+    $memberId = (int) $memberIdResult;
 
     $taskLabel = isset($_POST['task_label']) ? sanitize_text_field(wp_unslash((string) $_POST['task_label'])) : '';
     $sourceProject = isset($_POST['source_project']) ? sanitize_text_field(wp_unslash((string) $_POST['source_project'])) : '';
@@ -428,15 +470,11 @@ function mj_member_ajax_hour_encode_update() {
         wp_send_json_error(array('message' => __('Utilisateur non authentifié.', 'mj-member')), 401);
     }
 
-    $memberRow = MjMembers::getByWpUserId($userId);
-    if (!$memberRow || empty($memberRow->id)) {
-        wp_send_json_error(array('message' => __('Impossible de déterminer le membre associé.', 'mj-member')), 400);
+    $memberIdResult = mj_member_hour_encode_resolve_target_member_id($userId);
+    if (is_wp_error($memberIdResult)) {
+        mj_member_hour_encode_handle_member_error($memberIdResult);
     }
-
-    $memberId = (int) $memberRow->id;
-    if ($memberId <= 0) {
-        wp_send_json_error(array('message' => __('Profil membre invalide.', 'mj-member')), 400);
-    }
+    $memberId = (int) $memberIdResult;
 
     if (!class_exists(MjMemberHours::class)) {
         wp_send_json_error(array('message' => __('Enregistrement des heures indisponible.', 'mj-member')), 500);
@@ -552,15 +590,11 @@ function mj_member_ajax_hour_encode_delete() {
         wp_send_json_error(array('message' => __('Utilisateur non authentifié.', 'mj-member')), 401);
     }
 
-    $memberRow = MjMembers::getByWpUserId($userId);
-    if (!$memberRow || empty($memberRow->id)) {
-        wp_send_json_error(array('message' => __('Impossible de déterminer le membre associé.', 'mj-member')), 400);
+    $memberIdResult = mj_member_hour_encode_resolve_target_member_id($userId);
+    if (is_wp_error($memberIdResult)) {
+        mj_member_hour_encode_handle_member_error($memberIdResult);
     }
-
-    $memberId = (int) $memberRow->id;
-    if ($memberId <= 0) {
-        wp_send_json_error(array('message' => __('Profil membre invalide.', 'mj-member')), 400);
-    }
+    $memberId = (int) $memberIdResult;
 
     if (!class_exists(MjMemberHours::class)) {
         wp_send_json_error(array('message' => __('Enregistrement des heures indisponible.', 'mj-member')), 500);

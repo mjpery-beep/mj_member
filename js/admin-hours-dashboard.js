@@ -679,6 +679,66 @@ function MembersTable({ members, totals, i18n }) {
     );
 }
 
+function HourEncodeEmbed({ config, configJson, panelId, labelledBy, emptyLabel }) {
+    var containerRef = useRef(null);
+
+    useEffect(function () {
+        if (!config || !configJson) {
+            return undefined;
+        }
+
+        if (typeof document === 'undefined') {
+            return undefined;
+        }
+
+        var container = containerRef.current;
+        if (!container) {
+            return undefined;
+        }
+
+        var destroyEvent = new CustomEvent('mj-member-hour-encode:destroy', { detail: { context: container } });
+        document.dispatchEvent(destroyEvent);
+        container.innerHTML = '';
+
+        var widgetElement = document.createElement('div');
+        widgetElement.className = 'mj-hour-encode';
+        widgetElement.setAttribute('data-config', configJson);
+        container.appendChild(widgetElement);
+
+        var initEvent = new CustomEvent('mj-member-hour-encode:init', { detail: { context: container } });
+        document.dispatchEvent(initEvent);
+
+        return function cleanup() {
+            var cleanupEvent = new CustomEvent('mj-member-hour-encode:destroy', { detail: { context: container } });
+            document.dispatchEvent(cleanupEvent);
+            container.innerHTML = '';
+        };
+    }, [config, configJson]);
+
+    var panelProps = {
+        className: 'mj-hours-dashboard-card mj-hours-dashboard__editor-card',
+    };
+
+    if (panelId) {
+        panelProps.id = panelId;
+    }
+
+    if (labelledBy) {
+        panelProps.role = 'tabpanel';
+        panelProps['aria-labelledby'] = labelledBy;
+    }
+
+    if (!config || !configJson) {
+        return h('div', panelProps,
+            h('p', { className: 'mj-hours-dashboard__empty' }, emptyLabel || 'Impossible de charger l’éditeur pour ce membre.')
+        );
+    }
+
+    return h('div', panelProps,
+        h('div', { ref: containerRef, className: 'mj-hours-dashboard__editor-widget' })
+    );
+}
+
 function DashboardApp({ config }) {
     var data = config.data || {};
     var i18n = config.i18n || {};
@@ -693,6 +753,7 @@ function DashboardApp({ config }) {
 
     var defaultMemberId = members.length > 0 ? members[0].id : 0;
     var [selectedMemberId, setSelectedMemberId] = useState(defaultMemberId);
+    var [activeTab, setActiveTab] = useState('graphs');
 
     var selectedMember = useMemo(function () {
         if (!Array.isArray(members)) {
@@ -702,6 +763,8 @@ function DashboardApp({ config }) {
             return member.id === selectedMemberId;
         }) || null;
     }, [members, selectedMemberId]);
+
+    var hourEncodeBase = (config && typeof config.hourEncode === 'object') ? config.hourEncode : null;
 
     var memberProjects = selectedMember && Array.isArray(selectedMember.projects) ? selectedMember.projects : [];
     var memberTotalMinutes = selectedMember ? Math.max(selectedMember.minutes || 0, 0) : 0;
@@ -789,6 +852,92 @@ function DashboardApp({ config }) {
         projectsDonutTitle = baseProjectsTitle;
     }
 
+    var canShowEditTab = Boolean(hourEncodeBase && selectedMember && selectedMemberId);
+    useEffect(function () {
+        if (!canShowEditTab && activeTab !== 'graphs') {
+            setActiveTab('graphs');
+        }
+    }, [canShowEditTab, activeTab]);
+
+    var editConfig = useMemo(function () {
+        if (!hourEncodeBase || !selectedMember || !selectedMemberId) {
+            return null;
+        }
+
+        var ajaxConfig = Object.assign({}, hourEncodeBase.ajax || {});
+        var staticParams = Object.assign({}, ajaxConfig.staticParams || {});
+        staticParams.member_id = String(selectedMemberId);
+        ajaxConfig.staticParams = staticParams;
+
+        var labelsConfig = Object.assign({}, hourEncodeBase.labels || {});
+        if (selectedMember.label) {
+            var baseTitle = typeof (hourEncodeBase.labels && hourEncodeBase.labels.title) === 'string'
+                ? hourEncodeBase.labels.title
+                : '';
+            labelsConfig.title = baseTitle !== '' ? baseTitle + ' · ' + selectedMember.label : selectedMember.label;
+        }
+
+        var projectSuggestions = Array.isArray(selectedMember.projects)
+            ? selectedMember.projects.map(function (project) {
+                if (!project || typeof project !== 'object') {
+                    return '';
+                }
+                if (project.raw_label) {
+                    return String(project.raw_label);
+                }
+                if (!project.is_unassigned && project.label) {
+                    return String(project.label);
+                }
+                return '';
+            })
+            : [];
+
+        if ((!Array.isArray(projectSuggestions) || projectSuggestions.length === 0) && Array.isArray(hourEncodeBase.projects)) {
+            projectSuggestions = hourEncodeBase.projects;
+        }
+
+        var uniqueProjects = Array.from(new Set(
+            (Array.isArray(projectSuggestions) ? projectSuggestions : []).map(function (name) {
+                return typeof name === 'string' ? name.trim() : '';
+            }).filter(function (name) {
+                return name !== '';
+            })
+        ));
+
+        var workSchedule = Array.isArray(selectedMember.work_schedule) ? selectedMember.work_schedule : (hourEncodeBase.workSchedule || []);
+        var cumulativeBalance = (selectedMember.cumulative_balance && typeof selectedMember.cumulative_balance === 'object')
+            ? selectedMember.cumulative_balance
+            : null;
+
+        var capabilities = Object.assign({}, hourEncodeBase.capabilities || {}, {
+            canManage: true,
+        });
+
+        return Object.assign({}, hourEncodeBase, {
+            ajax: ajaxConfig,
+            labels: labelsConfig,
+            projects: uniqueProjects,
+            entries: [],
+            events: [],
+            projectTotals: hourEncodeBase.projectTotals || [],
+            workSchedule: workSchedule,
+            cumulativeBalance: cumulativeBalance,
+            capabilities: capabilities,
+        });
+    }, [hourEncodeBase, selectedMember, selectedMemberId]);
+
+    var editConfigJson = useMemo(function () {
+        if (!editConfig) {
+            return null;
+        }
+        try {
+            return JSON.stringify(editConfig);
+        } catch (error) {
+            console.error('MJ Member Hours dashboard failed to serialise edit config', error);
+            return null;
+        }
+    }, [editConfig]);
+
     return h('div', { className: 'mj-hours-dashboard__content' },
         h(SummaryCards, { totals: totals, i18n: i18n }),
         h(MemberSelector, {
@@ -798,32 +947,72 @@ function DashboardApp({ config }) {
             label: i18n.memberSelectLabel,
             helper: i18n.memberSelectHelper,
         }),
-        h(DonutChart, {
-            title: projectsDonutTitle,
-            items: donutItems,
-            totalMinutes: donutTotalMinutes,
-            centerValue: donutCenterValue,
-            centerLabel: donutCenterLabel,
-            i18n: i18n,
-            emptyLabel: i18n.noProjectsForMember,
-        }),
-        h('div', { className: 'mj-hours-dashboard__grid mj-hours-dashboard__grid--timeseries' },
-            h(BarChart, {
-                title: monthlyTitle,
-                subtitle: monthlySubtitle,
-                items: monthlySeries,
+        canShowEditTab ? h('div', { className: 'mj-hours-dashboard__tabs', role: 'tablist' },
+            h('button', {
+                type: 'button',
+                id: 'mj-hours-dashboard-tab-graphs',
+                role: 'tab',
+                'aria-selected': activeTab === 'graphs' ? 'true' : 'false',
+                'aria-controls': 'mj-hours-dashboard-panel-graphs',
+                tabIndex: activeTab === 'graphs' ? 0 : -1,
+                className: 'mj-hours-dashboard__tab' + (activeTab === 'graphs' ? ' mj-hours-dashboard__tab--active' : ''),
+                onClick: function () {
+                    setActiveTab('graphs');
+                },
+            }, i18n.graphsTabLabel || 'Graphiques'),
+            h('button', {
+                type: 'button',
+                id: 'mj-hours-dashboard-tab-edit',
+                role: 'tab',
+                'aria-selected': activeTab === 'edit' ? 'true' : 'false',
+                'aria-controls': 'mj-hours-dashboard-panel-edit',
+                tabIndex: activeTab === 'edit' ? 0 : -1,
+                className: 'mj-hours-dashboard__tab' + (activeTab === 'edit' ? ' mj-hours-dashboard__tab--active' : ''),
+                onClick: function () {
+                    setActiveTab('edit');
+                },
+            }, i18n.editTabLabel || 'Éditer les heures')
+        ) : null,
+        (!canShowEditTab || activeTab === 'graphs') ? h('div', {
+            className: 'mj-hours-dashboard__graphs',
+            id: canShowEditTab ? 'mj-hours-dashboard-panel-graphs' : undefined,
+            role: canShowEditTab ? 'tabpanel' : undefined,
+            'aria-labelledby': canShowEditTab ? 'mj-hours-dashboard-tab-graphs' : undefined,
+        },
+            h(DonutChart, {
+                title: projectsDonutTitle,
+                items: donutItems,
+                totalMinutes: donutTotalMinutes,
+                centerValue: donutCenterValue,
+                centerLabel: donutCenterLabel,
                 i18n: i18n,
-                emptyLabel: i18n.barChartEmpty,
+                emptyLabel: i18n.noProjectsForMember,
             }),
-            h(BarChart, {
-                title: weeklyTitle,
-                subtitle: weeklySubtitle,
-                items: weeklySeries,
-                i18n: i18n,
-                emptyLabel: i18n.barChartEmpty,
-            })
-        ),
-        h(MembersTable, { members: members, totals: totals, i18n: i18n })
+            h('div', { className: 'mj-hours-dashboard__grid mj-hours-dashboard__grid--timeseries' },
+                h(BarChart, {
+                    title: monthlyTitle,
+                    subtitle: monthlySubtitle,
+                    items: monthlySeries,
+                    i18n: i18n,
+                    emptyLabel: i18n.barChartEmpty,
+                }),
+                h(BarChart, {
+                    title: weeklyTitle,
+                    subtitle: weeklySubtitle,
+                    items: weeklySeries,
+                    i18n: i18n,
+                    emptyLabel: i18n.barChartEmpty,
+                })
+            ),
+            h(MembersTable, { members: members, totals: totals, i18n: i18n })
+        ) : null,
+        (canShowEditTab && activeTab === 'edit') ? h(HourEncodeEmbed, {
+            config: editConfig,
+            configJson: editConfigJson,
+            panelId: 'mj-hours-dashboard-panel-edit',
+            labelledBy: 'mj-hours-dashboard-tab-edit',
+            emptyLabel: i18n.editTabError || 'Impossible de charger l’éditeur pour ce membre.',
+        }) : null
     );
 }
 

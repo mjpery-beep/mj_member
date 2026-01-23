@@ -425,6 +425,53 @@ function mj_member_get_contact_message_recipients_table_name() {
     global $wpdb;
     return $wpdb->prefix . 'mj_contact_message_recipients';
 }
+
+function mj_member_get_notifications_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_notifications',
+        $wpdb->prefix . 'notifications',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
+function mj_member_get_notification_recipients_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_notification_recipients',
+        $wpdb->prefix . 'notification_recipients',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
 function mj_member_ensure_auxiliary_tables() {
     global $wpdb;
     if ( ! function_exists('dbDelta') ) {
@@ -844,6 +891,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_40($wpdb);
     mj_member_upgrade_to_2_41($wpdb);
     mj_member_upgrade_to_2_42($wpdb);
+    mj_member_upgrade_to_2_43($wpdb);
     mj_member_upgrade_to_2_7($wpdb);
     mj_member_upgrade_to_2_8($wpdb);
     mj_member_upgrade_to_2_9($wpdb);
@@ -2592,6 +2640,131 @@ function mj_member_upgrade_to_2_42($wpdb) {
         }
 
         $offset += $batch;
+    }
+}
+
+function mj_member_upgrade_to_2_43($wpdb) {
+    $notifications_table = mj_member_get_notifications_table_name();
+    $recipients_table = mj_member_get_notification_recipients_table_name();
+
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql_notifications = "CREATE TABLE {$notifications_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        uid varchar(64) NOT NULL,
+        type varchar(60) NOT NULL,
+        status varchar(20) NOT NULL DEFAULT 'published',
+        priority smallint(5) unsigned NOT NULL DEFAULT 0,
+        title varchar(255) NOT NULL DEFAULT '',
+        excerpt text DEFAULT NULL,
+        payload longtext DEFAULT NULL,
+        url varchar(500) DEFAULT NULL,
+        context varchar(120) DEFAULT NULL,
+        source varchar(120) DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        expires_at datetime DEFAULT NULL,
+        PRIMARY KEY  (id),
+        UNIQUE KEY uid (uid),
+        KEY idx_type (type),
+        KEY idx_status (status),
+        KEY idx_priority (priority),
+        KEY idx_created_at (created_at),
+        KEY idx_expires_at (expires_at)
+    ) {$charset_collate};";
+
+    dbDelta($sql_notifications);
+
+    $sql_recipients = "CREATE TABLE {$recipients_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        notification_id bigint(20) unsigned NOT NULL,
+        member_id bigint(20) unsigned DEFAULT NULL,
+        user_id bigint(20) unsigned DEFAULT NULL,
+        role varchar(30) DEFAULT NULL,
+        status varchar(20) NOT NULL DEFAULT 'unread',
+        read_at datetime DEFAULT NULL,
+        delivered_at datetime DEFAULT NULL,
+        extra_meta longtext DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY idx_notification (notification_id),
+        KEY idx_member_status (member_id, status),
+        KEY idx_user_status (user_id, status),
+        KEY idx_role_status (role, status),
+        CONSTRAINT fk_mj_notification_recipient FOREIGN KEY (notification_id) REFERENCES {$notifications_table} (id) ON DELETE CASCADE
+    ) {$charset_collate};";
+
+    dbDelta($sql_recipients);
+
+    if (mj_member_table_exists($notifications_table)) {
+        mj_member_convert_table_to_utf8mb4($notifications_table);
+
+        if (!mj_member_column_exists($notifications_table, 'uid')) {
+            $wpdb->query("ALTER TABLE {$notifications_table} ADD COLUMN uid varchar(64) NOT NULL AFTER id");
+        }
+
+        if (!mj_member_index_exists($notifications_table, 'uid')) {
+            $wpdb->query("ALTER TABLE {$notifications_table} ADD UNIQUE KEY uid (uid)");
+        }
+
+        if (!mj_member_index_exists($notifications_table, 'idx_type')) {
+            $wpdb->query("ALTER TABLE {$notifications_table} ADD KEY idx_type (type)");
+        }
+
+        if (!mj_member_index_exists($notifications_table, 'idx_status')) {
+            $wpdb->query("ALTER TABLE {$notifications_table} ADD KEY idx_status (status)");
+        }
+
+        if (!mj_member_index_exists($notifications_table, 'idx_priority')) {
+            $wpdb->query("ALTER TABLE {$notifications_table} ADD KEY idx_priority (priority)");
+        }
+
+        if (!mj_member_index_exists($notifications_table, 'idx_created_at')) {
+            $wpdb->query("ALTER TABLE {$notifications_table} ADD KEY idx_created_at (created_at)");
+        }
+
+        if (!mj_member_index_exists($notifications_table, 'idx_expires_at')) {
+            $wpdb->query("ALTER TABLE {$notifications_table} ADD KEY idx_expires_at (expires_at)");
+        }
+    }
+
+    if (mj_member_table_exists($recipients_table)) {
+        mj_member_convert_table_to_utf8mb4($recipients_table);
+
+        if (!mj_member_column_exists($recipients_table, 'status')) {
+            $wpdb->query("ALTER TABLE {$recipients_table} ADD COLUMN status varchar(20) NOT NULL DEFAULT 'unread' AFTER role");
+        }
+
+        if (!mj_member_index_exists($recipients_table, 'idx_notification')) {
+            $wpdb->query("ALTER TABLE {$recipients_table} ADD KEY idx_notification (notification_id)");
+        }
+
+        if (!mj_member_index_exists($recipients_table, 'idx_member_status')) {
+            $wpdb->query("ALTER TABLE {$recipients_table} ADD KEY idx_member_status (member_id, status)");
+        }
+
+        if (!mj_member_index_exists($recipients_table, 'idx_user_status')) {
+            $wpdb->query("ALTER TABLE {$recipients_table} ADD KEY idx_user_status (user_id, status)");
+        }
+
+        if (!mj_member_index_exists($recipients_table, 'idx_role_status')) {
+            $wpdb->query("ALTER TABLE {$recipients_table} ADD KEY idx_role_status (role, status)");
+        }
+
+        $has_fk = $wpdb->get_var($wpdb->prepare(
+            "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND REFERENCED_TABLE_NAME = %s",
+            DB_NAME,
+            $recipients_table,
+            $notifications_table
+        ));
+
+        if (empty($has_fk)) {
+            $wpdb->query("ALTER TABLE {$recipients_table} ADD CONSTRAINT fk_mj_notification_recipient FOREIGN KEY (notification_id) REFERENCES {$notifications_table} (id) ON DELETE CASCADE");
+        }
     }
 }
 

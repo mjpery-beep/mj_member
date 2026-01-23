@@ -183,6 +183,53 @@
     color: #64748b;
 }
 
+.mj-hours-dashboard__tabs {
+    display: flex;
+    gap: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    margin-top: 1rem;
+}
+
+.mj-hours-dashboard__tab {
+    background: transparent;
+    border: none;
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #64748b;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.mj-hours-dashboard__tab:hover {
+    color: #1f2937;
+}
+
+.mj-hours-dashboard__tab:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+    border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.mj-hours-dashboard__tab--active {
+    color: #1f2937;
+    border-color: #3b82f6;
+}
+
+.mj-hours-dashboard__tab[disabled] {
+    cursor: default;
+    color: #cbd5f5;
+}
+
+.mj-hours-dashboard__editor-card {
+    padding: 1.5rem;
+}
+
+.mj-hours-dashboard__editor-card .mj-hour-encode {
+    width: 100%;
+}
+
 .mj-hours-dashboard__table-card {
     overflow: hidden;
 }
