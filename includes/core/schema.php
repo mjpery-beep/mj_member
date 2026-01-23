@@ -838,6 +838,10 @@ function mj_member_run_schema_upgrade() {
         ? mj_member_get_idea_votes_table_name()
         : $wpdb->prefix . 'mj_idea_votes';
 
+    $notifications_table = function_exists('mj_member_get_notifications_table_name')
+        ? mj_member_get_notifications_table_name()
+        : $wpdb->prefix . 'mj_notifications';
+
     $missing_todo_tables = array();
     if (!mj_member_table_exists($todo_projects_table)) {
         $missing_todo_tables[] = $todo_projects_table;
@@ -860,6 +864,10 @@ function mj_member_run_schema_upgrade() {
     }
     if (!mj_member_table_exists($idea_votes_table)) {
         $missing_idea_tables[] = $idea_votes_table;
+    }
+
+    if (!mj_member_table_exists($notifications_table)) {
+        $missing_idea_tables[] = $notifications_table;
     }
 
     $schema_needs_upgrade = version_compare($stored_version, Config::schemaVersion(), '<')
@@ -886,12 +894,6 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_4($wpdb);
     mj_member_upgrade_to_2_5($wpdb);
     mj_member_upgrade_to_2_6($wpdb);
-    mj_member_upgrade_to_2_38($wpdb);
-    mj_member_upgrade_to_2_39($wpdb);
-    mj_member_upgrade_to_2_40($wpdb);
-    mj_member_upgrade_to_2_41($wpdb);
-    mj_member_upgrade_to_2_42($wpdb);
-    mj_member_upgrade_to_2_43($wpdb);
     mj_member_upgrade_to_2_7($wpdb);
     mj_member_upgrade_to_2_8($wpdb);
     mj_member_upgrade_to_2_9($wpdb);
@@ -922,6 +924,12 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_35($wpdb);
     mj_member_upgrade_to_2_36($wpdb);
     mj_member_upgrade_to_2_37($wpdb);
+    mj_member_upgrade_to_2_38($wpdb);
+    mj_member_upgrade_to_2_39($wpdb);
+    mj_member_upgrade_to_2_40($wpdb);
+    mj_member_upgrade_to_2_41($wpdb);
+    mj_member_upgrade_to_2_42($wpdb);
+    mj_member_upgrade_to_2_43($wpdb);
     
     
     $registrations_table = mj_member_get_event_registrations_table_name();

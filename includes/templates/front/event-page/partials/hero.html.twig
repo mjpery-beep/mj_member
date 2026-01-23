@@ -9,6 +9,9 @@
 {% set display_label = hero.display_label|default('') %}
 {% set weekly_schedule = hero.weekly_schedule|default({}) %}
 {% set price_label = hero.price_label|default('') %}
+{% set inline_days = hero.inline_schedule_days|default([]) %}
+{% set next_occurrence = hero.next_occurrence|default({}) %}
+{% set next_occurrence_label = hero.next_occurrence_label|default('') %}
 
 <section class="mj-event-page__hero">
     <div class="mj-event-page__hero-content">
@@ -23,12 +26,49 @@
             {# Titre #}
             <h1 class="mj-event-page__title">{{ title }}</h1>
 
-            {% if hero.schedule_component %}
+            {% if inline_days|length > 0 %}
+                <p class="mj-event-page__schedule-inline">
+                    {% for day in inline_days %}
+                        <span class="mj-event-page__schedule-inline-item">
+                            <span class="mj-event-page__schedule-inline-day">{{ day.label }}</span>
+                            {% if day.time_range %}
+                                <svg class="mj-event-page__schedule-inline-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                <span class="mj-event-page__schedule-inline-time">{{ day.time_range }}</span>
+                            {% endif %}
+                        </span>
+                    {% endfor %}
+                </p>
+            {% elseif weekly_schedule.days is defined and weekly_schedule.days|length > 0 %}
+                <p class="mj-event-page__schedule-inline">
+                    {% for day in weekly_schedule.days %}
+                        <span class="mj-event-page__schedule-inline-item">
+                            <span class="mj-event-page__schedule-inline-day">{{ day.label }}</span>
+                            {% if day.time_range %}
+                                <svg class="mj-event-page__schedule-inline-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                <span class="mj-event-page__schedule-inline-time">{{ day.time_range }}</span>
+                            {% endif %}
+                        </span>
+                    {% endfor %}
+                </p>
+            {% elseif hero.schedule_component %}
                 {{ hero.schedule_component|raw }}
             {% elseif schedule_summary %}
                 <p class="mj-event-page__date">{{ schedule_summary }}</p>
             {% elseif display_label %}
                 <p class="mj-event-page__date">{{ display_label }}</p>
+            {% elseif next_occurrence_label %}
+                <p class="mj-event-page__date">{{ next_occurrence_label }}</p>
+            {% elseif next_occurrence.full_date %}
+                {% set time_range = '' %}
+                {% if next_occurrence.time_start %}
+                    {% set time_range = next_occurrence.time_start %}
+                    {% if next_occurrence.time_end and next_occurrence.time_end != next_occurrence.time_start %}
+                        {% set time_range = time_range ~ ' - ' ~ next_occurrence.time_end %}
+                    {% endif %}
+                {% endif %}
+                <p class="mj-event-page__date">
+                    {{ next_occurrence.full_date }}{% if time_range %} - {{ time_range }}{% endif %}
+                </p>
             {% endif %}
 
             {# Tarif #}

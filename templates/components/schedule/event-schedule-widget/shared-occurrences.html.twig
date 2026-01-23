@@ -20,7 +20,6 @@
                     <thead>
                         <tr>
                             <th>{{ strings.day }}</th>
-                            <th>{{ strings.date }}</th>
                             <th>{{ strings.time }}</th>
                         </tr>
                     </thead>
@@ -35,7 +34,6 @@
                             {% endif %}
                             <tr class="{{ row_classes|join(' ')|trim }}">
                                 <td>{{ entry.day }}</td>
-                                <td>{{ entry.date }}</td>
                                 <td>
                                     {{ entry.start_time }}
                                     {% if entry.end_time and entry.end_time != entry.start_time %}
@@ -57,7 +55,6 @@
                     {% endif %}
                     <span class="{{ chip_classes|join(' ')|e('html_attr') }}">
                         <strong>{{ entry.day }}</strong>
-                        <span class="mj-event-schedule__chip-meta">{{ entry.date }}</span>
                         <span class="mj-event-schedule__chip-time">
                             {{ entry.start_time }}
                             {% if entry.end_time and entry.end_time != entry.start_time %}
@@ -81,7 +78,6 @@
                     <article class="{{ card_classes|join(' ')|e('html_attr') }}">
                         <header class="mj-event-schedule__card-header">
                             <span class="mj-event-schedule__day-text">{{ entry.day }}</span>
-                            <span class="mj-event-schedule__date-text">{{ entry.date }}</span>
                         </header>
                         <div class="mj-event-schedule__card-time">
                             {% if show_icons %}
@@ -118,7 +114,6 @@
                         <div class="mj-event-schedule__timeline-content">
                             <div class="mj-event-schedule__day">
                                 <span class="mj-event-schedule__day-text">{{ entry.day }}</span>
-                                <span class="mj-event-schedule__date-text">{{ entry.date }}</span>
                             </div>
                             <div class="mj-event-schedule__time">
                                 {% if show_icons %}
@@ -154,7 +149,6 @@
                     <div class="{{ item_classes|join(' ')|e('html_attr') }}">
                         <div class="mj-event-schedule__day">
                             <span class="mj-event-schedule__day-text">{{ entry.day }}</span>
-                            <span class="mj-event-schedule__date-text">{{ entry.date }}</span>
                         </div>
                         <div class="mj-event-schedule__time">
                             {% if show_icons %}

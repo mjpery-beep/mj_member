@@ -55,6 +55,36 @@ if (!function_exists('mj_member_parse_event_datetime')) {
     }
 }
 
+if (!function_exists('mj_member_occurrence_datetime_to_iso')) {
+    function mj_member_occurrence_datetime_to_iso($value) {
+        $timezone = wp_timezone();
+        $datetime = null;
+
+        if ($value instanceof DateTimeInterface) {
+            $datetime = DateTime::createFromFormat('U', (string) $value->getTimestamp(), $timezone);
+        } else {
+            $normalized = mj_member_parse_event_datetime($value);
+            if ($normalized !== '') {
+                $datetime = DateTime::createFromFormat('Y-m-d H:i:s', $normalized, $timezone);
+                if (!$datetime) {
+                    $timestamp = strtotime($normalized);
+                    if ($timestamp !== false) {
+                        $datetime = DateTime::createFromFormat('U', (string) $timestamp, $timezone);
+                    }
+                }
+            }
+        }
+
+        if (!$datetime instanceof DateTime) {
+            return '';
+        }
+
+        $datetime->setTimezone($timezone);
+
+        return $datetime->format('Y-m-d\TH:i:s');
+    }
+}
+
 if (!function_exists('mj_member_format_event_datetime')) {
     function mj_member_format_event_datetime($value) {
         if (empty($value) || $value === '0000-00-00 00:00:00') {
@@ -258,27 +288,111 @@ if (!function_exists('mj_member_admin_resolve_weekly_anchor')) {
         $normalized_weekdays = array();
         foreach ($weekdays as $weekday_key) {
             $normalized = sanitize_key((string) $weekday_key);
-            if ($normalized !== '') {
-                <?php
-                $occurrence_editor = isset($form_values['occurrence_editor']) && is_array($form_values['occurrence_editor'])
-                    ? $form_values['occurrence_editor']
-                    : array();
-                $occurrence_items = isset($occurrence_editor['items']) && is_array($occurrence_editor['items'])
-                    ? $occurrence_editor['items']
-                    : array();
-                $occurrence_items_json = wp_json_encode($occurrence_items);
-                if (!is_string($occurrence_items_json)) {
-                    $occurrence_items_json = '[]';
-                }
-                ?>
-                <tr class="mj-event-planification-hidden" style="display:none;">
-                    <th scope="row"></th>
-                    <td>
-                        <input type="hidden" id="mj-event-date-start" name="event_date_start" value="<?php echo esc_attr($form_values['date_debut']); ?>" />
-                        <input type="hidden" id="mj-event-date-end" name="event_date_end" value="<?php echo esc_attr($form_values['date_fin']); ?>" />
-                        <input type="hidden" id="mj-event-occurrences-payload" name="event_occurrences_payload" value="<?php echo esc_attr($occurrence_items_json); ?>" />
-                    </td>
-                </tr>
+            if ($normalized === '') {
+                continue;
+            }
+
+            $weekday_index = mj_member_admin_weekday_index($normalized);
+            if ($weekday_index === null) {
+                continue;
+            }
+
+            $normalized_weekdays[] = array(
+                'key' => $normalized,
+                'index' => $weekday_index,
+            );
+        }
+
+        if (empty($normalized_weekdays)) {
+            return null;
+        }
+
+        $anchor_day_index = (int) $anchor->format('N');
+        $resolved = null;
+
+        foreach ($normalized_weekdays as $weekday_entry) {
+            $days_to_add = $weekday_entry['index'] - $anchor_day_index;
+            if ($days_to_add < 0) {
+                $days_to_add += 7;
+            }
+
+            $candidate_date = clone $anchor;
+            if ($days_to_add > 0) {
+                $candidate_date->modify('+' . $days_to_add . ' days');
+            }
+
+            $weekday_key = $weekday_entry['key'];
+            $raw_times = isset($weekday_times[$weekday_key]) && is_array($weekday_times[$weekday_key])
+                ? $weekday_times[$weekday_key]
+                : array();
+
+            $start_time = mj_member_admin_first_non_empty_value($raw_times, array('start', 'start_time', 'startTime', 'from'));
+            $end_time = mj_member_admin_first_non_empty_value($raw_times, array('end', 'end_time', 'endTime', 'to'));
+
+            $start_time = mj_member_admin_normalize_time_value($start_time);
+            $end_time = mj_member_admin_normalize_time_value($end_time);
+            if ($end_time === '' && $start_time !== '') {
+                $end_time = $start_time;
+            }
+
+            $candidate_timestamp = $candidate_date->getTimestamp();
+            if ($resolved === null || $candidate_timestamp < $resolved['timestamp']) {
+                $resolved = array(
+                    'timestamp' => $candidate_timestamp,
+                    'date' => $candidate_date->format('Y-m-d'),
+                    'weekday' => $weekday_key,
+                    'start_time' => $start_time,
+                    'end_time' => $end_time,
+                );
+            }
+        }
+
+        if ($resolved === null) {
+            return null;
+        }
+
+        return array(
+            'date' => $resolved['date'],
+            'weekday' => $resolved['weekday'],
+            'start_time' => $resolved['start_time'],
+            'end_time' => $resolved['end_time'],
+        );
+    }
+}
+
+if (!function_exists('mj_member_normalize_occurrence_editor_item')) {
+    function mj_member_normalize_occurrence_editor_item($occurrence) {
+        if (!is_array($occurrence)) {
+            return array();
+        }
+
+        $start = '';
+        $end = '';
+
+        if (isset($occurrence['start']) && $occurrence['start'] !== '') {
+            $start = sanitize_text_field((string) $occurrence['start']);
+        } elseif (isset($occurrence['startIso']) && $occurrence['startIso'] !== '') {
+            $start = sanitize_text_field((string) $occurrence['startIso']);
+        } elseif (isset($occurrence['start_iso']) && $occurrence['start_iso'] !== '') {
+            $start = sanitize_text_field((string) $occurrence['start_iso']);
+        }
+
+        if (isset($occurrence['end']) && $occurrence['end'] !== '') {
+            $end = sanitize_text_field((string) $occurrence['end']);
+        } elseif (isset($occurrence['endIso']) && $occurrence['endIso'] !== '') {
+            $end = sanitize_text_field((string) $occurrence['endIso']);
+        } elseif (isset($occurrence['end_iso']) && $occurrence['end_iso'] !== '') {
+            $end = sanitize_text_field((string) $occurrence['end_iso']);
+        }
+
+        if ($start === '' || $end === '') {
+            return array();
+        }
+
+        $status = isset($occurrence['status']) ? sanitize_key((string) $occurrence['status']) : '';
+        if ($status === '') {
+            $status = MjEventOccurrences::STATUS_ACTIVE;
+        }
 
         $meta_value = array();
         if (isset($occurrence['meta']) && is_array($occurrence['meta'])) {

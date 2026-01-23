@@ -542,11 +542,16 @@ class MjAccountLinks {
         array $extraTargets,
         array $args
     ): int {
+        $contactUnread = 0;
+        $notificationUnread = 0;
+        $canComputeContact = false;
+
         if ($currentUser instanceof WP_User) {
             $userHasCapability = ($contactCapability === '' || current_user_can($contactCapability));
             $shouldAllowOwner = $allowContactOwnerView && !$userHasCapability && $contactCapability !== '';
 
             if ($userHasCapability || $previewMode || $shouldAllowOwner) {
+                $canComputeContact = true;
                 $helperArgs = array();
 
                 if ($previewMode || $shouldAllowOwner) {
@@ -566,14 +571,43 @@ class MjAccountLinks {
                     $helperArgs['extra_targets'] = $extraTargets;
                 }
 
-                return self::getUnreadCount($currentUser->ID, $helperArgs);
+                $contactUnread = self::getUnreadCount($currentUser->ID, $helperArgs);
+
+                if ($previewMode && $contactUnread <= 0) {
+                    $contactUnread = (int) apply_filters('mj_member_contact_messages_preview_unread_total', 2, $args);
+                }
+            } elseif ($previewMode) {
+                $contactUnread = (int) apply_filters('mj_member_contact_messages_preview_unread_total', 2, $args);
             }
 
-            return 0;
+            $notificationArgs = array();
+            if ($canComputeContact) {
+                $notificationArgs['exclude_types'] = array('contact-message');
+            }
+
+            $notificationArgs = apply_filters(
+                'mj_member_account_links_notification_query_args',
+                $notificationArgs,
+                $currentUser,
+                $args,
+                array(
+                    'contact_unread' => $contactUnread,
+                    'can_compute_contact' => $canComputeContact,
+                )
+            );
+
+            if (function_exists('mj_member_get_user_unread_notifications_count')) {
+                $notificationUnread = (int) \mj_member_get_user_unread_notifications_count($currentUser->ID, $notificationArgs);
+            }
+
+            return max(0, $contactUnread + $notificationUnread);
         }
 
         if ($previewMode) {
-            return (int) apply_filters('mj_member_contact_messages_preview_unread_total', 2, $args);
+            $contactPreview = (int) apply_filters('mj_member_contact_messages_preview_unread_total', 2, $args);
+            $notificationPreview = (int) apply_filters('mj_member_notifications_preview_unread_total', 0, $args);
+
+            return max(0, $contactPreview + $notificationPreview);
         }
 
         return 0;

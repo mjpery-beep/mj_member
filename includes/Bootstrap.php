@@ -45,6 +45,7 @@ final class Bootstrap
         'includes/import_members.php',
         'includes/cards_pdf_admin.php',
         'includes/event_photos_admin.php',
+        'includes/notifications.php',
         'includes/contact_messages.php',
         'includes/contact_messages_admin.php',
         'includes/todos.php',

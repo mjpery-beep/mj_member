@@ -147,9 +147,15 @@ final class EventPageViewBuilder
             ));
         }
 
-        $weeklySchedule = isset($schedule['weekly_schedule']) && is_array($schedule['weekly_schedule'])
-            ? $schedule['weekly_schedule']
-            : array('is_weekly' => false, 'days' => array());
+        $nextOccurrenceDetails = $this->buildNextOccurrenceDetails($schedule);
+        $nextOccurrenceData = $nextOccurrenceDetails['data'];
+        $nextOccurrenceLabel = $nextOccurrenceDetails['label'];
+
+        $weeklySchedule = $this->resolveWeeklySchedule($schedule);
+        $inlineSchedule = $this->buildWeeklyScheduleFromOccurrences($schedule, false);
+        $inlineScheduleDays = isset($inlineSchedule['days']) && is_array($inlineSchedule['days'])
+            ? $inlineSchedule['days']
+            : array();
 
         return array(
             'title' => isset($event['title']) ? (string) $event['title'] : '',
@@ -163,8 +169,181 @@ final class EventPageViewBuilder
             'display_label' => isset($schedule['display_label']) ? (string) $schedule['display_label'] : '',
             'weekly_schedule' => $weeklySchedule,
             'schedule_component' => $scheduleComponent,
+            'next_occurrence' => $nextOccurrenceData,
+            'next_occurrence_label' => $nextOccurrenceLabel,
             'price_label' => isset($registration['price_display']) ? (string) $registration['price_display'] : '',
+            'inline_schedule_days' => $inlineScheduleDays,
         );
+    }
+
+    /**
+     * @param array<string, mixed> $schedule
+     * @return array<string, mixed>
+     */
+    private function resolveWeeklySchedule(array $schedule): array
+    {
+        $default = array(
+            'is_weekly' => false,
+            'is_monthly' => false,
+            'is_series' => false,
+            'show_date_range' => false,
+            'days' => array(),
+            'series_items' => array(),
+        );
+
+        $weeklySchedule = isset($schedule['weekly_schedule']) && is_array($schedule['weekly_schedule'])
+            ? array_merge($default, $schedule['weekly_schedule'])
+            : $default;
+
+        if (!empty($weeklySchedule['days'])) {
+            return $weeklySchedule;
+        }
+
+        $fallback = $this->buildWeeklyScheduleFromOccurrences($schedule, (bool) $weeklySchedule['show_date_range']);
+        if (!empty($fallback['days'])) {
+            return $fallback;
+        }
+
+        return $weeklySchedule;
+    }
+
+    /**
+     * @param array<string, mixed> $schedule
+     * @return array<string, mixed>
+     */
+    private function buildWeeklyScheduleFromOccurrences(array $schedule, bool $showDateRange): array
+    {
+        $occurrences = isset($schedule['occurrences']) && is_array($schedule['occurrences'])
+            ? $schedule['occurrences']
+            : array();
+
+        if (empty($occurrences)) {
+            return array(
+                'is_weekly' => false,
+                'is_monthly' => false,
+                'is_series' => false,
+                'show_date_range' => $showDateRange,
+                'days' => array(),
+                'series_items' => array(),
+            );
+        }
+
+        $timezone = wp_timezone();
+        if (!($timezone instanceof \DateTimeZone)) {
+            $timezone = new \DateTimeZone('UTC');
+        }
+
+        $weekdayLabels = array(
+            1 => __('Lundi', 'mj-member'),
+            2 => __('Mardi', 'mj-member'),
+            3 => __('Mercredi', 'mj-member'),
+            4 => __('Jeudi', 'mj-member'),
+            5 => __('Vendredi', 'mj-member'),
+            6 => __('Samedi', 'mj-member'),
+            7 => __('Dimanche', 'mj-member'),
+        );
+
+        $daysByIndex = array();
+
+        foreach ($occurrences as $occurrence) {
+            if (!is_array($occurrence)) {
+                continue;
+            }
+
+            $timestamp = isset($occurrence['timestamp']) ? (int) $occurrence['timestamp'] : 0;
+            if ($timestamp <= 0 && !empty($occurrence['start'])) {
+                $parsed = $this->parseOccurrenceTimestamp((string) $occurrence['start']);
+                if ($parsed !== null) {
+                    $timestamp = $parsed;
+                }
+            }
+
+            if ($timestamp <= 0) {
+                continue;
+            }
+
+            $weekdayIndex = (int) wp_date('N', $timestamp, $timezone);
+            if ($weekdayIndex < 1 || $weekdayIndex > 7) {
+                continue;
+            }
+
+            if (isset($daysByIndex[$weekdayIndex])) {
+                continue;
+            }
+
+            $startTimestamp = $timestamp;
+            $endTimestamp = 0;
+
+            if (!empty($occurrence['end'])) {
+                $parsedEnd = $this->parseOccurrenceTimestamp((string) $occurrence['end']);
+                if ($parsedEnd !== null) {
+                    $endTimestamp = $parsedEnd;
+                }
+            }
+
+            $startLabel = $startTimestamp > 0
+                ? $this->formatTimeFromTimestamp($startTimestamp, $timezone)
+                : '';
+            $endLabel = $endTimestamp > 0
+                ? $this->formatTimeFromTimestamp($endTimestamp, $timezone)
+                : '';
+
+            $timeRange = '';
+            if ($startLabel !== '' && $endLabel !== '' && $endLabel !== $startLabel) {
+                $timeRange = $startLabel . ' - ' . $endLabel;
+            } elseif ($startLabel !== '') {
+                $timeRange = $startLabel;
+            } elseif ($endLabel !== '') {
+                $timeRange = $endLabel;
+            }
+
+            $daysByIndex[$weekdayIndex] = array(
+                'key' => $this->weekdayKeyFromIndex($weekdayIndex),
+                'label' => $weekdayLabels[$weekdayIndex] ?? '',
+                'start_time' => $startTimestamp > 0 ? wp_date('H:i', $startTimestamp, $timezone) : '',
+                'end_time' => $endTimestamp > 0 ? wp_date('H:i', $endTimestamp, $timezone) : '',
+                'start_formatted' => $startLabel,
+                'end_formatted' => $endLabel,
+                'time_range' => $timeRange,
+            );
+        }
+
+        if (empty($daysByIndex)) {
+            return array(
+                'is_weekly' => false,
+                'is_monthly' => false,
+                'is_series' => false,
+                'show_date_range' => $showDateRange,
+                'days' => array(),
+                'series_items' => array(),
+            );
+        }
+
+        ksort($daysByIndex);
+
+        return array(
+            'is_weekly' => true,
+            'is_monthly' => false,
+            'is_series' => false,
+            'show_date_range' => $showDateRange,
+            'days' => array_values($daysByIndex),
+            'series_items' => array(),
+        );
+    }
+
+    private function weekdayKeyFromIndex(int $index): string
+    {
+        $map = array(
+            1 => 'monday',
+            2 => 'tuesday',
+            3 => 'wednesday',
+            4 => 'thursday',
+            5 => 'friday',
+            6 => 'saturday',
+            7 => 'sunday',
+        );
+
+        return $map[$index] ?? 'monday';
     }
 
     /**
@@ -319,59 +498,9 @@ final class EventPageViewBuilder
             ? $this->model['meta']
             : array();
 
-        $nextOccurrence = isset($schedule['next_occurrence']) && is_array($schedule['next_occurrence'])
-            ? $schedule['next_occurrence']
-            : null;
-
-        // Construire les données enrichies pour la prochaine date
-        $nextOccurrenceData = array(
-            'label' => '',
-            'day_name' => '',
-            'day_num' => '',
-            'month_name' => '',
-            'year' => '',
-            'time_start' => '',
-            'time_end' => '',
-            'full_date' => '',
-        );
-        
-        if ($nextOccurrence !== null) {
-            $timezone = wp_timezone();
-            if (!($timezone instanceof \DateTimeZone)) {
-                $timezone = new \DateTimeZone('UTC');
-            }
-
-            $nextOccurrenceData['label'] = isset($nextOccurrence['label']) ? (string) $nextOccurrence['label'] : '';
-            $nextOccurrenceData['day_name'] = isset($nextOccurrence['day_name']) ? (string) $nextOccurrence['day_name'] : '';
-            $nextOccurrenceData['day_num'] = isset($nextOccurrence['day_num']) ? (string) $nextOccurrence['day_num'] : '';
-            $nextOccurrenceData['month_name'] = isset($nextOccurrence['month_name']) ? (string) $nextOccurrence['month_name'] : '';
-            
-            $timestamp = isset($nextOccurrence['timestamp']) ? (int) $nextOccurrence['timestamp'] : 0;
-            if ($timestamp > 0) {
-                $nextOccurrenceData['year'] = wp_date('Y', $timestamp, $timezone);
-                $nextOccurrenceData['full_date'] = wp_date('l j F Y', $timestamp, $timezone);
-            }
-            
-            $occurrenceStartTimestamp = $timestamp;
-
-            if (!empty($nextOccurrence['start']) && $occurrenceStartTimestamp <= 0) {
-                $parsedStart = $this->parseOccurrenceTimestamp((string) $nextOccurrence['start']);
-                if ($parsedStart !== null) {
-                    $occurrenceStartTimestamp = $parsedStart;
-                }
-            }
-
-            if ($occurrenceStartTimestamp > 0) {
-                $nextOccurrenceData['time_start'] = $this->formatTimeFromTimestamp($occurrenceStartTimestamp, $timezone);
-            }
-
-            if (!empty($nextOccurrence['end'])) {
-                $parsedEnd = $this->parseOccurrenceTimestamp((string) $nextOccurrence['end']);
-                if ($parsedEnd !== null) {
-                    $nextOccurrenceData['time_end'] = $this->formatTimeFromTimestamp($parsedEnd, $timezone);
-                }
-            }
-        }
+        $nextOccurrenceDetails = $this->buildNextOccurrenceDetails($schedule);
+        $nextOccurrenceData = $nextOccurrenceDetails['data'];
+        $nextOccurrenceLabel = $nextOccurrenceDetails['label'];
 
         return array(
             'deadline_label' => isset($registration['deadline_label']) ? (string) $registration['deadline_label'] : '',
@@ -382,9 +511,119 @@ final class EventPageViewBuilder
             'schedule_summary' => isset($schedule['schedule_summary']) ? (string) $schedule['schedule_summary'] : '',
             'display_label' => isset($schedule['display_label']) ? (string) $schedule['display_label'] : '',
             'next_occurrence' => $nextOccurrenceData,
-            'next_occurrence_label' => $nextOccurrenceData['label'],
+            'next_occurrence_label' => $nextOccurrenceLabel,
             'has_multiple_occurrences' => !empty($schedule['has_multiple_occurrences']),
             'occurrences' => isset($schedule['occurrences']) ? $schedule['occurrences'] : array(),
+        );
+    }
+
+    /**
+     * Prépare les données d'affichage pour la prochaine occurrence.
+     *
+     * @param array<string, mixed> $schedule
+     * @return array{data: array<string, string>, label: string}
+     */
+    private function buildNextOccurrenceDetails(array $schedule): array
+    {
+        $data = array(
+            'label' => '',
+            'day_name' => '',
+            'day_num' => '',
+            'month_name' => '',
+            'year' => '',
+            'time_start' => '',
+            'time_end' => '',
+            'full_date' => '',
+        );
+
+        $label = '';
+
+        $nextOccurrence = isset($schedule['next_occurrence']) && is_array($schedule['next_occurrence'])
+            ? $schedule['next_occurrence']
+            : null;
+
+        if ($nextOccurrence === null) {
+            return array(
+                'data' => $data,
+                'label' => $label,
+            );
+        }
+
+        $timezone = wp_timezone();
+        if (!($timezone instanceof \DateTimeZone)) {
+            $timezone = new \DateTimeZone('UTC');
+        }
+
+        $data['label'] = isset($nextOccurrence['label']) ? (string) $nextOccurrence['label'] : '';
+        $data['day_name'] = isset($nextOccurrence['day_name']) ? (string) $nextOccurrence['day_name'] : '';
+        $data['day_num'] = isset($nextOccurrence['day_num']) ? (string) $nextOccurrence['day_num'] : '';
+        $data['month_name'] = isset($nextOccurrence['month_name']) ? (string) $nextOccurrence['month_name'] : '';
+        $data['full_date'] = isset($nextOccurrence['full_date']) ? (string) $nextOccurrence['full_date'] : '';
+
+        $timestamp = isset($nextOccurrence['timestamp']) ? (int) $nextOccurrence['timestamp'] : 0;
+        if ($timestamp > 0) {
+            $data['year'] = wp_date('Y', $timestamp, $timezone);
+            if ($data['full_date'] === '') {
+                $data['full_date'] = wp_date('l j F Y', $timestamp, $timezone);
+            }
+            if ($data['day_name'] === '') {
+                $data['day_name'] = wp_date('D', $timestamp, $timezone);
+            }
+            if ($data['day_num'] === '') {
+                $data['day_num'] = wp_date('d', $timestamp, $timezone);
+            }
+            if ($data['month_name'] === '') {
+                $data['month_name'] = wp_date('M', $timestamp, $timezone);
+            }
+        }
+
+        $occurrenceStartTimestamp = $timestamp;
+
+        if (!empty($nextOccurrence['start']) && $occurrenceStartTimestamp <= 0) {
+            $parsedStart = $this->parseOccurrenceTimestamp((string) $nextOccurrence['start']);
+            if ($parsedStart !== null) {
+                $occurrenceStartTimestamp = $parsedStart;
+            }
+        }
+
+        if ($occurrenceStartTimestamp > 0) {
+            $data['time_start'] = $this->formatTimeFromTimestamp($occurrenceStartTimestamp, $timezone);
+        }
+
+        if (!empty($nextOccurrence['end'])) {
+            $parsedEnd = $this->parseOccurrenceTimestamp((string) $nextOccurrence['end']);
+            if ($parsedEnd !== null) {
+                $data['time_end'] = $this->formatTimeFromTimestamp($parsedEnd, $timezone);
+            }
+        }
+
+        $label = $data['label'];
+        if ($label === '') {
+            $labelParts = array();
+            if ($data['full_date'] !== '') {
+                $labelParts[] = $data['full_date'];
+            }
+
+            $timeRange = '';
+            if ($data['time_start'] !== '') {
+                $timeRange = $data['time_start'];
+                if ($data['time_end'] !== '' && $data['time_end'] !== $data['time_start']) {
+                    $timeRange .= ' - ' . $data['time_end'];
+                }
+            }
+
+            if ($timeRange !== '') {
+                $labelParts[] = $timeRange;
+            }
+
+            if (!empty($labelParts)) {
+                $label = implode(' - ', $labelParts);
+            }
+        }
+
+        return array(
+            'data' => $data,
+            'label' => $label,
         );
     }
 

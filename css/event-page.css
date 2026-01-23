@@ -372,6 +372,36 @@
     font-variant-numeric: tabular-nums;
 }
 
+.mj-event-page__schedule-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--mj-event-text-muted);
+}
+
+.mj-event-page__schedule-inline-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.mj-event-page__schedule-inline-day {
+    font-weight: 600;
+    color: var(--mj-event-text);
+}
+
+.mj-event-page__schedule-inline-icon {
+    flex-shrink: 0;
+    opacity: 0.6;
+}
+
+.mj-event-page__schedule-inline-time {
+    color: var(--mj-event-text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
 /* Price in hero */
 .mj-event-page__price {
     display: inline-flex;

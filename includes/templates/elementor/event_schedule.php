@@ -4,13 +4,15 @@
  * Affiche l'horaire d'un événement MJ et adapte le rendu selon le type de planification.
  */
 
+use Mj\Member\Classes\Crud\MjEvents;
+use Mj\Member\Classes\MjEventSchedule;
+use Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper;
+
 if (!defined('ABSPATH')) {
     exit;
 }
 
-use Mj\Member\Classes\Crud\MjEvents;
-use Mj\Member\Classes\MjEventSchedule;
-use Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper;
+$template_data = isset($template_data) && is_array($template_data) ? $template_data : array();
 
 $event_id = isset($template_data['event_id']) ? (int) $template_data['event_id'] : 0;
 $title = isset($template_data['title']) ? (string) $template_data['title'] : '';
@@ -38,7 +40,6 @@ $register_button_label = isset($template_data['register_button_label']) && $temp
     : __('Inscription', 'mj-member');
 $is_preview = !empty($template_data['is_preview']);
 
-// Map Elementor display options to WordPress date/time formats.
 $time_format_pattern = $time_format_setting === '12h' ? 'g:i A' : 'H:i';
 $date_format_map = array(
     'full' => 'l j F Y',
@@ -53,15 +54,22 @@ if (!($site_timezone instanceof \DateTimeZone)) {
     $site_timezone = new \DateTimeZone('UTC');
 }
 
-$format_time = static function (string $value) use ($time_format_pattern, $site_timezone): string {
+$format_datetime = static function (string $value, \DateTimeZone $timezone) {
     $value = trim($value);
     if ($value === '') {
-        return '';
+        return null;
     }
 
     try {
-        $datetime = new \DateTimeImmutable($value, $site_timezone);
-    } catch (\Exception $exception) {
+        return new \DateTimeImmutable($value, $timezone);
+    } catch (\Throwable $throwable) {
+        return null;
+    }
+};
+
+$format_time = static function (string $value) use ($time_format_pattern, $site_timezone, $format_datetime): string {
+    $datetime = $format_datetime($value, $site_timezone);
+    if (!$datetime instanceof \DateTimeImmutable) {
         return '';
     }
 
@@ -69,41 +77,40 @@ $format_time = static function (string $value) use ($time_format_pattern, $site_
 };
 
 $format_time_string = static function (string $value) use ($time_format_pattern, $site_timezone): string {
-    $value = trim($value);
-    if ($value === '') {
+    $candidate = trim($value);
+    if ($candidate === '') {
         return '';
     }
 
-    $time_candidate = $value;
-    if (preg_match('/^\d{1,2}:\d{2}$/', $time_candidate)) {
-        $time_candidate .= ':00';
+    if (preg_match('/^\d{1,2}:\d{2}$/', $candidate)) {
+        $candidate .= ':00';
     }
 
     try {
-        $datetime = new \DateTimeImmutable('1970-01-01 ' . $time_candidate, $site_timezone);
-    } catch (\Exception $exception) {
+        $datetime = new \DateTimeImmutable('1970-01-01 ' . $candidate, $site_timezone);
+    } catch (\Throwable $throwable) {
         return '';
     }
 
     return $datetime->format($time_format_pattern);
 };
 
-$format_day = static function (string $value): string {
+$format_day = static function (string $value) use ($site_timezone): string {
     $timestamp = strtotime($value);
     if ($timestamp === false) {
         return '';
     }
 
-    return wp_date('l', $timestamp);
+    return wp_date('l', $timestamp, $site_timezone);
 };
 
-$format_date_label = static function (string $value) use ($date_format_pattern): string {
+$format_date_label = static function (string $value) use ($date_format_pattern, $site_timezone): string {
     $timestamp = strtotime($value);
     if ($timestamp === false) {
         return '';
     }
 
-    return wp_date($date_format_pattern, $timestamp);
+    return wp_date($date_format_pattern, $timestamp, $site_timezone);
 };
 
 $format_time_for_display = static function (string $time) use ($format_time_string): string {
@@ -390,6 +397,117 @@ $extract_occurrence_generator_plan = static function (array $payload) use ($sani
     }
 
     return array();
+};
+
+$weekday_from_index = static function (int $index): string {
+    $map = array(
+        1 => 'monday',
+        2 => 'tuesday',
+        3 => 'wednesday',
+        4 => 'thursday',
+        5 => 'friday',
+        6 => 'saturday',
+        7 => 'sunday',
+    );
+
+    return $map[$index] ?? 'monday';
+};
+
+$build_weekly_schedule_from_occurrences = static function (array $occurrences, bool $showDateRange) use (
+    $blank_weekly_schedule,
+    $weekday_from_index,
+    $site_timezone,
+    $time_format_pattern
+): array {
+    if (empty($occurrences)) {
+        return $blank_weekly_schedule($showDateRange);
+    }
+
+    $weekdayLabels = array(
+        1 => __('Lundi', 'mj-member'),
+        2 => __('Mardi', 'mj-member'),
+        3 => __('Mercredi', 'mj-member'),
+        4 => __('Jeudi', 'mj-member'),
+        5 => __('Vendredi', 'mj-member'),
+        6 => __('Samedi', 'mj-member'),
+        7 => __('Dimanche', 'mj-member'),
+    );
+
+    $daysByIndex = array();
+
+    foreach ($occurrences as $occurrence) {
+        if (!is_array($occurrence)) {
+            continue;
+        }
+
+        $timestamp = isset($occurrence['timestamp']) ? (int) $occurrence['timestamp'] : 0;
+        if ($timestamp <= 0 && !empty($occurrence['start'])) {
+            $parsed = strtotime((string) $occurrence['start']);
+            if ($parsed !== false) {
+                $timestamp = $parsed;
+            }
+        }
+
+        if ($timestamp <= 0) {
+            continue;
+        }
+
+        $weekdayIndex = (int) wp_date('N', $timestamp, $site_timezone);
+        if ($weekdayIndex < 1 || $weekdayIndex > 7) {
+            continue;
+        }
+
+        if (isset($daysByIndex[$weekdayIndex])) {
+            continue;
+        }
+
+        $endTimestamp = 0;
+        if (!empty($occurrence['end'])) {
+            $parsedEnd = strtotime((string) $occurrence['end']);
+            if ($parsedEnd !== false) {
+                $endTimestamp = $parsedEnd;
+            }
+        }
+
+        $startFormatted = $timestamp > 0 ? wp_date($time_format_pattern, $timestamp, $site_timezone) : '';
+        $endFormatted = $endTimestamp > 0 ? wp_date($time_format_pattern, $endTimestamp, $site_timezone) : '';
+
+        $timeRange = '';
+        if ($startFormatted !== '' && $endFormatted !== '' && $endFormatted !== $startFormatted) {
+            $timeRange = $startFormatted . ' - ' . $endFormatted;
+        } elseif ($startFormatted !== '') {
+            $timeRange = $startFormatted;
+        } elseif ($endFormatted !== '') {
+            $timeRange = $endFormatted;
+        }
+
+        $daysByIndex[$weekdayIndex] = array(
+            'key' => $weekday_from_index($weekdayIndex),
+            'label' => $weekdayLabels[$weekdayIndex] ?? '',
+            'start_time' => $startFormatted,
+            'end_time' => $endFormatted,
+            'start_formatted' => $startFormatted,
+            'end_formatted' => $endFormatted,
+            'time_range' => $timeRange,
+        );
+    }
+
+    if (empty($daysByIndex)) {
+        return $blank_weekly_schedule($showDateRange);
+    }
+
+    ksort($daysByIndex);
+
+    return array(
+        'is_weekly' => true,
+        'is_monthly' => false,
+        'is_series' => false,
+        'show_date_range' => $showDateRange,
+        'monthly_label' => '',
+        'time_range' => '',
+        'days' => array_values($daysByIndex),
+        'series_items' => array(),
+    );
 };
 
 $build_weekly_schedule_from_generator = static function (array $plan, bool $showDateRange) use ($format_time_for_display, $blank_weekly_schedule): array {
@@ -906,13 +1024,14 @@ if ($event_for_schedule and class_exists(MjEventSchedule::class)) {
 
 if ($is_preview and !$event_for_schedule) {
     $schedule_mode = 'preview';
-    $dummy_date = new DateTime('next monday');
+    $dummy_date = new \DateTime('next monday');
     for ($i = 0; $i < min(5, max(1, $max_occurrences)); $i++) {
         $start = clone $dummy_date;
         $start->modify("+{$i} days");
         $start->setTime(14, 0, 0);
         $end = clone $start;
         $end->setTime(17, 0, 0);
+
         $occurrences[] = array(
             'start' => $start->format('Y-m-d H:i:s'),
             'end' => $end->format('Y-m-d H:i:s'),
@@ -941,6 +1060,10 @@ if (empty($occurrences) and $event_for_schedule) {
             );
         }
     }
+}
+
+if (!empty($occurrences) && empty($weekly_schedule['days']) && empty($weekly_schedule['series_items'])) {
+    $weekly_schedule = $build_weekly_schedule_from_occurrences($occurrences, $show_date_range);
 }
 
 $now_timestamp = current_time('timestamp');
@@ -1010,7 +1133,64 @@ foreach ($occurrences as $occurrence) {
         'end_time' => $end_time_label,
         'is_past' => $is_past_entry,
         'is_today' => $is_today_entry,
+        'timestamp' => $start_timestamp ? $start_timestamp : 0,
     );
+}
+
+if (!empty($entries)) {
+    $deduped_entries = array();
+    foreach ($entries as $entry) {
+        $key = strtolower($entry['day']) . '|' . $entry['start_time'] . '|' . $entry['end_time'];
+        if (!isset($deduped_entries[$key])) {
+            $deduped_entries[$key] = $entry;
+            continue;
+        }
+
+        $existing = $deduped_entries[$key];
+        $existing_ts = isset($existing['timestamp']) ? (int) $existing['timestamp'] : 0;
+        $candidate_ts = isset($entry['timestamp']) ? (int) $entry['timestamp'] : 0;
+
+        $should_replace = false;
+        if ($entry['is_today'] && empty($existing['is_today'])) {
+            $should_replace = true;
+        } elseif (!$entry['is_past'] && !empty($existing['is_past'])) {
+            $should_replace = true;
+        } elseif (!$entry['is_past'] && !$existing['is_past']) {
+            if ($candidate_ts !== 0 && $existing_ts !== 0 && $candidate_ts < $existing_ts) {
+                $should_replace = true;
+            }
+        } elseif ($entry['is_past'] && !empty($existing['is_past'])) {
+            if ($candidate_ts !== 0 && $existing_ts !== 0 && $candidate_ts > $existing_ts) {
+                $should_replace = true;
+            }
+        }
+
+        if ($should_replace) {
+            $deduped_entries[$key] = $entry;
+        }
+    }
+
+    if (!empty($deduped_entries)) {
+        usort(
+            $deduped_entries,
+            static function (array $left, array $right): int {
+                $left_ts = isset($left['timestamp']) ? (int) $left['timestamp'] : 0;
+                $right_ts = isset($right['timestamp']) ? (int) $right['timestamp'] : 0;
+                if ($left_ts === $right_ts) {
+                    return strcmp((string) $left['day'], (string) $right['day']);
+                }
+                if ($left_ts === 0) {
+                    return 1;
+                }
+                if ($right_ts === 0) {
+                    return -1;
+                }
+                return $left_ts <=> $right_ts;
+            }
+        );
+
+        $entries = array_values($deduped_entries);
+    }
 }
 
 $has_recurring = ($schedule_mode === 'recurring') and (!empty($weekly_schedule['days']) or !empty($weekly_schedule['is_monthly']));

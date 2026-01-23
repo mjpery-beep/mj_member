@@ -873,6 +873,76 @@ if (!function_exists('mj_member_handle_contact_message_submission')) {
             wp_send_json_error(array('message' => $created_message_id->get_error_message()), 500);
         }
 
+        $member_target_key = mj_member_contact_member_target_key();
+        $notification_recipients = array();
+        $staff_notification_recipients = array();
+        $staff_role_map = array(
+            MjContactMessages::TARGET_ANIMATEUR => 'animateur',
+            MjContactMessages::TARGET_COORDINATEUR => 'coordinateur',
+        );
+
+        foreach ($recipient_specs as $recipient_entry) {
+            if (!is_array($recipient_entry)) {
+                continue;
+            }
+
+            $type = isset($recipient_entry['type']) ? sanitize_key((string) $recipient_entry['type']) : '';
+            $reference = isset($recipient_entry['reference']) ? (int) $recipient_entry['reference'] : 0;
+
+            if ($type === $member_target_key && $reference > 0) {
+                $notification_recipients[] = array('member_id' => $reference);
+                continue;
+            }
+
+            if ($type === MjContactMessages::TARGET_ANIMATEUR || $type === MjContactMessages::TARGET_COORDINATEUR) {
+                if ($reference > 0) {
+                    $staff_spec = array('member_id' => $reference);
+
+                    if (class_exists('MjMembers')) {
+                        $staff_member = MjMembers::getById($reference);
+                        if ($staff_member && isset($staff_member->wp_user_id) && (int) $staff_member->wp_user_id > 0) {
+                            $staff_spec['user_id'] = (int) $staff_member->wp_user_id;
+                        }
+                    }
+
+                    $staff_notification_recipients[] = $staff_spec;
+                } else {
+                    $role_slug = isset($staff_role_map[$type]) ? $staff_role_map[$type] : '';
+                    if ($role_slug !== '') {
+                        $staff_notification_recipients[] = array('role' => $role_slug);
+                    }
+                }
+            }
+        }
+
+        $all_notification_recipients = array_merge($notification_recipients, $staff_notification_recipients);
+
+        if (!empty($all_notification_recipients) && function_exists('mj_member_record_notification')) {
+            $notification_title = $subject !== '' ? $subject : __('Nouveau message', 'mj-member');
+            $notification_excerpt = $message !== '' ? wp_trim_words(wp_strip_all_tags($message), 24, '...') : '';
+
+            $notification_payload = array(
+                'message_id' => (int) $created_message_id,
+                'sender_name' => $sender_name,
+                'sender_email' => $sender_email,
+            );
+
+            $notification_data = array(
+                'type' => 'contact-message',
+                'title' => $notification_title,
+                'excerpt' => $notification_excerpt,
+                'payload' => $notification_payload,
+                'context' => 'contact',
+                'source' => 'contact_form',
+                'priority' => 5,
+            );
+
+            $record_result = mj_member_record_notification($notification_data, $all_notification_recipients);
+            if (is_wp_error($record_result) && function_exists('mj_member_log_error')) {
+                mj_member_log_error('notifications', sprintf('Contact message notification failed: %s', $record_result->get_error_message()));
+            }
+        }
+
         if ($recipient_total > 1) {
             $response_message = sprintf(
                 _n(

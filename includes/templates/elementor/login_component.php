@@ -267,6 +267,110 @@ if (!function_exists('mj_member_login_component_build_unread_target_specs')) {
     }
 }
 
+if (!function_exists('mj_member_login_component_collect_unread_counts')) {
+    /**
+     * Calcule le décompte des notifications (messages inclus) pour l'affichage du badge.
+     *
+     * @param WP_User|null $user
+     * @param object|null  $member
+     * @param array<string,mixed> $options
+     *
+     * @return array{contact:int,notifications:int,total:int}
+     */
+    function mj_member_login_component_collect_unread_counts($user = null, $member = null, array $options = array()) {
+        $defaults = array(
+            'member_id' => 0,
+            'extra_targets' => array(),
+            'preview_mode' => false,
+        );
+        $options = wp_parse_args($options, $defaults);
+
+        $preview_mode = !empty($options['preview_mode']);
+        $results = array(
+            'contact' => 0,
+            'notifications' => 0,
+            'total' => 0,
+        );
+
+        if (!$user instanceof WP_User) {
+            if ($preview_mode) {
+                $contact_preview = (int) apply_filters('mj_member_contact_messages_preview_unread_total', 2, array('context' => 'login_component'));
+                $notification_preview = (int) apply_filters('mj_member_notifications_preview_unread_total', 0, array('context' => 'login_component'));
+                $results['contact'] = max(0, $contact_preview);
+                $results['notifications'] = max(0, $notification_preview);
+                $results['total'] = max(0, $results['contact'] + $results['notifications']);
+            }
+
+            /** @var array{contact:int,notifications:int,total:int} */
+            return apply_filters('mj_member_login_component_unread_counts', $results, $user, $member, $options);
+        }
+
+        $member_id = isset($options['member_id']) ? (int) $options['member_id'] : 0;
+        if ($member_id <= 0 && $member && isset($member->id)) {
+            $member_id = (int) $member->id;
+        }
+
+        $extra_targets = array();
+        if (!empty($options['extra_targets']) && is_array($options['extra_targets'])) {
+            $extra_targets = $options['extra_targets'];
+        }
+
+        $contact_capability = Config::contactCapability();
+        $user_can_contact = ($contact_capability === '' || user_can($user->ID, $contact_capability));
+        $user_email = sanitize_email(isset($user->user_email) ? $user->user_email : '');
+        $allow_owner_view = ($member_id > 0 || $user_email !== '');
+
+        $contact_args = array();
+        if (!empty($extra_targets)) {
+            $contact_args['extra_targets'] = $extra_targets;
+        }
+
+        if (!$user_can_contact && $allow_owner_view) {
+            $contact_args['skip_capability_check'] = true;
+            if ($member_id > 0) {
+                $contact_args['member_id'] = $member_id;
+            }
+            if ($user_email !== '') {
+                $contact_args['sender_email'] = $user_email;
+            }
+        }
+
+        $can_compute_contact = $user_can_contact || (!$user_can_contact && $allow_owner_view);
+
+        if ($can_compute_contact && function_exists('mj_member_login_component_get_unread_contact_message_count')) {
+            $results['contact'] = (int) mj_member_login_component_get_unread_contact_message_count($user->ID, $contact_args);
+        }
+
+        $notification_args = array();
+        if ($can_compute_contact) {
+            $notification_args['exclude_types'] = array('contact-message');
+        }
+
+        $notification_args = apply_filters(
+            'mj_member_account_links_notification_query_args',
+            $notification_args,
+            $user,
+            array(),
+            array(
+                'contact_unread' => $results['contact'],
+                'can_compute_contact' => $can_compute_contact,
+            )
+        );
+
+        if (function_exists('mj_member_get_user_unread_notifications_count')) {
+            $results['notifications'] = (int) mj_member_get_user_unread_notifications_count($user->ID, $notification_args);
+        }
+
+        $results['total'] = max(0, (int) $results['contact'] + (int) $results['notifications']);
+
+        $results['contact'] = max(0, (int) $results['contact']);
+        $results['notifications'] = max(0, (int) $results['notifications']);
+
+        /** @var array{contact:int,notifications:int,total:int} */
+        return apply_filters('mj_member_login_component_unread_counts', $results, $user, $member, $options);
+    }
+}
+
 if (!function_exists('mj_member_login_component_get_account_links')) {
     function mj_member_login_component_get_account_links($account_base, $args) {
         return MjAccountLinks::getLinks((string) $account_base, is_array($args) ? $args : array());
@@ -433,9 +537,13 @@ if (!function_exists('mj_member_render_login_modal_component')) {
         $preview_mode = mj_member_login_component_is_preview_mode();
         $is_logged_in = is_user_logged_in() && !$preview_mode;
 
-        $contact_capability = Config::contactCapability();
-        $unread_contact_count = 0;
         $account_button_label = $args['button_label_logged_in'] !== '' ? $args['button_label_logged_in'] : $defaults['button_label_logged_in'];
+
+        $unread_counts = array(
+            'contact' => 0,
+            'notifications' => 0,
+            'total' => 0,
+        );
 
         $current_user = null;
         $member = null;
@@ -448,7 +556,6 @@ if (!function_exists('mj_member_render_login_modal_component')) {
             'id' => 0,
         );
         $unread_extra_targets = array();
-        $should_compute_unread = false;
 
         if ($is_logged_in) {
             $component_classes[] = 'is-logged-in';
@@ -459,13 +566,6 @@ if (!function_exists('mj_member_render_login_modal_component')) {
 
             if ($member && isset($member->id)) {
                 $member_id = (int) $member->id;
-            }
-
-            if ($current_user instanceof WP_User) {
-                $should_check_messages = ($contact_capability === '' || current_user_can($contact_capability));
-                if ($should_check_messages && function_exists('mj_member_login_component_get_unread_contact_message_count')) {
-                    $should_compute_unread = true;
-                }
             }
 
             if ($member && class_exists('MjMembers') && MjMembers::hasField($member, 'role')) {
@@ -494,20 +594,24 @@ if (!function_exists('mj_member_render_login_modal_component')) {
 
             $unread_extra_targets = mj_member_login_component_build_unread_target_specs($member_id, $member_role_key);
 
-            if ($should_compute_unread) {
-                $count_args = array();
-                if (!empty($unread_extra_targets)) {
-                    $count_args['extra_targets'] = $unread_extra_targets;
-                }
-                $unread_contact_count = (int) mj_member_login_component_get_unread_contact_message_count($current_user->ID, $count_args);
-            }
+            $unread_counts = mj_member_login_component_collect_unread_counts(
+                $current_user,
+                $member,
+                array(
+                    'member_id' => $member_id,
+                    'extra_targets' => $unread_extra_targets,
+                    'preview_mode' => false,
+                )
+            );
 
             $member_display_name = mj_member_login_component_get_member_display_name($current_user, $member);
             $member_avatar = mj_member_login_component_get_member_avatar($current_user, $member);
         }
 
         if ($preview_mode && !$is_logged_in) {
-            $unread_contact_count = (int) apply_filters('mj_member_contact_messages_preview_unread_total', 2, array('context' => 'login_component'));
+            $unread_counts = mj_member_login_component_collect_unread_counts(null, null, array(
+                'preview_mode' => true,
+            ));
         }
 
         static $instance_counter = 0;
@@ -563,11 +667,13 @@ if (!function_exists('mj_member_render_login_modal_component')) {
 
         if ($is_logged_in) {
             $link_args = $args;
-            $link_args['unread_contact_count'] = $unread_contact_count;
+            $link_args['unread_contact_count'] = isset($unread_counts['total']) ? (int) $unread_counts['total'] : 0;
+            $link_args['unread_breakdown'] = $unread_counts;
             $link_args['preview_mode'] = $preview_mode;
             $account_links = mj_member_login_component_get_account_links($redirect_url, $link_args);
 
             if (is_array($account_links)) {
+                $badge_override = null;
                 foreach ($account_links as $link_entry) {
                     if (!is_array($link_entry)) {
                         continue;
@@ -575,14 +681,26 @@ if (!function_exists('mj_member_render_login_modal_component')) {
                     $link_key = isset($link_entry['key']) ? $link_entry['key'] : '';
                     if ($link_key === 'contact_messages') {
                         if (isset($link_entry['badge'])) {
-                            $unread_contact_count = (int) $link_entry['badge'];
+                            $badge_override = max(0, (int) $link_entry['badge']);
                         }
                         break;
                     }
                 }
+
+                if ($badge_override !== null) {
+                    $unread_counts['total'] = $badge_override;
+                    if (!isset($unread_counts['contact']) || $unread_counts['contact'] > $badge_override) {
+                        $unread_counts['contact'] = $badge_override;
+                    }
+                    $unread_counts['notifications'] = max(0, (int) $unread_counts['total'] - (int) $unread_counts['contact']);
+                }
             }
         }
         
+        $unread_total_count = isset($unread_counts['total']) ? max(0, (int) $unread_counts['total']) : 0;
+        $unread_contact_only_count = isset($unread_counts['contact']) ? max(0, (int) $unread_counts['contact']) : 0;
+        $unread_notification_count = isset($unread_counts['notifications']) ? max(0, (int) $unread_counts['notifications']) : 0;
+
 
         $registration_url = (!$is_logged_in && function_exists('mj_member_login_component_get_registration_url')) ? mj_member_login_component_get_registration_url() : '';
         $registration_label = $args['registration_link_label'] !== '' ? $args['registration_link_label'] : $defaults['registration_link_label'];
@@ -664,6 +782,9 @@ if (!function_exists('mj_member_render_login_modal_component')) {
         }
 
         $wrapper_attributes = ' data-mj-member-login';
+        $wrapper_attributes .= ' data-unread-total="' . esc_attr($unread_total_count) . '"';
+        $wrapper_attributes .= ' data-unread-contact="' . esc_attr($unread_contact_only_count) . '"';
+        $wrapper_attributes .= ' data-unread-notifications="' . esc_attr($unread_notification_count) . '"';
         if ($preview_mode) {
             $wrapper_attributes .= ' data-preview="1"';
         }
@@ -704,8 +825,8 @@ if (!function_exists('mj_member_render_login_modal_component')) {
             $trigger_aria_label = $member_display_name !== ''
                 ? sprintf(__('Accéder au profil de %s', 'mj-member'), $member_display_name)
                 : __('Accéder à votre profil membre', 'mj-member');
-            if ($unread_contact_count > 0) {
-                $trigger_aria_label .= ' ' . sprintf(_n('Vous avez %d message non lu.', 'Vous avez %d messages non lus.', $unread_contact_count, 'mj-member'), $unread_contact_count);
+            if ($unread_total_count > 0) {
+                $trigger_aria_label .= ' ' . sprintf(_n('Vous avez %d notification non lue.', 'Vous avez %d notifications non lues.', $unread_total_count, 'mj-member'), $unread_total_count);
             }
         }
 
@@ -736,9 +857,9 @@ if (!function_exists('mj_member_render_login_modal_component')) {
                                 <?php endif; ?>
                             </span>
                         <?php endif; ?>
-                        <?php if ($unread_contact_count > 0) : ?>
-                            <?php $badge_value = $unread_contact_count > 99 ? '99+' : number_format_i18n($unread_contact_count); ?>
-                            <span class="mj-member-login-component__badge" data-unread-count="<?php echo esc_attr($unread_contact_count); ?>"><?php echo esc_html($badge_value); ?></span>
+                        <?php if ($unread_total_count > 0) : ?>
+                            <?php $badge_value = $unread_total_count > 99 ? '99+' : number_format_i18n($unread_total_count); ?>
+                            <span class="mj-member-login-component__badge" data-unread-count="<?php echo esc_attr($unread_total_count); ?>"><?php echo esc_html($badge_value); ?></span>
                         <?php endif; ?>
                     </span>
                     <span class="mj-member-login-component__trigger-info">
