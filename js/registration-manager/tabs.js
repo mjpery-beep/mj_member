@@ -51,14 +51,20 @@
                     }),
                     role: 'tab',
                     'aria-selected': activeTab === tab.key ? 'true' : 'false',
+                    'aria-label': tab.label,
+                    title: tab.label,
                     onClick: function () {
                         if (typeof onChange === 'function') {
                             onChange(tab.key);
                         }
                     },
                 }, [
-                    tab.icon && h('span', { class: 'mj-regmgr-tab__icon', dangerouslySetInnerHTML: { __html: tab.icon } }),
-                    h('span', null, tab.label),
+                    tab.icon && h('span', {
+                        class: 'mj-regmgr-tab__icon',
+                        'aria-hidden': 'true',
+                        dangerouslySetInnerHTML: { __html: tab.icon },
+                    }),
+                    h('span', { class: 'mj-regmgr-tab__label', 'aria-hidden': 'true' }, tab.label),
                     tab.badge !== undefined && h('span', { class: 'mj-regmgr-tab__badge' }, tab.badge),
                 ]);
             })

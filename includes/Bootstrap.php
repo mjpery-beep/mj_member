@@ -48,6 +48,7 @@ final class Bootstrap
         'includes/notifications.php',
         'includes/contact_messages.php',
         'includes/contact_messages_admin.php',
+        'includes/badges_admin.php',
         'includes/todos.php',
         'includes/core/ajax/front/todos.php',
         'includes/core/ajax/front/events.php',

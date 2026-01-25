@@ -274,6 +274,7 @@ final class AssetsManager
         self::registerStyle('mj-member-todo-widget', 'css/todo-widget.css', array('mj-member-components'));
         self::registerStyle('mj-member-idea-box', 'css/idea-box.css', array('mj-member-components'));
         self::registerStyle('mj-member-documents-manager', 'css/documents-manager.css', array('mj-member-components'));
+        self::registerStyle('mj-member-badges-overview', 'css/badges-overview.css', array('mj-member-components'));
 
         if (function_exists('register_block_type')) {
             self::registerScript(
@@ -436,6 +437,11 @@ final class AssetsManager
                 if (function_exists('mj_member_documents_localize')) {
                     mj_member_documents_localize();
                 }
+                break;
+
+            case 'badges-overview':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-badges-overview');
                 break;
 
             case 'payments-overview':

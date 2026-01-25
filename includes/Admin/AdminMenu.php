@@ -18,6 +18,7 @@ use Mj\Member\Admin\Page\ContactMessagesPage;
 use Mj\Member\Admin\Page\HoursPage;
 use Mj\Member\Admin\Page\TodosPage;
 use Mj\Member\Admin\Page\TodoProjectsPage;
+use Mj\Member\Admin\Page\BadgesPage;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -166,6 +167,16 @@ final class AdminMenu
             HoursPage::slug(),
             array(HoursPage::class, 'render')
         );
+
+        $badgesHook = add_submenu_page(
+            'mj_member',
+            __('Badges', 'mj-member'),
+            __('Badges', 'mj-member'),
+            $capability,
+            BadgesPage::slug(),
+            array(BadgesPage::class, 'render')
+        );
+        BadgesPage::registerHooks($badgesHook);
 
         if ($contactCapability !== '') {
             add_submenu_page(

@@ -868,20 +868,24 @@ input.mj-regmgr-search-input__field {
    ============================================ */
 .mj-regmgr-tabs {
     display: flex;
-    gap: 8px;
-    padding: 8px 16px;
+    gap: 6px;
+    padding: 6px 12px;
     background: var(--regmgr-gray-100);
     border-bottom: 1px solid var(--regmgr-gray-200);
     border-left: 0;
     border-radius: 15px;
     margin-left: 15px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
 }
 
 .mj-regmgr-tab {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
+    gap: 6px;
+    padding: 8px 16px;
     border: none;
     background: transparent;
     color: var(--regmgr-gray-600);
@@ -891,6 +895,7 @@ input.mj-regmgr-search-input__field {
     cursor: pointer;
     transition: all var(--regmgr-transition);
     position: relative;
+    flex: 0 0 auto;
 }
 
 .mj-regmgr-tab:hover {
@@ -919,6 +924,25 @@ input.mj-regmgr-search-input__field {
     text-align: center;
 }
 
+.mj-regmgr-tab__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    color: inherit;
+}
+
+.mj-regmgr-tab__icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.mj-regmgr-tab__label {
+    line-height: 1.2;
+}
+
 .mj-regmgr-tab--active .mj-regmgr-tab__badge {
     background: rgba(255, 255, 255, 0.25);
     color: #fff;
@@ -929,6 +953,26 @@ input.mj-regmgr-search-input__field {
     overflow-y: auto;
     padding: 16px;
     background: #fff;
+}
+
+@media (max-width: 768px) {
+    .mj-regmgr-tab {
+        gap: 4px;
+        padding: 8px 12px;
+        justify-content: center;
+    }
+
+    .mj-regmgr-tab__label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
 }
 
 /* ============================================
@@ -4604,6 +4648,20 @@ input.mj-regmgr-search-input__field {
     gap: 24px;
 }
 
+.mj-regmgr-member-detail__tabs-nav {
+    display: flex;
+}
+
+.mj-regmgr-member-detail__tabs-nav .mj-regmgr-tabs {
+    width: 100%;
+}
+
+.mj-regmgr-member-detail__tabs-content {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
 .mj-regmgr-member-detail__section {
     background: #fff;
     border-radius: var(--regmgr-radius-lg);
@@ -4839,6 +4897,270 @@ input.mj-regmgr-search-input__field {
     border-radius: var(--regmgr-radius);
     background: rgba(59, 130, 246, 0.06);
     padding: 10px 14px;
+}
+
+/* Badges tab */
+.mj-regmgr-member-badges {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.mj-regmgr-member-badge {
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius-lg);
+    background: #fff;
+    padding: 20px;
+    box-shadow: var(--regmgr-shadow);
+    transition: border-color var(--regmgr-transition), box-shadow var(--regmgr-transition), transform var(--regmgr-transition);
+}
+
+.mj-regmgr-member-badge--state-complete {
+    border-color: var(--regmgr-success);
+    box-shadow: 0 12px 24px rgba(16, 185, 129, 0.15);
+}
+
+.mj-regmgr-member-badge--state-in_progress {
+    border-color: var(--regmgr-primary);
+    box-shadow: 0 8px 18px rgba(59, 130, 246, 0.12);
+}
+
+.mj-regmgr-member-badge--state-locked {
+    border-color: var(--regmgr-gray-200);
+}
+
+.mj-regmgr-member-badge--state-revoked {
+    border-color: var(--regmgr-danger);
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.mj-regmgr-member-badge__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.mj-regmgr-member-badge__title {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.mj-regmgr-member-badge__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--regmgr-primary-light);
+    color: var(--regmgr-primary);
+    overflow: hidden;
+}
+
+.mj-regmgr-member-badge__icon i {
+    font-size: 28px;
+}
+
+.mj-regmgr-member-badge__icon--image {
+    background: transparent;
+    padding: 0;
+}
+
+.mj-regmgr-member-badge__icon--image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.mj-regmgr-member-badge__heading {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mj-regmgr-member-badge__name {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--regmgr-gray-900);
+}
+
+.mj-regmgr-member-badge__summary {
+    margin: 0;
+    font-size: 13px;
+    color: var(--regmgr-gray-500);
+}
+
+.mj-regmgr-member-badge__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-end;
+    text-align: right;
+}
+
+.mj-regmgr-member-badge__state {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    background: var(--regmgr-gray-100);
+    color: var(--regmgr-gray-600);
+}
+
+.mj-regmgr-member-badge__state--complete {
+    background: var(--regmgr-success-light);
+    color: #0f5132;
+}
+
+.mj-regmgr-member-badge__state--in_progress {
+    background: var(--regmgr-primary-light);
+    color: var(--regmgr-primary);
+}
+
+.mj-regmgr-member-badge__state--revoked {
+    background: var(--regmgr-danger-light);
+    color: var(--regmgr-danger);
+}
+
+.mj-regmgr-member-badge__progress-count {
+    font-size: 13px;
+    color: var(--regmgr-gray-600);
+    font-weight: 500;
+}
+
+.mj-regmgr-member-badge__progress {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.mj-regmgr-member-badge__progress-bar {
+    position: relative;
+    flex: 1;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--regmgr-gray-100);
+    overflow: hidden;
+}
+
+.mj-regmgr-member-badge__progress-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--regmgr-primary);
+    transition: width var(--regmgr-transition);
+}
+
+.mj-regmgr-member-badge__progress-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--regmgr-gray-500);
+    min-width: 36px;
+    text-align: right;
+}
+
+.mj-regmgr-member-badge__criteria {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mj-regmgr-member-badge__criterion {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: var(--regmgr-radius);
+    border: 1px solid var(--regmgr-gray-200);
+    background: var(--regmgr-gray-50);
+    transition: border-color var(--regmgr-transition), background-color var(--regmgr-transition);
+}
+
+.mj-regmgr-member-badge__criterion--awarded {
+    border-color: var(--regmgr-success);
+    background: rgba(16, 185, 129, 0.08);
+}
+
+.mj-regmgr-member-badge__criterion--readonly {
+    opacity: 0.75;
+}
+
+.mj-regmgr-member-badge__criterion--readonly .mj-regmgr-member-badge__criterion-label {
+    cursor: default;
+}
+
+.mj-regmgr-member-badge__criterion-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    cursor: pointer;
+}
+
+.mj-regmgr-member-badge__checkbox {
+    margin-top: 3px;
+    width: 16px;
+    height: 16px;
+}
+
+.mj-regmgr-member-badge__criterion-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mj-regmgr-member-badge__criterion-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--regmgr-gray-800);
+}
+
+.mj-regmgr-member-badge__criterion-description {
+    font-size: 13px;
+    color: var(--regmgr-gray-600);
+}
+
+.mj-regmgr-member-badge__criterion-hint {
+    font-size: 12px;
+    color: var(--regmgr-gray-500);
+    font-style: italic;
+}
+
+.mj-regmgr-member-badge__empty {
+    margin: 0;
+    font-size: 13px;
+    color: var(--regmgr-gray-500);
+}
+
+.mj-regmgr-member-badge__saving {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--regmgr-gray-500);
+}
+
+.mj-regmgr-spinner--inline {
+    width: 16px;
+    height: 16px;
+    border-width: 2px;
 }
 
 .mj-regmgr-member-message__activity summary {

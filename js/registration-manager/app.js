@@ -4389,6 +4389,25 @@
                 });
         }, [api, showSuccess, showError, loadMemberDetails]);
 
+        var handleSyncMemberBadge = useCallback(function (memberId, badgeId, criterionIds) {
+            return api.syncMemberBadge(memberId, badgeId, criterionIds)
+                .then(function (result) {
+                    var successMessage = result && result.message
+                        ? result.message
+                        : getString(strings, 'memberBadgeUpdated', 'Progression mise à jour.');
+                    showSuccess(successMessage);
+                    loadMemberDetails(memberId);
+                    return result;
+                })
+                .catch(function (err) {
+                    var message = err && err.message
+                        ? err.message
+                        : getString(strings, 'memberBadgeUpdateError', 'Impossible de mettre à jour ce badge.');
+                    showError(message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails, strings]);
+
         var handleUpdateMemberAvatar = useCallback(function (memberId, photoId) {
             var targetId = parseInt(memberId, 10);
             if (!targetId || targetId <= 0) {
@@ -5539,6 +5558,7 @@
                             onPendingEditHandled: handleConsumePendingMemberEdit,
                             onDeleteMessage: handleDeleteMemberMessage,
                             onDeleteMember: handleDeleteMember,
+                            onSyncBadgeCriteria: handleSyncMemberBadge,
                         }),
                     ]),
                 ]),

@@ -472,6 +472,98 @@ function mj_member_get_notification_recipients_table_name() {
     return $cached;
 }
 
+function mj_member_get_badges_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_badges',
+        $wpdb->prefix . 'badges',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
+function mj_member_get_member_badges_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_member_badges',
+        $wpdb->prefix . 'member_badges',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
+function mj_member_get_badge_criteria_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_badge_criteria',
+        $wpdb->prefix . 'badge_criteria',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
+function mj_member_get_member_badge_criteria_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_member_badge_criteria',
+        $wpdb->prefix . 'member_badge_criteria',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
 function mj_member_ensure_auxiliary_tables() {
     global $wpdb;
     if ( ! function_exists('dbDelta') ) {
@@ -769,6 +861,273 @@ HTML
 }
 add_action('init', 'mj_member_seed_email_templates', 15);
 
+function mj_member_seed_default_badges() {
+    global $wpdb;
+
+    $badges_table = mj_member_get_badges_table_name();
+    if (!mj_member_table_exists($badges_table)) {
+        return;
+    }
+
+    $badge_criteria_table = mj_member_get_badge_criteria_table_name();
+    $has_criteria_table = mj_member_table_exists($badge_criteria_table);
+
+    $badge_definitions = array(
+        array(
+            'slug' => 'premier-pas',
+            'label' => 'Premier Pas',
+            'summary' => "A franchi la porte de la MJ et commencé à s'impliquer.",
+            'description' => "Attribué aux jeunes qui découvrent la MJ Péry et font leurs premiers pas, en participant activement et en échangeant avec l'équipe.",
+            'criteria' => array(
+                'Venir au moins 3 fois à la MJ',
+                'Participer à une activité ou un temps collectif',
+                'Échanger avec un·e animateur·rice'
+            ),
+            'prompt' => 'Grimlin mascot taking a confident first step forward, circular emblem badge, flat illustration, thick bold outlines, vibrant colors, street graffiti style, simple textured background, no text',
+            'icon' => 'green_circle',
+            'display_order' => 10,
+        ),
+        array(
+            'slug' => 'habitue-du-pery',
+            'label' => 'Habitué·e du Péry',
+            'summary' => 'Présence régulière et respect du cadre.',
+            'description' => "Récompense les jeunes qui fréquentent régulièrement la MJ et contribuent à un cadre respectueux et positif.",
+            'criteria' => array(
+                'Fréquenter la MJ sur plusieurs semaines',
+                'Respecter le cadre et les autres',
+                "Être reconnu·e par l'équipe comme présence positive"
+            ),
+            'prompt' => 'Grimlin mascot relaxed and comfortable, casual seated posture, circular emblem badge, flat illustration, thick bold outlines, vibrant colors, street graffiti style, simple textured background, no text',
+            'icon' => 'yellow_circle',
+            'display_order' => 20,
+        ),
+        array(
+            'slug' => 'voix-du-groupe',
+            'label' => 'Voix du Groupe',
+            'summary' => "Ose s'exprimer et donner son avis.",
+            'description' => "Valorise les prises de parole et la capacité à écouter les autres au sein du groupe.",
+            'criteria' => array(
+                "Prendre la parole au moins une fois dans un échange collectif",
+                'Donner un avis ou une idée',
+                'Écouter les autres sans les interrompre'
+            ),
+            'prompt' => 'Grimlin mascot speaking confidently into a microphone, expressive face, circular emblem badge, flat illustration, thick bold outlines, vibrant colors, street graffiti style, simple textured background, no text',
+            'icon' => 'blue_circle',
+            'display_order' => 30,
+        ),
+        array(
+            'slug' => 'esprit-cracs',
+            'label' => 'Esprit CRACS',
+            'summary' => 'Posture critique, citoyenne et responsable.',
+            'description' => "Salue les jeunes qui montrent un esprit critique, une réflexion citoyenne et un sens des responsabilités.",
+            'criteria' => array(
+                'Participer à un débat, atelier ou discussion',
+                'Exprimer un point de vue personnel argumenté',
+                'Montrer une capacité de recul ou de réflexion'
+            ),
+            'prompt' => 'Grimlin mascot thinking with a lightbulb above head, reflective posture, circular emblem badge, flat illustration, thick bold outlines, vibrant colors, street graffiti style, simple textured background, no text',
+            'icon' => 'purple_circle',
+            'display_order' => 40,
+        ),
+        array(
+            'slug' => 'coup-de-main',
+            'label' => 'Coup de Main',
+            'summary' => 'Soutient le collectif par des actions concrètes.',
+            'description' => "Met en lumière celles et ceux qui contribuent concrètement à la vie collective par des coups de main spontanés.",
+            'criteria' => array(
+                'Aider à installer, ranger ou organiser',
+                'Donner un coup de main sans y être obligé·e',
+                'Adopter une attitude solidaire'
+            ),
+            'prompt' => 'Grimlin mascot helping another Grimlin lift an object, teamwork posture, circular emblem badge, flat illustration, thick bold outlines, vibrant colors, street graffiti style, simple textured background, no text',
+            'icon' => 'orange_circle',
+            'display_order' => 50,
+        ),
+        array(
+            'slug' => 'creatif',
+            'label' => 'Créatif·ve',
+            'summary' => "S'exprime par la création ou l'art.",
+            'description' => "Récompense l'expression artistique et la capacité à partager une création avec le groupe.",
+            'criteria' => array(
+                'Participer à un atelier créatif ou artistique',
+                'Produire ou co-produire une création',
+                'Partager sa création avec le groupe'
+            ),
+            'prompt' => 'Grimlin mascot creating street art with spray paint, dynamic creative pose, circular emblem badge, flat illustration, thick bold outlines, vibrant colors, street graffiti style, simple textured background, no text',
+            'icon' => 'artist_palette',
+            'display_order' => 60,
+        ),
+        array(
+            'slug' => 'organisateur',
+            'label' => 'Organisateur·rice',
+            'summary' => "S'implique dans la préparation d'une activité ou d'un projet.",
+            'description' => "Souligne l'engagement dans l'organisation d'activités, avec prise de responsabilités et persévérance.",
+            'criteria' => array(
+                "Participer à l'organisation d'un événement ou projet",
+                'Prendre au moins une responsabilité concrète',
+                'Aller au bout de ce qui a été proposé'
+            ),
+            'prompt' => 'Grimlin mascot holding a clipboard and tools, planning posture, circular emblem badge, flat illustration, thick bold outlines, vibrant colors, street graffiti style, simple textured background, no text',
+            'icon' => 'hammer_and_wrench',
+            'display_order' => 70,
+        ),
+        array(
+            'slug' => 'ambassadeur',
+            'label' => 'Ambassadeur·rice',
+            'summary' => 'Représente positivement la MJ à l\'extérieur.',
+            'description' => "Valorise la représentation positive de la MJ en dehors de ses murs et la capacité à faire rayonner la structure.",
+            'criteria' => array(
+                "Parler de la MJ à quelqu'un d'extérieur",
+                'Inviter un·e nouveau·elle jeune',
+                'Participer à une action visible hors les murs'
+            ),
+            'prompt' => 'Grimlin mascot pointing outward proudly, confident stance, circular emblem badge, flat illustration, thick bold outlines, vibrant colors, street graffiti style, simple textured background, no text',
+            'icon' => 'megaphone',
+            'display_order' => 80,
+        ),
+        array(
+            'slug' => 'moteur-de-projet',
+            'label' => 'Moteur de Projet',
+            'summary' => 'Participe activement à un projet sur toute sa durée.',
+            'description' => "Récompense un engagement constant tout au long d'un projet collectif et la contribution active à sa réussite.",
+            'criteria' => array(
+                "S'impliquer du début à la fin d'un projet",
+                'Être présent·e aux moments clés',
+                'Contribuer à la réussite collective'
+            ),
+            'prompt' => 'Grimlin mascot pushing a large gear forward, determined action pose, circular emblem badge, flat illustration, thick bold outlines, vibrant colors, street graffiti style, simple textured background, no text',
+            'icon' => 'gear',
+            'display_order' => 90,
+        ),
+        array(
+            'slug' => 'grimlin-du-pery',
+            'label' => 'Grimlin du Péry',
+            'summary' => 'Reconnaissance collective pour un engagement durable.',
+            'description' => "Distinction ultime qui salue un engagement durable et l'incarnation quotidienne des valeurs de la MJ.",
+            'criteria' => array(
+                'Cumuler plusieurs badges précédents',
+                "Être reconnu·e par les jeunes et l'équipe",
+                'Incarner les valeurs de la MJ au quotidien'
+            ),
+            'prompt' => 'Iconic Grimlin mascot standing strong and proud, central heroic pose, circular emblem badge, flat illustration, thick bold outlines, vibrant colors, street graffiti style, simple textured background, no text',
+            'icon' => 'star',
+            'display_order' => 100,
+        ),
+    );
+
+    foreach ($badge_definitions as $badge) {
+        $existing_id = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$badges_table} WHERE slug = %s",
+            $badge['slug']
+        ));
+
+        if (!$existing_id) {
+            $criteria_json = null;
+            if (!empty($badge['criteria'])) {
+                $encoded = wp_json_encode(array_values($badge['criteria']));
+                if (is_string($encoded) && $encoded !== '') {
+                    $criteria_json = $encoded;
+                }
+            }
+
+            $wpdb->insert(
+                $badges_table,
+                array(
+                    'slug' => $badge['slug'],
+                    'label' => $badge['label'],
+                    'summary' => $badge['summary'],
+                    'description' => $badge['description'],
+                    'criteria' => $criteria_json,
+                    'prompt' => $badge['prompt'],
+                    'icon' => $badge['icon'],
+                    'display_order' => isset($badge['display_order']) ? (int) $badge['display_order'] : 0,
+                    'status' => 'active',
+                ),
+                array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s')
+            );
+
+            $existing_id = (int) $wpdb->insert_id;
+        }
+
+        $badge_id = (int) $existing_id;
+        if ($badge_id <= 0) {
+            continue;
+        }
+
+        if ($has_criteria_table && !empty($badge['criteria'])) {
+            $order = 0;
+            foreach ($badge['criteria'] as $criterion_label) {
+                $label = trim((string) $criterion_label);
+                if ($label === '') {
+                    continue;
+                }
+
+                $base_slug = sanitize_title($label);
+                if ($base_slug === '') {
+                    $base_slug = sanitize_title($badge['slug'] . '-' . ($order + 1));
+                }
+                if ($base_slug === '') {
+                    $base_slug = 'criterion-' . $badge_id . '-' . ($order + 1);
+                }
+
+                $slug = $base_slug;
+                $existing_criterion_id = (int) $wpdb->get_var($wpdb->prepare(
+                    "SELECT id FROM {$badge_criteria_table} WHERE badge_id = %d AND slug = %s",
+                    $badge_id,
+                    $slug
+                ));
+
+                if ($existing_criterion_id <= 0) {
+                    $unique_slug = $slug;
+                    $suffix = 2;
+                    while ((int) $wpdb->get_var($wpdb->prepare(
+                        "SELECT COUNT(*) FROM {$badge_criteria_table} WHERE badge_id = %d AND slug = %s",
+                        $badge_id,
+                        $unique_slug
+                    )) > 0) {
+                        $unique_slug = $base_slug . '-' . $suffix;
+                        $suffix++;
+                    }
+
+                    $slug = $unique_slug;
+                }
+
+                if ($existing_criterion_id > 0) {
+                    $wpdb->update(
+                        $badge_criteria_table,
+                        array(
+                            'label' => $label,
+                            'display_order' => $order,
+                            'status' => 'active',
+                            'updated_at' => current_time('mysql'),
+                        ),
+                        array('id' => $existing_criterion_id),
+                        array('%s', '%d', '%s', '%s'),
+                        array('%d')
+                    );
+                } else {
+                    $wpdb->insert(
+                        $badge_criteria_table,
+                        array(
+                            'badge_id' => $badge_id,
+                            'slug' => $slug,
+                            'label' => $label,
+                            'display_order' => $order,
+                            'status' => 'active',
+                            'created_at' => current_time('mysql'),
+                            'updated_at' => current_time('mysql'),
+                        ),
+                        array('%d', '%s', '%s', '%d', '%s', '%s', '%s')
+                    );
+                }
+
+                $order++;
+            }
+        }
+    }
+}
+add_action('init', 'mj_member_seed_default_badges', 16);
+
 function mj_member_run_schema_upgrade() {
     static $running = false;
     if ($running) {
@@ -842,6 +1201,13 @@ function mj_member_run_schema_upgrade() {
         ? mj_member_get_notifications_table_name()
         : $wpdb->prefix . 'mj_notifications';
 
+    $badges_table = function_exists('mj_member_get_badges_table_name')
+        ? mj_member_get_badges_table_name()
+        : $wpdb->prefix . 'mj_badges';
+    $member_badges_table = function_exists('mj_member_get_member_badges_table_name')
+        ? mj_member_get_member_badges_table_name()
+        : $wpdb->prefix . 'mj_member_badges';
+
     $missing_todo_tables = array();
     if (!mj_member_table_exists($todo_projects_table)) {
         $missing_todo_tables[] = $todo_projects_table;
@@ -870,11 +1236,20 @@ function mj_member_run_schema_upgrade() {
         $missing_idea_tables[] = $notifications_table;
     }
 
+    $missing_badge_tables = array();
+    if (!mj_member_table_exists($badges_table)) {
+        $missing_badge_tables[] = $badges_table;
+    }
+    if (!mj_member_table_exists($member_badges_table)) {
+        $missing_badge_tables[] = $member_badges_table;
+    }
+
     $schema_needs_upgrade = version_compare($stored_version, Config::schemaVersion(), '<')
         || !empty($missing_columns)
         || !empty($missing_event_columns)
         || !empty($missing_todo_tables)
-        || !empty($missing_idea_tables);
+        || !empty($missing_idea_tables)
+        || !empty($missing_badge_tables);
     
  
     
@@ -930,6 +1305,9 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_41($wpdb);
     mj_member_upgrade_to_2_42($wpdb);
     mj_member_upgrade_to_2_43($wpdb);
+    mj_member_upgrade_to_2_44($wpdb);
+    mj_member_upgrade_to_2_45($wpdb);
+    mj_member_upgrade_to_2_46($wpdb);
     
     
     $registrations_table = mj_member_get_event_registrations_table_name();
@@ -2773,6 +3151,385 @@ function mj_member_upgrade_to_2_43($wpdb) {
         if (empty($has_fk)) {
             $wpdb->query("ALTER TABLE {$recipients_table} ADD CONSTRAINT fk_mj_notification_recipient FOREIGN KEY (notification_id) REFERENCES {$notifications_table} (id) ON DELETE CASCADE");
         }
+    }
+}
+
+function mj_member_upgrade_to_2_44($wpdb) {
+    $badges_table = mj_member_get_badges_table_name();
+    $member_badges_table = mj_member_get_member_badges_table_name();
+
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql_badges = "CREATE TABLE {$badges_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        slug varchar(120) NOT NULL,
+        label varchar(190) NOT NULL,
+        summary text DEFAULT NULL,
+        description longtext DEFAULT NULL,
+        criteria longtext DEFAULT NULL,
+        prompt longtext DEFAULT NULL,
+        icon varchar(60) DEFAULT NULL,
+        display_order smallint(5) unsigned NOT NULL DEFAULT 0,
+        status varchar(20) NOT NULL DEFAULT 'active',
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        UNIQUE KEY slug (slug),
+        KEY idx_status (status),
+        KEY idx_display_order (display_order)
+    ) {$charset_collate};";
+
+    dbDelta($sql_badges);
+
+    $sql_member_badges = "CREATE TABLE {$member_badges_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        badge_id bigint(20) unsigned NOT NULL,
+        member_id bigint(20) unsigned NOT NULL,
+        awarded_by_user_id bigint(20) unsigned DEFAULT NULL,
+        awarded_by_member_id bigint(20) unsigned DEFAULT NULL,
+        awarded_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        status varchar(20) NOT NULL DEFAULT 'awarded',
+        notes text DEFAULT NULL,
+        evidence longtext DEFAULT NULL,
+        revoked_at datetime DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        UNIQUE KEY idx_member_badge_unique (member_id, badge_id),
+        KEY idx_badge (badge_id),
+        KEY idx_member (member_id),
+        KEY idx_status (status),
+        KEY idx_awarded_by_user (awarded_by_user_id),
+        KEY idx_awarded_by_member (awarded_by_member_id),
+        KEY idx_awarded_at (awarded_at),
+        CONSTRAINT fk_mj_member_badges_badge FOREIGN KEY (badge_id) REFERENCES {$badges_table} (id) ON DELETE CASCADE
+    ) {$charset_collate};";
+
+    dbDelta($sql_member_badges);
+
+    if (mj_member_table_exists($badges_table)) {
+        mj_member_convert_table_to_utf8mb4($badges_table);
+
+        $badge_columns = array(
+            'slug' => "ALTER TABLE {$badges_table} ADD COLUMN slug varchar(120) NOT NULL AFTER id",
+            'label' => "ALTER TABLE {$badges_table} ADD COLUMN label varchar(190) NOT NULL AFTER slug",
+            'summary' => "ALTER TABLE {$badges_table} ADD COLUMN summary text DEFAULT NULL AFTER label",
+            'description' => "ALTER TABLE {$badges_table} ADD COLUMN description longtext DEFAULT NULL AFTER summary",
+            'criteria' => "ALTER TABLE {$badges_table} ADD COLUMN criteria longtext DEFAULT NULL AFTER description",
+            'prompt' => "ALTER TABLE {$badges_table} ADD COLUMN prompt longtext DEFAULT NULL AFTER criteria",
+            'icon' => "ALTER TABLE {$badges_table} ADD COLUMN icon varchar(60) DEFAULT NULL AFTER prompt",
+            'display_order' => "ALTER TABLE {$badges_table} ADD COLUMN display_order smallint(5) unsigned NOT NULL DEFAULT 0 AFTER icon",
+            'status' => "ALTER TABLE {$badges_table} ADD COLUMN status varchar(20) NOT NULL DEFAULT 'active' AFTER display_order",
+            'created_at' => "ALTER TABLE {$badges_table} ADD COLUMN created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER status",
+            'updated_at' => "ALTER TABLE {$badges_table} ADD COLUMN updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at",
+        );
+
+        foreach ($badge_columns as $column => $statement) {
+            if (!mj_member_column_exists($badges_table, $column)) {
+                $wpdb->query($statement);
+            }
+        }
+
+        if (!mj_member_index_exists($badges_table, 'slug')) {
+            $wpdb->query("ALTER TABLE {$badges_table} ADD UNIQUE KEY slug (slug)");
+        }
+
+        if (!mj_member_index_exists($badges_table, 'idx_status')) {
+            $wpdb->query("ALTER TABLE {$badges_table} ADD KEY idx_status (status)");
+        }
+
+        if (!mj_member_index_exists($badges_table, 'idx_display_order')) {
+            $wpdb->query("ALTER TABLE {$badges_table} ADD KEY idx_display_order (display_order)");
+        }
+
+        $wpdb->query("UPDATE {$badges_table} SET status = 'active' WHERE status IS NULL OR status = ''");
+    }
+
+    if (mj_member_table_exists($member_badges_table)) {
+        mj_member_convert_table_to_utf8mb4($member_badges_table);
+
+        $member_badge_columns = array(
+            'badge_id' => "ALTER TABLE {$member_badges_table} ADD COLUMN badge_id bigint(20) unsigned NOT NULL AFTER id",
+            'member_id' => "ALTER TABLE {$member_badges_table} ADD COLUMN member_id bigint(20) unsigned NOT NULL AFTER badge_id",
+            'awarded_by_user_id' => "ALTER TABLE {$member_badges_table} ADD COLUMN awarded_by_user_id bigint(20) unsigned DEFAULT NULL AFTER member_id",
+            'awarded_by_member_id' => "ALTER TABLE {$member_badges_table} ADD COLUMN awarded_by_member_id bigint(20) unsigned DEFAULT NULL AFTER awarded_by_user_id",
+            'awarded_at' => "ALTER TABLE {$member_badges_table} ADD COLUMN awarded_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER awarded_by_member_id",
+            'status' => "ALTER TABLE {$member_badges_table} ADD COLUMN status varchar(20) NOT NULL DEFAULT 'awarded' AFTER awarded_at",
+            'notes' => "ALTER TABLE {$member_badges_table} ADD COLUMN notes text DEFAULT NULL AFTER status",
+            'evidence' => "ALTER TABLE {$member_badges_table} ADD COLUMN evidence longtext DEFAULT NULL AFTER notes",
+            'revoked_at' => "ALTER TABLE {$member_badges_table} ADD COLUMN revoked_at datetime DEFAULT NULL AFTER evidence",
+            'created_at' => "ALTER TABLE {$member_badges_table} ADD COLUMN created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER revoked_at",
+            'updated_at' => "ALTER TABLE {$member_badges_table} ADD COLUMN updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at",
+        );
+
+        foreach ($member_badge_columns as $column => $statement) {
+            if (!mj_member_column_exists($member_badges_table, $column)) {
+                $wpdb->query($statement);
+            }
+        }
+
+        $member_badge_indexes = array(
+            'idx_member_badge_unique' => "ALTER TABLE {$member_badges_table} ADD UNIQUE KEY idx_member_badge_unique (member_id, badge_id)",
+            'idx_badge' => "ALTER TABLE {$member_badges_table} ADD KEY idx_badge (badge_id)",
+            'idx_member' => "ALTER TABLE {$member_badges_table} ADD KEY idx_member (member_id)",
+            'idx_status' => "ALTER TABLE {$member_badges_table} ADD KEY idx_status (status)",
+            'idx_awarded_by_user' => "ALTER TABLE {$member_badges_table} ADD KEY idx_awarded_by_user (awarded_by_user_id)",
+            'idx_awarded_by_member' => "ALTER TABLE {$member_badges_table} ADD KEY idx_awarded_by_member (awarded_by_member_id)",
+            'idx_awarded_at' => "ALTER TABLE {$member_badges_table} ADD KEY idx_awarded_at (awarded_at)",
+        );
+
+        foreach ($member_badge_indexes as $index => $statement) {
+            if (!mj_member_index_exists($member_badges_table, $index)) {
+                $wpdb->query($statement);
+            }
+        }
+
+        $has_fk = $wpdb->get_var($wpdb->prepare(
+            "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND REFERENCED_TABLE_NAME = %s",
+            DB_NAME,
+            $member_badges_table,
+            $badges_table
+        ));
+
+        if (empty($has_fk)) {
+            $wpdb->query("ALTER TABLE {$member_badges_table} ADD CONSTRAINT fk_mj_member_badges_badge FOREIGN KEY (badge_id) REFERENCES {$badges_table} (id) ON DELETE CASCADE");
+        }
+
+        $wpdb->query("UPDATE {$member_badges_table} SET status = 'awarded' WHERE status IS NULL OR status = ''");
+    }
+
+    mj_member_seed_default_badges();
+}
+
+function mj_member_upgrade_to_2_45($wpdb) {
+    $badges_table = mj_member_get_badges_table_name();
+    $badge_criteria_table = mj_member_get_badge_criteria_table_name();
+    $member_badge_criteria_table = mj_member_get_member_badge_criteria_table_name();
+
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql_badge_criteria = "CREATE TABLE {$badge_criteria_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        badge_id bigint(20) unsigned NOT NULL,
+        slug varchar(160) NOT NULL,
+        label varchar(190) NOT NULL,
+        description text DEFAULT NULL,
+        display_order smallint(5) unsigned NOT NULL DEFAULT 0,
+        status varchar(20) NOT NULL DEFAULT 'active',
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        UNIQUE KEY idx_badge_slug (badge_id, slug),
+        KEY idx_badge (badge_id),
+        KEY idx_status (status),
+        KEY idx_display_order (display_order)
+    ) {$charset_collate};";
+
+    dbDelta($sql_badge_criteria);
+
+    $sql_member_badge_criteria = "CREATE TABLE {$member_badge_criteria_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        badge_id bigint(20) unsigned NOT NULL,
+        criterion_id bigint(20) unsigned NOT NULL,
+        member_id bigint(20) unsigned NOT NULL,
+        status varchar(20) NOT NULL DEFAULT 'awarded',
+        notes text DEFAULT NULL,
+        evidence longtext DEFAULT NULL,
+        awarded_by_user_id bigint(20) unsigned DEFAULT NULL,
+        awarded_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        revoked_at datetime DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        UNIQUE KEY idx_member_criterion_unique (member_id, criterion_id),
+        KEY idx_badge (badge_id),
+        KEY idx_member (member_id),
+        KEY idx_criterion (criterion_id),
+        KEY idx_status (status),
+        KEY idx_awarded_at (awarded_at),
+        CONSTRAINT fk_mj_badge_criteria_badge FOREIGN KEY (badge_id) REFERENCES {$badges_table} (id) ON DELETE CASCADE,
+        CONSTRAINT fk_mj_member_badge_criteria FOREIGN KEY (criterion_id) REFERENCES {$badge_criteria_table} (id) ON DELETE CASCADE
+    ) {$charset_collate};";
+
+    dbDelta($sql_member_badge_criteria);
+
+    if (mj_member_table_exists($badge_criteria_table)) {
+        mj_member_convert_table_to_utf8mb4($badge_criteria_table);
+
+        $columns = array(
+            'badge_id' => "ALTER TABLE {$badge_criteria_table} ADD COLUMN badge_id bigint(20) unsigned NOT NULL AFTER id",
+            'slug' => "ALTER TABLE {$badge_criteria_table} ADD COLUMN slug varchar(160) NOT NULL AFTER badge_id",
+            'label' => "ALTER TABLE {$badge_criteria_table} ADD COLUMN label varchar(190) NOT NULL AFTER slug",
+            'description' => "ALTER TABLE {$badge_criteria_table} ADD COLUMN description text DEFAULT NULL AFTER label",
+            'display_order' => "ALTER TABLE {$badge_criteria_table} ADD COLUMN display_order smallint(5) unsigned NOT NULL DEFAULT 0 AFTER description",
+            'status' => "ALTER TABLE {$badge_criteria_table} ADD COLUMN status varchar(20) NOT NULL DEFAULT 'active' AFTER display_order",
+            'created_at' => "ALTER TABLE {$badge_criteria_table} ADD COLUMN created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER status",
+            'updated_at' => "ALTER TABLE {$badge_criteria_table} ADD COLUMN updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at",
+        );
+
+        foreach ($columns as $column => $statement) {
+            if (!mj_member_column_exists($badge_criteria_table, $column)) {
+                $wpdb->query($statement);
+            }
+        }
+
+        $indexes = array(
+            'idx_badge_slug' => "ALTER TABLE {$badge_criteria_table} ADD UNIQUE KEY idx_badge_slug (badge_id, slug)",
+            'idx_badge' => "ALTER TABLE {$badge_criteria_table} ADD KEY idx_badge (badge_id)",
+            'idx_status' => "ALTER TABLE {$badge_criteria_table} ADD KEY idx_status (status)",
+            'idx_display_order' => "ALTER TABLE {$badge_criteria_table} ADD KEY idx_display_order (display_order)",
+        );
+
+        foreach ($indexes as $index => $statement) {
+            if (!mj_member_index_exists($badge_criteria_table, $index)) {
+                $wpdb->query($statement);
+            }
+        }
+
+        $wpdb->query("UPDATE {$badge_criteria_table} SET status = 'active' WHERE status IS NULL OR status = ''");
+    }
+
+    if (mj_member_table_exists($member_badge_criteria_table)) {
+        mj_member_convert_table_to_utf8mb4($member_badge_criteria_table);
+
+        $columns = array(
+            'badge_id' => "ALTER TABLE {$member_badge_criteria_table} ADD COLUMN badge_id bigint(20) unsigned NOT NULL AFTER id",
+            'criterion_id' => "ALTER TABLE {$member_badge_criteria_table} ADD COLUMN criterion_id bigint(20) unsigned NOT NULL AFTER badge_id",
+            'member_id' => "ALTER TABLE {$member_badge_criteria_table} ADD COLUMN member_id bigint(20) unsigned NOT NULL AFTER criterion_id",
+            'status' => "ALTER TABLE {$member_badge_criteria_table} ADD COLUMN status varchar(20) NOT NULL DEFAULT 'awarded' AFTER member_id",
+            'notes' => "ALTER TABLE {$member_badge_criteria_table} ADD COLUMN notes text DEFAULT NULL AFTER status",
+            'evidence' => "ALTER TABLE {$member_badge_criteria_table} ADD COLUMN evidence longtext DEFAULT NULL AFTER notes",
+            'awarded_by_user_id' => "ALTER TABLE {$member_badge_criteria_table} ADD COLUMN awarded_by_user_id bigint(20) unsigned DEFAULT NULL AFTER evidence",
+            'awarded_at' => "ALTER TABLE {$member_badge_criteria_table} ADD COLUMN awarded_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER awarded_by_user_id",
+            'revoked_at' => "ALTER TABLE {$member_badge_criteria_table} ADD COLUMN revoked_at datetime DEFAULT NULL AFTER awarded_at",
+            'created_at' => "ALTER TABLE {$member_badge_criteria_table} ADD COLUMN created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER revoked_at",
+            'updated_at' => "ALTER TABLE {$member_badge_criteria_table} ADD COLUMN updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at",
+        );
+
+        foreach ($columns as $column => $statement) {
+            if (!mj_member_column_exists($member_badge_criteria_table, $column)) {
+                $wpdb->query($statement);
+            }
+        }
+
+        $indexes = array(
+            'idx_member_criterion_unique' => "ALTER TABLE {$member_badge_criteria_table} ADD UNIQUE KEY idx_member_criterion_unique (member_id, criterion_id)",
+            'idx_badge' => "ALTER TABLE {$member_badge_criteria_table} ADD KEY idx_badge (badge_id)",
+            'idx_member' => "ALTER TABLE {$member_badge_criteria_table} ADD KEY idx_member (member_id)",
+            'idx_criterion' => "ALTER TABLE {$member_badge_criteria_table} ADD KEY idx_criterion (criterion_id)",
+            'idx_status' => "ALTER TABLE {$member_badge_criteria_table} ADD KEY idx_status (status)",
+            'idx_awarded_at' => "ALTER TABLE {$member_badge_criteria_table} ADD KEY idx_awarded_at (awarded_at)",
+        );
+
+        foreach ($indexes as $index => $statement) {
+            if (!mj_member_index_exists($member_badge_criteria_table, $index)) {
+                $wpdb->query($statement);
+            }
+        }
+
+        $wpdb->query("UPDATE {$member_badge_criteria_table} SET status = 'awarded' WHERE status IS NULL OR status = ''");
+    }
+
+    if (mj_member_table_exists($badge_criteria_table) && mj_member_table_exists($badges_table) && mj_member_column_exists($badges_table, 'criteria')) {
+        $badge_rows = $wpdb->get_results("SELECT id, criteria FROM {$badges_table} WHERE criteria IS NOT NULL AND criteria <> ''", ARRAY_A);
+        if (is_array($badge_rows)) {
+            foreach ($badge_rows as $row) {
+                $badge_id = isset($row['id']) ? (int) $row['id'] : 0;
+                if ($badge_id <= 0) {
+                    continue;
+                }
+
+                $decoded = json_decode((string) $row['criteria'], true);
+                if (empty($decoded) || !is_array($decoded)) {
+                    continue;
+                }
+
+                $order = 0;
+                foreach ($decoded as $entry) {
+                    if (is_array($entry)) {
+                        $label = isset($entry['label']) ? (string) $entry['label'] : '';
+                    } else {
+                        $label = (string) $entry;
+                    }
+
+                    $label = trim($label);
+                    if ($label === '') {
+                        continue;
+                    }
+
+                    $slug = sanitize_title($label);
+                    if ($slug === '') {
+                        $slug = 'criterion-' . $badge_id;
+                    }
+
+                    $base_slug = $slug;
+                    $suffix = 2;
+                    while ((int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$badge_criteria_table} WHERE badge_id = %d AND slug = %s", $badge_id, $slug)) > 0) {
+                        $slug = $base_slug . '-' . $suffix;
+                        $suffix++;
+                    }
+
+                    $existing_id = (int) $wpdb->get_var($wpdb->prepare(
+                        "SELECT id FROM {$badge_criteria_table} WHERE badge_id = %d AND slug = %s",
+                        $badge_id,
+                        $slug
+                    ));
+
+                    if ($existing_id > 0) {
+                        $wpdb->update(
+                            $badge_criteria_table,
+                            array(
+                                'label' => $label,
+                                'display_order' => $order,
+                                'status' => 'active',
+                                'updated_at' => current_time('mysql'),
+                            ),
+                            array('id' => $existing_id),
+                            array('%s', '%d', '%s', '%s'),
+                            array('%d')
+                        );
+                    } else {
+                        $wpdb->insert(
+                            $badge_criteria_table,
+                            array(
+                                'badge_id' => $badge_id,
+                                'slug' => $slug,
+                                'label' => $label,
+                                'display_order' => $order,
+                                'status' => 'active',
+                                'created_at' => current_time('mysql'),
+                                'updated_at' => current_time('mysql'),
+                            ),
+                            array('%d', '%s', '%s', '%d', '%s', '%s', '%s')
+                        );
+                    }
+
+                    $order++;
+                }
+            }
+        }
+    }
+
+    mj_member_seed_default_badges();
+}
+
+function mj_member_upgrade_to_2_46($wpdb) {
+    $badges_table = mj_member_get_badges_table_name();
+
+    if (!mj_member_table_exists($badges_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($badges_table, 'image_id')) {
+        $wpdb->query("ALTER TABLE {$badges_table} ADD COLUMN image_id bigint(20) unsigned DEFAULT NULL AFTER icon");
     }
 }
 

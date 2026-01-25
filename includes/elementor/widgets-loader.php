@@ -36,6 +36,7 @@ if (!function_exists('mj_member_get_elementor_widgets_map')) {
             'Mj_Member_Elementor_Photo_Grimlins_Widget' => 'includes/elementor/class-mj-member-photo-grimlins-widget.php',
             'Mj_Member_Elementor_Grimlins_Gallery_Widget' => 'includes/elementor/class-mj-member-grimlins-gallery-widget.php',
             'Mj_Member_Elementor_Grim_Gif_Widget' => 'includes/elementor/class-mj-member-grim-gif-widget.php',
+            'Mj_Member_Elementor_Badges_Widget' => 'includes/elementor/class-mj-member-badges-widget.php',
             'Mj_Member_Elementor_Todo_Widget' => 'includes/elementor/class-mj-member-todo-widget.php',
             'Mj_Member_Elementor_Documents_Widget' => 'includes/elementor/class-mj-member-documents-widget.php',
             'Mj_Member_Elementor_Idea_Box_Widget' => 'includes/elementor/class-mj-member-idea-box-widget.php',

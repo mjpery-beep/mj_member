@@ -15,6 +15,8 @@ if (!function_exists('mj_member_enqueue_login_component_assets')) {
     }
 }
 
+
+
 if (!function_exists('mj_member_normalize_classes')) {
     function mj_member_normalize_classes($classes) {
         $sanitized = array();

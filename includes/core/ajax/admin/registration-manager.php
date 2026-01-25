@@ -16,6 +16,10 @@ use Mj\Member\Classes\Crud\MjEventPhotos;
 use Mj\Member\Classes\Crud\MjContactMessages;
 use Mj\Member\Classes\Crud\MjIdeas;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjBadges;
+use Mj\Member\Classes\Crud\MjMemberBadges;
+use Mj\Member\Classes\Crud\MjBadgeCriteria;
+use Mj\Member\Classes\Crud\MjMemberBadgeCriteria;
 use Mj\Member\Classes\Forms\EventFormDataMapper;
 use Mj\Member\Classes\Forms\EventFormOptionsBuilder;
 use Mj\Member\Classes\MjEventSchedule;
@@ -67,6 +71,7 @@ add_action('wp_ajax_mj_regmgr_capture_member_photo', 'mj_regmgr_capture_member_p
 add_action('wp_ajax_mj_regmgr_delete_member_message', 'mj_regmgr_delete_member_message');
 add_action('wp_ajax_mj_regmgr_reset_member_password', 'mj_regmgr_reset_member_password');
 add_action('wp_ajax_mj_regmgr_delete_member', 'mj_regmgr_delete_member');
+add_action('wp_ajax_mj_regmgr_sync_member_badge', 'mj_regmgr_sync_member_badge');
 
 /**
  * Verify nonce and check user permissions
@@ -4592,6 +4597,212 @@ function mj_regmgr_get_members() {
 }
 
 /**
+ * Build badges payload for a member within the registration manager.
+ *
+ * @param int $member_id
+ * @return array<int,array<string,mixed>>
+ */
+function mj_regmgr_get_member_badges_payload($member_id) {
+    $member_id = (int) $member_id;
+    if ($member_id <= 0) {
+        return array();
+    }
+
+    $badges = MjBadges::get_all(array(
+        'status' => MjBadges::STATUS_ACTIVE,
+        'orderby' => 'display_order',
+        'order' => 'ASC',
+    ));
+
+    if (empty($badges)) {
+        return array();
+    }
+
+    $assignments = MjMemberBadges::get_all(array(
+        'member_id' => $member_id,
+    ));
+
+    $assignment_map = array();
+    if (!empty($assignments)) {
+        foreach ($assignments as $assignment) {
+            $assignment_badge_id = isset($assignment['badge_id']) ? (int) $assignment['badge_id'] : 0;
+            if ($assignment_badge_id > 0) {
+                $assignment_map[$assignment_badge_id] = $assignment;
+            }
+        }
+    }
+
+    $payload = array();
+    foreach ($badges as $badge) {
+        $entry = mj_regmgr_prepare_member_badge_entry($badge, $member_id, $assignment_map);
+        if ($entry !== null) {
+            $payload[] = $entry;
+        }
+    }
+
+    return $payload;
+}
+
+/**
+ * Prepare a badge entry payload for a member.
+ *
+ * @param array<string,mixed>|null $badge
+ * @param int $member_id
+ * @param array<int,array<string,mixed>>|null $assignment_map
+ * @return array<string,mixed>|null
+ */
+function mj_regmgr_prepare_member_badge_entry($badge, $member_id, $assignment_map = null) {
+    if (!is_array($badge) || empty($badge['id'])) {
+        return null;
+    }
+
+    $badge_id = (int) $badge['id'];
+    if ($badge_id <= 0) {
+        return null;
+    }
+
+    if ($assignment_map === null) {
+        $assignment_rows = MjMemberBadges::get_all(array(
+            'member_id' => $member_id,
+            'badge_id' => $badge_id,
+            'limit' => 1,
+        ));
+        $assignment_map = array();
+        if (!empty($assignment_rows)) {
+            $assignment_map[$badge_id] = $assignment_rows[0];
+        }
+    }
+
+    $assignment = isset($assignment_map[$badge_id]) ? $assignment_map[$badge_id] : null;
+    $assignment_status = '';
+    $awarded_at = '';
+    $revoked_at = '';
+
+    $image_id = isset($badge['image_id']) ? (int) $badge['image_id'] : 0;
+    $image_url = '';
+    if ($image_id > 0) {
+        $image_url = wp_get_attachment_image_url($image_id, 'medium');
+        if (!$image_url) {
+            $image_url = wp_get_attachment_url($image_id);
+        }
+    }
+
+    if (is_array($assignment)) {
+        $assignment_status = isset($assignment['status']) ? (string) $assignment['status'] : '';
+        $awarded_at = isset($assignment['awarded_at']) ? (string) $assignment['awarded_at'] : '';
+        $revoked_at = isset($assignment['revoked_at']) ? (string) $assignment['revoked_at'] : '';
+    }
+
+    $criteria_records = array();
+    if (!empty($badge['criteria_records']) && is_array($badge['criteria_records'])) {
+        foreach ($badge['criteria_records'] as $record) {
+            if (empty($record['id'])) {
+                continue;
+            }
+            if (!empty($record['status']) && $record['status'] === MjBadgeCriteria::STATUS_ARCHIVED) {
+                continue;
+            }
+            $criteria_records[] = $record;
+        }
+    }
+
+    $awards = MjMemberBadgeCriteria::get_for_member_badge($member_id, $badge_id);
+    $awarded_map = array();
+    if (!empty($awards)) {
+        foreach ($awards as $award_row) {
+            $criterion_id = isset($award_row['criterion_id']) ? (int) $award_row['criterion_id'] : 0;
+            if ($criterion_id <= 0) {
+                continue;
+            }
+            $awarded_map[$criterion_id] = isset($award_row['status']) ? (string) $award_row['status'] : MjMemberBadgeCriteria::STATUS_AWARDED;
+        }
+    }
+
+    $criteria = array();
+    $awardable_total = 0;
+    $awarded_count = 0;
+
+    foreach ($criteria_records as $record) {
+        $criterion_id = isset($record['id']) ? (int) $record['id'] : 0;
+        $can_toggle = $criterion_id > 0;
+
+        $status = 'pending';
+        $awarded = false;
+
+        if ($can_toggle && isset($awarded_map[$criterion_id])) {
+            $candidate_status = $awarded_map[$criterion_id];
+            if ($candidate_status === MjMemberBadgeCriteria::STATUS_AWARDED) {
+                $status = 'awarded';
+                $awarded = true;
+                $awarded_count++;
+            } elseif ($candidate_status === MjMemberBadgeCriteria::STATUS_REVOKED) {
+                $status = 'revoked';
+            }
+        }
+
+        if ($can_toggle) {
+            $awardable_total++;
+        }
+
+        $criteria[] = array(
+            'id' => $criterion_id,
+            'label' => isset($record['label']) ? (string) $record['label'] : '',
+            'description' => isset($record['description']) ? (string) $record['description'] : '',
+            'awarded' => $awarded,
+            'status' => $status,
+            'canToggle' => $can_toggle,
+        );
+    }
+
+    if (empty($criteria) && !empty($badge['criteria']) && is_array($badge['criteria'])) {
+        foreach ($badge['criteria'] as $label_raw) {
+            $label = trim((string) $label_raw);
+            if ($label === '') {
+                continue;
+            }
+            $criteria[] = array(
+                'id' => 0,
+                'label' => $label,
+                'description' => '',
+                'awarded' => false,
+                'status' => 'pending',
+                'canToggle' => false,
+            );
+        }
+    }
+
+    $progress = 0;
+    if ($awardable_total > 0) {
+        $progress = (int) round(($awarded_count / $awardable_total) * 100);
+    } elseif ($assignment_status === MjMemberBadges::STATUS_AWARDED) {
+        $progress = 100;
+    }
+
+    if ($progress < 0) {
+        $progress = 0;
+    } elseif ($progress > 100) {
+        $progress = 100;
+    }
+
+    return array(
+        'id' => $badge_id,
+        'label' => isset($badge['label']) ? (string) $badge['label'] : '',
+        'summary' => isset($badge['summary']) ? (string) $badge['summary'] : '',
+        'description' => isset($badge['description']) ? (string) $badge['description'] : '',
+        'icon' => isset($badge['icon']) ? (string) $badge['icon'] : '',
+        'imageId' => $image_id,
+        'imageUrl' => $image_url,
+        'status' => $assignment_status,
+        'awardedAt' => $awarded_at,
+        'revokedAt' => $revoked_at,
+        'totalCriteria' => $awardable_total,
+        'awardedCount' => $awarded_count,
+        'progressPercent' => $progress,
+        'criteria' => $criteria,
+    );
+}
+
+/**
  * Get member details
  */
 function mj_regmgr_get_member_details() {
@@ -4908,7 +5119,89 @@ function mj_regmgr_get_member_details() {
         }
     }
 
+    $member['badges'] = mj_regmgr_get_member_badges_payload($member_id);
+
     wp_send_json_success(array('member' => $member));
+}
+
+/**
+ * Synchronize badge criteria for a member
+ */
+function mj_regmgr_sync_member_badge() {
+    $current_member = mj_regmgr_verify_request();
+    if (!$current_member) return;
+
+    $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+    $badge_id = isset($_POST['badgeId']) ? absint($_POST['badgeId']) : 0;
+
+    if ($member_id <= 0 || $badge_id <= 0) {
+        wp_send_json_error(array('message' => __('Paramètres invalides.', 'mj-member')));
+        return;
+    }
+
+    $target_member = MjMembers::getById($member_id);
+    if (!$target_member) {
+        wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
+        return;
+    }
+
+    $badge = MjBadges::get($badge_id);
+    if (!$badge || (isset($badge['status']) && $badge['status'] === MjBadges::STATUS_ARCHIVED)) {
+        wp_send_json_error(array('message' => __('Badge introuvable ou archivé.', 'mj-member')));
+        return;
+    }
+
+    $raw_ids = array();
+    if (isset($_POST['criterionIds'])) {
+        $raw_ids = $_POST['criterionIds'];
+        if (is_string($raw_ids)) {
+            $decoded = json_decode(stripslashes($raw_ids), true);
+            $raw_ids = is_array($decoded) ? $decoded : array();
+        }
+    }
+
+    $criterion_ids = array();
+    if (is_array($raw_ids)) {
+        foreach ($raw_ids as $value) {
+            $criterion_ids[] = (int) $value;
+        }
+    }
+
+    $criterion_ids = array_values(array_filter($criterion_ids, static function ($id) {
+        return $id > 0;
+    }));
+
+    if (!empty($criterion_ids)) {
+        $criterion_ids = MjBadgeCriteria::filter_ids_for_badge($badge_id, $criterion_ids);
+    }
+
+    $awarded_by = get_current_user_id();
+
+    $sync = MjMemberBadgeCriteria::sync_awards($member_id, $badge_id, $criterion_ids, $awarded_by);
+    if (is_wp_error($sync)) {
+        wp_send_json_error(array('message' => $sync->get_error_message()));
+        return;
+    }
+
+    $status = empty($criterion_ids) ? MjMemberBadges::STATUS_REVOKED : MjMemberBadges::STATUS_AWARDED;
+    $assignment = MjMemberBadges::create(array(
+        'member_id' => $member_id,
+        'badge_id' => $badge_id,
+        'status' => $status,
+        'awarded_by_user_id' => $awarded_by,
+    ));
+
+    if (is_wp_error($assignment)) {
+        wp_send_json_error(array('message' => $assignment->get_error_message()));
+        return;
+    }
+
+    $badge_payload = mj_regmgr_prepare_member_badge_entry($badge, $member_id);
+
+    wp_send_json_success(array(
+        'message' => __('Progression du badge mise à jour.', 'mj-member'),
+        'badge' => $badge_payload,
+    ));
 }
 
 /**

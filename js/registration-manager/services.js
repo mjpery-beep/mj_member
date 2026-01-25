@@ -441,6 +441,17 @@
             },
 
             /**
+             * Synchronise les critères d'un badge pour un membre
+             */
+            syncMemberBadge: function (memberId, badgeId, criterionIds) {
+                return post('mj_regmgr_sync_member_badge', {
+                    memberId: memberId,
+                    badgeId: badgeId,
+                    criterionIds: Array.isArray(criterionIds) ? criterionIds : [],
+                });
+            },
+
+            /**
              * Envoie un email de réinitialisation de mot de passe
              */
             resetMemberPassword: function (memberId) {
