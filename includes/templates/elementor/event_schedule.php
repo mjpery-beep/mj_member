@@ -4,9 +4,6 @@
  * Affiche l'horaire d'un événement MJ et adapte le rendu selon le type de planification.
  */
 
-use Mj\Member\Classes\Crud\MjEvents;
-use Mj\Member\Classes\MjEventSchedule;
-use Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -884,8 +881,8 @@ $event = null;
 $event_array = array();
 $event_for_schedule = null;
 
-if ($event_id > 0 and class_exists(MjEvents::class)) {
-    $event = MjEvents::find($event_id);
+if ($event_id > 0 and class_exists(\Mj\Member\Classes\Crud\MjEvents::class)) {
+    $event = \Mj\Member\Classes\Crud\MjEvents::find($event_id);
 
     if (is_object($event) and method_exists($event, 'toArray')) {
         $event_array = $event->toArray();
@@ -983,11 +980,11 @@ $occurrence_args = array(
 
 $occurrences = array();
 
-if ($event_for_schedule and class_exists(MjEventSchedule::class)) {
-    $occurrences = MjEventSchedule::get_occurrences($event_for_schedule, $occurrence_args);
+if ($event_for_schedule and class_exists(\Mj\Member\Classes\MjEventSchedule::class)) {
+    $occurrences = \Mj\Member\Classes\MjEventSchedule::get_occurrences($event_for_schedule, $occurrence_args);
 
     if (empty($occurrences)) {
-        $raw_occurrences = MjEventSchedule::build_all_occurrences($event_for_schedule);
+        $raw_occurrences = \Mj\Member\Classes\MjEventSchedule::build_all_occurrences($event_for_schedule);
         if (is_array($raw_occurrences) and !empty($raw_occurrences)) {
             $now_ts = current_time('timestamp');
             foreach ($raw_occurrences as $raw_occurrence) {
@@ -1328,8 +1325,8 @@ if ($next_occurrence_label !== '') {
 }
 
 $schedule_component = '';
-if (class_exists(ScheduleDisplayHelper::class)) {
-    $schedule_component = ScheduleDisplayHelper::render(
+if (class_exists(\Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper::class)) {
+    $schedule_component = \Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper::render(
         $schedule_data,
         array(
             'variant' => 'event-schedule-widget',
