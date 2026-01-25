@@ -56,6 +56,17 @@ class MjAccountLinks {
                 'type' => 'standard',
                 'icon_id' => 0,
             ),
+            'badges' => array(
+                'label' => __('Mes badges', 'mj-member'),
+                'slug' => 'mes-badges',
+                'query' => array('section' => 'badges'),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'all',
+                'editable_label' => true,
+                'type' => 'standard',
+                'icon_id' => 0,
+            ),
             'registrations' => array(
                 'label' => __('Mes inscriptions', 'mj-member'),
                 'slug' => 'inscriptions',
