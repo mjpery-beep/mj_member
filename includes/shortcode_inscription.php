@@ -204,8 +204,10 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 'phone'               => sanitize_text_field(wp_unslash($raw_child['phone'] ?? '')),
                 'is_autonomous'       => !empty($raw_child['is_autonomous']) ? 1 : 0,
                 'photo_usage_consent' => !empty($raw_child['photo_usage_consent']) ? 1 : 0,
+                'user_login'          => sanitize_text_field(wp_unslash($raw_child['user_login'] ?? '')),
                 'user_password'       => (string) wp_unslash($raw_child['user_password'] ?? ''),
                 'user_password_confirm' => (string) wp_unslash($raw_child['user_password_confirm'] ?? ''),
+                'notes'               => sanitize_textarea_field(wp_unslash($raw_child['notes'] ?? '')),
             );
 
             $is_empty = $child['first_name'] === '' && $child['last_name'] === '' && $child['birth_date'] === '' && $child['email'] === '';
