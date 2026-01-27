@@ -198,6 +198,40 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'week_display_mode',
+            array(
+                'label' => __('Semaine à afficher', 'mj-member'),
+                'type' => Controls_Manager::SELECT,
+                'default' => 'current',
+                'options' => array(
+                    'current' => __('Semaine courante', 'mj-member'),
+                    'previous' => __('Semaine précédente', 'mj-member'),
+                    'next' => __('Semaine prochaine', 'mj-member'),
+                    'custom' => __('Semaine spécifique', 'mj-member'),
+                ),
+                'condition' => array(
+                    'current_week_only' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'week_custom_reference',
+            array(
+                'label' => __('Date de référence', 'mj-member'),
+                'type' => Controls_Manager::DATE_TIME,
+                'picker_options' => array(
+                    'enableTime' => false,
+                ),
+                'condition' => array(
+                    'current_week_only' => 'yes',
+                    'week_display_mode' => 'custom',
+                ),
+                'description' => __('Choisissez une date incluse dans la semaine désirée.', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
             'cover_width_desktop',
             array(
                 'label' => __('Largeur image (desktop)', 'mj-member'),
@@ -426,6 +460,19 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $week_days_keys = array();
         $restrict_mobile_to_week = array();
         if ($display_current_week_only) {
+            $week_display_mode = isset($settings['week_display_mode']) ? sanitize_key((string) $settings['week_display_mode']) : 'current';
+            if (!in_array($week_display_mode, array('current', 'previous', 'next', 'custom'), true)) {
+                $week_display_mode = 'current';
+            }
+
+            $week_custom_reference_raw = '';
+            if (isset($settings['week_custom_reference']) && is_string($settings['week_custom_reference'])) {
+                $candidate_reference = sanitize_text_field($settings['week_custom_reference']);
+                if (preg_match('/^\d{4}-\d{2}-\d{2}(?:\s\d{2}:\d{2}(?::\d{2})?)?$/', $candidate_reference)) {
+                    $week_custom_reference_raw = $candidate_reference;
+                }
+            }
+
             try {
                 $week_reference_dt = new \DateTimeImmutable('@' . $now_ts);
                 $week_reference_dt = $week_reference_dt->setTimezone($timezone);
@@ -435,6 +482,29 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
             if (!($week_reference_dt instanceof \DateTimeImmutable)) {
                 $week_reference_dt = new \DateTimeImmutable('now', $timezone);
+            }
+
+            if ($week_reference_dt instanceof \DateTimeImmutable) {
+                if ($week_display_mode === 'custom' && $week_custom_reference_raw !== '') {
+                    try {
+                        $custom_reference_dt = new \DateTimeImmutable($week_custom_reference_raw, $timezone);
+                        $week_reference_dt = $custom_reference_dt;
+                    } catch (\Exception $exception) {
+                        // Keep fallback reference when custom date parsing fails.
+                    }
+                } else {
+                    $modifier_map = array(
+                        'previous' => '-1 week',
+                        'next' => '+1 week',
+                    );
+                    if (isset($modifier_map[$week_display_mode])) {
+                        try {
+                            $week_reference_dt = $week_reference_dt->modify($modifier_map[$week_display_mode]);
+                        } catch (\Exception $exception) {
+                            // Keep fallback reference when modification fails.
+                        }
+                    }
+                }
             }
 
             try {
