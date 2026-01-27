@@ -268,6 +268,18 @@
     border-right: none;
 }
 
+.mj-member-events-calendar[data-calendar-weekend-visible="0"] .mj-member-events-calendar__weekday.is-weekend {
+    display: none;
+}
+
+.mj-member-events-calendar[data-calendar-weekend-visible="0"] .mj-member-events-calendar__weekday:nth-child(5n) {
+    border-right: none;
+}
+
+.mj-member-events-calendar[data-calendar-weekend-visible="0"] .mj-member-events-calendar__weekday-row {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 /* ==========================================================================
    Weeks Grid
    ========================================================================== */
@@ -319,6 +331,18 @@
 
 .mj-member-events-calendar__day-cell.is-padding {
     background: #f8fafc;
+}
+
+.mj-member-events-calendar[data-calendar-weekend-visible="0"] .mj-member-events-calendar__day-cell.is-weekend {
+    display: none;
+}
+
+.mj-member-events-calendar[data-calendar-weekend-visible="0"] .mj-member-events-calendar__week-days {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.mj-member-events-calendar[data-calendar-weekend-visible="0"] .mj-member-events-calendar__day-cell:nth-child(5n) {
+    border-right: none;
 }
 
 /* ==========================================================================

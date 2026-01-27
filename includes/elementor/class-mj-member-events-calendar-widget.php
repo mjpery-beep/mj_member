@@ -232,6 +232,21 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'week_show_weekend',
+            array(
+                'label' => __('Afficher le week-end', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'condition' => array(
+                    'current_week_only' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
             'cover_width_desktop',
             array(
                 'label' => __('Largeur image (desktop)', 'mj-member'),
@@ -459,7 +474,10 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $display_current_week_only = isset($settings['current_week_only']) && $settings['current_week_only'] === 'yes';
         $week_days_keys = array();
         $restrict_mobile_to_week = array();
+        $week_day_weekend_map = array();
+        $week_show_weekend = true;
         if ($display_current_week_only) {
+            $week_show_weekend = !isset($settings['week_show_weekend']) || $settings['week_show_weekend'] === 'yes';
             $week_display_mode = isset($settings['week_display_mode']) ? sanitize_key((string) $settings['week_display_mode']) : 'current';
             if (!in_array($week_display_mode, array('current', 'previous', 'next', 'custom'), true)) {
                 $week_display_mode = 'current';
@@ -487,8 +505,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             if ($week_reference_dt instanceof \DateTimeImmutable) {
                 if ($week_display_mode === 'custom' && $week_custom_reference_raw !== '') {
                     try {
-                        $custom_reference_dt = new \DateTimeImmutable($week_custom_reference_raw, $timezone);
-                        $week_reference_dt = $custom_reference_dt;
+                        $week_reference_dt = new \DateTimeImmutable($week_custom_reference_raw, $timezone);
                     } catch (\Exception $exception) {
                         // Keep fallback reference when custom date parsing fails.
                     }
@@ -517,14 +534,34 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 $week_start_dt = $week_reference_dt;
             }
 
-            $week_start_dt = $week_start_dt->setTime(0, 0, 0);
+            if ($week_start_dt instanceof \DateTimeImmutable) {
+                $week_start_dt = $week_start_dt->setTime(0, 0, 0);
 
-            $week_pointer_dt = $week_start_dt;
-            for ($week_day_offset = 0; $week_day_offset < 7; $week_day_offset++) {
-                if ($week_pointer_dt instanceof \DateTimeImmutable) {
-                    $week_days_keys[] = $week_pointer_dt->format('Y-m-d');
+                $week_pointer_dt = $week_start_dt;
+                for ($week_day_offset = 0; $week_day_offset < 7; $week_day_offset++) {
+                    if (!($week_pointer_dt instanceof \DateTimeImmutable)) {
+                        break;
+                    }
+
+                    $current_day_key = $week_pointer_dt->format('Y-m-d');
+                    $weekday_number = (int) $week_pointer_dt->format('N');
+                    $is_weekend_day = $weekday_number >= 6;
+                    $week_day_weekend_map[$current_day_key] = $is_weekend_day;
+
+                    if ($week_show_weekend || !$is_weekend_day) {
+                        $week_days_keys[] = $current_day_key;
+                    }
+
                     $week_pointer_dt = $week_pointer_dt->modify('+1 day');
                 }
+            }
+
+            if (empty($week_days_keys) && !empty($week_day_weekend_map)) {
+                $week_days_keys = array_keys($week_day_weekend_map);
+            }
+
+            if (!empty($week_days_keys)) {
+                $restrict_mobile_to_week = array_fill_keys($week_days_keys, true);
             }
         }
 
@@ -1224,8 +1261,10 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             $calendar_attributes[] = 'data-calendar-week-only="1"';
             $calendar_attributes[] = 'data-calendar-week-days="' . esc_attr(implode(',', $week_days_keys)) . '"';
             $calendar_attributes[] = 'data-calendar-week-start="' . esc_attr($week_days_keys[0]) . '"';
+            $calendar_attributes[] = 'data-calendar-weekend-visible="' . esc_attr($week_show_weekend ? '1' : '0') . '"';
         } else {
             $calendar_attributes[] = 'data-calendar-week-only="0"';
+            $calendar_attributes[] = 'data-calendar-weekend-visible="1"';
         }
 
         echo '<div ' . implode(' ', $calendar_attributes) . '>';
@@ -1296,8 +1335,12 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 __('Dim', 'mj-member'),
             );
             echo '<div class="mj-member-events-calendar__weekday-row">';
-            foreach ($week_days as $day_label) {
-                echo '<span class="mj-member-events-calendar__weekday">' . esc_html($day_label) . '</span>';
+            foreach ($week_days as $weekday_index => $day_label) {
+                $weekday_classes = array('mj-member-events-calendar__weekday');
+                if ($weekday_index >= 5) {
+                    $weekday_classes[] = 'is-weekend';
+                }
+                echo '<span class="' . esc_attr(implode(' ', $weekday_classes)) . '">' . esc_html($day_label) . '</span>';
             }
             echo '</div>';
             echo '<div class="mj-member-events-calendar__weeks">';
@@ -1330,6 +1373,12 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         : array();
                     $events_for_day = isset($day_bucket['events']) && is_array($day_bucket['events']) ? $day_bucket['events'] : array();
                     $has_multi = !empty($day_bucket['has_multi']);
+                    $is_weekend_cell = $weekday_pointer === 5 || $weekday_pointer === 6;
+
+                    if ($display_current_week_only && !$week_show_weekend && $is_weekend_cell) {
+                        $events_for_day = array();
+                        $has_multi = false;
+                    }
 
                     $weeks[$week_index_pointer]['cells'][] = array(
                         'is_padding' => false,
@@ -1338,6 +1387,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         'events' => $events_for_day,
                         'has_multi' => $has_multi,
                         'is_closure' => !empty($month_data['days'][$day_key]['is_closure']),
+                        'is_weekend' => $is_weekend_cell,
                     );
 
                     $day_positions[$day_key] = array(
@@ -1345,12 +1395,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         'col' => $weekday_pointer,
                     );
 
-                    if (empty($restrict_mobile_to_week) || isset($restrict_mobile_to_week[$day_key])) {
+                    if (((!$display_current_week_only) || $week_show_weekend || !$is_weekend_cell) && (empty($restrict_mobile_to_week) || isset($restrict_mobile_to_week[$day_key]))) {
                         $day_list_entries[] = array(
                             'day_number' => $day_number,
                             'day_key' => $day_key,
                             'events' => $events_for_day,
                             'is_closure' => !empty($month_data['days'][$day_key]['is_closure']),
+                            'is_weekend' => $is_weekend_cell,
                         );
                     }
 
@@ -1480,7 +1531,11 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         );
                     }
 
+                    $is_weekend_day = !empty($cell_entry['is_weekend']);
                     $day_classes = array('mj-member-events-calendar__day');
+                    if ($is_weekend_day) {
+                        $day_classes[] = 'is-weekend';
+                    }
                     if (!empty($events_for_day)) {
                         $day_classes[] = 'has-events';
                     }
@@ -1496,7 +1551,12 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     }
                     $day_data_attr = ' data-calendar-day="' . esc_attr($day_key) . '"';
 
-                    echo '<div class="mj-member-events-calendar__day-cell">';
+                    $day_cell_classes = array('mj-member-events-calendar__day-cell');
+                    if ($is_weekend_day) {
+                        $day_cell_classes[] = 'is-weekend';
+                    }
+
+                    echo '<div class="' . esc_attr(implode(' ', $day_cell_classes)) . '">';
                     echo '<div class="' . esc_attr(implode(' ', $day_classes)) . '"' . $day_data_attr . '>';
                     echo '<span class="mj-member-events-calendar__day-number">' . esc_html($cell_entry['day_number']) . '</span>';
 
@@ -1824,6 +1884,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     $mobile_day_classes = array('mj-member-events-calendar__mobile-day');
                     if (!empty($day_entry['is_closure'])) {
                         $mobile_day_classes[] = 'is-closure';
+                    }
+                    if (!empty($day_entry['is_weekend'])) {
+                        $mobile_day_classes[] = 'is-weekend';
                     }
                     if ($day_key === wp_date('Y-m-d', $now_ts, $timezone)) {
                         $mobile_day_classes[] = 'is-today';
