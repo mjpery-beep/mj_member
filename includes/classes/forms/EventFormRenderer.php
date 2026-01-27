@@ -12,6 +12,40 @@ if (!defined('ABSPATH')) {
 class EventFormRenderer
 {
     /**
+     * Build HTML attributes string for markup helpers.
+     *
+     * @param array<string, mixed> $attributes
+     */
+    private static function buildAttributes(array $attributes): string
+    {
+        if (empty($attributes)) {
+            return '';
+        }
+
+        $compiled = '';
+
+        foreach ($attributes as $key => $value) {
+            if ($value === null || $value === false) {
+                continue;
+            }
+
+            $normalizedKey = preg_replace('/[^a-zA-Z0-9_\-:]/', '', (string) $key);
+            if ($normalizedKey === '') {
+                continue;
+            }
+
+            if ($value === true) {
+                $compiled .= ' ' . esc_attr($normalizedKey);
+                continue;
+            }
+
+            $compiled .= sprintf(' %s="%s"', esc_attr($normalizedKey), esc_attr((string) $value));
+        }
+
+        return $compiled;
+    }
+
+    /**
      * Labels des jours de la semaine
      */
     private static function getWeekdayLabels(): array
@@ -117,9 +151,24 @@ class EventFormRenderer
         $rows = $args['rows'] ?? 5;
         $class = $args['class'] ?? 'large-text';
         $wrapper_class = $args['wrapper_class'] ?? 'mj-form-field';
+        $attributes = isset($args['attributes']) && is_array($args['attributes']) ? $args['attributes'] : [];
+        $wrapper_attributes = isset($args['wrapper_attributes']) && is_array($args['wrapper_attributes']) ? $args['wrapper_attributes'] : [];
+
+        if (isset($attributes['class'])) {
+            $class = trim($class . ' ' . (string) $attributes['class']);
+            unset($attributes['class']);
+        }
+
+        if (isset($wrapper_attributes['class'])) {
+            $wrapper_class = trim($wrapper_class . ' ' . (string) $wrapper_attributes['class']);
+            unset($wrapper_attributes['class']);
+        }
+
+        $attribute_string = self::buildAttributes($attributes);
+        $wrapper_attribute_string = self::buildAttributes($wrapper_attributes);
 
         ?>
-        <div class="<?php echo esc_attr($wrapper_class); ?>">
+        <div class="<?php echo esc_attr($wrapper_class); ?>"<?php echo $wrapper_attribute_string; ?>>
             <label for="<?php echo esc_attr($id); ?>">
                 <?php echo esc_html($label); ?>
                 <?php if ($required): ?>
@@ -133,6 +182,7 @@ class EventFormRenderer
                 rows="<?php echo esc_attr($rows); ?>"
                 <?php if ($required): ?>required<?php endif; ?>
                 <?php if ($placeholder): ?>placeholder="<?php echo esc_attr($placeholder); ?>"<?php endif; ?>
+                <?php echo $attribute_string; ?>
             ><?php echo esc_textarea($value); ?></textarea>
             <?php if ($description): ?>
                 <p class="description"><?php echo esc_html($description); ?></p>
@@ -422,7 +472,7 @@ class EventFormRenderer
      * @param array<string,array<string,string>> $options Options pour les selects (types, statuts, etc.)
      * @return void
      */
-    public static function renderBasicFields(array $event, array $options): void
+    public static function renderBasicFields(array $event, array $options, array $args = []): void
     {
         if (!class_exists('MjEvents')) {
             require_once \Mj\Member\Core\Config::path() . 'includes/classes/crud/MjEvents.php';
@@ -498,16 +548,10 @@ class EventFormRenderer
         </div>
         <?php
 
-        self::renderTextarea(
-            'description',
-            __('Description', 'mj-member'),
-            $description,
-            [
-                'placeholder' => __('Décrivez l\'événement...', 'mj-member'),
-                'rows' => 4,
-                'class' => 'widefat',
-            ]
-        );
+        $include_description = $args['include_description'] ?? true;
+        if ($include_description) {
+            self::renderDescriptionField($description);
+        }
 
         self::renderFieldGroup(function () use ($type, $event_types, $status, $event_statuses) {
             self::renderSelect(
@@ -601,6 +645,33 @@ class EventFormRenderer
         }, [
             'class' => 'mj-form-field-group mj-form-field-group--row',
         ]);
+    }
+
+    /**
+     * Rend le champ de description riche.
+     *
+     * @param string $value Valeur actuelle
+     * @return void
+     */
+    public static function renderDescriptionField(string $value = ''): void
+    {
+        self::renderTextarea(
+            'description',
+            __('Description', 'mj-member'),
+            $value,
+            [
+                'placeholder' => __('Décrivez l\'événement...', 'mj-member'),
+                'rows' => 6,
+                'class' => 'widefat mj-richtext__textarea',
+                'wrapper_class' => 'mj-form-field mj-form-field--richtext',
+                'wrapper_attributes' => [
+                    'data-richtext-field' => 'description',
+                ],
+                'attributes' => [
+                    'data-richtext-source' => 'description',
+                ],
+            ]
+        );
     }
 
     /**

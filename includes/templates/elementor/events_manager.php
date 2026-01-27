@@ -331,12 +331,94 @@ $config_json = wp_json_encode([
                     'types' => $event_types,
                     'statuses' => $event_statuses,
                 ];
-                
-                // Rendre les champs de base (le JS hydratera les valeurs dynamiquement)
-                EventFormRenderer::renderBasicFields([], $form_options);
-                
-                // Rendre les champs de planification/récurrence
+
+                $tab_prefix = $widget_id . '-tab';
+
+                ob_start();
+                EventFormRenderer::renderBasicFields([], $form_options, [
+                    'include_description' => false,
+                ]);
+                $general_fields_html = ob_get_clean();
+
+                ob_start();
+                EventFormRenderer::renderDescriptionField('');
+                $description_field_html = ob_get_clean();
+
+                ob_start();
                 EventFormRenderer::renderScheduleFields([]);
+                $schedule_fields_html = ob_get_clean();
+                ?>
+
+                <div class="mj-events-manager-tabs" data-tabs role="tablist">
+                    <button
+                        type="button"
+                        class="mj-events-manager-tabs__button is-active"
+                        data-tab-target="general"
+                        aria-selected="true"
+                        role="tab"
+                        id="<?php echo esc_attr($tab_prefix . '-btn-general'); ?>"
+                        aria-controls="<?php echo esc_attr($tab_prefix . '-panel-general'); ?>"
+                    >
+                        <span class="dashicons dashicons-admin-generic" aria-hidden="true"></span>
+                        <span class="mj-events-manager-tabs__label"><?php esc_html_e('Modifier', 'mj-member'); ?></span>
+                    </button>
+                    <button
+                        type="button"
+                        class="mj-events-manager-tabs__button"
+                        data-tab-target="description"
+                        aria-selected="false"
+                        role="tab"
+                        id="<?php echo esc_attr($tab_prefix . '-btn-description'); ?>"
+                        aria-controls="<?php echo esc_attr($tab_prefix . '-panel-description'); ?>"
+                    >
+                        <span class="dashicons dashicons-edit" aria-hidden="true"></span>
+                        <span class="mj-events-manager-tabs__label"><?php esc_html_e('Description', 'mj-member'); ?></span>
+                    </button>
+                    <button
+                        type="button"
+                        class="mj-events-manager-tabs__button"
+                        data-tab-target="schedule"
+                        aria-selected="false"
+                        role="tab"
+                        id="<?php echo esc_attr($tab_prefix . '-btn-schedule'); ?>"
+                        aria-controls="<?php echo esc_attr($tab_prefix . '-panel-schedule'); ?>"
+                    >
+                        <span class="dashicons dashicons-calendar-alt" aria-hidden="true"></span>
+                        <span class="mj-events-manager-tabs__label"><?php esc_html_e('Planification', 'mj-member'); ?></span>
+                    </button>
+                </div>
+
+                <div class="mj-events-manager-tabpanels">
+                    <div
+                        class="mj-events-manager-tabpanel is-active"
+                        data-tab-panel="general"
+                        id="<?php echo esc_attr($tab_prefix . '-panel-general'); ?>"
+                        role="tabpanel"
+                        aria-labelledby="<?php echo esc_attr($tab_prefix . '-btn-general'); ?>"
+                    >
+                        <?php echo $general_fields_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                    </div>
+                    <div
+                        class="mj-events-manager-tabpanel"
+                        data-tab-panel="description"
+                        id="<?php echo esc_attr($tab_prefix . '-panel-description'); ?>"
+                        role="tabpanel"
+                        aria-labelledby="<?php echo esc_attr($tab_prefix . '-btn-description'); ?>"
+                        hidden
+                    >
+                        <?php echo $description_field_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                    </div>
+                    <div
+                        class="mj-events-manager-tabpanel"
+                        data-tab-panel="schedule"
+                        id="<?php echo esc_attr($tab_prefix . '-panel-schedule'); ?>"
+                        role="tabpanel"
+                        aria-labelledby="<?php echo esc_attr($tab_prefix . '-btn-schedule'); ?>"
+                        hidden
+                    >
+                        <?php echo $schedule_fields_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                    </div>
+                </div>
                 ?>
 
                 <div class="mj-events-manager-form__actions">

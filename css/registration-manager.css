@@ -5398,6 +5398,29 @@ input.mj-regmgr-search-input__field {
     overflow: hidden;
 }
 
+.mj-regmgr-description-tab {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.mj-regmgr-description-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.mj-regmgr-description-status {
+    font-size: 13px;
+    color: var(--regmgr-gray-600);
+}
+
+.mj-regmgr-description-error {
+    font-size: 13px;
+    color: var(--regmgr-danger);
+}
+
 .mj-regmgr-form-field .wp-editor-wrap .wp-editor-container {
     border: none;
     box-shadow: none;

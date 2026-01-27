@@ -522,6 +522,11 @@ class MjPayments extends MjTools {
 
         $allowed_contexts = array('membership', 'membership_renewal', 'membership-renewal', 'membership_fee', 'membershipfee', 'adhesion');
         $pending_statuses = array('pending', 'requires_payment_method', 'requires_action', 'processing', 'incomplete', 'open', 'awaiting', 'awaiting_payment', 'unpaid');
+        $current_mode = null;
+        if (class_exists('MjStripeConfig') && method_exists('MjStripeConfig', 'is_test_mode')) {
+            $current_mode = \MjStripeConfig::is_test_mode() ? 'test' : 'live';
+        }
+        $max_age = (int) apply_filters('mj_member_stripe_pending_membership_max_age', defined('DAY_IN_SECONDS') ? DAY_IN_SECONDS : 86400);
 
         foreach ($rows as $row) {
             $status = isset($row->status) ? \sanitize_key((string) $row->status) : '';
@@ -541,6 +546,25 @@ class MjPayments extends MjTools {
             $checkout_url = isset($row->checkout_url) ? \trim((string) $row->checkout_url) : '';
             if ($checkout_url === '') {
                 continue;
+            }
+
+            if ($max_age > 0 && isset($row->created_at)) {
+                $created_time = strtotime((string) $row->created_at);
+                if ($created_time && $created_time < (time() - $max_age)) {
+                    continue;
+                }
+            }
+
+            if ($current_mode !== null) {
+                $session_id = isset($row->external_ref) ? \trim((string) $row->external_ref) : '';
+                if ($session_id !== '') {
+                    if ($current_mode === 'test' && strpos($session_id, 'cs_live_') === 0) {
+                        continue;
+                    }
+                    if ($current_mode === 'live' && strpos($session_id, 'cs_test_') === 0) {
+                        continue;
+                    }
+                }
             }
 
             return $row;

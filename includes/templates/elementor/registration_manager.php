@@ -634,9 +634,21 @@ $config_json = wp_json_encode(array(
         // Onglets
         'tabRegistrations' => __('Inscriptions', 'mj-member'),
         'tabAttendance' => __('Présence', 'mj-member'),
+        'tabDescription' => __('Description', 'mj-member'),
         'tabDetails' => __('Détails', 'mj-member'),
         'tabEditor' => __('Éditer', 'mj-member'),
         'tabOccurrenceEncoder' => __('Occurence de date', 'mj-member'),
+
+        // Description
+        'descriptionLabel' => __('Description de l\'événement', 'mj-member'),
+        'descriptionPlaceholder' => __('Décrivez le contenu de cet événement...', 'mj-member'),
+        'descriptionSaveButton' => __('Enregistrer la description', 'mj-member'),
+        'descriptionSaving' => __('Enregistrement de la description...', 'mj-member'),
+        'descriptionSaved' => __('Description mise à jour.', 'mj-member'),
+        'descriptionSaveError' => __('Impossible d\'enregistrer la description.', 'mj-member'),
+        'descriptionUnsavedChanges' => __('Modifications non enregistrées', 'mj-member'),
+        'descriptionLastSaved' => __('Description mise à jour à %s.', 'mj-member'),
+        'descriptionResetButton' => __('Annuler les modifications', 'mj-member'),
         
         // Types d'événements (pour présence)
         'scheduleFixed' => __('Date fixe', 'mj-member'),

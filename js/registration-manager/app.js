@@ -3123,6 +3123,155 @@
     }
 
     // ============================================
+    // DESCRIPTION EDITOR FIELD
+    // ============================================
+
+    function DescriptionEditorField(props) {
+        var value = typeof props.value === 'string' ? props.value : '';
+        var onChange = typeof props.onChange === 'function' ? props.onChange : function () {};
+        var rows = props.rows || 10;
+        var className = props.className || '';
+        var placeholder = typeof props.placeholder === 'string' ? props.placeholder : '';
+        var editorAvailable = !!(global.wp && global.wp.editor && typeof global.wp.editor.initialize === 'function');
+
+        var idRef = useRef(null);
+        if (!idRef.current) {
+            if (props.id && typeof props.id === 'string' && props.id !== '') {
+                idRef.current = props.id;
+            } else {
+                idRef.current = 'mj-regmgr-description-' + Math.random().toString(36).slice(2);
+            }
+        }
+        var editorId = idRef.current;
+
+        var textareaRef = useRef(null);
+        var editorRef = useRef(null);
+        var syncingRef = useRef(false);
+        var valueRef = useRef(value);
+        valueRef.current = value;
+
+        useEffect(function () {
+            if (!editorAvailable) {
+                return undefined;
+            }
+
+            var textarea = textareaRef.current;
+            if (!textarea) {
+                return undefined;
+            }
+
+            if (global.wp && global.wp.editor && typeof global.wp.editor.remove === 'function') {
+                try {
+                    global.wp.editor.remove(editorId);
+                } catch (removeError) {
+                    // ignore cleanup issues
+                }
+            }
+
+            textarea.value = valueRef.current || '';
+
+            var editorSettings = {
+                mediaButtons: false,
+                quicktags: false,
+                tinymce: {
+                    branding: false,
+                    menubar: false,
+                    statusbar: true,
+                    toolbar1: 'bold italic underline | bullist numlist | link unlink | undo redo',
+                    plugins: 'lists link paste',
+                    wpautop: true,
+                },
+            };
+
+            try {
+                global.wp.editor.initialize(editorId, editorSettings);
+            } catch (initError) {
+                console.error('[MjRegMgr] Failed to initialise description editor', initError);
+                return undefined;
+            }
+
+            var editor = global.tinymce ? global.tinymce.get(editorId) : null;
+            if (!editor) {
+                return undefined;
+            }
+
+            editorRef.current = editor;
+
+            var handleContentChange = function () {
+                if (syncingRef.current) {
+                    return;
+                }
+                var content = editor.getContent();
+                if (content !== valueRef.current) {
+                    valueRef.current = content;
+                    onChange(content);
+                }
+            };
+
+            editor.on('Change KeyUp Paste Undo Redo', handleContentChange);
+
+            return function () {
+                editor.off('Change KeyUp Paste Undo Redo', handleContentChange);
+                editorRef.current = null;
+                if (global.wp && global.wp.editor && typeof global.wp.editor.remove === 'function') {
+                    try {
+                        global.wp.editor.remove(editorId);
+                    } catch (cleanupError) {
+                        // ignore cleanup issues
+                    }
+                }
+            };
+        }, [editorAvailable, editorId, onChange]);
+
+        useEffect(function () {
+            if (!editorAvailable) {
+                if (textareaRef.current && textareaRef.current.value !== valueRef.current) {
+                    textareaRef.current.value = valueRef.current || '';
+                }
+                return;
+            }
+
+            var editor = editorRef.current;
+            if (editor && editor.initialized) {
+                var targetValue = valueRef.current || '';
+                var currentValue = editor.getContent();
+                if (targetValue !== currentValue && !editor.hasFocus()) {
+                    syncingRef.current = true;
+                    editor.setContent(targetValue);
+                    editor.save();
+                    syncingRef.current = false;
+                }
+            }
+        }, [editorAvailable, editorId, value]);
+
+        if (!editorAvailable) {
+            return h('textarea', {
+                ref: textareaRef,
+                class: className,
+                rows: rows,
+                value: valueRef.current || '',
+                placeholder: placeholder,
+                onInput: function (event) {
+                    var nextValue = event && event.target ? event.target.value : '';
+                    valueRef.current = nextValue;
+                    onChange(nextValue);
+                },
+            });
+        }
+
+        var editorClassName = className ? className + ' wp-editor-area' : 'wp-editor-area';
+
+        return h('textarea', {
+            id: editorId,
+            ref: textareaRef,
+            class: editorClassName,
+            rows: rows,
+            defaultValue: valueRef.current || '',
+            placeholder: placeholder,
+        });
+    }
+
+    // ============================================
     // MAIN APP
     // ============================================
 
@@ -3401,6 +3550,28 @@
         var activeTab = _activeTab[0];
         var setActiveTab = _activeTab[1];
 
+        var _descriptionState = useState({
+            base: '',
+            draft: '',
+            eventId: null,
+        });
+        var descriptionState = _descriptionState[0];
+        var setDescriptionState = _descriptionState[1];
+
+        var _descriptionSaving = useState(false);
+        var descriptionSaving = _descriptionSaving[0];
+        var setDescriptionSaving = _descriptionSaving[1];
+
+        var _descriptionError = useState('');
+        var descriptionError = _descriptionError[0];
+        var setDescriptionError = _descriptionError[1];
+
+        var descriptionFieldIdRef = useRef(null);
+        if (!descriptionFieldIdRef.current) {
+            descriptionFieldIdRef.current = 'mj-regmgr-description-' + Math.random().toString(36).slice(2);
+        }
+        var descriptionFieldId = descriptionFieldIdRef.current;
+
         var _pagination = useState({ page: 1, totalPages: 1 });
         var pagination = _pagination[0];
         var setPagination = _pagination[1];
@@ -3458,6 +3629,39 @@
         var _mobileShowDetails = useState(false);
         var mobileShowDetails = _mobileShowDetails[0];
         var setMobileShowDetails = _mobileShowDetails[1];
+
+        useEffect(function () {
+            var eventId = eventDetails && eventDetails.id ? eventDetails.id : null;
+            var descriptionValue = eventDetails && typeof eventDetails.description === 'string'
+                ? eventDetails.description
+                : '';
+
+            setDescriptionState(function (prev) {
+                if (eventId === null) {
+                    if (prev.eventId === null && prev.base === '' && prev.draft === '') {
+                        return prev;
+                    }
+                    return { base: '', draft: '', eventId: null };
+                }
+
+                if (prev.eventId !== eventId) {
+                    return { base: descriptionValue, draft: descriptionValue, eventId: eventId };
+                }
+
+                if (prev.base === descriptionValue) {
+                    return prev;
+                }
+
+                if (prev.draft === prev.base) {
+                    return { base: descriptionValue, draft: descriptionValue, eventId: eventId };
+                }
+
+                return Object.assign({}, prev, {
+                    base: descriptionValue,
+                    eventId: eventId,
+                });
+            });
+        }, [eventDetails ? eventDetails.id : null, eventDetails ? eventDetails.description : '', setDescriptionState]);
 
         useEffect(function () {
             if (!locationModal.isOpen) {
@@ -3612,6 +3816,94 @@
                 });
         }, [api, showError]);
 
+        var handleDescriptionChange = useCallback(function (nextValue) {
+            var safeValue = typeof nextValue === 'string' ? nextValue : '';
+            setDescriptionState(function (prev) {
+                if (prev.draft === safeValue) {
+                    return prev;
+                }
+                return Object.assign({}, prev, { draft: safeValue });
+            });
+            if (descriptionError) {
+                setDescriptionError('');
+            }
+        }, [setDescriptionState, descriptionError, setDescriptionError]);
+
+        var handleResetDescription = useCallback(function () {
+            setDescriptionState(function (prev) {
+                if (prev.draft === prev.base) {
+                    return prev;
+                }
+                return Object.assign({}, prev, { draft: prev.base });
+            });
+            setDescriptionError('');
+        }, [setDescriptionState, setDescriptionError]);
+
+        var handleSaveDescription = useCallback(function () {
+            if (!selectedEvent || !selectedEvent.id) {
+                return Promise.resolve();
+            }
+
+            if (!descriptionState || descriptionState.draft === descriptionState.base) {
+                return Promise.resolve();
+            }
+
+            var eventId = selectedEvent.id;
+            var draftValue = descriptionState.draft || '';
+
+            setDescriptionSaving(true);
+            setDescriptionError('');
+
+            return api.updateEvent(eventId, { event_description: draftValue }, {})
+                .then(function (data) {
+                    setDescriptionSaving(false);
+                    setDescriptionState(function (prev) {
+                        if (prev.eventId !== eventId) {
+                            return prev;
+                        }
+                        return Object.assign({}, prev, {
+                            base: draftValue,
+                            draft: draftValue,
+                        });
+                    });
+                    setDescriptionError('');
+                    showSuccess(data && data.message ? data.message : getString(strings, 'descriptionSaved', 'Description mise à jour.'));
+                    loadEventDetails(eventId);
+                    if (data && data.event) {
+                        setSelectedEvent(function (prev) {
+                            if (!prev || prev.id !== data.event.id) {
+                                return prev;
+                            }
+                            return Object.assign({}, prev, data.event);
+                        });
+                        setEvents(function (prevEvents) {
+                            if (!Array.isArray(prevEvents) || prevEvents.length === 0) {
+                                return prevEvents;
+                            }
+                            return prevEvents.map(function (evt) {
+                                if (evt && evt.id === data.event.id) {
+                                    return Object.assign({}, evt, data.event);
+                                }
+                                return evt;
+                            });
+                        });
+                    }
+                    return data;
+                })
+                .catch(function (error) {
+                    setDescriptionSaving(false);
+                    if (error && error.aborted) {
+                        return Promise.reject(error);
+                    }
+                    var fallback = getString(strings, 'descriptionSaveError', "Impossible d'enregistrer la description.");
+                    var messages = collectErrorMessages(error, fallback);
+                    var message = messages && messages.length > 0 ? messages[0] : fallback;
+                    setDescriptionError(message);
+                    showError(message);
+                    return Promise.reject(error);
+                });
+        }, [selectedEvent, descriptionState, api, showSuccess, strings, loadEventDetails, setSelectedEvent, setEvents, collectErrorMessages, showError]);
+
         var loadEventEditor = useCallback(function (eventId) {
             if (!EventEditor) {
                 return Promise.resolve();
@@ -3722,6 +4014,9 @@
             setEventEditorErrors([]);
             setEventEditorLoading(false);
             setEventEditorSaving(false);
+            setDescriptionSaving(false);
+            setDescriptionError('');
+            setDescriptionState({ base: '', draft: '', eventId: null });
             eventEditorLoadedRef.current = null;
             var defaultTab = 'registrations';
             if (event) {
@@ -3742,7 +4037,7 @@
             
             loadEventDetails(event.id);
             loadRegistrations(event.id);
-        }, [loadEventDetails, loadRegistrations, storageKey]);
+        }, [loadEventDetails, loadRegistrations, storageKey, setDescriptionState, setDescriptionSaving, setDescriptionError]);
 
         var openCreateEventModal = useCallback(function () {
             if (creatingEvent) {
@@ -5247,6 +5542,7 @@
         // Onglets
         var registrationsCount = Array.isArray(registrations) ? registrations.length : 0;
         var registrationsTabLabel = getString(strings, 'tabRegistrations', 'Inscriptions');
+        var descriptionDirty = descriptionState.draft !== descriptionState.base;
 
         var occurrenceTab = createOccurrenceTab
             ? createOccurrenceTab(strings)
@@ -5266,6 +5562,10 @@
             { 
                 key: 'attendance', 
                 label: getString(strings, 'tabAttendance', 'Présence'),
+            },
+            { 
+                key: 'description', 
+                label: getString(strings, 'tabDescription', 'Description'),
             },
             { 
                 key: 'details', 
@@ -5487,6 +5787,45 @@
                                 loadingMembers: loadingMembers,
                                 eventRequiresValidation: eventRequiresValidation,
                             }),
+
+                            activeTab === 'description' && h('div', { class: 'mj-regmgr-description-tab' }, [
+                                (!eventDetails || registrationsLoading)
+                                    ? h('div', { class: 'mj-regmgr-loading' }, [
+                                        h('div', { class: 'mj-regmgr-loading__spinner' }),
+                                        h('p', { class: 'mj-regmgr-loading__text' }, getString(strings, 'loading', 'Chargement des détails...')),
+                                    ])
+                                    : h(Fragment, null, [
+                                        h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
+                                            h('label', { class: 'mj-regmgr-form-label', htmlFor: descriptionFieldId }, getString(strings, 'descriptionLabel', "Description de l'événement")),
+                                            h(DescriptionEditorField, {
+                                                id: descriptionFieldId,
+                                                className: 'mj-regmgr-richtext',
+                                                rows: 12,
+                                                value: descriptionState.draft,
+                                                onChange: handleDescriptionChange,
+                                                placeholder: getString(strings, 'descriptionPlaceholder', 'Décrivez le contenu de cet événement...'),
+                                            }),
+                                        ]),
+                                        h('div', { class: 'mj-regmgr-description-actions' }, [
+                                            h('button', {
+                                                type: 'button',
+                                                class: 'mj-btn mj-btn--primary',
+                                                disabled: descriptionSaving || !descriptionDirty,
+                                                onClick: function () { handleSaveDescription(); },
+                                            }, descriptionSaving
+                                                ? getString(strings, 'descriptionSaving', 'Enregistrement de la description...')
+                                                : getString(strings, 'descriptionSaveButton', 'Enregistrer la description')),
+                                            h('button', {
+                                                type: 'button',
+                                                class: 'mj-btn mj-btn--secondary',
+                                                disabled: descriptionSaving || !descriptionDirty,
+                                                onClick: function () { handleResetDescription(); },
+                                            }, getString(strings, 'descriptionResetButton', 'Annuler les modifications')),
+                                            descriptionDirty && !descriptionSaving && h('span', { class: 'mj-regmgr-description-status' }, getString(strings, 'descriptionUnsavedChanges', 'Modifications non enregistrées')),
+                                            descriptionError && h('p', { class: 'mj-regmgr-description-error' }, descriptionError),
+                                        ]),
+                                    ]),
+                            ]),
 
                             activeTab === 'details' && h(EventDetailPanel, {
                                 event: eventDetails,

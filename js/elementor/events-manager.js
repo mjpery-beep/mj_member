@@ -523,6 +523,431 @@
         }
     }
 
+    class RichTextFieldController {
+        constructor(form, options = {}) {
+            this.form = form;
+            this.wrapperSelector = (options && options.wrapperSelector) || '[data-richtext-field]';
+            this.sourceSelector = (options && options.sourceSelector) || 'textarea[data-richtext-source]';
+            this.wrapper = null;
+            this.source = null;
+            this.editor = null;
+            this.toolbar = null;
+            this.editable = null;
+            this.placeholder = '';
+            this.isEnhanced = false;
+            this.isDirty = false;
+            this.lastSyncedRaw = '';
+            this.lastSanitizedValue = '';
+
+            this.init();
+        }
+
+        init() {
+            if (!this.form || typeof document === 'undefined') {
+                return;
+            }
+
+            this.wrapper = this.form.querySelector(this.wrapperSelector);
+            if (!this.wrapper) {
+                return;
+            }
+
+            this.source = this.wrapper.querySelector(this.sourceSelector);
+            if (!this.source) {
+                return;
+            }
+
+            this.placeholder = this.source.getAttribute('placeholder') || '';
+
+            if (!this.canEnhance()) {
+                return;
+            }
+
+            this.createEditor();
+            this.isEnhanced = true;
+            this.syncToSource();
+            this.refreshToolbarState();
+        }
+
+        canEnhance() {
+            return typeof document.execCommand === 'function';
+        }
+
+        createEditor() {
+            this.editor = document.createElement('div');
+            this.editor.className = 'mj-richtext';
+
+            this.toolbar = this.buildToolbar();
+            this.editable = document.createElement('div');
+            this.editable.className = 'mj-richtext__editable';
+            this.editable.contentEditable = 'true';
+            this.editable.setAttribute('role', 'textbox');
+            this.editable.setAttribute('aria-multiline', 'true');
+
+            const labelText = this.findLabelText();
+            if (labelText) {
+                this.editable.setAttribute('aria-label', labelText);
+            }
+
+            if (this.placeholder) {
+                this.editable.dataset.placeholder = this.placeholder;
+            }
+
+            const initialValue = this.normalizeContent(this.source.value || '');
+            if (initialValue) {
+                this.editable.innerHTML = initialValue;
+            }
+
+            this.editor.appendChild(this.toolbar);
+            this.editor.appendChild(this.editable);
+
+            this.wrapper.insertBefore(this.editor, this.source);
+            this.source.dataset.richtextHidden = 'true';
+            this.source.hidden = true;
+            this.source.setAttribute('aria-hidden', 'true');
+
+            this.editable.addEventListener('input', () => this.handleInput());
+            this.editable.addEventListener('input', (event) => this.handleInput(event));
+            this.editable.addEventListener('blur', () => this.syncToSource(true));
+            this.editable.addEventListener('keyup', (event) => this.handleKeyup(event));
+            this.editable.addEventListener('keydown', (event) => this.handleKeydown(event));
+            this.editable.addEventListener('mouseup', () => this.refreshToolbarState());
+            this.editable.addEventListener('focus', () => this.refreshToolbarState());
+            this.editable.addEventListener('paste', (event) => this.handlePaste(event));
+
+            this.syncToSource(true);
+            this.refreshToolbarState();
+        }
+
+        buildToolbar() {
+            const toolbar = document.createElement('div');
+            toolbar.className = 'mj-richtext__toolbar';
+
+            const buttons = [
+                { command: 'bold', label: 'Gras', text: 'B' },
+                { command: 'italic', label: 'Italique', text: 'I' },
+                { command: 'underline', label: 'Souligner', text: 'U' },
+                { command: 'insertUnorderedList', label: 'Liste à puces', text: 'Bul' },
+                { command: 'insertOrderedList', label: 'Liste numérotée', text: 'Num' },
+                { command: 'createLink', label: 'Insérer un lien', text: 'Link' },
+                { command: 'removeFormat', label: 'Nettoyer le formatage', text: 'Clr' },
+            ];
+
+            buttons.forEach(config => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'mj-richtext__toolbar-btn';
+                button.dataset.command = config.command;
+                button.setAttribute('aria-label', config.label);
+                button.textContent = config.text;
+                button.addEventListener('mousedown', (event) => event.preventDefault());
+                button.addEventListener('click', () => this.handleCommand(config));
+                toolbar.appendChild(button);
+            });
+
+            return toolbar;
+        }
+
+        handleInput(event) {
+            if (event) {
+                event.stopPropagation();
+            }
+            this.isDirty = true;
+        }
+
+        handleKeydown(event) {
+            if (!event) {
+                return;
+            }
+            event.stopPropagation();
+        }
+
+        handleKeyup(event) {
+            if (event) {
+                event.stopPropagation();
+            }
+            this.refreshToolbarState();
+        }
+
+        handleCommand(config) {
+            if (!this.editable) {
+                return;
+            }
+
+            this.editable.focus();
+
+            if (config.command === 'createLink') {
+                const selection = window.getSelection();
+                if (!selection || selection.isCollapsed) {
+                    return;
+                }
+                const rawUrl = window.prompt('Adresse du lien (https://...)', '');
+                const sanitized = this.sanitizeUrl(rawUrl || '');
+                if (!sanitized) {
+                    return;
+                }
+                document.execCommand('createLink', false, sanitized);
+                this.isDirty = true;
+                this.syncToSource(true);
+                this.refreshToolbarState();
+                return;
+            }
+
+            if (config.command === 'removeFormat') {
+                document.execCommand('removeFormat');
+                document.execCommand('unlink');
+                this.isDirty = true;
+                this.syncToSource(true);
+                this.refreshToolbarState();
+                return;
+            }
+
+            document.execCommand(config.command, false, config.value || null);
+            this.isDirty = true;
+            this.syncToSource(true);
+            this.refreshToolbarState();
+        }
+
+        syncToSource(force = false) {
+            if (!this.source) {
+                return;
+            }
+
+            const raw = this.isEnhanced && this.editable ? this.editable.innerHTML : this.source.value;
+
+            if (!force && !this.isDirty && raw === this.lastSyncedRaw) {
+                return;
+            }
+
+            const normalized = this.normalizeContent(raw);
+
+            this.source.value = normalized;
+            this.lastSyncedRaw = raw;
+            this.lastSanitizedValue = normalized;
+
+            if (this.isEnhanced && this.editable && document.activeElement !== this.editable) {
+                if (this.editable.innerHTML !== normalized) {
+                    this.editable.innerHTML = normalized || '';
+                }
+            }
+
+            this.isDirty = false;
+        }
+
+        syncSource(force = false) {
+            this.syncToSource(force);
+        }
+
+        setValue(value) {
+            const normalized = this.normalizeContent(value);
+            if (this.source) {
+                this.source.value = normalized;
+            }
+            if (this.isEnhanced && this.editable) {
+                this.editable.innerHTML = normalized || '';
+            }
+            this.isDirty = true;
+            this.syncToSource(true);
+            this.refreshToolbarState();
+        }
+
+        reset() {
+            this.setValue('');
+        }
+
+        normalizeContent(value) {
+            if (value === null || typeof value === 'undefined') {
+                return '';
+            }
+            const raw = String(value);
+            const trimmed = raw.trim();
+
+            if (trimmed === '') {
+                return '';
+            }
+
+            const looksLikeHtml = /<[a-z][\s\S]*>/i.test(trimmed);
+            if (!looksLikeHtml) {
+                return this.sanitizeHtml(this.convertTextToHtml(trimmed));
+            }
+
+            return this.sanitizeHtml(trimmed);
+        }
+
+        convertTextToHtml(text) {
+            const lines = text.split(/\r?\n/);
+            const htmlLines = lines.map(line => {
+                const cleaned = line.trim();
+                if (cleaned === '') {
+                    return '<p><br></p>';
+                }
+                return `<p>${escapeHtml(cleaned)}</p>`;
+            });
+            return htmlLines.join('');
+        }
+
+        sanitizeHtml(html) {
+            if (!html) {
+                return '';
+            }
+
+            const template = document.createElement('template');
+            template.innerHTML = html;
+
+            const allowedTags = new Set(['P', 'BR', 'UL', 'OL', 'LI', 'STRONG', 'B', 'EM', 'I', 'U', 'A', 'SPAN', 'DIV']);
+            const allowedAttributes = {
+                A: ['href', 'target', 'rel'],
+                SPAN: [],
+            };
+
+            template.content.querySelectorAll('*').forEach(node => {
+                const tagName = node.tagName;
+                if (!allowedTags.has(tagName)) {
+                    this.unwrapNode(node);
+                    return;
+                }
+
+                Array.from(node.attributes).forEach(attr => {
+                    const attrName = attr.name.toLowerCase();
+                    const allowed = allowedAttributes[tagName] || [];
+                    if (!allowed.includes(attrName)) {
+                        node.removeAttribute(attr.name);
+                    }
+                });
+
+                if (tagName === 'A') {
+                    const href = this.sanitizeUrl(node.getAttribute('href') || '');
+                    if (!href) {
+                        this.unwrapNode(node);
+                        return;
+                    }
+                    node.setAttribute('href', href);
+                    const target = node.getAttribute('target');
+                    if (target && target.toLowerCase() === '_blank') {
+                        node.setAttribute('rel', 'noopener noreferrer');
+                    } else {
+                        node.removeAttribute('target');
+                        node.removeAttribute('rel');
+                    }
+                }
+            });
+
+            template.content.querySelectorAll('div').forEach(div => {
+                const paragraph = document.createElement('p');
+                while (div.firstChild) {
+                    paragraph.appendChild(div.firstChild);
+                }
+                if (div.parentNode) {
+                    div.parentNode.replaceChild(paragraph, div);
+                }
+            });
+
+            const container = document.createElement('div');
+            container.appendChild(template.content.cloneNode(true));
+
+            const sanitized = container.innerHTML
+                .replace(/\s+<\/p>/g, '</p>')
+                .replace(/<p>\s*<\/p>/g, '');
+
+            return sanitized.trim();
+        }
+
+        sanitizeUrl(url) {
+            if (!url) {
+                return '';
+            }
+
+            const trimmed = String(url).trim();
+            if (trimmed === '') {
+                return '';
+            }
+
+            const lower = trimmed.toLowerCase();
+            if (/^(https?:\/\/|mailto:)/.test(lower)) {
+                return trimmed;
+            }
+
+            if (/^www\./.test(lower)) {
+                return `https://${trimmed}`;
+            }
+
+            return '';
+        }
+
+        unwrapNode(node) {
+            if (!node || !node.parentNode) {
+                return;
+            }
+            while (node.firstChild) {
+                node.parentNode.insertBefore(node.firstChild, node);
+            }
+            node.parentNode.removeChild(node);
+        }
+
+        handlePaste(event) {
+            if (!event.clipboardData) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+
+            const html = event.clipboardData.getData('text/html');
+            const text = event.clipboardData.getData('text/plain');
+
+            if (html) {
+                const sanitized = this.sanitizeHtml(html);
+                document.execCommand('insertHTML', false, sanitized);
+            } else if (text) {
+                const sanitizedText = escapeHtml(text).replace(/\r?\n/g, '<br>');
+                document.execCommand('insertHTML', false, sanitizedText);
+            }
+
+            this.isDirty = true;
+            this.syncToSource(true);
+            this.refreshToolbarState();
+        }
+
+        refreshToolbarState() {
+            if (!this.toolbar) {
+                return;
+            }
+
+            this.toolbar.querySelectorAll('[data-command]').forEach(button => {
+                const command = button.getAttribute('data-command');
+                if (!command || command === 'createLink' || command === 'removeFormat') {
+                    button.setAttribute('aria-pressed', 'false');
+                    button.classList.remove('is-active');
+                    return;
+                }
+
+                let active = false;
+                try {
+                    active = document.queryCommandState(command);
+                } catch (error) {
+                    active = false;
+                }
+
+                button.setAttribute('aria-pressed', active ? 'true' : 'false');
+                if (active) {
+                    button.classList.add('is-active');
+                } else {
+                    button.classList.remove('is-active');
+                }
+            });
+        }
+
+        findLabelText() {
+            if (!this.wrapper) {
+                return '';
+            }
+            const label = this.wrapper.querySelector('label');
+            if (label && label.textContent) {
+                return label.textContent.trim();
+            }
+            return '';
+        }
+    }
+
     class EventsManagerController {
         constructor(container) {
             this.container = container;
@@ -532,6 +957,9 @@
             this.currentPage = 1;
             this.totalPages = 1;
             this.isLoading = false;
+            this.tabButtons = [];
+            this.tabPanels = [];
+            this.activeTab = null;
 
             this.locale = (typeof document !== 'undefined' && document.documentElement && document.documentElement.lang)
                 ? document.documentElement.lang
@@ -584,6 +1012,13 @@
 
             this.emojiController = null;
             this.setupEmojiField();
+
+            this.descriptionField = this.elements.form
+                ? new RichTextFieldController(this.elements.form, {
+                    wrapperSelector: '[data-richtext-field="description"]',
+                    sourceSelector: 'textarea[data-richtext-source="description"]',
+                })
+                : null;
 
             this.init();
         }
@@ -788,6 +1223,7 @@
         init() {
             this.attachEventListeners();
             this.loadEvents();
+            this.setupTabs();
         }
 
         attachEventListeners() {
@@ -868,6 +1304,73 @@
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
                     body: new URLSearchParams({
+                                    if (!this.elements.form) {
+                                        return;
+                                    }
+
+                                    const tabsContainer = this.elements.form.querySelector('[data-tabs]');
+                                    const panels = this.elements.form.querySelectorAll('[data-tab-panel]');
+
+                                    if (!tabsContainer || panels.length === 0) {
+                                        return;
+                                    }
+
+                                    const buttons = Array.from(tabsContainer.querySelectorAll('[data-tab-target]'));
+                                    if (buttons.length === 0) {
+                                        return;
+                                    }
+
+                                    this.tabButtons = buttons;
+                                    this.tabPanels = Array.from(panels);
+
+                                    buttons.forEach(button => {
+                                        button.addEventListener('click', (event) => {
+                                            event.preventDefault();
+                                            const target = button.getAttribute('data-tab-target');
+                                            this.activateTab(target);
+                                        });
+                                    });
+
+                                    const initialButton = buttons.find(button => button.classList.contains('is-active')) || buttons[0];
+                                    if (initialButton) {
+                                        const target = initialButton.getAttribute('data-tab-target');
+                                        this.activateTab(target, { skipFocus: true });
+                                    }
+                                }
+
+                                activateTab(tabId, options = {}) {
+                                    if (!tabId || !Array.isArray(this.tabButtons) || this.tabButtons.length === 0) {
+                                        return;
+                                    }
+
+                                    const { skipFocus = false } = options;
+
+                                    this.tabButtons.forEach(button => {
+                                        const target = button.getAttribute('data-tab-target');
+                                        const isActive = target === tabId;
+                                        button.classList.toggle('is-active', isActive);
+                                        button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                                        button.setAttribute('tabindex', isActive ? '0' : '-1');
+                                        if (isActive && !skipFocus) {
+                                            button.focus();
+                                        }
+                                    });
+
+                                    if (Array.isArray(this.tabPanels)) {
+                                        this.tabPanels.forEach(panel => {
+                                            const panelTarget = panel.getAttribute('data-tab-panel');
+                                            const isActive = panelTarget === tabId;
+                                            panel.classList.toggle('is-active', isActive);
+                                            if (isActive) {
+                                                panel.removeAttribute('hidden');
+                                            } else {
+                                                panel.setAttribute('hidden', 'hidden');
+                                            }
+                                        });
+                                    }
+
+                                    this.activeTab = tabId;
+                                }
                         action: 'mj_events_manager_list',
                         nonce: this.config.nonce,
                         show_past: this.config.showPast ? '1' : '0',
@@ -1368,9 +1871,11 @@
             if (mode === 'add') {
                 this.elements.modalTitle.textContent = this.getString('addNew');
                 this.resetForm();
+                this.activateTab('general', { skipFocus: true });
             } else if (mode === 'edit' && eventId) {
                 this.elements.modalTitle.textContent = this.getString('edit');
                 this.loadEventToForm(eventId);
+                this.activateTab('description', { skipFocus: true });
             }
 
             this.elements.modal.hidden = false;
@@ -1388,6 +1893,9 @@
             if (this.elements.form) {
                 this.elements.form.reset();
             }
+            if (Array.isArray(this.tabButtons) && this.tabButtons.length > 0) {
+                this.activateTab('general', { skipFocus: true });
+            }
             // Reset schedule fields
             if (this.scheduleController) {
                 this.scheduleController.reset();
@@ -1403,6 +1911,10 @@
             }
 
             this.setEmojiValue('');
+
+            if (this.descriptionField) {
+                this.descriptionField.reset();
+            }
         }
 
         loadEventToForm(eventId) {
@@ -1413,7 +1925,14 @@
             form.querySelector('[name="title"]').value = event.title || '';
             form.querySelector('[name="type"]').value = event.type || '';
             form.querySelector('[name="status"]').value = event.status || '';
-            form.querySelector('[name="description"]').value = event.description || '';
+            if (this.descriptionField) {
+                this.descriptionField.setValue(event.description || '');
+            } else {
+                const descriptionInput = form.querySelector('[name="description"]');
+                if (descriptionInput) {
+                    descriptionInput.value = event.description || '';
+                }
+            }
             form.querySelector('[name="price"]').value = event.price || '';
             form.querySelector('[name="capacity_total"]').value = event.capacity_total || '';
 
@@ -1497,6 +2016,10 @@
                 if (emojiInput) {
                     emojiInput.value = sanitizeEmojiInput(emojiInput.value || '');
                 }
+            }
+
+            if (this.descriptionField) {
+                this.descriptionField.syncSource(true);
             }
 
             this.syncDatetimeHidden();
