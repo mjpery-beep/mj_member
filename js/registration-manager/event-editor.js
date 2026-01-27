@@ -4426,22 +4426,6 @@
 
                 h('div', { class: 'mj-regmgr-event-editor__section' }, [
                     h('div', { class: 'mj-regmgr-event-editor__section-header' }, [
-                        h('h2', null, getString(strings, 'contentSection', 'Description')),
-                        h('p', { class: 'mj-regmgr-event-editor__section-hint' }, getString(strings, 'contentSectionHint', 'Redigez le contenu presente aux membres et visiteurs.')),
-                    ]),
-                    h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
-                        h('label', { class: 'mj-regmgr-sr-only' }, getString(strings, 'description', 'Description')),
-                        h(RichTextEditorField, {
-                            className: 'mj-regmgr-richtext',
-                            rows: 10,
-                            value: formState.event_description || '',
-                            onChange: function (content) { updateFormValue('event_description', content); },
-                        }),
-                    ]),
-                ]),
-
-                h('div', { class: 'mj-regmgr-event-editor__section' }, [
-                    h('div', { class: 'mj-regmgr-event-editor__section-header' }, [
                         h('h2', null, getString(strings, 'locationSection', 'Lieu et equipe')),
                         h('p', { class: 'mj-regmgr-event-editor__section-hint' }, getString(strings, 'locationSectionHint', "Choisissez le lieu d accueil et les referents associes.")),
                     ]),

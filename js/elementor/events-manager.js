@@ -538,6 +538,13 @@
             this.isDirty = false;
             this.lastSyncedRaw = '';
             this.lastSanitizedValue = '';
+            this.lastSelectionRange = null;
+            this.focusRestoreHandle = null;
+            this.focusRestoreHandleType = null;
+            this.preventFocusRestore = false;
+            this.didPointerDownOutside = false;
+            this.hasPointerListener = false;
+            this.boundHandleDocumentPointerDown = this.handleDocumentPointerDown.bind(this);
 
             this.init();
         }
@@ -606,17 +613,24 @@
             this.source.hidden = true;
             this.source.setAttribute('aria-hidden', 'true');
 
-            this.editable.addEventListener('input', () => this.handleInput());
             this.editable.addEventListener('input', (event) => this.handleInput(event));
-            this.editable.addEventListener('blur', () => this.syncToSource(true));
+            this.editable.addEventListener('blur', () => this.handleBlur());
             this.editable.addEventListener('keyup', (event) => this.handleKeyup(event));
             this.editable.addEventListener('keydown', (event) => this.handleKeydown(event));
-            this.editable.addEventListener('mouseup', () => this.refreshToolbarState());
-            this.editable.addEventListener('focus', () => this.refreshToolbarState());
+            this.editable.addEventListener('mouseup', () => this.handleMouseup());
+            this.editable.addEventListener('focus', () => this.handleFocus());
+            this.editable.addEventListener('pointerdown', () => {
+                this.didPointerDownOutside = false;
+            });
             this.editable.addEventListener('paste', (event) => this.handlePaste(event));
 
             this.syncToSource(true);
             this.refreshToolbarState();
+
+            if (!this.hasPointerListener && typeof document !== 'undefined') {
+                document.addEventListener('pointerdown', this.boundHandleDocumentPointerDown, true);
+                this.hasPointerListener = true;
+            }
         }
 
         buildToolbar() {
@@ -650,9 +664,14 @@
 
         handleInput(event) {
             if (event) {
-                event.stopPropagation();
+                if (typeof event.stopPropagation === 'function') {
+                    event.stopPropagation();
+                }
             }
             this.isDirty = true;
+            this.didPointerDownOutside = false;
+            this.captureSelection();
+            this.scheduleFocusRestore();
         }
 
         handleKeydown(event) {
@@ -666,7 +685,149 @@
             if (event) {
                 event.stopPropagation();
             }
+            this.captureSelection();
             this.refreshToolbarState();
+        }
+
+        handleFocus() {
+            this.preventFocusRestore = false;
+            this.didPointerDownOutside = false;
+            this.captureSelection();
+            this.refreshToolbarState();
+        }
+
+        handleBlur() {
+            this.syncToSource(true);
+            const shouldPrevent = this.didPointerDownOutside;
+            this.preventFocusRestore = shouldPrevent;
+            this.didPointerDownOutside = false;
+
+            if (shouldPrevent) {
+                this.cancelFocusRestore();
+                return;
+            }
+
+            this.scheduleFocusRestore();
+        }
+
+        handleMouseup() {
+            this.captureSelection();
+            this.refreshToolbarState();
+        }
+
+        captureSelection() {
+            if (!this.editable || typeof globalObject.getSelection !== 'function') {
+                return;
+            }
+            const selection = globalObject.getSelection();
+            if (!selection || selection.rangeCount === 0) {
+                return;
+            }
+            const range = selection.getRangeAt(0);
+            if (!this.editable.contains(range.startContainer) || !this.editable.contains(range.endContainer)) {
+                return;
+            }
+            this.lastSelectionRange = range.cloneRange();
+        }
+
+        restoreSelection() {
+            if (!this.editable || typeof globalObject.getSelection !== 'function') {
+                return;
+            }
+            const selection = globalObject.getSelection();
+            if (!selection) {
+                return;
+            }
+
+            selection.removeAllRanges();
+
+            if (this.lastSelectionRange && this.editable.contains(this.lastSelectionRange.startContainer) && this.editable.contains(this.lastSelectionRange.endContainer)) {
+                const range = this.lastSelectionRange.cloneRange();
+                selection.addRange(range);
+                return;
+            }
+
+            this.placeCaretAtEnd();
+        }
+
+        placeCaretAtEnd() {
+            if (!this.editable || typeof document.createRange !== 'function' || typeof globalObject.getSelection !== 'function') {
+                return;
+            }
+            const selection = globalObject.getSelection();
+            if (!selection) {
+                return;
+            }
+            const range = document.createRange();
+            range.selectNodeContents(this.editable);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            this.lastSelectionRange = range.cloneRange();
+        }
+
+        cancelFocusRestore() {
+            if (this.focusRestoreHandle === null) {
+                return;
+            }
+            if (this.focusRestoreHandleType === 'raf' && typeof globalObject.cancelAnimationFrame === 'function') {
+                globalObject.cancelAnimationFrame(this.focusRestoreHandle);
+            } else if (this.focusRestoreHandleType === 'timeout' && typeof globalObject.clearTimeout === 'function') {
+                globalObject.clearTimeout(this.focusRestoreHandle);
+            }
+            this.focusRestoreHandle = null;
+            this.focusRestoreHandleType = null;
+        }
+
+        scheduleFocusRestore() {
+            if (!this.editable || this.preventFocusRestore) {
+                return;
+            }
+
+            this.cancelFocusRestore();
+
+            const scheduler = typeof globalObject.requestAnimationFrame === 'function'
+                ? (callback) => {
+                    return { type: 'raf', id: globalObject.requestAnimationFrame(callback) };
+                }
+                : (callback) => {
+                    return { type: 'timeout', id: (typeof globalObject.setTimeout === 'function' ? globalObject.setTimeout(callback, 16) : setTimeout(callback, 16)) };
+                };
+
+            const handle = scheduler(() => {
+                this.focusRestoreHandle = null;
+                this.focusRestoreHandleType = null;
+
+                if (!this.editable || this.preventFocusRestore) {
+                    return;
+                }
+                if (document.activeElement === this.editable) {
+                    return;
+                }
+
+                try {
+                    if (typeof this.editable.focus === 'function') {
+                        this.editable.focus({ preventScroll: true });
+                    } else {
+                        this.editable.focus();
+                    }
+                } catch (focusError) {
+                    this.editable.focus();
+                }
+
+                this.restoreSelection();
+            });
+
+            this.focusRestoreHandle = handle && handle.id !== undefined ? handle.id : null;
+            this.focusRestoreHandleType = handle && handle.type ? handle.type : null;
+        }
+
+        handleDocumentPointerDown(event) {
+            if (!this.editor) {
+                this.didPointerDownOutside = true;
+                return;
+            }
+            this.didPointerDownOutside = !this.editor.contains(event.target);
         }
 
         handleCommand(config) {
@@ -677,7 +838,7 @@
             this.editable.focus();
 
             if (config.command === 'createLink') {
-                const selection = window.getSelection();
+                const selection = globalObject.getSelection ? globalObject.getSelection() : null;
                 if (!selection || selection.isCollapsed) {
                     return;
                 }
@@ -690,6 +851,7 @@
                 this.isDirty = true;
                 this.syncToSource(true);
                 this.refreshToolbarState();
+                this.captureSelection();
                 return;
             }
 
@@ -699,6 +861,7 @@
                 this.isDirty = true;
                 this.syncToSource(true);
                 this.refreshToolbarState();
+                this.captureSelection();
                 return;
             }
 
@@ -706,6 +869,7 @@
             this.isDirty = true;
             this.syncToSource(true);
             this.refreshToolbarState();
+            this.captureSelection();
         }
 
         syncToSource(force = false) {
@@ -749,10 +913,13 @@
             this.isDirty = true;
             this.syncToSource(true);
             this.refreshToolbarState();
+            this.lastSelectionRange = null;
         }
 
         reset() {
             this.setValue('');
+            this.cancelFocusRestore();
+            this.lastSelectionRange = null;
         }
 
         normalizeContent(value) {
@@ -1289,6 +1456,75 @@
             }
         }
 
+        setupTabs() {
+            if (!this.elements.form) {
+                return;
+            }
+
+            const tabsContainer = this.elements.form.querySelector('[data-tabs]');
+            const panels = this.elements.form.querySelectorAll('[data-tab-panel]');
+
+            if (!tabsContainer || panels.length === 0) {
+                return;
+            }
+
+            const buttons = Array.from(tabsContainer.querySelectorAll('[data-tab-target]'));
+            if (buttons.length === 0) {
+                return;
+            }
+
+            this.tabButtons = buttons;
+            this.tabPanels = Array.from(panels);
+
+            buttons.forEach(button => {
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    const target = button.getAttribute('data-tab-target');
+                    this.activateTab(target);
+                });
+            });
+
+            const initialButton = buttons.find(button => button.classList.contains('is-active')) || buttons[0];
+            if (initialButton) {
+                const target = initialButton.getAttribute('data-tab-target');
+                this.activateTab(target, { skipFocus: true });
+            }
+        }
+
+        activateTab(tabId, options = {}) {
+            if (!tabId || !Array.isArray(this.tabButtons) || this.tabButtons.length === 0) {
+                return;
+            }
+
+            const { skipFocus = false } = options;
+
+            this.tabButtons.forEach(button => {
+                const target = button.getAttribute('data-tab-target');
+                const isActive = target === tabId;
+                button.classList.toggle('is-active', isActive);
+                button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                button.setAttribute('tabindex', isActive ? '0' : '-1');
+                if (isActive && !skipFocus) {
+                    button.focus();
+                }
+            });
+
+            if (Array.isArray(this.tabPanels)) {
+                this.tabPanels.forEach(panel => {
+                    const panelTarget = panel.getAttribute('data-tab-panel');
+                    const isActive = panelTarget === tabId;
+                    panel.classList.toggle('is-active', isActive);
+                    if (isActive) {
+                        panel.removeAttribute('hidden');
+                    } else {
+                        panel.setAttribute('hidden', 'hidden');
+                    }
+                });
+            }
+
+            this.activeTab = tabId;
+        }
+
         async loadEvents() {
             if (this.isLoading) return;
             
@@ -1304,73 +1540,6 @@
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
                     body: new URLSearchParams({
-                                    if (!this.elements.form) {
-                                        return;
-                                    }
-
-                                    const tabsContainer = this.elements.form.querySelector('[data-tabs]');
-                                    const panels = this.elements.form.querySelectorAll('[data-tab-panel]');
-
-                                    if (!tabsContainer || panels.length === 0) {
-                                        return;
-                                    }
-
-                                    const buttons = Array.from(tabsContainer.querySelectorAll('[data-tab-target]'));
-                                    if (buttons.length === 0) {
-                                        return;
-                                    }
-
-                                    this.tabButtons = buttons;
-                                    this.tabPanels = Array.from(panels);
-
-                                    buttons.forEach(button => {
-                                        button.addEventListener('click', (event) => {
-                                            event.preventDefault();
-                                            const target = button.getAttribute('data-tab-target');
-                                            this.activateTab(target);
-                                        });
-                                    });
-
-                                    const initialButton = buttons.find(button => button.classList.contains('is-active')) || buttons[0];
-                                    if (initialButton) {
-                                        const target = initialButton.getAttribute('data-tab-target');
-                                        this.activateTab(target, { skipFocus: true });
-                                    }
-                                }
-
-                                activateTab(tabId, options = {}) {
-                                    if (!tabId || !Array.isArray(this.tabButtons) || this.tabButtons.length === 0) {
-                                        return;
-                                    }
-
-                                    const { skipFocus = false } = options;
-
-                                    this.tabButtons.forEach(button => {
-                                        const target = button.getAttribute('data-tab-target');
-                                        const isActive = target === tabId;
-                                        button.classList.toggle('is-active', isActive);
-                                        button.setAttribute('aria-selected', isActive ? 'true' : 'false');
-                                        button.setAttribute('tabindex', isActive ? '0' : '-1');
-                                        if (isActive && !skipFocus) {
-                                            button.focus();
-                                        }
-                                    });
-
-                                    if (Array.isArray(this.tabPanels)) {
-                                        this.tabPanels.forEach(panel => {
-                                            const panelTarget = panel.getAttribute('data-tab-panel');
-                                            const isActive = panelTarget === tabId;
-                                            panel.classList.toggle('is-active', isActive);
-                                            if (isActive) {
-                                                panel.removeAttribute('hidden');
-                                            } else {
-                                                panel.setAttribute('hidden', 'hidden');
-                                            }
-                                        });
-                                    }
-
-                                    this.activeTab = tabId;
-                                }
                         action: 'mj_events_manager_list',
                         nonce: this.config.nonce,
                         show_past: this.config.showPast ? '1' : '0',
