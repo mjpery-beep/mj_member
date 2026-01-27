@@ -966,6 +966,10 @@
         var resetting = _resetting[0];
         var setResetting = _resetting[1];
 
+        var _linkCopyFeedback = useState('');
+        var linkCopyFeedback = _linkCopyFeedback[0];
+        var setLinkCopyFeedback = _linkCopyFeedback[1];
+
         var modalTitle = getString(strings, 'memberAccountModalTitle', 'Gestion du compte WordPress');
         var modalDescription = getString(strings, 'memberAccountModalDescription', 'Créez, liez ou mettez à jour le compte WordPress associé à ce membre.');
         var accountLabel = getString(strings, 'memberAccount', 'Compte WordPress');
@@ -981,6 +985,10 @@
         var generatePasswordLabel = getString(strings, 'memberAccountGeneratePassword', 'Générer un mot de passe sécurisé');
         var copyPasswordLabel = getString(strings, 'memberAccountCopyPassword', 'Copier le mot de passe');
         var copyPasswordSuccess = getString(strings, 'memberAccountPasswordCopied', 'Mot de passe copié dans le presse-papiers.');
+        var claimLinkLabel = getString(strings, 'memberAccountClaimLinkLabel', 'Lien de création de compte');
+        var claimLinkHelp = getString(strings, 'memberAccountClaimLinkHelp', 'Partagez ce lien avec le membre pour qu\'il crée son accès.');
+        var copyLinkLabel = getString(strings, 'memberAccountCopyLink', 'Copier le lien');
+        var copyLinkSuccess = getString(strings, 'memberAccountLinkCopied', 'Lien copié dans le presse-papiers.');
         var submitCreateLabel = getString(strings, 'memberAccountSubmitCreate', 'Créer et lier le compte');
         var submitUpdateLabel = getString(strings, 'memberAccountSubmitUpdate', 'Mettre à jour le compte');
         var successCreateLabel = getString(strings, 'memberAccountSuccessCreate', 'Compte WordPress créé et lié avec succès.');
@@ -990,6 +998,7 @@
         var noRolesMessage = getString(strings, 'memberAccountNoRoles', 'Aucun rôle WordPress n\'est disponible pour votre compte.');
 
         var memberName = member ? [(member.firstName || ''), (member.lastName || '')].join(' ').trim() : '';
+        var claimLink = member && typeof member.cardClaimUrl === 'string' ? member.cardClaimUrl : '';
 
         var baseLinked = member && member.hasLinkedAccount ? true : false;
         if (resultData && (resultData.created || (resultData.login && resultData.login !== ''))) {
@@ -1015,6 +1024,7 @@
             setResultData(null);
             setCopyFeedback('');
             setResetting(false);
+            setLinkCopyFeedback('');
         }, [isOpen, member ? member.id : null, roleKeysKey]);
 
         var generatePassword = useCallback(function () {
@@ -1035,7 +1045,7 @@
 
             var text = manualPassword;
 
-            if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
                 navigator.clipboard.writeText(text)
                     .then(function () {
                         setCopyFeedback(copyPasswordSuccess);
@@ -1061,6 +1071,40 @@
                 setCopyFeedback(copyPasswordSuccess);
             }
         }, [manualPassword, copyPasswordSuccess]);
+
+        var handleCopyClaimLink = useCallback(function () {
+            if (!claimLink) {
+                return;
+            }
+
+            var text = claimLink;
+
+            if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                navigator.clipboard.writeText(text)
+                    .then(function () {
+                        setLinkCopyFeedback(copyLinkSuccess);
+                    })
+                    .catch(function () {
+                        setLinkCopyFeedback(copyLinkSuccess);
+                    });
+                return;
+            }
+
+            try {
+                var textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.setAttribute('readonly', '');
+                textarea.style.position = 'absolute';
+                textarea.style.left = '-9999px';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                setLinkCopyFeedback(copyLinkSuccess);
+            } catch (err) {
+                setLinkCopyFeedback(copyLinkSuccess);
+            }
+        }, [claimLink, copyLinkSuccess]);
 
         var handleSubmit = useCallback(function (event) {
             event.preventDefault();
@@ -1243,6 +1287,27 @@
                         }, copyPasswordLabel),
                     ]),
                     copyFeedback && h('p', { class: 'mj-regmgr-modal__description' }, copyFeedback),
+                ]),
+
+                claimLink && h('div', { class: 'mj-regmgr-form__group' }, [
+                    h('label', { for: 'member-account-claim-link' }, claimLinkLabel),
+                    h('input', {
+                        type: 'text',
+                        id: 'member-account-claim-link',
+                        class: 'mj-regmgr-input',
+                        value: claimLink,
+                        readOnly: true,
+                        onFocus: function (e) { e.target.select(); },
+                    }),
+                    h('div', { class: 'mj-regmgr-modal__actions' }, [
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--ghost mj-btn--small',
+                            onClick: handleCopyClaimLink,
+                        }, copyLinkLabel),
+                    ]),
+                    h('p', { class: 'mj-regmgr-modal__description' }, claimLinkHelp),
+                    linkCopyFeedback && h('p', { class: 'mj-regmgr-modal__description' }, linkCopyFeedback),
                 ]),
 
                 resultData && h('div', { class: 'mj-regmgr-form__group' }, [

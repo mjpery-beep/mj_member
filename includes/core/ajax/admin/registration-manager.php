@@ -4881,6 +4881,7 @@ function mj_regmgr_get_member_details() {
         'accountRole' => '',
         'accountRoleLabel' => '',
         'accountEditUrl' => '',
+        'cardClaimUrl' => '',
         'createdAt' => $memberData->created_at ?? null,
         'dateInscription' => $memberData->date_inscription ?? null,
         'status' => $memberData->status ?? 'active',
@@ -4926,6 +4927,10 @@ function mj_regmgr_get_member_details() {
 
             $member['accountEditUrl'] = get_edit_user_link($user_object->ID);
         }
+    }
+
+    if (function_exists('mj_member_get_card_claim_url')) {
+        $member['cardClaimUrl'] = mj_member_get_card_claim_url((int) $memberData->id);
     }
 
     // Add guardian info if exists

@@ -453,6 +453,9 @@ final class AssetsManager
             case 'events-manager':
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-events-manager');
+                if (function_exists('wp_enqueue_media')) {
+                    wp_enqueue_media();
+                }
                 wp_enqueue_script('mj-member-events-manager');
                 break;
 

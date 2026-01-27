@@ -544,6 +544,8 @@
             this.preventFocusRestore = false;
             this.didPointerDownOutside = false;
             this.hasPointerListener = false;
+            this.mediaFrame = null;
+            this.wpMediaAvailable = !!(globalObject.wp && globalObject.wp.media && typeof globalObject.wp.media === 'function');
             this.boundHandleDocumentPointerDown = this.handleDocumentPointerDown.bind(this);
 
             this.init();
@@ -644,6 +646,7 @@
                 { command: 'insertUnorderedList', label: 'Liste à puces', text: 'Bul' },
                 { command: 'insertOrderedList', label: 'Liste numérotée', text: 'Num' },
                 { command: 'createLink', label: 'Insérer un lien', text: 'Link' },
+                { command: 'insertMedia', label: 'Insérer un média', text: 'Med' },
                 { command: 'removeFormat', label: 'Nettoyer le formatage', text: 'Clr' },
             ];
 
@@ -835,7 +838,18 @@
                 return;
             }
 
-            this.editable.focus();
+            try {
+                this.editable.focus({ preventScroll: true });
+            } catch (focusError) {
+                this.editable.focus();
+            }
+
+            this.restoreSelection();
+
+            if (config.command === 'insertMedia') {
+                this.handleInsertMedia();
+                return;
+            }
 
             if (config.command === 'createLink') {
                 const selection = globalObject.getSelection ? globalObject.getSelection() : null;
@@ -866,6 +880,183 @@
             }
 
             document.execCommand(config.command, false, config.value || null);
+            this.isDirty = true;
+            this.syncToSource(true);
+            this.refreshToolbarState();
+            this.captureSelection();
+        }
+
+        handleInsertMedia() {
+            if (!this.editable) {
+                return;
+            }
+
+            this.wpMediaAvailable = !!(globalObject.wp && globalObject.wp.media && typeof globalObject.wp.media === 'function');
+            this.captureSelection();
+
+            if (this.wpMediaAvailable) {
+                this.openMediaFrame();
+                return;
+            }
+
+            this.promptForMediaUrl();
+        }
+
+        openMediaFrame() {
+            if (!this.wpMediaAvailable) {
+                this.promptForMediaUrl();
+                return;
+            }
+
+            if (!this.mediaFrame && globalObject.wp && typeof globalObject.wp.media === 'function') {
+                const frame = globalObject.wp.media({
+                    title: 'Sélectionner un média',
+                    button: { text: 'Insérer' },
+                    library: { type: ['image', 'video'] },
+                    multiple: false,
+                });
+
+                frame.on('select', () => {
+                    const state = typeof frame.state === 'function' ? frame.state() : frame.state;
+                    const selection = state && typeof state.get === 'function' ? state.get('selection') : null;
+                    const attachment = selection && typeof selection.first === 'function' ? selection.first() : null;
+                    const data = attachment && typeof attachment.toJSON === 'function' ? attachment.toJSON() : attachment;
+                    if (data) {
+                        this.handleMediaSelection(data);
+                    }
+                    this.preventFocusRestore = false;
+                    try {
+                        if (this.editable) {
+                            this.editable.focus({ preventScroll: true });
+                        }
+                    } catch (focusError) {
+                        if (this.editable) {
+                            this.editable.focus();
+                        }
+                    }
+                    this.restoreSelection();
+                });
+
+                frame.on('close', () => {
+                    this.preventFocusRestore = false;
+                    try {
+                        if (this.editable) {
+                            this.editable.focus({ preventScroll: true });
+                        }
+                    } catch (focusError) {
+                        if (this.editable) {
+                            this.editable.focus();
+                        }
+                    }
+                    this.restoreSelection();
+                });
+
+                this.mediaFrame = frame;
+            }
+
+            this.preventFocusRestore = true;
+
+            if (this.mediaFrame && typeof this.mediaFrame.open === 'function') {
+                this.mediaFrame.open();
+            } else {
+                this.promptForMediaUrl();
+            }
+        }
+
+        promptForMediaUrl() {
+            const promptFn = typeof globalObject.prompt === 'function' ? globalObject.prompt : null;
+            if (!promptFn) {
+                this.preventFocusRestore = false;
+                return;
+            }
+
+            const rawUrl = promptFn('Adresse du média (https://...)', '');
+            const sanitizedUrl = this.sanitizeMediaUrl(rawUrl || '');
+            if (!sanitizedUrl) {
+                this.preventFocusRestore = false;
+                return;
+            }
+
+            let altText = '';
+            if (typeof globalObject.prompt === 'function') {
+                const rawAlt = globalObject.prompt('Texte alternatif (optionnel)', '');
+                if (typeof rawAlt === 'string') {
+                    altText = rawAlt;
+                }
+            }
+
+            this.insertImageFromUrl(sanitizedUrl, altText);
+            this.preventFocusRestore = false;
+        }
+
+        handleMediaSelection(data) {
+            if (!data) {
+                this.preventFocusRestore = false;
+                return;
+            }
+
+            const candidateUrl = data.url
+                || (data.sizes && data.sizes.large && data.sizes.large.url)
+                || (data.sizes && data.sizes.full && data.sizes.full.url)
+                || '';
+            const mime = data.mime || data.mime_type || '';
+            const type = data.type || '';
+            const isImage = (typeof mime === 'string' && mime.indexOf('image/') === 0) || type === 'image';
+
+            if (isImage) {
+                const altText = data.alt || data.alt_text || data.caption || data.title || data.filename || '';
+                this.insertImageFromUrl(candidateUrl, altText);
+                this.preventFocusRestore = false;
+                return;
+            }
+
+            const sanitizedUrl = this.sanitizeUrl(candidateUrl);
+            if (!sanitizedUrl) {
+                this.preventFocusRestore = false;
+                return;
+            }
+
+            const labelSource = data.title || data.filename || candidateUrl;
+            const label = this.sanitizeAttributeText(labelSource, 160) || 'Média';
+            const html = `<a href="${escapeHtml(sanitizedUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
+            this.insertHtml(html);
+            this.preventFocusRestore = false;
+        }
+
+        insertImageFromUrl(url, altText) {
+            const sanitizedUrl = this.sanitizeMediaUrl(url);
+            if (!sanitizedUrl) {
+                return;
+            }
+
+            const safeAlt = this.sanitizeAttributeText(altText, 160);
+            const html = `<img src="${escapeHtml(sanitizedUrl)}" alt="${escapeHtml(safeAlt)}">`;
+            this.insertHtml(html);
+        }
+
+        insertHtml(html) {
+            if (!this.editable) {
+                return;
+            }
+
+            try {
+                this.editable.focus({ preventScroll: true });
+            } catch (focusError) {
+                this.editable.focus();
+            }
+
+            this.restoreSelection();
+
+            if (typeof document.execCommand === 'function') {
+                try {
+                    document.execCommand('insertHTML', false, html);
+                } catch (error) {
+                    return;
+                }
+            } else {
+                this.editable.insertAdjacentHTML('beforeend', html);
+            }
+
             this.isDirty = true;
             this.syncToSource(true);
             this.refreshToolbarState();
@@ -961,10 +1152,11 @@
             const template = document.createElement('template');
             template.innerHTML = html;
 
-            const allowedTags = new Set(['P', 'BR', 'UL', 'OL', 'LI', 'STRONG', 'B', 'EM', 'I', 'U', 'A', 'SPAN', 'DIV']);
+            const allowedTags = new Set(['P', 'BR', 'UL', 'OL', 'LI', 'STRONG', 'B', 'EM', 'I', 'U', 'A', 'SPAN', 'DIV', 'IMG']);
             const allowedAttributes = {
                 A: ['href', 'target', 'rel'],
                 SPAN: [],
+                IMG: ['src', 'alt'],
             };
 
             template.content.querySelectorAll('*').forEach(node => {
@@ -996,6 +1188,18 @@
                         node.removeAttribute('target');
                         node.removeAttribute('rel');
                     }
+                } else if (tagName === 'IMG') {
+                    const src = this.sanitizeMediaUrl(node.getAttribute('src') || '');
+                    if (!src) {
+                        if (node.parentNode) {
+                            node.parentNode.removeChild(node);
+                        }
+                        return;
+                    }
+                    node.setAttribute('src', src);
+                    const altRaw = node.getAttribute('alt') || '';
+                    const altText = this.sanitizeAttributeText(altRaw, 160);
+                    node.setAttribute('alt', altText);
                 }
             });
 
@@ -1041,6 +1245,45 @@
             return '';
         }
 
+        sanitizeMediaUrl(url) {
+            if (!url) {
+                return '';
+            }
+
+            const trimmed = String(url).trim();
+            if (trimmed === '') {
+                return '';
+            }
+
+            const lower = trimmed.toLowerCase();
+            if (/^https?:\/\//.test(lower)) {
+                return trimmed;
+            }
+
+            if (/^www\./.test(lower)) {
+                return `https://${trimmed}`;
+            }
+
+            return '';
+        }
+
+        sanitizeAttributeText(value, maxLength = 255) {
+            if (typeof value !== 'string') {
+                return '';
+            }
+
+            let normalized = value.replace(/\s+/g, ' ').trim();
+            if (normalized === '') {
+                return '';
+            }
+
+            if (typeof maxLength === 'number' && maxLength > 0 && normalized.length > maxLength) {
+                normalized = normalized.slice(0, maxLength);
+            }
+
+            return normalized;
+        }
+
         unwrapNode(node) {
             if (!node || !node.parentNode) {
                 return;
@@ -1081,7 +1324,7 @@
 
             this.toolbar.querySelectorAll('[data-command]').forEach(button => {
                 const command = button.getAttribute('data-command');
-                if (!command || command === 'createLink' || command === 'removeFormat') {
+                if (!command || command === 'createLink' || command === 'removeFormat' || command === 'insertMedia') {
                     button.setAttribute('aria-pressed', 'false');
                     button.classList.remove('is-active');
                     return;
