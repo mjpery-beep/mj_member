@@ -53,6 +53,12 @@
     padding: 1.5rem;
 }
 
+@media (max-width: 640px) {
+    .mj-regmgr {
+        padding: 0;
+    }
+}
+
 .mj-registration-manager__boot-loader {
     display: none;
     align-items: center;

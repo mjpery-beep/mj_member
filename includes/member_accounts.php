@@ -396,6 +396,13 @@ if (!function_exists('mj_member_get_guardian_children_statuses')) {
                 }
             }
 
+            $photo_preview = function_exists('mj_member_account_get_photo_preview')
+                ? mj_member_account_get_photo_preview($child)
+                : array('url' => '', 'id' => 0);
+
+            $photo_id = isset($photo_preview['id']) ? (int) $photo_preview['id'] : 0;
+            $photo_url = isset($photo_preview['url']) ? esc_url_raw((string) $photo_preview['url']) : '';
+
             $profile = array(
                 'id' => isset($child->id) ? (int) $child->id : 0,
                 'first_name' => isset($child->first_name) ? sanitize_text_field((string) $child->first_name) : '',
@@ -407,6 +414,8 @@ if (!function_exists('mj_member_get_guardian_children_statuses')) {
                 'is_autonomous' => !empty($child->is_autonomous) ? 1 : 0,
                 'photo_usage_consent' => !empty($child->photo_usage_consent) ? 1 : 0,
                 'full_name' => $full_name,
+                'photo_id' => $photo_id,
+                'photo_url' => $photo_url,
             );
 
             $entries[] = array(
@@ -419,6 +428,10 @@ if (!function_exists('mj_member_get_guardian_children_statuses')) {
                 'expires_display' => isset($status['expires_display']) ? sanitize_text_field($status['expires_display']) : '',
                 'amount' => isset($status['amount']) ? (float) $status['amount'] : 0.0,
                 'requires_payment' => $requires_payment,
+                'photo' => array(
+                    'id' => $photo_id,
+                    'url' => $photo_url,
+                ),
                 'profile' => $profile,
             );
         }
@@ -1086,6 +1099,34 @@ if (!function_exists('mj_member_ajax_update_child_profile')) {
 
         $updates['is_autonomous'] = !empty($_POST['is_autonomous']) ? 1 : 0;
         $updates['photo_usage_consent'] = !empty($_POST['photo_usage_consent']) ? 1 : 0;
+
+        $photo_remove = !empty($_POST['photo_remove']);
+        $existing_photo_id = isset($_POST['photo_id_existing']) ? (int) $_POST['photo_id_existing'] : 0;
+        $new_photo_id = null;
+
+        if (!$photo_remove && !empty($_FILES['child_photo']) && !empty($_FILES['child_photo']['name'])) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            require_once ABSPATH . 'wp-admin/includes/media.php';
+            require_once ABSPATH . 'wp-admin/includes/image.php';
+
+            add_filter('user_has_cap', 'mj_member_temp_allow_upload_cap', 10, 3);
+            $upload_id = media_handle_upload('child_photo', 0, array(), array('test_form' => false));
+            remove_filter('user_has_cap', 'mj_member_temp_allow_upload_cap', 10);
+
+            if (is_wp_error($upload_id)) {
+                wp_send_json_error(array('message' => $upload_id->get_error_message()), 400);
+            }
+
+            $new_photo_id = (int) $upload_id;
+        }
+
+        if ($photo_remove) {
+            $updates['photo_id'] = null;
+        } elseif ($new_photo_id !== null) {
+            $updates['photo_id'] = $new_photo_id;
+        } elseif ($existing_photo_id > 0) {
+            $updates['photo_id'] = $existing_photo_id;
+        }
 
         if (isset($updates['birth_date']) && $updates['birth_date'] === '') {
             $updates['birth_date'] = null;

@@ -311,8 +311,16 @@ if (!function_exists('mj_member_render_account_component')) {
             : false;
         if ($is_elementor_context) {
             $is_preview = $is_preview || (did_action('elementor/loaded') && !is_user_logged_in());
-        } elseif (is_user_logged_in()) {
-            $is_preview = false;
+        }
+
+        if (is_user_logged_in()) {
+            $has_elementor_preview_param = isset($_GET['elementor-preview']) && $_GET['elementor-preview'] !== ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+            if ($has_elementor_preview_param) {
+                $is_preview = true;
+            } elseif (!is_admin()) {
+                $is_preview = false;
+            }
         }
 
         $current_url = function_exists('mj_member_get_current_url')
@@ -631,9 +639,112 @@ if (!function_exists('mj_member_render_account_component')) {
             $upload_container_classes[] = 'is-disabled';
         }
 
+        $children_payload = array();
+        if (!empty($children_statuses)) {
+            foreach ($children_statuses as $entry) {
+                if (!is_array($entry)) {
+                    continue;
+                }
+
+                $child_id = isset($entry['id']) ? (int) $entry['id'] : 0;
+                if ($child_id <= 0) {
+                    continue;
+                }
+
+                $child_profile = isset($entry['profile']) && is_array($entry['profile'])
+                    ? $entry['profile']
+                    : array();
+
+                $child_photo_meta = isset($entry['photo']) && is_array($entry['photo']) ? $entry['photo'] : array();
+                $child_photo_id = isset($child_photo_meta['id']) ? (int) $child_photo_meta['id'] : (isset($child_profile['photo_id']) ? (int) $child_profile['photo_id'] : 0);
+                $child_photo_url = isset($child_photo_meta['url']) ? esc_url_raw((string) $child_photo_meta['url']) : (isset($child_profile['photo_url']) ? esc_url_raw((string) $child_profile['photo_url']) : '');
+
+                $children_payload[] = array(
+                    'id' => $child_id,
+                    'full_name' => isset($entry['full_name']) ? sanitize_text_field((string) $entry['full_name']) : '',
+                    'status' => isset($entry['status']) ? sanitize_key((string) $entry['status']) : 'unknown',
+                    'status_label' => isset($entry['status_label']) ? sanitize_text_field((string) $entry['status_label']) : '',
+                    'description' => isset($entry['description']) ? sanitize_text_field((string) $entry['description']) : '',
+                    'last_payment_display' => isset($entry['last_payment_display']) ? sanitize_text_field((string) $entry['last_payment_display']) : '',
+                    'expires_display' => isset($entry['expires_display']) ? sanitize_text_field((string) $entry['expires_display']) : '',
+                    'requires_payment' => !empty($entry['requires_payment']) ? 1 : 0,
+                    'profile' => array(
+                        'first_name' => isset($child_profile['first_name']) ? sanitize_text_field((string) $child_profile['first_name']) : '',
+                        'last_name' => isset($child_profile['last_name']) ? sanitize_text_field((string) $child_profile['last_name']) : '',
+                        'email' => isset($child_profile['email']) ? sanitize_email((string) $child_profile['email']) : '',
+                        'phone' => isset($child_profile['phone']) ? sanitize_text_field((string) $child_profile['phone']) : '',
+                        'birth_date' => isset($child_profile['birth_date']) ? mj_member_account_normalize_birth_date((string) $child_profile['birth_date']) : '',
+                        'notes' => isset($child_profile['notes']) ? sanitize_textarea_field((string) $child_profile['notes']) : '',
+                        'is_autonomous' => !empty($child_profile['is_autonomous']) ? 1 : 0,
+                        'photo_usage_consent' => !empty($child_profile['photo_usage_consent']) ? 1 : 0,
+                        'photo_id' => $child_photo_id,
+                        'photo_url' => $child_photo_url,
+                    ),
+                    'photo' => array(
+                        'id' => $child_photo_id,
+                        'url' => $child_photo_url,
+                    ),
+                );
+            }
+        }
+
+        if (!empty($options['show_children'])) {
+            wp_enqueue_script('mj-member-member-account');
+            $account_localization = array(
+                'ajaxUrl' => esc_url_raw(admin_url('admin-ajax.php')),
+                'isPreview' => $is_preview ? 1 : 0,
+                'memberId' => isset($member->id) ? (int) $member->id : 0,
+                'actions' => array(
+                    'create' => 'mj_member_create_child_profile',
+                    'update' => 'mj_member_update_child_profile',
+                ),
+                'nonces' => array(
+                    'create' => wp_create_nonce('mj_member_create_child_profile'),
+                    'update' => wp_create_nonce('mj_member_update_child_profile'),
+                ),
+                'children' => array_values($children_payload),
+                'i18n' => array(
+                    'addChild' => __('Ajouter un jeune', 'mj-member'),
+                    'editChild' => __('Modifier', 'mj-member'),
+                    'formTitleCreate' => __('Ajouter un jeune', 'mj-member'),
+                    'formTitleEdit' => __('Modifier les informations du jeune', 'mj-member'),
+                    'submitCreate' => __('Enregistrer le jeune', 'mj-member'),
+                    'submitEdit' => __('Enregistrer les modifications', 'mj-member'),
+                    'cancel' => __('Annuler', 'mj-member'),
+                    'saving' => __('Enregistrement…', 'mj-member'),
+                    'errorGeneric' => __('Une erreur est survenue. Merci de réessayer.', 'mj-member'),
+                    'errorListIntro' => __('Merci de corriger les éléments suivants :', 'mj-member'),
+                    'successCreate' => __('Le jeune a été ajouté.', 'mj-member'),
+                    'successUpdate' => __('Les informations du jeune ont été mises à jour.', 'mj-member'),
+                    'emptyChildren' => __('Aucun jeune rattaché pour le moment.', 'mj-member'),
+                    'close' => __('Fermer', 'mj-member'),
+                    'birthLabel' => __('Né(e) le', 'mj-member'),
+                    'expiresLabel' => __('Expire le', 'mj-member'),
+                    'notesLabel' => __('Notes', 'mj-member'),
+                    'autonomousLabel' => __('Autorisation de sortie autonome', 'mj-member'),
+                    'photoConsentLabel' => __('Autorisation photo', 'mj-member'),
+                    'defaultChildName' => \Mj\Member\Classes\MjRoles::getRoleLabel(\Mj\Member\Classes\MjRoles::JEUNE),
+                    'errorFirstName' => __('Merci de renseigner le prénom du jeune.', 'mj-member'),
+                    'errorLastName' => __('Merci de renseigner le nom du jeune.', 'mj-member'),
+                ),
+            );
+
+            static $mj_member_account_script_localized = false;
+            if (!$mj_member_account_script_localized) {
+                wp_localize_script('mj-member-member-account', 'mjMemberAccountData', $account_localization);
+                $mj_member_account_script_localized = true;
+            }
+        }
+
+        $child_photo_input_id = sanitize_html_class(wp_unique_id('mj-account-child-photo-'));
+        $child_photo_label_id = $child_photo_input_id . '-label';
+        $child_photo_hint_id = $child_photo_input_id . '-hint';
+        $child_photo_trigger_id = $child_photo_input_id . '-trigger';
+        $child_photo_default_text = __('Aucun fichier sélectionné', 'mj-member');
+
         ob_start();
         ?>
-        <div class="mj-account-modern">
+        <div class="mj-account-modern" data-mj-member-account>
             <div class="mj-account-shell">
                 <section class="mj-account-card mj-account-card--profile">
                     <header class="mj-account-card__header">
@@ -828,12 +939,22 @@ if (!function_exists('mj_member_render_account_component')) {
                 </section>
 
                 <?php if (!empty($options['show_children'])) : ?>
-                    <section class="mj-account-card mj-account-card--children">
+                    <section class="mj-account-card mj-account-card--children" data-mj-member-children-section>
                         <header class="mj-account-card__header">
                             <h3 class="mj-account-card__title"><?php esc_html_e('Mes jeunes rattachés', 'mj-member'); ?></h3>
+                            <button
+                                type="button"
+                                class="mj-button mj-button--secondary mj-account-children__add"
+                                data-mj-member-child-add
+                                <?php echo $is_preview ? 'disabled="disabled" aria-disabled="true"' : ''; ?>
+                                aria-controls="mj-member-child-modal">
+                                <span class="mj-account-children__add-icon" aria-hidden="true">+</span>
+                                <span><?php esc_html_e('Ajouter un jeune', 'mj-member'); ?></span>
+                            </button>
                         </header>
+                        <div class="mj-account-children__feedback" data-mj-member-child-feedback role="status" aria-live="polite" hidden></div>
                         <?php if (!empty($children_statuses)) : ?>
-                            <div class="mj-account-children">
+                            <div class="mj-account-children" data-mj-member-children>
                                 <?php foreach ($children_statuses as $child) :
                                     $child_status = isset($child['status']) ? sanitize_key((string) $child['status']) : 'unknown';
                                     $child_label = isset($child['status_label']) ? sanitize_text_field((string) $child['status_label']) : '';
@@ -842,38 +963,225 @@ if (!function_exists('mj_member_render_account_component')) {
                                     $child_birth = isset($child_profile['birth_date']) ? mj_member_account_normalize_birth_date((string) $child_profile['birth_date']) : '';
                                     $child_phone = isset($child_profile['phone']) ? sanitize_text_field((string) $child_profile['phone']) : '';
                                     $child_email = isset($child_profile['email']) ? sanitize_email((string) $child_profile['email']) : '';
+                                    $child_notes = isset($child_profile['notes']) ? sanitize_textarea_field((string) $child_profile['notes']) : '';
+                                    $child_autonomous = !empty($child_profile['is_autonomous']);
+                                    $child_photo_consent = !empty($child_profile['photo_usage_consent']);
+                                    $child_id = isset($child['id']) ? (int) $child['id'] : 0;
+                                    $child_photo = isset($child['photo']) && is_array($child['photo']) ? $child['photo'] : array();
+                                    $child_photo_url = isset($child_photo['url']) ? esc_url((string) $child_photo['url']) : '';
                                     ?>
-                                    <article class="mj-account-child-card mj-account-child-card--<?php echo esc_attr($child_status); ?>">
-                                        <div class="mj-account-child-card__header">
-                                            <h4 class="mj-account-child-card__title"><?php echo esc_html(isset($child['full_name']) ? (string) $child['full_name'] : \Mj\Member\Classes\MjRoles::getRoleLabel(\Mj\Member\Classes\MjRoles::JEUNE)); ?></h4>
-                                            <?php if ($child_label !== '') : ?>
-                                                <span class="mj-account-chip mj-account-chip--<?php echo esc_attr($child_status); ?>"><?php echo esc_html($child_label); ?></span>
-                                            <?php endif; ?>
+                                    <article
+                                        class="mj-account-child-card mj-account-child-card--<?php echo esc_attr($child_status); ?>"
+                                        data-mj-member-child
+                                        data-mj-child-id="<?php echo esc_attr((string) $child_id); ?>"
+                                        data-mj-child-status="<?php echo esc_attr($child_status); ?>">
+                                        <div class="mj-account-child-card__layout">
+                                            <div class="mj-account-child-card__media">
+                                                <?php if ($child_photo_url !== '') : ?>
+                                                    <img src="<?php echo esc_url($child_photo_url); ?>" alt="<?php echo esc_attr(isset($child['full_name']) ? (string) $child['full_name'] : ''); ?>" />
+                                                <?php else : ?>
+                                                    <span class="mj-account-child-card__placeholder" aria-hidden="true">👤</span>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="mj-account-child-card__content">
+                                                <div class="mj-account-child-card__header">
+                                                    <div class="mj-account-child-card__heading">
+                                                        <h4 class="mj-account-child-card__title"><?php echo esc_html(isset($child['full_name']) ? (string) $child['full_name'] : \Mj\Member\Classes\MjRoles::getRoleLabel(\Mj\Member\Classes\MjRoles::JEUNE)); ?></h4>
+                                                        <?php if ($child_label !== '') : ?>
+                                                            <span class="mj-account-chip mj-account-chip--<?php echo esc_attr($child_status); ?>"><?php echo esc_html($child_label); ?></span>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        class="mj-button mj-button--ghost mj-account-child-card__edit"
+                                                        data-mj-member-child-edit
+                                                        data-child-id="<?php echo esc_attr((string) $child_id); ?>"
+                                                        <?php echo $is_preview ? 'disabled="disabled" aria-disabled="true"' : ''; ?>>
+                                                        <?php esc_html_e('Modifier', 'mj-member'); ?>
+                                                    </button>
+                                                </div>
+                                                <?php if ($child_description !== '') : ?>
+                                                    <p class="mj-account-child-card__summary"><?php echo esc_html($child_description); ?></p>
+                                                <?php endif; ?>
+                                                <ul class="mj-account-child-card__meta">
+                                                    <?php if ($child_birth !== '') : ?>
+                                                        <li><?php esc_html_e('Né(e) le', 'mj-member'); ?> <?php echo esc_html($child_birth); ?></li>
+                                                    <?php endif; ?>
+                                                    <?php if ($child_email !== '') : ?>
+                                                        <li><a class="mj-account-link" href="mailto:<?php echo esc_attr($child_email); ?>"><?php echo esc_html($child_email); ?></a></li>
+                                                    <?php endif; ?>
+                                                    <?php if ($child_phone !== '') : ?>
+                                                        <li><a class="mj-account-link" href="tel:<?php echo esc_attr($child_phone); ?>"><?php echo esc_html($child_phone); ?></a></li>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($child['expires_display'])) : ?>
+                                                        <li><?php esc_html_e('Expire le', 'mj-member'); ?> <?php echo esc_html((string) $child['expires_display']); ?></li>
+                                                    <?php endif; ?>
+                                                    <?php if ($child_autonomous) : ?>
+                                                        <li><?php esc_html_e('Autorisé à rentrer seul', 'mj-member'); ?></li>
+                                                    <?php endif; ?>
+                                                    <?php if ($child_photo_consent) : ?>
+                                                        <li><?php esc_html_e('Autorisation photo accordée', 'mj-member'); ?></li>
+                                                    <?php endif; ?>
+                                                </ul>
+                                                <?php if ($child_notes !== '') : ?>
+                                                    <p class="mj-account-child-card__notes"><strong><?php esc_html_e('Notes :', 'mj-member'); ?></strong> <?php echo esc_html($child_notes); ?></p>
+                                                <?php endif; ?>
+                                            </div>
                                         </div>
-                                        <?php if ($child_description !== '') : ?>
-                                            <p class="mj-account-child-card__summary"><?php echo esc_html($child_description); ?></p>
-                                        <?php endif; ?>
-                                        <ul class="mj-account-child-card__meta">
-                                            <?php if ($child_birth !== '') : ?>
-                                                <li><?php esc_html_e('Né(e) le', 'mj-member'); ?> <?php echo esc_html($child_birth); ?></li>
-                                            <?php endif; ?>
-                                            <?php if ($child_email !== '') : ?>
-                                                <li><a class="mj-account-link" href="mailto:<?php echo esc_attr($child_email); ?>"><?php echo esc_html($child_email); ?></a></li>
-                                            <?php endif; ?>
-                                            <?php if ($child_phone !== '') : ?>
-                                                <li><a class="mj-account-link" href="tel:<?php echo esc_attr($child_phone); ?>"><?php echo esc_html($child_phone); ?></a></li>
-                                            <?php endif; ?>
-                                            <?php if (!empty($child['expires_display'])) : ?>
-                                                <li><?php esc_html_e('Expire le', 'mj-member'); ?> <?php echo esc_html((string) $child['expires_display']); ?></li>
-                                            <?php endif; ?>
-                                        </ul>
                                     </article>
                                 <?php endforeach; ?>
                             </div>
                         <?php else : ?>
-                            <p class="mj-account-empty"><?php esc_html_e('Aucun jeune rattaché pour le moment.', 'mj-member'); ?></p>
+                            <p class="mj-account-empty" data-mj-member-children-empty><?php esc_html_e('Aucun jeune rattaché pour le moment.', 'mj-member'); ?></p>
                         <?php endif; ?>
                     </section>
+                    <div
+                        class="mj-modal"
+                        data-mj-member-child-modal
+                        id="mj-member-child-modal"
+                        hidden
+                        aria-hidden="true">
+                        <div class="mj-modal__backdrop" data-mj-member-child-close></div>
+                        <div class="mj-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="mj-member-child-modal-title">
+                            <button type="button" class="mj-modal__close" data-mj-member-child-close <?php echo $is_preview ? 'disabled="disabled" aria-disabled="true"' : ''; ?>>
+                                <span class="screen-reader-text"><?php esc_html_e('Fermer', 'mj-member'); ?></span>
+                                <span aria-hidden="true">×</span>
+                            </button>
+                            <div class="mj-modal__header">
+                                <h2 class="mj-modal__title" id="mj-member-child-modal-title" data-mj-member-child-title></h2>
+                            </div>
+                            <div class="mj-modal__body">
+                                <form class="mj-modal-form" data-mj-member-child-form novalidate enctype="multipart/form-data">
+                                    <input type="hidden" name="child_id" value="" data-mj-child-field="child_id" />
+                                    <div class="mj-modal__messages" data-mj-member-child-errors hidden aria-live="assertive"></div>
+                                    <div class="mj-modal__photo">
+                                        <div class="mj-account-photo-control mj-account-photo-control--modal">
+                                            <div class="mj-account-photo-control__preview" data-mj-child-photo-preview>
+                                                <img src="" alt="" data-mj-child-photo-image hidden />
+                                                <span class="mj-account-photo-control__placeholder" data-mj-child-photo-placeholder>👤</span>
+                                            </div>
+                                            <div class="mj-account-photo-control__fields">
+                                                <div class="mj-field-group mj-account-photo-control__upload">
+                                                    <span id="<?php echo esc_attr($child_photo_label_id); ?>" class="mj-account-photo-control__label"><?php esc_html_e('Photo du jeune', 'mj-member'); ?></span>
+                                                    <div class="mj-account-upload" data-mj-account-upload>
+                                                        <input
+                                                            type="file"
+                                                            id="<?php echo esc_attr($child_photo_input_id); ?>"
+                                                            class="mj-account-upload__input"
+                                                            name="child_photo"
+                                                            data-mj-child-photo-input
+                                                            accept="image/*"
+                                                            aria-labelledby="<?php echo esc_attr($child_photo_label_id . ' ' . $child_photo_trigger_id); ?>"
+                                                            aria-describedby="<?php echo esc_attr($child_photo_hint_id); ?>"
+                                                            <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                                        <label
+                                                            class="mj-account-upload__trigger"
+                                                            id="<?php echo esc_attr($child_photo_trigger_id); ?>"
+                                                            for="<?php echo esc_attr($child_photo_input_id); ?>"<?php echo $is_preview ? ' aria-disabled="true" tabindex="-1"' : ''; ?>>
+                                                            <span class="mj-account-upload__icon" aria-hidden="true">📷</span>
+                                                            <span class="mj-account-upload__text"><?php esc_html_e('Choisir une image', 'mj-member'); ?></span>
+                                                        </label>
+                                                        <div class="mj-account-upload__meta">
+                                                            <span class="mj-account-upload__filename" data-mj-child-photo-filename data-default="<?php echo esc_attr($child_photo_default_text); ?>"><?php echo esc_html($child_photo_default_text); ?></span>
+                                                            <span class="mj-account-upload__hint" id="<?php echo esc_attr($child_photo_hint_id); ?>"><?php esc_html_e('Formats acceptés : JPG ou PNG, 5 Mo max.', 'mj-member'); ?></span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <?php if ($is_preview) : ?>
+                                                    <p class="mj-account-photo-control__remove"><?php esc_html_e('Modification désactivée en aperçu.', 'mj-member'); ?></p>
+                                                <?php else : ?>
+                                                    <label class="mj-account-photo-control__remove">
+                                                        <input type="checkbox" name="photo_remove" value="1" data-mj-child-field="photo_remove" />
+                                                        <span><?php esc_html_e('Supprimer la photo actuelle', 'mj-member'); ?></span>
+                                                    </label>
+                                                <?php endif; ?>
+                                                <input type="hidden" name="photo_id_existing" value="" data-mj-child-field="photo_id_existing" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mj-field-grid mj-field-grid--modal">
+                                        <div class="mj-field-group">
+                                            <label for="mj-member-child-first-name"><?php esc_html_e('Prénom', 'mj-member'); ?></label>
+                                            <input
+                                                type="text"
+                                                id="mj-member-child-first-name"
+                                                name="first_name"
+                                                data-mj-child-field="first_name"
+                                                autocomplete="given-name"
+                                                <?php echo $is_preview ? 'disabled="disabled"' : 'required'; ?> />
+                                        </div>
+                                        <div class="mj-field-group">
+                                            <label for="mj-member-child-last-name"><?php esc_html_e('Nom', 'mj-member'); ?></label>
+                                            <input
+                                                type="text"
+                                                id="mj-member-child-last-name"
+                                                name="last_name"
+                                                data-mj-child-field="last_name"
+                                                autocomplete="family-name"
+                                                <?php echo $is_preview ? 'disabled="disabled"' : 'required'; ?> />
+                                        </div>
+                                        <div class="mj-field-group">
+                                            <label for="mj-member-child-email"><?php esc_html_e('Email', 'mj-member'); ?></label>
+                                            <input
+                                                type="email"
+                                                id="mj-member-child-email"
+                                                name="email"
+                                                data-mj-child-field="email"
+                                                autocomplete="email"
+                                                <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                        </div>
+                                        <div class="mj-field-group">
+                                            <label for="mj-member-child-phone"><?php esc_html_e('Téléphone', 'mj-member'); ?></label>
+                                            <input
+                                                type="tel"
+                                                id="mj-member-child-phone"
+                                                name="phone"
+                                                data-mj-child-field="phone"
+                                                autocomplete="tel"
+                                                <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                        </div>
+                                        <div class="mj-field-group">
+                                            <label for="mj-member-child-birth-date"><?php esc_html_e('Date de naissance', 'mj-member'); ?></label>
+                                            <input
+                                                type="date"
+                                                id="mj-member-child-birth-date"
+                                                name="birth_date"
+                                                data-mj-child-field="birth_date"
+                                                autocomplete="bday"
+                                                <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                        </div>
+                                        <div class="mj-field-group mj-field-group--full">
+                                            <label for="mj-member-child-notes"><?php esc_html_e('Notes', 'mj-member'); ?></label>
+                                            <textarea
+                                                id="mj-member-child-notes"
+                                                name="notes"
+                                                rows="3"
+                                                data-mj-child-field="notes"
+                                                <?php echo $is_preview ? 'disabled="disabled"' : ''; ?>></textarea>
+                                        </div>
+                                    </div>
+                                    <div class="mj-modal__options">
+                                        <label class="mj-modal-checkbox">
+                                            <input type="checkbox" name="is_autonomous" value="1" data-mj-child-field="is_autonomous" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                            <span><?php esc_html_e('Autorisation de sortie autonome', 'mj-member'); ?></span>
+                                        </label>
+                                        <label class="mj-modal-checkbox">
+                                            <input type="checkbox" name="photo_usage_consent" value="1" data-mj-child-field="photo_usage_consent" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                            <span><?php esc_html_e('Autorisation photo accordée', 'mj-member'); ?></span>
+                                        </label>
+                                    </div>
+                                    <div class="mj-modal__footer">
+                                        <button type="button" class="mj-button mj-button--ghost mj-modal__cancel" data-mj-member-child-cancel <?php echo $is_preview ? 'disabled="disabled"' : ''; ?>>
+                                            <?php esc_html_e('Annuler', 'mj-member'); ?>
+                                        </button>
+                                        <button type="submit" class="mj-button mj-modal__submit" data-mj-member-child-submit <?php echo $is_preview ? 'disabled="disabled"' : ''; ?>>
+                                            <?php esc_html_e('Enregistrer', 'mj-member'); ?>
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
                 <?php endif; ?>
 
                 <?php if (!empty($options['show_payments'])) : ?>
@@ -1077,6 +1385,50 @@ if (!function_exists('mj_member_render_account_component')) {
     opacity: 0.6;
     cursor: not-allowed;
     box-shadow: none;
+}
+
+.mj-button--secondary {
+    background: rgba(47, 82, 143, 0.12);
+    color: var(--mj-account-accent);
+    border: 1px solid rgba(47, 82, 143, 0.28);
+    box-shadow: none;
+    font-weight: 600;
+}
+
+.mj-button--secondary:hover,
+.mj-button--secondary:focus,
+.mj-button--secondary:focus-visible {
+    background: rgba(47, 82, 143, 0.2);
+    transform: none;
+    box-shadow: none;
+}
+
+.mj-button--secondary[disabled] {
+    opacity: 0.6;
+    border-color: rgba(47, 82, 143, 0.18);
+}
+
+.mj-button--ghost {
+    background: transparent;
+    color: var(--mj-account-accent);
+    border: 1px solid rgba(47, 82, 143, 0.24);
+    box-shadow: none;
+    font-weight: 600;
+    padding: 10px 18px;
+}
+
+.mj-button--ghost:hover,
+.mj-button--ghost:focus,
+.mj-button--ghost:focus-visible {
+    background: rgba(47, 82, 143, 0.08);
+    transform: none;
+    box-shadow: none;
+}
+
+.mj-button--ghost[disabled] {
+    opacity: 0.6;
+    border-color: rgba(47, 82, 143, 0.18);
+    cursor: not-allowed;
 }
 
 .mj-account-form {
@@ -1347,6 +1699,14 @@ if (!function_exists('mj_member_render_account_component')) {
     justify-content: space-between;
     align-items: center;
     gap: 12px;
+    flex-wrap: wrap;
+}
+
+.mj-account-child-card__heading {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
 .mj-account-child-card__title {
@@ -1382,6 +1742,60 @@ if (!function_exists('mj_member_render_account_component')) {
     display: grid;
     gap: 6px;
     color: var(--mj-account-muted);
+}
+
+.mj-account-child-card__notes {
+    margin: 8px 0 0;
+    color: var(--mj-account-muted);
+}
+
+.mj-account-child-card__notes strong {
+    color: var(--mj-account-text);
+}
+
+.mj-account-children__add {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    white-space: nowrap;
+}
+
+.mj-account-children__add-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(47, 82, 143, 0.18);
+    color: var(--mj-account-accent);
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.mj-account-children__feedback {
+    margin-bottom: 20px;
+    padding: 14px 18px;
+    border-radius: var(--mj-account-radius-sm);
+    border: 1px solid transparent;
+    font-weight: 600;
+    display: block;
+}
+
+.mj-account-children__feedback[hidden] {
+    display: none !important;
+}
+
+.mj-account-children__feedback.is-success {
+    background: rgba(46, 204, 113, 0.12);
+    border-color: rgba(46, 204, 113, 0.3);
+    color: #2c7d49;
+}
+
+.mj-account-children__feedback.is-error {
+    background: rgba(205, 45, 64, 0.12);
+    border-color: rgba(205, 45, 64, 0.24);
+    color: #901624;
 }
 
 .mj-account-payments {
@@ -1455,6 +1869,143 @@ if (!function_exists('mj_member_render_account_component')) {
     gap: 6px;
 }
 
+.mj-modal-open {
+    overflow: hidden;
+}
+
+.mj-modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.mj-modal[hidden] {
+    display: none !important;
+}
+
+.mj-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+}
+
+.mj-modal__dialog {
+    position: relative;
+    background: #ffffff;
+    border-radius: var(--mj-account-radius-lg);
+    max-width: 640px;
+    width: min(640px, 92vw);
+    padding: 32px;
+    box-shadow: 0 28px 60px rgba(31, 39, 66, 0.35);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.mj-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.mj-modal__title {
+    margin: 0;
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: var(--mj-account-text);
+}
+
+.mj-modal__close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    border: none;
+    background: rgba(47, 82, 143, 0.1);
+    border-radius: 999px;
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--mj-account-accent);
+    font-size: 1.4rem;
+    transition: background 0.2s ease;
+}
+
+.mj-modal__close:hover,
+.mj-modal__close:focus,
+.mj-modal__close:focus-visible {
+    background: rgba(47, 82, 143, 0.2);
+}
+
+.mj-modal__body {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.mj-field-grid--modal {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.mj-modal__options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 18px;
+    align-items: center;
+}
+
+.mj-modal-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.95rem;
+    color: var(--mj-account-text);
+}
+
+.mj-modal-checkbox input {
+    margin: 0;
+}
+
+.mj-modal__messages {
+    border-radius: var(--mj-account-radius-sm);
+    border: 1px solid rgba(205, 45, 64, 0.22);
+    background: rgba(205, 45, 64, 0.08);
+    padding: 12px 16px;
+    display: grid;
+    gap: 10px;
+}
+
+.mj-modal__messages[hidden] {
+    display: none !important;
+}
+
+.mj-modal__error-intro {
+    margin: 0;
+    font-weight: 600;
+    color: #901624;
+}
+
+.mj-modal__error-list {
+    margin: 0;
+    padding-left: 20px;
+    display: grid;
+    gap: 6px;
+    color: #901624;
+}
+
+.mj-modal__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
 @media (max-width: 960px) {
     .mj-account-card {
         padding: 24px;
@@ -1491,6 +2042,29 @@ if (!function_exists('mj_member_render_account_component')) {
     .mj-account-membership__meta {
         flex-direction: column;
         gap: 8px;
+    }
+
+    .mj-account-children__add {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .mj-field-grid--modal {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+
+    .mj-modal__dialog {
+        width: min(96vw, 560px);
+        padding: 24px;
+    }
+
+    .mj-modal__footer {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .mj-modal__footer .mj-button {
+        width: 100%;
     }
 
     .mj-account-payment__main {

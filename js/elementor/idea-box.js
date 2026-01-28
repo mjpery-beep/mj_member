@@ -437,7 +437,7 @@
         var deleteLabel = getString(this.i18n, 'deleteLabel', 'Supprimer');
 
         var markup = ideas.map(function (idea) {
-            var titleHtml = idea.title ? '<h3 class="mj-idea-box__item-title">' + escapeHtml(idea.title) + '</h3>' : '';
+            var titleHtml = idea.title ? '<h2 class="mj-idea-box__item-title">' + escapeHtml(idea.title) + '</h2>' : '';
             var lines = idea.content ? idea.content.split(/\r?\n/) : [];
             var contentHtml = lines.length > 0
                 ? '<p class="mj-idea-box__item-content">' + lines.map(function (line) {
