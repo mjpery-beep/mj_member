@@ -5719,6 +5719,30 @@
             eventRequiresValidation = !!selectedEvent.requiresValidation;
         }
 
+        var editorHeadingSource = eventEditorSummary || eventDetails || selectedEvent || null;
+        var editorHeadingTitle = '';
+        if (editorHeadingSource && typeof editorHeadingSource.title === 'string' && editorHeadingSource.title !== '') {
+            editorHeadingTitle = editorHeadingSource.title;
+        } else if (selectedEvent && typeof selectedEvent.title === 'string' && selectedEvent.title !== '') {
+            editorHeadingTitle = selectedEvent.title;
+        }
+        if (!editorHeadingTitle) {
+            editorHeadingTitle = getString(strings, 'editorTitleFallback', "Modifier l'événement");
+        }
+        var editorHeadingMeta = '';
+        var statusSource = editorHeadingSource || selectedEvent || null;
+        if (statusSource) {
+            var sourceId = statusSource.id || (selectedEvent && selectedEvent.id);
+            var statusLabel = typeof statusSource.statusLabel === 'string' && statusSource.statusLabel !== ''
+                ? statusSource.statusLabel
+                : (typeof statusSource.status === 'string' ? statusSource.status : '');
+            if (sourceId) {
+                editorHeadingMeta = '#' + sourceId + (statusLabel ? ' · ' + statusLabel : '');
+            } else if (statusLabel) {
+                editorHeadingMeta = statusLabel;
+            }
+        }
+
         // Get MemberDetailPanel component
         var MembersComps = window.MjRegMgrMembers;
         var MemberDetailPanel = MembersComps ? MembersComps.MemberDetailPanel : null;
@@ -5838,6 +5862,10 @@
 
                     // Contenu événement sélectionné
                     sidebarMode === 'events' && selectedEvent && h('div', { class: 'mj-regmgr__content' }, [
+                        editorHeadingTitle && h('div', { class: 'mj-regmgr__event-heading' }, [
+                            h('h2', { class: 'mj-regmgr__event-heading-title' }, editorHeadingTitle),
+                            editorHeadingMeta && h('p', { class: 'mj-regmgr__event-heading-meta' }, editorHeadingMeta),
+                        ]),
                         // Onglets
                         TabsComponent && h(TabsComponent, {
                             tabs: tabs,

@@ -873,6 +873,26 @@ input.mj-regmgr-search-input__field {
     overflow-y: auto;
 }
 
+.mj-regmgr__event-heading {
+    padding: 18px 18px 6px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mj-regmgr__event-heading-title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--regmgr-gray-900);
+}
+
+.mj-regmgr__event-heading-meta {
+    margin: 0;
+    font-size: 13px;
+    color: var(--regmgr-gray-500);
+}
+
 /* ============================================
    Tabs
    ============================================ */
@@ -884,7 +904,7 @@ input.mj-regmgr-search-input__field {
     border-bottom: 1px solid var(--regmgr-gray-200);
     border-left: 0;
     border-radius: 15px;
-    margin-left: 15px;
+    margin-left: 0px;
     flex-wrap: nowrap;
     overflow-x: auto;
     overflow-y: hidden;
@@ -1754,81 +1774,6 @@ input.mj-regmgr-search-input__field {
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
 }
 
-/* Responsive */
-@media (max-width: 640px) {
-    .mj-att-pill {
-        padding: 8px 10px;
-        min-width: 50px;
-    }
-    
-    .mj-att-pill__date {
-        font-size: 16px;
-    }
-    
-    .mj-att-member {
-        padding: 10px 12px;
-        flex-wrap: wrap;
-    }
-    
-    .mj-att-member__name-row {
-        flex-wrap: wrap;
-        gap: 6px;
-    }
-
-    .mj-att-member__name {
-        font-size: 13px;
-        flex-basis: 100%;
-    }
-    
-    .mj-att-member__view-member {
-        width: 100%;
-        justify-content: flex-start;
-        margin-top: 2px;
-    }
-
-    .mj-att-btn {
-        width: 34px;
-        height: 34px;
-    }
-    
-    .mj-att-btn svg {
-        width: 14px;
-        height: 14px;
-    }
-
-    .mj-att-member__contact {
-        width: 34px;
-        height: 34px;
-    }
-
-    .mj-att-member__contact-icon {
-        width: 22px;
-        height: 22px;
-    }
-
-    .mj-att-member__actions {
-        gap: 6px;
-    }
-    
-    .mj-att__bulk-btn {
-        padding: 6px 10px;
-        font-size: 12px;
-    }
-    
-    .mj-att-member__regularize-btn {
-        font-size: 11px;
-        padding: 5px 8px;
-    }
-    
-    .mj-att-member__badge {
-        font-size: 9px;
-        padding: 2px 6px;
-    }
-    
-    .mj-att__irregular-title {
-        font-size: 13px;
-    }
-}
 
 /* Legacy classes for backward compatibility */
 .mj-regmgr-attendance {
@@ -3623,8 +3568,8 @@ input.mj-regmgr-search-input__field {
     .mj-regmgr-tabs {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
-        gap: 6px;
-        padding: 10px 12px;
+        gap: 0px;
+        padding: 8px 0px;
     }
 
     .mj-regmgr-tab {
@@ -7848,4 +7793,146 @@ input.mj-regmgr-search-input__field {
 
 .mj-regmgr-avatar-capture__actions .mj-btn {
     min-width: 120px;
+}
+
+
+
+/* Responsive */
+@media (max-width: 640px) {
+    .mj-regmgr-member-detail {
+        padding: 2px;
+    }
+
+    .mj-regmgr-member-detail__header {
+        flex-wrap: wrap;
+        gap: 12px;
+        padding-bottom: 16px;
+    }
+
+    .mj-regmgr-member-detail__avatar-wrapper {
+        min-width: 0;
+        width: 100%;
+        flex-direction: row;
+        justify-content: flex-start;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .mj-regmgr-member-detail__avatar-actions {
+        flex-direction: row;
+        width: auto;
+        gap: 8px;
+    }
+
+    .mj-regmgr-member-detail__avatar-actions .mj-btn {
+        width: auto;
+        flex: 1;
+    }
+
+    .mj-regmgr-member-detail__identity {
+        width: 100%;
+    }
+
+    .mj-regmgr-member-detail__header-actions {
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        gap: 8px;
+    }
+
+    .mj-regmgr__event-heading {
+        padding: 14px 12px 4px 12px;
+    }
+
+    .mj-regmgr__event-heading-title {
+        font-size: 18px;
+    }
+
+    .mj-regmgr-registration-card__name-row {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .mj-regmgr-registration-card__name {
+        flex-basis: 100%;
+    }
+
+    .mj-regmgr-registration-card__view-member {
+        width: 100%;
+        justify-content: flex-start;
+        margin-top: 2px;
+    }
+
+    .mj-att-pill {
+        padding: 8px 10px;
+        min-width: 50px;
+    }
+    
+    .mj-att-pill__date {
+        font-size: 16px;
+    }
+    
+    .mj-att-member {
+        padding: 10px 12px;
+        flex-wrap: wrap;
+    }
+    
+    .mj-att-member__name-row {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .mj-att-member__name {
+        font-size: 13px;
+        flex-basis: 100%;
+    }
+    
+    .mj-att-member__view-member {
+        width: 100%;
+        justify-content: flex-start;
+        margin-top: 2px;
+    }
+
+    .mj-att-btn {
+        width: 34px;
+        height: 34px;
+    }
+    
+    .mj-att-btn svg {
+        width: 14px;
+        height: 14px;
+    }
+
+    .mj-att-member__contact {
+        width: 34px;
+        height: 34px;
+    }
+
+    .mj-att-member__contact-icon {
+        width: 22px;
+        height: 22px;
+    }
+
+    .mj-att-member__actions {
+        gap: 6px;
+    }
+    
+    .mj-att__bulk-btn {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+    
+    .mj-att-member__regularize-btn {
+        font-size: 11px;
+        padding: 5px 8px;
+    }
+    
+    .mj-att-member__badge {
+        font-size: 9px;
+        padding: 2px 6px;
+    }
+    
+    .mj-att__irregular-title {
+        font-size: 13px;
+    }
 }
