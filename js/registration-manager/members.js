@@ -612,6 +612,25 @@
         var captureAvatarLabel = getString(strings, 'captureAvatar', 'Capturer');
         var avatarUploadingLabel = getString(strings, 'avatarUploading', 'Téléversement...');
         var changeAvatarLabel = getString(strings, 'changeAvatar', 'Changer');
+
+        var canManageChildren = !!(config && config.canManageChildren);
+        var allowCreateChild = !!(config && config.allowCreateChild);
+        var allowAttachChild = !!(config && config.allowAttachChild);
+        var hasChildren = !!(member && Array.isArray(member.children) && member.children.length > 0);
+
+        var handleCreateChild = useCallback(function () {
+            if (!config || typeof config.onCreateChild !== 'function' || !member) {
+                return;
+            }
+            config.onCreateChild(member);
+        }, [config, member]);
+
+        var handleAttachChild = useCallback(function () {
+            if (!config || typeof config.onAttachChild !== 'function' || !member) {
+                return;
+            }
+            config.onAttachChild(member);
+        }, [config, member]);
         var removeAvatarLabel = getString(strings, 'removeAvatar', 'Supprimer');
         var removeAvatarConfirmLabel = getString(strings, 'removeAvatarConfirm', 'Supprimer l’avatar personnalisé ?');
 
@@ -2430,71 +2449,89 @@
                 ]),
 
                 // Section enfants (si le membre est tuteur)
-                member.children && member.children.length > 0 && h('div', { class: 'mj-regmgr-member-detail__section' }, [
-                    h('h2', { class: 'mj-regmgr-member-detail__section-title' }, 
-                        'Enfants (' + member.children.length + ')'
-                    ),
-                    h('div', { class: 'mj-regmgr-member-detail__children' }, 
-                        member.children.map(function (child) {
-                            var childAge = child.birthDate ? calculateAge(child.birthDate) : null;
-                            return h('div', { key: child.id, class: 'mj-regmgr-child-card' }, [
-                                h('div', { class: 'mj-regmgr-child-card__avatar' }, [
-                                    child.avatarUrl 
-                                        ? h('img', { src: child.avatarUrl, alt: '', class: 'mj-regmgr-child-card__img' })
-                                        : h('div', { class: 'mj-regmgr-child-card__initials' }, 
-                                            ((child.firstName || '')[0] || '') + ((child.lastName || '')[0] || '')
+                (hasChildren || canManageChildren) && h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                    h('div', { class: 'mj-regmgr-member-detail__section-header' }, [
+                        h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'guardianChildSectionTitle', 'Enfants') + (
+                            hasChildren
+                                ? ' (' + member.children.length + ')'
+                                : ''
+                        )),
+                        canManageChildren && h('div', { class: 'mj-regmgr-member-detail__section-actions' }, [
+                            allowAttachChild && h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--secondary mj-btn--small',
+                                onClick: handleAttachChild,
+                            }, getString(strings, 'guardianChildAttachExisting', 'Rattacher un enfant')), 
+                            allowCreateChild && h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--primary mj-btn--small',
+                                onClick: handleCreateChild,
+                            }, getString(strings, 'guardianChildAddNew', 'Ajouter un enfant')), 
+                        ].filter(Boolean)),
+                    ]),
+                    hasChildren
+                        ? h('div', { class: 'mj-regmgr-member-detail__children' },
+                            member.children.map(function (child) {
+                                var childAge = child.birthDate ? calculateAge(child.birthDate) : null;
+                                return h('div', { key: child.id, class: 'mj-regmgr-child-card' }, [
+                                    h('div', { class: 'mj-regmgr-child-card__avatar' }, [
+                                        child.avatarUrl
+                                            ? h('img', { src: child.avatarUrl, alt: '', class: 'mj-regmgr-child-card__img' })
+                                            : h('div', { class: 'mj-regmgr-child-card__initials' },
+                                                ((child.firstName || '')[0] || '') + ((child.lastName || '')[0] || '')
+                                            ),
+                                    ]),
+                                    h('div', { class: 'mj-regmgr-child-card__info' }, [
+                                        h('div', { class: 'mj-regmgr-child-card__name' },
+                                            (child.firstName || '') + ' ' + (child.lastName || '')
                                         ),
-                                ]),
-                                h('div', { class: 'mj-regmgr-child-card__info' }, [
-                                    h('div', { class: 'mj-regmgr-child-card__name' }, 
-                                        (child.firstName || '') + ' ' + (child.lastName || '')
-                                    ),
-                                    h('div', { class: 'mj-regmgr-child-card__meta' }, [
-                                        child.roleLabel && h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--sm' }, child.roleLabel),
-                                        childAge !== null && h('span', null, childAge + ' ans'),
-                                    ]),
-                                ]),
-                                h('div', { class: 'mj-regmgr-child-card__status' }, [
-                                    h('span', { 
-                                        class: classNames('mj-regmgr-badge mj-regmgr-badge--sm', {
-                                            'mj-regmgr-badge--success': child.membershipStatus === 'paid',
-                                            'mj-regmgr-badge--warning': child.membershipStatus === 'expired',
-                                            'mj-regmgr-badge--danger': child.membershipStatus === 'unpaid',
-                                            'mj-regmgr-badge--secondary': child.membershipStatus === 'not_required',
-                                        })
-                                    }, membershipLabels[child.membershipStatus] || 'N/A'),
-                                    child.membershipYear && h('span', { class: 'mj-regmgr-child-card__year' }, child.membershipYear),
-                                ]),
-                                h('div', { class: 'mj-regmgr-child-card__actions' }, [
-                                    onOpenMember && child && child.id && h('button', {
-                                        type: 'button',
-                                        class: 'mj-btn mj-btn--ghost mj-btn--small',
-                                        onClick: function () {
-                                            onOpenMember(child, { edit: true });
-                                        },
-                                        title: 'Éditer le jeune',
-                                    }, [
-                                        h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                                            h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
-                                            h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
-                                        ]),
-                                        h('span', { class: 'mj-regmgr-child-card__action-label' }, 'Éditer le jeune'),
-                                    ]),
-                                    config.adminMemberUrl && h('a', {
-                                        href: config.adminMemberUrl + child.id,
-                                        target: '_blank',
-                                        class: 'mj-btn mj-btn--icon mj-btn--ghost',
-                                        title: 'Modifier dans l\'admin',
-                                    }, [
-                                        h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                                            h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
-                                            h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+                                        h('div', { class: 'mj-regmgr-child-card__meta' }, [
+                                            child.roleLabel && h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--sm' }, child.roleLabel),
+                                            childAge !== null && h('span', null, childAge + ' ans'),
                                         ]),
                                     ]),
-                                ]),
-                            ]);
-                        })
-                    ),
+                                    h('div', { class: 'mj-regmgr-child-card__status' }, [
+                                        h('span', {
+                                            class: classNames('mj-regmgr-badge mj-regmgr-badge--sm', {
+                                                'mj-regmgr-badge--success': child.membershipStatus === 'paid',
+                                                'mj-regmgr-badge--warning': child.membershipStatus === 'expired',
+                                                'mj-regmgr-badge--danger': child.membershipStatus === 'unpaid',
+                                                'mj-regmgr-badge--secondary': child.membershipStatus === 'not_required',
+                                            }),
+                                        }, membershipLabels[child.membershipStatus] || 'N/A'),
+                                        child.membershipYear && h('span', { class: 'mj-regmgr-child-card__year' }, child.membershipYear),
+                                    ]),
+                                    h('div', { class: 'mj-regmgr-child-card__actions' }, [
+                                        onOpenMember && child && child.id && h('button', {
+                                            type: 'button',
+                                            class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                            onClick: function () {
+                                                onOpenMember(child, { edit: true });
+                                            },
+                                            title: 'Éditer le jeune',
+                                        }, [
+                                            h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
+                                                h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+                                            ]),
+                                            h('span', { class: 'mj-regmgr-child-card__action-label' }, 'Éditer le jeune'),
+                                        ]),
+                                        config && config.adminMemberUrl && h('a', {
+                                            href: config.adminMemberUrl + child.id,
+                        target: '_blank',
+                                            class: 'mj-btn mj-btn--icon mj-btn--ghost',
+                                            title: 'Modifier dans l\'admin',
+                                        }, [
+                                            h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
+                                                h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+                                            ]),
+                                        ]),
+                                    ]),
+                                ]);
+                            })
+                        )
+                        : h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'guardianChildEmpty', 'Aucun enfant rattaché pour le moment.')),
                 ]),
             ]),
 

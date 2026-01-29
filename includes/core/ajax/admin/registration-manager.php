@@ -1231,6 +1231,7 @@ function mj_regmgr_get_events() {
     $filter = isset($_POST['filter']) ? sanitize_key($_POST['filter']) : 'assigned';
     $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
     $page = isset($_POST['page']) ? max(1, (int) $_POST['page']) : 1;
+    $role_filter = isset($_POST['role']) ? sanitize_key($_POST['role']) : '';
     $per_page = isset($_POST['perPage']) ? max(5, min(100, (int) $_POST['perPage'])) : 20;
 
     $now = current_time('mysql');
@@ -2054,6 +2055,10 @@ function mj_regmgr_search_members() {
         $filters['subscription_status'] = $subscription_filter;
     }
 
+    if ($role_filter !== '') {
+        $filters['role'] = $role_filter;
+    }
+
     $members = MjMembers::get_all(array(
         'search' => $search,
         'filters' => $filters,
@@ -2120,6 +2125,7 @@ function mj_regmgr_search_members() {
             'alreadyRegistered' => $already_registered,
             'ageRestriction' => $age_restriction,
             'roleRestriction' => $role_restriction,
+            'guardianId' => isset($member->guardian_id) ? (int) $member->guardian_id : 0,
         );
     }
 
@@ -2597,6 +2603,7 @@ function mj_regmgr_create_quick_member() {
     $email = isset($_POST['email']) ? sanitize_email($_POST['email']) : '';
     $role = isset($_POST['role']) ? sanitize_key($_POST['role']) : MjRoles::JEUNE;
     $birth_date = isset($_POST['birthDate']) ? sanitize_text_field($_POST['birthDate']) : '';
+    $guardian_id = isset($_POST['guardianId']) ? (int) $_POST['guardianId'] : 0;
 
     if ($first_name === '' || $last_name === '') {
         wp_send_json_error(array('message' => __('Prénom et nom sont requis.', 'mj-member')));
@@ -2609,6 +2616,22 @@ function mj_regmgr_create_quick_member() {
         'role' => $role,
         'status' => MjMembers::STATUS_ACTIVE,
     );
+
+    if ($guardian_id > 0) {
+        $guardian = MjMembers::getById($guardian_id);
+        if (!$guardian || $guardian->role !== MjRoles::TUTEUR) {
+            wp_send_json_error(array('message' => __('Le tuteur spécifié est introuvable ou invalide.', 'mj-member')));
+            return;
+        }
+
+        if ($role !== MjRoles::JEUNE) {
+            $role = MjRoles::JEUNE;
+            $data['role'] = $role;
+        }
+
+        $data['guardian_id'] = $guardian_id;
+        $data['is_autonomous'] = 0;
+    }
 
     // Ajouter la date de naissance si fournie
     if ($birth_date !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $birth_date)) {
@@ -2643,6 +2666,7 @@ function mj_regmgr_create_quick_member() {
             'email' => $member->email ?? '',
             'role' => $member->role,
             'roleLabel' => MjRoles::getRoleLabel($member->role),
+            'guardianId' => $guardian_id > 0 ? $guardian_id : ($member->guardian_id ?? 0),
         ),
     ));
 }
@@ -5287,6 +5311,19 @@ function mj_regmgr_update_member() {
     if (array_key_exists('photoUsageConsent', $data)) {
         $update_data['photo_usage_consent'] = mj_regmgr_to_bool($data['photoUsageConsent']) ? 1 : 0;
     }
+    if (array_key_exists('guardianId', $data)) {
+        $raw_guardian_id = (int) $data['guardianId'];
+        if ($raw_guardian_id > 0) {
+            $guardian = MjMembers::getById($raw_guardian_id);
+            if (!$guardian || $guardian->role !== MjRoles::TUTEUR) {
+                wp_send_json_error(array('message' => __('Le tuteur spécifié est introuvable ou invalide.', 'mj-member')));
+                return;
+            }
+            $update_data['guardian_id'] = $raw_guardian_id;
+        } else {
+            $update_data['guardian_id'] = null;
+        }
+    }
     if (array_key_exists('photoId', $data)) {
         $raw_photo_id = (int) $data['photoId'];
         if ($raw_photo_id > 0) {
@@ -5330,6 +5367,10 @@ function mj_regmgr_update_member() {
     if (array_key_exists('photo_id', $update_data)) {
         $response['photoId'] = (int) $update_data['photo_id'];
         $response['avatarUrl'] = mj_regmgr_get_member_avatar_url($member_id);
+    }
+
+    if (array_key_exists('guardian_id', $update_data)) {
+        $response['guardianId'] = $update_data['guardian_id'] ? (int) $update_data['guardian_id'] : 0;
     }
 
     wp_send_json_success($response);

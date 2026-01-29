@@ -579,8 +579,21 @@
         var isOpen = props.isOpen;
         var onClose = props.onClose;
         var onCreate = props.onCreate;
-        var strings = props.strings;
-        var config = props.config;
+        var strings = props.strings || {};
+        var config = props.config || {};
+        var context = props.context || null;
+
+        var contextType = context && context.type ? context.type : '';
+        var guardian = context && context.guardian ? context.guardian : null;
+        var guardianId = guardian && guardian.id ? guardian.id : null;
+        var guardianName = '';
+        if (guardian) {
+            guardianName = ((guardian.firstName || '') + ' ' + (guardian.lastName || '')).trim();
+            if (!guardianName && guardian.displayName) {
+                guardianName = guardian.displayName;
+            }
+        }
+        var isChildMode = contextType === 'child' && !!guardianId;
 
         var _firstName = useState('');
         var firstName = _firstName[0];
@@ -610,41 +623,84 @@
         var error = _error[0];
         var setError = _error[1];
 
-        // Reset à l'ouverture
+        var nameRequiredMessage = getString(strings, 'createMemberNameRequired', 'Prénom et nom sont requis.');
+        var creationErrorMessage = isChildMode
+            ? getString(strings, 'guardianChildCreationError', 'Impossible de créer l\'enfant.')
+            : getString(strings, 'createMemberError', 'Impossible de créer ce membre.');
+
         useEffect(function () {
             if (isOpen) {
                 setFirstName('');
                 setLastName('');
                 setEmail('');
-                setRole('jeune');
                 setBirthDate('');
                 setError('');
+                setRole('jeune');
             }
-        }, [isOpen]);
+        }, [isOpen, isChildMode, guardianId]);
 
         var handleSubmit = useCallback(function (e) {
-            e.preventDefault();
-            
+            if (e && typeof e.preventDefault === 'function') {
+                e.preventDefault();
+            }
+
             if (!firstName.trim() || !lastName.trim()) {
-                setError('Prénom et nom sont requis.');
+                setError(nameRequiredMessage);
                 return;
             }
+
+            var selectedRole = isChildMode ? 'jeune' : role;
 
             setLoading(true);
             setError('');
 
-            onCreate(firstName.trim(), lastName.trim(), email.trim(), role, birthDate)
+            onCreate(firstName.trim(), lastName.trim(), email.trim(), selectedRole, birthDate, {
+                guardianId: guardianId,
+                context: context,
+            })
                 .then(function () {
                     setLoading(false);
                     onClose();
                 })
                 .catch(function (err) {
                     setLoading(false);
-                    setError(err.message || 'Erreur lors de la création');
+                    setError(err && err.message ? err.message : creationErrorMessage);
                 });
-        }, [firstName, lastName, email, role, birthDate, onCreate, onClose]);
+        }, [
+            firstName,
+            lastName,
+            email,
+            role,
+            birthDate,
+            onCreate,
+            onClose,
+            isChildMode,
+            guardianId,
+            context,
+            creationErrorMessage,
+            nameRequiredMessage,
+        ]);
 
         var roleLabels = config.roleLabels || {};
+        var roleKeys = Object.keys(roleLabels);
+        if (roleKeys.indexOf('jeune') === -1) {
+            roleKeys.push('jeune');
+        }
+
+        var modalTitle = isChildMode
+            ? getString(strings, 'guardianChildCreationTitle', 'Ajouter un enfant')
+            : getString(strings, 'createNewMember', 'Créer un nouveau membre');
+
+        var subtitle = null;
+        if (isChildMode) {
+            var subtitleTemplate = getString(strings, 'guardianChildCreationSubtitle', 'L\'enfant sera rattaché à %s.');
+            var targetName = guardianName || getString(strings, 'guardianChildSectionTitle', 'ce tuteur');
+            subtitle = subtitleTemplate.replace('%s', targetName);
+        }
+
+        var roleLockedHint = isChildMode
+            ? getString(strings, 'guardianChildRoleLocked', 'Le rôle est verrouillé sur « Jeune » pour les enfants.')
+            : null;
 
         var footer = h(Fragment, null, [
             h('button', {
@@ -664,7 +720,7 @@
         return h(Modal, {
             isOpen: isOpen,
             onClose: onClose,
-            title: getString(strings, 'createNewMember', 'Créer un nouveau membre'),
+            title: modalTitle,
             size: 'small',
             footer: footer,
         }, [
@@ -673,6 +729,7 @@
                 class: 'mj-regmgr-form',
                 onSubmit: handleSubmit,
             }, [
+                subtitle && h('p', { class: 'mj-regmgr-form__intro' }, subtitle),
                 error && h('div', { class: 'mj-regmgr-alert mj-regmgr-alert--error' }, error),
 
                 h('div', { class: 'mj-regmgr-form__group' }, [
@@ -685,6 +742,7 @@
                         onInput: function (e) { setFirstName(e.target.value); },
                         required: true,
                         autoFocus: true,
+                        disabled: loading,
                     }),
                 ]),
 
@@ -697,6 +755,7 @@
                         value: lastName,
                         onInput: function (e) { setLastName(e.target.value); },
                         required: true,
+                        disabled: loading,
                     }),
                 ]),
 
@@ -708,6 +767,7 @@
                         class: 'mj-regmgr-input',
                         value: email,
                         onInput: function (e) { setEmail(e.target.value); },
+                        disabled: loading,
                     }),
                 ]),
 
@@ -719,6 +779,7 @@
                         class: 'mj-regmgr-input',
                         value: birthDate,
                         onInput: function (e) { setBirthDate(e.target.value); },
+                        disabled: loading,
                     }),
                 ]),
 
@@ -727,12 +788,247 @@
                     h('select', {
                         id: 'create-role',
                         class: 'mj-regmgr-select',
-                        value: role,
-                        onChange: function (e) { setRole(e.target.value); },
-                    }, Object.keys(roleLabels).map(function (key) {
-                        return h('option', { key: key, value: key }, roleLabels[key]);
+                        value: isChildMode ? 'jeune' : role,
+                        disabled: isChildMode || loading,
+                        onChange: isChildMode ? undefined : function (e) { setRole(e.target.value); },
+                    }, roleKeys.map(function (key) {
+                        var optionLabel = roleLabels[key] || key;
+                        return h('option', { key: key, value: key }, optionLabel);
                     })),
+                    roleLockedHint && h('p', { class: 'mj-regmgr-form__hint' }, roleLockedHint),
                 ]),
+            ]),
+        ]);
+    }
+
+    function AttachChildModal(props) {
+        var isOpen = props.isOpen;
+        var onClose = props.onClose;
+        var guardian = props.guardian;
+        var strings = props.strings || {};
+        var searchMembers = props.searchMembers;
+        var onAttach = props.onAttach;
+        var config = props.config || {};
+
+        var guardianId = guardian && guardian.id ? guardian.id : null;
+        var guardianName = '';
+        if (guardian) {
+            guardianName = ((guardian.firstName || '') + ' ' + (guardian.lastName || '')).trim();
+            if (!guardianName && guardian.displayName) {
+                guardianName = guardian.displayName;
+            }
+        }
+
+        var _search = useState('');
+        var search = _search[0];
+        var setSearch = _search[1];
+
+        var _results = useState([]);
+        var results = _results[0];
+        var setResults = _results[1];
+
+        var _loading = useState(false);
+        var loading = _loading[0];
+        var setLoading = _loading[1];
+
+        var _error = useState('');
+        var error = _error[0];
+        var setError = _error[1];
+
+        var _attachingId = useState(null);
+        var attachingId = _attachingId[0];
+        var setAttachingId = _attachingId[1];
+
+        var _hasSearched = useState(false);
+        var hasSearched = _hasSearched[0];
+        var setHasSearched = _hasSearched[1];
+
+        useEffect(function () {
+            if (isOpen) {
+                setSearch('');
+                setResults([]);
+                setError('');
+                setAttachingId(null);
+                setHasSearched(false);
+            }
+        }, [isOpen, guardianId]);
+
+        var minLength = 2;
+
+        var handleSearch = useCallback(function (e) {
+            if (e && typeof e.preventDefault === 'function') {
+                e.preventDefault();
+            }
+
+            if (!searchMembers || !guardianId) {
+                return;
+            }
+
+            var term = search.trim();
+            if (term.length < minLength) {
+                setError(getString(strings, 'guardianChildSearchHelp', 'Tapez au moins 2 caractères pour rechercher'));
+                setResults([]);
+                setHasSearched(false);
+                return;
+            }
+
+            setLoading(true);
+            setError('');
+            setHasSearched(true);
+
+            Promise.resolve(searchMembers({
+                search: term,
+                role: 'jeune',
+                page: 1,
+            }))
+                .then(function (data) {
+                    var list = data && data.members ? data.members : [];
+                    setResults(Array.isArray(list) ? list : []);
+                    setLoading(false);
+                })
+                .catch(function (err) {
+                    setLoading(false);
+                    setResults([]);
+                    setError(err && err.message ? err.message : getString(strings, 'error', 'Une erreur est survenue.'));
+                });
+        }, [searchMembers, search, strings, guardianId]);
+
+        var handleAttach = useCallback(function (member) {
+            if (!member || !member.id || !guardianId || typeof onAttach !== 'function') {
+                return;
+            }
+
+            setAttachingId(member.id);
+            setError('');
+
+            Promise.resolve(onAttach(guardian, member))
+                .then(function () {
+                    setAttachingId(null);
+                    onClose();
+                })
+                .catch(function (err) {
+                    setAttachingId(null);
+                    setError(err && err.message ? err.message : getString(strings, 'error', 'Une erreur est survenue.'));
+                });
+        }, [guardian, guardianId, onAttach, onClose, strings]);
+
+        var introText = getString(strings, 'guardianChildSearchIntro', 'Recherchez un membre à rattacher comme enfant.');
+        var placeholderText = getString(strings, 'guardianChildSearchPlaceholder', 'Rechercher un jeune...');
+        var searchButtonLabel = getString(strings, 'guardianChildSearchAction', 'Rechercher');
+        var noResultsLabel = getString(strings, 'guardianChildSearchNoResults', 'Aucun jeune trouvé.');
+
+        var attachLabel = getString(strings, 'guardianChildAttachAction', 'Rattacher');
+        var roleRestrictionLabel = getString(strings, 'guardianChildRoleRestriction', 'Seuls les membres avec le rôle « Jeune » peuvent être rattachés.');
+        var alreadyLinkedLabel = getString(strings, 'guardianChildAlreadyLinked', 'Déjà rattaché à un autre tuteur');
+        var alreadyAssignedLabel = getString(strings, 'guardianChildAlreadyAssigned', 'Déjà rattaché à ce tuteur');
+
+        var guardianSummary = guardianName
+            ? getString(strings, 'guardianChildSectionTitle', 'Enfants') + ' · ' + guardianName
+            : null;
+
+        return h(Modal, {
+            isOpen: isOpen,
+            onClose: onClose,
+            title: getString(strings, 'guardianChildAttachExisting', 'Rattacher un enfant existant'),
+            size: 'medium',
+        }, [
+            !guardian && h('p', { class: 'mj-regmgr-form__hint' }, getString(strings, 'error', 'Une erreur est survenue.')),
+
+            guardian && h('div', { class: 'mj-regmgr-attach-child' }, [
+                guardianSummary && h('p', { class: 'mj-regmgr-form__intro' }, guardianSummary),
+                h('p', { class: 'mj-regmgr-form__intro' }, introText),
+                h('form', {
+                    class: 'mj-regmgr-attach-child__form',
+                    onSubmit: handleSearch,
+                }, [
+                    h('div', { class: 'mj-regmgr-search-input' }, [
+                        h('svg', {
+                            class: 'mj-regmgr-search-input__icon',
+                            width: 20,
+                            height: 20,
+                            viewBox: '0 0 24 24',
+                            fill: 'none',
+                            stroke: 'currentColor',
+                            'stroke-width': 2,
+                        }, [
+                            h('circle', { cx: 11, cy: 11, r: 8 }),
+                            h('line', { x1: 21, y1: 21, x2: 16.65, y2: 16.65 }),
+                        ]),
+                        h('input', {
+                            type: 'text',
+                            class: 'mj-regmgr-search-input__field',
+                            value: search,
+                            onInput: function (e) { setSearch(e.target.value); },
+                            placeholder: placeholderText,
+                            disabled: loading || attachingId !== null,
+                        }),
+                    ]),
+                    h('button', {
+                        type: 'submit',
+                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                        disabled: loading || search.trim().length < minLength,
+                    }, loading ? getString(strings, 'loading', 'Chargement...') : searchButtonLabel),
+                ]),
+
+                error && h('div', { class: 'mj-regmgr-alert mj-regmgr-alert--error' }, error),
+
+                !loading && hasSearched && results.length === 0 && h('div', { class: 'mj-regmgr-attach-child__empty' }, [
+                    h('p', null, noResultsLabel),
+                ]),
+
+                loading && h('div', { class: 'mj-regmgr-add-member__loading' }, [
+                    h('div', { class: 'mj-regmgr-spinner' }),
+                ]),
+
+                !loading && results.length > 0 && h('div', { class: 'mj-regmgr-attach-child__results' },
+                    results.map(function (member) {
+                        if (!member || !member.id) {
+                            return null;
+                        }
+
+                        var memberGuardianId = member.guardianId || member.guardian_id || 0;
+                        var invalidRole = member.role && member.role !== 'jeune';
+                        var isCurrentGuardian = memberGuardianId && guardianId && memberGuardianId === guardianId;
+                        var isDifferentGuardian = memberGuardianId && guardianId && memberGuardianId !== guardianId;
+                        var restriction = '';
+                        if (invalidRole) {
+                            restriction = roleRestrictionLabel;
+                        } else if (isDifferentGuardian) {
+                            restriction = alreadyLinkedLabel;
+                        } else if (isCurrentGuardian) {
+                            restriction = alreadyAssignedLabel;
+                        }
+
+                        var disabled = invalidRole || isDifferentGuardian || isCurrentGuardian || attachingId === member.id;
+
+                        return h('div', {
+                            key: member.id,
+                            class: classNames('mj-regmgr-attach-child__card', {
+                                'mj-regmgr-attach-child__card--disabled': disabled,
+                            }),
+                        }, [
+                            h(MemberAvatar, { member: member, size: 'small' }),
+                            h('div', { class: 'mj-regmgr-attach-child__info' }, [
+                                h('div', { class: 'mj-regmgr-attach-child__name' },
+                                    (member.firstName || '') + ' ' + (member.lastName || '')
+                                ),
+                                h('div', { class: 'mj-regmgr-attach-child__meta' }, [
+                                    member.roleLabel && h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--sm' }, member.roleLabel),
+                                    typeof member.age === 'number' && h('span', null, member.age + ' ans'),
+                                ]),
+                                restriction && h('p', { class: 'mj-regmgr-attach-child__restriction' }, restriction),
+                            ]),
+                            h('div', { class: 'mj-regmgr-attach-child__actions' }, [
+                                h('button', {
+                                    type: 'button',
+                                    class: 'mj-btn mj-btn--primary mj-btn--small',
+                                    onClick: function () { handleAttach(member); },
+                                    disabled: disabled,
+                                }, attachingId === member.id ? getString(strings, 'loading', 'Chargement...') : attachLabel),
+                            ]),
+                        ]);
+                    })
+                ),
             ]),
         ]);
     }
@@ -2338,6 +2634,7 @@
         AddParticipantModal: AddParticipantModal,
         CreateEventModal: CreateEventModal,
         CreateMemberModal: CreateMemberModal,
+        AttachChildModal: AttachChildModal,
         MemberNotesModal: MemberNotesModal,
         MemberAccountModal: MemberAccountModal,
         QRCodeModal: QRCodeModal,

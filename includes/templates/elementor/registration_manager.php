@@ -328,6 +328,9 @@ if (!in_array($member_role, $allowed_roles, true) && !current_user_can('manage_o
 }
 
 $is_coordinateur = $member_role === MjRoles::COORDINATEUR || current_user_can('manage_options');
+$can_manage_children = current_user_can(Config::capability()) || $is_coordinateur;
+$allow_attach_child = $can_manage_children;
+$allow_create_child = $allow_create_member && $can_manage_children;
 
 // Préparer les labels
 $event_types = MjEvents::get_type_labels();
@@ -387,6 +390,9 @@ $config_json = wp_json_encode(array(
     'allowManualPayment' => $allow_manual_payment,
     'allowDeleteRegistration' => $allow_delete_registration,
     'allowCreateMember' => $allow_create_member,
+    'canManageChildren' => $can_manage_children,
+    'allowCreateChild' => $allow_create_child,
+    'allowAttachChild' => $allow_attach_child,
     'canManageAccounts' => $can_manage_accounts,
     'accountLinkNonce' => $can_manage_accounts ? wp_create_nonce('mj_link_member_user') : '',
     'accountRoles' => $account_roles,
@@ -535,6 +541,26 @@ $config_json = wp_json_encode(array(
         'memberAvatarCaptureUnsupported' => __('La capture photo n\'est pas supportée sur ce navigateur.', 'mj-member'),
         'memberAvatarCaptureError' => __('Impossible d\'accéder à la caméra.', 'mj-member'),
         'memberAvatarCaptureInvalid' => __('Le fichier sélectionné n\'est pas une image.', 'mj-member'),
+        // Gestion des enfants
+        'guardianChildSectionTitle' => __('Enfants', 'mj-member'),
+        'guardianChildEmpty' => __('Aucun enfant rattaché pour le moment.', 'mj-member'),
+        'guardianChildAddNew' => __('Ajouter un enfant', 'mj-member'),
+        'guardianChildAttachExisting' => __('Rattacher un enfant existant', 'mj-member'),
+        'guardianChildSearchPlaceholder' => __('Rechercher un jeune...', 'mj-member'),
+        'guardianChildSearchHelp' => __('Tapez au moins 2 caractères pour rechercher', 'mj-member'),
+        'guardianChildSearchAction' => __('Rechercher', 'mj-member'),
+        'guardianChildSearchNoResults' => __('Aucun jeune trouvé.', 'mj-member'),
+        'guardianChildSearchIntro' => __('Recherchez un membre à rattacher comme enfant.', 'mj-member'),
+        'guardianChildAttachAction' => __('Rattacher', 'mj-member'),
+        'guardianChildAlreadyLinked' => __('Déjà rattaché à un autre tuteur', 'mj-member'),
+        'guardianChildAlreadyAssigned' => __('Déjà rattaché à ce tuteur', 'mj-member'),
+        'guardianChildRoleRestriction' => __('Seuls les membres avec le rôle « Jeune » peuvent être rattachés.', 'mj-member'),
+        'guardianChildAttached' => __('Enfant rattaché avec succès.', 'mj-member'),
+        'guardianChildCreated' => __('Enfant ajouté et rattaché avec succès.', 'mj-member'),
+        'guardianChildCreationTitle' => __('Ajouter un enfant', 'mj-member'),
+        'guardianChildCreationSubtitle' => __('L\'enfant sera rattaché à %s.', 'mj-member'),
+        'guardianChildRoleLocked' => __('Le rôle est verrouillé sur « Jeune » pour les enfants.', 'mj-member'),
+        'guardianChildCreationError' => __('Impossible de créer l\'enfant.', 'mj-member'),
         'memberAvatarUploading' => __('Mise à jour de la photo...', 'mj-member'),
         'deleteMember' => __('Supprimer le membre', 'mj-member'),
         'deleteMemberConfirm' => __('Voulez-vous vraiment supprimer ce membre ? Cette action est irréversible.', 'mj-member'),
@@ -612,6 +638,8 @@ $config_json = wp_json_encode(array(
         'subscriptionExpired' => __('Cotisation expirée', 'mj-member'),
         'subscriptionNone' => __('Aucune cotisation', 'mj-member'),
         'createNewMember' => __('Créer un nouveau membre', 'mj-member'),
+        'createMemberError' => __('Impossible de créer ce membre.', 'mj-member'),
+        'createMemberNameRequired' => __('Prénom et nom sont requis.', 'mj-member'),
         'firstName' => __('Prénom', 'mj-member'),
         'lastName' => __('Nom', 'mj-member'),
         'email' => __('Email (optionnel)', 'mj-member'),

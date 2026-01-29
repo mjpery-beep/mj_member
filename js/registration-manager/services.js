@@ -343,14 +343,20 @@
             /**
              * Crée un membre rapide
              */
-            createQuickMember: function (firstName, lastName, email, role, birthDate) {
-                return post('mj_regmgr_create_quick_member', {
+            createQuickMember: function (firstName, lastName, email, role, birthDate, options) {
+                var payload = {
                     firstName: firstName,
                     lastName: lastName,
                     email: email || '',
                     role: role || 'jeune',
                     birthDate: birthDate || '',
-                });
+                };
+
+                if (options && typeof options.guardianId !== 'undefined' && options.guardianId !== null) {
+                    payload.guardianId = options.guardianId;
+                }
+
+                return post('mj_regmgr_create_quick_member', payload);
             },
 
             /**

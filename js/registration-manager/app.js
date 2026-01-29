@@ -76,6 +76,7 @@
     var AddParticipantModal = Modals.AddParticipantModal;
     var CreateEventModal = Modals.CreateEventModal;
     var CreateMemberModal = Modals.CreateMemberModal;
+    var AttachChildModal = Modals.AttachChildModal;
     var MemberNotesModal = Modals.MemberNotesModal;
     var MemberAccountModal = Modals.MemberAccountModal;
     var QRCodeModal = Modals.QRCodeModal;
@@ -3487,12 +3488,40 @@
         var createEventModal = useModal();
         var addParticipantModal = useModal();
         var createMemberModal = useModal();
+        var attachChildModal = useModal();
         var notesModal = useModal();
         var qrModal = useModal();
         var occurrencesModal = useModal();
         var locationModal = useModal();
         var accountModal = useModal();
         var avatarCaptureModal = useModal();
+
+        var memberDetailConfig = useMemo(function () {
+            var baseConfig = config ? Object.assign({}, config) : {};
+
+            baseConfig.onCreateChild = function (guardian) {
+                if (!guardian) {
+                    return;
+                }
+                createMemberModal.open({
+                    context: {
+                        type: 'child',
+                        guardian: guardian,
+                    },
+                });
+            };
+
+            baseConfig.onAttachChild = function (guardian) {
+                if (!guardian) {
+                    return;
+                }
+                attachChildModal.open({
+                    guardian: guardian,
+                });
+            };
+
+            return baseConfig;
+        }, [config, createMemberModal, attachChildModal]);
 
         // State
         var _events = useState([]);
@@ -5006,16 +5035,18 @@
 
         // Mettre à jour un membre
         var handleUpdateMember = useCallback(function (memberId, data) {
-            api.updateMember(memberId, data)
+            return api.updateMember(memberId, data)
                 .then(function (result) {
                     showSuccess(result.message || 'Membre mis à jour');
                     loadMemberDetails(memberId);
                     loadMembers(membersPagination.page);
+                    return result;
                 })
                 .catch(function (err) {
-                    showError(err.message);
+                    showError(err && err.message ? err.message : getString(strings, 'error', 'Une erreur est survenue.'));
+                    throw err;
                 });
-        }, [api, showSuccess, showError, loadMemberDetails, loadMembers, membersPagination.page]);
+        }, [api, showSuccess, showError, loadMemberDetails, loadMembers, membersPagination.page, strings]);
 
         // Marquer la cotisation comme payée
         var handleMarkMembershipPaid = useCallback(function (memberId, paymentMethod) {
@@ -5471,13 +5502,41 @@
         }, [api, selectedEvent, showSuccess, showError, loadRegistrations]);
 
         // Créer membre
-        var handleCreateMember = useCallback(function (firstName, lastName, email, role, birthDate) {
-            return api.createQuickMember(firstName, lastName, email, role, birthDate)
+        var handleCreateMember = useCallback(function (firstName, lastName, email, role, birthDate, options) {
+            var opts = options || {};
+            var guardianId = null;
+            if (typeof opts.guardianId === 'number') {
+                guardianId = opts.guardianId;
+            } else if (typeof opts.guardianId === 'string' && opts.guardianId !== '') {
+                var parsedGuardian = parseInt(opts.guardianId, 10);
+                guardianId = isNaN(parsedGuardian) ? null : parsedGuardian;
+            }
+
+            var context = opts.context || null;
+            var isChildFlow = !!(context && context.type === 'child' && guardianId);
+
+            return api.createQuickMember(firstName, lastName, email, role, birthDate, {
+                guardianId: guardianId,
+            })
                 .then(function (data) {
-                    showSuccess(data.message);
+                    var successMessage = data && data.message
+                        ? data.message
+                        : isChildFlow
+                            ? getString(strings, 'guardianChildCreated', 'Enfant ajouté et rattaché avec succès.')
+                            : getString(strings, 'success', 'Opération réussie.');
+                    showSuccess(successMessage);
                     createMemberModal.close();
 
                     var createdMember = data.member || null;
+
+                    if (isChildFlow) {
+                        if (guardianId) {
+                            loadMemberDetails(guardianId);
+                        }
+                        loadMembers(membersPagination.page);
+                        return data;
+                    }
+
                     if (createdMember && createdMember.id) {
                         var lightweightMember = Object.assign({
                             membershipStatus: 'not_required',
@@ -5532,7 +5591,32 @@
             loadRegistrations,
             loadEvents,
             pagination.page,
+            loadMemberDetails,
+            strings,
         ]);
+
+        var handleAttachChild = useCallback(function (guardian, child) {
+            if (!guardian || !guardian.id || !child || !child.id) {
+                return Promise.reject(new Error(getString(strings, 'error', 'Une erreur est survenue.')));
+            }
+
+            return api.updateMember(child.id, {
+                guardianId: guardian.id,
+            })
+                .then(function (result) {
+                    var successMessage = result && result.message
+                        ? result.message
+                        : getString(strings, 'guardianChildAttached', 'Enfant rattaché avec succès.');
+                    showSuccess(successMessage);
+                    loadMemberDetails(guardian.id);
+                    loadMembers(membersPagination.page);
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err && err.message ? err.message : getString(strings, 'error', 'Une erreur est survenue.'));
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails, loadMembers, membersPagination.page, strings]);
 
         // Rechercher membres
         var handleSearchMembers = useCallback(function (params) {
@@ -5876,7 +5960,7 @@
                             member: memberDetails,
                             loading: !memberDetails,
                             strings: strings,
-                            config: config,
+                            config: memberDetailConfig,
                             notes: memberNotes,
                             registrations: memberRegistrations,
                             onSaveNote: handleSaveMemberNote,
@@ -5931,6 +6015,17 @@
                 onClose: createMemberModal.close,
                 onCreate: handleCreateMember,
                 strings: strings,
+                config: config,
+                context: createMemberModal.data ? createMemberModal.data.context : null,
+            }),
+
+            h(AttachChildModal, {
+                isOpen: attachChildModal.isOpen,
+                onClose: attachChildModal.close,
+                guardian: attachChildModal.data ? attachChildModal.data.guardian : null,
+                strings: strings,
+                searchMembers: handleSearchMembers,
+                onAttach: handleAttachChild,
                 config: config,
             }),
 
