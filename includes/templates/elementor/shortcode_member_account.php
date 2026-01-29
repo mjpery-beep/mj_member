@@ -294,7 +294,7 @@ if (!function_exists('mj_member_render_account_component')) {
             'description' => '',
             'submit_label' => __('Enregistrer', 'mj-member'),
             'success_message' => __('Vos informations ont été mises à jour.', 'mj-member'),
-            'show_children' => true,
+            'show_children' => false,
             'show_payments' => true,
             'payment_limit' => 10,
             'show_membership' => true,
@@ -356,6 +356,16 @@ if (!function_exists('mj_member_render_account_component')) {
 
         if ($is_preview) {
             list($member, $membership_status, $children_statuses, $payment_history) = mj_member_account_fake_context($options);
+
+            $preview_role_raw = isset($member->role) ? (string) $member->role : '';
+            $preview_role = strtolower($preview_role_raw);
+            $guardian_role_key = strtolower((string) \Mj\Member\Classes\MjRoles::TUTEUR);
+            $is_preview_guardian = ($preview_role !== '' && $preview_role === $guardian_role_key);
+            $options['show_children'] = $options['show_children'] && $is_preview_guardian;
+
+            if (!$options['show_children']) {
+                $children_statuses = array();
+            }
         } else {
             if (!function_exists('mj_member_get_current_member')) {
                 ob_start();
@@ -381,6 +391,12 @@ if (!function_exists('mj_member_render_account_component')) {
                 <?php
                 return ob_get_clean();
             }
+
+            $member_role_raw = isset($member->role) ? (string) $member->role : '';
+            $member_role_value = strtolower($member_role_raw);
+            $guardian_role_key = strtolower((string) \Mj\Member\Classes\MjRoles::TUTEUR);
+            $is_guardian_role = ($member_role_value !== '' && $member_role_value === $guardian_role_key);
+            $options['show_children'] = $options['show_children'] && $is_guardian_role;
 
             if ($display_membership && function_exists('mj_member_get_membership_status')) {
                 $membership_status = mj_member_get_membership_status($member);

@@ -613,24 +613,34 @@
         var avatarUploadingLabel = getString(strings, 'avatarUploading', 'Téléversement...');
         var changeAvatarLabel = getString(strings, 'changeAvatar', 'Changer');
 
-        var canManageChildren = !!(config && config.canManageChildren);
-        var allowCreateChild = !!(config && config.allowCreateChild);
-        var allowAttachChild = !!(config && config.allowAttachChild);
+        var memberRoleRaw = member && typeof member.role === 'string' ? member.role : '';
+        var memberRole = memberRoleRaw ? memberRoleRaw.toLowerCase() : '';
+        var isGuardianRole = memberRole === 'tuteur';
+        var canManageChildren = !!(config && config.canManageChildren && isGuardianRole);
+        var allowCreateChild = !!(config && config.allowCreateChild && isGuardianRole);
+        var allowAttachChild = !!(config && config.allowAttachChild && isGuardianRole);
         var hasChildren = !!(member && Array.isArray(member.children) && member.children.length > 0);
+        var showChildSection = isGuardianRole && (hasChildren || canManageChildren);
 
         var handleCreateChild = useCallback(function () {
+            if (!canManageChildren || !allowCreateChild) {
+                return;
+            }
             if (!config || typeof config.onCreateChild !== 'function' || !member) {
                 return;
             }
             config.onCreateChild(member);
-        }, [config, member]);
+        }, [canManageChildren, allowCreateChild, config, member]);
 
         var handleAttachChild = useCallback(function () {
+            if (!canManageChildren || !allowAttachChild) {
+                return;
+            }
             if (!config || typeof config.onAttachChild !== 'function' || !member) {
                 return;
             }
             config.onAttachChild(member);
-        }, [config, member]);
+        }, [canManageChildren, allowAttachChild, config, member]);
         var removeAvatarLabel = getString(strings, 'removeAvatar', 'Supprimer');
         var removeAvatarConfirmLabel = getString(strings, 'removeAvatarConfirm', 'Supprimer l’avatar personnalisé ?');
 
@@ -2449,7 +2459,7 @@
                 ]),
 
                 // Section enfants (si le membre est tuteur)
-                (hasChildren || canManageChildren) && h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                showChildSection && h('div', { class: 'mj-regmgr-member-detail__section' }, [
                     h('div', { class: 'mj-regmgr-member-detail__section-header' }, [
                         h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'guardianChildSectionTitle', 'Enfants') + (
                             hasChildren

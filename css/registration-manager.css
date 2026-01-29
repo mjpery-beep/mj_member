@@ -58,6 +58,9 @@
     .mj-regmgr {
         padding: 0;
     }
+    .mj-att-member__view-member-label {
+        display: none;
+    }
 }
 
 .mj-registration-manager__boot-loader {
@@ -1580,6 +1583,9 @@ input.mj-regmgr-search-input__field {
     color: var(--regmgr-gray-400);
     cursor: pointer;
     transition: all var(--regmgr-transition);
+    padding: 0;
+    line-height: 0;
+    box-sizing: border-box;
 }
 
 .mj-att-member__view-member {
@@ -1764,18 +1770,44 @@ input.mj-regmgr-search-input__field {
         flex-wrap: wrap;
     }
     
+    .mj-att-member__name-row {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
     .mj-att-member__name {
         font-size: 13px;
+        flex-basis: 100%;
     }
     
+    .mj-att-member__view-member {
+        width: 100%;
+        justify-content: flex-start;
+        margin-top: 2px;
+    }
+
     .mj-att-btn {
-        width: 38px;
-        height: 38px;
+        width: 34px;
+        height: 34px;
     }
     
     .mj-att-btn svg {
-        width: 16px;
-        height: 16px;
+        width: 14px;
+        height: 14px;
+    }
+
+    .mj-att-member__contact {
+        width: 34px;
+        height: 34px;
+    }
+
+    .mj-att-member__contact-icon {
+        width: 22px;
+        height: 22px;
+    }
+
+    .mj-att-member__actions {
+        gap: 6px;
     }
     
     .mj-att__bulk-btn {
