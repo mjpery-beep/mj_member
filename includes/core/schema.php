@@ -861,6 +861,88 @@ HTML
 }
 add_action('init', 'mj_member_seed_email_templates', 15);
 
+if (!function_exists('mj_member_get_default_badge_slugs')) {
+    function mj_member_get_default_badge_slugs(): array {
+        return array(
+            'premier-pas',
+            'habitue-du-pery',
+            'voix-du-groupe',
+            'esprit-cracs',
+            'coup-de-main',
+            'creatif',
+            'organisateur',
+            'ambassadeur',
+            'moteur-de-projet',
+            'grimlin-du-pery',
+        );
+    }
+}
+
+if (!function_exists('mj_member_get_removed_default_badge_slugs')) {
+    function mj_member_get_removed_default_badge_slugs(): array {
+        $stored = get_option('mj_member_removed_default_badges', array());
+        if (!is_array($stored)) {
+            return array();
+        }
+
+        $normalized = array();
+        foreach ($stored as $slug) {
+            $candidate = sanitize_title((string) $slug);
+            if ($candidate !== '') {
+                $normalized[$candidate] = $candidate;
+            }
+        }
+
+        return array_values($normalized);
+    }
+}
+
+if (!function_exists('mj_member_mark_default_badge_removed')) {
+    function mj_member_mark_default_badge_removed($slug): void {
+        $normalized = sanitize_title((string) $slug);
+        if ($normalized === '') {
+            return;
+        }
+
+        $default_slugs = mj_member_get_default_badge_slugs();
+        if (!in_array($normalized, $default_slugs, true)) {
+            return;
+        }
+
+        $removed = mj_member_get_removed_default_badge_slugs();
+        if (!in_array($normalized, $removed, true)) {
+            $removed[] = $normalized;
+            update_option('mj_member_removed_default_badges', $removed);
+        }
+    }
+}
+
+if (!function_exists('mj_member_unmark_default_badge_removed')) {
+    function mj_member_unmark_default_badge_removed($slug): void {
+        $normalized = sanitize_title((string) $slug);
+        if ($normalized === '') {
+            return;
+        }
+
+        $removed = mj_member_get_removed_default_badge_slugs();
+        if (empty($removed)) {
+            return;
+        }
+
+        $index = array_search($normalized, $removed, true);
+        if ($index === false) {
+            return;
+        }
+
+        unset($removed[$index]);
+        if (empty($removed)) {
+            delete_option('mj_member_removed_default_badges');
+        } else {
+            update_option('mj_member_removed_default_badges', array_values($removed));
+        }
+    }
+}
+
 function mj_member_seed_default_badges() {
     global $wpdb;
 
@@ -1015,13 +1097,33 @@ function mj_member_seed_default_badges() {
         ),
     );
 
+    $removed_slugs = mj_member_get_removed_default_badge_slugs();
+    $removed_lookup = array();
+    foreach ($removed_slugs as $slug) {
+        $removed_lookup[$slug] = true;
+    }
+
     foreach ($badge_definitions as $badge) {
-        $existing_id = $wpdb->get_var($wpdb->prepare(
+        $slug = isset($badge['slug']) ? sanitize_title((string) $badge['slug']) : '';
+        if ($slug === '') {
+            continue;
+        }
+
+        $existing_id = (int) $wpdb->get_var($wpdb->prepare(
             "SELECT id FROM {$badges_table} WHERE slug = %s",
-            $badge['slug']
+            $slug
         ));
 
-        if (!$existing_id) {
+        if ($existing_id <= 0 && isset($removed_lookup[$slug])) {
+            continue;
+        }
+
+        if ($existing_id > 0 && isset($removed_lookup[$slug])) {
+            mj_member_unmark_default_badge_removed($slug);
+            unset($removed_lookup[$slug]);
+        }
+
+        if ($existing_id <= 0) {
             $criteria_json = null;
             if (!empty($badge['criteria'])) {
                 $encoded = wp_json_encode(array_values($badge['criteria']));
@@ -1033,7 +1135,7 @@ function mj_member_seed_default_badges() {
             $wpdb->insert(
                 $badges_table,
                 array(
-                    'slug' => $badge['slug'],
+                    'slug' => $slug,
                     'label' => $badge['label'],
                     'summary' => $badge['summary'],
                     'description' => $badge['description'],
@@ -1064,21 +1166,21 @@ function mj_member_seed_default_badges() {
 
                 $base_slug = sanitize_title($label);
                 if ($base_slug === '') {
-                    $base_slug = sanitize_title($badge['slug'] . '-' . ($order + 1));
+                    $base_slug = sanitize_title($slug . '-' . ($order + 1));
                 }
                 if ($base_slug === '') {
                     $base_slug = 'criterion-' . $badge_id . '-' . ($order + 1);
                 }
 
-                $slug = $base_slug;
+                $criterion_slug = $base_slug;
                 $existing_criterion_id = (int) $wpdb->get_var($wpdb->prepare(
                     "SELECT id FROM {$badge_criteria_table} WHERE badge_id = %d AND slug = %s",
                     $badge_id,
-                    $slug
+                    $criterion_slug
                 ));
 
                 if ($existing_criterion_id <= 0) {
-                    $unique_slug = $slug;
+                    $unique_slug = $criterion_slug;
                     $suffix = 2;
                     while ((int) $wpdb->get_var($wpdb->prepare(
                         "SELECT COUNT(*) FROM {$badge_criteria_table} WHERE badge_id = %d AND slug = %s",
@@ -1089,7 +1191,7 @@ function mj_member_seed_default_badges() {
                         $suffix++;
                     }
 
-                    $slug = $unique_slug;
+                    $criterion_slug = $unique_slug;
                 }
 
                 if ($existing_criterion_id > 0) {
@@ -1110,7 +1212,7 @@ function mj_member_seed_default_badges() {
                         $badge_criteria_table,
                         array(
                             'badge_id' => $badge_id,
-                            'slug' => $slug,
+                            'slug' => $criterion_slug,
                             'label' => $label,
                             'display_order' => $order,
                             'status' => 'active',

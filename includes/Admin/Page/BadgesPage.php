@@ -457,7 +457,7 @@ final class BadgesPage
         if ($badgeId > 0) {
             $result = MjBadges::update($badgeId, $payload);
         } else {
-            $result = MjBadges::insert($payload);
+            $result = MjBadges::create($payload);
             if (!is_wp_error($result)) {
                 $badgeId = (int) $result;
             }
@@ -499,7 +499,13 @@ final class BadgesPage
         $badgeId = isset($_REQUEST['badge_id']) ? (int) $_REQUEST['badge_id'] : 0;
         check_admin_referer(static::deleteNonceAction($badgeId));
 
+        $badgeSlug = '';
+
         if ($badgeId > 0) {
+            $badgeData = MjBadges::get($badgeId);
+            if (is_array($badgeData) && !empty($badgeData['slug'])) {
+                $badgeSlug = sanitize_title((string) $badgeData['slug']);
+            }
             $result = MjBadges::delete($badgeId);
         } else {
             $result = new \WP_Error('missing_id', __('Badge introuvable.', 'mj-member'));
@@ -514,6 +520,9 @@ final class BadgesPage
             $args['mj_badges_error'] = rawurlencode($result->get_error_message());
         } else {
             $args['mj_badges_notice'] = 'deleted';
+            if ($badgeSlug !== '' && function_exists('mj_member_mark_default_badge_removed')) {
+                mj_member_mark_default_badge_removed($badgeSlug);
+            }
         }
 
         wp_safe_redirect(add_query_arg($args, admin_url('admin.php')));
