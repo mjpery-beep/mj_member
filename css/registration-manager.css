@@ -54,6 +54,7 @@
 }
 
 @media (max-width: 640px) {
+    .mj-regmgr-member-detail,
     .mj-regmgr {
         padding: 0;
     }
