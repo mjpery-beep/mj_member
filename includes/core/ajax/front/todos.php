@@ -47,13 +47,38 @@ if (!function_exists('mj_member_ajax_todos_fetch_my')) {
             return mj_member_todo_prepare_payload($todo, $projectMap, $memberId);
         }, $todos);
 
-        $payloadProjects = array_map(static function ($project) {
-            return array(
-                'id' => isset($project['id']) ? (int) $project['id'] : 0,
-                'title' => isset($project['title']) ? sanitize_text_field((string) $project['title']) : '',
-                'color' => isset($project['color']) ? sanitize_hex_color((string) $project['color']) : '',
-            );
-        }, $projects);
+        $projectIdsWithTodos = array();
+        foreach ($payloadTodos as $payloadTodo) {
+            if (!is_array($payloadTodo)) {
+                continue;
+            }
+            $projectId = isset($payloadTodo['projectId']) ? (int) $payloadTodo['projectId'] : 0;
+            if ($projectId > 0) {
+                $projectIdsWithTodos[$projectId] = true;
+            }
+        }
+
+        $payloadProjects = array();
+        if (!empty($projectIdsWithTodos)) {
+            foreach ($projects as $project) {
+                if (!is_array($project)) {
+                    continue;
+                }
+                $projectId = isset($project['id']) ? (int) $project['id'] : 0;
+                if ($projectId <= 0 || !isset($projectIdsWithTodos[$projectId])) {
+                    continue;
+                }
+
+                $title = isset($project['title']) ? sanitize_text_field((string) $project['title']) : '';
+                $color = isset($project['color']) ? sanitize_hex_color((string) $project['color']) : '';
+
+                $payloadProjects[] = array(
+                    'id' => $projectId,
+                    'title' => $title,
+                    'color' => is_string($color) ? $color : '',
+                );
+            }
+        }
 
         $assignableMembers = mj_member_todo_fetch_assignable_members($memberId);
 
@@ -637,13 +662,38 @@ if (!function_exists('mj_member_ajax_todos_fetch_archived')) {
             return mj_member_todo_prepare_payload($todo, $projectMap, $memberId);
         }, $todos);
 
-        $payloadProjects = array_map(static function ($project) {
-            return array(
-                'id' => isset($project['id']) ? (int) $project['id'] : 0,
-                'title' => isset($project['title']) ? sanitize_text_field((string) $project['title']) : '',
-                'color' => isset($project['color']) ? sanitize_hex_color((string) $project['color']) : '',
-            );
-        }, $projects);
+        $projectIdsWithTodos = array();
+        foreach ($payloadTodos as $payloadTodo) {
+            if (!is_array($payloadTodo)) {
+                continue;
+            }
+            $projectId = isset($payloadTodo['projectId']) ? (int) $payloadTodo['projectId'] : 0;
+            if ($projectId > 0) {
+                $projectIdsWithTodos[$projectId] = true;
+            }
+        }
+
+        $payloadProjects = array();
+        if (!empty($projectIdsWithTodos)) {
+            foreach ($projects as $project) {
+                if (!is_array($project)) {
+                    continue;
+                }
+                $projectId = isset($project['id']) ? (int) $project['id'] : 0;
+                if ($projectId <= 0 || !isset($projectIdsWithTodos[$projectId])) {
+                    continue;
+                }
+
+                $title = isset($project['title']) ? sanitize_text_field((string) $project['title']) : '';
+                $color = isset($project['color']) ? sanitize_hex_color((string) $project['color']) : '';
+
+                $payloadProjects[] = array(
+                    'id' => $projectId,
+                    'title' => $title,
+                    'color' => is_string($color) ? $color : '',
+                );
+            }
+        }
 
         wp_send_json_success(array(
             'todos' => $payloadTodos,

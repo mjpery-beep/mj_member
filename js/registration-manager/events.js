@@ -395,6 +395,7 @@
         var onLoadMoreMembers = props.onLoadMoreMembers;
         var hasMoreMembers = props.hasMoreMembers;
         var membersLoadingMore = props.membersLoadingMore;
+        var showAllEvents = !!props.showAllEvents;
 
         // Get MembersList component
         var MembersComps = window.MjRegMgrMembers;
@@ -402,11 +403,18 @@
 
         var eventFilters = [
             { key: 'assigned', label: getString(strings, 'filterAssigned', 'Mes événements') },
+        ];
+
+        if (showAllEvents) {
+            eventFilters.push({ key: 'all', label: getString(strings, 'filterShowAllEvents', 'Afficher tout') });
+        }
+
+        eventFilters.push(
             { key: 'upcoming', label: getString(strings, 'filterUpcoming', 'À venir') },
             { key: 'past', label: getString(strings, 'filterPast', 'Passés') },
             { key: 'draft', label: getString(strings, 'filterDraft', 'Brouillons') },
-            { key: 'internal', label: getString(strings, 'filterInternal', 'Internes') },
-        ];
+            { key: 'internal', label: getString(strings, 'filterInternal', 'Internes') }
+        );
 
         var memberFilters = [
             { key: 'all', label: getString(strings, 'filterAll', 'Tous') },

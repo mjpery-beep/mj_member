@@ -4698,6 +4698,19 @@ input.mj-regmgr-search-input__field {
     gap: 2px;
 }
 
+.mj-regmgr-guardian__name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.mj-regmgr-guardian__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .mj-regmgr-guardian__label {
     font-size: 12px;
     text-transform: uppercase;

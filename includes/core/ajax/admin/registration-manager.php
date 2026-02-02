@@ -1239,7 +1239,7 @@ function mj_regmgr_get_events() {
     $total = 0;
 
     // Pour le filtre "assigned", utiliser MjEventAnimateurs
-    if ($filter === 'assigned' && !$auth['is_coordinateur']) {
+    if ($filter === 'assigned') {
         $assigned_args = array(
             'statuses' => array(MjEvents::STATUS_ACTIVE),
             'orderby' => 'date_debut',
@@ -1268,11 +1268,6 @@ function mj_regmgr_get_events() {
         );
 
         switch ($filter) {
-            case 'assigned':
-                // Coordinateur voit tout
-                $args['statuses'] = array(MjEvents::STATUS_ACTIVE);
-                break;
-
             case 'upcoming':
                 $args['statuses'] = array(MjEvents::STATUS_ACTIVE);
                 $args['after'] = $now;

@@ -432,6 +432,7 @@ $config_json = wp_json_encode(array(
         // Filtres événements
         'filterAll' => __('Tous', 'mj-member'),
         'filterAssigned' => __('Mes événements', 'mj-member'),
+        'filterShowAllEvents' => __('Afficher tout', 'mj-member'),
         'filterUpcoming' => __('À venir', 'mj-member'),
         'filterPast' => __('Passés', 'mj-member'),
         'filterDraft' => __('Brouillons', 'mj-member'),

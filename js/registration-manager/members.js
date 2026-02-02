@@ -682,19 +682,100 @@
         } else if (member.guardianName) {
             guardianDisplayName = member.guardianName;
         }
+        if (!guardianDisplayName) {
+            var guardianFirstFromMember = member.guardianFirstName || member.guardian_first_name || '';
+            var guardianLastFromMember = member.guardianLastName || member.guardian_last_name || '';
+            var guardianNameFromMember = ((guardianFirstFromMember || '') + ' ' + (guardianLastFromMember || '')).trim();
+            if (guardianNameFromMember) {
+                guardianDisplayName = guardianNameFromMember;
+            }
+        }
+
+        var guardianId = null;
+        if (guardian && typeof guardian.id !== 'undefined') {
+            guardianId = guardian.id;
+        }
+        if (guardianId === null && typeof member.guardianId !== 'undefined' && member.guardianId !== null) {
+            guardianId = member.guardianId;
+        }
+        if ((guardianId === null || typeof guardianId === 'undefined') && typeof member.guardian_id !== 'undefined' && member.guardian_id !== null) {
+            guardianId = member.guardian_id;
+        }
+        if (guardianId !== null) {
+            guardianId = parseInt(guardianId, 10);
+            if (isNaN(guardianId)) {
+                guardianId = null;
+            }
+        }
 
         var guardianEditUrl = '';
         if (guardian && guardian.editUrl) {
             guardianEditUrl = guardian.editUrl;
         } else if (member.guardianEditUrl) {
             guardianEditUrl = member.guardianEditUrl;
-        } else if (config && config.guardianEditBaseUrl && guardian && guardian.id) {
-            guardianEditUrl = config.guardianEditBaseUrl.replace('%ID%', guardian.id);
+        } else if (config && config.guardianEditBaseUrl && guardianId) {
+            guardianEditUrl = config.guardianEditBaseUrl.replace('%ID%', guardianId);
         }
 
         var canEditGuardianInline = !!(config && config.canEditGuardianInline);
         if (typeof member.canEditGuardianInline !== 'undefined') {
             canEditGuardianInline = !!member.canEditGuardianInline;
+        }
+
+        var guardianReference = null;
+        if (guardian && guardian.id) {
+            guardianReference = guardian;
+        } else if (guardianId) {
+            var nameParts = guardianDisplayName ? guardianDisplayName.split(' ') : [];
+            var fallbackFirst = guardian && guardian.firstName ? guardian.firstName : '';
+            if (!fallbackFirst && member.guardianFirstName) {
+                fallbackFirst = member.guardianFirstName;
+            }
+            if (!fallbackFirst && member.guardian_first_name) {
+                fallbackFirst = member.guardian_first_name;
+            }
+            if (!fallbackFirst && nameParts.length > 0) {
+                fallbackFirst = nameParts[0];
+            }
+            var fallbackLast = guardian && guardian.lastName ? guardian.lastName : '';
+            if (!fallbackLast && member.guardianLastName) {
+                fallbackLast = member.guardianLastName;
+            }
+            if (!fallbackLast && member.guardian_last_name) {
+                fallbackLast = member.guardian_last_name;
+            }
+            if (!fallbackLast && nameParts.length > 1) {
+                fallbackLast = nameParts.slice(1).join(' ');
+            }
+            var derivedDisplayName = guardianDisplayName;
+            if (!derivedDisplayName) {
+                if (guardian && guardian.displayName) {
+                    derivedDisplayName = guardian.displayName;
+                } else {
+                    var combinedFallback = ((fallbackFirst || '') + ' ' + (fallbackLast || '')).trim();
+                    if (combinedFallback) {
+                        derivedDisplayName = combinedFallback;
+                    }
+                }
+            }
+            guardianReference = {
+                id: guardianId,
+                firstName: fallbackFirst,
+                lastName: fallbackLast,
+                displayName: derivedDisplayName,
+                role: guardian && guardian.role ? guardian.role : 'tuteur',
+                roleLabel: guardian && guardian.roleLabel ? guardian.roleLabel : '',
+                avatarUrl: guardian && guardian.avatarUrl ? guardian.avatarUrl : '',
+                email: guardian && guardian.email ? guardian.email : '',
+                phone: guardian && guardian.phone ? guardian.phone : '',
+            };
+        }
+        if (!guardianDisplayName && guardianReference) {
+            if (guardianReference.displayName) {
+                guardianDisplayName = guardianReference.displayName;
+            } else {
+                guardianDisplayName = ((guardianReference.firstName || '') + ' ' + (guardianReference.lastName || '')).trim();
+            }
         }
 
         var handleGuardianEditClick = function () {
@@ -708,6 +789,59 @@
                 }
             }
         };
+
+        var guardianActions = [];
+        if (onOpenMember && guardianReference) {
+            guardianActions.push(h('button', {
+                type: 'button',
+                class: 'mj-regmgr-guardian__edit-link mj-regmgr-guardian__view-link',
+                onClick: function () {
+                    onOpenMember(guardianReference);
+                },
+                title: getString(strings, 'viewMemberProfile', 'Ouvrir la fiche membre'),
+            }, [
+                h('svg', {
+                    width: 14,
+                    height: 14,
+                    viewBox: '0 0 24 24',
+                    fill: 'none',
+                    stroke: 'currentColor',
+                    'stroke-width': 2,
+                }, [
+                    h('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
+                    h('polyline', { points: '15 3 21 3 21 9' }),
+                    h('line', { x1: 10, y1: 14, x2: 21, y2: 3 }),
+                ]),
+                h('span', null, getString(strings, 'openMember', 'Fiche')),
+            ]));
+        }
+
+        if (canEditGuardianInline) {
+            guardianActions.push(h('button', {
+                type: 'button',
+                class: 'mj-regmgr-guardian__edit-link',
+                onClick: handleGuardianEditClick,
+            }, [
+                h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                    h('path', { d: 'M12 20h9' }),
+                    h('path', { d: 'M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z' }),
+                ]),
+                h('span', null, 'Modifier'),
+            ]));
+        } else if (guardianEditUrl) {
+            guardianActions.push(h('a', {
+                class: 'mj-regmgr-guardian__edit-link',
+                href: guardianEditUrl,
+                target: '_blank',
+                rel: 'noopener noreferrer',
+            }, [
+                h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                    h('path', { d: 'M12 20h9' }),
+                    h('path', { d: 'M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z' }),
+                ]),
+                h('span', null, 'Modifier'),
+            ]));
+        }
 
         var handleFieldChange = function (field) {
             return function (event) {
@@ -1670,36 +1804,19 @@
                             h('path', { d: 'M16 3.13a4 4 0 0 1 0 7.75' }),
                         ]),
                         h('div', { class: 'mj-regmgr-guardian' }, [
-                            guardian ? h(MemberAvatar, { member: guardian, size: 'small' }) : null,
+                            (guardianReference && guardianReference.id)
+                                ? h(MemberAvatar, { member: guardianReference, size: 'small' })
+                                : null,
                             h('div', { class: 'mj-regmgr-guardian__info' }, [
                                 h('span', { class: 'mj-regmgr-guardian__label' }, 'Tuteur référent'),
-                                h('span', { class: 'mj-regmgr-guardian__name' }, guardianDisplayName),
+                                h('div', { class: 'mj-regmgr-guardian__name-row' }, [
+                                    h('span', { class: 'mj-regmgr-guardian__name' }, guardianDisplayName),
+                                    guardianActions.length > 0
+                                        ? h('div', { class: 'mj-regmgr-guardian__actions' }, guardianActions)
+                                        : null,
+                                ]),
                             ]),
                         ]),
-                        canEditGuardianInline
-                            ? h('button', {
-                                type: 'button',
-                                class: 'mj-regmgr-guardian__edit-link',
-                                onClick: handleGuardianEditClick,
-                            }, [
-                                h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                                    h('path', { d: 'M12 20h9' }),
-                                    h('path', { d: 'M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z' }),
-                                ]),
-                                h('span', null, 'Modifier'),
-                            ])
-                            : guardianEditUrl && h('a', {
-                                class: 'mj-regmgr-guardian__edit-link',
-                                href: guardianEditUrl,
-                                target: '_blank',
-                                rel: 'noopener noreferrer',
-                            }, [
-                                h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                                    h('path', { d: 'M12 20h9' }),
-                                    h('path', { d: 'M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z' }),
-                                ]),
-                                h('span', null, 'Modifier'),
-                            ]),
                     ]),
                 ]),
         ]);

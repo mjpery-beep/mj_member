@@ -3292,14 +3292,21 @@
         }, [config.prefillEventId]);
 
         var initialFilterValue = useMemo(function () {
+            var allowAllFilter = !!config.showAllEvents;
             var fallback = typeof config.defaultFilter === 'string' && config.defaultFilter !== ''
                 ? config.defaultFilter
                 : 'assigned';
-            if (prefillEventId && fallback !== 'all') {
+
+            if (fallback === 'all' && !allowAllFilter) {
+                fallback = 'assigned';
+            }
+
+            if (prefillEventId && allowAllFilter && fallback !== 'all') {
                 return 'all';
             }
+
             return fallback;
-        }, [config.defaultFilter, prefillEventId]);
+        }, [config.defaultFilter, config.showAllEvents, prefillEventId]);
 
         // API Service
         var api = useMemo(function () {
@@ -3543,6 +3550,23 @@
         var _filter = useState(initialFilterValue);
         var filter = _filter[0];
         var setFilter = _filter[1];
+        var allowAllFilter = useMemo(function () {
+            return !!config.showAllEvents;
+        }, [config.showAllEvents]);
+
+        var setFilterSafe = useCallback(function (nextFilter) {
+            if (nextFilter === 'all' && !allowAllFilter) {
+                setFilter('assigned');
+                return;
+            }
+            setFilter(nextFilter);
+        }, [allowAllFilter, setFilter]);
+
+        useEffect(function () {
+            if (!allowAllFilter && filter === 'all') {
+                setFilter('assigned');
+            }
+        }, [allowAllFilter, filter]);
 
         var _search = useState('');
         var search = _search[0];
@@ -5776,7 +5800,7 @@
                     selectedEventId: selectedEvent ? selectedEvent.id : null,
                     onSelectEvent: handleSelectEvent,
                     filter: filter,
-                    onFilterChange: setFilter,
+                    onFilterChange: setFilterSafe,
                     search: search,
                     onSearchChange: setSearch,
                     onLoadMore: function () { loadEvents(pagination.page + 1); },
@@ -5803,6 +5827,7 @@
                     onCreateMember: config.allowCreateMember ? createMemberModal.open : null,
 
                     strings: strings,
+                    showAllEvents: allowAllFilter,
                     title: config.title || 'Événements',
                 }),
 
