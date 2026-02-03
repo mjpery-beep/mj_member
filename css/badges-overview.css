@@ -817,7 +817,7 @@
 
 .mj-trophies-section__grid{
     display:grid;
-    grid-template-columns:repeat(auto-fill,minmax(140px,1fr));
+    grid-template-columns:repeat(2,1fr);
     gap:16px;
 }
 
@@ -893,8 +893,8 @@
 /* Trophy Visual */
 .mj-trophy__visual{
     position:relative;
-    width:80px;
-    height:80px;
+    width:100px;
+    height:100px;
     display:flex;
     align-items:center;
     justify-content:center;
@@ -912,8 +912,8 @@
 }
 
 .mj-trophy__image{
-    width:60px;
-    height:60px;
+    width:80px;
+    height:80px;
     object-fit:contain;
     filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));
     transition:transform 0.3s ease;
@@ -1051,9 +1051,15 @@
 }
 
 /* Responsive */
-@media (min-width:700px){
+@media (min-width:900px){
     .mj-trophies-section__grid{
-        grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+        grid-template-columns:repeat(4,1fr);
+    }
+}
+
+@media (min-width:500px) and (max-width:899px){
+    .mj-trophies-section__grid{
+        grid-template-columns:repeat(3,1fr);
     }
 }
 
@@ -1079,7 +1085,7 @@
         font-size:1.2rem;
     }
     .mj-trophies-section__grid{
-        grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+        grid-template-columns:repeat(2,1fr);
         gap:12px;
     }
     .mj-trophy{
@@ -1087,12 +1093,12 @@
         gap:10px;
     }
     .mj-trophy__visual{
-        width:64px;
-        height:64px;
+        width:80px;
+        height:80px;
     }
     .mj-trophy__image{
-        width:48px;
-        height:48px;
+        width:64px;
+        height:64px;
     }
     .mj-trophy__emoji{
         font-size:2rem;

@@ -100,9 +100,10 @@ final class MjMemberXp extends MjTools
         global $wpdb;
         $table = self::getTableName('mj_members');
 
-        // Use GREATEST to ensure XP never goes below 0
+        // Use CASE WHEN to avoid BIGINT UNSIGNED underflow error
         $updated = $wpdb->query($wpdb->prepare(
-            "UPDATE {$table} SET xp_total = GREATEST(0, xp_total - %d) WHERE id = %d",
+            "UPDATE {$table} SET xp_total = CASE WHEN xp_total >= %d THEN xp_total - %d ELSE 0 END WHERE id = %d",
+            $amount,
             $amount,
             $memberId
         ));

@@ -20,6 +20,7 @@ use Mj\Member\Admin\Page\TodosPage;
 use Mj\Member\Admin\Page\TodoProjectsPage;
 use Mj\Member\Admin\Page\BadgesPage;
 use Mj\Member\Admin\Page\TrophiesPage;
+use Mj\Member\Admin\Page\LevelsPage;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -34,8 +35,9 @@ final class AdminMenu
     {
         add_action('admin_menu', array(__CLASS__, 'registerMenu'));
         
-        // Enregistrer les actions admin_post pour TrophiesPage
+        // Enregistrer les actions admin_post pour TrophiesPage et LevelsPage
         TrophiesPage::boot();
+        LevelsPage::boot();
     }
 
     /**
@@ -191,6 +193,16 @@ final class AdminMenu
             array(TrophiesPage::class, 'render')
         );
         TrophiesPage::registerHooks($trophiesHook);
+
+        $levelsHook = add_submenu_page(
+            'mj_member',
+            __('Niveaux', 'mj-member'),
+            __('Niveaux', 'mj-member'),
+            $capability,
+            LevelsPage::slug(),
+            array(LevelsPage::class, 'render')
+        );
+        LevelsPage::registerHooks($levelsHook);
 
         if ($contactCapability !== '') {
             add_submenu_page(

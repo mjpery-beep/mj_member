@@ -272,6 +272,10 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
                 array('%s', '%s', '%d', '%s', '%s', '%s'),
                 array('%d')
             );
+
+            // Ajouter les XP du trophée au membre (réactivation)
+            self::award_trophy_xp($memberId, $trophyId);
+
             return (int) $existing['id'];
         }
 
@@ -294,7 +298,12 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
             return new WP_Error('mj_trophy_award_failed', __('Impossible d\'attribuer le trophée.', 'mj-member'));
         }
 
-        return (int) $wpdb->insert_id;
+        $insertId = (int) $wpdb->insert_id;
+
+        // Ajouter les XP du trophée au membre
+        self::award_trophy_xp($memberId, $trophyId);
+
+        return $insertId;
     }
 
     /**
@@ -327,7 +336,42 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
             array('%d')
         );
 
+        if ($result !== false) {
+            // Retirer les XP du trophée au membre
+            self::revoke_trophy_xp($memberId, $trophyId);
+        }
+
         return $result !== false;
+    }
+
+    /**
+     * Ajoute les XP d'un trophée au membre.
+     *
+     * @param int $memberId
+     * @param int $trophyId
+     * @return void
+     */
+    private static function award_trophy_xp(int $memberId, int $trophyId): void
+    {
+        $trophy = MjTrophies::get($trophyId);
+        if ($trophy && isset($trophy['xp']) && (int) $trophy['xp'] > 0) {
+            MjMemberXp::add($memberId, (int) $trophy['xp']);
+        }
+    }
+
+    /**
+     * Retire les XP d'un trophée au membre.
+     *
+     * @param int $memberId
+     * @param int $trophyId
+     * @return void
+     */
+    private static function revoke_trophy_xp(int $memberId, int $trophyId): void
+    {
+        $trophy = MjTrophies::get($trophyId);
+        if ($trophy && isset($trophy['xp']) && (int) $trophy['xp'] > 0) {
+            MjMemberXp::subtract($memberId, (int) $trophy['xp']);
+        }
     }
 
     /**
