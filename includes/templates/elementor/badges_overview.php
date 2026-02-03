@@ -448,20 +448,22 @@ $headingTitle = $title !== '' ? $title : __('Mes Succès', 'mj-member');
     <?php else : ?>
         <div class="mj-badges-overview__grid">
             <!-- XP Gaming Bar as first grid item -->
-            <div class="mj-badges-xp-bar">
-                <div class="mj-badges-xp-bar__level">
-                    <?php if ($levelImage) : ?>
-                        <img src="<?php echo esc_url($levelImage); ?>" alt="<?php echo esc_attr($levelTitle); ?>" class="mj-badges-xp-bar__level-image" />
-                    <?php else : ?>
-                        <div class="mj-badges-xp-bar__level-badge">
-                            <span class="mj-badges-xp-bar__level-number"><?php echo esc_html($currentLevelNumber); ?></span>
+            <div class="mj-badges-xp-bar" <?php if ($levelImage) : ?>style="--level-bg-image: url('<?php echo esc_url($levelImage); ?>');"<?php endif; ?>>
+                <?php if ($levelImage) : ?>
+                    <div class="mj-badges-xp-bar__bg-image"></div>
+                <?php endif; ?>
+                <div class="mj-badges-xp-bar__content">
+                    <div class="mj-badges-xp-bar__level">
+                        <?php if (!$levelImage) : ?>
+                            <div class="mj-badges-xp-bar__level-badge">
+                                <span class="mj-badges-xp-bar__level-number"><?php echo esc_html($currentLevelNumber); ?></span>
+                            </div>
+                        <?php endif; ?>
+                        <div class="mj-badges-xp-bar__level-info">
+                            <span class="mj-badges-xp-bar__level-title"><?php echo esc_html($levelTitle); ?></span>
+                            <span class="mj-badges-xp-bar__level-label"><?php echo esc_html(sprintf(__('Niveau %d', 'mj-member'), $currentLevelNumber)); ?></span>
                         </div>
-                    <?php endif; ?>
-                    <div class="mj-badges-xp-bar__level-info">
-                        <span class="mj-badges-xp-bar__level-title"><?php echo esc_html($levelTitle); ?></span>
-                        <span class="mj-badges-xp-bar__level-label"><?php echo esc_html(sprintf(__('Niveau %d', 'mj-member'), $currentLevelNumber)); ?></span>
                     </div>
-                </div>
                 <div class="mj-badges-xp-bar__progress-wrapper">
                     <div class="mj-badges-xp-bar__xp-info">
                         <span class="mj-badges-xp-bar__xp-current">
@@ -504,6 +506,7 @@ $headingTitle = $title !== '' ? $title : __('Mes Succès', 'mj-member');
                         <span class="mj-badges-xp-bar__badge-stat-icon">🔒</span>
                         <span class="mj-badges-xp-bar__badge-stat-value"><?php echo esc_html($lockedCount); ?></span>
                     </div>
+                </div>
                 </div>
             </div>
 
