@@ -136,6 +136,17 @@
     text-shadow:0 0 10px rgba(255,215,0,0.8);
 }
 
+/* Level description */
+.mj-badges-xp-bar__level-description{
+    font-size:0.85rem;
+    font-weight:500;
+    color:rgba(255,255,255,0.85);
+    text-align:center;
+    line-height:1.4;
+    margin:8px 0 0 0;
+    max-width:280px;
+}
+
 /* Level image - now used as background */
 .mj-badges-xp-bar__level-image{
     display:none;

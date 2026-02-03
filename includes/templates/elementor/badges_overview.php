@@ -462,6 +462,9 @@ $headingTitle = $title !== '' ? $title : __('Mes Succès', 'mj-member');
                         <div class="mj-badges-xp-bar__level-info">
                             <span class="mj-badges-xp-bar__level-title"><?php echo esc_html($levelTitle); ?></span>
                             <span class="mj-badges-xp-bar__level-label"><?php echo esc_html(sprintf(__('Niveau %d', 'mj-member'), $currentLevelNumber)); ?></span>
+                            <?php if (!empty($levelDescription)) : ?>
+                                <p class="mj-badges-xp-bar__level-description"><?php echo esc_html($levelDescription); ?></p>
+                            <?php endif; ?>
                         </div>
                     </div>
                 <div class="mj-badges-xp-bar__progress-wrapper">

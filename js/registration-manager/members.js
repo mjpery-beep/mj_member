@@ -2228,6 +2228,59 @@
                         ]),
                     ]),
                     activeTab === 'badges' && h(Fragment, null, [
+                        // Level Display
+                        member.levelProgression && member.levelProgression.currentLevel && h('div', { class: 'mj-regmgr-member-level' }, [
+                            h('div', { class: 'mj-regmgr-member-level__current' }, [
+                                member.levelProgression.currentLevel.imageUrl
+                                    ? h('div', { class: 'mj-regmgr-member-level__image' }, [
+                                        h('img', {
+                                            src: member.levelProgression.currentLevel.imageUrl,
+                                            alt: member.levelProgression.currentLevel.title || '',
+                                            loading: 'lazy',
+                                        }),
+                                    ])
+                                    : h('div', { class: 'mj-regmgr-member-level__badge' }, [
+                                        h('span', { class: 'mj-regmgr-member-level__badge-number' }, member.levelProgression.currentLevel.levelNumber),
+                                    ]),
+                                h('div', { class: 'mj-regmgr-member-level__info' }, [
+                                    h('div', { class: 'mj-regmgr-member-level__header' }, [
+                                        h('span', { class: 'mj-regmgr-member-level__label' }, getString(strings, 'memberLevelLabel', 'Niveau')),
+                                        h('span', { class: 'mj-regmgr-member-level__number' }, member.levelProgression.currentLevel.levelNumber),
+                                    ]),
+                                    h('h2', { class: 'mj-regmgr-member-level__title' }, member.levelProgression.currentLevel.title || ''),
+                                    member.levelProgression.currentLevel.description && h('p', { class: 'mj-regmgr-member-level__description' }, member.levelProgression.currentLevel.description),
+                                ]),
+                            ]),
+                            !member.levelProgression.isMaxLevel && member.levelProgression.nextLevel && h('div', { class: 'mj-regmgr-member-level__progress-section' }, [
+                                h('div', { class: 'mj-regmgr-member-level__progress-header' }, [
+                                    h('span', { class: 'mj-regmgr-member-level__progress-label' }, [
+                                        getString(strings, 'memberLevelNextLabel', 'Prochain niveau:'),
+                                        ' ',
+                                        h('strong', null, member.levelProgression.nextLevel.title || ('Niveau ' + member.levelProgression.nextLevel.levelNumber)),
+                                    ]),
+                                    h('span', { class: 'mj-regmgr-member-level__progress-xp' }, [
+                                        member.levelProgression.xpRemaining.toLocaleString(),
+                                        ' ',
+                                        getString(strings, 'memberXpRemainingLabel', 'XP restants'),
+                                    ]),
+                                ]),
+                                h('div', { class: 'mj-regmgr-member-level__progress-bar' }, [
+                                    h('div', {
+                                        class: 'mj-regmgr-member-level__progress-fill',
+                                        style: { width: member.levelProgression.progressPercent + '%' },
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-member-level__progress-footer' }, [
+                                    h('span', null, member.levelProgression.xpCurrent.toLocaleString() + ' XP'),
+                                    h('span', null, member.levelProgression.progressPercent + '%'),
+                                    h('span', null, member.levelProgression.xpForNext.toLocaleString() + ' XP'),
+                                ]),
+                            ]),
+                            member.levelProgression.isMaxLevel && h('div', { class: 'mj-regmgr-member-level__max' }, [
+                                h('span', { class: 'mj-regmgr-member-level__max-icon' }, '🏆'),
+                                h('span', { class: 'mj-regmgr-member-level__max-text' }, getString(strings, 'memberLevelMax', 'Niveau maximum atteint !')),
+                            ]),
+                        ]),
                         // XP Display
                         h('div', { class: 'mj-regmgr-member-xp' }, [
                             h('div', { class: 'mj-regmgr-member-xp__icon' }, [

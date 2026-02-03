@@ -23,6 +23,7 @@ use Mj\Member\Classes\Crud\MjMemberBadgeCriteria;
 use Mj\Member\Classes\Crud\MjMemberXp;
 use Mj\Member\Classes\Crud\MjTrophies;
 use Mj\Member\Classes\Crud\MjMemberTrophies;
+use Mj\Member\Classes\Crud\MjLevels;
 use Mj\Member\Classes\Forms\EventFormDataMapper;
 use Mj\Member\Classes\Forms\EventFormOptionsBuilder;
 use Mj\Member\Classes\MjEventSchedule;
@@ -4643,6 +4644,63 @@ function mj_regmgr_get_members() {
 }
 
 /**
+ * Build level progression payload for a member.
+ *
+ * @param int $xp_total
+ * @return array<string,mixed>
+ */
+function mj_regmgr_get_member_level_progression($xp_total) {
+    $xp_total = (int) $xp_total;
+    $progression = MjLevels::get_progression($xp_total);
+
+    $current_level = isset($progression['current_level']) ? $progression['current_level'] : null;
+    $next_level = isset($progression['next_level']) ? $progression['next_level'] : null;
+
+    $current_level_image = '';
+    if ($current_level && !empty($current_level['image_id'])) {
+        $current_level_image = wp_get_attachment_image_url((int) $current_level['image_id'], 'thumbnail');
+        if (!$current_level_image) {
+            $current_level_image = wp_get_attachment_url((int) $current_level['image_id']);
+        }
+    }
+
+    $next_level_image = '';
+    if ($next_level && !empty($next_level['image_id'])) {
+        $next_level_image = wp_get_attachment_image_url((int) $next_level['image_id'], 'thumbnail');
+        if (!$next_level_image) {
+            $next_level_image = wp_get_attachment_url((int) $next_level['image_id']);
+        }
+    }
+
+    return array(
+        'currentLevel' => $current_level ? array(
+            'id' => (int) $current_level['id'],
+            'levelNumber' => (int) $current_level['level_number'],
+            'title' => isset($current_level['title']) ? (string) $current_level['title'] : '',
+            'description' => isset($current_level['description']) ? (string) $current_level['description'] : '',
+            'xpThreshold' => (int) $current_level['xp_threshold'],
+            'xpReward' => isset($current_level['xp_reward']) ? (int) $current_level['xp_reward'] : 0,
+            'imageUrl' => $current_level_image ?: '',
+        ) : null,
+        'nextLevel' => $next_level ? array(
+            'id' => (int) $next_level['id'],
+            'levelNumber' => (int) $next_level['level_number'],
+            'title' => isset($next_level['title']) ? (string) $next_level['title'] : '',
+            'description' => isset($next_level['description']) ? (string) $next_level['description'] : '',
+            'xpThreshold' => (int) $next_level['xp_threshold'],
+            'xpReward' => isset($next_level['xp_reward']) ? (int) $next_level['xp_reward'] : 0,
+            'imageUrl' => $next_level_image ?: '',
+        ) : null,
+        'xpCurrent' => $xp_total,
+        'xpForNext' => isset($progression['xp_for_next']) ? (int) $progression['xp_for_next'] : 0,
+        'xpProgress' => isset($progression['xp_progress']) ? (int) $progression['xp_progress'] : 0,
+        'xpRemaining' => isset($progression['xp_remaining']) ? (int) $progression['xp_remaining'] : 0,
+        'progressPercent' => isset($progression['progress_percent']) ? (int) $progression['progress_percent'] : 0,
+        'isMaxLevel' => isset($progression['is_max_level']) ? (bool) $progression['is_max_level'] : false,
+    );
+}
+
+/**
  * Build badges payload for a member within the registration manager.
  *
  * @param int $member_id
@@ -5173,6 +5231,9 @@ function mj_regmgr_get_member_details() {
 
     $member['badges'] = mj_regmgr_get_member_badges_payload($member_id);
     $member['trophies'] = mj_regmgr_get_member_trophies_payload($member_id);
+
+    // Ajouter les informations de niveau
+    $member['levelProgression'] = mj_regmgr_get_member_level_progression($member['xpTotal']);
 
     wp_send_json_success(array('member' => $member));
 }
