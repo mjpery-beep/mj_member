@@ -356,7 +356,7 @@ $age_ranges = array(
 // URL de l'admin pour le bouton modifier
 $admin_edit_url = admin_url('admin.php?page=mj_events&action=edit&event=');
 $admin_add_url = admin_url('admin.php?page=mj_events&action=add');
-$admin_member_url = admin_url('admin.php?page=mj_members&action=edit&member=');
+$admin_member_url = admin_url('admin.php?page=mj_members&action=edit&id=');
 
 // Prix de la cotisation
 $membership_price = (float) get_option('mj_annual_fee', '2.00');
@@ -417,6 +417,8 @@ $config_json = wp_json_encode(array(
     'ageRanges' => $age_ranges,
     'locale' => function_exists('determine_locale') ? determine_locale() : get_locale(),
     'prefillEventId' => $prefill_event_id > 0 ? $prefill_event_id : null,
+    'regDocHeader' => get_option('mj_regdoc_header', ''),
+    'regDocFooter' => get_option('mj_regdoc_footer', ''),
     'strings' => array(
         // Général
         'loading' => __('Chargement...', 'mj-member'),
@@ -438,11 +440,21 @@ $config_json = wp_json_encode(array(
         'filterDraft' => __('Brouillons', 'mj-member'),
         'filterInternal' => __('Internes', 'mj-member'),
 
+        // Navigation mobile
+        'backToEvents' => __('Retour aux événements', 'mj-member'),
+        'backToMembers' => __('Retour à la liste', 'mj-member'),
+
         // Filtres membres
         'filterJeune' => __('Jeunes', 'mj-member'),
         'filterAnimateur' => __('Animateurs', 'mj-member'),
         'filterParent' => __('Parents', 'mj-member'),
         'filterMembershipDue' => __('Cotisation à régulariser', 'mj-member'),
+
+        // Tri membres
+        'sortBy' => __('Trier par', 'mj-member'),
+        'sortByName' => __('Nom (A-Z)', 'mj-member'),
+        'sortByRegistration' => __('Date d\'inscription', 'mj-member'),
+        'sortByMembership' => __('Date de cotisation', 'mj-member'),
         
         // Événements
         'noEvents' => __('Aucun événement trouvé.', 'mj-member'),

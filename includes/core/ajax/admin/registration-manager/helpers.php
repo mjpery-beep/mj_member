@@ -604,6 +604,7 @@ function mj_regmgr_prepare_event_form_values($event, array $schedule_weekdays, a
             'allow_guardian_registration' => !empty($event->allow_guardian_registration),
             'requires_validation' => isset($event->requires_validation) ? !empty($event->requires_validation) : true,
             'description' => isset($event->description) ? (string) $event->description : '',
+            'registration_document' => isset($event->registration_document) ? (string) $event->registration_document : '',
             'age_min' => isset($event->age_min) ? (int) $event->age_min : (int) $form_values['age_min'],
             'age_max' => isset($event->age_max) ? (int) $event->age_max : (int) $form_values['age_max'],
             'date_debut' => mj_regmgr_format_event_datetime(isset($event->date_debut) ? $event->date_debut : ''),
@@ -1095,6 +1096,7 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
     $accent_color = isset($form_values['accent_color']) ? mj_regmgr_normalize_hex_color($form_values['accent_color']) : '';
     $cover_id = isset($form_values['cover_id']) ? (int) $form_values['cover_id'] : 0;
     $description = isset($form_values['description']) ? wp_kses_post($form_values['description']) : '';
+    $registration_document = isset($form_values['registration_document']) ? wp_kses_post($form_values['registration_document']) : '';
 
     $age_min = isset($form_values['age_min']) ? (int) $form_values['age_min'] : 0;
     $age_max = isset($form_values['age_max']) ? (int) $form_values['age_max'] : 0;
@@ -1687,6 +1689,7 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
         'emoji' => isset($form_values['emoji']) ? sanitize_text_field((string) $form_values['emoji']) : '',
         'cover_id' => $cover_id,
         'description' => $description,
+        'registration_document' => $registration_document,
         'age_min' => $age_min,
         'age_max' => $age_max,
         'date_debut' => $date_debut,
@@ -1769,6 +1772,7 @@ function mj_regmgr_serialize_event_summary($event) {
         'scheduleMode' => $schedule_mode,
         'scheduleSummary' => isset($schedule_info['summary']) ? $schedule_info['summary'] : '',
         'scheduleDetail' => isset($schedule_info['detail']) ? $schedule_info['detail'] : '',
+        'registrationDocument' => isset($event->registration_document) ? (string) $event->registration_document : '',
     );
 }
 

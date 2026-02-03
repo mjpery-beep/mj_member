@@ -274,6 +274,121 @@ if (!function_exists('mj_member_account_normalize_birth_date')) {
     }
 }
 
+if (!function_exists('mj_member_process_account_deletion_early')) {
+    /**
+     * Traite la suppression de compte avant tout rendu.
+     * Retourne l'URL de redirection si succès, false sinon.
+     *
+     * @return string|false URL de redirection ou false si erreur/non applicable.
+     */
+    function mj_member_process_account_deletion_early() {
+        // Vérifier le nonce
+        $nonce = isset($_POST['mj_member_account_delete_nonce']) ? sanitize_text_field(wp_unslash((string) $_POST['mj_member_account_delete_nonce'])) : '';
+        if (!wp_verify_nonce($nonce, 'mj_member_account_delete')) {
+            return false;
+        }
+
+        // Vérifier que les classes nécessaires existent
+        if (!class_exists('MjMembers') || !method_exists('MjMembers', 'update')) {
+            return false;
+        }
+
+        // Récupérer le membre courant
+        if (!function_exists('mj_member_get_current_member')) {
+            return false;
+        }
+
+        $member = mj_member_get_current_member();
+        if (!$member || !is_object($member)) {
+            return false;
+        }
+
+        $member_id = isset($member->id) ? (int) $member->id : 0;
+        $current_user_id = get_current_user_id();
+
+        if ($member_id <= 0 || $current_user_id <= 0) {
+            return false;
+        }
+
+        // Sauvegarder les valeurs précédentes pour rollback
+        $previous_status = isset($member->status) ? sanitize_key((string) $member->status) : MjMembers::STATUS_ACTIVE;
+        $previous_wp_user_id = isset($member->wp_user_id) ? (int) $member->wp_user_id : 0;
+        $previous_newsletter = !empty($member->newsletter_opt_in) ? 1 : 0;
+        $previous_sms = !empty($member->sms_opt_in) ? 1 : 0;
+        $previous_whatsapp = !empty($member->whatsapp_opt_in) ? 1 : 0;
+
+        // Désactiver le membre
+        $deactivate_payload = array(
+            'status' => MjMembers::STATUS_INACTIVE,
+            'wp_user_id' => null,
+            'newsletter_opt_in' => 0,
+            'sms_opt_in' => 0,
+            'whatsapp_opt_in' => 0,
+        );
+
+        $deactivate_result = MjMembers::update($member_id, $deactivate_payload);
+        if (is_wp_error($deactivate_result)) {
+            return false;
+        }
+
+        // Charger la fonction wp_delete_user si nécessaire
+        if (!function_exists('wp_delete_user')) {
+            require_once ABSPATH . 'wp-admin/includes/user.php';
+        }
+
+        // Accorder temporairement les capacités de suppression
+        $delete_cap_callback = static function ($allcaps, $caps, $args) use ($current_user_id) {
+            if (empty($args) || !isset($args[0])) {
+                return $allcaps;
+            }
+
+            $requested_capability = (string) $args[0];
+            if ($requested_capability === 'delete_users') {
+                $allcaps['delete_users'] = true;
+                return $allcaps;
+            }
+
+            if ($requested_capability === 'delete_user') {
+                $target_user_id = isset($args[2]) ? (int) $args[2] : 0;
+                if ($target_user_id === $current_user_id) {
+                    $allcaps['delete_user'] = true;
+                }
+            }
+
+            return $allcaps;
+        };
+
+        add_filter('user_has_cap', $delete_cap_callback, 10, 3);
+
+        $user_deleted = wp_delete_user($current_user_id);
+
+        remove_filter('user_has_cap', $delete_cap_callback, 10);
+
+        if (!$user_deleted) {
+            // Rollback
+            MjMembers::update($member_id, array(
+                'status' => $previous_status !== '' ? $previous_status : MjMembers::STATUS_ACTIVE,
+                'wp_user_id' => $previous_wp_user_id > 0 ? $previous_wp_user_id : null,
+                'newsletter_opt_in' => $previous_newsletter,
+                'sms_opt_in' => $previous_sms,
+                'whatsapp_opt_in' => $previous_whatsapp,
+            ));
+            return false;
+        }
+
+        // Détruire la session explicitement
+        wp_destroy_current_session();
+        wp_clear_auth_cookie();
+        wp_set_current_user(0);
+
+        // Construire l'URL de redirection
+        $default_redirect = add_query_arg('mj-account-deleted', '1', home_url('/'));
+
+        /** @var string $redirect_url Permet de personnaliser la redirection après suppression. */
+        return apply_filters('mj_member_account_deletion_redirect', $default_redirect, $member);
+    }
+}
+
 if (!function_exists('mj_member_render_account_component')) {
     /**
      * Rend le composant Elementor / shortcode de l’espace membre.
@@ -286,6 +401,22 @@ if (!function_exists('mj_member_render_account_component')) {
             AssetsManager::requirePackage('member-account');
         } else {
             wp_enqueue_style('mj-member-components');
+        }
+
+        // Traiter la suppression de compte EN PREMIER, avant tout output
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_account_action']) && $_POST['mj_member_account_action'] === 'delete_account') {
+            $delete_redirect = mj_member_process_account_deletion_early();
+            if ($delete_redirect !== false) {
+                // Redirection immédiate - ne pas continuer le rendu
+                if (!headers_sent()) {
+                    wp_safe_redirect($delete_redirect);
+                    exit;
+                }
+                // Headers déjà envoyés, retourner un script de redirection
+                return '<script>window.location.href = ' . wp_json_encode($delete_redirect) . ';</script>'
+                     . '<noscript><meta http-equiv="refresh" content="0;url=' . esc_attr($delete_redirect) . '"></noscript>';
+            }
         }
 
         $defaults = array(
@@ -951,7 +1082,50 @@ if (!function_exists('mj_member_render_account_component')) {
                                 <?php echo esc_html($submit_label); ?>
                             </button>
                         </div>
+
+                        <?php if (!$is_preview) : ?>
+                        <div class="mj-account-danger-zone">
+                            <h4 class="mj-account-danger-zone__title"><?php esc_html_e('Zone de danger', 'mj-member'); ?></h4>
+                            <p class="mj-account-danger-zone__text">
+                                <?php esc_html_e('La suppression de votre compte est irréversible. Toutes vos données personnelles seront effacées.', 'mj-member'); ?>
+                            </p>
+                            <button type="button" class="mj-button mj-button--danger" data-mj-member-delete-trigger>
+                                <?php esc_html_e('Supprimer mon compte', 'mj-member'); ?>
+                            </button>
+                        </div>
+                        <?php endif; ?>
                     </form>
+
+                    <!-- Modal de confirmation de suppression -->
+                    <div id="mj-member-delete-modal" class="mj-modal" hidden aria-labelledby="mj-member-delete-modal-title" aria-modal="true" role="dialog">
+                        <div class="mj-modal__backdrop" data-mj-member-delete-dismiss></div>
+                        <div class="mj-modal__dialog">
+                            <header class="mj-modal__header">
+                                <h3 id="mj-member-delete-modal-title" class="mj-modal__title"><?php esc_html_e('Confirmer la suppression', 'mj-member'); ?></h3>
+                                <button type="button" class="mj-modal__close" data-mj-member-delete-dismiss aria-label="<?php esc_attr_e('Fermer', 'mj-member'); ?>">&times;</button>
+                            </header>
+                            <div class="mj-modal__body">
+                                <p><?php esc_html_e('Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.', 'mj-member'); ?></p>
+                                <ul>
+                                    <li><?php esc_html_e('Votre profil membre sera désactivé', 'mj-member'); ?></li>
+                                    <li><?php esc_html_e('Votre compte utilisateur WordPress sera supprimé', 'mj-member'); ?></li>
+                                    <li><?php esc_html_e('Vous serez désinscrit de toutes les communications', 'mj-member'); ?></li>
+                                </ul>
+                            </div>
+                            <footer class="mj-modal__footer">
+                                <button type="button" class="mj-button mj-button--secondary" data-mj-member-delete-dismiss>
+                                    <?php esc_html_e('Annuler', 'mj-member'); ?>
+                                </button>
+                                <form method="post" class="mj-account-delete-form">
+                                    <?php wp_nonce_field('mj_member_account_delete', 'mj_member_account_delete_nonce'); ?>
+                                    <input type="hidden" name="mj_member_account_action" value="delete_account">
+                                    <button type="submit" class="mj-button mj-button--danger">
+                                        <?php esc_html_e('Oui, supprimer mon compte', 'mj-member'); ?>
+                                    </button>
+                                </form>
+                            </footer>
+                        </div>
+                    </div>
                 </section>
 
                 <?php if (!empty($options['show_children'])) : ?>
@@ -1445,6 +1619,52 @@ if (!function_exists('mj_member_render_account_component')) {
     opacity: 0.6;
     border-color: rgba(47, 82, 143, 0.18);
     cursor: not-allowed;
+}
+
+.mj-button--danger {
+    background: #d64545;
+    border: 1px solid #d64545;
+    color: #ffffff;
+    box-shadow: none;
+}
+
+.mj-button--danger:hover,
+.mj-button--danger:focus,
+.mj-button--danger:focus-visible {
+    background: #bb3535;
+    border-color: #bb3535;
+    transform: none;
+    box-shadow: 0 12px 20px rgba(214, 69, 69, 0.25);
+}
+
+.mj-button--danger[disabled] {
+    opacity: 0.65;
+    border-color: rgba(214, 69, 69, 0.4);
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+.mj-account-danger-zone {
+    margin-top: 32px;
+    padding: 24px;
+    border-radius: var(--mj-account-radius);
+    border: 1px solid rgba(214, 69, 69, 0.28);
+    background: rgba(214, 69, 69, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.mj-account-danger-zone__title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #b83232;
+    margin: 0;
+}
+
+.mj-account-danger-zone__text {
+    margin: 0;
+    color: var(--mj-account-muted);
 }
 
 .mj-account-form {

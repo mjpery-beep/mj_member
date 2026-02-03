@@ -564,6 +564,75 @@ function mj_member_get_member_badge_criteria_table_name() {
     return $cached;
 }
 
+function mj_member_get_trophies_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_trophies',
+        $wpdb->prefix . 'trophies',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
+function mj_member_get_member_trophies_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_member_trophies',
+        $wpdb->prefix . 'member_trophies',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
+function mj_member_get_levels_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_levels',
+        $wpdb->prefix . 'levels',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
 function mj_member_ensure_auxiliary_tables() {
     global $wpdb;
     if ( ! function_exists('dbDelta') ) {
@@ -1164,6 +1233,20 @@ function mj_member_seed_default_badges() {
                     continue;
                 }
 
+                // Vérifier si un critère avec ce LABEL existe déjà pour ce badge (peu importe le statut)
+                $existing_criterion_id = (int) $wpdb->get_var($wpdb->prepare(
+                    "SELECT id FROM {$badge_criteria_table} WHERE badge_id = %d AND label = %s LIMIT 1",
+                    $badge_id,
+                    $label
+                ));
+
+                if ($existing_criterion_id > 0) {
+                    // Le critère existe déjà, on ne fait rien (pas de mise à jour de l'ordre pour éviter les conflits)
+                    $order++;
+                    continue;
+                }
+
+                // Le critère n'existe pas, on le crée
                 $base_slug = sanitize_title($label);
                 if ($base_slug === '') {
                     $base_slug = sanitize_title($slug . '-' . ($order + 1));
@@ -1173,55 +1256,29 @@ function mj_member_seed_default_badges() {
                 }
 
                 $criterion_slug = $base_slug;
-                $existing_criterion_id = (int) $wpdb->get_var($wpdb->prepare(
-                    "SELECT id FROM {$badge_criteria_table} WHERE badge_id = %d AND slug = %s",
+                $suffix = 2;
+                while ((int) $wpdb->get_var($wpdb->prepare(
+                    "SELECT COUNT(*) FROM {$badge_criteria_table} WHERE badge_id = %d AND slug = %s",
                     $badge_id,
                     $criterion_slug
-                ));
-
-                if ($existing_criterion_id <= 0) {
-                    $unique_slug = $criterion_slug;
-                    $suffix = 2;
-                    while ((int) $wpdb->get_var($wpdb->prepare(
-                        "SELECT COUNT(*) FROM {$badge_criteria_table} WHERE badge_id = %d AND slug = %s",
-                        $badge_id,
-                        $unique_slug
-                    )) > 0) {
-                        $unique_slug = $base_slug . '-' . $suffix;
-                        $suffix++;
-                    }
-
-                    $criterion_slug = $unique_slug;
+                )) > 0) {
+                    $criterion_slug = $base_slug . '-' . $suffix;
+                    $suffix++;
                 }
 
-                if ($existing_criterion_id > 0) {
-                    $wpdb->update(
-                        $badge_criteria_table,
-                        array(
-                            'label' => $label,
-                            'display_order' => $order,
-                            'status' => 'active',
-                            'updated_at' => current_time('mysql'),
-                        ),
-                        array('id' => $existing_criterion_id),
-                        array('%s', '%d', '%s', '%s'),
-                        array('%d')
-                    );
-                } else {
-                    $wpdb->insert(
-                        $badge_criteria_table,
-                        array(
-                            'badge_id' => $badge_id,
-                            'slug' => $criterion_slug,
-                            'label' => $label,
-                            'display_order' => $order,
-                            'status' => 'active',
-                            'created_at' => current_time('mysql'),
-                            'updated_at' => current_time('mysql'),
-                        ),
-                        array('%d', '%s', '%s', '%d', '%s', '%s', '%s')
-                    );
-                }
+                $wpdb->insert(
+                    $badge_criteria_table,
+                    array(
+                        'badge_id' => $badge_id,
+                        'slug' => $criterion_slug,
+                        'label' => $label,
+                        'display_order' => $order,
+                        'status' => 'active',
+                        'created_at' => current_time('mysql'),
+                        'updated_at' => current_time('mysql'),
+                    ),
+                    array('%d', '%s', '%s', '%d', '%s', '%s', '%s')
+                );
 
                 $order++;
             }
@@ -1229,6 +1286,195 @@ function mj_member_seed_default_badges() {
     }
 }
 add_action('init', 'mj_member_seed_default_badges', 16);
+
+/**
+ * Seed default trophies based on TROPHE.md.
+ */
+function mj_member_seed_default_trophies() {
+    global $wpdb;
+
+    $trophies_table = mj_member_get_trophies_table_name();
+    if (!mj_member_table_exists($trophies_table)) {
+        return;
+    }
+
+    $trophy_definitions = array(
+        array(
+            'slug' => 'compte-active',
+            'title' => 'Compte activé',
+            'description' => 'Le membre a complété et activé son compte sur le site.',
+            'xp' => 10,
+            'auto_mode' => 1,
+            'auto_hook' => 'account_activated',
+            'auto_threshold' => 1,
+            'display_order' => 10,
+        ),
+        array(
+            'slug' => 'cotisation-reglee',
+            'title' => 'Cotisation réglée',
+            'description' => 'Le membre a payé sa cotisation annuelle.',
+            'xp' => 20,
+            'auto_mode' => 1,
+            'auto_hook' => 'subscription_paid',
+            'auto_threshold' => 1,
+            'display_order' => 20,
+        ),
+        array(
+            'slug' => 'profil-complete',
+            'title' => 'Profil complété',
+            'description' => 'Le membre a complété les informations de son profil.',
+            'xp' => 15,
+            'auto_mode' => 1,
+            'auto_hook' => 'profile_completed',
+            'auto_threshold' => 1,
+            'display_order' => 30,
+        ),
+        array(
+            'slug' => 'premiere-photo-publiee',
+            'title' => 'Première photo publiée',
+            'description' => 'Le membre a publié une photo sur le site (galerie, activité, projet).',
+            'xp' => 15,
+            'auto_mode' => 1,
+            'auto_hook' => 'photo_published',
+            'auto_threshold' => 1,
+            'display_order' => 40,
+        ),
+        array(
+            'slug' => 'contributeur-visuel',
+            'title' => 'Contributeur·rice visuel·le',
+            'description' => 'Le membre a partagé plusieurs photos ou visuels.',
+            'xp' => 30,
+            'auto_mode' => 1,
+            'auto_hook' => 'photos_count',
+            'auto_threshold' => 5,
+            'display_order' => 50,
+        ),
+        array(
+            'slug' => 'proposition-idee',
+            'title' => 'Proposition d\'idée',
+            'description' => 'Le membre a proposé une idée via le site (formulaire, espace idées, projet).',
+            'xp' => 20,
+            'auto_mode' => 1,
+            'auto_hook' => 'idea_submitted',
+            'auto_threshold' => 1,
+            'display_order' => 60,
+        ),
+        array(
+            'slug' => 'force-de-proposition',
+            'title' => 'Force de proposition',
+            'description' => 'Le membre propose régulièrement des idées ou suggestions.',
+            'xp' => 40,
+            'auto_mode' => 1,
+            'auto_hook' => 'ideas_count',
+            'auto_threshold' => 5,
+            'display_order' => 70,
+        ),
+        array(
+            'slug' => 'inscrit-activite',
+            'title' => 'Inscrit·e à une activité',
+            'description' => 'Le membre s\'est inscrit à une activité via le site.',
+            'xp' => 10,
+            'auto_mode' => 1,
+            'auto_hook' => 'event_registered',
+            'auto_threshold' => 1,
+            'display_order' => 80,
+        ),
+        array(
+            'slug' => 'habitue-inscriptions',
+            'title' => 'Habitué·e des inscriptions',
+            'description' => 'Le membre utilise régulièrement le site pour s\'inscrire aux activités.',
+            'xp' => 30,
+            'auto_mode' => 1,
+            'auto_hook' => 'registrations_count',
+            'auto_threshold' => 10,
+            'display_order' => 90,
+        ),
+        array(
+            'slug' => 'commentateur',
+            'title' => 'Commentateur·rice',
+            'description' => 'Le membre interagit avec les contenus du site (commentaires, réactions).',
+            'xp' => 15,
+            'auto_mode' => 1,
+            'auto_hook' => 'comment_posted',
+            'auto_threshold' => 1,
+            'display_order' => 100,
+        ),
+        array(
+            'slug' => 'idee-retenue',
+            'title' => 'Idée retenue',
+            'description' => 'Une idée proposée par le membre a été retenue ou mise en projet.',
+            'xp' => 50,
+            'auto_mode' => 0,
+            'auto_hook' => null,
+            'auto_threshold' => 1,
+            'display_order' => 110,
+        ),
+        array(
+            'slug' => 'compte-de-confiance',
+            'title' => 'Compte de confiance',
+            'description' => 'Le membre utilise le site de manière respectueuse et autonome.',
+            'xp' => 30,
+            'auto_mode' => 0,
+            'auto_hook' => null,
+            'auto_threshold' => 1,
+            'display_order' => 120,
+        ),
+        array(
+            'slug' => 'membre-actif-en-ligne',
+            'title' => 'Membre actif·ve en ligne',
+            'description' => 'Le membre est régulièrement actif sur la plateforme.',
+            'xp' => 40,
+            'auto_mode' => 0,
+            'auto_hook' => null,
+            'auto_threshold' => 1,
+            'display_order' => 130,
+        ),
+        array(
+            'slug' => 'ambassadeur-numerique',
+            'title' => 'Ambassadeur·rice numérique',
+            'description' => 'Le membre aide d\'autres jeunes à utiliser le site ou ses fonctionnalités.',
+            'xp' => 50,
+            'auto_mode' => 0,
+            'auto_hook' => null,
+            'auto_threshold' => 1,
+            'display_order' => 140,
+        ),
+    );
+
+    foreach ($trophy_definitions as $trophy) {
+        $slug = isset($trophy['slug']) ? sanitize_title((string) $trophy['slug']) : '';
+        if ($slug === '') {
+            continue;
+        }
+
+        $existing_id = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$trophies_table} WHERE slug = %s",
+            $slug
+        ));
+
+        if ($existing_id > 0) {
+            // Le trophée existe déjà, on le laisse tel quel
+            continue;
+        }
+
+        $wpdb->insert(
+            $trophies_table,
+            array(
+                'slug' => $slug,
+                'title' => $trophy['title'],
+                'description' => $trophy['description'],
+                'xp' => isset($trophy['xp']) ? (int) $trophy['xp'] : 0,
+                'auto_mode' => isset($trophy['auto_mode']) ? (int) $trophy['auto_mode'] : 0,
+                'auto_hook' => $trophy['auto_hook'],
+                'auto_threshold' => isset($trophy['auto_threshold']) ? (int) $trophy['auto_threshold'] : 1,
+                'display_order' => isset($trophy['display_order']) ? (int) $trophy['display_order'] : 0,
+                'status' => 'active',
+            ),
+            array('%s', '%s', '%s', '%d', '%d', '%s', '%d', '%d', '%s')
+        );
+    }
+}
+add_action('init', 'mj_member_seed_default_trophies', 17);
 
 function mj_member_run_schema_upgrade() {
     static $running = false;
@@ -1410,6 +1656,10 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_44($wpdb);
     mj_member_upgrade_to_2_45($wpdb);
     mj_member_upgrade_to_2_46($wpdb);
+    mj_member_upgrade_to_2_47($wpdb);
+    mj_member_upgrade_to_2_48($wpdb);
+    mj_member_upgrade_to_2_49($wpdb);
+    mj_member_upgrade_to_2_50($wpdb);
     
     
     $registrations_table = mj_member_get_event_registrations_table_name();
@@ -3456,9 +3706,7 @@ function mj_member_upgrade_to_2_45($wpdb) {
         KEY idx_member (member_id),
         KEY idx_criterion (criterion_id),
         KEY idx_status (status),
-        KEY idx_awarded_at (awarded_at),
-        CONSTRAINT fk_mj_badge_criteria_badge FOREIGN KEY (badge_id) REFERENCES {$badges_table} (id) ON DELETE CASCADE,
-        CONSTRAINT fk_mj_member_badge_criteria FOREIGN KEY (criterion_id) REFERENCES {$badge_criteria_table} (id) ON DELETE CASCADE
+        KEY idx_awarded_at (awarded_at)
     ) {$charset_collate};";
 
     dbDelta($sql_member_badge_criteria);
@@ -3538,6 +3786,27 @@ function mj_member_upgrade_to_2_45($wpdb) {
         }
 
         $wpdb->query("UPDATE {$member_badge_criteria_table} SET status = 'awarded' WHERE status IS NULL OR status = ''");
+
+        // Add FOREIGN KEY constraints manually (dbDelta does not support them)
+        $has_fk_badge = $wpdb->get_var($wpdb->prepare(
+            "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND CONSTRAINT_NAME = %s",
+            DB_NAME,
+            $member_badge_criteria_table,
+            'fk_mj_badge_criteria_badge'
+        ));
+        if (empty($has_fk_badge)) {
+            $wpdb->query("ALTER TABLE {$member_badge_criteria_table} ADD CONSTRAINT fk_mj_badge_criteria_badge FOREIGN KEY (badge_id) REFERENCES {$badges_table} (id) ON DELETE CASCADE");
+        }
+
+        $has_fk_criterion = $wpdb->get_var($wpdb->prepare(
+            "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND CONSTRAINT_NAME = %s",
+            DB_NAME,
+            $member_badge_criteria_table,
+            'fk_mj_member_badge_criteria'
+        ));
+        if (empty($has_fk_criterion)) {
+            $wpdb->query("ALTER TABLE {$member_badge_criteria_table} ADD CONSTRAINT fk_mj_member_badge_criteria FOREIGN KEY (criterion_id) REFERENCES {$badge_criteria_table} (id) ON DELETE CASCADE");
+        }
     }
 
     if (mj_member_table_exists($badge_criteria_table) && mj_member_table_exists($badges_table) && mj_member_column_exists($badges_table, 'criteria')) {
@@ -3634,6 +3903,270 @@ function mj_member_upgrade_to_2_46($wpdb) {
         $wpdb->query("ALTER TABLE {$badges_table} ADD COLUMN image_id bigint(20) unsigned DEFAULT NULL AFTER icon");
     }
 }
+
+/**
+ * Upgrade to version 2.47: Add registration_document column to events table.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_47($wpdb) {
+    $events_table = mj_member_get_events_table_name();
+
+    if (!mj_member_table_exists($events_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($events_table, 'registration_document')) {
+        $wpdb->query("ALTER TABLE {$events_table} ADD COLUMN registration_document longtext DEFAULT NULL AFTER description");
+    }
+}
+
+/**
+ * Add xp_total column to members table for gamification.
+ */
+function mj_member_upgrade_to_2_48($wpdb) {
+    $members_table = $wpdb->prefix . 'mj_members';
+
+    if (!mj_member_table_exists($members_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($members_table, 'xp_total')) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN xp_total int unsigned NOT NULL DEFAULT 0 AFTER anonymized_at");
+    }
+
+    if (!mj_member_index_exists($members_table, 'idx_xp_total')) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD KEY idx_xp_total (xp_total)");
+    }
+}
+
+/**
+ * Schema upgrade 2.49: Create trophies tables.
+ */
+function mj_member_upgrade_to_2_49($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $trophies_table = mj_member_get_trophies_table_name();
+    $member_trophies_table = mj_member_get_member_trophies_table_name();
+
+    $sql_trophies = "CREATE TABLE {$trophies_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        slug varchar(120) NOT NULL,
+        title varchar(190) NOT NULL,
+        description longtext DEFAULT NULL,
+        xp int unsigned NOT NULL DEFAULT 0,
+        auto_mode tinyint(1) NOT NULL DEFAULT 0,
+        auto_hook varchar(60) DEFAULT NULL,
+        auto_threshold int unsigned NOT NULL DEFAULT 1,
+        image_id bigint(20) unsigned DEFAULT NULL,
+        display_order smallint(5) unsigned NOT NULL DEFAULT 0,
+        status varchar(20) NOT NULL DEFAULT 'active',
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        UNIQUE KEY slug (slug),
+        KEY idx_status (status),
+        KEY idx_auto_mode (auto_mode),
+        KEY idx_auto_hook (auto_hook),
+        KEY idx_display_order (display_order)
+    ) {$charset_collate};";
+
+    dbDelta($sql_trophies);
+
+    $sql_member_trophies = "CREATE TABLE {$member_trophies_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        trophy_id bigint(20) unsigned NOT NULL,
+        member_id bigint(20) unsigned NOT NULL,
+        status varchar(20) NOT NULL DEFAULT 'awarded',
+        notes text DEFAULT NULL,
+        awarded_by_user_id bigint(20) unsigned DEFAULT NULL,
+        awarded_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        revoked_at datetime DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        UNIQUE KEY idx_member_trophy_unique (member_id, trophy_id),
+        KEY idx_trophy (trophy_id),
+        KEY idx_member (member_id),
+        KEY idx_status (status),
+        KEY idx_awarded_at (awarded_at),
+        CONSTRAINT fk_mj_member_trophies_trophy FOREIGN KEY (trophy_id) REFERENCES {$trophies_table} (id) ON DELETE CASCADE
+    ) {$charset_collate};";
+
+    dbDelta($sql_member_trophies);
+
+    if (mj_member_table_exists($trophies_table)) {
+        mj_member_convert_table_to_utf8mb4($trophies_table);
+    }
+
+    if (mj_member_table_exists($member_trophies_table)) {
+        mj_member_convert_table_to_utf8mb4($member_trophies_table);
+
+        $has_fk = $wpdb->get_var($wpdb->prepare(
+            "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND REFERENCED_TABLE_NAME = %s",
+            DB_NAME,
+            $member_trophies_table,
+            $trophies_table
+        ));
+
+        if (empty($has_fk)) {
+            $wpdb->query("ALTER TABLE {$member_trophies_table} ADD CONSTRAINT fk_mj_member_trophies_trophy FOREIGN KEY (trophy_id) REFERENCES {$trophies_table} (id) ON DELETE CASCADE");
+        }
+    }
+
+    mj_member_seed_default_trophies();
+}
+
+/**
+ * Schema upgrade 2.50: Create levels table for member progression.
+ */
+function mj_member_upgrade_to_2_50($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+    $levels_table = mj_member_get_levels_table_name();
+
+    $sql_levels = "CREATE TABLE {$levels_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        level_number smallint(5) unsigned NOT NULL,
+        title varchar(190) NOT NULL,
+        description longtext DEFAULT NULL,
+        image_id bigint(20) unsigned DEFAULT NULL,
+        xp_reward int unsigned NOT NULL DEFAULT 0,
+        xp_threshold int unsigned NOT NULL DEFAULT 0,
+        status varchar(20) NOT NULL DEFAULT 'active',
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        UNIQUE KEY idx_level_number (level_number),
+        KEY idx_status (status),
+        KEY idx_xp_threshold (xp_threshold)
+    ) {$charset_collate};";
+
+    dbDelta($sql_levels);
+
+    if (mj_member_table_exists($levels_table)) {
+        mj_member_convert_table_to_utf8mb4($levels_table);
+    }
+
+    mj_member_seed_default_levels();
+}
+
+/**
+ * Seed default levels (10 levels) for member progression.
+ */
+function mj_member_seed_default_levels() {
+    global $wpdb;
+
+    $levels_table = mj_member_get_levels_table_name();
+    if (!mj_member_table_exists($levels_table)) {
+        return;
+    }
+
+    $level_definitions = array(
+        array(
+            'level_number' => 1,
+            'title' => 'Débutant',
+            'description' => 'Tu viens de rejoindre la communauté ! Bienvenue parmi nous.',
+            'xp_reward' => 10,
+            'xp_threshold' => 0,
+        ),
+        array(
+            'level_number' => 2,
+            'title' => 'Apprenti',
+            'description' => 'Tu commences à prendre tes marques et à participer aux activités.',
+            'xp_reward' => 15,
+            'xp_threshold' => 50,
+        ),
+        array(
+            'level_number' => 3,
+            'title' => 'Explorateur',
+            'description' => 'Tu explores les différentes possibilités offertes par la MJ.',
+            'xp_reward' => 20,
+            'xp_threshold' => 150,
+        ),
+        array(
+            'level_number' => 4,
+            'title' => 'Aventurier',
+            'description' => 'Tu t\'impliques de plus en plus dans les projets et activités.',
+            'xp_reward' => 25,
+            'xp_threshold' => 300,
+        ),
+        array(
+            'level_number' => 5,
+            'title' => 'Confirmé',
+            'description' => 'Tu es un membre actif et reconnu au sein de la communauté.',
+            'xp_reward' => 30,
+            'xp_threshold' => 500,
+        ),
+        array(
+            'level_number' => 6,
+            'title' => 'Expert',
+            'description' => 'Tu maîtrises les rouages et participes régulièrement aux décisions.',
+            'xp_reward' => 40,
+            'xp_threshold' => 800,
+        ),
+        array(
+            'level_number' => 7,
+            'title' => 'Mentor',
+            'description' => 'Tu aides les nouveaux membres et partages ton expérience.',
+            'xp_reward' => 50,
+            'xp_threshold' => 1200,
+        ),
+        array(
+            'level_number' => 8,
+            'title' => 'Leader',
+            'description' => 'Tu portes des projets et inspires les autres membres.',
+            'xp_reward' => 60,
+            'xp_threshold' => 1800,
+        ),
+        array(
+            'level_number' => 9,
+            'title' => 'Champion',
+            'description' => 'Tu es un pilier incontournable de la MJ !',
+            'xp_reward' => 75,
+            'xp_threshold' => 2500,
+        ),
+        array(
+            'level_number' => 10,
+            'title' => 'Légende',
+            'description' => 'Tu as atteint le sommet ! Tu es une véritable légende de la MJ.',
+            'xp_reward' => 100,
+            'xp_threshold' => 3500,
+        ),
+    );
+
+    foreach ($level_definitions as $level) {
+        $exists = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$levels_table} WHERE level_number = %d",
+            $level['level_number']
+        ));
+
+        if (!empty($exists)) {
+            continue;
+        }
+
+        $wpdb->insert(
+            $levels_table,
+            array(
+                'level_number' => (int) $level['level_number'],
+                'title' => $level['title'],
+                'description' => $level['description'],
+                'xp_reward' => isset($level['xp_reward']) ? (int) $level['xp_reward'] : 0,
+                'xp_threshold' => isset($level['xp_threshold']) ? (int) $level['xp_threshold'] : 0,
+                'status' => 'active',
+            ),
+            array('%d', '%s', '%s', '%d', '%d', '%s')
+        );
+    }
+}
+add_action('init', 'mj_member_seed_default_levels', 18);
 
 function mj_member_upgrade_to_2_5($wpdb) {
     $members_table = $wpdb->prefix . 'mj_members';

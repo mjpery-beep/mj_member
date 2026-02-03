@@ -72,13 +72,88 @@
         return Boolean(value);
     }
 
-    domReady(function () {
-        var settings = window.mjMemberAccountData;
-        if (!settings || !settings.ajaxUrl) {
-            if (typeof console !== 'undefined' && typeof console.warn === 'function') {
-                console.warn('[mj-member][member-account] Données non disponibles, arrêt du script.', settings);
-            }
+    function initAccountDeletion(root) {
+        if (!root || typeof document === 'undefined') {
             return;
+        }
+
+        var trigger = root.querySelector('[data-mj-member-delete-trigger]');
+        var modal = root.querySelector('#mj-member-delete-modal');
+        if (!trigger || !modal) {
+            return;
+        }
+
+        var dismissButtons = toArray(modal.querySelectorAll('[data-mj-member-delete-dismiss]'));
+
+        var isOpen = false;
+
+        function focusElement(element) {
+            if (element && typeof element.focus === 'function') {
+                element.focus();
+            }
+        }
+
+        function handleKeydown(event) {
+            if (event.key === 'Escape' && isOpen) {
+                event.preventDefault();
+                closeModal();
+            }
+        }
+
+        function openModal() {
+            if (isOpen) {
+                return;
+            }
+            isOpen = true;
+            modal.hidden = false;
+            modal.setAttribute('aria-hidden', 'false');
+            modal.classList.add('is-visible');
+            document.body.classList.add('mj-modal-open');
+            document.addEventListener('keydown', handleKeydown);
+            var firstButton = modal.querySelector('button');
+            focusElement(firstButton);
+        }
+
+        function closeModal() {
+            if (!isOpen) {
+                return;
+            }
+            isOpen = false;
+            modal.hidden = true;
+            modal.setAttribute('aria-hidden', 'true');
+            modal.classList.remove('is-visible');
+            document.body.classList.remove('mj-modal-open');
+            document.removeEventListener('keydown', handleKeydown);
+            focusElement(trigger);
+        }
+
+        trigger.addEventListener('click', function (event) {
+            if (trigger.hasAttribute('disabled') || trigger.getAttribute('aria-disabled') === 'true') {
+                return;
+            }
+            event.preventDefault();
+            openModal();
+        });
+
+        dismissButtons.forEach(function (button) {
+            button.addEventListener('click', function (event) {
+                event.preventDefault();
+                closeModal();
+            });
+        });
+
+        modal.addEventListener('click', function (event) {
+            if (event.target && event.target.hasAttribute && event.target.hasAttribute('data-mj-member-delete-dismiss')) {
+                event.preventDefault();
+                closeModal();
+            }
+        });
+    }
+
+    domReady(function () {
+        var settings = window.mjMemberAccountData || null;
+        if ((!settings || !settings.ajaxUrl) && typeof console !== 'undefined' && typeof console.warn === 'function') {
+            console.warn('[mj-member][member-account] Données non disponibles pour les fonctionnalités avancées.', settings);
         }
 
         var root = document.querySelector('[data-mj-member-account]');
@@ -88,19 +163,16 @@
             }
             return;
         }
-        var section = root.querySelector('[data-mj-member-children-section]');
-        if (!section) {
-            if (typeof console !== 'undefined' && typeof console.warn === 'function') {
-                console.warn('[mj-member][member-account] Section enfants introuvable, arrêt du script.');
-            }
+
+        initAccountDeletion(root);
+
+        if (!settings || !settings.ajaxUrl) {
             return;
         }
 
-        var modal = root.querySelector('[data-mj-member-child-modal]');
-        if (!modal) {
-            if (typeof console !== 'undefined' && typeof console.warn === 'function') {
-                console.warn('[mj-member][member-account] Modale introuvable, arrêt du script.');
-            }
+        var section = root.querySelector('[data-mj-member-children-section]');
+        var modal = section ? root.querySelector('[data-mj-member-child-modal]') : null;
+        if (!section || !modal) {
             return;
         }
 

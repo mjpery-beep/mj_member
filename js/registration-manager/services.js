@@ -458,6 +458,27 @@
             },
 
             /**
+             * Ajuste manuellement les XP d'un membre (ajouter ou retirer)
+             */
+            adjustMemberXp: function (memberId, amount) {
+                return post('mj_regmgr_adjust_member_xp', {
+                    memberId: memberId,
+                    amount: amount,
+                });
+            },
+
+            /**
+             * Toggle un trophée manuel pour un membre
+             */
+            toggleMemberTrophy: function (memberId, trophyId, awarded) {
+                return post('mj_regmgr_toggle_member_trophy', {
+                    memberId: memberId,
+                    trophyId: trophyId,
+                    awarded: awarded ? 'true' : 'false',
+                });
+            },
+
+            /**
              * Envoie un email de réinitialisation de mot de passe
              */
             resetMemberPassword: function (memberId) {

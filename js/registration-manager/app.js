@@ -3619,6 +3619,29 @@
         var descriptionError = _descriptionError[0];
         var setDescriptionError = _descriptionError[1];
 
+        // Registration document state
+        var _regDocState = useState({
+            base: '',
+            draft: '',
+            eventId: null,
+        });
+        var regDocState = _regDocState[0];
+        var setRegDocState = _regDocState[1];
+
+        var _regDocSaving = useState(false);
+        var regDocSaving = _regDocSaving[0];
+        var setRegDocSaving = _regDocSaving[1];
+
+        var _regDocError = useState('');
+        var regDocError = _regDocError[0];
+        var setRegDocError = _regDocError[1];
+
+        var regDocFieldIdRef = useRef(null);
+        if (!regDocFieldIdRef.current) {
+            regDocFieldIdRef.current = 'mj-regmgr-regdoc-' + Math.random().toString(36).slice(2);
+        }
+        var regDocFieldId = regDocFieldIdRef.current;
+
         var descriptionFieldIdRef = useRef(null);
         if (!descriptionFieldIdRef.current) {
             descriptionFieldIdRef.current = 'mj-regmgr-description-' + Math.random().toString(36).slice(2);
@@ -3716,6 +3739,40 @@
             });
         }, [eventDetails ? eventDetails.id : null, eventDetails ? eventDetails.description : '', setDescriptionState]);
 
+        // Sync registration document state when eventDetails changes
+        useEffect(function () {
+            var eventId = eventDetails && eventDetails.id ? eventDetails.id : null;
+            var regDocValue = eventDetails && typeof eventDetails.registrationDocument === 'string'
+                ? eventDetails.registrationDocument
+                : '';
+
+            setRegDocState(function (prev) {
+                if (eventId === null) {
+                    if (prev.eventId === null && prev.base === '' && prev.draft === '') {
+                        return prev;
+                    }
+                    return { base: '', draft: '', eventId: null };
+                }
+
+                if (prev.eventId !== eventId) {
+                    return { base: regDocValue, draft: regDocValue, eventId: eventId };
+                }
+
+                if (prev.base === regDocValue) {
+                    return prev;
+                }
+
+                if (prev.draft === prev.base) {
+                    return { base: regDocValue, draft: regDocValue, eventId: eventId };
+                }
+
+                return Object.assign({}, prev, {
+                    base: regDocValue,
+                    eventId: eventId,
+                });
+            });
+        }, [eventDetails ? eventDetails.id : null, eventDetails ? eventDetails.registrationDocument : '', setRegDocState]);
+
         useEffect(function () {
             if (!locationModal.isOpen) {
                 setLocationModalState({
@@ -3748,6 +3805,10 @@
         var _memberSearch = useState('');
         var memberSearch = _memberSearch[0];
         var setMemberSearch = _memberSearch[1];
+
+        var _memberSort = useState('name');
+        var memberSort = _memberSort[0];
+        var setMemberSort = _memberSort[1];
 
         var _selectedMember = useState(null);
         var selectedMember = _selectedMember[0];
@@ -3957,6 +4018,178 @@
                 });
         }, [selectedEvent, descriptionState, api, showSuccess, strings, loadEventDetails, setSelectedEvent, setEvents, collectErrorMessages, showError]);
 
+        // Registration document handlers
+        var handleRegDocChange = useCallback(function (nextValue) {
+            var safeValue = typeof nextValue === 'string' ? nextValue : '';
+            setRegDocState(function (prev) {
+                if (prev.draft === safeValue) {
+                    return prev;
+                }
+                return Object.assign({}, prev, { draft: safeValue });
+            });
+            if (regDocError) {
+                setRegDocError('');
+            }
+        }, [setRegDocState, regDocError, setRegDocError]);
+
+        var handleResetRegDoc = useCallback(function () {
+            setRegDocState(function (prev) {
+                if (prev.draft === prev.base) {
+                    return prev;
+                }
+                return Object.assign({}, prev, { draft: prev.base });
+            });
+            setRegDocError('');
+        }, [setRegDocState, setRegDocError]);
+
+        var handleSaveRegDoc = useCallback(function () {
+            if (!selectedEvent || !selectedEvent.id) {
+                return Promise.resolve();
+            }
+
+            if (!regDocState || regDocState.draft === regDocState.base) {
+                return Promise.resolve();
+            }
+
+            var eventId = selectedEvent.id;
+            var draftValue = regDocState.draft || '';
+
+            setRegDocSaving(true);
+            setRegDocError('');
+
+            return api.updateEvent(eventId, { event_registration_document: draftValue }, {})
+                .then(function (data) {
+                    setRegDocSaving(false);
+                    setRegDocState(function (prev) {
+                        if (prev.eventId !== eventId) {
+                            return prev;
+                        }
+                        return Object.assign({}, prev, {
+                            base: draftValue,
+                            draft: draftValue,
+                        });
+                    });
+                    setRegDocError('');
+                    showSuccess(data && data.message ? data.message : getString(strings, 'regDocSaved', 'Document d\'inscription mis à jour.'));
+                    loadEventDetails(eventId);
+                    if (data && data.event) {
+                        setSelectedEvent(function (prev) {
+                            if (!prev || prev.id !== data.event.id) {
+                                return prev;
+                            }
+                            return Object.assign({}, prev, data.event);
+                        });
+                        setEvents(function (prevEvents) {
+                            if (!Array.isArray(prevEvents) || prevEvents.length === 0) {
+                                return prevEvents;
+                            }
+                            return prevEvents.map(function (evt) {
+                                if (evt && evt.id === data.event.id) {
+                                    return Object.assign({}, evt, data.event);
+                                }
+                                return evt;
+                            });
+                        });
+                    }
+                    return data;
+                })
+                .catch(function (error) {
+                    setRegDocSaving(false);
+                    if (error && error.aborted) {
+                        return Promise.reject(error);
+                    }
+                    var fallback = getString(strings, 'regDocSaveError', "Impossible d'enregistrer le document d'inscription.");
+                    var messages = collectErrorMessages(error, fallback);
+                    var message = messages && messages.length > 0 ? messages[0] : fallback;
+                    setRegDocError(message);
+                    showError(message);
+                    return Promise.reject(error);
+                });
+        }, [selectedEvent, regDocState, api, showSuccess, strings, loadEventDetails, setSelectedEvent, setEvents, collectErrorMessages, showError]);
+
+        // Registration document download as PDF using print dialog
+        var handleDownloadRegDoc = useCallback(function () {
+            if (!selectedEvent || !eventDetails) {
+                return;
+            }
+
+            var content = regDocState.draft || '';
+            if (!content) {
+                showError(getString(strings, 'regDocEmpty', 'Aucun contenu à télécharger.'));
+                return;
+            }
+
+            // Collect variables from event
+            var variables = {
+                event_name: eventDetails.title || '',
+                event_type: eventDetails.typeLabel || eventDetails.type || '',
+                event_status: eventDetails.statusLabel || eventDetails.status || '',
+                event_date_start: eventDetails.dateDebutFormatted || eventDetails.dateDebut || '',
+                event_date_end: eventDetails.dateFinFormatted || eventDetails.dateFin || '',
+                event_date_deadline: eventDetails.dateFinInscription || '',
+                event_price: (eventDetails.prix || 0) + ' €',
+                event_location: eventDetails.location ? eventDetails.location.name : '',
+                event_location_address: eventDetails.location ? eventDetails.location.address : '',
+                event_age_min: (eventDetails.ageMin || '').toString(),
+                event_age_max: (eventDetails.ageMax || '').toString(),
+                event_capacity: (eventDetails.capacityTotal || '').toString(),
+                site_name: config.siteName || '',
+                site_url: config.siteUrl || '',
+                current_date: new Date().toLocaleDateString('fr-FR'),
+                current_year: new Date().getFullYear().toString(),
+            };
+
+            // Helper function to replace placeholders
+            var interpolateVariables = function (text) {
+                if (!text) return '';
+                var result = text;
+                Object.keys(variables).forEach(function (key) {
+                    var regex = new RegExp('\\[' + key + '\\]', 'gi');
+                    result = result.replace(regex, variables[key] || '');
+                });
+                return result;
+            };
+
+            // Process header, content and footer
+            var processedHeader = interpolateVariables(config.regDocHeader || '');
+            var processedContent = interpolateVariables(content);
+            var processedFooter = interpolateVariables(config.regDocFooter || '');
+
+            // Create HTML document for PDF
+            var htmlDoc = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Document d\'inscription - ' + 
+                (eventDetails.title || 'Événement') + '</title><style>' +
+                '@page{size:A4;margin:20mm;}' +
+                'body{font-family:Arial,Helvetica,sans-serif;font-size:12pt;line-height:1.5;color:#333;max-width:100%;margin:0;padding:0;}' +
+                'h1{font-size:18pt;margin:0 0 10pt 0;}h2{font-size:14pt;margin:15pt 0 8pt 0;}h3{font-size:12pt;margin:12pt 0 6pt 0;}' +
+                'p{margin:8pt 0;}' +
+                'table{width:100%;border-collapse:collapse;margin:10pt 0;}' +
+                'th,td{border:1px solid #999;padding:6pt 8pt;text-align:left;}' +
+                'th{background:#f0f0f0;font-weight:bold;}' +
+                'img{max-width:100%;height:auto;}' +
+                '.regdoc-header{border-bottom:2px solid #333;padding-bottom:15pt;margin-bottom:20pt;}' +
+                '.regdoc-content{min-height:400pt;}' +
+                '.regdoc-footer{border-top:1px solid #999;padding-top:15pt;margin-top:20pt;font-size:10pt;color:#666;}' +
+                '</style></head><body>' +
+                (processedHeader ? '<div class="regdoc-header">' + processedHeader + '</div>' : '') +
+                '<div class="regdoc-content">' + processedContent + '</div>' +
+                (processedFooter ? '<div class="regdoc-footer">' + processedFooter + '</div>' : '') +
+                '</body></html>';
+
+            // Open print dialog in new window (user can save as PDF)
+            var printWindow = window.open('', '_blank', 'width=800,height=600');
+            if (printWindow) {
+                printWindow.document.write(htmlDoc);
+                printWindow.document.close();
+                printWindow.focus();
+                // Wait for content to load then trigger print
+                setTimeout(function() {
+                    printWindow.print();
+                }, 250);
+            } else {
+                showError('Impossible d\'ouvrir la fenêtre d\'impression. Vérifiez que les popups ne sont pas bloqués.');
+            }
+        }, [selectedEvent, eventDetails, regDocState, config, strings, showError]);
+
         var loadEventEditor = useCallback(function (eventId) {
             if (!EventEditor) {
                 return Promise.resolve();
@@ -4070,6 +4303,9 @@
             setDescriptionSaving(false);
             setDescriptionError('');
             setDescriptionState({ base: '', draft: '', eventId: null });
+            setRegDocSaving(false);
+            setRegDocError('');
+            setRegDocState({ base: '', draft: '', eventId: null });
             eventEditorLoadedRef.current = null;
             var defaultTab = 'registrations';
             if (event) {
@@ -4090,7 +4326,7 @@
             
             loadEventDetails(event.id);
             loadRegistrations(event.id);
-        }, [loadEventDetails, loadRegistrations, storageKey, setDescriptionState, setDescriptionSaving, setDescriptionError]);
+        }, [loadEventDetails, loadRegistrations, storageKey, setDescriptionState, setDescriptionSaving, setDescriptionError, setRegDocState, setRegDocSaving, setRegDocError]);
 
         var openCreateEventModal = useCallback(function () {
             if (creatingEvent) {
@@ -4478,6 +4714,7 @@
             return api.getMembers({
                 filter: memberFilter,
                 search: memberSearch,
+                sort: memberSort,
                 page: page || 1,
                 perPage: config.perPage || 20,
             })
@@ -4503,14 +4740,14 @@
                     }
                     return null;
                 });
-        }, [api, memberFilter, memberSearch, config.perPage, pendingMemberSelection, showError, strings]);
+        }, [api, memberFilter, memberSearch, memberSort, config.perPage, pendingMemberSelection, showError, strings]);
 
         // Charger les membres quand on bascule en mode membres ou quand les filtres changent
         useEffect(function () {
             if (sidebarMode === 'members') {
                 loadMembers(1);
             }
-        }, [sidebarMode, memberFilter, memberSearch]);
+        }, [sidebarMode, memberFilter, memberSearch, memberSort]);
 
         // Charger les détails d'un membre
         var loadMemberDetails = useCallback(function (memberId) {
@@ -4744,6 +4981,13 @@
                         ? result.message
                         : getString(strings, 'memberBadgeUpdated', 'Progression mise à jour.');
                     showSuccess(successMessage);
+                    // Update xpTotal immediately from sync response
+                    if (result && typeof result.xpTotal === 'number') {
+                        setMemberDetails(function (prev) {
+                            if (!prev) return prev;
+                            return Object.assign({}, prev, { xpTotal: result.xpTotal });
+                        });
+                    }
                     loadMemberDetails(memberId);
                     return result;
                 })
@@ -4751,6 +4995,52 @@
                     var message = err && err.message
                         ? err.message
                         : getString(strings, 'memberBadgeUpdateError', 'Impossible de mettre à jour ce badge.');
+                    showError(message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails, strings]);
+
+        var handleAdjustMemberXp = useCallback(function (memberId, amount) {
+            return api.adjustMemberXp(memberId, amount)
+                .then(function (result) {
+                    var successMessage = result && result.message
+                        ? result.message
+                        : (amount > 0 ? '+' : '') + amount + ' XP';
+                    showSuccess(successMessage);
+                    // Update xpTotal immediately from response
+                    if (result && typeof result.xpTotal === 'number') {
+                        setMemberDetails(function (prev) {
+                            if (!prev) return prev;
+                            return Object.assign({}, prev, { xpTotal: result.xpTotal });
+                        });
+                    }
+                    return result;
+                })
+                .catch(function (err) {
+                    var message = err && err.message
+                        ? err.message
+                        : 'Impossible d\'ajuster les XP.';
+                    showError(message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError]);
+
+        var handleToggleMemberTrophy = useCallback(function (memberId, trophyId, awarded) {
+            return api.toggleMemberTrophy(memberId, trophyId, awarded)
+                .then(function (result) {
+                    var successMessage = result && result.message
+                        ? result.message
+                        : (awarded
+                            ? getString(strings, 'memberTrophyAwarded', 'Trophée attribué.')
+                            : getString(strings, 'memberTrophyRevoked', 'Trophée retiré.'));
+                    showSuccess(successMessage);
+                    loadMemberDetails(memberId);
+                    return result;
+                })
+                .catch(function (err) {
+                    var message = err && err.message
+                        ? err.message
+                        : getString(strings, 'memberTrophyToggleError', 'Impossible de modifier ce trophée.');
                     showError(message);
                     throw err;
                 });
@@ -5651,6 +5941,7 @@
         var registrationsCount = Array.isArray(registrations) ? registrations.length : 0;
         var registrationsTabLabel = getString(strings, 'tabRegistrations', 'Inscriptions');
         var descriptionDirty = descriptionState.draft !== descriptionState.base;
+        var regDocDirty = regDocState.draft !== regDocState.base;
 
         var occurrenceTab = createOccurrenceTab
             ? createOccurrenceTab(strings)
@@ -5665,6 +5956,7 @@
             registrations: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
             attendance: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 12l2 2 4-4"></path><line x1="7" y1="8" x2="17" y2="8"></line></svg>',
             description: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg>',
+            regdoc: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>',
             details: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><circle cx="12" cy="8" r="1"></circle></svg>',
             occurrences: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>',
             editor: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5l4 4-11 11H5.5v-6.5z"></path></svg>',
@@ -5686,6 +5978,11 @@
                 key: 'description', 
                 label: getString(strings, 'tabDescription', 'Description'),
                 icon: tabIcons.description,
+            },
+            {
+                key: 'regdoc',
+                label: getString(strings, 'tabRegDoc', 'Document d\'inscription'),
+                icon: tabIcons.regdoc,
             },
             { 
                 key: 'details', 
@@ -5820,6 +6117,8 @@
                     onMemberFilterChange: setMemberFilter,
                     memberSearch: memberSearch,
                     onMemberSearchChange: setMemberSearch,
+                    memberSort: memberSort,
+                    onMemberSortChange: setMemberSort,
                     onLoadMoreMembers: function () { loadMembers(membersPagination.page + 1); },
                     hasMoreMembers: membersPagination.page < membersPagination.totalPages,
                     membersLoadingMore: false,
@@ -5839,10 +6138,10 @@
                         class: 'mj-regmgr__back-btn',
                         onClick: function (e) { handleBackToEvents(e); },
                     }, [
-                        h('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                        h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.5 }, [
                             h('polyline', { points: '15 18 9 12 15 6' }),
                         ]),
-                        h('span', null, 'Événements'),
+                        h('span', null, getString(strings, 'backToEvents', 'Retour aux événements')),
                     ]),
 
                     // Bouton retour mobile (membres)
@@ -5851,10 +6150,10 @@
                         class: 'mj-regmgr__back-btn',
                         onClick: function (e) { handleBackToEvents(e); },
                     }, [
-                        h('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                        h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.5 }, [
                             h('polyline', { points: '15 18 9 12 15 6' }),
                         ]),
-                        h('span', null, 'Membres'),
+                        h('span', null, getString(strings, 'backToMembers', 'Retour à la liste')),
                     ]),
 
                     // Empty state pour événements
@@ -5983,6 +6282,93 @@
                                     ]),
                             ]),
 
+                            activeTab === 'regdoc' && h('div', { class: 'mj-regmgr-regdoc-tab' }, [
+                                (!eventDetails || registrationsLoading)
+                                    ? h('div', { class: 'mj-regmgr-loading' }, [
+                                        h('div', { class: 'mj-regmgr-loading__spinner' }),
+                                        h('p', { class: 'mj-regmgr-loading__text' }, getString(strings, 'loading', 'Chargement des détails...')),
+                                    ])
+                                    : h(Fragment, null, [
+                                        // Variables disponibles
+                                        h('div', { class: 'mj-regmgr-regdoc-variables' }, [
+                                            h('h4', { class: 'mj-regmgr-regdoc-variables__title' }, getString(strings, 'regDocVariablesTitle', 'Variables disponibles')),
+                                            h('p', { class: 'mj-regmgr-regdoc-variables__hint' }, getString(strings, 'regDocVariablesHint', 'Utilisez ces variables dans le contenu du document. Elles seront remplacées par les valeurs réelles lors du téléchargement.')),
+                                            h('div', { class: 'mj-regmgr-regdoc-variables__list' }, [
+                                                h('div', { class: 'mj-regmgr-regdoc-variables__group' }, [
+                                                    h('h5', null, 'Événement'),
+                                                    h('ul', null, [
+                                                        h('li', null, [h('code', null, '[event_name]'), ' - Nom de l\'événement']),
+                                                        h('li', null, [h('code', null, '[event_type]'), ' - Type d\'événement']),
+                                                        h('li', null, [h('code', null, '[event_status]'), ' - Statut']),
+                                                        h('li', null, [h('code', null, '[event_date_start]'), ' - Date de début']),
+                                                        h('li', null, [h('code', null, '[event_date_end]'), ' - Date de fin']),
+                                                        h('li', null, [h('code', null, '[event_date_deadline]'), ' - Date limite d\'inscription']),
+                                                        h('li', null, [h('code', null, '[event_price]'), ' - Tarif']),
+                                                        h('li', null, [h('code', null, '[event_location]'), ' - Lieu']),
+                                                        h('li', null, [h('code', null, '[event_location_address]'), ' - Adresse du lieu']),
+                                                        h('li', null, [h('code', null, '[event_age_min]'), ' - Âge minimum']),
+                                                        h('li', null, [h('code', null, '[event_age_max]'), ' - Âge maximum']),
+                                                        h('li', null, [h('code', null, '[event_capacity]'), ' - Capacité totale']),
+                                                    ]),
+                                                ]),
+                                                h('div', { class: 'mj-regmgr-regdoc-variables__group' }, [
+                                                    h('h5', null, 'Site'),
+                                                    h('ul', null, [
+                                                        h('li', null, [h('code', null, '[site_name]'), ' - Nom du site']),
+                                                        h('li', null, [h('code', null, '[site_url]'), ' - URL du site']),
+                                                        h('li', null, [h('code', null, '[current_date]'), ' - Date actuelle']),
+                                                        h('li', null, [h('code', null, '[current_year]'), ' - Année actuelle']),
+                                                    ]),
+                                                ]),
+                                            ]),
+                                        ]),
+                                        // Éditeur du document
+                                        h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
+                                            h('label', { class: 'mj-regmgr-form-label', htmlFor: regDocFieldId }, getString(strings, 'regDocLabel', 'Contenu du document d\'inscription')),
+                                            h(DescriptionEditorField, {
+                                                id: regDocFieldId,
+                                                className: 'mj-regmgr-richtext',
+                                                rows: 12,
+                                                value: regDocState.draft,
+                                                onChange: handleRegDocChange,
+                                                placeholder: getString(strings, 'regDocPlaceholder', 'Rédigez le document d\'inscription avec les informations à transmettre aux participants...'),
+                                            }),
+                                        ]),
+                                        // Actions
+                                        h('div', { class: 'mj-regmgr-regdoc-actions' }, [
+                                            h('button', {
+                                                type: 'button',
+                                                class: 'mj-btn mj-btn--primary',
+                                                disabled: regDocSaving || !regDocDirty,
+                                                onClick: function () { handleSaveRegDoc(); },
+                                            }, regDocSaving
+                                                ? getString(strings, 'regDocSaving', 'Enregistrement...')
+                                                : getString(strings, 'regDocSaveButton', 'Enregistrer le document')),
+                                            h('button', {
+                                                type: 'button',
+                                                class: 'mj-btn mj-btn--secondary',
+                                                disabled: regDocSaving || !regDocDirty,
+                                                onClick: function () { handleResetRegDoc(); },
+                                            }, getString(strings, 'regDocResetButton', 'Annuler les modifications')),
+                                            h('button', {
+                                                type: 'button',
+                                                class: 'mj-btn mj-btn--outline',
+                                                disabled: !regDocState.draft,
+                                                onClick: function () { handleDownloadRegDoc(); },
+                                            }, [
+                                                h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, style: 'margin-right: 6px; vertical-align: middle;' }, [
+                                                    h('path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }),
+                                                    h('polyline', { points: '7 10 12 15 17 10' }),
+                                                    h('line', { x1: 12, y1: 15, x2: 12, y2: 3 }),
+                                                ]),
+                                                getString(strings, 'regDocDownloadButton', 'Télécharger le document'),
+                                            ]),
+                                            regDocDirty && !regDocSaving && h('span', { class: 'mj-regmgr-regdoc-status' }, getString(strings, 'regDocUnsavedChanges', 'Modifications non enregistrées')),
+                                            regDocError && h('p', { class: 'mj-regmgr-regdoc-error' }, regDocError),
+                                        ]),
+                                    ]),
+                            ]),
+
                             activeTab === 'details' && h(EventDetailPanel, {
                                 event: eventDetails,
                                 registrations: registrations,
@@ -6054,6 +6440,8 @@
                             onDeleteMessage: handleDeleteMemberMessage,
                             onDeleteMember: handleDeleteMember,
                             onSyncBadgeCriteria: handleSyncMemberBadge,
+                            onAdjustXp: handleAdjustMemberXp,
+                            onToggleTrophy: handleToggleMemberTrophy,
                         }),
                     ]),
                 ]),

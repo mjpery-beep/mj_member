@@ -3,6 +3,53 @@
 use Mj\Member\Classes\MjGoogleDrive;
 use Mj\Member\Core\Config;
 
+// Register TinyMCE table plugin from CDN
+add_filter('mce_external_plugins', 'mj_member_add_tinymce_table_plugin');
+function mj_member_add_tinymce_table_plugin($plugins) {
+    $plugins['table'] = 'https://cdnjs.cloudflare.com/ajax/libs/tinymce/4.9.11/plugins/table/plugin.min.js';
+    return $plugins;
+}
+
+// Add lineheight button to TinyMCE (only on MJ settings page)
+add_action('admin_print_footer_scripts', 'mj_member_tinymce_lineheight_inline_plugin', 99);
+function mj_member_tinymce_lineheight_inline_plugin() {
+    $screen = get_current_screen();
+    if (!$screen || strpos($screen->id, 'mj_settings') === false) {
+        return;
+    }
+    ?>
+    <script type="text/javascript">
+    (function() {
+        if (typeof tinymce !== 'undefined' && !tinymce.PluginManager.get('lineheight')) {
+            tinymce.PluginManager.add('lineheight', function(editor) {
+                var lineHeights = ['1', '1.2', '1.4', '1.5', '1.6', '1.8', '2', '2.5', '3'];
+                var menuItems = lineHeights.map(function(lh) {
+                    return {
+                        text: lh,
+                        onclick: function() {
+                            editor.formatter.toggle('lineheight', { value: lh });
+                        }
+                    };
+                });
+                editor.addButton('lineheightselect', {
+                    type: 'menubutton',
+                    text: 'Interligne',
+                    icon: false,
+                    menu: menuItems
+                });
+                editor.on('init', function() {
+                    editor.formatter.register('lineheight', {
+                        selector: 'p,h1,h2,h3,h4,h5,h6,td,th,li,div,span',
+                        styles: { 'line-height': '%value' }
+                    });
+                });
+            });
+        }
+    })();
+    </script>
+    <?php
+}
+
 // Admin settings page for plugin
 function mj_settings_page() {
     if (function_exists('wp_enqueue_media')) {
@@ -78,6 +125,12 @@ function mj_settings_page() {
         update_option('mj_login_registration_page', $registration_page > 0 ? $registration_page : 0);
         update_option('mj_member_openai_api_key', $openai_api_key);
         update_option('mj_member_photo_grimlins_prompt', $photo_grimlins_prompt);
+
+        // Document d'inscription header/footer
+        $regdoc_header = isset($_POST['mj_regdoc_header']) ? wp_kses_post(wp_unslash($_POST['mj_regdoc_header'])) : '';
+        $regdoc_footer = isset($_POST['mj_regdoc_footer']) ? wp_kses_post(wp_unslash($_POST['mj_regdoc_footer'])) : '';
+        update_option('mj_regdoc_header', $regdoc_header);
+        update_option('mj_regdoc_footer', $regdoc_footer);
 
         $drive_root_folder = isset($_POST['mj_documents_google_root_folder_id'])
             ? sanitize_text_field(wp_unslash($_POST['mj_documents_google_root_folder_id']))
@@ -406,7 +459,7 @@ function mj_settings_page() {
     <div class="wrap">
         <h1>⚙️ Configuration MJ Péry</h1>
         
-        <form method="post" id="mj-settings-form">
+        <form method="post" id="mj-settings-form" novalidate>
             <?php wp_nonce_field('mj_settings_nonce'); ?>
 
             <div class="mj-settings-tabs">
@@ -416,6 +469,7 @@ function mj_settings_page() {
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-account" data-tab-target="account" role="tab" aria-controls="mj-tab-account" aria-selected="false">👤 Espace membre</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-messaging" data-tab-target="messaging" role="tab" aria-controls="mj-tab-messaging" aria-selected="false">✉️ Notifications &amp; envois</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-ai" data-tab-target="ai" role="tab" aria-controls="mj-tab-ai" aria-selected="false">🧠 IA &amp; médias</button>
+                    <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-regdoc" data-tab-target="regdoc" role="tab" aria-controls="mj-tab-regdoc" aria-selected="false">📄 Document d'inscription</button>
                 </div>
 
                 <div class="mj-settings-tabs__panels">
@@ -1056,6 +1110,81 @@ function mj_settings_page() {
                                 <li><?php esc_html_e('Limitez le poids des images d’entrée à 5 Mo (format JPG/PNG/WebP).', 'mj-member'); ?></li>
                                 <li><?php esc_html_e('Informez les membres que les avatars générés sont destinés à un usage ludique et peuvent différer du portrait original.', 'mj-member'); ?></li>
                                 <li><?php esc_html_e('Supprimez régulièrement les fichiers temporaires si vous n’activez pas la suppression automatique côté serveur.', 'mj-member'); ?></li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div id="mj-tab-regdoc" class="mj-settings-tabs__panel" data-tab="regdoc" role="tabpanel" aria-labelledby="mj-tab-button-regdoc" aria-hidden="true">
+                        <div style="background:#f0fdf4; border-left:4px solid #22c55e; padding:18px 20px; border-radius:10px; margin-bottom:24px;">
+                            <h2 style="margin:0 0 8px 0;">📄 Document d'inscription</h2>
+                            <p style="margin:0; color:#475569;">
+                                <?php esc_html_e('Configurez l\'en-tête et le pied de page par défaut pour les documents d\'inscription générés via le gestionnaire d\'événements.', 'mj-member'); ?><br>
+                                <?php esc_html_e('Ces valeurs servent de base et peuvent être personnalisées par événement.', 'mj-member'); ?>
+                            </p>
+                        </div>
+
+                        <div style="margin-bottom:24px;">
+                            <label for="mj-regdoc-header"><strong><?php esc_html_e('En-tête du document', 'mj-member'); ?></strong></label>
+                            <p style="color:#6b7280; font-size:13px; margin:4px 0 8px 0;">
+                                <?php esc_html_e('Contenu affiché en haut de chaque document d\'inscription. Vous pouvez y placer un logo, le nom de l\'association, etc.', 'mj-member'); ?>
+                            </p>
+                            <?php
+                            wp_editor(
+                                get_option('mj_regdoc_header', ''),
+                                'mj_regdoc_header',
+                                array(
+                                    'textarea_name' => 'mj_regdoc_header',
+                                    'textarea_rows' => 8,
+                                    'media_buttons' => true,
+                                    'teeny' => false,
+                                    'quicktags' => true,
+                                    'tinymce' => array(
+                                        'plugins' => 'table,lists,link,image,paste,wordpress,wplink,hr',
+                                        'toolbar1' => 'formatselect,fontsizeselect,lineheightselect,bold,italic,underline,bullist,numlist,blockquote,alignleft,aligncenter,alignright,link,unlink,table,hr,fullscreen,wp_adv',
+                                        'toolbar2' => 'strikethrough,forecolor,backcolor,pastetext,removeformat,charmap,outdent,indent,undo,redo,wp_help',
+                                        'fontsize_formats' => '8px 10px 12px 14px 16px 18px 20px 24px 28px 32px 36px 48px 72px',
+                                    ),
+                                )
+                            );
+                            ?>
+                        </div>
+
+                        <div style="margin-bottom:24px;">
+                            <label for="mj-regdoc-footer"><strong><?php esc_html_e('Pied de page du document', 'mj-member'); ?></strong></label>
+                            <p style="color:#6b7280; font-size:13px; margin:4px 0 8px 0;">
+                                <?php esc_html_e('Contenu affiché en bas de chaque document d\'inscription. Idéal pour les mentions légales, les coordonnées, etc.', 'mj-member'); ?>
+                            </p>
+                            <?php
+                            wp_editor(
+                                get_option('mj_regdoc_footer', ''),
+                                'mj_regdoc_footer',
+                                array(
+                                    'textarea_name' => 'mj_regdoc_footer',
+                                    'textarea_rows' => 8,
+                                    'media_buttons' => true,
+                                    'teeny' => false,
+                                    'quicktags' => true,
+                                    'tinymce' => array(
+                                        'plugins' => 'table,lists,link,image,paste,wordpress,wplink,hr',
+                                        'toolbar1' => 'formatselect,fontsizeselect,lineheightselect,bold,italic,underline,bullist,numlist,blockquote,alignleft,aligncenter,alignright,link,unlink,table,hr,fullscreen,wp_adv',
+                                        'toolbar2' => 'strikethrough,forecolor,backcolor,pastetext,removeformat,charmap,outdent,indent,undo,redo,wp_help',
+                                        'fontsize_formats' => '8px 10px 12px 14px 16px 18px 20px 24px 28px 32px 36px 48px 72px',
+                                    ),
+                                )
+                            );
+                            ?>
+                        </div>
+
+                        <div style="margin-top:24px; padding:16px; border:1px dashed #86efac; border-radius:8px; background:#fff; color:#334155;">
+                            <p style="margin:0 0 6px 0;"><strong><?php esc_html_e('Variables disponibles', 'mj-member'); ?></strong></p>
+                            <p style="margin:0 0 8px 0; color:#6b7280; font-size:13px;">
+                                <?php esc_html_e('Vous pouvez utiliser ces variables dans l\'en-tête et le pied de page. Elles seront remplacées par les valeurs correspondantes lors de la génération.', 'mj-member'); ?>
+                            </p>
+                            <ul style="margin:0 0 0 18px; padding:0; list-style:disc; color:#475569; font-family:monospace; font-size:12px;">
+                                <li>[site_name] — <?php esc_html_e('Nom du site', 'mj-member'); ?></li>
+                                <li>[site_url] — <?php esc_html_e('URL du site', 'mj-member'); ?></li>
+                                <li>[current_date] — <?php esc_html_e('Date actuelle', 'mj-member'); ?></li>
+                                <li>[current_year] — <?php esc_html_e('Année actuelle', 'mj-member'); ?></li>
                             </ul>
                         </div>
                     </div>

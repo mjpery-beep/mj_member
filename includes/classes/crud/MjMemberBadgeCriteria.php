@@ -3,6 +3,7 @@
 namespace Mj\Member\Classes\Crud;
 
 use Mj\Member\Classes\MjTools;
+use Mj\Member\Classes\Crud\MjMemberXp;
 use WP_Error;
 
 if (!defined('ABSPATH')) {
@@ -326,6 +327,10 @@ final class MjMemberBadgeCriteria extends MjTools implements CrudRepositoryInter
         $processed = array();
         $now = current_time('mysql');
 
+        // XP tracking: count newly awarded and revoked criteria
+        $criteriaNewlyAwarded = 0;
+        $criteriaRevoked = 0;
+
         if (is_array($existingRows)) {
             foreach ($existingRows as $row) {
                 $id = isset($row['id']) ? (int) $row['id'] : 0;
@@ -342,8 +347,10 @@ final class MjMemberBadgeCriteria extends MjTools implements CrudRepositoryInter
                         'revoked_at' => null,
                     );
 
+                    // Track XP: criterion was revoked and is now being re-awarded
                     if ($currentStatus !== self::STATUS_AWARDED) {
                         $updates['awarded_at'] = $now;
+                        $criteriaNewlyAwarded++;
                     }
 
                     if ($awardedByUserId > 0) {
@@ -365,6 +372,7 @@ final class MjMemberBadgeCriteria extends MjTools implements CrudRepositoryInter
 
                     $processed[$criterionId] = true;
                 } else {
+                    // Track XP: criterion was awarded and is now being revoked
                     if ($currentStatus !== self::STATUS_REVOKED) {
                         $revokeUpdates = array(
                             'status' => self::STATUS_REVOKED,
@@ -379,6 +387,8 @@ final class MjMemberBadgeCriteria extends MjTools implements CrudRepositoryInter
                             self::get_format($revokeUpdates),
                             array('%d')
                         );
+
+                        $criteriaRevoked++;
                     }
                 }
             }
@@ -404,6 +414,19 @@ final class MjMemberBadgeCriteria extends MjTools implements CrudRepositoryInter
             $result = self::create($payload);
             if (is_wp_error($result)) {
                 return $result;
+            }
+
+            // Track XP: brand new criterion awarded
+            $criteriaNewlyAwarded++;
+        }
+
+        // Apply XP changes
+        if ($criteriaNewlyAwarded > 0 || $criteriaRevoked > 0) {
+            if ($criteriaNewlyAwarded > 0) {
+                MjMemberXp::awardForCriteria($memberId, $criteriaNewlyAwarded);
+            }
+            if ($criteriaRevoked > 0) {
+                MjMemberXp::revokeForCriteria($memberId, $criteriaRevoked);
             }
         }
 

@@ -42,6 +42,7 @@ class MjEvents implements CrudRepositoryInterface {
         'free_participation' => '%d',
         'registration_payload' => '%s',
         'description' => '%s',
+        'registration_document' => '%s',
         'age_min' => '%d',
         'age_max' => '%d',
         'date_debut' => '%s',

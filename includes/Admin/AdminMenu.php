@@ -19,6 +19,7 @@ use Mj\Member\Admin\Page\HoursPage;
 use Mj\Member\Admin\Page\TodosPage;
 use Mj\Member\Admin\Page\TodoProjectsPage;
 use Mj\Member\Admin\Page\BadgesPage;
+use Mj\Member\Admin\Page\TrophiesPage;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -32,6 +33,9 @@ final class AdminMenu
     public static function boot(): void
     {
         add_action('admin_menu', array(__CLASS__, 'registerMenu'));
+        
+        // Enregistrer les actions admin_post pour TrophiesPage
+        TrophiesPage::boot();
     }
 
     /**
@@ -177,6 +181,16 @@ final class AdminMenu
             array(BadgesPage::class, 'render')
         );
         BadgesPage::registerHooks($badgesHook);
+
+        $trophiesHook = add_submenu_page(
+            'mj_member',
+            __('Trophées', 'mj-member'),
+            __('Trophées', 'mj-member'),
+            $capability,
+            TrophiesPage::slug(),
+            array(TrophiesPage::class, 'render')
+        );
+        TrophiesPage::registerHooks($trophiesHook);
 
         if ($contactCapability !== '') {
             add_submenu_page(

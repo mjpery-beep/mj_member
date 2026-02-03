@@ -249,6 +249,97 @@
     }
 
     // ============================================
+    // TROPHY NORMALIZATION FUNCTIONS
+    // ============================================
+
+    function normalizeTrophyEntry(entry) {
+        if (!entry || typeof entry !== 'object') {
+            return null;
+        }
+
+        var trophyId = 0;
+        if (typeof entry.id === 'number') {
+            trophyId = entry.id;
+        } else if (typeof entry.id === 'string' && entry.id !== '') {
+            trophyId = parseInt(entry.id, 10);
+            if (isNaN(trophyId)) {
+                trophyId = 0;
+            }
+        }
+
+        var imageId = 0;
+        if (typeof entry.imageId === 'number') {
+            imageId = entry.imageId;
+        } else if (typeof entry.image_id === 'number') {
+            imageId = entry.image_id;
+        } else if (typeof entry.imageId === 'string' && entry.imageId !== '') {
+            var parsedImageId = parseInt(entry.imageId, 10);
+            imageId = isNaN(parsedImageId) ? 0 : parsedImageId;
+        }
+
+        var imageUrl = '';
+        if (typeof entry.imageUrl === 'string') {
+            imageUrl = entry.imageUrl;
+        } else if (typeof entry.image_url === 'string') {
+            imageUrl = entry.image_url;
+        }
+
+        var xp = 0;
+        if (typeof entry.xp === 'number') {
+            xp = entry.xp;
+        } else if (typeof entry.xp === 'string' && entry.xp !== '') {
+            var parsedXp = parseInt(entry.xp, 10);
+            xp = isNaN(parsedXp) ? 0 : parsedXp;
+        }
+
+        var autoMode = false;
+        if (typeof entry.autoMode === 'boolean') {
+            autoMode = entry.autoMode;
+        } else if (typeof entry.auto_mode === 'boolean') {
+            autoMode = entry.auto_mode;
+        } else if (entry.autoMode === 1 || entry.auto_mode === 1) {
+            autoMode = true;
+        }
+
+        var canToggle = false;
+        if (typeof entry.canToggle === 'boolean') {
+            canToggle = entry.canToggle;
+        } else if (typeof entry.can_toggle === 'boolean') {
+            canToggle = entry.can_toggle;
+        } else {
+            canToggle = !autoMode;
+        }
+
+        return {
+            id: trophyId,
+            title: typeof entry.title === 'string' ? entry.title : '',
+            description: typeof entry.description === 'string' ? entry.description : '',
+            xp: xp,
+            imageId: imageId,
+            imageUrl: imageUrl,
+            autoMode: autoMode,
+            awarded: !!entry.awarded,
+            awardedAt: typeof entry.awardedAt === 'string' ? entry.awardedAt : (typeof entry.awarded_at === 'string' ? entry.awarded_at : ''),
+            canToggle: canToggle,
+        };
+    }
+
+    function normalizeTrophyEntries(member) {
+        if (!member || !Array.isArray(member.trophies)) {
+            return [];
+        }
+
+        var entries = [];
+        for (var i = 0; i < member.trophies.length; i++) {
+            var normalized = normalizeTrophyEntry(member.trophies[i]);
+            if (normalized) {
+                entries.push(normalized);
+            }
+        }
+        return entries;
+    }
+
+    // ============================================
     // MEMBER CARD (for sidebar list)
     // ============================================
 
@@ -409,6 +500,8 @@
         var onDeleteRegistration = typeof props.onDeleteRegistration === 'function' ? props.onDeleteRegistration : null;
         var onOpenMember = typeof props.onOpenMember === 'function' ? props.onOpenMember : null;
         var onSyncBadgeCriteria = typeof props.onSyncBadgeCriteria === 'function' ? props.onSyncBadgeCriteria : null;
+        var onAdjustXp = typeof props.onAdjustXp === 'function' ? props.onAdjustXp : null;
+        var onToggleTrophy = typeof props.onToggleTrophy === 'function' ? props.onToggleTrophy : null;
         var pendingEditRequest = props.pendingEditRequest || null;
         var onPendingEditHandled = typeof props.onPendingEditHandled === 'function' ? props.onPendingEditHandled : null;
 
@@ -518,6 +611,14 @@
         var badgeSaving = _useStateBadgeSaving[0];
         var setBadgeSaving = _useStateBadgeSaving[1];
 
+        var _useStateTrophyData = useState(normalizeTrophyEntries(member));
+        var trophyData = _useStateTrophyData[0];
+        var setTrophyData = _useStateTrophyData[1];
+
+        var _useStateTrophySaving = useState({});
+        var trophySaving = _useStateTrophySaving[0];
+        var setTrophySaving = _useStateTrophySaving[1];
+
         var avatarFrameRef = useRef(null);
 
         useEffect(function () {
@@ -542,6 +643,11 @@
         useEffect(function () {
             setBadgeData(normalizeBadgeEntries(member));
             setBadgeSaving({});
+        }, [member]);
+
+        useEffect(function () {
+            setTrophyData(normalizeTrophyEntries(member));
+            setTrophySaving({});
         }, [member]);
 
         useEffect(function () {
@@ -596,11 +702,21 @@
             pending: getString(strings, 'photoStatusPending', 'En attente'),
             rejected: getString(strings, 'photoStatusRejected', 'Refusée'),
         };
+        var photoStatusClasses = {
+            approved: 'mj-regmgr-badge--success',
+            pending: 'mj-regmgr-badge--warning',
+            rejected: 'mj-regmgr-badge--danger',
+        };
 
         var ideaStatusLabels = {
             published: getString(strings, 'ideaStatusPublished', 'Publiée'),
             draft: getString(strings, 'ideaStatusDraft', 'Brouillon'),
             archived: getString(strings, 'ideaStatusArchived', 'Archivée'),
+        };
+        var ideaStatusClasses = {
+            published: 'mj-regmgr-badge--success',
+            draft: 'mj-regmgr-badge--warning',
+            archived: 'mj-regmgr-badge--secondary',
         };
 
         var communicationEnabledLabel = getString(strings, 'communicationEnabled', 'Activé');
@@ -1356,6 +1472,84 @@
                 });
         };
 
+        var handleToggleTrophy = function (trophyId, checked) {
+            if (!onToggleTrophy || !memberId) {
+                return;
+            }
+
+            var numericTrophyId = typeof trophyId === 'number' ? trophyId : parseInt(trophyId, 10);
+            var numericMemberId = typeof memberId === 'number' ? memberId : parseInt(memberId, 10);
+
+            if (!numericMemberId || numericMemberId <= 0 || !numericTrophyId || numericTrophyId <= 0) {
+                return;
+            }
+
+            if (trophySaving[numericTrophyId]) {
+                return;
+            }
+
+            var targetTrophy = null;
+            for (var i = 0; i < trophyData.length; i++) {
+                if (trophyData[i].id === numericTrophyId) {
+                    targetTrophy = trophyData[i];
+                    break;
+                }
+            }
+
+            if (!targetTrophy || !targetTrophy.canToggle) {
+                return;
+            }
+
+            if (!!targetTrophy.awarded === !!checked) {
+                return;
+            }
+
+            var previousTrophies = trophyData.slice();
+
+            // Optimistic update
+            var nextTrophies = trophyData.map(function (trophy) {
+                if (trophy.id !== numericTrophyId) {
+                    return trophy;
+                }
+                return Object.assign({}, trophy, {
+                    awarded: checked,
+                    awardedAt: checked ? new Date().toISOString() : '',
+                });
+            });
+
+            setTrophyData(nextTrophies);
+
+            setTrophySaving(function (prev) {
+                var next = Object.assign({}, prev);
+                next[numericTrophyId] = true;
+                return next;
+            });
+
+            Promise.resolve(onToggleTrophy(numericMemberId, numericTrophyId, checked))
+                .then(function (result) {
+                    if (result && result.trophy) {
+                        var normalized = normalizeTrophyEntry(result.trophy);
+                        if (normalized) {
+                            setTrophyData(function (currentTrophies) {
+                                return currentTrophies.map(function (trophy) {
+                                    return trophy.id === numericTrophyId ? normalized : trophy;
+                                });
+                            });
+                        }
+                    }
+                })
+                .catch(function () {
+                    setTrophyData(previousTrophies);
+                })
+                .finally(function () {
+                    setTrophySaving(function (prev) {
+                        var next = Object.assign({}, prev);
+                        delete next[numericTrophyId];
+                        return next;
+                    });
+                });
+        };
+
         var memberId = member && member.id ? member.id : null;
         var hasLinkedAccount = member && member.userId ? true : false;
 
@@ -2034,6 +2228,32 @@
                         ]),
                     ]),
                     activeTab === 'badges' && h(Fragment, null, [
+                        // XP Display
+                        h('div', { class: 'mj-regmgr-member-xp' }, [
+                            h('div', { class: 'mj-regmgr-member-xp__icon' }, [
+                                h('svg', { width: 28, height: 28, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, [
+                                    h('polygon', { points: '12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2' }),
+                                ]),
+                            ]),
+                            h('div', { class: 'mj-regmgr-member-xp__content' }, [
+                                h('span', { class: 'mj-regmgr-member-xp__value' }, typeof member.xpTotal === 'number' ? member.xpTotal.toLocaleString() : '0'),
+                                h('span', { class: 'mj-regmgr-member-xp__label' }, getString(strings, 'memberXpLabel', 'points XP')),
+                            ]),
+                            onAdjustXp && h('div', { class: 'mj-regmgr-member-xp__actions' }, [
+                                h('button', {
+                                    type: 'button',
+                                    class: 'mj-regmgr-member-xp__btn mj-regmgr-member-xp__btn--minus',
+                                    title: getString(strings, 'memberXpRemove10', 'Retirer 10 XP'),
+                                    onClick: function () { onAdjustXp(member.id, -10); },
+                                }, '-10'),
+                                h('button', {
+                                    type: 'button',
+                                    class: 'mj-regmgr-member-xp__btn mj-regmgr-member-xp__btn--plus',
+                                    title: getString(strings, 'memberXpAdd10', 'Ajouter 10 XP'),
+                                    onClick: function () { onAdjustXp(member.id, 10); },
+                                }, '+10'),
+                            ]),
+                        ]),
                         badgeData.length > 0
                             ? h('div', { class: 'mj-regmgr-member-detail__section' }, [
                                 h('h2', { class: 'mj-regmgr-member-detail__section-title' }, badgesTitle),
@@ -2138,6 +2358,77 @@
                             : h('div', { class: 'mj-regmgr-member-detail__section' }, [
                                 h('h2', { class: 'mj-regmgr-member-detail__section-title' }, badgesTitle),
                                 h('p', { class: 'mj-regmgr-member-detail__empty' }, badgeEmptyLabel),
+                            ]),
+                        // Trophies Section
+                        trophyData.length > 0
+                            ? h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberTrophiesTitle', 'Trophées')),
+                                h('div', { class: 'mj-regmgr-member-trophies' }, trophyData.map(function (trophy) {
+                                    var isSaving = !!trophySaving[trophy.id];
+                                    var hasTrophyImage = typeof trophy.imageUrl === 'string' && trophy.imageUrl !== '';
+                                    var isAwarded = trophy.awarded;
+                                    var canToggle = trophy.canToggle && !trophy.autoMode;
+
+                                    return h('article', {
+                                        key: trophy.id ? 'trophy-' + trophy.id : 'trophy-' + trophy.title,
+                                        class: classNames('mj-regmgr-member-trophy', {
+                                            'mj-regmgr-member-trophy--awarded': isAwarded,
+                                            'mj-regmgr-member-trophy--auto': trophy.autoMode,
+                                            'mj-regmgr-member-trophy--saving': isSaving,
+                                        }),
+                                    }, [
+                                        h('label', {
+                                            class: classNames('mj-regmgr-member-trophy__container', {
+                                                'mj-regmgr-member-trophy__container--disabled': !canToggle,
+                                            }),
+                                        }, [
+                                            canToggle && h('input', {
+                                                type: 'checkbox',
+                                                class: 'mj-regmgr-member-trophy__checkbox',
+                                                checked: isAwarded,
+                                                disabled: isSaving,
+                                                onChange: function (event) {
+                                                    handleToggleTrophy(trophy.id, event.target.checked);
+                                                },
+                                            }),
+                                            h('div', { class: 'mj-regmgr-member-trophy__visual' }, [
+                                                hasTrophyImage
+                                                    ? h('img', {
+                                                        src: trophy.imageUrl,
+                                                        alt: trophy.title || '',
+                                                        class: 'mj-regmgr-member-trophy__image',
+                                                        loading: 'lazy',
+                                                    })
+                                                    : h('div', { class: 'mj-regmgr-member-trophy__icon' }, [
+                                                        h('svg', { width: 32, height: 32, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                            h('path', { d: 'M6 9H4.5a2.5 2.5 0 0 1 0-5H6' }),
+                                                            h('path', { d: 'M18 9h1.5a2.5 2.5 0 0 0 0-5H18' }),
+                                                            h('path', { d: 'M4 22h16' }),
+                                                            h('path', { d: 'M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22' }),
+                                                            h('path', { d: 'M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22' }),
+                                                            h('path', { d: 'M18 2H6v7a6 6 0 0 0 12 0V2Z' }),
+                                                        ]),
+                                                    ]),
+                                            ]),
+                                            h('div', { class: 'mj-regmgr-member-trophy__content' }, [
+                                                h('h2', { class: 'mj-regmgr-member-trophy__title' }, trophy.title || getString(strings, 'memberTrophyUntitled', 'Trophée')),
+                                                trophy.description && h('p', { class: 'mj-regmgr-member-trophy__description' }, trophy.description),
+                                                h('div', { class: 'mj-regmgr-member-trophy__meta' }, [
+                                                    trophy.xp > 0 && h('span', { class: 'mj-regmgr-member-trophy__xp' }, '+' + trophy.xp + ' XP'),
+                                                    trophy.autoMode && h('span', { class: 'mj-regmgr-member-trophy__auto-badge' }, getString(strings, 'memberTrophyAuto', 'Automatique')),
+                                                    isAwarded && !trophy.autoMode && h('span', { class: 'mj-regmgr-member-trophy__awarded-badge' }, getString(strings, 'memberTrophyAwarded', 'Obtenu')),
+                                                ]),
+                                            ]),
+                                        ]),
+                                        isSaving && h('div', { class: 'mj-regmgr-member-trophy__saving' }, [
+                                            h('span', { class: 'mj-regmgr-spinner mj-regmgr-spinner--inline' }),
+                                        ]),
+                                    ]);
+                                })),
+                            ])
+                            : h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberTrophiesTitle', 'Trophées')),
+                                h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoTrophies', 'Aucun trophée disponible.')),
                             ]),
                     ]),
                     activeTab === 'photos' && h(Fragment, null, [

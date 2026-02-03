@@ -53,6 +53,7 @@ if (!defined('ABSPATH')) {
  * @property-read string|null $nickname
  * @property-read string|null $created_at
  * @property-read string|null $updated_at
+ * @property-read int|null $xp_total
  */
 final class MemberData implements JsonSerializable {
     /**
@@ -108,6 +109,7 @@ final class MemberData implements JsonSerializable {
         'last_login_at',
         'notes',
         'extra_fields',
+        'xp_total',
     );
 
     /**

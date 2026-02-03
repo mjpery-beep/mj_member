@@ -392,6 +392,8 @@
         var onMemberFilterChange = props.onMemberFilterChange;
         var memberSearch = props.memberSearch || '';
         var onMemberSearchChange = props.onMemberSearchChange;
+        var memberSort = props.memberSort || 'name';
+        var onMemberSortChange = props.onMemberSortChange;
         var onLoadMoreMembers = props.onLoadMoreMembers;
         var hasMoreMembers = props.hasMoreMembers;
         var membersLoadingMore = props.membersLoadingMore;
@@ -606,6 +608,34 @@
                         }, f.label);
                     })
                 ),
+            ]),
+
+            // Tri (seulement en mode membres)
+            sidebarMode === 'members' && h('div', { class: 'mj-regmgr-sidebar__sort' }, [
+                h('label', { class: 'mj-regmgr-sort-label' }, [
+                    h('svg', {
+                        width: 14,
+                        height: 14,
+                        viewBox: '0 0 24 24',
+                        fill: 'none',
+                        stroke: 'currentColor',
+                        'stroke-width': 2,
+                    }, [
+                        h('line', { x1: 4, y1: 6, x2: 11, y2: 6 }),
+                        h('line', { x1: 4, y1: 12, x2: 15, y2: 12 }),
+                        h('line', { x1: 4, y1: 18, x2: 20, y2: 18 }),
+                    ]),
+                    h('span', null, getString(strings, 'sortBy', 'Trier par')),
+                ]),
+                h('select', {
+                    class: 'mj-regmgr-sort-select',
+                    value: memberSort,
+                    onChange: function (e) { onMemberSortChange && onMemberSortChange(e.target.value); },
+                }, [
+                    h('option', { value: 'name' }, getString(strings, 'sortByName', 'Nom (A-Z)')),
+                    h('option', { value: 'registration_date' }, getString(strings, 'sortByRegistration', 'Date d\'inscription')),
+                    h('option', { value: 'membership_date' }, getString(strings, 'sortByMembership', 'Date de cotisation')),
+                ]),
             ]),
 
             // Liste (événements ou membres)

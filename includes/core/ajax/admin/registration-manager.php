@@ -20,6 +20,9 @@ use Mj\Member\Classes\Crud\MjBadges;
 use Mj\Member\Classes\Crud\MjMemberBadges;
 use Mj\Member\Classes\Crud\MjBadgeCriteria;
 use Mj\Member\Classes\Crud\MjMemberBadgeCriteria;
+use Mj\Member\Classes\Crud\MjMemberXp;
+use Mj\Member\Classes\Crud\MjTrophies;
+use Mj\Member\Classes\Crud\MjMemberTrophies;
 use Mj\Member\Classes\Forms\EventFormDataMapper;
 use Mj\Member\Classes\Forms\EventFormOptionsBuilder;
 use Mj\Member\Classes\MjEventSchedule;
@@ -72,6 +75,8 @@ add_action('wp_ajax_mj_regmgr_delete_member_message', 'mj_regmgr_delete_member_m
 add_action('wp_ajax_mj_regmgr_reset_member_password', 'mj_regmgr_reset_member_password');
 add_action('wp_ajax_mj_regmgr_delete_member', 'mj_regmgr_delete_member');
 add_action('wp_ajax_mj_regmgr_sync_member_badge', 'mj_regmgr_sync_member_badge');
+add_action('wp_ajax_mj_regmgr_adjust_member_xp', 'mj_regmgr_adjust_member_xp');
+add_action('wp_ajax_mj_regmgr_toggle_member_trophy', 'mj_regmgr_toggle_member_trophy');
 
 /**
  * Verify nonce and check user permissions
@@ -1435,6 +1440,7 @@ function mj_regmgr_get_event_details() {
             'status' => $event->status,
             'statusLabel' => isset($status_labels[$event->status]) ? $status_labels[$event->status] : $event->status,
             'description' => $event->description,
+            'registrationDocument' => isset($event->registration_document) ? $event->registration_document : '',
             'dateDebut' => $event->date_debut,
             'dateFin' => $event->date_fin,
             'dateDebutFormatted' => mj_regmgr_format_date($event->date_debut, true),
@@ -4520,8 +4526,28 @@ function mj_regmgr_get_members() {
 
     $filter = isset($_POST['filter']) ? sanitize_text_field($_POST['filter']) : 'all';
     $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
+    $sort = isset($_POST['sort']) ? sanitize_text_field($_POST['sort']) : 'name';
     $page = isset($_POST['page']) ? absint($_POST['page']) : 1;
     $per_page = isset($_POST['perPage']) ? absint($_POST['perPage']) : 20;
+
+    // Déterminer le tri
+    $orderby = 'last_name';
+    $order = 'ASC';
+    switch ($sort) {
+        case 'registration_date':
+            $orderby = 'created_at';
+            $order = 'DESC';
+            break;
+        case 'membership_date':
+            $orderby = 'date_last_payement';
+            $order = 'DESC';
+            break;
+        case 'name':
+        default:
+            $orderby = 'last_name';
+            $order = 'ASC';
+            break;
+    }
 
     // Build filters array
     $filters = array();
@@ -4548,8 +4574,8 @@ function mj_regmgr_get_members() {
     $member_objects = MjMembers::get_all(array(
         'limit' => $per_page,
         'offset' => $offset,
-        'orderby' => 'last_name',
-        'order' => 'ASC',
+        'orderby' => $orderby,
+        'order' => $order,
         'search' => $search,
         'filters' => $filters,
     ));
@@ -4602,6 +4628,7 @@ function mj_regmgr_get_members() {
             'membershipStatus' => $membership_status,
             'membershipYear' => $membership_year > 0 ? $membership_year : null,
             'isVolunteer' => !empty($member->is_volunteer),
+            'xpTotal' => isset($member->xp_total) ? (int) $member->xp_total : 0,
         );
     }
 
@@ -4920,6 +4947,7 @@ function mj_regmgr_get_member_details() {
         'whatsappOptIn' => isset($memberData->whatsapp_opt_in) ? !empty($memberData->whatsapp_opt_in) : true,
         'photoUsageConsent' => (bool) $memberData->get('photo_usage_consent', 0),
         'photoId' => $memberData->get('photo_id', null),
+        'xpTotal' => isset($memberData->xp_total) ? (int) $memberData->xp_total : 0,
         'guardian' => null,
     );
 
@@ -5144,6 +5172,7 @@ function mj_regmgr_get_member_details() {
     }
 
     $member['badges'] = mj_regmgr_get_member_badges_payload($member_id);
+    $member['trophies'] = mj_regmgr_get_member_trophies_payload($member_id);
 
     wp_send_json_success(array('member' => $member));
 }
@@ -5199,12 +5228,27 @@ function mj_regmgr_sync_member_badge() {
         $criterion_ids = MjBadgeCriteria::filter_ids_for_badge($badge_id, $criterion_ids);
     }
 
+    // Determine badge completion state BEFORE sync
+    $was_complete = mj_regmgr_is_badge_complete($member_id, $badge_id);
+
     $awarded_by = get_current_user_id();
 
     $sync = MjMemberBadgeCriteria::sync_awards($member_id, $badge_id, $criterion_ids, $awarded_by);
     if (is_wp_error($sync)) {
         wp_send_json_error(array('message' => $sync->get_error_message()));
         return;
+    }
+
+    // Determine badge completion state AFTER sync
+    $is_complete = mj_regmgr_is_badge_complete($member_id, $badge_id);
+
+    // Award or revoke XP for badge completion
+    if ($is_complete && !$was_complete) {
+        // Badge just became complete - award 100 XP
+        MjMemberXp::awardForBadgeCompletion($member_id);
+    } elseif (!$is_complete && $was_complete) {
+        // Badge was complete but no longer is - revoke 100 XP
+        MjMemberXp::revokeForBadgeCompletion($member_id);
     }
 
     $status = empty($criterion_ids) ? MjMemberBadges::STATUS_REVOKED : MjMemberBadges::STATUS_AWARDED;
@@ -5222,9 +5266,102 @@ function mj_regmgr_sync_member_badge() {
 
     $badge_payload = mj_regmgr_prepare_member_badge_entry($badge, $member_id);
 
+    // Include updated XP in response
+    $updated_member = MjMembers::getById($member_id);
+    $xp_total = isset($updated_member->xp_total) ? (int) $updated_member->xp_total : 0;
+
     wp_send_json_success(array(
         'message' => __('Progression du badge mise à jour.', 'mj-member'),
         'badge' => $badge_payload,
+        'xpTotal' => $xp_total,
+    ));
+}
+
+/**
+ * Check if a badge is complete for a given member.
+ *
+ * A badge is complete when all toggleable criteria are awarded.
+ *
+ * @param int $member_id Member ID.
+ * @param int $badge_id Badge ID.
+ * @return bool True if badge is complete.
+ */
+function mj_regmgr_is_badge_complete($member_id, $badge_id) {
+    $criteria_records = MjBadgeCriteria::get_for_badge($badge_id);
+    if (empty($criteria_records)) {
+        return false;
+    }
+
+    // Filter out archived criteria
+    $active_criteria = array_filter($criteria_records, static function ($record) {
+        return empty($record['status']) || $record['status'] !== MjBadgeCriteria::STATUS_ARCHIVED;
+    });
+
+    $awardable_total = count($active_criteria);
+    if ($awardable_total === 0) {
+        return false;
+    }
+
+    $awards = MjMemberBadgeCriteria::get_for_member_badge($member_id, $badge_id);
+    $awarded_count = 0;
+
+    if (!empty($awards)) {
+        foreach ($awards as $award_row) {
+            $status = isset($award_row['status']) ? (string) $award_row['status'] : '';
+            if ($status === MjMemberBadgeCriteria::STATUS_AWARDED) {
+                $awarded_count++;
+            }
+        }
+    }
+
+    return $awarded_count >= $awardable_total;
+}
+
+/**
+ * Adjust member XP manually (add or remove).
+ */
+function mj_regmgr_adjust_member_xp() {
+    $current_member = mj_regmgr_verify_request();
+    if (!$current_member) {
+        return;
+    }
+
+    $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+    $amount = isset($_POST['amount']) ? (int) $_POST['amount'] : 0;
+
+    if ($member_id <= 0) {
+        wp_send_json_error(array('message' => __('ID du membre manquant.', 'mj-member')));
+        return;
+    }
+
+    if ($amount === 0) {
+        wp_send_json_error(array('message' => __('Montant XP invalide.', 'mj-member')));
+        return;
+    }
+
+    $member = MjMembers::getById($member_id);
+    if (!$member) {
+        wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
+        return;
+    }
+
+    if ($amount > 0) {
+        $result = MjMemberXp::add($member_id, $amount);
+    } else {
+        $result = MjMemberXp::subtract($member_id, abs($amount));
+    }
+
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+        return;
+    }
+
+    $action_label = $amount > 0 ? 'ajoutés' : 'retirés';
+    $abs_amount = abs($amount);
+
+    wp_send_json_success(array(
+        'message' => sprintf(__('%d XP %s.', 'mj-member'), $abs_amount, $action_label),
+        'xpTotal' => $result,
     ));
 }
 
@@ -6282,4 +6419,149 @@ function mj_regmgr_create_membership_payment_link() {
     } catch (Exception $e) {
         wp_send_json_error(array('message' => $e->getMessage()));
     }
+}
+
+/**
+ * Build trophies payload for a member within the registration manager.
+ *
+ * @param int $member_id
+ * @return array<int,array<string,mixed>>
+ */
+function mj_regmgr_get_member_trophies_payload($member_id) {
+    $member_id = (int) $member_id;
+    if ($member_id <= 0) {
+        return array();
+    }
+
+    $trophies = MjTrophies::get_all(array(
+        'status' => MjTrophies::STATUS_ACTIVE,
+        'orderby' => 'display_order',
+        'order' => 'ASC',
+    ));
+
+    if (empty($trophies)) {
+        return array();
+    }
+
+    // Get member's trophy assignments
+    $assignments = MjMemberTrophies::get_all(array(
+        'member_id' => $member_id,
+    ));
+
+    $assignment_map = array();
+    if (!empty($assignments)) {
+        foreach ($assignments as $assignment) {
+            $trophy_id = isset($assignment['trophy_id']) ? (int) $assignment['trophy_id'] : 0;
+            if ($trophy_id > 0) {
+                $assignment_map[$trophy_id] = $assignment;
+            }
+        }
+    }
+
+    $payload = array();
+    foreach ($trophies as $trophy) {
+        $trophy_id = isset($trophy['id']) ? (int) $trophy['id'] : 0;
+        if ($trophy_id <= 0) {
+            continue;
+        }
+
+        $assignment = isset($assignment_map[$trophy_id]) ? $assignment_map[$trophy_id] : null;
+        $assignment_status = '';
+        $awarded_at = '';
+
+        if (is_array($assignment)) {
+            $assignment_status = isset($assignment['status']) ? (string) $assignment['status'] : '';
+            $awarded_at = isset($assignment['awarded_at']) ? (string) $assignment['awarded_at'] : '';
+        }
+
+        $image_id = isset($trophy['image_id']) ? (int) $trophy['image_id'] : 0;
+        $image_url = '';
+        if ($image_id > 0) {
+            $image_url = wp_get_attachment_image_url($image_id, 'medium');
+            if (!$image_url) {
+                $image_url = wp_get_attachment_url($image_id);
+            }
+        }
+
+        $is_auto = !empty($trophy['auto_mode']);
+        $is_awarded = $assignment_status === MjMemberTrophies::STATUS_AWARDED;
+
+        $payload[] = array(
+            'id' => $trophy_id,
+            'title' => isset($trophy['title']) ? (string) $trophy['title'] : '',
+            'description' => isset($trophy['description']) ? (string) $trophy['description'] : '',
+            'xp' => isset($trophy['xp']) ? (int) $trophy['xp'] : 0,
+            'imageId' => $image_id,
+            'imageUrl' => $image_url,
+            'autoMode' => $is_auto,
+            'awarded' => $is_awarded,
+            'awardedAt' => $awarded_at,
+            'canToggle' => !$is_auto,
+        );
+    }
+
+    return $payload;
+}
+
+/**
+ * Toggle a trophy for a member (manual trophies only)
+ */
+function mj_regmgr_toggle_member_trophy() {
+    $current_member = mj_regmgr_verify_request();
+    if (!$current_member) return;
+
+    $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+    $trophy_id = isset($_POST['trophyId']) ? absint($_POST['trophyId']) : 0;
+    $awarded = isset($_POST['awarded']) && $_POST['awarded'] === 'true';
+
+    if ($member_id <= 0 || $trophy_id <= 0) {
+        wp_send_json_error(array('message' => __('Paramètres invalides.', 'mj-member')));
+        return;
+    }
+
+    $target_member = MjMembers::getById($member_id);
+    if (!$target_member) {
+        wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
+        return;
+    }
+
+    $trophy = MjTrophies::get($trophy_id);
+    if (!$trophy || (isset($trophy['status']) && $trophy['status'] === MjTrophies::STATUS_ARCHIVED)) {
+        wp_send_json_error(array('message' => __('Trophée introuvable ou archivé.', 'mj-member')));
+        return;
+    }
+
+    // Check if trophy is manual (not auto_mode)
+    if (!empty($trophy['auto_mode'])) {
+        wp_send_json_error(array('message' => __('Ce trophée est automatique et ne peut pas être attribué manuellement.', 'mj-member')));
+        return;
+    }
+
+    if ($awarded) {
+        $result = MjMemberTrophies::award($member_id, $trophy_id);
+    } else {
+        $result = MjMemberTrophies::revoke($member_id, $trophy_id);
+    }
+
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+        return;
+    }
+
+    // Build updated trophy entry
+    $updated_trophy = mj_regmgr_get_member_trophies_payload($member_id);
+    $updated_entry = null;
+    foreach ($updated_trophy as $entry) {
+        if ((int) $entry['id'] === $trophy_id) {
+            $updated_entry = $entry;
+            break;
+        }
+    }
+
+    wp_send_json_success(array(
+        'trophy' => $updated_entry,
+        'message' => $awarded
+            ? __('Trophée attribué.', 'mj-member')
+            : __('Trophée retiré.', 'mj-member'),
+    ));
 }

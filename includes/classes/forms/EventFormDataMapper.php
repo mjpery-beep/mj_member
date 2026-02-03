@@ -103,6 +103,7 @@ final class EventFormDataMapper
             'event_date_deadline' => isset($values['date_fin_inscription']) ? (string) $values['date_fin_inscription'] : '',
             'event_price' => isset($values['prix']) ? (float) $values['prix'] : 0.0,
             'event_description' => isset($values['description']) ? (string) $values['description'] : '',
+            'event_registration_document' => isset($values['registration_document']) ? (string) $values['registration_document'] : '',
             'event_occurrences_payload' => $occurrence_payload_json,
         );
     }
@@ -188,6 +189,7 @@ final class EventFormDataMapper
         $values['date_fin_inscription'] = isset($formData['event_date_deadline']) ? (string) $formData['event_date_deadline'] : $values['date_fin_inscription'];
         $values['prix'] = isset($formData['event_price']) ? (float) $formData['event_price'] : $values['prix'];
         $values['description'] = isset($formData['event_description']) ? (string) $formData['event_description'] : $values['description'];
+        $values['registration_document'] = isset($formData['event_registration_document']) ? (string) $formData['event_registration_document'] : (isset($values['registration_document']) ? $values['registration_document'] : '');
 
         if (array_key_exists('event_schedule_exceptions', $formData)) {
             $values['schedule_exceptions'] = self::sanitizeExceptionsField($formData['event_schedule_exceptions']);

@@ -370,7 +370,9 @@ class Mj_Member_Elementor_Subscription_Widget extends Widget_Base {
             }
         }
 
-        $child_edit_nonce = (!empty($children_statuses) && $is_guardian) ? wp_create_nonce('mj_member_update_child_profile') : '';
+        $allow_child_edit = !$is_guardian;
+
+        $child_edit_nonce = (!empty($children_statuses) && $allow_child_edit) ? wp_create_nonce('mj_member_update_child_profile') : '';
         $child_payment_nonce = (!empty($children_statuses) && $is_guardian) ? wp_create_nonce('mj_member_create_child_payment_link') : '';
 
         $card_classes = array('mj-member-subscription', 'status-' . sanitize_html_class($status['status']));
@@ -967,14 +969,18 @@ class Mj_Member_Elementor_Subscription_Widget extends Widget_Base {
                 echo '<div class="mj-member-subscription__children-actions">';
                 echo '<div class="mj-member-subscription__children-actions-main">';
                 if (!empty($child_entry['requires_payment']) && $child_payment_nonce !== '') {
+                    $child_payment_label = $is_guardian ? __('Régler la cotisation', 'mj-member') : __('Payer cette cotisation', 'mj-member');
                     echo '<form method="post" class="mj-member-subscription__child-form" data-child-id="' . esc_attr((int) $child_entry['id']) . '" data-ajax-nonce="' . esc_attr($child_payment_nonce) . '">';
-                    echo '<button type="submit" class="mj-member-button mj-member-button--secondary">' . esc_html__('Payer cette cotisation', 'mj-member') . '</button>';
+                    echo '<button type="submit" class="mj-member-button mj-member-button--secondary">' . esc_html($child_payment_label) . '</button>';
                     echo '</form>';
                 }
-                echo '<button type="button" class="mj-member-button mj-member-button--ghost mj-member-child-edit" data-child-id="' . esc_attr((int) $child_entry['id']) . '" data-child-profile="' . esc_attr($child_profile_attr) . '">' . esc_html__('Modifier les informations', 'mj-member') . '</button>';
+                if ($allow_child_edit) {
+                    echo '<button type="button" class="mj-member-button mj-member-button--ghost mj-member-child-edit" data-child-id="' . esc_attr((int) $child_entry['id']) . '" data-child-profile="' . esc_attr($child_profile_attr) . '">' . esc_html__('Modifier les informations', 'mj-member') . '</button>';
+                }
                 echo '</div>';
                 if (!empty($child_entry['requires_payment'])) {
-                    echo '<p class="mj-member-subscription__children-pay-note">' . esc_html__('Ce jeune peut aussi remettre 2 € directement à un animateur.', 'mj-member') . '</p>';
+                    $manual_note = sprintf(__('Ce jeune peut aussi remettre %s € directement à un animateur.', 'mj-member'), $manual_amount_label);
+                    echo '<p class="mj-member-subscription__children-pay-note">' . esc_html($manual_note) . '</p>';
                 }
                 echo '</div>';
 
@@ -985,7 +991,7 @@ class Mj_Member_Elementor_Subscription_Widget extends Widget_Base {
         }
 
         $should_render_child_forms = !empty($children_statuses) && $child_payment_nonce !== '';
-        $has_child_edit = !empty($children_statuses) && $child_edit_nonce !== '';
+        $has_child_edit = $allow_child_edit && !empty($children_statuses) && $child_edit_nonce !== '';
         $needs_widget_script = $should_display_button || $should_render_child_forms || $has_child_edit;
 
         if ($needs_widget_script && !$script_printed) {
