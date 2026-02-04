@@ -92,6 +92,10 @@ $criteriaStatusLabels = array(
 $badgeEntries = array();
 
 if ($isPreview) {
+    // Constantes XP pour l'affichage
+    $xpPerCriterion = MjMemberXp::XP_PER_CRITERION;
+    $xpPerBadge = MjMemberXp::XP_PER_BADGE_COMPLETION;
+
     $badgeEntries = array(
         array(
             'id' => 1,
@@ -153,6 +157,10 @@ if ($isPreview) {
         ),
     );
 } else {
+    // Constantes XP pour l'affichage
+    $xpPerCriterion = MjMemberXp::XP_PER_CRITERION;
+    $xpPerBadge = MjMemberXp::XP_PER_BADGE_COMPLETION;
+
     $badges = MjBadges::get_all(array(
         'status' => MjBadges::STATUS_ACTIVE,
         'orderby' => 'display_order',
@@ -419,7 +427,7 @@ if ($isPreview) {
 
             $imageUrl = '';
             if (!empty($trophy['image_id'])) {
-                $imageData = wp_get_attachment_image_src((int) $trophy['image_id'], 'thumbnail');
+                $imageData = wp_get_attachment_image_src((int) $trophy['image_id'], 'large');
                 if (is_array($imageData) && !empty($imageData[0])) {
                     $imageUrl = (string) $imageData[0];
                 }
@@ -524,12 +532,15 @@ $headingTitle = $title !== '' ? $title : __('Mes Succès', 'mj-member');
                     $hasIcon = !$hasImage && !empty($entry['icon']);
                     $awardedCount = isset($entry['awarded_count']) ? (int) $entry['awarded_count'] : 0;
                     $totalCriteria = isset($entry['total_criteria']) ? (int) $entry['total_criteria'] : count($criteriaList);
+                    // Calculer XP du badge: XP par critère * nombre critères + bonus badge complet
+                    $badgeTotalXp = ($totalCriteria * $xpPerCriterion) + $xpPerBadge;
                     ?>
                     <li class="mj-badges-overview__item mj-badges-overview__item--<?php echo esc_attr($state); ?>" data-state="<?php echo esc_attr($state); ?>">
                         <div class="mj-badges-overview__card">
-                            <div class="mj-badges-overview__media">
+                            <div class="mj-badges-overview__media" style="--progress: <?php echo esc_attr($progressPercent); ?>%;">
                                 <?php if ($hasImage) : ?>
-                                    <img src="<?php echo esc_url($entry['image']); ?>" alt="<?php echo esc_attr($entry['image_alt']); ?>" loading="lazy" />
+                                    <img src="<?php echo esc_url($entry['image']); ?>" alt="<?php echo esc_attr($entry['image_alt']); ?>" loading="lazy" class="mj-badges-overview__media-img" />
+                                    <img src="<?php echo esc_url($entry['image']); ?>" alt="" loading="lazy" class="mj-badges-overview__media-overlay" aria-hidden="true" />
                                 <?php elseif ($hasIcon) : ?>
                                     <span class="mj-badges-overview__icon <?php echo esc_attr($entry['icon']); ?>" aria-hidden="true"></span>
                                 <?php else : ?>
@@ -538,8 +549,12 @@ $headingTitle = $title !== '' ? $title : __('Mes Succès', 'mj-member');
                             </div>
                             <div class="mj-badges-overview__content">
                                 <div class="mj-badges-overview__heading-row">
-                                    <h4 class="mj-badges-overview__badge-title"><?php echo esc_html($entry['label']); ?></h4>
                                     <span class="mj-badges-overview__state mj-badges-overview__state--<?php echo esc_attr($state); ?>"><?php echo esc_html($stateLabel); ?></span>
+                                    <span class="mj-badges-overview__xp">
+                                        <span class="mj-badges-overview__xp-icon">⚡</span>
+                                        <span class="mj-badges-overview__xp-value"><?php echo esc_html($badgeTotalXp); ?></span>
+                                        <span class="mj-badges-overview__xp-label">XP</span>
+                                    </span>
                                 </div>
                                 <?php if ($totalCriteria > 0) : ?>
                                     <div class="mj-badges-overview__progress" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<?php echo esc_attr($progressPercent); ?>">
@@ -560,6 +575,10 @@ $headingTitle = $title !== '' ? $title : __('Mes Succès', 'mj-member');
                                                     <span class="mj-badges-overview__criterion-marker" aria-hidden="true"></span>
                                                     <div class="mj-badges-overview__criterion-body">
                                                         <span class="mj-badges-overview__criterion-title"><?php echo esc_html($criterion['label']); ?></span>
+                                                        <span class="mj-badges-overview__criterion-xp">
+                                                            <span class="mj-badges-overview__criterion-xp-icon">⚡</span>
+                                                            <span class="mj-badges-overview__criterion-xp-value"><?php echo esc_html($xpPerCriterion); ?></span>
+                                                        </span>
                                                     </div>
                                                 </li>
                                             <?php endforeach; ?>
