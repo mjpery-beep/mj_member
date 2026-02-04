@@ -10,10 +10,6 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-if (class_exists(__NAMESPACE__ . '\\MjEventSchedule', false)) {
-    return;
-}
-
 class MjEventSchedule {
     /**
      * @param object|array $event

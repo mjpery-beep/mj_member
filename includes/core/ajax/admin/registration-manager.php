@@ -5327,14 +5327,16 @@ function mj_regmgr_sync_member_badge() {
 
     $badge_payload = mj_regmgr_prepare_member_badge_entry($badge, $member_id);
 
-    // Include updated XP in response
+    // Include updated XP and level progression in response
     $updated_member = MjMembers::getById($member_id);
     $xp_total = isset($updated_member->xp_total) ? (int) $updated_member->xp_total : 0;
+    $level_progression = mj_regmgr_get_member_level_progression($xp_total);
 
     wp_send_json_success(array(
         'message' => __('Progression du badge mise à jour.', 'mj-member'),
         'badge' => $badge_payload,
         'xpTotal' => $xp_total,
+        'levelProgression' => $level_progression,
     ));
 }
 

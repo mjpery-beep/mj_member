@@ -62,7 +62,8 @@ final class Autoloader
             $file = $directory . $relativePath;
 
             if (is_readable($file)) {
-                require $file;
+                require_once $file;
+                return;
             }
         }
     }
