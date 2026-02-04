@@ -19,6 +19,7 @@ final class MjTrophies extends MjTools implements CrudRepositoryInterface
     public const STATUS_ACTIVE = 'active';
     public const STATUS_ARCHIVED = 'archived';
 
+
     /**
      * @return array<int,string>
      */

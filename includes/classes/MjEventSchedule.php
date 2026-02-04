@@ -9,7 +9,10 @@ use Mj\Member\Classes\Crud\MjEventOccurrences;
 if (!defined('ABSPATH')) {
     exit;
 }
-
+/**
+ * Gestion des horaires et occurrences d'événements.
+ * @package Mj\Member\Classes
+ */
 class MjEventSchedule {
     /**
      * @param object|array $event
@@ -67,7 +70,7 @@ class MjEventSchedule {
     }
 
     /**
-     * @param object|array $event
+     * @param object|array $event Event object or array.
      * @return array<int,array<string,mixed>>
      */
     public static function build_all_occurrences($event) {
@@ -88,9 +91,9 @@ class MjEventSchedule {
     }
 
     /**
-     * @param array<int,array<string,mixed>> $rows
-     * @param array<string,bool> $allowed_statuses
-     * @return array<int,array<string,mixed>>
+     * @param array<int,array<string,mixed>> $rows Rows of event occurrences data.
+     * @param array<string,bool> $allowed_statuses Allowed statuses for filtering occurrences.
+     * @return array<int,array<string,mixed>> Mapped and sorted occurrences.
      */
     private static function map_rows_to_occurrences(array $rows, array $allowed_statuses) {
         if (empty($rows)) {

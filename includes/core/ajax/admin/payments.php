@@ -2,6 +2,7 @@
 
 use Mj\Member\Core\Config;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\MjTrophyService;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -553,6 +554,11 @@ function mj_member_mark_paid() {
     $updated_member = MjMembers::getById($member_id);
     $date_display = ($updated_member && !empty($updated_member->date_last_payement)) ? wp_date('d/m/Y', strtotime($updated_member->date_last_payement)) : '';
     $status_label = ($updated_member && $updated_member->status === MjMembers::STATUS_ACTIVE) ? __('Actif', 'mj-member') : __('Inactif', 'mj-member');
+
+    // Attribuer le trophée "Cotisation réglée"
+    MjTrophyService::assignBySlug($member_id, MjTrophyService::MEMBERSHIP_PAID, array(
+        'notes' => __('Attribué automatiquement lors du paiement de la cotisation.', 'mj-member'),
+    ));
 
     $admin_name = '';
     if ($admin_user_id > 0) {

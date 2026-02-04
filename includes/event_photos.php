@@ -1138,6 +1138,15 @@ if (!function_exists('mj_member_event_photos_submission_handler')) {
             $redirect_with_notice('store');
         }
 
+        // Attribuer le trophée "Première photo publiée" au membre
+        if (class_exists('Mj\\Member\\Classes\\MjTrophyService')) {
+            \Mj\Member\Classes\MjTrophyService::assignBySlug(
+                (int) $current_member->id,
+                \Mj\Member\Classes\MjTrophyService::FIRST_PHOTO_PUBLISHED,
+                array('notes' => __('Attribué automatiquement lors de la publication d\'une photo.', 'mj-member'))
+            );
+        }
+
         if ($caption !== '') {
             wp_update_post(array(
                 'ID' => (int) $attachment_id,

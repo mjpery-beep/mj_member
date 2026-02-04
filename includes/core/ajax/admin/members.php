@@ -2,6 +2,7 @@
 
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\MjRoles;
+use Mj\Member\Classes\MjTrophyService;
 use Mj\Member\Core\Config;
 
 if (!defined('ABSPATH')) {
@@ -220,6 +221,13 @@ function mj_link_member_user_callback() {
         'role' => $target_role,
         'role_label' => isset($editable_roles[$target_role]['name']) ? translate_user_role($editable_roles[$target_role]['name']) : $target_role,
     );
+
+    // Attribuer le trophée "Compte activé" si un nouveau compte a été créé
+    if ($user_created) {
+        MjTrophyService::assignBySlug($member_id, MjTrophyService::AUTO_ACCOUNT_CREATED, array(
+            'notes' => __('Attribué automatiquement lors de la création du compte.', 'mj-member'),
+        ));
+    }
 
     $user_object = get_user_by('id', $user_id);
     if ($user_object) {

@@ -537,8 +537,8 @@ final class TrophiesPage
                     <?php else: ?>
                         <?php foreach ($assignments as $assignment): ?>
                             <?php
-                            $member = MjMembers::get($assignment['member_id']);
-                            $memberName = $member ? sprintf('%s %s', $member['first_name'], $member['last_name']) : __('Membre inconnu', 'mj-member');
+                            $member = MjMembers::getById($assignment['member_id']);
+                            $memberName = $member ? sprintf('%s %s', $member->first_name, $member->last_name) : __('Membre inconnu', 'mj-member');
                             $revokeUrl = wp_nonce_url(
                                 admin_url('admin-post.php?action=revoke_trophy&trophy_id=' . $trophyId . '&member_id=' . $assignment['member_id']),
                                 'revoke_trophy_' . $trophyId . '_' . $assignment['member_id']

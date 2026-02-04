@@ -28,6 +28,7 @@ use Mj\Member\Classes\Forms\EventFormDataMapper;
 use Mj\Member\Classes\Forms\EventFormOptionsBuilder;
 use Mj\Member\Classes\MjEventSchedule;
 use Mj\Member\Classes\MjRoles;
+use Mj\Member\Classes\MjTrophyService;
 use Mj\Member\Core\Config;
 use Mj\Member\Classes\Value\EventLocationData;
 
@@ -5421,10 +5422,12 @@ function mj_regmgr_adjust_member_xp() {
 
     $action_label = $amount > 0 ? 'ajoutés' : 'retirés';
     $abs_amount = abs($amount);
+    $level_progression = mj_regmgr_get_member_level_progression($result);
 
     wp_send_json_success(array(
         'message' => sprintf(__('%d XP %s.', 'mj-member'), $abs_amount, $action_label),
         'xpTotal' => $result,
+        'levelProgression' => $level_progression,
     ));
 }
 
@@ -6421,6 +6424,11 @@ function mj_regmgr_mark_membership_paid() {
         ),
         'created_at' => current_time('mysql'),
     ), array('%d', '%d', '%s', '%s'));
+
+    // Attribuer le trophée "Cotisation réglée"
+    MjTrophyService::assignBySlug($member_id, MjTrophyService::MEMBERSHIP_PAID, array(
+        'notes' => sprintf(__('Cotisation %d - %s', 'mj-member'), $year, $method_label),
+    ));
 
     wp_send_json_success(array(
         'message' => sprintf(__('Cotisation %d enregistrée avec succès.', 'mj-member'), $year),

@@ -4,6 +4,7 @@ use Mj\Member\Core\Config;
 use Mj\Member\Core\Logger;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\MjPayments;
+use Mj\Member\Classes\MjTrophyService;
 use Mj\Member\Classes\Crud\MjEventLocations;
 
 if (!defined('ABSPATH')) {
@@ -239,6 +240,11 @@ if (!function_exists('mj_member_sync_member_user_account')) {
         if ($send_notification && function_exists('wp_send_new_user_notifications')) {
             wp_send_new_user_notifications($user_id, 'user');
         }
+
+        // Attribuer le trophée "Compte activé" au membre
+        MjTrophyService::assignBySlug((int) $member->id, MjTrophyService::AUTO_ACCOUNT_CREATED, array(
+            'notes' => __('Attribué automatiquement lors de la création du compte.', 'mj-member'),
+        ));
 
         return (int) $user_id;
     }

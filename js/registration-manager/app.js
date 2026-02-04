@@ -5011,11 +5011,15 @@
                         ? result.message
                         : (amount > 0 ? '+' : '') + amount + ' XP';
                     showSuccess(successMessage);
-                    // Update xpTotal immediately from response
+                    // Update xpTotal and levelProgression immediately from response
                     if (result && typeof result.xpTotal === 'number') {
                         setMemberDetails(function (prev) {
                             if (!prev) return prev;
-                            return Object.assign({}, prev, { xpTotal: result.xpTotal });
+                            var updates = { xpTotal: result.xpTotal };
+                            if (result.levelProgression) {
+                                updates.levelProgression = result.levelProgression;
+                            }
+                            return Object.assign({}, prev, updates);
                         });
                     }
                     return result;
