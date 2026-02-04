@@ -180,6 +180,24 @@
             },
 
             /**
+             * Récupère les photos d'un événement
+             */
+            getEventPhotos: function (eventId) {
+                return post('mj_regmgr_get_event_photos', { event_id: eventId }, 'event-photos-' + eventId);
+            },
+
+            /**
+             * Upload une photo pour un événement
+             */
+            uploadEventPhoto: function (eventId, file, caption) {
+                return post('mj_regmgr_upload_event_photo', {
+                    event_id: eventId,
+                    photo: file,
+                    caption: caption || '',
+                });
+            },
+
+            /**
              * Récupère les données pour l'éditeur d'événement
              */
             getEventEditor: function (eventId) {

@@ -39,6 +39,8 @@ if (!defined('ABSPATH')) {
 // Register AJAX actions
 add_action('wp_ajax_mj_regmgr_get_events', 'mj_regmgr_get_events');
 add_action('wp_ajax_mj_regmgr_get_event_details', 'mj_regmgr_get_event_details');
+add_action('wp_ajax_mj_regmgr_get_event_photos', 'mj_regmgr_get_event_photos');
+add_action('wp_ajax_mj_regmgr_upload_event_photo', 'mj_regmgr_upload_event_photo');
 add_action('wp_ajax_mj_regmgr_get_event_editor', 'mj_regmgr_get_event_editor');
 add_action('wp_ajax_mj_regmgr_update_event', 'mj_regmgr_update_event');
 add_action('wp_ajax_mj_regmgr_create_event', 'mj_regmgr_create_event');
@@ -1608,6 +1610,14 @@ function mj_regmgr_update_event() {
         }
     }
 
+    // DEBUG registration_document
+    error_log('[MjRegMgr] form_input keys: ' . implode(', ', array_keys($form_input)));
+    if (isset($form_input['event_registration_document'])) {
+        error_log('[MjRegMgr] event_registration_document length: ' . strlen($form_input['event_registration_document']));
+    } else {
+        error_log('[MjRegMgr] event_registration_document NOT in form_input');
+    }
+
     $meta = array();
     if (isset($_POST['meta']) && is_array($_POST['meta'])) {
         $meta = wp_unslash($_POST['meta']);
@@ -1617,6 +1627,13 @@ function mj_regmgr_update_event() {
 
     if (!empty($form_input)) {
         $form_values = EventFormDataMapper::mergeIntoValues($form_values, $form_input);
+    }
+
+    // DEBUG après merge
+    if (isset($form_values['registration_document'])) {
+        error_log('[MjRegMgr] After merge - registration_document length: ' . strlen($form_values['registration_document']));
+    } else {
+        error_log('[MjRegMgr] After merge - registration_document NOT SET');
     }
 
     if (isset($meta['scheduleWeekdayTimes'])) {
@@ -3134,6 +3151,7 @@ function mj_regmgr_prepare_event_form_values($event, array $schedule_weekdays, a
             'allow_guardian_registration' => !empty($event->allow_guardian_registration),
             'requires_validation' => isset($event->requires_validation) ? !empty($event->requires_validation) : true,
             'description' => isset($event->description) ? (string) $event->description : '',
+            'registration_document' => isset($event->registration_document) ? (string) $event->registration_document : '',
             'age_min' => isset($event->age_min) ? (int) $event->age_min : (int) $form_values['age_min'],
             'age_max' => isset($event->age_max) ? (int) $event->age_max : (int) $form_values['age_max'],
             'date_debut' => mj_regmgr_format_event_datetime(isset($event->date_debut) ? $event->date_debut : ''),
@@ -3886,6 +3904,7 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
     $accent_color = isset($form_values['accent_color']) ? mj_regmgr_normalize_hex_color($form_values['accent_color']) : '';
     $cover_id = isset($form_values['cover_id']) ? (int) $form_values['cover_id'] : 0;
     $description = isset($form_values['description']) ? wp_kses_post($form_values['description']) : '';
+    $registration_document = isset($form_values['registration_document']) ? wp_kses_post($form_values['registration_document']) : '';
 
     $age_min = isset($form_values['age_min']) ? (int) $form_values['age_min'] : 0;
     $age_max = isset($form_values['age_max']) ? (int) $form_values['age_max'] : 0;
@@ -4037,6 +4056,7 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
         'emoji' => isset($form_values['emoji']) ? sanitize_text_field((string) $form_values['emoji']) : '',
         'cover_id' => $cover_id,
         'description' => $description,
+        'registration_document' => $registration_document,
         'age_min' => $age_min,
         'age_max' => $age_max,
         'date_fin_inscription' => $date_fin_inscription !== '' ? $date_fin_inscription : null,
@@ -5117,13 +5137,13 @@ function mj_regmgr_get_member_details() {
         }
     }
 
-    // Collect latest approved event photos for this member
+    // Collect event photos for this member (pending + approved)
     $photo_status_labels = MjEventPhotos::get_status_labels();
 
     $photos = MjEventPhotos::query(array(
         'member_id' => $member_id,
-        'status' => MjEventPhotos::STATUS_APPROVED,
-        'per_page' => 12,
+        'status' => array(MjEventPhotos::STATUS_PENDING, MjEventPhotos::STATUS_APPROVED),
+        'per_page' => 20,
         'paged' => 1,
         'orderby' => 'created_at',
         'order' => 'DESC',
@@ -6634,5 +6654,233 @@ function mj_regmgr_toggle_member_trophy() {
         'message' => $awarded
             ? __('Trophée attribué.', 'mj-member')
             : __('Trophée retiré.', 'mj-member'),
+    ));
+}
+
+/**
+ * Get photos for an event
+ */
+function mj_regmgr_get_event_photos() {
+    $member = mj_regmgr_verify_request();
+    if (!$member) {
+        return;
+    }
+
+    $event_id = isset($_POST['event_id']) ? (int) $_POST['event_id'] : 0;
+    if ($event_id <= 0) {
+        wp_send_json_error(array('message' => __('Événement invalide.', 'mj-member')));
+        return;
+    }
+
+    $photo_status_labels = MjEventPhotos::get_status_labels();
+
+    $photos = MjEventPhotos::query(array(
+        'event_id' => $event_id,
+        'status' => array(MjEventPhotos::STATUS_PENDING, MjEventPhotos::STATUS_APPROVED),
+        'per_page' => 50,
+        'paged' => 1,
+        'orderby' => 'created_at',
+        'order' => 'DESC',
+    ));
+
+    $result = array();
+    if (!empty($photos)) {
+        foreach ($photos as $photo) {
+            $attachment_id = isset($photo->attachment_id) ? (int) $photo->attachment_id : 0;
+            if ($attachment_id <= 0) {
+                continue;
+            }
+
+            $thumbnail = wp_get_attachment_image_url($attachment_id, 'medium');
+            if (!$thumbnail) {
+                $thumbnail = wp_get_attachment_url($attachment_id);
+            }
+
+            $full = wp_get_attachment_image_url($attachment_id, 'large');
+            if (!$full) {
+                $full = wp_get_attachment_url($attachment_id);
+            }
+
+            // Get member info
+            $memberName = '';
+            $memberAvatar = '';
+            $memberId = isset($photo->member_id) ? (int) $photo->member_id : 0;
+            if ($memberId > 0) {
+                $photoMember = MjMembers::getById($memberId);
+                if ($photoMember) {
+                    $memberName = trim(($photoMember->first_name ?? '') . ' ' . ($photoMember->last_name ?? ''));
+                    $memberAvatar = mj_regmgr_get_member_avatar_url($memberId);
+                }
+            }
+
+            $status_key = isset($photo->status) ? (string) $photo->status : MjEventPhotos::STATUS_APPROVED;
+
+            $result[] = array(
+                'id' => (int) $photo->id,
+                'memberId' => $memberId,
+                'memberName' => $memberName,
+                'memberAvatar' => $memberAvatar,
+                'caption' => isset($photo->caption) ? (string) $photo->caption : '',
+                'thumbnailUrl' => $thumbnail ?: '',
+                'fullUrl' => $full ?: $thumbnail ?: '',
+                'createdAt' => isset($photo->created_at) ? (string) $photo->created_at : '',
+                'status' => $status_key,
+                'statusLabel' => isset($photo_status_labels[$status_key]) ? (string) $photo_status_labels[$status_key] : $status_key,
+            );
+        }
+    }
+
+    wp_send_json_success(array('photos' => $result));
+}
+
+/**
+ * Upload a new photo for an event
+ */
+function mj_regmgr_upload_event_photo() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) {
+        return;
+    }
+
+    if (!current_user_can('upload_files')) {
+        wp_send_json_error(array('message' => __('Vous ne pouvez pas gérer la médiathèque.', 'mj-member')));
+        return;
+    }
+
+    $event_id = isset($_POST['event_id']) ? (int) $_POST['event_id'] : 0;
+    if ($event_id <= 0) {
+        wp_send_json_error(array('message' => __('Événement invalide.', 'mj-member')));
+        return;
+    }
+
+    $event = MjEvents::find($event_id);
+    if (!$event) {
+        wp_send_json_error(array('message' => __('Événement introuvable.', 'mj-member')));
+        return;
+    }
+
+    // Check permission: must be coordinateur or have manage capability
+    $can_upload = !empty($auth['is_coordinateur']) || !empty($auth['is_animateur']) || current_user_can(Config::capability());
+    if (!$can_upload) {
+        wp_send_json_error(array('message' => __('Accès refusé pour ajouter une photo.', 'mj-member')), 403);
+        return;
+    }
+
+    if (!isset($_FILES['photo'])) {
+        wp_send_json_error(array('message' => __('Aucune photo reçue.', 'mj-member')));
+        return;
+    }
+
+    $file = $_FILES['photo'];
+    if (empty($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) {
+        wp_send_json_error(array('message' => __('Le fichier envoyé est invalide.', 'mj-member')));
+        return;
+    }
+
+    $file_check = wp_check_filetype_and_ext($file['tmp_name'], $file['name']);
+    if (empty($file_check['type']) || strpos($file_check['type'], 'image/') !== 0) {
+        wp_send_json_error(array('message' => __('Le fichier sélectionné n\'est pas une image.', 'mj-member')));
+        return;
+    }
+
+    require_once ABSPATH . 'wp-admin/includes/file.php';
+    require_once ABSPATH . 'wp-admin/includes/media.php';
+    require_once ABSPATH . 'wp-admin/includes/image.php';
+
+    $upload_overrides = array(
+        'test_form' => false,
+        'mimes' => array(
+            'jpg|jpeg|jpe' => 'image/jpeg',
+            'png' => 'image/png',
+            'gif' => 'image/gif',
+            'webp' => 'image/webp',
+        ),
+    );
+
+    $uploaded = wp_handle_upload($file, $upload_overrides);
+    if (isset($uploaded['error'])) {
+        wp_send_json_error(array('message' => $uploaded['error']));
+        return;
+    }
+
+    $filename = $uploaded['file'];
+    $attachment = array(
+        'guid' => $uploaded['url'],
+        'post_mime_type' => $file_check['type'],
+        'post_title' => sanitize_text_field(pathinfo($filename, PATHINFO_FILENAME)),
+        'post_content' => '',
+        'post_status' => 'inherit',
+    );
+
+    $attachment_id = wp_insert_attachment($attachment, $filename);
+    if (is_wp_error($attachment_id)) {
+        if (file_exists($filename)) {
+            wp_delete_file($filename);
+        }
+        wp_send_json_error(array('message' => $attachment_id->get_error_message()));
+        return;
+    }
+
+    $metadata = wp_generate_attachment_metadata($attachment_id, $filename);
+    if (!is_wp_error($metadata)) {
+        wp_update_attachment_metadata($attachment_id, $metadata);
+    }
+
+    // Get member_id from auth
+    $member_id = isset($auth['member_id']) ? (int) $auth['member_id'] : 0;
+    $caption = isset($_POST['caption']) ? sanitize_text_field($_POST['caption']) : '';
+
+    // Create the event photo record - auto approved for animateur/coordinateur
+    $photo_id = MjEventPhotos::create(array(
+        'event_id' => $event_id,
+        'member_id' => $member_id,
+        'attachment_id' => $attachment_id,
+        'caption' => $caption,
+        'status' => MjEventPhotos::STATUS_APPROVED,
+        'reviewed_at' => current_time('mysql'),
+        'reviewed_by' => get_current_user_id(),
+    ));
+
+    if (is_wp_error($photo_id)) {
+        wp_delete_attachment($attachment_id, true);
+        wp_send_json_error(array('message' => $photo_id->get_error_message()));
+        return;
+    }
+
+    $thumbnail = wp_get_attachment_image_url($attachment_id, 'medium');
+    if (!$thumbnail) {
+        $thumbnail = wp_get_attachment_url($attachment_id);
+    }
+    $full = wp_get_attachment_image_url($attachment_id, 'large');
+    if (!$full) {
+        $full = wp_get_attachment_url($attachment_id);
+    }
+
+    $memberName = '';
+    $memberAvatar = '';
+    if ($member_id > 0) {
+        $photoMember = MjMembers::getById($member_id);
+        if ($photoMember) {
+            $memberName = trim(($photoMember->first_name ?? '') . ' ' . ($photoMember->last_name ?? ''));
+            $memberAvatar = mj_regmgr_get_member_avatar_url($member_id);
+        }
+    }
+
+    $status_labels = MjEventPhotos::get_status_labels();
+
+    wp_send_json_success(array(
+        'message' => __('Photo ajoutée avec succès.', 'mj-member'),
+        'photo' => array(
+            'id' => (int) $photo_id,
+            'memberId' => $member_id,
+            'memberName' => $memberName,
+            'memberAvatar' => $memberAvatar,
+            'caption' => $caption,
+            'thumbnailUrl' => $thumbnail ?: '',
+            'fullUrl' => $full ?: $thumbnail ?: '',
+            'createdAt' => current_time('mysql'),
+            'status' => MjEventPhotos::STATUS_APPROVED,
+            'statusLabel' => $status_labels[MjEventPhotos::STATUS_APPROVED] ?? 'Validée',
+        ),
     ));
 }

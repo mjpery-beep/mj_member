@@ -502,6 +502,7 @@
         var onSyncBadgeCriteria = typeof props.onSyncBadgeCriteria === 'function' ? props.onSyncBadgeCriteria : null;
         var onAdjustXp = typeof props.onAdjustXp === 'function' ? props.onAdjustXp : null;
         var onToggleTrophy = typeof props.onToggleTrophy === 'function' ? props.onToggleTrophy : null;
+        var onSelectEvent = typeof props.onSelectEvent === 'function' ? props.onSelectEvent : null;
         var pendingEditRequest = props.pendingEditRequest || null;
         var onPendingEditHandled = typeof props.onPendingEditHandled === 'function' ? props.onPendingEditHandled : null;
 
@@ -582,6 +583,10 @@
         var _useStatePhotoDeletingId = useState(null);
         var photoDeletingId = _useStatePhotoDeletingId[0];
         var setPhotoDeletingId = _useStatePhotoDeletingId[1];
+
+        var _useStatePhotoApprovingId = useState(null);
+        var photoApprovingId = _useStatePhotoApprovingId[0];
+        var setPhotoApprovingId = _useStatePhotoApprovingId[1];
 
         var _useStateMessageDeletingId = useState(null);
         var messageDeletingId = _useStateMessageDeletingId[0];
@@ -1311,6 +1316,24 @@
                 });
         };
 
+        var handleApprovePhoto = function (photo) {
+            if (!onUpdatePhoto || !member || !member.id || !photo || !photo.id) {
+                return;
+            }
+            var payload = {
+                caption: photo.caption || '',
+                status: 'approved',
+            };
+            setPhotoApprovingId(photo.id);
+            Promise.resolve(onUpdatePhoto(member.id, photo.id, payload))
+                .catch(function () {
+                    // Erreur gérée en amont
+                })
+                .finally(function () {
+                    setPhotoApprovingId(null);
+                });
+        };
+
         var handleDeleteMessage = function (message) {
             if (!onDeleteMessage || !member || !member.id || !message || !message.id) {
                 return;
@@ -1610,6 +1633,7 @@
         var tabHistoryLabel = getString(strings, 'tabMemberHistory', 'Historique');
 
         var photosCount = memberPhotos.length;
+        var pendingPhotosCount = memberPhotos.filter(function (p) { return p.status === 'pending'; }).length;
         var ideasCount = memberIdeas.length;
         var messagesCount = memberMessages.length;
         var notesCount = notes.length;
@@ -1659,7 +1683,7 @@
             { key: 'information', label: tabInformationLabel, icon: tabIcons.information },
             { key: 'membership', label: tabMembershipLabel, icon: tabIcons.membership },
             { key: 'badges', label: tabBadgesLabel, badge: badgesCompletedCount > 0 ? badgesCompletedCount : undefined, icon: tabIcons.badges },
-            { key: 'photos', label: tabPhotosLabel, badge: photosCount > 0 ? photosCount : undefined, icon: tabIcons.photos },
+            { key: 'photos', label: tabPhotosLabel, badge: pendingPhotosCount > 0 ? pendingPhotosCount : undefined, badgeType: pendingPhotosCount > 0 ? 'warning' : undefined, icon: tabIcons.photos },
             { key: 'ideas', label: tabIdeasLabel, badge: ideasCount > 0 ? ideasCount : undefined, icon: tabIcons.ideas },
             { key: 'messages', label: tabMessagesLabel, badge: messagesCount > 0 ? messagesCount : undefined, icon: tabIcons.messages },
             { key: 'notes', label: tabNotesLabel, badge: notesCount > 0 ? notesCount : undefined, icon: tabIcons.notes },
@@ -1745,7 +1769,11 @@
                                 dangerouslySetInnerHTML: { __html: tab.icon },
                             }),
                             h('span', { class: 'mj-regmgr-tab__label', 'aria-hidden': 'true' }, tab.label),
-                            tab.badge !== undefined && h('span', { class: 'mj-regmgr-tab__badge' }, tab.badge),
+                            tab.badge !== undefined && h('span', {
+                                class: classNames('mj-regmgr-tab__badge', {
+                                    'mj-regmgr-tab__badge--warning': tab.badgeType === 'warning',
+                                }),
+                            }, tab.badge),
                         ]);
                     })
                 );
@@ -2492,9 +2520,12 @@
                                     var statusKey = photo.status || 'approved';
                                     var statusLabel = photo.statusLabel || photoStatusLabels[statusKey] || statusKey;
                                     var isEditingPhoto = editingPhotoId === photo.id;
+                                    var isPending = statusKey === 'pending';
+                                    var isProcessing = photoApprovingId === photo.id || photoDeletingId === photo.id;
                                     return h('div', {
                                         key: photo.id,
                                         class: classNames('mj-regmgr-member-photo', {
+                                            'mj-regmgr-member-photo--pending': isPending,
                                             'mj-regmgr-member-photo--editing': isEditingPhoto,
                                         }),
                                     }, [
@@ -2507,39 +2538,70 @@
                                             }, [
                                                 h('img', { src: photo.thumbnailUrl, alt: photo.caption || '', loading: 'lazy' }),
                                             ]),
-                                            h('figcaption', { class: 'mj-regmgr-member-photo__caption' }, [
-                                                photo.eventTitle && h('span', { class: 'mj-regmgr-member-photo__event' }, photo.eventTitle),
-                                                !isEditingPhoto && photo.caption && h('span', { class: 'mj-regmgr-member-photo__text' }, photo.caption),
-                                            ]),
-                                        ]),
-                                        h('div', { class: 'mj-regmgr-member-photo__meta' }, [
                                             h('span', {
-                                                class: classNames('mj-regmgr-badge', photoStatusClasses[statusKey] || ''),
+                                                class: classNames('mj-regmgr-badge mj-regmgr-member-photo__status-badge', photoStatusClasses[statusKey] || ''),
                                             }, statusLabel),
-                                            onUpdatePhoto && !isEditingPhoto && h('button', {
-                                                type: 'button',
-                                                class: 'mj-btn mj-btn--icon mj-btn--ghost mj-btn--small',
-                                                onClick: function () { handlePhotoEditStart(photo); },
-                                                title: 'Modifier',
-                                                disabled: photoDeletingId === photo.id,
+                                        ]),
+                                        !isEditingPhoto && h('div', { class: 'mj-regmgr-member-photo__body' }, [
+                                            photo.eventTitle && h('a', {
+                                                href: '#',
+                                                class: 'mj-regmgr-member-photo__event',
+                                                onClick: function (e) {
+                                                    e.preventDefault();
+                                                    if (photo.eventId && typeof onSelectEvent === 'function') {
+                                                        onSelectEvent(photo.eventId);
+                                                    }
+                                                },
+                                                title: 'Voir l\'événement',
                                             }, [
-                                                h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                                                    h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
-                                                    h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+                                                h('svg', { width: 12, height: 12, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, class: 'mj-regmgr-member-photo__event-icon' }, [
+                                                    h('rect', { x: 3, y: 4, width: 18, height: 18, rx: 2, ry: 2 }),
+                                                    h('line', { x1: 16, y1: 2, x2: 16, y2: 6 }),
+                                                    h('line', { x1: 8, y1: 2, x2: 8, y2: 6 }),
+                                                    h('line', { x1: 3, y1: 10, x2: 21, y2: 10 }),
                                                 ]),
+                                                h('span', null, photo.eventTitle),
                                             ]),
-                                            onDeletePhoto && !isEditingPhoto && h('button', {
-                                                type: 'button',
-                                                class: 'mj-btn mj-btn--ghost mj-btn--danger mj-btn--small',
-                                                onClick: function () { handleDeletePhoto(photo); },
-                                                disabled: photoDeletingId === photo.id,
-                                            }, photoDeletingId === photo.id ? 'Suppression...' : 'Supprimer'),
+                                            photo.caption && h('span', { class: 'mj-regmgr-member-photo__caption-text' }, photo.caption),
+                                            h('div', { class: 'mj-regmgr-member-photo__actions' }, [
+                                                onUpdatePhoto && isPending && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--success mj-btn--small',
+                                                    onClick: function () { handleApprovePhoto(photo); },
+                                                    disabled: isProcessing,
+                                                }, photoApprovingId === photo.id ? 'Validation...' : 'Valider'),
+                                                onUpdatePhoto && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--icon mj-btn--ghost mj-btn--small',
+                                                    onClick: function () { handlePhotoEditStart(photo); },
+                                                    title: 'Modifier',
+                                                    disabled: isProcessing,
+                                                }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                        h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
+                                                        h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+                                                    ]),
+                                                ]),
+                                                onDeletePhoto && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--icon mj-btn--ghost mj-btn--danger mj-btn--small',
+                                                    onClick: function () { handleDeletePhoto(photo); },
+                                                    title: 'Supprimer',
+                                                    disabled: isProcessing,
+                                                }, photoDeletingId === photo.id
+                                                    ? h('span', { class: 'mj-regmgr-spinner mj-regmgr-spinner--inline' })
+                                                    : h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                        h('polyline', { points: '3 6 5 6 21 6' }),
+                                                        h('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' }),
+                                                    ])
+                                                ),
+                                            ]),
                                         ]),
                                         isEditingPhoto && h('div', { class: 'mj-regmgr-member-photo__edit' }, [
                                             h('label', { class: 'mj-regmgr-member-photo__edit-label' }, 'Légende'),
                                             h('textarea', {
                                                 class: 'mj-regmgr-textarea',
-                                                rows: 3,
+                                                rows: 2,
                                                 value: photoDraft.caption,
                                                 onInput: function (e) {
                                                     var value = e.target.value;
@@ -2585,95 +2647,133 @@
                             ])
                             : h('div', { class: 'mj-regmgr-member-detail__section' }, [
                                 h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberPhotos', 'Photos partagées')),
-                                h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoPhotos', 'Aucune photo validée pour ce membre.')),
+                                h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoPhotos', 'Aucune photo pour ce membre.')),
                             ]),
                     ]),
                     activeTab === 'ideas' && h(Fragment, null, [
-                        memberIdeas.length > 0
-                            ? h('div', { class: 'mj-regmgr-member-detail__section' }, [
-                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberIdeas', 'Idées proposées')),
-                                h('div', { class: 'mj-regmgr-member-detail__ideas' }, memberIdeas.map(function (idea) {
+                        h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                            h('div', { class: 'mj-regmgr-member-detail__section-header' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, [
+                                    h('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', class: 'mj-regmgr-member-detail__section-icon' }, [
+                                        h('path', { d: 'M9 18h6' }),
+                                        h('path', { d: 'M10 22h4' }),
+                                        h('path', { d: 'M12 2a7 7 0 0 0-4 12.9V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.1A7 7 0 0 0 12 2z' }),
+                                    ]),
+                                    getString(strings, 'memberIdeas', 'Idées proposées'),
+                                    memberIdeas.length > 0 && h('span', { class: 'mj-regmgr-member-detail__section-count' }, memberIdeas.length),
+                                ]),
+                            ]),
+                            memberIdeas.length > 0
+                                ? h('div', { class: 'mj-regmgr-member-ideas-grid' }, memberIdeas.map(function (idea) {
                                     var statusKey = idea.status || 'published';
                                     var statusLabel = ideaStatusLabels[statusKey] || statusKey;
                                     var isEditingIdea = editingIdeaId === idea.id;
+                                    var voteCount = typeof idea.voteCount === 'number' ? idea.voteCount : 0;
                                     return h('article', {
                                         key: idea.id,
-                                        class: classNames('mj-regmgr-member-idea', {
-                                            'mj-regmgr-member-idea--editing': isEditingIdea,
+                                        class: classNames('mj-regmgr-idea-card', {
+                                            'mj-regmgr-idea-card--editing': isEditingIdea,
+                                            'mj-regmgr-idea-card--published': statusKey === 'published',
+                                            'mj-regmgr-idea-card--draft': statusKey === 'draft',
+                                            'mj-regmgr-idea-card--archived': statusKey === 'archived',
                                         }),
                                     }, [
-                                        h('header', { class: 'mj-regmgr-member-idea__header' }, [
-                                            h('div', { class: 'mj-regmgr-member-idea__heading' }, [
-                                                h('span', {
-                                                    class: classNames('mj-regmgr-badge mj-regmgr-badge--sm', ideaStatusClasses[statusKey] || ''),
-                                                }, statusLabel),
-                                                !isEditingIdea && h('h2', { class: 'mj-regmgr-member-idea__title' }, idea.title || 'Idée'),
-                                                !isEditingIdea && idea.voteCount >= 0 && h('span', { class: 'mj-regmgr-member-idea__votes' }, idea.voteCount + ' ❤'),
+                                        h('div', { class: 'mj-regmgr-idea-card__status-indicator' }),
+                                        !isEditingIdea && h('header', { class: 'mj-regmgr-idea-card__header' }, [
+                                            h('div', { class: 'mj-regmgr-idea-card__title-row' }, [
+                                                h('h3', { class: 'mj-regmgr-idea-card__title' }, idea.title || 'Idée sans titre'),
+                                                onUpdateIdea && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-regmgr-idea-card__edit-btn',
+                                                    onClick: function () { handleIdeaEditStart(idea); },
+                                                    title: 'Modifier l\'idée',
+                                                }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                        h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
+                                                        h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+                                                    ]),
+                                                ]),
                                             ]),
-                                            onUpdateIdea && !isEditingIdea && h('button', {
-                                                type: 'button',
-                                                class: 'mj-btn mj-btn--icon mj-btn--ghost mj-btn--small',
-                                                onClick: function () { handleIdeaEditStart(idea); },
-                                                title: 'Modifier',
-                                            }, [
-                                                h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                                                    h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
-                                                    h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+                                            h('div', { class: 'mj-regmgr-idea-card__badges' }, [
+                                                h('span', {
+                                                    class: classNames('mj-regmgr-idea-card__status', 'mj-regmgr-idea-card__status--' + statusKey),
+                                                }, statusLabel),
+                                                h('span', { class: 'mj-regmgr-idea-card__votes' }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'currentColor', class: 'mj-regmgr-idea-card__vote-icon' }, [
+                                                        h('path', { d: 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z' }),
+                                                    ]),
+                                                    h('span', null, voteCount),
                                                 ]),
                                             ]),
                                         ]),
-                                        !isEditingIdea && h(Fragment, null, [
-                                            idea.content && h('p', { class: 'mj-regmgr-member-idea__content' }, idea.content),
-                                            idea.createdAt && h('p', { class: 'mj-regmgr-member-idea__meta' }, formatDate(idea.createdAt)),
+                                        !isEditingIdea && h('div', { class: 'mj-regmgr-idea-card__body' }, [
+                                            idea.content && h('p', { class: 'mj-regmgr-idea-card__content' }, idea.content),
                                         ]),
-                                        isEditingIdea && h('div', { class: 'mj-regmgr-member-idea__edit' }, [
-                                            h('label', { class: 'mj-regmgr-member-idea__edit-label' }, 'Titre'),
-                                            h('input', {
-                                                type: 'text',
-                                                class: 'mj-regmgr-input',
-                                                value: ideaDraft.title,
-                                                onInput: function (e) {
-                                                    var value = e.target.value;
-                                                    setIdeaDraft(function (prev) {
-                                                        var next = prev ? Object.assign({}, prev) : {};
-                                                        next.title = value;
-                                                        return next;
-                                                    });
-                                                },
-                                            }),
-                                            h('label', { class: 'mj-regmgr-member-idea__edit-label' }, 'Description'),
-                                            h('textarea', {
-                                                class: 'mj-regmgr-textarea',
-                                                rows: 4,
-                                                value: ideaDraft.content,
-                                                onInput: function (e) {
-                                                    var value = e.target.value;
-                                                    setIdeaDraft(function (prev) {
-                                                        var next = prev ? Object.assign({}, prev) : {};
-                                                        next.content = value;
-                                                        return next;
-                                                    });
-                                                },
-                                            }),
-                                            h('label', { class: 'mj-regmgr-member-idea__edit-label' }, 'Statut'),
-                                            h('select', {
-                                                class: 'mj-regmgr-select',
-                                                value: ideaDraft.status,
-                                                onChange: function (e) {
-                                                    var value = e.target.value;
-                                                    setIdeaDraft(function (prev) {
-                                                        var next = prev ? Object.assign({}, prev) : {};
-                                                        next.status = value;
-                                                        return next;
-                                                    });
-                                                },
-                                            }, Object.keys(ideaStatusLabels).map(function (key) {
-                                                return h('option', { key: key, value: key }, ideaStatusLabels[key]);
-                                            })),
-                                            h('div', { class: 'mj-regmgr-member-idea__edit-actions' }, [
+                                        !isEditingIdea && idea.createdAt && h('footer', { class: 'mj-regmgr-idea-card__footer' }, [
+                                            h('span', { class: 'mj-regmgr-idea-card__date' }, [
+                                                h('svg', { width: 12, height: 12, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                    h('circle', { cx: 12, cy: 12, r: 10 }),
+                                                    h('polyline', { points: '12 6 12 12 16 14' }),
+                                                ]),
+                                                formatDate(idea.createdAt),
+                                            ]),
+                                        ]),
+                                        isEditingIdea && h('div', { class: 'mj-regmgr-idea-card__edit-form' }, [
+                                            h('div', { class: 'mj-regmgr-idea-card__edit-field' }, [
+                                                h('label', { class: 'mj-regmgr-idea-card__edit-label' }, 'Titre'),
+                                                h('input', {
+                                                    type: 'text',
+                                                    class: 'mj-regmgr-input',
+                                                    value: ideaDraft.title,
+                                                    placeholder: 'Titre de l\'idée...',
+                                                    onInput: function (e) {
+                                                        var value = e.target.value;
+                                                        setIdeaDraft(function (prev) {
+                                                            var next = prev ? Object.assign({}, prev) : {};
+                                                            next.title = value;
+                                                            return next;
+                                                        });
+                                                    },
+                                                }),
+                                            ]),
+                                            h('div', { class: 'mj-regmgr-idea-card__edit-field' }, [
+                                                h('label', { class: 'mj-regmgr-idea-card__edit-label' }, 'Description'),
+                                                h('textarea', {
+                                                    class: 'mj-regmgr-textarea',
+                                                    rows: 4,
+                                                    value: ideaDraft.content,
+                                                    placeholder: 'Décrivez l\'idée...',
+                                                    onInput: function (e) {
+                                                        var value = e.target.value;
+                                                        setIdeaDraft(function (prev) {
+                                                            var next = prev ? Object.assign({}, prev) : {};
+                                                            next.content = value;
+                                                            return next;
+                                                        });
+                                                    },
+                                                }),
+                                            ]),
+                                            h('div', { class: 'mj-regmgr-idea-card__edit-field' }, [
+                                                h('label', { class: 'mj-regmgr-idea-card__edit-label' }, 'Statut'),
+                                                h('select', {
+                                                    class: 'mj-regmgr-select',
+                                                    value: ideaDraft.status,
+                                                    onChange: function (e) {
+                                                        var value = e.target.value;
+                                                        setIdeaDraft(function (prev) {
+                                                            var next = prev ? Object.assign({}, prev) : {};
+                                                            next.status = value;
+                                                            return next;
+                                                        });
+                                                    },
+                                                }, Object.keys(ideaStatusLabels).map(function (key) {
+                                                    return h('option', { key: key, value: key }, ideaStatusLabels[key]);
+                                                })),
+                                            ]),
+                                            h('div', { class: 'mj-regmgr-idea-card__edit-actions' }, [
                                                 h('button', {
                                                     type: 'button',
-                                                    class: 'mj-btn mj-btn--secondary mj-btn--small',
+                                                    class: 'mj-btn mj-btn--ghost mj-btn--small',
                                                     onClick: handleIdeaEditCancel,
                                                     disabled: ideaSaving,
                                                 }, 'Annuler'),
@@ -2686,12 +2786,19 @@
                                             ]),
                                         ]),
                                     ]);
-                                })),
-                            ])
-                            : h('div', { class: 'mj-regmgr-member-detail__section' }, [
-                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberIdeas', 'Idées proposées')),
-                                h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoIdeas', 'Aucune idée proposée pour le moment.')),
-                            ]),
+                                }))
+                                : h('div', { class: 'mj-regmgr-member-ideas-empty' }, [
+                                    h('div', { class: 'mj-regmgr-member-ideas-empty__icon' }, [
+                                        h('svg', { width: 48, height: 48, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, [
+                                            h('path', { d: 'M9 18h6' }),
+                                            h('path', { d: 'M10 22h4' }),
+                                            h('path', { d: 'M12 2a7 7 0 0 0-4 12.9V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.1A7 7 0 0 0 12 2z' }),
+                                        ]),
+                                    ]),
+                                    h('p', { class: 'mj-regmgr-member-ideas-empty__text' }, getString(strings, 'memberNoIdeas', 'Aucune idée proposée pour le moment.')),
+                                    h('p', { class: 'mj-regmgr-member-ideas-empty__hint' }, 'Les idées proposées par ce membre apparaîtront ici.'),
+                                ]),
+                        ]),
                     ]),
                     activeTab === 'messages' && h(Fragment, null, [
                         memberMessages.length > 0

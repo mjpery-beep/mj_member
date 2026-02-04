@@ -3636,6 +3636,25 @@
         var regDocError = _regDocError[0];
         var setRegDocError = _regDocError[1];
 
+        // Event photos state
+        var _eventPhotos = useState([]);
+        var eventPhotos = _eventPhotos[0];
+        var setEventPhotos = _eventPhotos[1];
+
+        var _eventPhotosLoading = useState(false);
+        var eventPhotosLoading = _eventPhotosLoading[0];
+        var setEventPhotosLoading = _eventPhotosLoading[1];
+
+        var _eventPhotoUpdating = useState(null);
+        var eventPhotoUpdating = _eventPhotoUpdating[0];
+        var setEventPhotoUpdating = _eventPhotoUpdating[1];
+
+        var _eventPhotoUploading = useState(false);
+        var eventPhotoUploading = _eventPhotoUploading[0];
+        var setEventPhotoUploading = _eventPhotoUploading[1];
+
+        var eventPhotoInputRef = useRef(null);
+
         var regDocFieldIdRef = useRef(null);
         if (!regDocFieldIdRef.current) {
             regDocFieldIdRef.current = 'mj-regmgr-regdoc-' + Math.random().toString(36).slice(2);
@@ -3930,6 +3949,52 @@
                 });
         }, [api, showError]);
 
+        // Charger les photos de l'événement sélectionné
+        var loadEventPhotos = useCallback(function (eventId) {
+            if (!eventId) {
+                setEventPhotos([]);
+                return;
+            }
+            setEventPhotosLoading(true);
+            api.getEventPhotos(eventId)
+                .then(function (data) {
+                    setEventPhotos(data.photos || []);
+                    setEventPhotosLoading(false);
+                })
+                .catch(function (err) {
+                    if (!err.aborted) {
+                        showError(err.message);
+                    }
+                    setEventPhotosLoading(false);
+                });
+        }, [api, showError]);
+
+        // Upload une photo pour l'événement
+        var handleUploadEventPhoto = useCallback(function (file) {
+            if (!selectedEvent || !selectedEvent.id || !file) {
+                return;
+            }
+            setEventPhotoUploading(true);
+            api.uploadEventPhoto(selectedEvent.id, file, '')
+                .then(function (result) {
+                    if (result.photo) {
+                        setEventPhotos(function (prev) {
+                            return [result.photo].concat(prev);
+                        });
+                    }
+                    showSuccess(result.message || 'Photo ajoutée');
+                    setEventPhotoUploading(false);
+                    // Reset input
+                    if (eventPhotoInputRef.current) {
+                        eventPhotoInputRef.current.value = '';
+                    }
+                })
+                .catch(function (err) {
+                    showError(err.message || 'Erreur lors de l\'upload');
+                    setEventPhotoUploading(false);
+                });
+        }, [api, selectedEvent, showSuccess, showError]);
+
         var handleDescriptionChange = useCallback(function (nextValue) {
             var safeValue = typeof nextValue === 'string' ? nextValue : '';
             setDescriptionState(function (prev) {
@@ -4053,6 +4118,14 @@
 
             var eventId = selectedEvent.id;
             var draftValue = regDocState.draft || '';
+
+            // DEBUG
+            console.log('[MjRegMgr] Saving registration document:', {
+                eventId: eventId,
+                draftValue: draftValue,
+                draftLength: draftValue.length,
+                base: regDocState.base,
+            });
 
             setRegDocSaving(true);
             setRegDocError('');
@@ -4306,6 +4379,9 @@
             setRegDocSaving(false);
             setRegDocError('');
             setRegDocState({ base: '', draft: '', eventId: null });
+            setEventPhotos([]);
+            setEventPhotosLoading(false);
+            setEventPhotoUpdating(null);
             eventEditorLoadedRef.current = null;
             var defaultTab = 'registrations';
             if (event) {
@@ -4703,6 +4779,26 @@
             }
             loadEventEditor(selectedEvent.id);
         }, [sidebarMode, activeTab, selectedEvent, eventEditorLoading, eventEditorSaving, eventEditorData, loadEventEditor]);
+
+        // Charger les photos de l'événement quand l'onglet photos est actif
+        useEffect(function () {
+            if (sidebarMode !== 'events') {
+                return;
+            }
+            if (activeTab !== 'photos') {
+                return;
+            }
+            if (!selectedEvent || !selectedEvent.id) {
+                return;
+            }
+            if (eventPhotosLoading) {
+                return;
+            }
+            if (eventPhotos.length > 0) {
+                return;
+            }
+            loadEventPhotos(selectedEvent.id);
+        }, [sidebarMode, activeTab, selectedEvent, eventPhotosLoading, eventPhotos, loadEventPhotos]);
 
         // ============================================
         // MEMBERS MODE FUNCTIONS
@@ -5355,6 +5451,28 @@
             handleSelectMember(member);
         }, [handleSelectMember, setSelectedEvent, setEventDetails, setSidebarMode, setPendingMemberEdit]);
 
+        // Naviguer vers un événement depuis la fiche membre (ex: photo)
+        var handleViewEventById = useCallback(function (eventId) {
+            if (!eventId) {
+                return;
+            }
+            // Chercher l'événement dans la liste
+            var found = events.find(function (e) { return e.id === eventId; });
+            if (found) {
+                setSidebarMode('events');
+                setSelectedMember(null);
+                setMemberDetails(null);
+                handleSelectEvent(found);
+            } else {
+                // L'événement n'est pas dans la liste actuelle, on l'affiche quand même
+                // en créant un objet minimal
+                setSidebarMode('events');
+                setSelectedMember(null);
+                setMemberDetails(null);
+                handleSelectEvent({ id: eventId });
+            }
+        }, [events, handleSelectEvent, setSidebarMode, setSelectedMember, setMemberDetails]);
+
         // Mettre à jour un membre
         var handleUpdateMember = useCallback(function (memberId, data) {
             return api.updateMember(memberId, data)
@@ -5968,7 +6086,13 @@
             details: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><circle cx="12" cy="8" r="1"></circle></svg>',
             occurrences: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>',
             editor: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5l4 4-11 11H5.5v-6.5z"></path></svg>',
+            photos: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>',
         };
+
+        // Compteur de photos en attente pour l'événement
+        var eventPendingPhotosCount = useMemo(function () {
+            return eventPhotos.filter(function (p) { return p.status === 'pending'; }).length;
+        }, [eventPhotos]);
 
         var tabs = [
             { 
@@ -5991,6 +6115,13 @@
                 key: 'regdoc',
                 label: getString(strings, 'tabRegDoc', 'Document d\'inscription'),
                 icon: tabIcons.regdoc,
+            },
+            {
+                key: 'photos',
+                label: getString(strings, 'tabPhotos', 'Photos'),
+                icon: tabIcons.photos,
+                badge: eventPendingPhotosCount > 0 ? eventPendingPhotosCount : null,
+                badgeClass: eventPendingPhotosCount > 0 ? 'mj-regmgr-tab__badge--warning' : '',
             },
             { 
                 key: 'details', 
@@ -6377,6 +6508,172 @@
                                     ]),
                             ]),
 
+                            activeTab === 'photos' && h('div', { class: 'mj-regmgr-photos-tab' }, [
+                                // Header avec bouton d'upload
+                                h('div', { class: 'mj-regmgr-event-photos__header' }, [
+                                    h('input', {
+                                        ref: eventPhotoInputRef,
+                                        type: 'file',
+                                        accept: 'image/*',
+                                        style: 'display: none;',
+                                        onChange: function (e) {
+                                            var file = e.target.files && e.target.files[0];
+                                            if (file) {
+                                                handleUploadEventPhoto(file);
+                                            }
+                                        },
+                                    }),
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--primary',
+                                        onClick: function () {
+                                            if (eventPhotoInputRef.current) {
+                                                eventPhotoInputRef.current.click();
+                                            }
+                                        },
+                                        disabled: eventPhotoUploading,
+                                    }, [
+                                        eventPhotoUploading
+                                            ? getString(strings, 'uploading', 'Envoi en cours...')
+                                            : h(Fragment, null, [
+                                                h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, style: 'margin-right: 6px; vertical-align: middle;' }, [
+                                                    h('path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }),
+                                                    h('polyline', { points: '17 8 12 3 7 8' }),
+                                                    h('line', { x1: 12, y1: 3, x2: 12, y2: 15 }),
+                                                ]),
+                                                getString(strings, 'addPhoto', 'Ajouter une photo'),
+                                            ]),
+                                    ]),
+                                ]),
+                                eventPhotosLoading
+                                    ? h('div', { class: 'mj-regmgr-loading' }, [
+                                        h('div', { class: 'mj-regmgr-loading__spinner' }),
+                                        h('p', { class: 'mj-regmgr-loading__text' }, getString(strings, 'loading', 'Chargement des photos...')),
+                                    ])
+                                    : eventPhotos.length === 0
+                                        ? h('div', { class: 'mj-regmgr-empty-state' }, [
+                                            h('div', { class: 'mj-regmgr-empty-state__icon', dangerouslySetInnerHTML: { __html: tabIcons.photos } }),
+                                            h('h3', { class: 'mj-regmgr-empty-state__title' }, getString(strings, 'eventNoPhotos', 'Aucune photo')),
+                                            h('p', { class: 'mj-regmgr-empty-state__text' }, getString(strings, 'eventNoPhotosText', 'Les participants n\'ont pas encore partagé de photos pour cet événement.')),
+                                        ])
+                                        : h('div', { class: 'mj-regmgr-event-photos' }, [
+                                            eventPendingPhotosCount > 0 && h('div', { class: 'mj-regmgr-event-photos__notice mj-regmgr-event-photos__notice--warning' }, [
+                                                h('span', null, eventPendingPhotosCount + ' photo' + (eventPendingPhotosCount > 1 ? 's' : '') + ' en attente de validation'),
+                                            ]),
+                                            h('div', { class: 'mj-regmgr-event-photos__grid' },
+                                                eventPhotos.map(function (photo) {
+                                                    var isPending = photo.status === 'pending';
+                                                    var isUpdating = eventPhotoUpdating === photo.id;
+                                                    var photoStatusClasses = {
+                                                        pending: 'mj-regmgr-badge--warning',
+                                                        approved: 'mj-regmgr-badge--success',
+                                                        rejected: 'mj-regmgr-badge--error',
+                                                    };
+                                                    return h('div', {
+                                                        key: photo.id,
+                                                        class: classNames('mj-regmgr-event-photo', {
+                                                            'mj-regmgr-event-photo--pending': isPending,
+                                                        }),
+                                                    }, [
+                                                        h('figure', { class: 'mj-regmgr-event-photo__figure' }, [
+                                                            h('a', {
+                                                                href: photo.fullUrl || photo.thumbnailUrl,
+                                                                target: '_blank',
+                                                                rel: 'noreferrer',
+                                                                class: 'mj-regmgr-event-photo__link',
+                                                            }, [
+                                                                h('img', { src: photo.thumbnailUrl, alt: photo.caption || '', loading: 'lazy' }),
+                                                            ]),
+                                                            h('span', {
+                                                                class: classNames('mj-regmgr-badge mj-regmgr-event-photo__status-badge', photoStatusClasses[photo.status] || ''),
+                                                            }, photo.statusLabel),
+                                                        ]),
+                                                        h('div', { class: 'mj-regmgr-event-photo__body' }, [
+                                                            photo.memberName && h('a', {
+                                                                href: '#',
+                                                                class: 'mj-regmgr-event-photo__member',
+                                                                onClick: function (e) {
+                                                                    e.preventDefault();
+                                                                    if (photo.memberId) {
+                                                                        handleViewMemberFromRegistration({ id: photo.memberId });
+                                                                    }
+                                                                },
+                                                                title: 'Voir le membre',
+                                                            }, [
+                                                                photo.memberAvatar && h('img', {
+                                                                    src: photo.memberAvatar,
+                                                                    alt: '',
+                                                                    class: 'mj-regmgr-event-photo__member-avatar',
+                                                                }),
+                                                                h('span', null, photo.memberName),
+                                                            ]),
+                                                            photo.caption && h('span', { class: 'mj-regmgr-event-photo__caption-text' }, photo.caption),
+                                                            h('div', { class: 'mj-regmgr-event-photo__actions' }, [
+                                                                isPending && h('button', {
+                                                                    type: 'button',
+                                                                    class: 'mj-btn mj-btn--success mj-btn--small',
+                                                                    onClick: function () {
+                                                                        setEventPhotoUpdating(photo.id);
+                                                                        api.updateMemberPhoto(photo.id, { status: 'approved' })
+                                                                            .then(function (result) {
+                                                                                setEventPhotos(function (prev) {
+                                                                                    return prev.map(function (p) {
+                                                                                        if (p.id === photo.id) {
+                                                                                            return Object.assign({}, p, {
+                                                                                                status: 'approved',
+                                                                                                statusLabel: result.photo && result.photo.statusLabel ? result.photo.statusLabel : 'Validée',
+                                                                                            });
+                                                                                        }
+                                                                                        return p;
+                                                                                    });
+                                                                                });
+                                                                                showSuccess('Photo validée');
+                                                                                setEventPhotoUpdating(null);
+                                                                            })
+                                                                            .catch(function (err) {
+                                                                                showError(err.message || 'Erreur lors de la validation');
+                                                                                setEventPhotoUpdating(null);
+                                                                            });
+                                                                    },
+                                                                    disabled: isUpdating,
+                                                                }, isUpdating ? 'Validation...' : 'Valider'),
+                                                                h('button', {
+                                                                    type: 'button',
+                                                                    class: 'mj-btn mj-btn--icon mj-btn--ghost mj-btn--small mj-btn--danger',
+                                                                    onClick: function () {
+                                                                        if (!confirm('Supprimer cette photo ?')) {
+                                                                            return;
+                                                                        }
+                                                                        setEventPhotoUpdating(photo.id);
+                                                                        api.deleteMemberPhoto(photo.id)
+                                                                            .then(function () {
+                                                                                setEventPhotos(function (prev) {
+                                                                                    return prev.filter(function (p) { return p.id !== photo.id; });
+                                                                                });
+                                                                                showSuccess('Photo supprimée');
+                                                                                setEventPhotoUpdating(null);
+                                                                            })
+                                                                            .catch(function (err) {
+                                                                                showError(err.message || 'Erreur lors de la suppression');
+                                                                                setEventPhotoUpdating(null);
+                                                                            });
+                                                                    },
+                                                                    title: 'Supprimer',
+                                                                    disabled: isUpdating,
+                                                                }, [
+                                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                                        h('polyline', { points: '3 6 5 6 21 6' }),
+                                                                        h('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' }),
+                                                                    ]),
+                                                                ]),
+                                                            ]),
+                                                        ]),
+                                                    ]);
+                                                })
+                                            ),
+                                        ]),
+                            ]),
+
                             activeTab === 'details' && h(EventDetailPanel, {
                                 event: eventDetails,
                                 registrations: registrations,
@@ -6450,6 +6747,7 @@
                             onSyncBadgeCriteria: handleSyncMemberBadge,
                             onAdjustXp: handleAdjustMemberXp,
                             onToggleTrophy: handleToggleMemberTrophy,
+                            onSelectEvent: handleViewEventById,
                         }),
                     ]),
                 ]),

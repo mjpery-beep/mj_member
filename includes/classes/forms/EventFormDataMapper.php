@@ -128,13 +128,13 @@ final class EventFormDataMapper
         $values['article_id'] = isset($formData['event_article_id']) ? (int) $formData['event_article_id'] : $values['article_id'];
         $values['cover_id'] = isset($formData['event_cover_id']) ? (int) $formData['event_cover_id'] : $values['cover_id'];
         $values['location_id'] = isset($formData['event_location_id']) ? (int) $formData['event_location_id'] : $values['location_id'];
-        $values['animateur_ids'] = isset($formData['event_animateur_ids']) && is_array($formData['event_animateur_ids']) ? array_map('intval', $formData['event_animateur_ids']) : array();
-        $values['volunteer_ids'] = isset($formData['event_volunteer_ids']) && is_array($formData['event_volunteer_ids']) ? array_map('intval', $formData['event_volunteer_ids']) : array();
-        $values['allow_guardian_registration'] = !empty($formData['event_allow_guardian_registration']);
-        $values['attendance_show_all_members'] = !empty($formData['event_attendance_show_all_members']);
-        $values['registration_is_free_participation'] = !empty($formData['event_free_participation']);
-        $values['free_participation'] = !empty($formData['event_free_participation']);
-        $values['requires_validation'] = !empty($formData['event_requires_validation']);
+        $values['animateur_ids'] = isset($formData['event_animateur_ids']) && is_array($formData['event_animateur_ids']) ? array_map('intval', $formData['event_animateur_ids']) : (isset($values['animateur_ids']) ? $values['animateur_ids'] : array());
+        $values['volunteer_ids'] = isset($formData['event_volunteer_ids']) && is_array($formData['event_volunteer_ids']) ? array_map('intval', $formData['event_volunteer_ids']) : (isset($values['volunteer_ids']) ? $values['volunteer_ids'] : array());
+        $values['allow_guardian_registration'] = array_key_exists('event_allow_guardian_registration', $formData) ? !empty($formData['event_allow_guardian_registration']) : (isset($values['allow_guardian_registration']) ? $values['allow_guardian_registration'] : false);
+        $values['attendance_show_all_members'] = array_key_exists('event_attendance_show_all_members', $formData) ? !empty($formData['event_attendance_show_all_members']) : (isset($values['attendance_show_all_members']) ? $values['attendance_show_all_members'] : false);
+        $values['registration_is_free_participation'] = array_key_exists('event_free_participation', $formData) ? !empty($formData['event_free_participation']) : (isset($values['registration_is_free_participation']) ? $values['registration_is_free_participation'] : false);
+        $values['free_participation'] = array_key_exists('event_free_participation', $formData) ? !empty($formData['event_free_participation']) : (isset($values['free_participation']) ? $values['free_participation'] : false);
+        $values['requires_validation'] = array_key_exists('event_requires_validation', $formData) ? !empty($formData['event_requires_validation']) : (isset($values['requires_validation']) ? $values['requires_validation'] : true);
 
         if (!isset($values['registration_payload']) || !is_array($values['registration_payload'])) {
             $values['registration_payload'] = array();

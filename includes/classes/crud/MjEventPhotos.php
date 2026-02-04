@@ -257,7 +257,22 @@ class MjEventPhotos implements CrudRepositoryInterface {
         );
         $query_args = wp_parse_args($args, $defaults);
 
-        $status = $query_args['status'] !== '' ? self::sanitize_status($query_args['status']) : '';
+        // Support array or single status
+        $statuses = array();
+        if (is_array($query_args['status'])) {
+            foreach ($query_args['status'] as $s) {
+                $sanitized = self::sanitize_status((string) $s);
+                if ($sanitized !== '') {
+                    $statuses[] = $sanitized;
+                }
+            }
+        } elseif ($query_args['status'] !== '') {
+            $sanitized = self::sanitize_status($query_args['status']);
+            if ($sanitized !== '') {
+                $statuses[] = $sanitized;
+            }
+        }
+
         $event_id = (int) $query_args['event_id'];
         $member_id = (int) $query_args['member_id'];
         $per_page = max(1, (int) $query_args['per_page']);
@@ -269,9 +284,10 @@ class MjEventPhotos implements CrudRepositoryInterface {
         $where_parts = array('1=1');
         $params = array();
 
-        if ($status !== '') {
-            $where_parts[] = 'status = %s';
-            $params[] = $status;
+        if (!empty($statuses)) {
+            $placeholders = implode(', ', array_fill(0, count($statuses), '%s'));
+            $where_parts[] = "status IN ({$placeholders})";
+            $params = array_merge($params, $statuses);
         }
         if ($event_id > 0) {
             $where_parts[] = 'event_id = %d';
