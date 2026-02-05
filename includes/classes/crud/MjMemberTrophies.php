@@ -357,6 +357,8 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
         if ($trophy && isset($trophy['xp']) && (int) $trophy['xp'] > 0) {
             MjMemberXp::add($memberId, (int) $trophy['xp']);
         }
+        // Award coins for the trophy
+        MjMemberCoins::awardForTrophy($memberId, $trophyId);
     }
 
     /**
@@ -372,6 +374,8 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
         if ($trophy && isset($trophy['xp']) && (int) $trophy['xp'] > 0) {
             MjMemberXp::subtract($memberId, (int) $trophy['xp']);
         }
+        // Revoke coins for the trophy
+        MjMemberCoins::revokeForTrophy($memberId, $trophyId);
     }
 
     /**

@@ -319,6 +319,8 @@ final class MjBadges extends MjTools implements CrudRepositoryInterface
             'prompt' => isset($row['prompt']) ? sanitize_textarea_field((string) $row['prompt']) : '',
             'icon' => isset($row['icon']) ? sanitize_key((string) $row['icon']) : '',
             'image_id' => isset($row['image_id']) ? max(0, (int) $row['image_id']) : 0,
+            'xp' => isset($row['xp']) ? max(0, (int) $row['xp']) : 0,
+            'coins' => isset($row['coins']) ? max(0, (int) $row['coins']) : 0,
             'display_order' => isset($row['display_order']) ? (int) $row['display_order'] : 0,
             'status' => self::normalize_status($row['status'] ?? self::STATUS_ACTIVE) ?: self::STATUS_ACTIVE,
             'created_at' => isset($row['created_at']) ? (string) $row['created_at'] : '',
@@ -405,6 +407,14 @@ final class MjBadges extends MjTools implements CrudRepositoryInterface
             $payload['image_id'] = $imageId > 0 ? $imageId : 0;
         }
 
+        if (isset($data['xp'])) {
+            $payload['xp'] = max(0, (int) $data['xp']);
+        }
+
+        if (isset($data['coins'])) {
+            $payload['coins'] = max(0, (int) $data['coins']);
+        }
+
         if (isset($data['display_order'])) {
             $payload['display_order'] = (int) $data['display_order'];
         }
@@ -484,6 +494,8 @@ final class MjBadges extends MjTools implements CrudRepositoryInterface
             'prompt' => '%s',
             'icon' => '%s',
             'image_id' => '%d',
+            'xp' => '%d',
+            'coins' => '%d',
             'display_order' => '%d',
             'status' => '%s',
             'created_at' => '%s',

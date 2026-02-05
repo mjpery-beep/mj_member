@@ -5077,11 +5077,14 @@
                         ? result.message
                         : getString(strings, 'memberBadgeUpdated', 'Progression mise à jour.');
                     showSuccess(successMessage);
-                    // Update xpTotal and levelProgression immediately from sync response
+                    // Update xpTotal, coinsTotal and levelProgression immediately from sync response
                     if (result && typeof result.xpTotal === 'number') {
                         setMemberDetails(function (prev) {
                             if (!prev) return prev;
                             var updates = { xpTotal: result.xpTotal };
+                            if (typeof result.coinsTotal === 'number') {
+                                updates.coinsTotal = result.coinsTotal;
+                            }
                             if (result.levelProgression) {
                                 updates.levelProgression = result.levelProgression;
                             }
@@ -5107,11 +5110,14 @@
                         ? result.message
                         : (amount > 0 ? '+' : '') + amount + ' XP';
                     showSuccess(successMessage);
-                    // Update xpTotal and levelProgression immediately from response
+                    // Update xpTotal, coinsTotal and levelProgression immediately from response
                     if (result && typeof result.xpTotal === 'number') {
                         setMemberDetails(function (prev) {
                             if (!prev) return prev;
                             var updates = { xpTotal: result.xpTotal };
+                            if (typeof result.coinsTotal === 'number') {
+                                updates.coinsTotal = result.coinsTotal;
+                            }
                             if (result.levelProgression) {
                                 updates.levelProgression = result.levelProgression;
                             }

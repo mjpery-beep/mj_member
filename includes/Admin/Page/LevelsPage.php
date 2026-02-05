@@ -132,6 +132,7 @@ final class LevelsPage
                         <th><?php esc_html_e('Titre', 'mj-member'); ?></th>
                         <th style="width: 120px;"><?php esc_html_e('Plafond XP', 'mj-member'); ?></th>
                         <th style="width: 100px;"><?php esc_html_e('Récompense', 'mj-member'); ?></th>
+                        <th style="width: 80px;"><?php esc_html_e('Coins', 'mj-member'); ?></th>
                         <th style="width: 100px;"><?php esc_html_e('Statut', 'mj-member'); ?></th>
                         <th style="width: 150px;"><?php esc_html_e('Actions', 'mj-member'); ?></th>
                     </tr>
@@ -139,7 +140,7 @@ final class LevelsPage
                 <tbody>
                     <?php if (empty($levels)): ?>
                         <tr>
-                            <td colspan="7"><?php esc_html_e('Aucun niveau trouvé.', 'mj-member'); ?></td>
+                            <td colspan="8"><?php esc_html_e('Aucun niveau trouvé.', 'mj-member'); ?></td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($levels as $level): ?>
@@ -187,6 +188,9 @@ final class LevelsPage
                                     <span style="background: #d4edda; color: #155724; padding: 2px 8px; border-radius: 3px; font-size: 12px;">+<?php echo esc_html($level['xp_reward']); ?> XP</span>
                                 </td>
                                 <td>
+                                    <span style="background: #fff3cd; color: #856404; padding: 2px 8px; border-radius: 3px; font-size: 12px;">🪙 <?php echo esc_html($level['coins']); ?></span>
+                                </td>
+                                <td>
                                     <?php if ($level['status'] === 'active'): ?>
                                         <span style="background: #d4edda; color: #155724; padding: 2px 8px; border-radius: 3px; font-size: 12px;">Actif</span>
                                     <?php else: ?>
@@ -208,6 +212,7 @@ final class LevelsPage
                 <ul style="margin-bottom: 0;">
                     <li>📊 <strong><?php esc_html_e('Plafond XP', 'mj-member'); ?></strong> : <?php esc_html_e('Le nombre d\'XP requis pour atteindre ce niveau.', 'mj-member'); ?></li>
                     <li>🎁 <strong><?php esc_html_e('Récompense XP', 'mj-member'); ?></strong> : <?php esc_html_e('Les XP bonus gagnés lors du passage à ce niveau.', 'mj-member'); ?></li>
+                    <li>🪙 <strong><?php esc_html_e('Coins', 'mj-member'); ?></strong> : <?php esc_html_e('Les coins gagnés lors du passage à ce niveau.', 'mj-member'); ?></li>
                     <li>⬆️ <?php esc_html_e('Les membres progressent automatiquement vers le niveau suivant lorsqu\'ils atteignent le plafond XP.', 'mj-member'); ?></li>
                 </ul>
             </div>
@@ -226,6 +231,7 @@ final class LevelsPage
             'description' => '',
             'xp_threshold' => 0,
             'xp_reward' => 10,
+            'coins' => 10,
             'image_id' => 0,
             'status' => MjLevels::STATUS_ACTIVE,
         );
@@ -293,6 +299,13 @@ final class LevelsPage
                         <td>
                             <input type="number" name="xp_reward" id="xp_reward" value="<?php echo esc_attr($level['xp_reward']); ?>" min="0" class="small-text">
                             <p class="description"><?php esc_html_e('XP bonus attribués au membre lors du passage à ce niveau.', 'mj-member'); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="coins"><?php esc_html_e('Coins', 'mj-member'); ?></label></th>
+                        <td>
+                            <input type="number" name="coins" id="coins" value="<?php echo esc_attr($level['coins']); ?>" min="0" class="small-text">
+                            <p class="description"><?php esc_html_e('Coins attribués au membre lors du passage à ce niveau.', 'mj-member'); ?></p>
                         </td>
                     </tr>
                     <tr>
@@ -388,6 +401,7 @@ final class LevelsPage
             'description' => isset($_POST['description']) ? sanitize_textarea_field(wp_unslash((string) $_POST['description'])) : '',
             'xp_threshold' => isset($_POST['xp_threshold']) ? (int) $_POST['xp_threshold'] : 0,
             'xp_reward' => isset($_POST['xp_reward']) ? (int) $_POST['xp_reward'] : 0,
+            'coins' => isset($_POST['coins']) ? (int) $_POST['coins'] : 0,
             'image_id' => isset($_POST['image_id']) && $_POST['image_id'] !== '' ? (int) $_POST['image_id'] : null,
             'status' => isset($_POST['status']) ? sanitize_key(wp_unslash((string) $_POST['status'])) : 'active',
         );

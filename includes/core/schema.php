@@ -1660,6 +1660,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_48($wpdb);
     mj_member_upgrade_to_2_49($wpdb);
     mj_member_upgrade_to_2_50($wpdb);
+    mj_member_upgrade_to_2_51($wpdb);
     
     
     $registrations_table = mj_member_get_event_registrations_table_name();
@@ -3838,6 +3839,19 @@ function mj_member_upgrade_to_2_45($wpdb) {
                         continue;
                     }
 
+                    // Check if criterion with this label already exists (regardless of status)
+                    $existing_id = (int) $wpdb->get_var($wpdb->prepare(
+                        "SELECT id FROM {$badge_criteria_table} WHERE badge_id = %d AND label = %s LIMIT 1",
+                        $badge_id,
+                        $label
+                    ));
+
+                    // Skip if already exists - don't create duplicates
+                    if ($existing_id > 0) {
+                        $order++;
+                        continue;
+                    }
+
                     $slug = sanitize_title($label);
                     if ($slug === '') {
                         $slug = 'criterion-' . $badge_id;
@@ -3850,40 +3864,19 @@ function mj_member_upgrade_to_2_45($wpdb) {
                         $suffix++;
                     }
 
-                    $existing_id = (int) $wpdb->get_var($wpdb->prepare(
-                        "SELECT id FROM {$badge_criteria_table} WHERE badge_id = %d AND slug = %s",
-                        $badge_id,
-                        $slug
-                    ));
-
-                    if ($existing_id > 0) {
-                        $wpdb->update(
-                            $badge_criteria_table,
-                            array(
-                                'label' => $label,
-                                'display_order' => $order,
-                                'status' => 'active',
-                                'updated_at' => current_time('mysql'),
-                            ),
-                            array('id' => $existing_id),
-                            array('%s', '%d', '%s', '%s'),
-                            array('%d')
-                        );
-                    } else {
-                        $wpdb->insert(
-                            $badge_criteria_table,
-                            array(
-                                'badge_id' => $badge_id,
-                                'slug' => $slug,
-                                'label' => $label,
-                                'display_order' => $order,
-                                'status' => 'active',
-                                'created_at' => current_time('mysql'),
-                                'updated_at' => current_time('mysql'),
-                            ),
-                            array('%d', '%s', '%s', '%d', '%s', '%s', '%s')
-                        );
-                    }
+                    $wpdb->insert(
+                        $badge_criteria_table,
+                        array(
+                            'badge_id' => $badge_id,
+                            'slug' => $slug,
+                            'label' => $label,
+                            'display_order' => $order,
+                            'status' => 'active',
+                            'created_at' => current_time('mysql'),
+                            'updated_at' => current_time('mysql'),
+                        ),
+                        array('%d', '%s', '%s', '%d', '%s', '%s', '%s')
+                    );
 
                     $order++;
                 }
@@ -4077,6 +4070,7 @@ function mj_member_seed_default_levels() {
             'title' => 'Débutant',
             'description' => 'Tu viens de rejoindre la communauté ! Bienvenue parmi nous.',
             'xp_reward' => 10,
+            'coins' => 10,
             'xp_threshold' => 0,
         ),
         array(
@@ -4084,6 +4078,7 @@ function mj_member_seed_default_levels() {
             'title' => 'Apprenti',
             'description' => 'Tu commences à prendre tes marques et à participer aux activités.',
             'xp_reward' => 15,
+            'coins' => 20,
             'xp_threshold' => 50,
         ),
         array(
@@ -4091,6 +4086,7 @@ function mj_member_seed_default_levels() {
             'title' => 'Explorateur',
             'description' => 'Tu explores les différentes possibilités offertes par la MJ.',
             'xp_reward' => 20,
+            'coins' => 30,
             'xp_threshold' => 150,
         ),
         array(
@@ -4098,6 +4094,7 @@ function mj_member_seed_default_levels() {
             'title' => 'Aventurier',
             'description' => 'Tu t\'impliques de plus en plus dans les projets et activités.',
             'xp_reward' => 25,
+            'coins' => 40,
             'xp_threshold' => 300,
         ),
         array(
@@ -4105,6 +4102,7 @@ function mj_member_seed_default_levels() {
             'title' => 'Confirmé',
             'description' => 'Tu es un membre actif et reconnu au sein de la communauté.',
             'xp_reward' => 30,
+            'coins' => 50,
             'xp_threshold' => 500,
         ),
         array(
@@ -4112,6 +4110,7 @@ function mj_member_seed_default_levels() {
             'title' => 'Expert',
             'description' => 'Tu maîtrises les rouages et participes régulièrement aux décisions.',
             'xp_reward' => 40,
+            'coins' => 60,
             'xp_threshold' => 800,
         ),
         array(
@@ -4119,6 +4118,7 @@ function mj_member_seed_default_levels() {
             'title' => 'Mentor',
             'description' => 'Tu aides les nouveaux membres et partages ton expérience.',
             'xp_reward' => 50,
+            'coins' => 70,
             'xp_threshold' => 1200,
         ),
         array(
@@ -4126,6 +4126,7 @@ function mj_member_seed_default_levels() {
             'title' => 'Leader',
             'description' => 'Tu portes des projets et inspires les autres membres.',
             'xp_reward' => 60,
+            'coins' => 80,
             'xp_threshold' => 1800,
         ),
         array(
@@ -4133,6 +4134,7 @@ function mj_member_seed_default_levels() {
             'title' => 'Champion',
             'description' => 'Tu es un pilier incontournable de la MJ !',
             'xp_reward' => 75,
+            'coins' => 90,
             'xp_threshold' => 2500,
         ),
         array(
@@ -4140,6 +4142,7 @@ function mj_member_seed_default_levels() {
             'title' => 'Légende',
             'description' => 'Tu as atteint le sommet ! Tu es une véritable légende de la MJ.',
             'xp_reward' => 100,
+            'coins' => 100,
             'xp_threshold' => 3500,
         ),
     );
@@ -4161,14 +4164,66 @@ function mj_member_seed_default_levels() {
                 'title' => $level['title'],
                 'description' => $level['description'],
                 'xp_reward' => isset($level['xp_reward']) ? (int) $level['xp_reward'] : 0,
+                'coins' => isset($level['coins']) ? (int) $level['coins'] : 0,
                 'xp_threshold' => isset($level['xp_threshold']) ? (int) $level['xp_threshold'] : 0,
                 'status' => 'active',
             ),
-            array('%d', '%s', '%s', '%d', '%d', '%s')
+            array('%d', '%s', '%s', '%d', '%d', '%d', '%s')
         );
     }
 }
 add_action('init', 'mj_member_seed_default_levels', 18);
+
+/**
+ * Schema upgrade 2.51: Add coins column to badges, badge_criteria, trophies and members tables.
+ */
+function mj_member_upgrade_to_2_51($wpdb) {
+    $badges_table = mj_member_get_badges_table_name();
+    $badge_criteria_table = mj_member_get_badge_criteria_table_name();
+    $trophies_table = mj_member_get_trophies_table_name();
+    $members_table = $wpdb->prefix . 'mj_members';
+
+    // Add coins column to badges table
+    if (mj_member_table_exists($badges_table) && !mj_member_column_exists($badges_table, 'coins')) {
+        $wpdb->query("ALTER TABLE {$badges_table} ADD COLUMN coins int unsigned NOT NULL DEFAULT 0 AFTER xp");
+    }
+
+    // Add coins column to badge_criteria table (default 1 coin per criterion)
+    if (mj_member_table_exists($badge_criteria_table) && !mj_member_column_exists($badge_criteria_table, 'coins')) {
+        $wpdb->query("ALTER TABLE {$badge_criteria_table} ADD COLUMN coins int unsigned NOT NULL DEFAULT 1 AFTER xp");
+    }
+
+    // Update existing criteria to have 1 coin if they have 0
+    if (mj_member_table_exists($badge_criteria_table) && mj_member_column_exists($badge_criteria_table, 'coins')) {
+        $wpdb->query("UPDATE {$badge_criteria_table} SET coins = 1 WHERE coins = 0");
+    }
+
+    // Add coins column to trophies table
+    if (mj_member_table_exists($trophies_table) && !mj_member_column_exists($trophies_table, 'coins')) {
+        $wpdb->query("ALTER TABLE {$trophies_table} ADD COLUMN coins int unsigned NOT NULL DEFAULT 0 AFTER xp");
+    }
+
+    // Add coins_total column to members table
+    if (mj_member_table_exists($members_table) && !mj_member_column_exists($members_table, 'coins_total')) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN coins_total int unsigned NOT NULL DEFAULT 0 AFTER xp_total");
+    }
+
+    // Add index for coins_total
+    if (mj_member_table_exists($members_table) && !mj_member_index_exists($members_table, 'idx_coins_total')) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD KEY idx_coins_total (coins_total)");
+    }
+
+    // Add coins column to levels table
+    $levels_table = mj_member_get_levels_table_name();
+    if (mj_member_table_exists($levels_table) && !mj_member_column_exists($levels_table, 'coins')) {
+        $wpdb->query("ALTER TABLE {$levels_table} ADD COLUMN coins int unsigned NOT NULL DEFAULT 0 AFTER xp_reward");
+    }
+
+    // Set default coins values for existing levels (increasing with level number)
+    if (mj_member_table_exists($levels_table) && mj_member_column_exists($levels_table, 'coins')) {
+        $wpdb->query("UPDATE {$levels_table} SET coins = level_number * 10 WHERE coins = 0");
+    }
+}
 
 function mj_member_upgrade_to_2_5($wpdb) {
     $members_table = $wpdb->prefix . 'mj_members';

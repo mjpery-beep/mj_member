@@ -169,10 +169,28 @@
                 ? criterion.status
                 : (awarded ? 'awarded' : 'pending');
 
+            var criterionXp = 0;
+            if (typeof criterion.xp === 'number') {
+                criterionXp = criterion.xp;
+            } else if (typeof criterion.xp === 'string' && criterion.xp !== '') {
+                var parsedCriterionXp = parseInt(criterion.xp, 10);
+                criterionXp = isNaN(parsedCriterionXp) ? 0 : parsedCriterionXp;
+            }
+
+            var criterionCoins = 0;
+            if (typeof criterion.coins === 'number') {
+                criterionCoins = criterion.coins;
+            } else if (typeof criterion.coins === 'string' && criterion.coins !== '') {
+                var parsedCriterionCoins = parseInt(criterion.coins, 10);
+                criterionCoins = isNaN(parsedCriterionCoins) ? 0 : parsedCriterionCoins;
+            }
+
             return {
                 id: criterionId,
                 label: typeof criterion.label === 'string' ? criterion.label : '',
                 description: typeof criterion.description === 'string' ? criterion.description : '',
+                xp: criterionXp,
+                coins: criterionCoins,
                 awarded: awarded,
                 status: status,
                 canToggle: canToggle,
@@ -215,6 +233,22 @@
             progress = 100;
         }
 
+        var badgeXp = 0;
+        if (typeof entry.xp === 'number') {
+            badgeXp = entry.xp;
+        } else if (typeof entry.xp === 'string' && entry.xp !== '') {
+            var parsedBadgeXp = parseInt(entry.xp, 10);
+            badgeXp = isNaN(parsedBadgeXp) ? 0 : parsedBadgeXp;
+        }
+
+        var badgeCoins = 0;
+        if (typeof entry.coins === 'number') {
+            badgeCoins = entry.coins;
+        } else if (typeof entry.coins === 'string' && entry.coins !== '') {
+            var parsedBadgeCoins = parseInt(entry.coins, 10);
+            badgeCoins = isNaN(parsedBadgeCoins) ? 0 : parsedBadgeCoins;
+        }
+
         return {
             id: badgeId,
             label: typeof entry.label === 'string' ? entry.label : '',
@@ -223,6 +257,8 @@
             icon: typeof entry.icon === 'string' ? entry.icon : '',
             imageId: imageId,
             imageUrl: imageUrl,
+            xp: badgeXp,
+            coins: badgeCoins,
             status: typeof entry.status === 'string' ? entry.status : '',
             awardedAt: typeof entry.awardedAt === 'string' ? entry.awardedAt : (typeof entry.awarded_at === 'string' ? entry.awarded_at : ''),
             revokedAt: typeof entry.revokedAt === 'string' ? entry.revokedAt : (typeof entry.revoked_at === 'string' ? entry.revoked_at : ''),
@@ -292,6 +328,14 @@
             xp = isNaN(parsedXp) ? 0 : parsedXp;
         }
 
+        var coins = 0;
+        if (typeof entry.coins === 'number') {
+            coins = entry.coins;
+        } else if (typeof entry.coins === 'string' && entry.coins !== '') {
+            var parsedCoins = parseInt(entry.coins, 10);
+            coins = isNaN(parsedCoins) ? 0 : parsedCoins;
+        }
+
         var autoMode = false;
         if (typeof entry.autoMode === 'boolean') {
             autoMode = entry.autoMode;
@@ -315,6 +359,7 @@
             title: typeof entry.title === 'string' ? entry.title : '',
             description: typeof entry.description === 'string' ? entry.description : '',
             xp: xp,
+            coins: coins,
             imageId: imageId,
             imageUrl: imageUrl,
             autoMode: autoMode,
@@ -2309,7 +2354,7 @@
                                 h('span', { class: 'mj-regmgr-member-level__max-text' }, getString(strings, 'memberLevelMax', 'Niveau maximum atteint !')),
                             ]),
                         ]),
-                        // XP Display
+                        // XP and Coins Display
                         h('div', { class: 'mj-regmgr-member-xp' }, [
                             h('div', { class: 'mj-regmgr-member-xp__icon' }, [
                                 h('svg', { width: 28, height: 28, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, [
@@ -2333,6 +2378,13 @@
                                     title: getString(strings, 'memberXpAdd10', 'Ajouter 10 XP'),
                                     onClick: function () { onAdjustXp(member.id, 10); },
                                 }, '+10'),
+                            ]),
+                            // Coins display
+                            h('div', { class: 'mj-regmgr-member-xp__separator' }),
+                            h('div', { class: 'mj-regmgr-member-xp__icon mj-regmgr-member-xp__icon--coins' }, '🪙'),
+                            h('div', { class: 'mj-regmgr-member-xp__content' }, [
+                                h('span', { class: 'mj-regmgr-member-xp__value mj-regmgr-member-xp__value--coins' }, typeof member.coinsTotal === 'number' ? member.coinsTotal.toLocaleString() : '0'),
+                                h('span', { class: 'mj-regmgr-member-xp__label' }, getString(strings, 'memberCoinsLabel', 'coins')),
                             ]),
                         ]),
                         badgeData.length > 0
@@ -2388,6 +2440,12 @@
                                             h('div', { class: 'mj-regmgr-member-badge__meta' }, [
                                                 badgeStateLabel && h('span', { class: classNames('mj-regmgr-member-badge__state', 'mj-regmgr-member-badge__state--' + badgeState) }, badgeStateLabel),
                                                 h('span', { class: 'mj-regmgr-member-badge__progress-count' }, progressDisplay),
+                                                (badge.xp > 0 || badge.coins > 0) && h('div', { class: 'mj-regmgr-member-badge__rewards' }, [
+                                                    badge.xp > 0 && h('span', { class: 'mj-regmgr-member-badge__xp', title: 'Points XP' }, '+' + badge.xp + ' XP'),
+                                                    badge.coins > 0 && h('span', { class: 'mj-regmgr-member-badge__coins', title: 'Coins' }, [
+                                                        '🪙 +' + badge.coins,
+                                                    ]),
+                                                ]),
                                             ]),
                                         ]),
                                         h('div', { class: 'mj-regmgr-member-badge__progress' }, [
@@ -2423,6 +2481,10 @@
                                                         h('span', { class: 'mj-regmgr-member-badge__criterion-content' }, [
                                                             h('span', { class: 'mj-regmgr-member-badge__criterion-name' }, criterion.label || getString(strings, 'memberBadgeUnnamedCriterion', 'Critère')),
                                                             criterion.description && h('span', { class: 'mj-regmgr-member-badge__criterion-description' }, criterion.description),
+                                                            (criterion.xp > 0 || criterion.coins > 0) && h('span', { class: 'mj-regmgr-member-badge__criterion-rewards' }, [
+                                                                criterion.xp > 0 && h('span', { class: 'mj-regmgr-member-badge__criterion-xp' }, '+' + criterion.xp + ' XP'),
+                                                                criterion.coins > 0 && h('span', { class: 'mj-regmgr-member-badge__criterion-coins' }, '🪙 +' + criterion.coins),
+                                                            ]),
                                                             !canToggle && h('span', { class: 'mj-regmgr-member-badge__criterion-hint' }, badgeReadonlyHint),
                                                         ]),
                                                     ]),
@@ -2496,6 +2558,7 @@
                                                 trophy.description && h('p', { class: 'mj-regmgr-member-trophy__description' }, trophy.description),
                                                 h('div', { class: 'mj-regmgr-member-trophy__meta' }, [
                                                     trophy.xp > 0 && h('span', { class: 'mj-regmgr-member-trophy__xp' }, '+' + trophy.xp + ' XP'),
+                                                    trophy.coins > 0 && h('span', { class: 'mj-regmgr-member-trophy__coins' }, '🪙 +' + trophy.coins),
                                                     trophy.autoMode && h('span', { class: 'mj-regmgr-member-trophy__auto-badge' }, getString(strings, 'memberTrophyAuto', 'Automatique')),
                                                     isAwarded && !trophy.autoMode && h('span', { class: 'mj-regmgr-member-trophy__awarded-badge' }, getString(strings, 'memberTrophyAwarded', 'Obtenu')),
                                                 ]),

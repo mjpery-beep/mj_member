@@ -5,6 +5,7 @@ use Mj\Member\Classes\Crud\MjBadgeCriteria;
 use Mj\Member\Classes\Crud\MjMemberBadges;
 use Mj\Member\Classes\Crud\MjMemberBadgeCriteria;
 use Mj\Member\Classes\Crud\MjMemberXp;
+use Mj\Member\Classes\Crud\MjMemberCoins;
 use Mj\Member\Classes\Crud\MjTrophies;
 use Mj\Member\Classes\Crud\MjMemberTrophies;
 use Mj\Member\Classes\Crud\MjLevels;
@@ -53,10 +54,15 @@ $xpProgressPercent = 0;
 $xpRemaining = 0;
 $isMaxLevel = false;
 
+// Récupérer les coins du membre
+$memberCoins = 0;
+
 if ($isPreview) {
     $memberXp = 450;
+    $memberCoins = 125;
 } elseif ($memberId > 0) {
     $memberXp = MjMemberXp::get($memberId);
+    $memberCoins = MjMemberCoins::get($memberId);
 }
 
 // Utiliser MjLevels pour calculer la progression
@@ -110,10 +116,11 @@ if ($isPreview) {
             'awarded_count' => 3,
             'total_criteria' => 3,
             'awarded_at' => gmdate('Y-m-d'),
+            'coins' => 15,
             'criteria' => array(
-                array('label' => __('Participer à un atelier', 'mj-member'), 'description' => '', 'status' => 'awarded'),
-                array('label' => __('Inviter un ami', 'mj-member'), 'description' => '', 'status' => 'awarded'),
-                array('label' => __('Partager un feedback', 'mj-member'), 'description' => '', 'status' => 'awarded'),
+                array('label' => __('Participer à un atelier', 'mj-member'), 'description' => '', 'status' => 'awarded', 'coins' => 2),
+                array('label' => __('Inviter un ami', 'mj-member'), 'description' => '', 'status' => 'awarded', 'coins' => 2),
+                array('label' => __('Partager un feedback', 'mj-member'), 'description' => '', 'status' => 'awarded', 'coins' => 1),
             ),
         ),
         array(
@@ -129,11 +136,12 @@ if ($isPreview) {
             'awarded_count' => 2,
             'total_criteria' => 4,
             'awarded_at' => '',
+            'coins' => 25,
             'criteria' => array(
-                array('label' => __('Accompagner un nouvel inscrit', 'mj-member'), 'description' => '', 'status' => 'awarded'),
-                array('label' => __('Publier une ressource', 'mj-member'), 'description' => '', 'status' => 'awarded'),
-                array('label' => __('Organiser un mini-événement', 'mj-member'), 'description' => '', 'status' => 'pending'),
-                array('label' => __('Recevoir un avis positif', 'mj-member'), 'description' => '', 'status' => 'pending'),
+                array('label' => __('Accompagner un nouvel inscrit', 'mj-member'), 'description' => '', 'status' => 'awarded', 'coins' => 3),
+                array('label' => __('Publier une ressource', 'mj-member'), 'description' => '', 'status' => 'awarded', 'coins' => 2),
+                array('label' => __('Organiser un mini-événement', 'mj-member'), 'description' => '', 'status' => 'pending', 'coins' => 5),
+                array('label' => __('Recevoir un avis positif', 'mj-member'), 'description' => '', 'status' => 'pending', 'coins' => 2),
             ),
         ),
         array(
@@ -148,11 +156,12 @@ if ($isPreview) {
             'progress_percent' => 0,
             'awarded_count' => 0,
             'total_criteria' => 3,
+            'coins' => 20,
             'awarded_at' => '',
             'criteria' => array(
-                array('label' => __('Partager une idée', 'mj-member'), 'description' => '', 'status' => 'pending'),
-                array('label' => __('Participer à un atelier créatif', 'mj-member'), 'description' => '', 'status' => 'pending'),
-                array('label' => __('Publier un rendu', 'mj-member'), 'description' => '', 'status' => 'pending'),
+                array('label' => __('Partager une idée', 'mj-member'), 'description' => '', 'status' => 'pending', 'coins' => 2),
+                array('label' => __('Participer à un atelier créatif', 'mj-member'), 'description' => '', 'status' => 'pending', 'coins' => 3),
+                array('label' => __('Publier un rendu', 'mj-member'), 'description' => '', 'status' => 'pending', 'coins' => 5),
             ),
         ),
     );
@@ -196,6 +205,7 @@ if ($isPreview) {
                         'id' => (int) $record['id'],
                         'label' => isset($record['label']) ? (string) $record['label'] : '',
                         'description' => isset($record['description']) ? (string) $record['description'] : '',
+                        'coins' => isset($record['coins']) ? (int) $record['coins'] : 0,
                     );
                 }
             }
@@ -210,6 +220,7 @@ if ($isPreview) {
                         'id' => 0,
                         'label' => $label,
                         'description' => '',
+                        'coins' => 0,
                     );
                 }
             }
@@ -245,6 +256,7 @@ if ($isPreview) {
                     'label' => $record['label'],
                     'description' => $record['description'],
                     'status' => $awardStatus,
+                    'coins' => isset($record['coins']) ? (int) $record['coins'] : 0,
                 );
             }
 
@@ -300,6 +312,7 @@ if ($isPreview) {
                 'awarded_count' => $awardedCount,
                 'total_criteria' => $totalCriteria,
                 'awarded_at' => $awardedAt,
+                'coins' => isset($badge['coins']) ? (int) $badge['coins'] : 0,
                 'criteria' => $criteriaList,
             );
         }
@@ -337,6 +350,7 @@ if ($isPreview) {
             'title' => __('Première Participation', 'mj-member'),
             'description' => __('Participer à votre premier événement.', 'mj-member'),
             'xp' => 50,
+            'coins' => 10,
             'image' => '',
             'state' => 'awarded',
             'awarded_at' => gmdate('Y-m-d', strtotime('-30 days')),
@@ -346,6 +360,7 @@ if ($isPreview) {
             'title' => __('Fidèle Membre', 'mj-member'),
             'description' => __('Participer à 10 événements.', 'mj-member'),
             'xp' => 100,
+            'coins' => 25,
             'image' => '',
             'state' => 'awarded',
             'awarded_at' => gmdate('Y-m-d', strtotime('-7 days')),
@@ -355,6 +370,7 @@ if ($isPreview) {
             'title' => __('Champion MJ', 'mj-member'),
             'description' => __('Participer à 50 événements.', 'mj-member'),
             'xp' => 500,
+            'coins' => 100,
             'image' => '',
             'state' => 'locked',
             'awarded_at' => '',
@@ -364,6 +380,7 @@ if ($isPreview) {
             'title' => __('Super Animateur', 'mj-member'),
             'description' => __('Animer 5 événements avec succès.', 'mj-member'),
             'xp' => 200,
+            'coins' => 50,
             'image' => '',
             'state' => 'locked',
             'awarded_at' => '',
@@ -373,6 +390,7 @@ if ($isPreview) {
             'title' => __('Contributeur', 'mj-member'),
             'description' => __('Aider à organiser un événement.', 'mj-member'),
             'xp' => 75,
+            'coins' => 15,
             'image' => '',
             'state' => 'awarded',
             'awarded_at' => gmdate('Y-m-d', strtotime('-14 days')),
@@ -382,6 +400,7 @@ if ($isPreview) {
             'title' => __('Légende MJ', 'mj-member'),
             'description' => __('Atteindre le niveau 10.', 'mj-member'),
             'xp' => 1000,
+            'coins' => 200,
             'image' => '',
             'state' => 'locked',
             'awarded_at' => '',
@@ -438,6 +457,7 @@ if ($isPreview) {
                 'title' => isset($trophy['title']) ? (string) $trophy['title'] : '',
                 'description' => isset($trophy['description']) ? (string) $trophy['description'] : '',
                 'xp' => isset($trophy['xp']) ? (int) $trophy['xp'] : 0,
+                'coins' => isset($trophy['coins']) ? (int) $trophy['coins'] : 0,
                 'image' => $imageUrl,
                 'state' => $state,
                 'awarded_at' => $awardedAt,
@@ -482,15 +502,11 @@ $headingTitle = $title !== '' ? $title : __('Mes Succès', 'mj-member');
                             <span class="mj-badges-xp-bar__xp-value"><?php echo esc_html(number_format($memberXp, 0, ',', ' ')); ?></span>
                             <span class="mj-badges-xp-bar__xp-label">XP</span>
                         </span>
-                        <?php if (!$isMaxLevel && $nextLevel) : ?>
-                            <span class="mj-badges-xp-bar__xp-next">
-                                <?php echo esc_html(sprintf(__('%s XP pour %s', 'mj-member'), number_format($xpRemaining, 0, ',', ' '), $nextLevelTitle)); ?>
-                            </span>
-                        <?php else : ?>
-                            <span class="mj-badges-xp-bar__xp-next mj-badges-xp-bar__xp-next--max">
-                                <?php echo esc_html__('Niveau maximum atteint ! 🌟', 'mj-member'); ?>
-                            </span>
-                        <?php endif; ?>
+                        <span class="mj-badges-xp-bar__coins-current">
+                            <span class="mj-badges-xp-bar__coins-icon">🪙</span>
+                            <span class="mj-badges-xp-bar__coins-value"><?php echo esc_html(number_format($memberCoins, 0, ',', ' ')); ?></span>
+                            <span class="mj-badges-xp-bar__coins-label">Coins</span>
+                        </span>
                     </div>
                     <div class="mj-badges-xp-bar__track">
                         <div class="mj-badges-xp-bar__fill" style="width: <?php echo esc_attr($xpProgressPercent); ?>%;">
@@ -501,6 +517,15 @@ $headingTitle = $title !== '' ? $title : __('Mes Succès', 'mj-member');
                         <div class="mj-badges-xp-bar__next-level-preview">
                             <span class="mj-badges-xp-bar__next-label"><?php echo esc_html__('Prochain niveau :', 'mj-member'); ?></span>
                             <span class="mj-badges-xp-bar__next-title"><?php echo esc_html($nextLevelTitle); ?></span>
+                            <span class="mj-badges-xp-bar__next-xp">
+                                <span class="mj-badges-xp-bar__next-xp-value"><?php echo esc_html(number_format($xpRemaining, 0, ',', ' ')); ?></span>
+                                <span class="mj-badges-xp-bar__next-xp-label">XP restants</span>
+                            </span>
+                        </div>
+                    <?php else : ?>
+                        <div class="mj-badges-xp-bar__next-level-preview mj-badges-xp-bar__next-level-preview--max">
+                            <span class="mj-badges-xp-bar__next-label"><?php echo esc_html__('Niveau maximum atteint !', 'mj-member'); ?></span>
+                            <span class="mj-badges-xp-bar__next-title">🌟</span>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -534,6 +559,8 @@ $headingTitle = $title !== '' ? $title : __('Mes Succès', 'mj-member');
                     $totalCriteria = isset($entry['total_criteria']) ? (int) $entry['total_criteria'] : count($criteriaList);
                     // Calculer XP du badge: XP par critère * nombre critères + bonus badge complet
                     $badgeTotalXp = ($totalCriteria * $xpPerCriterion) + $xpPerBadge;
+                    // Coins pour compléter le badge
+                    $badgeCoins = isset($entry['coins']) ? (int) $entry['coins'] : 0;
                     ?>
                     <li class="mj-badges-overview__item mj-badges-overview__item--<?php echo esc_attr($state); ?>" data-state="<?php echo esc_attr($state); ?>">
                         <div class="mj-badges-overview__card">
@@ -550,11 +577,19 @@ $headingTitle = $title !== '' ? $title : __('Mes Succès', 'mj-member');
                             <div class="mj-badges-overview__content">
                                 <div class="mj-badges-overview__heading-row">
                                     <span class="mj-badges-overview__state mj-badges-overview__state--<?php echo esc_attr($state); ?>"><?php echo esc_html($stateLabel); ?></span>
-                                    <span class="mj-badges-overview__xp">
-                                        <span class="mj-badges-overview__xp-icon">⚡</span>
-                                        <span class="mj-badges-overview__xp-value"><?php echo esc_html($badgeTotalXp); ?></span>
-                                        <span class="mj-badges-overview__xp-label">XP</span>
-                                    </span>
+                                    <div class="mj-badges-overview__rewards">
+                                        <span class="mj-badges-overview__xp">
+                                            <span class="mj-badges-overview__xp-icon">⚡</span>
+                                            <span class="mj-badges-overview__xp-value"><?php echo esc_html($badgeTotalXp); ?></span>
+                                            <span class="mj-badges-overview__xp-label">XP</span>
+                                        </span>
+                                        <?php if ($badgeCoins > 0) : ?>
+                                        <span class="mj-badges-overview__coins">
+                                            <span class="mj-badges-overview__coins-icon">🪙</span>
+                                            <span class="mj-badges-overview__coins-value"><?php echo esc_html($badgeCoins); ?></span>
+                                        </span>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
                                 <?php if ($totalCriteria > 0) : ?>
                                     <div class="mj-badges-overview__progress" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<?php echo esc_attr($progressPercent); ?>">
@@ -575,10 +610,19 @@ $headingTitle = $title !== '' ? $title : __('Mes Succès', 'mj-member');
                                                     <span class="mj-badges-overview__criterion-marker" aria-hidden="true"></span>
                                                     <div class="mj-badges-overview__criterion-body">
                                                         <span class="mj-badges-overview__criterion-title"><?php echo esc_html($criterion['label']); ?></span>
-                                                        <span class="mj-badges-overview__criterion-xp">
-                                                            <span class="mj-badges-overview__criterion-xp-icon">⚡</span>
-                                                            <span class="mj-badges-overview__criterion-xp-value"><?php echo esc_html($xpPerCriterion); ?></span>
-                                                        </span>
+                                                        <div class="mj-badges-overview__criterion-rewards">
+                                                            <span class="mj-badges-overview__criterion-xp">
+                                                                <span class="mj-badges-overview__criterion-xp-icon">⚡</span>
+                                                                <span class="mj-badges-overview__criterion-xp-value"><?php echo esc_html($xpPerCriterion); ?></span>
+                                                            </span>
+                                                            <?php $criterionCoins = isset($criterion['coins']) ? (int) $criterion['coins'] : 0; ?>
+                                                            <?php if ($criterionCoins > 0) : ?>
+                                                            <span class="mj-badges-overview__criterion-coins">
+                                                                <span class="mj-badges-overview__criterion-coins-icon">🪙</span>
+                                                                <span class="mj-badges-overview__criterion-coins-value"><?php echo esc_html($criterionCoins); ?></span>
+                                                            </span>
+                                                            <?php endif; ?>
+                                                        </div>
                                                     </div>
                                                 </li>
                                             <?php endforeach; ?>
@@ -618,6 +662,7 @@ $headingTitle = $title !== '' ? $title : __('Mes Succès', 'mj-member');
                     $trophyState = isset($trophy['state']) ? $trophy['state'] : 'locked';
                     $hasImage = !empty($trophy['image']);
                     $trophyXp = isset($trophy['xp']) ? (int) $trophy['xp'] : 0;
+                    $trophyCoins = isset($trophy['coins']) ? (int) $trophy['coins'] : 0;
                     ?>
                     <div class="mj-trophy mj-trophy--<?php echo esc_attr($trophyState); ?>" data-trophy-id="<?php echo esc_attr($trophy['id']); ?>">
                         <div class="mj-trophy__visual">
@@ -635,13 +680,21 @@ $headingTitle = $title !== '' ? $title : __('Mes Succès', 'mj-member');
                             <?php if (!empty($trophy['description'])) : ?>
                                 <p class="mj-trophy__description"><?php echo esc_html($trophy['description']); ?></p>
                             <?php endif; ?>
-                            <?php if ($trophyXp > 0) : ?>
+                            <div class="mj-trophy__rewards">
+                                <?php if ($trophyXp > 0) : ?>
                                 <span class="mj-trophy__xp">
                                     <span class="mj-trophy__xp-icon">⚡</span>
                                     <span class="mj-trophy__xp-value"><?php echo esc_html($trophyXp); ?></span>
                                     <span class="mj-trophy__xp-label">XP</span>
                                 </span>
-                            <?php endif; ?>
+                                <?php endif; ?>
+                                <?php if ($trophyCoins > 0) : ?>
+                                <span class="mj-trophy__coins">
+                                    <span class="mj-trophy__coins-icon">🪙</span>
+                                    <span class="mj-trophy__coins-value"><?php echo esc_html($trophyCoins); ?></span>
+                                </span>
+                                <?php endif; ?>
+                            </div>
                             <?php if ($trophyState === 'awarded' && !empty($trophy['awarded_at'])) :
                                 $trophyAwardedTimestamp = strtotime($trophy['awarded_at']);
                                 $trophyAwardedLabel = $trophyAwardedTimestamp ? date_i18n('d/m/Y', $trophyAwardedTimestamp) : '';

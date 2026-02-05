@@ -290,6 +290,7 @@ final class MjLevels extends MjTools implements CrudRepositoryInterface
             'description' => isset($data['description']) ? wp_kses_post($data['description']) : null,
             'image_id' => isset($data['image_id']) ? (int) $data['image_id'] : null,
             'xp_reward' => isset($data['xp_reward']) ? (int) $data['xp_reward'] : 0,
+            'coins' => isset($data['coins']) ? (int) $data['coins'] : 0,
             'xp_threshold' => isset($data['xp_threshold']) ? (int) $data['xp_threshold'] : 0,
             'status' => isset($data['status']) ? self::normalize_status($data['status']) : self::STATUS_ACTIVE,
         );
@@ -298,7 +299,7 @@ final class MjLevels extends MjTools implements CrudRepositoryInterface
             $insert_data['status'] = self::STATUS_ACTIVE;
         }
 
-        $result = $wpdb->insert($table, $insert_data, array('%d', '%s', '%s', '%d', '%d', '%d', '%s'));
+        $result = $wpdb->insert($table, $insert_data, array('%d', '%s', '%s', '%d', '%d', '%d', '%d', '%s'));
 
         if ($result === false) {
             return new WP_Error('db_error', __('Erreur lors de la création du niveau.', 'mj-member'));
@@ -357,6 +358,11 @@ final class MjLevels extends MjTools implements CrudRepositoryInterface
 
         if (isset($data['xp_reward'])) {
             $update_data['xp_reward'] = (int) $data['xp_reward'];
+            $formats[] = '%d';
+        }
+
+        if (isset($data['coins'])) {
+            $update_data['coins'] = (int) $data['coins'];
             $formats[] = '%d';
         }
 
@@ -434,6 +440,7 @@ final class MjLevels extends MjTools implements CrudRepositoryInterface
             'image_id' => isset($row['image_id']) && $row['image_id'] !== null ? (int) $row['image_id'] : null,
             'image_url' => isset($row['image_id']) && $row['image_id'] ? wp_get_attachment_url((int) $row['image_id']) : null,
             'xp_reward' => isset($row['xp_reward']) ? (int) $row['xp_reward'] : 0,
+            'coins' => isset($row['coins']) ? (int) $row['coins'] : 0,
             'xp_threshold' => isset($row['xp_threshold']) ? (int) $row['xp_threshold'] : 0,
             'status' => isset($row['status']) ? (string) $row['status'] : self::STATUS_ACTIVE,
             'created_at' => isset($row['created_at']) ? (string) $row['created_at'] : '',

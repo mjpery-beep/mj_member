@@ -64,6 +64,13 @@ final class MjMemberXp extends MjTools
             return self::get($memberId);
         }
 
+        // Get current XP and level before update
+        $oldXp = self::get($memberId);
+        $oldProgression = MjLevels::get_progression($oldXp);
+        $oldLevelNumber = isset($oldProgression['current_level']['level_number'])
+            ? (int) $oldProgression['current_level']['level_number']
+            : 0;
+
         global $wpdb;
         $table = self::getTableName('mj_members');
 
@@ -77,7 +84,22 @@ final class MjMemberXp extends MjTools
             return new WP_Error('mj_member_xp_update_failed', __('Impossible de mettre à jour les XP.', 'mj-member'));
         }
 
-        return self::get($memberId);
+        $newXp = self::get($memberId);
+
+        // Check for level up and award coins for each level gained
+        $newProgression = MjLevels::get_progression($newXp);
+        $newLevelNumber = isset($newProgression['current_level']['level_number'])
+            ? (int) $newProgression['current_level']['level_number']
+            : 0;
+
+        if ($newLevelNumber > $oldLevelNumber) {
+            // Award coins for each level gained
+            for ($lvl = $oldLevelNumber + 1; $lvl <= $newLevelNumber; $lvl++) {
+                MjMemberCoins::awardForLevelUp($memberId, $lvl);
+            }
+        }
+
+        return $newXp;
     }
 
     /**
@@ -97,6 +119,13 @@ final class MjMemberXp extends MjTools
             return self::get($memberId);
         }
 
+        // Get current XP and level before update
+        $oldXp = self::get($memberId);
+        $oldProgression = MjLevels::get_progression($oldXp);
+        $oldLevelNumber = isset($oldProgression['current_level']['level_number'])
+            ? (int) $oldProgression['current_level']['level_number']
+            : 0;
+
         global $wpdb;
         $table = self::getTableName('mj_members');
 
@@ -112,7 +141,22 @@ final class MjMemberXp extends MjTools
             return new WP_Error('mj_member_xp_update_failed', __('Impossible de mettre à jour les XP.', 'mj-member'));
         }
 
-        return self::get($memberId);
+        $newXp = self::get($memberId);
+
+        // Check for level down and revoke coins for each level lost
+        $newProgression = MjLevels::get_progression($newXp);
+        $newLevelNumber = isset($newProgression['current_level']['level_number'])
+            ? (int) $newProgression['current_level']['level_number']
+            : 0;
+
+        if ($newLevelNumber < $oldLevelNumber) {
+            // Revoke coins for each level lost
+            for ($lvl = $oldLevelNumber; $lvl > $newLevelNumber; $lvl--) {
+                MjMemberCoins::revokeForLevelDown($memberId, $lvl);
+            }
+        }
+
+        return $newXp;
     }
 
     /**

@@ -4,6 +4,7 @@ namespace Mj\Member\Classes\Crud;
 
 use Mj\Member\Classes\MjTools;
 use Mj\Member\Classes\Crud\MjMemberXp;
+use Mj\Member\Classes\Crud\MjMemberCoins;
 use WP_Error;
 
 if (!defined('ABSPATH')) {
@@ -327,9 +328,9 @@ final class MjMemberBadgeCriteria extends MjTools implements CrudRepositoryInter
         $processed = array();
         $now = current_time('mysql');
 
-        // XP tracking: count newly awarded and revoked criteria
-        $criteriaNewlyAwarded = 0;
-        $criteriaRevoked = 0;
+        // XP and Coins tracking: collect newly awarded and revoked criteria IDs
+        $criteriaIdsNewlyAwarded = array();
+        $criteriaIdsRevoked = array();
 
         if (is_array($existingRows)) {
             foreach ($existingRows as $row) {
@@ -347,10 +348,10 @@ final class MjMemberBadgeCriteria extends MjTools implements CrudRepositoryInter
                         'revoked_at' => null,
                     );
 
-                    // Track XP: criterion was revoked and is now being re-awarded
+                    // Track XP and Coins: criterion was revoked and is now being re-awarded
                     if ($currentStatus !== self::STATUS_AWARDED) {
                         $updates['awarded_at'] = $now;
-                        $criteriaNewlyAwarded++;
+                        $criteriaIdsNewlyAwarded[] = $criterionId;
                     }
 
                     if ($awardedByUserId > 0) {
@@ -372,7 +373,7 @@ final class MjMemberBadgeCriteria extends MjTools implements CrudRepositoryInter
 
                     $processed[$criterionId] = true;
                 } else {
-                    // Track XP: criterion was awarded and is now being revoked
+                    // Track XP and Coins: criterion was awarded and is now being revoked
                     if ($currentStatus !== self::STATUS_REVOKED) {
                         $revokeUpdates = array(
                             'status' => self::STATUS_REVOKED,
@@ -388,7 +389,7 @@ final class MjMemberBadgeCriteria extends MjTools implements CrudRepositoryInter
                             array('%d')
                         );
 
-                        $criteriaRevoked++;
+                        $criteriaIdsRevoked[] = $criterionId;
                     }
                 }
             }
@@ -416,17 +417,29 @@ final class MjMemberBadgeCriteria extends MjTools implements CrudRepositoryInter
                 return $result;
             }
 
-            // Track XP: brand new criterion awarded
-            $criteriaNewlyAwarded++;
+            // Track XP and Coins: brand new criterion awarded
+            $criteriaIdsNewlyAwarded[] = $criterionId;
         }
 
-        // Apply XP changes
-        if ($criteriaNewlyAwarded > 0 || $criteriaRevoked > 0) {
-            if ($criteriaNewlyAwarded > 0) {
-                MjMemberXp::awardForCriteria($memberId, $criteriaNewlyAwarded);
+        // Apply XP and Coins changes
+        $criteriaNewlyAwardedCount = count($criteriaIdsNewlyAwarded);
+        $criteriaRevokedCount = count($criteriaIdsRevoked);
+
+        if ($criteriaNewlyAwardedCount > 0 || $criteriaRevokedCount > 0) {
+            // XP: use count-based award (fixed XP per criterion)
+            if ($criteriaNewlyAwardedCount > 0) {
+                MjMemberXp::awardForCriteria($memberId, $criteriaNewlyAwardedCount);
             }
-            if ($criteriaRevoked > 0) {
-                MjMemberXp::revokeForCriteria($memberId, $criteriaRevoked);
+            if ($criteriaRevokedCount > 0) {
+                MjMemberXp::revokeForCriteria($memberId, $criteriaRevokedCount);
+            }
+
+            // Coins: use criterion-specific coins values
+            if (!empty($criteriaIdsNewlyAwarded)) {
+                MjMemberCoins::awardForCriteria($memberId, $criteriaIdsNewlyAwarded);
+            }
+            if (!empty($criteriaIdsRevoked)) {
+                MjMemberCoins::revokeForCriteria($memberId, $criteriaIdsRevoked);
             }
         }
 

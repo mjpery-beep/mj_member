@@ -188,6 +188,33 @@ final class MjBadgeCriteria extends MjTools implements CrudRepositoryInterface
     }
 
     /**
+     * Get a single criterion by ID.
+     *
+     * @param int $id
+     * @return array<string,mixed>|null
+     */
+    public static function get_by_id(int $id): ?array
+    {
+        if ($id <= 0) {
+            return null;
+        }
+
+        global $wpdb;
+        $table = self::table_name();
+
+        $row = $wpdb->get_row(
+            $wpdb->prepare("SELECT * FROM {$table} WHERE id = %d", $id),
+            ARRAY_A
+        );
+
+        if (!$row) {
+            return null;
+        }
+
+        return self::format_row($row);
+    }
+
+    /**
      * @param array<string,mixed> $data
      * @return int|WP_Error
      */
@@ -483,6 +510,8 @@ final class MjBadgeCriteria extends MjTools implements CrudRepositoryInterface
             'slug' => isset($row['slug']) ? sanitize_title((string) $row['slug']) : '',
             'label' => isset($row['label']) ? sanitize_text_field((string) $row['label']) : '',
             'description' => isset($row['description']) ? wp_kses_post((string) $row['description']) : '',
+            'xp' => isset($row['xp']) ? max(0, (int) $row['xp']) : 0,
+            'coins' => isset($row['coins']) ? max(0, (int) $row['coins']) : 0,
             'display_order' => isset($row['display_order']) ? (int) $row['display_order'] : 0,
             'status' => self::normalize_status($row['status'] ?? self::STATUS_ACTIVE) ?: self::STATUS_ACTIVE,
             'created_at' => isset($row['created_at']) ? (string) $row['created_at'] : '',
@@ -537,6 +566,14 @@ final class MjBadgeCriteria extends MjTools implements CrudRepositoryInterface
 
         if (isset($data['description'])) {
             $payload['description'] = wp_kses_post((string) $data['description']);
+        }
+
+        if (isset($data['xp'])) {
+            $payload['xp'] = max(0, (int) $data['xp']);
+        }
+
+        if (isset($data['coins'])) {
+            $payload['coins'] = max(0, (int) $data['coins']);
         }
 
         if (isset($data['display_order'])) {
@@ -610,6 +647,8 @@ final class MjBadgeCriteria extends MjTools implements CrudRepositoryInterface
             'slug' => '%s',
             'label' => '%s',
             'description' => '%s',
+            'xp' => '%d',
+            'coins' => '%d',
             'display_order' => '%d',
             'status' => '%s',
             'created_at' => '%s',

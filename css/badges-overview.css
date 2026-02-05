@@ -156,25 +156,65 @@
 
 /* Next level preview */
 .mj-badges-xp-bar__next-level-preview{
-    display:flex;
+    display:inline-flex;
     align-items:center;
-    gap:8px;
-    margin-top:4px;
-    padding:6px 12px;
-    background:linear-gradient(135deg,rgba(138,43,226,0.2) 0%,rgba(75,0,130,0.3) 100%);
+    gap:10px;
+    margin-top:8px;
+    padding:8px 14px;
+    background:linear-gradient(135deg,rgba(138,43,226,0.25) 0%,rgba(75,0,130,0.35) 100%);
     border-radius:12px;
-    border:1px solid rgba(138,43,226,0.4);
+    border:2px solid rgba(138,43,226,0.5);
+    box-shadow:0 0 12px rgba(138,43,226,0.25);
+    flex-wrap:nowrap;
+    white-space:nowrap;
+}
+.mj-badges-xp-bar__next-level-preview--max{
+    background:linear-gradient(135deg,rgba(255,215,0,0.2) 0%,rgba(255,165,0,0.3) 100%);
+    border-color:rgba(255,215,0,0.6);
+    box-shadow:0 0 15px rgba(255,215,0,0.35);
 }
 .mj-badges-xp-bar__next-label{
     font-size:0.7rem;
     font-weight:600;
-    color:#a0a0c0;
+    color:#9090b0;
+    flex-shrink:0;
+}
+.mj-badges-xp-bar__next-level-preview--max .mj-badges-xp-bar__next-label{
+    color:#ffd700;
+    font-weight:700;
 }
 .mj-badges-xp-bar__next-title{
-    font-size:0.8rem;
+    font-size:0.85rem;
     font-weight:800;
     color:#da70d6;
-    text-shadow:0 0 8px rgba(218,112,214,0.6);
+    text-shadow:0 0 6px rgba(218,112,214,0.7);
+    flex-shrink:0;
+}
+.mj-badges-xp-bar__next-level-preview--max .mj-badges-xp-bar__next-title{
+    font-size:1.1rem;
+}
+.mj-badges-xp-bar__next-xp{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    padding:4px 10px;
+    background:linear-gradient(135deg,rgba(0,255,136,0.2) 0%,rgba(0,200,100,0.3) 100%);
+    border-radius:8px;
+    border:2px solid rgba(0,255,136,0.5);
+    flex-shrink:0;
+}
+.mj-badges-xp-bar__next-xp-value{
+    font-size:0.95rem;
+    font-weight:900;
+    color:#00ff88;
+    text-shadow:0 0 6px rgba(0,255,136,0.8);
+}
+.mj-badges-xp-bar__next-xp-label{
+    font-size:0.6rem;
+    font-weight:700;
+    color:#00cc66;
+    text-transform:uppercase;
+    letter-spacing:0.02em;
 }
 
 /* Max level reached */
@@ -195,34 +235,79 @@
 }
 .mj-badges-xp-bar__xp-info{
     display:flex;
-    flex-direction:column;
-    align-items:flex-start;
-    gap:2px;
+    flex-direction:row;
+    align-items:center;
+    gap:16px;
+    flex-wrap:wrap;
 }
 .mj-badges-xp-bar__xp-current{
     display:flex;
     align-items:center;
-    gap:6px;
+    gap:8px;
+    padding:12px 20px;
+    background:linear-gradient(135deg,rgba(0,255,136,0.15) 0%,rgba(0,200,100,0.25) 100%);
+    border-radius:16px;
+    border:3px solid rgba(0,255,136,0.5);
+    box-shadow:0 0 20px rgba(0,255,136,0.3),inset 0 0 15px rgba(0,255,136,0.1);
 }
 .mj-badges-xp-bar__xp-icon{
-    font-size:1.4rem;
+    font-size:1.8rem;
     animation:mj-bolt-flash 1.5s ease-in-out infinite;
+    filter:drop-shadow(0 0 8px rgba(0,255,136,0.8));
 }
 @keyframes mj-bolt-flash{
     0%,100%{opacity:1;transform:scale(1);}
-    50%{opacity:0.7;transform:scale(1.1);}
+    50%{opacity:0.8;transform:scale(1.15);}
 }
 .mj-badges-xp-bar__xp-value{
-    font-size:1.8rem;
+    font-size:2.2rem;
     font-weight:900;
-    color:#fff;
-    text-shadow:0 0 10px rgba(255,215,0,0.8),0 2px 0 rgba(0,0,0,0.3);
+    color:#00ff88;
+    text-shadow:0 0 15px rgba(0,255,136,0.9),0 0 30px rgba(0,255,136,0.5),0 2px 0 rgba(0,0,0,0.4);
+    letter-spacing:-0.02em;
 }
 .mj-badges-xp-bar__xp-label{
-    font-size:0.9rem;
-    font-weight:800;
-    color:#ffd700;
-    text-shadow:0 0 8px rgba(255,215,0,0.6);
+    font-size:1rem;
+    font-weight:900;
+    color:#00cc66;
+    text-shadow:0 0 10px rgba(0,255,136,0.7);
+    text-transform:uppercase;
+    letter-spacing:0.1em;
+}
+/* Coins display in XP bar */
+.mj-badges-xp-bar__coins-current{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:12px 20px;
+    background:linear-gradient(135deg,rgba(255,193,7,0.15) 0%,rgba(255,152,0,0.25) 100%);
+    border-radius:16px;
+    border:3px solid rgba(255,193,7,0.5);
+    box-shadow:0 0 20px rgba(255,193,7,0.3),inset 0 0 15px rgba(255,193,7,0.1);
+}
+.mj-badges-xp-bar__coins-icon{
+    font-size:1.8rem;
+    animation:mj-coin-shine 2s ease-in-out infinite;
+    filter:drop-shadow(0 0 8px rgba(255,193,7,0.8));
+}
+@keyframes mj-coin-shine{
+    0%,100%{opacity:1;transform:scale(1) rotate(0deg);}
+    50%{opacity:0.9;transform:scale(1.15) rotate(15deg);}
+}
+.mj-badges-xp-bar__coins-value{
+    font-size:2.2rem;
+    font-weight:900;
+    color:#ffc107;
+    text-shadow:0 0 15px rgba(255,193,7,0.9),0 0 30px rgba(255,193,7,0.5),0 2px 0 rgba(0,0,0,0.4);
+    letter-spacing:-0.02em;
+}
+.mj-badges-xp-bar__coins-label{
+    font-size:1rem;
+    font-weight:900;
+    color:#ffca28;
+    text-shadow:0 0 10px rgba(255,202,40,0.7);
+    text-transform:uppercase;
+    letter-spacing:0.1em;
 }
 .mj-badges-xp-bar__xp-next{
     font-size:0.7rem;
@@ -1193,6 +1278,119 @@
     font-weight:600;
     color:rgba(255,215,0,0.7);
     margin-top:2px;
+}
+
+/* ========================================
+   COINS STYLING
+   ======================================== */
+
+/* Rewards container for badges */
+.mj-badges-overview__rewards{
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+
+/* Badge coins */
+.mj-badges-overview__coins{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    padding:6px 14px;
+    background:linear-gradient(180deg,rgba(255,193,7,0.15) 0%,rgba(255,152,0,0.2) 100%);
+    border-radius:14px;
+    border:2px solid rgba(255,193,7,0.4);
+}
+.mj-badges-overview__item--complete .mj-badges-overview__coins{
+    background:linear-gradient(180deg,rgba(255,193,7,0.25) 0%,rgba(255,152,0,0.3) 100%);
+    border-color:rgba(255,193,7,0.6);
+}
+.mj-badges-overview__coins-icon{
+    font-size:0.85rem;
+}
+.mj-badges-overview__coins-value{
+    font-size:0.9rem;
+    font-weight:900;
+    color:#ffc107;
+    text-shadow:0 0 6px rgba(255,193,7,0.5);
+}
+.mj-badges-overview__item--complete .mj-badges-overview__coins-value{
+    color:#ffca28;
+    text-shadow:0 0 8px rgba(255,202,40,0.6);
+}
+
+/* Criterion rewards container */
+.mj-badges-overview__criterion-rewards{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    flex-shrink:0;
+}
+
+/* Criterion coins */
+.mj-badges-overview__criterion-coins{
+    display:inline-flex;
+    align-items:center;
+    gap:3px;
+    padding:4px 8px;
+    background:linear-gradient(180deg,rgba(255,193,7,0.1) 0%,rgba(255,152,0,0.15) 100%);
+    border-radius:10px;
+    border:1px solid rgba(255,193,7,0.3);
+    flex-shrink:0;
+}
+.mj-badges-overview__criterion--awarded .mj-badges-overview__criterion-coins{
+    background:linear-gradient(180deg,rgba(255,193,7,0.2) 0%,rgba(255,152,0,0.25) 100%);
+    border-color:rgba(255,193,7,0.5);
+}
+.mj-badges-overview__criterion-coins-icon{
+    font-size:0.65rem;
+}
+.mj-badges-overview__criterion-coins-value{
+    font-size:0.7rem;
+    font-weight:800;
+    color:#ffc107;
+    text-shadow:0 0 4px rgba(255,193,7,0.4);
+}
+.mj-badges-overview__criterion--awarded .mj-badges-overview__criterion-coins-value{
+    color:#ffca28;
+    text-shadow:0 0 4px rgba(255,202,40,0.5);
+}
+
+/* Trophy rewards container */
+.mj-trophy__rewards{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    margin-top:4px;
+    flex-wrap:wrap;
+}
+
+/* Trophy coins */
+.mj-trophy__coins{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    padding:5px 10px;
+    background:linear-gradient(180deg,rgba(255,193,7,0.1) 0%,rgba(255,152,0,0.15) 100%);
+    border-radius:12px;
+    border:2px solid rgba(255,193,7,0.4);
+}
+.mj-trophy--awarded .mj-trophy__coins{
+    background:linear-gradient(180deg,rgba(255,193,7,0.2) 0%,rgba(255,152,0,0.25) 100%);
+    border-color:rgba(255,193,7,0.6);
+}
+.mj-trophy__coins-icon{
+    font-size:0.75rem;
+}
+.mj-trophy__coins-value{
+    font-size:0.8rem;
+    font-weight:800;
+    color:#ffc107;
+    text-shadow:0 0 6px rgba(255,193,7,0.5);
+}
+.mj-trophy--awarded .mj-trophy__coins-value{
+    color:#ffca28;
+    text-shadow:0 0 6px rgba(255,202,40,0.6);
 }
 
 /* Responsive */

@@ -237,6 +237,7 @@ final class MjTrophies extends MjTools implements CrudRepositoryInterface
             'title' => $title,
             'description' => $description,
             'xp' => isset($row['xp']) ? (int) $row['xp'] : 0,
+            'coins' => isset($row['coins']) ? max(0, (int) $row['coins']) : 0,
             'auto_mode' => isset($row['auto_mode']) ? (bool) $row['auto_mode'] : false,
             'auto_hook' => isset($row['auto_hook']) ? sanitize_key((string) $row['auto_hook']) : '',
             'auto_threshold' => isset($row['auto_threshold']) ? (int) $row['auto_threshold'] : 0,
@@ -301,6 +302,10 @@ final class MjTrophies extends MjTools implements CrudRepositoryInterface
 
         if (isset($data['xp'])) {
             $payload['xp'] = max(0, (int) $data['xp']);
+        }
+
+        if (isset($data['coins'])) {
+            $payload['coins'] = max(0, (int) $data['coins']);
         }
 
         if (isset($data['auto_mode'])) {
@@ -443,7 +448,7 @@ final class MjTrophies extends MjTools implements CrudRepositoryInterface
     {
         $formats = array();
         foreach ($payload as $key => $value) {
-            if (in_array($key, array('id', 'xp', 'auto_mode', 'auto_threshold', 'image_id', 'display_order'), true)) {
+            if (in_array($key, array('id', 'xp', 'coins', 'auto_mode', 'auto_threshold', 'image_id', 'display_order'), true)) {
                 $formats[] = '%d';
             } else {
                 $formats[] = '%s';

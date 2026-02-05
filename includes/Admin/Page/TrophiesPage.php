@@ -158,6 +158,7 @@ final class TrophiesPage
                         <th style="width: 60px;"><?php esc_html_e('Image', 'mj-member'); ?></th>
                         <th><?php esc_html_e('Titre', 'mj-member'); ?></th>
                         <th style="width: 80px;"><?php esc_html_e('XP', 'mj-member'); ?></th>
+                        <th style="width: 80px;"><?php esc_html_e('Coins', 'mj-member'); ?></th>
                         <th style="width: 100px;"><?php esc_html_e('Mode', 'mj-member'); ?></th>
                         <th style="width: 100px;"><?php esc_html_e('Statut', 'mj-member'); ?></th>
                         <th style="width: 80px;"><?php esc_html_e('Ordre', 'mj-member'); ?></th>
@@ -167,7 +168,7 @@ final class TrophiesPage
                 <tbody>
                     <?php if (empty($trophies)): ?>
                         <tr>
-                            <td colspan="7"><?php esc_html_e('Aucun trophée trouvé.', 'mj-member'); ?></td>
+                            <td colspan="8"><?php esc_html_e('Aucun trophée trouvé.', 'mj-member'); ?></td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($trophies as $trophy): ?>
@@ -223,6 +224,7 @@ final class TrophiesPage
                                     <?php endif; ?>
                                 </td>
                                 <td><strong><?php echo esc_html($trophy['xp']); ?></strong> XP</td>
+                                <td><span style="background: #fff3cd; padding: 2px 8px; border-radius: 3px; font-size: 12px;">🪙 <?php echo esc_html($trophy['coins']); ?></span></td>
                                 <td>
                                     <?php if ($trophy['auto_mode']): ?>
                                         <span style="background: #d4edda; color: #155724; padding: 2px 8px; border-radius: 3px; font-size: 12px;">⚙️ Auto</span>
@@ -266,6 +268,7 @@ final class TrophiesPage
             'slug' => '',
             'description' => '',
             'xp' => 10,
+            'coins' => 0,
             'auto_mode' => false,
             'auto_hook' => '',
             'auto_threshold' => 1,
@@ -313,6 +316,10 @@ final class TrophiesPage
                     <tr>
                         <th scope="row"><label for="xp"><?php esc_html_e('Points XP', 'mj-member'); ?></label></th>
                         <td><input type="number" name="xp" id="xp" value="<?php echo esc_attr($trophy['xp']); ?>" min="0" class="small-text"></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="coins"><?php esc_html_e('Coins', 'mj-member'); ?> 🪙</label></th>
+                        <td><input type="number" name="coins" id="coins" value="<?php echo esc_attr($trophy['coins']); ?>" min="0" class="small-text"></td>
                     </tr>
                     <tr>
                         <th scope="row"><label for="image_id"><?php esc_html_e('Image', 'mj-member'); ?></label></th>
@@ -580,6 +587,7 @@ final class TrophiesPage
             'slug' => isset($_POST['slug']) ? sanitize_title(wp_unslash((string) $_POST['slug'])) : '',
             'description' => isset($_POST['description']) ? wp_kses_post(wp_unslash((string) $_POST['description'])) : '',
             'xp' => isset($_POST['xp']) ? (int) $_POST['xp'] : 0,
+            'coins' => isset($_POST['coins']) ? (int) $_POST['coins'] : 0,
             'auto_mode' => isset($_POST['auto_mode']) ? 1 : 0,
             'auto_hook' => isset($_POST['auto_hook']) ? sanitize_key(wp_unslash((string) $_POST['auto_hook'])) : '',
             'auto_threshold' => isset($_POST['auto_threshold']) ? (int) $_POST['auto_threshold'] : 1,

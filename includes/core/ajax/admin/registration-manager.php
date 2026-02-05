@@ -21,6 +21,7 @@ use Mj\Member\Classes\Crud\MjMemberBadges;
 use Mj\Member\Classes\Crud\MjBadgeCriteria;
 use Mj\Member\Classes\Crud\MjMemberBadgeCriteria;
 use Mj\Member\Classes\Crud\MjMemberXp;
+use Mj\Member\Classes\Crud\MjMemberCoins;
 use Mj\Member\Classes\Crud\MjTrophies;
 use Mj\Member\Classes\Crud\MjMemberTrophies;
 use Mj\Member\Classes\Crud\MjLevels;
@@ -4651,6 +4652,7 @@ function mj_regmgr_get_members() {
             'membershipYear' => $membership_year > 0 ? $membership_year : null,
             'isVolunteer' => !empty($member->is_volunteer),
             'xpTotal' => isset($member->xp_total) ? (int) $member->xp_total : 0,
+            'coinsTotal' => isset($member->coins_total) ? (int) $member->coins_total : 0,
         );
     }
 
@@ -4873,6 +4875,8 @@ function mj_regmgr_prepare_member_badge_entry($badge, $member_id, $assignment_ma
             'id' => $criterion_id,
             'label' => isset($record['label']) ? (string) $record['label'] : '',
             'description' => isset($record['description']) ? (string) $record['description'] : '',
+            'xp' => isset($record['xp']) ? (int) $record['xp'] : 0,
+            'coins' => isset($record['coins']) ? (int) $record['coins'] : 0,
             'awarded' => $awarded,
             'status' => $status,
             'canToggle' => $can_toggle,
@@ -4917,6 +4921,8 @@ function mj_regmgr_prepare_member_badge_entry($badge, $member_id, $assignment_ma
         'icon' => isset($badge['icon']) ? (string) $badge['icon'] : '',
         'imageId' => $image_id,
         'imageUrl' => $image_url,
+        'xp' => isset($badge['xp']) ? (int) $badge['xp'] : 0,
+        'coins' => isset($badge['coins']) ? (int) $badge['coins'] : 0,
         'status' => $assignment_status,
         'awardedAt' => $awarded_at,
         'revokedAt' => $revoked_at,
@@ -5027,6 +5033,7 @@ function mj_regmgr_get_member_details() {
         'photoUsageConsent' => (bool) $memberData->get('photo_usage_consent', 0),
         'photoId' => $memberData->get('photo_id', null),
         'xpTotal' => isset($memberData->xp_total) ? (int) $memberData->xp_total : 0,
+        'coinsTotal' => isset($memberData->coins_total) ? (int) $memberData->coins_total : 0,
         'guardian' => null,
     );
 
@@ -5324,13 +5331,15 @@ function mj_regmgr_sync_member_badge() {
     // Determine badge completion state AFTER sync
     $is_complete = mj_regmgr_is_badge_complete($member_id, $badge_id);
 
-    // Award or revoke XP for badge completion
+    // Award or revoke XP and Coins for badge completion
     if ($is_complete && !$was_complete) {
-        // Badge just became complete - award 100 XP
+        // Badge just became complete - award XP and Coins
         MjMemberXp::awardForBadgeCompletion($member_id);
+        MjMemberCoins::awardForBadgeCompletion($member_id, $badge_id);
     } elseif (!$is_complete && $was_complete) {
-        // Badge was complete but no longer is - revoke 100 XP
+        // Badge was complete but no longer is - revoke XP and Coins
         MjMemberXp::revokeForBadgeCompletion($member_id);
+        MjMemberCoins::revokeForBadgeCompletion($member_id, $badge_id);
     }
 
     $status = empty($criterion_ids) ? MjMemberBadges::STATUS_REVOKED : MjMemberBadges::STATUS_AWARDED;
@@ -5351,12 +5360,14 @@ function mj_regmgr_sync_member_badge() {
     // Include updated XP and level progression in response
     $updated_member = MjMembers::getById($member_id);
     $xp_total = isset($updated_member->xp_total) ? (int) $updated_member->xp_total : 0;
+    $coins_total = isset($updated_member->coins_total) ? (int) $updated_member->coins_total : 0;
     $level_progression = mj_regmgr_get_member_level_progression($xp_total);
 
     wp_send_json_success(array(
         'message' => __('Progression du badge mise à jour.', 'mj-member'),
         'badge' => $badge_payload,
         'xpTotal' => $xp_total,
+        'coinsTotal' => $coins_total,
         'levelProgression' => $level_progression,
     ));
 }
@@ -5444,9 +5455,13 @@ function mj_regmgr_adjust_member_xp() {
     $abs_amount = abs($amount);
     $level_progression = mj_regmgr_get_member_level_progression($result);
 
+    $updated_member = MjMembers::getById($member_id);
+    $coins_total = isset($updated_member->coins_total) ? (int) $updated_member->coins_total : 0;
+
     wp_send_json_success(array(
         'message' => sprintf(__('%d XP %s.', 'mj-member'), $abs_amount, $action_label),
         'xpTotal' => $result,
+        'coinsTotal' => $coins_total,
         'levelProgression' => $level_progression,
     ));
 }
@@ -6582,6 +6597,7 @@ function mj_regmgr_get_member_trophies_payload($member_id) {
             'title' => isset($trophy['title']) ? (string) $trophy['title'] : '',
             'description' => isset($trophy['description']) ? (string) $trophy['description'] : '',
             'xp' => isset($trophy['xp']) ? (int) $trophy['xp'] : 0,
+            'coins' => isset($trophy['coins']) ? (int) $trophy['coins'] : 0,
             'imageId' => $image_id,
             'imageUrl' => $image_url,
             'autoMode' => $is_auto,

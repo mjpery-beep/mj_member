@@ -5128,6 +5128,23 @@ input.mj-regmgr-search-input__field {
     transform: none;
 }
 
+/* Coins separator and display */
+.mj-regmgr-member-xp__separator {
+    width: 1px;
+    height: 40px;
+    background: rgba(146, 64, 14, 0.25);
+    margin: 0 8px;
+}
+
+.mj-regmgr-member-xp__icon--coins {
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    box-shadow: 0 4px 12px rgba(251, 191, 36, 0.35);
+}
+
+.mj-regmgr-member-xp__value--coins {
+    color: #92400e;
+}
+
 /* Level Display */
 .mj-regmgr-member-level {
     display: flex;
