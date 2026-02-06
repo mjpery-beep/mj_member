@@ -4338,7 +4338,7 @@
                 'img{max-width:100%;height:auto;}' +
                 'a{color:#2563eb;text-decoration:underline;}' +
                 '.regdoc-header{}' +
-                '.regdoc-content{min-height:400pt;}' +
+                '.regdoc-content{min-height:150px;}' +
                 '.regdoc-footer{border-top:1px solid #999;padding-top:15pt;margin-top:20pt;font-size:10pt;color:#666;}' +
                 '.regdoc-page{page-break-after:always;}' +
                 '.regdoc-page:last-child{page-break-after:auto;}' +
@@ -4494,7 +4494,7 @@
             var htmlDoc = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Document d\'inscription - ' + 
                 fullName + ' - ' + (eventDetails.title || 'Événement') + '</title><style>' +
                 '@page{size:A4;margin:20mm;}' +
-                'body{font-family:Arial,Helvetica,sans-serif;font-size:12pt;line-height:1.6;color:#333;max-width:100%;margin:0;padding:0;}' +
+                'body{font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#333;max-width:100%;margin:0;padding:0;}' +
                 'h1{font-size:18pt;margin:0 0 0.75em 0;}h2{font-size:14pt;margin:1em 0 0.5em 0;}h3{font-size:12pt;margin:0.8em 0 0.4em 0;}' +
                 'p{margin:0 0 0.75em 0;}p:last-child{margin-bottom:0;}' +
                 'ul,ol{margin:0 0 0.75em 1.5em;padding:0;}' +
@@ -4506,7 +4506,7 @@
                 'img{max-width:100%;height:auto;}' +
                 'a{color:#2563eb;text-decoration:underline;}' +
                 '.regdoc-header{}' +
-                '.regdoc-content{min-height:400pt;}' +
+                '.regdoc-content{min-height:150px;}' +
                 '.regdoc-footer{border-top:1px solid #999;padding-top:15pt;margin-top:20pt;font-size:10pt;color:#666;}' +
                 '</style></head><body>' +
                 (processedHeader ? '<div class="regdoc-header">' + processedHeader + '</div>' : '') +
