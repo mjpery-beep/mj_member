@@ -728,7 +728,7 @@ class MjEvents implements CrudRepositoryInterface {
             }
 
             if ($value === null || $value === '') {
-                if (in_array($column, array('description', 'title'), true)) {
+                if (in_array($column, array('description', 'title', 'registration_document'), true)) {
                     $prepared[$column] = '';
                     $formats[] = $format;
                 }

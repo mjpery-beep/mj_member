@@ -2340,6 +2340,17 @@ input.mj-regmgr-search-input__field {
     background: #dc2626;
 }
 
+.mj-btn--danger-outline {
+    background: transparent;
+    color: var(--regmgr-danger);
+    border: 1px solid var(--regmgr-danger);
+}
+
+.mj-btn--danger-outline:hover {
+    background: var(--regmgr-danger);
+    color: #fff;
+}
+
 .mj-btn--ghost {
     background: transparent;
     color: var(--regmgr-gray-600);

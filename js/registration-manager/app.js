@@ -4108,17 +4108,19 @@
             setRegDocError('');
         }, [setRegDocState, setRegDocError]);
 
-        var handleSaveRegDoc = useCallback(function () {
+        var handleSaveRegDoc = useCallback(function (overrideContent) {
             if (!selectedEvent || !selectedEvent.id) {
                 return Promise.resolve();
             }
 
-            if (!regDocState || regDocState.draft === regDocState.base) {
+            var draftValue = typeof overrideContent === 'string' ? overrideContent : (regDocState.draft || '');
+            
+            // Skip if no changes (unless overrideContent is explicitly provided)
+            if (typeof overrideContent !== 'string' && regDocState && draftValue === regDocState.base) {
                 return Promise.resolve();
             }
 
             var eventId = selectedEvent.id;
-            var draftValue = regDocState.draft || '';
 
             // DEBUG
             console.log('[MjRegMgr] Saving registration document:', {
@@ -6629,7 +6631,7 @@
                                 onShowNotes: handleShowNotes,
                                 onChangeOccurrences: handleChangeOccurrences,
                                 onViewMember: handleViewMemberFromRegistration,
-                                onDownloadDoc: handleDownloadMemberDoc,
+                                onDownloadDoc: (regDocState.draft || (eventDetails && eventDetails.registrationDocument)) ? handleDownloadMemberDoc : null,
                                 strings: strings,
                                 config: config,
                                 eventRequiresPayment: eventRequiresPayment,
@@ -6791,19 +6793,19 @@
                                                 disabled: regDocSaving || !regDocDirty,
                                                 onClick: function () { handleResetRegDoc(); },
                                             }, getString(strings, 'regDocResetButton', 'Annuler les modifications')),
-                                            h('button', {
+                                            regDocState.draft && h('button', {
                                                 type: 'button',
-                                                class: 'mj-btn mj-btn--outline',
-                                                disabled: !regDocState.draft,
-                                                onClick: function () { handleDownloadRegDoc(); },
-                                            }, [
-                                                h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, style: 'margin-right: 6px; vertical-align: middle;' }, [
-                                                    h('path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }),
-                                                    h('polyline', { points: '7 10 12 15 17 10' }),
-                                                    h('line', { x1: 12, y1: 15, x2: 12, y2: 3 }),
-                                                ]),
-                                                getString(strings, 'regDocDownloadButton', 'Télécharger le document'),
-                                            ]),
+                                                class: 'mj-btn mj-btn--danger-outline',
+                                                disabled: regDocSaving,
+                                                onClick: function () {
+                                                    if (window.confirm(getString(strings, 'regDocDisableConfirm', 'Êtes-vous sûr de vouloir désactiver le document d\'inscription ? Le contenu sera supprimé.'))) {
+                                                        setRegDocState(function (prev) {
+                                                            return Object.assign({}, prev, { draft: '' });
+                                                        });
+                                                        handleSaveRegDoc('');
+                                                    }
+                                                },
+                                            }, getString(strings, 'regDocDisableButton', 'Désactiver le document')),
                                             regDocDirty && !regDocSaving && h('span', { class: 'mj-regmgr-regdoc-status' }, getString(strings, 'regDocUnsavedChanges', 'Modifications non enregistrées')),
                                             regDocError && h('p', { class: 'mj-regmgr-regdoc-error' }, regDocError),
                                         ]),
