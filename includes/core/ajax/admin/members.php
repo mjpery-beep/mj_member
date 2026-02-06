@@ -43,12 +43,23 @@ function mj_link_member_user_callback() {
         wp_send_json_error(array('message' => __('Identifiant membre manquant.', 'mj-member')));
     }
 
+    $member = MjMembers::getById($member_id);
+    if (!$member) {
+        wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
+    }
+
+    // Default to subscriber role for jeunes when no role is provided
     $editable_roles = function_exists('get_editable_roles') ? get_editable_roles() : array();
+    if (empty($target_role)) {
+        $member_role = isset($member->role) ? $member->role : '';
+        if ($member_role === MjRoles::JEUNE && isset($editable_roles['subscriber'])) {
+            $target_role = 'subscriber';
+        }
+    }
+
     if (empty($target_role) || !isset($editable_roles[$target_role])) {
         wp_send_json_error(array('message' => __('Rôle sélectionné invalide.', 'mj-member')));
     }
-
-    $member = MjMembers::getById($member_id);
     if (!$member) {
         wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
     }

@@ -3654,6 +3654,7 @@
         var setEventPhotoUploading = _eventPhotoUploading[1];
 
         var eventPhotoInputRef = useRef(null);
+        var eventPhotosLoadedRef = useRef(null);
 
         var regDocFieldIdRef = useRef(null);
         if (!regDocFieldIdRef.current) {
@@ -4382,6 +4383,7 @@
             setEventPhotos([]);
             setEventPhotosLoading(false);
             setEventPhotoUpdating(null);
+            eventPhotosLoadedRef.current = null;
             eventEditorLoadedRef.current = null;
             var defaultTab = 'registrations';
             if (event) {
@@ -4794,11 +4796,13 @@
             if (eventPhotosLoading) {
                 return;
             }
-            if (eventPhotos.length > 0) {
+            // Déjà chargé pour cet événement
+            if (eventPhotosLoadedRef.current === selectedEvent.id) {
                 return;
             }
+            eventPhotosLoadedRef.current = selectedEvent.id;
             loadEventPhotos(selectedEvent.id);
-        }, [sidebarMode, activeTab, selectedEvent, eventPhotosLoading, eventPhotos, loadEventPhotos]);
+        }, [sidebarMode, activeTab, selectedEvent, eventPhotosLoading, loadEventPhotos]);
 
         // ============================================
         // MEMBERS MODE FUNCTIONS
@@ -6119,7 +6123,7 @@
             },
             {
                 key: 'regdoc',
-                label: getString(strings, 'tabRegDoc', 'Document d\'inscription'),
+                label: getString(strings, 'tabRegDoc', 'Document'),
                 icon: tabIcons.regdoc,
             },
             {
