@@ -3030,6 +3030,44 @@ if (!function_exists('mj_member_event_page_preload_for_admin_bar')) {
     add_action('template_redirect', 'mj_member_event_page_preload_for_admin_bar', 5);
 }
 
+if (!function_exists('mj_member_user_can_view_draft_events')) {
+    /**
+     * Indique si l'utilisateur courant est autorisé à consulter les événements en brouillon.
+     * Seuls les animateurs et coordinateurs peuvent voir les brouillons.
+     *
+     * @return bool
+     */
+    function mj_member_user_can_view_draft_events() {
+        // Admins WordPress peuvent toujours voir
+        if (function_exists('current_user_can') && current_user_can('manage_options')) {
+            return true;
+        }
+
+        // Vérifie la capacité MJ Member
+        if (class_exists(Config::class) && function_exists('current_user_can') && current_user_can(Config::capability())) {
+            return true;
+        }
+
+        // Vérifie le rôle du membre MJ
+        $member = null;
+        if (is_user_logged_in() && function_exists('mj_member_get_current_member')) {
+            $member = mj_member_get_current_member();
+        }
+
+        if ($member && is_object($member) && isset($member->role)) {
+            if (class_exists('Mj\\Member\\Classes\\MjRoles')) {
+                return \Mj\Member\Classes\MjRoles::isAnimateurOrCoordinateur((string) $member->role);
+            }
+
+            // Fallback sans MjRoles
+            $role = sanitize_key((string) $member->role);
+            return in_array($role, array('coordinateur', 'animateur'), true);
+        }
+
+        return false;
+    }
+}
+
 if (!function_exists('mj_member_event_page_template_include')) {
     /**
      * Filtre template_include pour la route /evenement/{slug}.
@@ -3058,6 +3096,20 @@ if (!function_exists('mj_member_event_page_template_include')) {
             status_header(404);
             nocache_headers();
             return get_404_template();
+        }
+
+        // Vérifie l'accès aux événements en brouillon
+        // Seuls les animateurs et coordinateurs peuvent voir les brouillons
+        $event_status = isset($event->status) ? sanitize_key((string) $event->status) : '';
+        if ($event_status === \Mj\Member\Classes\Crud\MjEvents::STATUS_DRAFT) {
+            if (!mj_member_user_can_view_draft_events()) {
+                // Accès refusé : retourne 404 pour ne pas révéler l'existence
+                global $wp_query;
+                $wp_query->set_404();
+                status_header(404);
+                nocache_headers();
+                return get_404_template();
+            }
         }
 
         // Prépare le contexte pour le controller
