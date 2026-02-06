@@ -82,6 +82,7 @@
         var onShowQR = props.onShowQR;
         var onShowNotes = props.onShowNotes;
         var onChangeOccurrences = props.onChangeOccurrences;
+        var onDownloadDoc = props.onDownloadDoc;
         var strings = props.strings;
         var config = props.config;
         var eventRequiresPayment = props.eventRequiresPayment;
@@ -316,6 +317,21 @@
                         h('span', { class: 'mj-regmgr-action-btn__label' }, getString(strings, 'notes', 'Notes')),
                         registration.notesCount > 0 && h('span', { class: 'mj-regmgr-action-btn__badge' }, registration.notesCount),
                     ]),
+
+                    // Télécharger document
+                    onDownloadDoc && h('button', {
+                        type: 'button',
+                        class: 'mj-regmgr-action-btn',
+                        onClick: function () { onDownloadDoc(registration); },
+                        title: getString(strings, 'downloadDoc', 'Télécharger le document'),
+                    }, [
+                        h('svg', { class: 'mj-regmgr-action-btn__icon', width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                            h('path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }),
+                            h('polyline', { points: '7 10 12 15 17 10' }),
+                            h('line', { x1: 12, y1: 15, x2: 12, y2: 3 }),
+                        ]),
+                        h('span', { class: 'mj-regmgr-action-btn__label' }, getString(strings, 'doc', 'Doc')),
+                    ]),
                 ]),
 
                 // Actions secondaires (dropdown pour actions destructives)
@@ -394,6 +410,7 @@
         var onShowQR = props.onShowQR;
         var onShowNotes = props.onShowNotes;
         var onChangeOccurrences = props.onChangeOccurrences;
+        var onDownloadDoc = props.onDownloadDoc;
         var strings = props.strings;
         var config = props.config;
         var eventRequiresPayment = props.eventRequiresPayment;
@@ -545,6 +562,7 @@
                         onShowQR: onShowQR,
                         onShowNotes: onShowNotes,
                         onChangeOccurrences: onChangeOccurrences,
+                        onDownloadDoc: onDownloadDoc,
                         onViewMember: onViewMember,
                         allowOccurrenceSelection: allowOccurrenceSelection,
                         strings: strings,

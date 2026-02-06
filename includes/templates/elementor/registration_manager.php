@@ -417,8 +417,8 @@ $config_json = wp_json_encode(array(
     'ageRanges' => $age_ranges,
     'locale' => function_exists('determine_locale') ? determine_locale() : get_locale(),
     'prefillEventId' => $prefill_event_id > 0 ? $prefill_event_id : null,
-    'regDocHeader' => get_option('mj_regdoc_header', ''),
-    'regDocFooter' => get_option('mj_regdoc_footer', ''),
+    'regDocHeader' => wpautop(get_option('mj_regdoc_header', '')),
+    'regDocFooter' => wpautop(get_option('mj_regdoc_footer', '')),
     'strings' => array(
         // Général
         'loading' => __('Chargement...', 'mj-member'),

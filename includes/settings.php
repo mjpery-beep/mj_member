@@ -7,6 +7,7 @@ use Mj\Member\Core\Config;
 add_filter('mce_external_plugins', 'mj_member_add_tinymce_table_plugin');
 function mj_member_add_tinymce_table_plugin($plugins) {
     $plugins['table'] = 'https://cdnjs.cloudflare.com/ajax/libs/tinymce/4.9.11/plugins/table/plugin.min.js';
+    $plugins['code'] = 'https://cdnjs.cloudflare.com/ajax/libs/tinymce/4.9.11/plugins/code/plugin.min.js';
     return $plugins;
 }
 
@@ -1139,8 +1140,8 @@ function mj_settings_page() {
                                     'teeny' => false,
                                     'quicktags' => true,
                                     'tinymce' => array(
-                                        'plugins' => 'table,lists,link,image,paste,wordpress,wplink,hr',
-                                        'toolbar1' => 'formatselect,fontsizeselect,lineheightselect,bold,italic,underline,bullist,numlist,blockquote,alignleft,aligncenter,alignright,link,unlink,table,hr,fullscreen,wp_adv',
+                                        'plugins' => 'table,lists,link,image,paste,wordpress,wplink,hr,code',
+                                        'toolbar1' => 'formatselect,fontsizeselect,lineheightselect,bold,italic,underline,bullist,numlist,blockquote,alignleft,aligncenter,alignright,link,unlink,table,hr,fullscreen,code,wp_adv',
                                         'toolbar2' => 'strikethrough,forecolor,backcolor,pastetext,removeformat,charmap,outdent,indent,undo,redo,wp_help',
                                         'fontsize_formats' => '8px 10px 12px 14px 16px 18px 20px 24px 28px 32px 36px 48px 72px',
                                     ),
@@ -1165,8 +1166,8 @@ function mj_settings_page() {
                                     'teeny' => false,
                                     'quicktags' => true,
                                     'tinymce' => array(
-                                        'plugins' => 'table,lists,link,image,paste,wordpress,wplink,hr',
-                                        'toolbar1' => 'formatselect,fontsizeselect,lineheightselect,bold,italic,underline,bullist,numlist,blockquote,alignleft,aligncenter,alignright,link,unlink,table,hr,fullscreen,wp_adv',
+                                        'plugins' => 'table,lists,link,image,paste,wordpress,wplink,hr,code',
+                                        'toolbar1' => 'formatselect,fontsizeselect,lineheightselect,bold,italic,underline,bullist,numlist,blockquote,alignleft,aligncenter,alignright,link,unlink,table,hr,fullscreen,code,wp_adv',
                                         'toolbar2' => 'strikethrough,forecolor,backcolor,pastetext,removeformat,charmap,outdent,indent,undo,redo,wp_help',
                                         'fontsize_formats' => '8px 10px 12px 14px 16px 18px 20px 24px 28px 32px 36px 48px 72px',
                                     ),
@@ -1180,12 +1181,66 @@ function mj_settings_page() {
                             <p style="margin:0 0 8px 0; color:#6b7280; font-size:13px;">
                                 <?php esc_html_e('Vous pouvez utiliser ces variables dans l\'en-tête et le pied de page. Elles seront remplacées par les valeurs correspondantes lors de la génération.', 'mj-member'); ?>
                             </p>
-                            <ul style="margin:0 0 0 18px; padding:0; list-style:disc; color:#475569; font-family:monospace; font-size:12px;">
-                                <li>[site_name] — <?php esc_html_e('Nom du site', 'mj-member'); ?></li>
-                                <li>[site_url] — <?php esc_html_e('URL du site', 'mj-member'); ?></li>
-                                <li>[current_date] — <?php esc_html_e('Date actuelle', 'mj-member'); ?></li>
-                                <li>[current_year] — <?php esc_html_e('Année actuelle', 'mj-member'); ?></li>
-                            </ul>
+                            <div style="display:flex; flex-wrap:wrap; gap:24px;">
+                                <div>
+                                    <p style="margin:0 0 6px 0; font-weight:600; font-size:13px;"><?php esc_html_e('Événement', 'mj-member'); ?></p>
+                                    <ul style="margin:0 0 0 18px; padding:0; list-style:disc; color:#475569; font-family:monospace; font-size:12px;">
+                                        <li>[event_name] — <?php esc_html_e('Nom de l\'événement', 'mj-member'); ?></li>
+                                        <li>[event_type] — <?php esc_html_e('Type d\'événement', 'mj-member'); ?></li>
+                                        <li>[event_status] — <?php esc_html_e('Statut', 'mj-member'); ?></li>
+                                        <li>[event_date_start] — <?php esc_html_e('Date de début', 'mj-member'); ?></li>
+                                        <li>[event_date_end] — <?php esc_html_e('Date de fin', 'mj-member'); ?></li>
+                                        <li>[event_date_deadline] — <?php esc_html_e('Date limite d\'inscription', 'mj-member'); ?></li>
+                                        <li>[event_price] — <?php esc_html_e('Tarif', 'mj-member'); ?></li>
+                                        <li>[event_location] — <?php esc_html_e('Lieu', 'mj-member'); ?></li>
+                                        <li>[event_location_address] — <?php esc_html_e('Adresse du lieu', 'mj-member'); ?></li>
+                                        <li>[event_age_min] — <?php esc_html_e('Âge minimum', 'mj-member'); ?></li>
+                                        <li>[event_age_max] — <?php esc_html_e('Âge maximum', 'mj-member'); ?></li>
+                                        <li>[event_capacity] — <?php esc_html_e('Capacité totale', 'mj-member'); ?></li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <p style="margin:0 0 6px 0; font-weight:600; font-size:13px;"><?php esc_html_e('Membre', 'mj-member'); ?></p>
+                                    <ul style="margin:0 0 0 18px; padding:0; list-style:disc; color:#475569; font-family:monospace; font-size:12px;">
+                                        <li>[member_name] — <?php esc_html_e('Nom complet', 'mj-member'); ?></li>
+                                        <li>[member_first_name] — <?php esc_html_e('Prénom', 'mj-member'); ?></li>
+                                        <li>[member_last_name] — <?php esc_html_e('Nom de famille', 'mj-member'); ?></li>
+                                        <li>[member_email] — <?php esc_html_e('Email', 'mj-member'); ?></li>
+                                        <li>[member_phone] — <?php esc_html_e('Téléphone', 'mj-member'); ?></li>
+                                        <li>[member_birth_date] — <?php esc_html_e('Date de naissance', 'mj-member'); ?></li>
+                                        <li>[member_address] — <?php esc_html_e('Adresse complète', 'mj-member'); ?></li>
+                                        <li>[member_address_line] — <?php esc_html_e('Rue', 'mj-member'); ?></li>
+                                        <li>[member_postal_code] — <?php esc_html_e('Code postal', 'mj-member'); ?></li>
+                                        <li>[member_city] — <?php esc_html_e('Ville', 'mj-member'); ?></li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <p style="margin:0 0 6px 0; font-weight:600; font-size:13px;"><?php esc_html_e('Tuteur', 'mj-member'); ?></p>
+                                    <ul style="margin:0 0 0 18px; padding:0; list-style:disc; color:#475569; font-family:monospace; font-size:12px;">
+                                        <li>[guardian_name] — <?php esc_html_e('Nom complet', 'mj-member'); ?></li>
+                                        <li>[guardian_first_name] — <?php esc_html_e('Prénom', 'mj-member'); ?></li>
+                                        <li>[guardian_last_name] — <?php esc_html_e('Nom de famille', 'mj-member'); ?></li>
+                                        <li>[guardian_email] — <?php esc_html_e('Email', 'mj-member'); ?></li>
+                                        <li>[guardian_phone] — <?php esc_html_e('Téléphone', 'mj-member'); ?></li>
+                                        <li>[guardian_address] — <?php esc_html_e('Adresse complète', 'mj-member'); ?></li>
+                                        <li>[guardian_address_line] — <?php esc_html_e('Rue', 'mj-member'); ?></li>
+                                        <li>[guardian_postal_code] — <?php esc_html_e('Code postal', 'mj-member'); ?></li>
+                                        <li>[guardian_city] — <?php esc_html_e('Ville', 'mj-member'); ?></li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <p style="margin:0 0 6px 0; font-weight:600; font-size:13px;"><?php esc_html_e('Site', 'mj-member'); ?></p>
+                                    <ul style="margin:0 0 0 18px; padding:0; list-style:disc; color:#475569; font-family:monospace; font-size:12px;">
+                                        <li>[site_name] — <?php esc_html_e('Nom du site', 'mj-member'); ?></li>
+                                        <li>[site_url] — <?php esc_html_e('URL du site', 'mj-member'); ?></li>
+                                        <li>[current_date] — <?php esc_html_e('Date actuelle', 'mj-member'); ?></li>
+                                        <li>[current_year] — <?php esc_html_e('Année actuelle', 'mj-member'); ?></li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <p style="margin:12px 0 0 0; color:#6b7280; font-size:12px; font-style:italic;">
+                                <?php esc_html_e('Note : Les variables membre génèrent une page par inscrit lors du téléchargement.', 'mj-member'); ?>
+                            </p>
                         </div>
                     </div>
                 </div>

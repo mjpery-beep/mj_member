@@ -1906,6 +1906,9 @@ function mj_regmgr_get_registrations() {
             'nickname' => isset($member->nickname) ? (string) $member->nickname : '',
             'email' => isset($member->email) ? (string) $member->email : '',
             'phone' => isset($member->phone) ? (string) $member->phone : '',
+            'address' => isset($member->address) ? (string) $member->address : '',
+            'postalCode' => isset($member->postal_code) ? (string) $member->postal_code : '',
+            'city' => isset($member->city) ? (string) $member->city : '',
             'role' => $role,
             'roleLabel' => MjRoles::getRoleLabel($role),
             'photoId' => $photo_id,
@@ -1975,6 +1978,9 @@ function mj_regmgr_get_registrations() {
                 'lastName' => $guardian->last_name,
                 'email' => isset($guardian->email) ? $guardian->email : '',
                 'phone' => isset($guardian->phone) ? $guardian->phone : '',
+                'address' => isset($guardian->address) ? (string) $guardian->address : '',
+                'postalCode' => isset($guardian->postal_code) ? (string) $guardian->postal_code : '',
+                'city' => isset($guardian->city) ? (string) $guardian->city : '',
                 'whatsappOptIn' => isset($guardian->whatsapp_opt_in) ? ((int) $guardian->whatsapp_opt_in !== 0) : true,
             );
         }

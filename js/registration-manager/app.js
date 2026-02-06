@@ -4193,8 +4193,8 @@
                 return;
             }
 
-            // Collect variables from event
-            var variables = {
+            // Base variables from event
+            var baseVariables = {
                 event_name: eventDetails.title || '',
                 event_type: eventDetails.typeLabel || eventDetails.type || '',
                 event_status: eventDetails.statusLabel || eventDetails.status || '',
@@ -4214,7 +4214,7 @@
             };
 
             // Helper function to replace placeholders
-            var interpolateVariables = function (text) {
+            var interpolateVariables = function (text, variables) {
                 if (!text) return '';
                 var result = text;
                 Object.keys(variables).forEach(function (key) {
@@ -4224,30 +4224,133 @@
                 return result;
             };
 
-            // Process header, content and footer
-            var processedHeader = interpolateVariables(config.regDocHeader || '');
-            var processedContent = interpolateVariables(content);
-            var processedFooter = interpolateVariables(config.regDocFooter || '');
+            // Helper to get member variables
+            var getMemberVariables = function (member, registrationGuardian) {
+                if (!member) return {};
+                var fullName = ((member.firstName || '') + ' ' + (member.lastName || '')).trim();
+                var fullAddress = [
+                    member.address || '',
+                    ((member.postalCode || '') + ' ' + (member.city || '')).trim()
+                ].filter(function (line) { return line; }).join(', ');
+
+                // Get guardian info - prefer registration guardian, fallback to member guardian
+                var guardian = registrationGuardian || member.guardian || member.guardianData || null;
+                var guardianName = '';
+                var guardianFirstName = '';
+                var guardianLastName = '';
+                var guardianEmail = '';
+                var guardianPhone = '';
+                var guardianAddressLine = '';
+                var guardianPostalCode = '';
+                var guardianCity = '';
+
+                if (guardian) {
+                    guardianFirstName = guardian.firstName || '';
+                    guardianLastName = guardian.lastName || '';
+                    guardianName = ((guardianFirstName) + ' ' + (guardianLastName)).trim();
+                    if (!guardianName && guardian.displayName) {
+                        guardianName = guardian.displayName;
+                    }
+                    guardianEmail = guardian.email || '';
+                    guardianPhone = guardian.phone || '';
+                    guardianAddressLine = guardian.address || '';
+                    guardianPostalCode = guardian.postalCode || '';
+                    guardianCity = guardian.city || '';
+                } else {
+                    // No guardian - use member info as fallback
+                    guardianFirstName = member.firstName || '';
+                    guardianLastName = member.lastName || '';
+                    guardianName = ((guardianFirstName) + ' ' + (guardianLastName)).trim();
+                    guardianEmail = member.email || '';
+                    guardianPhone = member.phone || '';
+                    guardianAddressLine = member.address || '';
+                    guardianPostalCode = member.postalCode || '';
+                    guardianCity = member.city || '';
+                }
+
+                var guardianFullAddress = [
+                    guardianAddressLine,
+                    ((guardianPostalCode) + ' ' + (guardianCity)).trim()
+                ].filter(function (line) { return line; }).join(', ');
+
+                return {
+                    member_name: fullName,
+                    member_first_name: member.firstName || '',
+                    member_last_name: member.lastName || '',
+                    member_email: member.email || '',
+                    member_phone: member.phone || '',
+                    member_birth_date: member.birthDate || '',
+                    member_address: fullAddress,
+                    member_address_line: member.address || '',
+                    member_postal_code: member.postalCode || '',
+                    member_city: member.city || '',
+                    guardian_name: guardianName,
+                    guardian_first_name: guardianFirstName,
+                    guardian_last_name: guardianLastName,
+                    guardian_email: guardianEmail,
+                    guardian_phone: guardianPhone,
+                    guardian_address: guardianFullAddress,
+                    guardian_address_line: guardianAddressLine,
+                    guardian_postal_code: guardianPostalCode,
+                    guardian_city: guardianCity,
+                };
+            };
+
+            // Get valid registrations with members
+            var validRegistrations = (registrations || []).filter(function (reg) {
+                return reg && reg.member && reg.status !== 'cancelled';
+            });
+
+            // Build document pages
+            var pages = [];
+            var processedHeader = interpolateVariables(config.regDocHeader || '', baseVariables);
+            var processedFooter = interpolateVariables(config.regDocFooter || '', baseVariables);
+
+            if (validRegistrations.length > 0) {
+                // Generate one page per member
+                validRegistrations.forEach(function (reg) {
+                    var memberVars = getMemberVariables(reg.member, reg.guardian);
+                    var allVariables = Object.assign({}, baseVariables, memberVars);
+                    var processedContent = interpolateVariables(content, allVariables);
+                    pages.push(processedContent);
+                });
+            } else {
+                // No registrations - generate single page without member variables
+                var processedContent = interpolateVariables(content, baseVariables);
+                pages.push(processedContent);
+            }
 
             // Create HTML document for PDF
             var htmlDoc = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Document d\'inscription - ' + 
                 (eventDetails.title || 'Événement') + '</title><style>' +
                 '@page{size:A4;margin:20mm;}' +
-                'body{font-family:Arial,Helvetica,sans-serif;font-size:12pt;line-height:1.5;color:#333;max-width:100%;margin:0;padding:0;}' +
-                'h1{font-size:18pt;margin:0 0 10pt 0;}h2{font-size:14pt;margin:15pt 0 8pt 0;}h3{font-size:12pt;margin:12pt 0 6pt 0;}' +
-                'p{margin:8pt 0;}' +
-                'table{width:100%;border-collapse:collapse;margin:10pt 0;}' +
-                'th,td{border:1px solid #999;padding:6pt 8pt;text-align:left;}' +
-                'th{background:#f0f0f0;font-weight:bold;}' +
+                'body{font-family:Arial,Helvetica,sans-serif;font-size:12pt;line-height:1.6;color:#333;max-width:100%;margin:0;padding:0;}' +
+                'h1{font-size:18pt;margin:0 0 0.75em 0;}h2{font-size:14pt;margin:1em 0 0.5em 0;}h3{font-size:12pt;margin:0.8em 0 0.4em 0;}' +
+                'p{margin:0 0 0.75em 0;}p:last-child{margin-bottom:0;}' +
+                'ul,ol{margin:0 0 0.75em 1.5em;padding:0;}' +
+                'li{margin-bottom:0.4em;}' +
+                'br{display:block;content:"";margin-top:0.5em;}' +
+                'table{width:100%;border-collapse:collapse;margin:0.75em 0;border:none;}' +
+                'th,td{border:none;padding:6pt 8pt;text-align:left;}' +
+                'th{background:transparent;font-weight:bold;}' +
                 'img{max-width:100%;height:auto;}' +
-                '.regdoc-header{border-bottom:2px solid #333;padding-bottom:15pt;margin-bottom:20pt;}' +
+                'a{color:#2563eb;text-decoration:underline;}' +
+                '.regdoc-header{}' +
                 '.regdoc-content{min-height:400pt;}' +
                 '.regdoc-footer{border-top:1px solid #999;padding-top:15pt;margin-top:20pt;font-size:10pt;color:#666;}' +
-                '</style></head><body>' +
-                (processedHeader ? '<div class="regdoc-header">' + processedHeader + '</div>' : '') +
-                '<div class="regdoc-content">' + processedContent + '</div>' +
-                (processedFooter ? '<div class="regdoc-footer">' + processedFooter + '</div>' : '') +
-                '</body></html>';
+                '.regdoc-page{page-break-after:always;}' +
+                '.regdoc-page:last-child{page-break-after:auto;}' +
+                '</style></head><body>';
+
+            pages.forEach(function (pageContent) {
+                htmlDoc += '<div class="regdoc-page">' +
+                    (processedHeader ? '<div class="regdoc-header">' + processedHeader + '</div>' : '') +
+                    '<div class="regdoc-content">' + pageContent + '</div>' +
+                    (processedFooter ? '<div class="regdoc-footer">' + processedFooter + '</div>' : '') +
+                    '</div>';
+            });
+
+            htmlDoc += '</body></html>';
 
             // Open print dialog in new window (user can save as PDF)
             var printWindow = window.open('', '_blank', 'width=800,height=600');
@@ -4256,6 +4359,165 @@
                 printWindow.document.close();
                 printWindow.focus();
                 // Wait for content to load then trigger print
+                setTimeout(function() {
+                    printWindow.print();
+                }, 250);
+            } else {
+                showError('Impossible d\'ouvrir la fenêtre d\'impression. Vérifiez que les popups ne sont pas bloqués.');
+            }
+        }, [selectedEvent, eventDetails, regDocState, config, strings, showError, registrations]);
+
+        // Download document for a single member
+        var handleDownloadMemberDoc = useCallback(function (registration) {
+            if (!selectedEvent || !eventDetails || !registration || !registration.member) {
+                return;
+            }
+
+            var content = regDocState.draft || eventDetails.registrationDocument || '';
+            if (!content) {
+                showError(getString(strings, 'regDocEmpty', 'Aucun contenu de document configuré pour cet événement.'));
+                return;
+            }
+
+            var member = registration.member;
+
+            // Base variables from event
+            var baseVariables = {
+                event_name: eventDetails.title || '',
+                event_type: eventDetails.typeLabel || eventDetails.type || '',
+                event_status: eventDetails.statusLabel || eventDetails.status || '',
+                event_date_start: eventDetails.dateDebutFormatted || eventDetails.dateDebut || '',
+                event_date_end: eventDetails.dateFinFormatted || eventDetails.dateFin || '',
+                event_date_deadline: eventDetails.dateFinInscription || '',
+                event_price: (eventDetails.prix || 0) + ' €',
+                event_location: eventDetails.location ? eventDetails.location.name : '',
+                event_location_address: eventDetails.location ? eventDetails.location.address : '',
+                event_age_min: (eventDetails.ageMin || '').toString(),
+                event_age_max: (eventDetails.ageMax || '').toString(),
+                event_capacity: (eventDetails.capacityTotal || '').toString(),
+                site_name: config.siteName || '',
+                site_url: config.siteUrl || '',
+                current_date: new Date().toLocaleDateString('fr-FR'),
+                current_year: new Date().getFullYear().toString(),
+            };
+
+            // Helper function to replace placeholders
+            var interpolateVariables = function (text, variables) {
+                if (!text) return '';
+                var result = text;
+                Object.keys(variables).forEach(function (key) {
+                    var regex = new RegExp('\\[' + key + '\\]', 'gi');
+                    result = result.replace(regex, variables[key] || '');
+                });
+                return result;
+            };
+
+            // Get member variables
+            var fullName = ((member.firstName || '') + ' ' + (member.lastName || '')).trim();
+            var fullAddress = [
+                member.address || '',
+                ((member.postalCode || '') + ' ' + (member.city || '')).trim()
+            ].filter(function (line) { return line; }).join(', ');
+
+            // Get guardian info - guardian is on registration, not member
+            var guardian = registration.guardian || member.guardian || member.guardianData || null;
+            var guardianName = '';
+            var guardianFirstName = '';
+            var guardianLastName = '';
+            var guardianEmail = '';
+            var guardianPhone = '';
+            var guardianAddressLine = '';
+            var guardianPostalCode = '';
+            var guardianCity = '';
+
+            if (guardian) {
+                guardianFirstName = guardian.firstName || '';
+                guardianLastName = guardian.lastName || '';
+                guardianName = ((guardianFirstName) + ' ' + (guardianLastName)).trim();
+                if (!guardianName && guardian.displayName) {
+                    guardianName = guardian.displayName;
+                }
+                guardianEmail = guardian.email || '';
+                guardianPhone = guardian.phone || '';
+                guardianAddressLine = guardian.address || '';
+                guardianPostalCode = guardian.postalCode || '';
+                guardianCity = guardian.city || '';
+            } else {
+                // No guardian - use member info as fallback
+                guardianFirstName = member.firstName || '';
+                guardianLastName = member.lastName || '';
+                guardianName = ((guardianFirstName) + ' ' + (guardianLastName)).trim();
+                guardianEmail = member.email || '';
+                guardianPhone = member.phone || '';
+                guardianAddressLine = member.address || '';
+                guardianPostalCode = member.postalCode || '';
+                guardianCity = member.city || '';
+            }
+
+            var guardianFullAddress = [
+                guardianAddressLine,
+                ((guardianPostalCode) + ' ' + (guardianCity)).trim()
+            ].filter(function (line) { return line; }).join(', ');
+
+            var memberVars = {
+                member_name: fullName,
+                member_first_name: member.firstName || '',
+                member_last_name: member.lastName || '',
+                member_email: member.email || '',
+                member_phone: member.phone || '',
+                member_birth_date: member.birthDate || '',
+                member_address: fullAddress,
+                member_address_line: member.address || '',
+                member_postal_code: member.postalCode || '',
+                member_city: member.city || '',
+                guardian_name: guardianName,
+                guardian_first_name: guardianFirstName,
+                guardian_last_name: guardianLastName,
+                guardian_email: guardianEmail,
+                guardian_phone: guardianPhone,
+                guardian_address: guardianFullAddress,
+                guardian_address_line: guardianAddressLine,
+                guardian_postal_code: guardianPostalCode,
+                guardian_city: guardianCity,
+            };
+
+            var allVariables = Object.assign({}, baseVariables, memberVars);
+
+            // Process content
+            var processedHeader = interpolateVariables(config.regDocHeader || '', allVariables);
+            var processedContent = interpolateVariables(content, allVariables);
+            var processedFooter = interpolateVariables(config.regDocFooter || '', allVariables);
+
+            // Create HTML document for PDF
+            var htmlDoc = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Document d\'inscription - ' + 
+                fullName + ' - ' + (eventDetails.title || 'Événement') + '</title><style>' +
+                '@page{size:A4;margin:20mm;}' +
+                'body{font-family:Arial,Helvetica,sans-serif;font-size:12pt;line-height:1.6;color:#333;max-width:100%;margin:0;padding:0;}' +
+                'h1{font-size:18pt;margin:0 0 0.75em 0;}h2{font-size:14pt;margin:1em 0 0.5em 0;}h3{font-size:12pt;margin:0.8em 0 0.4em 0;}' +
+                'p{margin:0 0 0.75em 0;}p:last-child{margin-bottom:0;}' +
+                'ul,ol{margin:0 0 0.75em 1.5em;padding:0;}' +
+                'li{margin-bottom:0.4em;}' +
+                'br{display:block;content:"";margin-top:0.5em;}' +
+                'table{width:100%;border-collapse:collapse;margin:0.75em 0;border:none;}' +
+                'th,td{border:none;padding:6pt 8pt;text-align:left;}' +
+                'th{background:transparent;font-weight:bold;}' +
+                'img{max-width:100%;height:auto;}' +
+                'a{color:#2563eb;text-decoration:underline;}' +
+                '.regdoc-header{}' +
+                '.regdoc-content{min-height:400pt;}' +
+                '.regdoc-footer{border-top:1px solid #999;padding-top:15pt;margin-top:20pt;font-size:10pt;color:#666;}' +
+                '</style></head><body>' +
+                (processedHeader ? '<div class="regdoc-header">' + processedHeader + '</div>' : '') +
+                '<div class="regdoc-content">' + processedContent + '</div>' +
+                (processedFooter ? '<div class="regdoc-footer">' + processedFooter + '</div>' : '') +
+                '</body></html>';
+
+            // Open print dialog in new window
+            var printWindow = window.open('', '_blank', 'width=800,height=600');
+            if (printWindow) {
+                printWindow.document.write(htmlDoc);
+                printWindow.document.close();
+                printWindow.focus();
                 setTimeout(function() {
                     printWindow.print();
                 }, 250);
@@ -6367,6 +6629,7 @@
                                 onShowNotes: handleShowNotes,
                                 onChangeOccurrences: handleChangeOccurrences,
                                 onViewMember: handleViewMemberFromRegistration,
+                                onDownloadDoc: handleDownloadMemberDoc,
                                 strings: strings,
                                 config: config,
                                 eventRequiresPayment: eventRequiresPayment,
@@ -6458,6 +6721,35 @@
                                                         h('li', null, [h('code', null, '[event_age_min]'), ' - Âge minimum']),
                                                         h('li', null, [h('code', null, '[event_age_max]'), ' - Âge maximum']),
                                                         h('li', null, [h('code', null, '[event_capacity]'), ' - Capacité totale']),
+                                                    ]),
+                                                ]),
+                                                h('div', { class: 'mj-regmgr-regdoc-variables__group' }, [
+                                                    h('h5', null, 'Membre'),
+                                                    h('ul', null, [
+                                                        h('li', null, [h('code', null, '[member_name]'), ' - Nom complet']),
+                                                        h('li', null, [h('code', null, '[member_first_name]'), ' - Prénom']),
+                                                        h('li', null, [h('code', null, '[member_last_name]'), ' - Nom de famille']),
+                                                        h('li', null, [h('code', null, '[member_email]'), ' - Email']),
+                                                        h('li', null, [h('code', null, '[member_phone]'), ' - Téléphone']),
+                                                        h('li', null, [h('code', null, '[member_birth_date]'), ' - Date de naissance']),
+                                                        h('li', null, [h('code', null, '[member_address]'), ' - Adresse complète']),
+                                                        h('li', null, [h('code', null, '[member_address_line]'), ' - Rue']),
+                                                        h('li', null, [h('code', null, '[member_postal_code]'), ' - Code postal']),
+                                                        h('li', null, [h('code', null, '[member_city]'), ' - Ville']),
+                                                    ]),
+                                                ]),
+                                                h('div', { class: 'mj-regmgr-regdoc-variables__group' }, [
+                                                    h('h5', null, 'Tuteur'),
+                                                    h('ul', null, [
+                                                        h('li', null, [h('code', null, '[guardian_name]'), ' - Nom complet']),
+                                                        h('li', null, [h('code', null, '[guardian_first_name]'), ' - Prénom']),
+                                                        h('li', null, [h('code', null, '[guardian_last_name]'), ' - Nom de famille']),
+                                                        h('li', null, [h('code', null, '[guardian_email]'), ' - Email']),
+                                                        h('li', null, [h('code', null, '[guardian_phone]'), ' - Téléphone']),
+                                                        h('li', null, [h('code', null, '[guardian_address]'), ' - Adresse complète']),
+                                                        h('li', null, [h('code', null, '[guardian_address_line]'), ' - Rue']),
+                                                        h('li', null, [h('code', null, '[guardian_postal_code]'), ' - Code postal']),
+                                                        h('li', null, [h('code', null, '[guardian_city]'), ' - Ville']),
                                                     ]),
                                                 ]),
                                                 h('div', { class: 'mj-regmgr-regdoc-variables__group' }, [
