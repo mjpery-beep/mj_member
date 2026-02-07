@@ -43,6 +43,7 @@ if (!function_exists('mj_member_get_elementor_widgets_map')) {
             'Mj\Member\Elementor\EventsManager' => 'includes/elementor/EventsManager.php',
             'Mj_Member_Elementor_Registration_Manager_Widget' => 'includes/elementor/class-mj-member-registration-manager-widget.php',
             'Mj_Member_Elementor_Event_Schedule_Widget' => 'includes/elementor/class-mj-member-event-schedule-widget.php',
+            'Mj_Member_Elementor_Notification_Bell_Widget' => 'includes/elementor/class-mj-member-notification-bell-widget.php',
         );
     }
 }

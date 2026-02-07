@@ -71,9 +71,11 @@ add_action('wp_ajax_mj_regmgr_get_members', 'mj_regmgr_get_members');
 add_action('wp_ajax_mj_regmgr_get_member_details', 'mj_regmgr_get_member_details');
 add_action('wp_ajax_mj_regmgr_update_member', 'mj_regmgr_update_member');
 add_action('wp_ajax_mj_regmgr_get_member_registrations', 'mj_regmgr_get_member_registrations');
+add_action('wp_ajax_mj_regmgr_update_registration_occurrences', 'mj_regmgr_update_registration_occurrences');
 add_action('wp_ajax_mj_regmgr_mark_membership_paid', 'mj_regmgr_mark_membership_paid');
 add_action('wp_ajax_mj_regmgr_create_membership_payment_link', 'mj_regmgr_create_membership_payment_link');
 add_action('wp_ajax_mj_regmgr_update_member_idea', 'mj_regmgr_update_member_idea');
+add_action('wp_ajax_mj_regmgr_delete_member_idea', 'mj_regmgr_delete_member_idea');
 add_action('wp_ajax_mj_regmgr_update_member_photo', 'mj_regmgr_update_member_photo');
 add_action('wp_ajax_mj_regmgr_delete_member_photo', 'mj_regmgr_delete_member_photo');
 add_action('wp_ajax_mj_regmgr_capture_member_photo', 'mj_regmgr_capture_member_photo');
@@ -2328,6 +2330,65 @@ function mj_regmgr_delete_registration() {
 }
 
 /**
+ * Update registration occurrence assignments
+ */
+function mj_regmgr_update_registration_occurrences() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) return;
+
+    $registration_id = isset($_POST['registrationId']) ? (int) $_POST['registrationId'] : 0;
+    $mode = isset($_POST['mode']) ? sanitize_key($_POST['mode']) : 'all';
+    $occurrences = isset($_POST['occurrences']) ? $_POST['occurrences'] : array();
+
+    if ($registration_id <= 0) {
+        wp_send_json_error(array('message' => __('ID inscription invalide.', 'mj-member')));
+        return;
+    }
+
+    // Validate mode
+    if (!in_array($mode, array('all', 'custom'), true)) {
+        $mode = 'all';
+    }
+
+    // Parse occurrences
+    $parsed_occurrences = array();
+    if ($mode === 'custom') {
+        if (is_string($occurrences)) {
+            $decoded = json_decode(stripslashes($occurrences), true);
+            if (is_array($decoded)) {
+                $occurrences = $decoded;
+            }
+        }
+
+        if (is_array($occurrences)) {
+            foreach ($occurrences as $occurrence) {
+                $normalized = MjEventAttendance::normalize_occurrence($occurrence);
+                if ($normalized !== '' && !in_array($normalized, $parsed_occurrences, true)) {
+                    $parsed_occurrences[] = $normalized;
+                }
+            }
+        }
+    }
+
+    $assignments = array(
+        'mode' => $mode,
+        'occurrences' => $parsed_occurrences,
+    );
+
+    $result = MjEventAttendance::set_registration_assignments($registration_id, $assignments);
+
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+        return;
+    }
+
+    wp_send_json_success(array(
+        'message' => __('Occurrences mises à jour.', 'mj-member'),
+        'assignments' => $assignments,
+    ));
+}
+
+/**
  * Update attendance for a single registration/occurrence
  */
 function mj_regmgr_event_allows_attendance_without_registration($event) {
@@ -3442,7 +3503,7 @@ function mj_regmgr_collect_event_editor_assets($event, array &$form_values) {
         }
     }
 
-    $animateur_filters = array('role' => MjRoles::ANIMATEUR);
+    $animateur_filters = array('roles' => array(MjRoles::ANIMATEUR, MjRoles::COORDINATEUR));
     $animateurs = MjMembers::getAll(0, 0, 'last_name', 'ASC', '', $animateur_filters);
     if (!is_array($animateurs)) {
         $animateurs = array();
@@ -4739,6 +4800,7 @@ function mj_regmgr_get_members() {
             'isVolunteer' => !empty($member->is_volunteer),
             'xpTotal' => isset($member->xp_total) ? (int) $member->xp_total : 0,
             'coinsTotal' => isset($member->coins_total) ? (int) $member->coins_total : 0,
+            'createdAt' => isset($member->created_at) ? $member->created_at : null,
         );
     }
 
@@ -5887,6 +5949,46 @@ function mj_regmgr_update_member_idea() {
 }
 
 /**
+ * Delete a member idea
+ */
+function mj_regmgr_delete_member_idea() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) {
+        return;
+    }
+
+    $idea_id = isset($_POST['ideaId']) ? (int) $_POST['ideaId'] : 0;
+    $member_id = isset($_POST['memberId']) ? (int) $_POST['memberId'] : 0;
+
+    if ($idea_id <= 0 || $member_id <= 0) {
+        wp_send_json_error(array('message' => __('Identifiant d\'idée ou de membre invalide.', 'mj-member')));
+        return;
+    }
+
+    $idea = MjIdeas::get($idea_id);
+    if (!$idea) {
+        wp_send_json_error(array('message' => __('Idée introuvable.', 'mj-member')));
+        return;
+    }
+
+    if ((int) ($idea['member_id'] ?? 0) !== $member_id) {
+        wp_send_json_error(array('message' => __('Cette idée n\'est pas associée à ce membre.', 'mj-member')));
+        return;
+    }
+
+    $result = MjIdeas::delete($idea_id);
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+        return;
+    }
+
+    wp_send_json_success(array(
+        'message' => __('Idée supprimée.', 'mj-member'),
+        'ideaId' => $idea_id,
+    ));
+}
+
+/**
  * Capture and assign a new member photo via direct upload
  */
 function mj_regmgr_capture_member_photo() {
@@ -6047,20 +6149,29 @@ function mj_regmgr_update_member_photo() {
             wp_send_json_error(array('message' => __('Statut photo invalide.', 'mj-member')));
             return;
         }
-        $update['status'] = $status;
-        $update['reviewed_at'] = current_time('mysql');
-        $update['reviewed_by'] = get_current_user_id();
+        // Utiliser update_status pour déclencher le hook de notification
+        $status_result = MjEventPhotos::update_status($photo_id, $status, array(
+            'reviewed_at' => current_time('mysql'),
+            'reviewed_by' => get_current_user_id(),
+        ));
+        if (is_wp_error($status_result)) {
+            wp_send_json_error(array('message' => $status_result->get_error_message()));
+            return;
+        }
     }
 
     if (empty($update)) {
-        wp_send_json_error(array('message' => __('Aucune donnée à mettre à jour.', 'mj-member')));
-        return;
-    }
-
-    $result = MjEventPhotos::update($photo_id, $update);
-    if (is_wp_error($result)) {
-        wp_send_json_error(array('message' => $result->get_error_message()));
-        return;
+        // Si seul le statut a été mis à jour, on continue quand même
+        if (!array_key_exists('status', $payload)) {
+            wp_send_json_error(array('message' => __('Aucune donnée à mettre à jour.', 'mj-member')));
+            return;
+        }
+    } else {
+        $result = MjEventPhotos::update($photo_id, $update);
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()));
+            return;
+        }
     }
 
     $updated = MjEventPhotos::get($photo_id);
@@ -6472,8 +6583,10 @@ function mj_regmgr_get_member_registrations() {
                 'occurrences' => $assigned_occurrences,
             ),
             'occurrenceDetails' => $sessions,
+            'allOccurrences' => array_values($event_occurrence_map),
             'coversAllOccurrences' => ($assignment_mode !== 'custom'),
             'totalOccurrences' => count($event_occurrence_map),
+            'canEditOccurrences' => count($event_occurrence_map) > 1,
         );
     }
 

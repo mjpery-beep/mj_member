@@ -276,6 +276,16 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
             // Ajouter les XP du trophée au membre (réactivation)
             self::award_trophy_xp($memberId, $trophyId);
 
+            /**
+             * Action déclenchée après l'attribution d'un trophée (réactivation).
+             *
+             * @param int $memberId      ID du membre
+             * @param int $trophyId      ID du trophée
+             * @param int $assignmentId  ID de l'attribution
+             * @param bool $isReactivation True si c'est une réactivation
+             */
+            do_action('mj_member_trophy_awarded', $memberId, $trophyId, (int) $existing['id'], true);
+
             return (int) $existing['id'];
         }
 
@@ -302,6 +312,16 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
 
         // Ajouter les XP du trophée au membre
         self::award_trophy_xp($memberId, $trophyId);
+
+        /**
+         * Action déclenchée après l'attribution d'un trophée (nouvelle attribution).
+         *
+         * @param int $memberId      ID du membre
+         * @param int $trophyId      ID du trophée
+         * @param int $assignmentId  ID de l'attribution
+         * @param bool $isReactivation True si c'est une réactivation
+         */
+        do_action('mj_member_trophy_awarded', $memberId, $trophyId, $insertId, false);
 
         return $insertId;
     }

@@ -348,6 +348,96 @@
     color: #b91c1c;
 }
 
+/* ==========================================================================
+   Multiple Locations
+   ========================================================================== */
+
+.mj-member-events__locations {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.mj-member-events__locations-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mj-member-events__location-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 14px;
+    border: 1px solid var(--mj-events-border-soft);
+    border-radius: 10px;
+    background: var(--mj-events-surface-soft);
+}
+
+.mj-member-events__location-type {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--mj-event-accent, var(--mj-events-accent));
+    background: rgba(99, 102, 241, 0.1);
+    padding: 3px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    align-self: flex-start;
+}
+
+.mj-member-events__location-item.type-departure .mj-member-events__location-type {
+    color: #059669;
+    background: rgba(5, 150, 105, 0.1);
+}
+
+.mj-member-events__location-item.type-return .mj-member-events__location-type {
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.1);
+}
+
+.mj-member-events__location-item.type-activity .mj-member-events__location-type {
+    color: #7c3aed;
+    background: rgba(124, 58, 237, 0.1);
+}
+
+.mj-member-events__location-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mj-member-events__locations .mj-member-events__location-name {
+    font-weight: 600;
+    color: var(--mj-events-card-title);
+    margin: 0;
+}
+
+.mj-member-events__locations .mj-member-events__location-address {
+    font-size: 0.88rem;
+    color: var(--mj-events-meta);
+    margin: 0;
+}
+
+.mj-member-events__location-city {
+    font-size: 0.88rem;
+    color: var(--mj-events-meta);
+}
+
+.mj-member-events__location-time {
+    font-size: 0.85rem;
+    color: var(--mj-events-meta);
+    background: rgba(0, 0, 0, 0.04);
+    padding: 2px 8px;
+    border-radius: 4px;
+    align-self: flex-start;
+}
+
 @media (max-width: 780px) {
     .mj-member-events__item.layout-horizontal {
         flex-direction: column;

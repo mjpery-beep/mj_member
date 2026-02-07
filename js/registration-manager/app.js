@@ -3280,7 +3280,41 @@
         var config = props.config;
         var strings = config.strings || {};
 
+        // Paramètres URL (prioritaires sur prefillEventId)
+        var urlEventId = useMemo(function () {
+            if (!config || config.urlEventId === undefined || config.urlEventId === null) {
+                return null;
+            }
+            var parsed = parseInt(config.urlEventId, 10);
+            if (isNaN(parsed) || parsed <= 0) {
+                return null;
+            }
+            return parsed;
+        }, [config.urlEventId]);
+
+        var urlMemberId = useMemo(function () {
+            if (!config || config.urlMemberId === undefined || config.urlMemberId === null) {
+                return null;
+            }
+            var parsed = parseInt(config.urlMemberId, 10);
+            if (isNaN(parsed) || parsed <= 0) {
+                return null;
+            }
+            return parsed;
+        }, [config.urlMemberId]);
+
+        var urlTab = useMemo(function () {
+            if (!config || !config.urlTab || typeof config.urlTab !== 'string') {
+                return null;
+            }
+            return config.urlTab;
+        }, [config.urlTab]);
+
         var prefillEventId = useMemo(function () {
+            // URL param est prioritaire
+            if (urlEventId) {
+                return urlEventId;
+            }
             if (!config || config.prefillEventId === undefined || config.prefillEventId === null) {
                 return null;
             }
@@ -3289,7 +3323,7 @@
                 return null;
             }
             return parsed;
-        }, [config.prefillEventId]);
+        }, [config.prefillEventId, urlEventId]);
 
         var initialFilterValue = useMemo(function () {
             var allowAllFilter = !!config.showAllEvents;
@@ -3601,7 +3635,15 @@
 
         var _activeTab = useState('registrations');
         var activeTab = _activeTab[0];
-        var setActiveTab = _activeTab[1];
+        var setActiveTabInternal = _activeTab[1];
+
+        // Wrapper pour setActiveTab qui met aussi à jour l'URL
+        var setActiveTab = useCallback(function (tab, skipUrlUpdate) {
+            setActiveTabInternal(tab);
+            if (!skipUrlUpdate) {
+                updateUrlParams({ tab: tab });
+            }
+        }, []);
 
         var _descriptionState = useState({
             base: '',
@@ -3805,7 +3847,11 @@
         }, [locationModal.isOpen, setLocationModalState]);
 
         // Sidebar mode state (events or members)
-        var _sidebarMode = useState('events');
+        // Si urlMemberId est présent, démarrer en mode membres
+        var initialSidebarMode = useMemo(function () {
+            return urlMemberId ? 'members' : 'events';
+        }, []);
+        var _sidebarMode = useState(initialSidebarMode);
         var sidebarMode = _sidebarMode[0];
         var setSidebarMode = _sidebarMode[1];
 
@@ -3868,6 +3914,8 @@
         }, [config.widgetId]);
 
         var prefillHandledRef = useRef(prefillEventId === null);
+        var urlMemberHandledRef = useRef(urlMemberId === null);
+        var urlTabHandledRef = useRef(urlTab === null);
         var lastSelectedEventIdRef = useRef(null);
         var lastSelectedMemberIdRef = useRef(null);
         var eventEditorLoadedRef = useRef(null);
@@ -4655,7 +4703,7 @@
                     defaultTab = 'attendance';
                 }
             }
-            setActiveTab(defaultTab);
+            setActiveTab(defaultTab, true); // Skip URL update, on le fait après
             setMobileShowDetails(true); // Afficher les détails sur mobile
             
             // Mémoriser l'événement sélectionné
@@ -4666,9 +4714,12 @@
                 // localStorage non disponible
             }
             
+            // Mettre à jour l'URL avec l'événement et l'onglet
+            updateUrlParams({ event: event.id, tab: defaultTab });
+            
             loadEventDetails(event.id);
             loadRegistrations(event.id);
-        }, [loadEventDetails, loadRegistrations, storageKey, setDescriptionState, setDescriptionSaving, setDescriptionError, setRegDocState, setRegDocSaving, setRegDocError]);
+        }, [loadEventDetails, loadRegistrations, storageKey, setDescriptionState, setDescriptionSaving, setDescriptionError, setRegDocState, setRegDocSaving, setRegDocError, setActiveTab]);
 
         var openCreateEventModal = useCallback(function () {
             if (creatingEvent) {
@@ -5068,6 +5119,32 @@
             loadEventPhotos(selectedEvent.id);
         }, [sidebarMode, activeTab, selectedEvent, eventPhotosLoading, loadEventPhotos]);
 
+        // Appliquer l'onglet depuis l'URL après le chargement initial de l'événement
+        useEffect(function () {
+            if (urlTabHandledRef.current) {
+                return;
+            }
+            if (!urlTab) {
+                urlTabHandledRef.current = true;
+                return;
+            }
+            // Attendre qu'un événement ou membre soit sélectionné
+            if (sidebarMode === 'events' && (!selectedEvent || !selectedEvent.id)) {
+                return;
+            }
+            if (sidebarMode === 'members' && (!selectedMember || !selectedMember.id)) {
+                return;
+            }
+
+            urlTabHandledRef.current = true;
+
+            // Liste des onglets valides
+            var validTabs = ['registrations', 'attendance', 'description', 'regdoc', 'photos', 'details', 'editor', OCCURRENCE_TAB_KEY];
+            if (validTabs.indexOf(urlTab) !== -1) {
+                setActiveTab(urlTab);
+            }
+        }, [urlTab, sidebarMode, selectedEvent, selectedMember, setActiveTab]);
+
         // ============================================
         // MEMBERS MODE FUNCTIONS
         // ============================================
@@ -5167,10 +5244,61 @@
                 // localStorage non disponible
             }
 
+            // Mettre à jour l'URL avec le membre (onglet par défaut: information)
+            updateUrlParams({ member: member.id, tab: 'information' });
+
             loadMemberDetails(member.id);
             loadMemberNotesForPanel(member.id);
             loadMemberRegistrationsHistory(member.id);
         }, [loadMemberDetails, loadMemberNotesForPanel, loadMemberRegistrationsHistory, memberStorageKey]);
+
+        // Charger le membre depuis l'URL au démarrage
+        useEffect(function () {
+            if (urlMemberHandledRef.current) {
+                return;
+            }
+            if (sidebarMode !== 'members') {
+                return;
+            }
+            if (membersLoading) {
+                return;
+            }
+            if (!urlMemberId) {
+                urlMemberHandledRef.current = true;
+                return;
+            }
+
+            urlMemberHandledRef.current = true;
+
+            // Chercher dans la liste déjà chargée
+            var memberFromList = membersList.find(function (m) { return m.id === urlMemberId; });
+            if (memberFromList) {
+                handleSelectMember(memberFromList);
+                return;
+            }
+
+            // Si pas trouvé, charger directement les détails du membre
+            api.getMemberDetails(urlMemberId)
+                .then(function (data) {
+                    if (data && data.member) {
+                        // Injecter dans la liste et sélectionner
+                        var memberData = data.member;
+                        setMembersList(function (prev) {
+                            var exists = prev.some(function (m) { return m.id === memberData.id; });
+                            if (exists) {
+                                return prev;
+                            }
+                            return [memberData].concat(prev);
+                        });
+                        handleSelectMember(memberData);
+                    }
+                })
+                .catch(function (err) {
+                    if (!err.aborted) {
+                        showError(err.message || getString(strings, 'memberNotFound', 'Membre introuvable'));
+                    }
+                });
+        }, [sidebarMode, membersLoading, urlMemberId, membersList, handleSelectMember, api, showError, strings]);
 
         useEffect(function () {
             if (sidebarMode !== 'members') {
@@ -5180,6 +5308,10 @@
                 return;
             }
             if (selectedMember && selectedMember.id) {
+                return;
+            }
+            // Ne pas restaurer depuis localStorage si on a un urlMemberId
+            if (urlMemberId && !urlMemberHandledRef.current) {
                 return;
             }
 
@@ -5204,7 +5336,7 @@
             } catch (e) {
                 // localStorage non disponible
             }
-        }, [sidebarMode, membersLoading, selectedMember, membersList, handleSelectMember, memberStorageKey]);
+        }, [sidebarMode, membersLoading, selectedMember, membersList, handleSelectMember, memberStorageKey, urlMemberId]);
 
         useEffect(function () {
             if (!pendingMemberSelection) {
@@ -5242,6 +5374,8 @@
             if (mode === 'events') {
                 setSelectedMember(null);
                 setMemberDetails(null);
+                // Nettoyer l'URL - enlever member et tab
+                updateUrlParams({ member: null, tab: null, event: null });
             } else {
                 setSelectedEvent(null);
                 setEventDetails(null);
@@ -5252,6 +5386,8 @@
                 setEventEditorErrors([]);
                 setEventEditorLoading(false);
                 setEventEditorSaving(false);
+                // Nettoyer l'URL - enlever event et tab
+                updateUrlParams({ event: null, tab: null, member: null });
             }
         }, []);
 
@@ -5290,6 +5426,19 @@
             return api.updateMemberIdea(ideaId, memberId, data)
                 .then(function (result) {
                     showSuccess(result.message || 'Idée mise à jour');
+                    loadMemberDetails(memberId);
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err.message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails]);
+
+        var handleDeleteMemberIdea = useCallback(function (memberId, ideaId) {
+            return api.deleteMemberIdea(ideaId, memberId)
+                .then(function (result) {
+                    showSuccess(result.message || 'Idée supprimée');
                     loadMemberDetails(memberId);
                     return result;
                 })
@@ -5569,6 +5718,38 @@
             loadEvents,
             pagination.page,
             showError,
+        ]);
+
+        var handleUpdateRegistrationOccurrences = useCallback(function (registrationId, mode, occurrences) {
+            if (!registrationId) {
+                return Promise.reject(new Error('Registration ID required'));
+            }
+
+            return api.updateRegistrationOccurrences(registrationId, mode, occurrences)
+                .then(function (result) {
+                    var successMessage = result && result.message
+                        ? result.message
+                        : getString(strings, 'success', 'Opération réussie');
+                    showSuccess(successMessage);
+
+                    // Refresh member registrations
+                    if (selectedMember && selectedMember.id) {
+                        loadMemberRegistrationsHistory(selectedMember.id);
+                    }
+
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err.message);
+                    throw err;
+                });
+        }, [
+            api,
+            showSuccess,
+            showError,
+            strings,
+            selectedMember,
+            loadMemberRegistrationsHistory,
         ]);
 
         var handleDeleteMember = useCallback(function (memberId) {
@@ -6918,7 +7099,7 @@
                                                                     class: 'mj-btn mj-btn--success mj-btn--small',
                                                                     onClick: function () {
                                                                         setEventPhotoUpdating(photo.id);
-                                                                        api.updateMemberPhoto(photo.id, { status: 'approved' })
+                                                                        api.updateMemberPhoto(photo.id, photo.memberId, { status: 'approved' })
                                                                             .then(function (result) {
                                                                                 setEventPhotos(function (prev) {
                                                                                     return prev.map(function (p) {
@@ -7030,6 +7211,10 @@
                             config: memberDetailConfig,
                             notes: memberNotes,
                             registrations: memberRegistrations,
+                            initialTab: urlMemberId ? urlTab : null,
+                            onTabChange: function (tab) {
+                                updateUrlParams({ tab: tab });
+                            },
                             onSaveNote: handleSaveMemberNote,
                             onDeleteNote: handleDeleteMemberNoteFromPanel,
                             onUpdateMember: handleUpdateMember,
@@ -7037,12 +7222,14 @@
                             onMarkMembershipPaid: handleMarkMembershipPaid,
                             onManageAccount: config.canManageAccounts ? handleOpenAccountModal : null,
                             onUpdateIdea: handleUpdateMemberIdea,
+                            onDeleteIdea: handleDeleteMemberIdea,
                             onUpdatePhoto: handleUpdateMemberPhoto,
                             onDeletePhoto: handleDeleteMemberPhoto,
                             onCaptureAvatar: handleCaptureMemberAvatar,
                             onUpdateAvatar: handleUpdateMemberAvatar,
                             onRemoveAvatar: handleRemoveMemberAvatar,
                             onDeleteRegistration: handleDeleteMemberRegistration,
+                            onUpdateRegistrationOccurrences: handleUpdateRegistrationOccurrences,
                             onOpenMember: handleViewMemberFromRegistration,
                             pendingEditRequest: pendingMemberEdit,
                             onPendingEditHandled: handleConsumePendingMemberEdit,
@@ -7184,11 +7371,104 @@
     }
 
     // ============================================
+    // URL PARAMETERS
+    // ============================================
+
+    /**
+     * Parse les paramètres URL pour le gestionnaire
+     * Paramètres supportés:
+     * - event=ID : ouvre sur un événement spécifique
+     * - member=ID : ouvre sur un membre spécifique (active le mode membres)
+     * - tab=KEY : ouvre sur un onglet spécifique (registrations, attendance, description, editor, photos, details, occurrence-encoder)
+     */
+    function parseUrlParams() {
+        var params = {
+            eventId: null,
+            memberId: null,
+            tab: null,
+        };
+
+        try {
+            var searchParams = new URLSearchParams(window.location.search);
+
+            var eventParam = searchParams.get('event');
+            if (eventParam) {
+                var eventId = parseInt(eventParam, 10);
+                if (!isNaN(eventId) && eventId > 0) {
+                    params.eventId = eventId;
+                }
+            }
+
+            var memberParam = searchParams.get('member');
+            if (memberParam) {
+                var memberId = parseInt(memberParam, 10);
+                if (!isNaN(memberId) && memberId > 0) {
+                    params.memberId = memberId;
+                }
+            }
+
+            var tabParam = searchParams.get('tab');
+            if (tabParam && typeof tabParam === 'string' && tabParam.trim() !== '') {
+                params.tab = tabParam.trim();
+            }
+        } catch (e) {
+            // URLSearchParams non supporté ou erreur de parsing
+        }
+
+        return params;
+    }
+
+    /**
+     * Met à jour les paramètres URL sans recharger la page
+     * @param {Object} params - Paramètres à mettre à jour { event, member, tab }
+     */
+    function updateUrlParams(params) {
+        try {
+            var url = new URL(window.location.href);
+            
+            // Gérer le paramètre event
+            if (params.event !== undefined) {
+                if (params.event) {
+                    url.searchParams.set('event', params.event);
+                    url.searchParams.delete('member'); // Mutuellement exclusif
+                } else {
+                    url.searchParams.delete('event');
+                }
+            }
+            
+            // Gérer le paramètre member
+            if (params.member !== undefined) {
+                if (params.member) {
+                    url.searchParams.set('member', params.member);
+                    url.searchParams.delete('event'); // Mutuellement exclusif
+                } else {
+                    url.searchParams.delete('member');
+                }
+            }
+            
+            // Gérer le paramètre tab
+            if (params.tab !== undefined) {
+                if (params.tab) {
+                    url.searchParams.set('tab', params.tab);
+                } else {
+                    url.searchParams.delete('tab');
+                }
+            }
+            
+            // Mettre à jour l'URL sans recharger
+            window.history.replaceState({}, '', url.toString());
+        } catch (e) {
+            // URL API non supportée ou erreur
+        }
+    }
+
+    // ============================================
     // INITIALIZATION
     // ============================================
 
     function initRegistrationManager() {
         var containers = document.querySelectorAll('[data-mj-registration-manager]');
+        var urlParams = parseUrlParams();
 
         containers.forEach(function (container) {
             var configAttr = container.getAttribute('data-config');
@@ -7198,6 +7478,17 @@
                 config = JSON.parse(configAttr || '{}');
             } catch (e) {
                 console.error('[MjRegMgr] Invalid config JSON');
+            }
+
+            // Injecter les paramètres URL dans la config
+            if (urlParams.eventId) {
+                config.urlEventId = urlParams.eventId;
+            }
+            if (urlParams.memberId) {
+                config.urlMemberId = urlParams.memberId;
+            }
+            if (urlParams.tab) {
+                config.urlTab = urlParams.tab;
             }
 
             render(h(RegistrationManagerApp, { config: config }), container);

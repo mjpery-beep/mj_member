@@ -928,9 +928,10 @@ if (!function_exists('mj_member_handle_contact_message_submission')) {
             );
 
             $notification_data = array(
-                'type' => 'contact-message',
+                'type' => 'message_received',
                 'title' => $notification_title,
                 'excerpt' => $notification_excerpt,
+                'url' => home_url('/mon-compte/messages/'),
                 'payload' => $notification_payload,
                 'context' => 'contact',
                 'source' => 'contact_form',

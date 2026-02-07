@@ -222,10 +222,8 @@ class MjNotificationRecipients implements CrudRepositoryInterface {
         $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static function ($value) {
             return $value > 0;
         })));
-        if (!empty($ids)) {
-            $placeholders = implode(',', array_fill(0, count($ids), '%d'));
-            $sql .= sprintf(' AND notification_id IN (%s)', $placeholders);
-            $params = array_merge($params, $ids);
+        if (empty($ids)) {
+            return 0;
         }
         if (!in_array($status, self::get_statuses(), true)) {
             return new WP_Error('mj_notification_recipients_invalid_status', __('Statut invalide.', 'mj-member'));

@@ -3885,6 +3885,12 @@ input.mj-regmgr-search-input__field {
     color: var(--regmgr-gray-500);
 }
 
+.mj-regmgr-registration-card__time-ago {
+    color: var(--regmgr-gray-400);
+    font-style: italic;
+    cursor: help;
+}
+
 .mj-regmgr-registration-card__statuses {
     display: flex;
     align-items: center;
@@ -4635,6 +4641,13 @@ input.mj-regmgr-search-input__field {
 .mj-regmgr-member-card__volunteer {
     font-size: 10px;
     letter-spacing: 0.3px;
+}
+
+.mj-regmgr-member-card__time-ago {
+    color: var(--regmgr-gray-400);
+    font-style: italic;
+    font-size: 11px;
+    cursor: help;
 }
 
 .mj-regmgr-member-card__role {
@@ -5897,7 +5910,7 @@ input.mj-regmgr-search-input__field {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: 8px;
     margin-bottom: 10px;
 }
 
@@ -5908,6 +5921,7 @@ input.mj-regmgr-search-input__field {
     color: var(--regmgr-gray-900);
     line-height: 1.4;
     flex: 1;
+    min-width: 0;
 }
 
 .mj-regmgr-idea-card__edit-btn {
@@ -5935,6 +5949,38 @@ input.mj-regmgr-search-input__field {
 .mj-regmgr-idea-card__edit-btn:hover {
     background: var(--regmgr-primary);
     color: #fff;
+}
+
+.mj-regmgr-idea-card__delete-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: var(--regmgr-gray-100);
+    border-radius: var(--regmgr-radius);
+    color: var(--regmgr-gray-500);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.mj-regmgr-idea-card__delete-btn svg {
+    display: block;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.mj-regmgr-idea-card__delete-btn:hover {
+    background: var(--regmgr-danger, #dc2626);
+    color: #fff;
+}
+
+.mj-regmgr-idea-card__delete-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .mj-regmgr-idea-card__badges {
@@ -6188,6 +6234,284 @@ input.mj-regmgr-search-input__field {
 .mj-regmgr-registration-item__sessions-placeholder {
     font-size: 12px;
     color: var(--regmgr-gray-600);
+}
+
+/* History list - New design */
+.mj-regmgr-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mj-regmgr-history-item {
+    background: #fff;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius);
+    overflow: hidden;
+    transition: box-shadow 0.15s ease;
+}
+
+.mj-regmgr-history-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.mj-regmgr-history-item--cancelled {
+    opacity: 0.7;
+}
+
+.mj-regmgr-history-item__header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.mj-regmgr-history-item__header:hover {
+    background: var(--regmgr-gray-50);
+}
+
+.mj-regmgr-history-item__cover {
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--regmgr-gray-100);
+}
+
+.mj-regmgr-history-item__cover-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.mj-regmgr-history-item__cover-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--regmgr-gray-400);
+}
+
+.mj-regmgr-history-item__cover-icon {
+    display: flex;
+}
+
+.mj-regmgr-history-item__main {
+    flex: 1;
+    min-width: 0;
+}
+
+.mj-regmgr-history-item__title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--regmgr-gray-900);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mj-regmgr-history-item__meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--regmgr-gray-500);
+}
+
+.mj-regmgr-history-item__date {
+    white-space: nowrap;
+}
+
+.mj-regmgr-history-item__sessions-count {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.mj-regmgr-history-item__sessions-count::before {
+    content: '•';
+    color: var(--regmgr-gray-300);
+}
+
+.mj-regmgr-history-item__end {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.mj-regmgr-history-item__expand-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--regmgr-gray-400);
+    transition: transform 0.2s ease;
+}
+
+.mj-regmgr-history-item__expand-icon--open {
+    transform: rotate(180deg);
+}
+
+.mj-regmgr-history-item__body {
+    padding: 0 12px 12px;
+    border-top: 1px solid var(--regmgr-gray-100);
+    background: var(--regmgr-gray-50);
+}
+
+.mj-regmgr-history-item__section {
+    padding-top: 12px;
+}
+
+.mj-regmgr-history-item__section--editing {
+    background: #fff;
+    margin: 12px -12px -12px;
+    padding: 12px;
+    border-top: 1px solid var(--regmgr-gray-200);
+}
+
+.mj-regmgr-history-item__section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.mj-regmgr-history-item__section-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--regmgr-gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.mj-regmgr-history-item__all-sessions {
+    display: flex;
+}
+
+.mj-regmgr-history-item__all-sessions-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--regmgr-primary-50, #e3f2fd);
+    color: var(--regmgr-primary-600, #1e88e5);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.mj-regmgr-history-item__sessions-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.mj-regmgr-history-item__no-sessions {
+    font-size: 13px;
+    color: var(--regmgr-gray-500);
+    font-style: italic;
+}
+
+.mj-regmgr-history-item__mode-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.mj-regmgr-radio {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.mj-regmgr-radio input[type="radio"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--regmgr-primary-500, #2196f3);
+}
+
+.mj-regmgr-radio__label {
+    font-size: 14px;
+    color: var(--regmgr-gray-700);
+}
+
+.mj-regmgr-history-item__occurrences-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 8px;
+    margin: 8px 0;
+    background: var(--regmgr-gray-50);
+    border-radius: var(--regmgr-radius);
+    border: 1px solid var(--regmgr-gray-200);
+}
+
+.mj-regmgr-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.1s ease;
+}
+
+.mj-regmgr-checkbox:hover {
+    background: var(--regmgr-gray-100);
+}
+
+.mj-regmgr-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--regmgr-primary-500, #2196f3);
+}
+
+.mj-regmgr-checkbox__label {
+    font-size: 13px;
+    color: var(--regmgr-gray-700);
+}
+
+.mj-regmgr-checkbox--past .mj-regmgr-checkbox__label {
+    color: var(--regmgr-gray-500);
+}
+
+.mj-regmgr-checkbox__hint {
+    font-size: 11px;
+    color: var(--regmgr-gray-400);
+    font-style: italic;
+}
+
+.mj-regmgr-history-item__edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--regmgr-gray-200);
+}
+
+.mj-regmgr-history-item__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--regmgr-gray-200);
+}
+
+.mj-btn__icon {
+    display: inline-flex;
+    margin-right: 4px;
 }
 
 /* Form grid for edit mode */

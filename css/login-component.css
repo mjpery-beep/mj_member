@@ -609,24 +609,6 @@
     flex-shrink: 0;    
 }
 
-.mj-member-login-component__badge {
-    position: absolute;
-    top: -0.25rem;
-    right: -0.2rem;
-    min-width: 1.5rem;
-    height: 1.5rem;
-    padding: 0 0.4rem;
-    border-radius: 999px;
-    background: var(--mj-member-login-accent);
-    color: #ffffff;
-    font-size: 0.75rem;
-    font-weight: 700;
-    line-height: 1.5rem;
-    text-align: center;
-    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.25);
-    pointer-events: none;
-}
-
 .mj-member-login-component__trigger-avatar {
     display: inline-flex;
     align-items: center;

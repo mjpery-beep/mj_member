@@ -346,6 +346,11 @@ if (!function_exists('mj_member_todos_handle_todo_create')) {
             }
         }
 
+        // Notifier les membres assignés
+        if (!empty($assignedMemberIds)) {
+            do_action('mj_member_todo_assigned', $todoId, $assignedMemberIds, $title, get_current_user_id());
+        }
+
         mj_member_todos_admin_redirect(array(
             'page' => $redirectPage,
             'mj_todo_notice' => 'todo_created',
@@ -453,6 +458,16 @@ if (!function_exists('mj_member_todos_handle_todo_update')) {
                     ));
                 }
             }
+        }
+
+        // Notifier les nouveaux membres assignés
+        if (!empty($assignedMemberIds)) {
+            $todoTitle = isset($payload['title']) ? $payload['title'] : '';
+            if ($todoTitle === '') {
+                $existingTodo = MjTodos::get_by_id($todoId);
+                $todoTitle = $existingTodo ? (string) ($existingTodo['title'] ?? '') : '';
+            }
+            do_action('mj_member_todo_assigned', $todoId, $assignedMemberIds, $todoTitle, get_current_user_id());
         }
 
         mj_member_todos_admin_redirect(array(

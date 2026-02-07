@@ -21,6 +21,7 @@
     var useCallback = hooks.useCallback;
 
     var formatDate = Utils.formatDate;
+    var formatTimeAgo = Utils.formatTimeAgo;
     var getInitials = Utils.getInitials;
     var stringToColor = Utils.stringToColor;
     var classNames = Utils.classNames;
@@ -169,6 +170,10 @@
                         member.isVolunteer && h('span', {
                             class: classNames('mj-regmgr-registration-card__volunteer', 'mj-regmgr-badge', 'mj-regmgr-badge--volunteer'),
                         }, volunteerLabel),
+                        registration.createdAt && h('span', {
+                            class: 'mj-regmgr-registration-card__time-ago',
+                            title: registration.createdAtFormatted || formatDate(registration.createdAt, true),
+                        }, ' • ' + formatTimeAgo(registration.createdAt)),
                     ]),
                 ]),
             ]),

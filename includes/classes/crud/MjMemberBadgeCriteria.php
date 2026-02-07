@@ -443,6 +443,18 @@ final class MjMemberBadgeCriteria extends MjTools implements CrudRepositoryInter
             }
         }
 
+        // Déclencher les notifications pour les critères nouvellement attribués
+        if (!empty($criteriaIdsNewlyAwarded)) {
+            /**
+             * Action déclenchée après l'attribution de critères de badge à un membre.
+             *
+             * @param int   $memberId              ID du membre
+             * @param int   $badgeId               ID du badge
+             * @param array $criteriaIdsNewlyAwarded IDs des critères nouvellement attribués
+             */
+            do_action('mj_member_badge_criteria_awarded', $memberId, $badgeId, $criteriaIdsNewlyAwarded);
+        }
+
         return true;
     }
 

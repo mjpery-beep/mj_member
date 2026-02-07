@@ -26,6 +26,7 @@
     var useRef = hooks.useRef;
 
     var formatDate = Utils.formatDate;
+    var formatTimeAgo = Utils.formatTimeAgo;
     var classNames = Utils.classNames;
     var getString = Utils.getString;
     var buildWhatsAppLink = Utils.buildWhatsAppLink;
@@ -444,6 +445,10 @@
                     member.isVolunteer && h('span', {
                         class: classNames('mj-regmgr-member-card__volunteer', 'mj-regmgr-badge', 'mj-regmgr-badge--volunteer'),
                     }, volunteerLabel),
+                    member.createdAt && h('span', {
+                        class: 'mj-regmgr-member-card__time-ago',
+                        title: formatDate(member.createdAt, true),
+                    }, formatTimeAgo(member.createdAt)),
                 ]),
             ]),
         ]);
@@ -518,6 +523,322 @@
     }
 
     // ============================================
+    // REGISTRATION HISTORY ITEM
+    // ============================================
+
+    function RegistrationHistoryItem(props) {
+        var reg = props.registration;
+        var strings = props.strings || {};
+        var allowDelete = !!props.allowDelete;
+        var onDelete = typeof props.onDelete === 'function' ? props.onDelete : null;
+        var onUpdateOccurrences = typeof props.onUpdateOccurrences === 'function' ? props.onUpdateOccurrences : null;
+        var onSelectEvent = typeof props.onSelectEvent === 'function' ? props.onSelectEvent : null;
+
+        var expanded = useState(false);
+        var isExpanded = expanded[0];
+        var setExpanded = expanded[1];
+
+        var editingOccurrences = useState(false);
+        var isEditingOccurrences = editingOccurrences[0];
+        var setEditingOccurrences = editingOccurrences[1];
+
+        var selectedOccurrences = useState([]);
+        var localSelectedOccurrences = selectedOccurrences[0];
+        var setSelectedOccurrences = selectedOccurrences[1];
+
+        var saving = useState(false);
+        var isSaving = saving[0];
+        var setSaving = saving[1];
+
+        var allMode = useState(true);
+        var isAllMode = allMode[0];
+        var setIsAllMode = allMode[1];
+
+        var statusClasses = {
+            'valide': 'mj-regmgr-badge--success',
+            'en_attente': 'mj-regmgr-badge--warning',
+            'annule': 'mj-regmgr-badge--danger',
+        };
+
+        var sessions = Array.isArray(reg.occurrenceDetails) ? reg.occurrenceDetails : [];
+        var allOccurrences = Array.isArray(reg.allOccurrences) ? reg.allOccurrences : [];
+        var coversAllSessions = !!reg.coversAllOccurrences;
+        var totalOccurrences = typeof reg.totalOccurrences === 'number' ? reg.totalOccurrences : 0;
+        var canEditOccurrences = !!reg.canEditOccurrences && onUpdateOccurrences;
+
+        var sessionsLabel = getString(strings, 'sessions', 'Séances');
+        var allSessionsLabel = getString(strings, 'allSessions', 'Toutes les séances');
+        var deleteLabel = getString(strings, 'deleteRegistration', 'Supprimer');
+        var editOccurrencesLabel = getString(strings, 'editOccurrences', 'Modifier les séances');
+        var saveLabel = getString(strings, 'save', 'Enregistrer');
+        var cancelLabel = getString(strings, 'cancel', 'Annuler');
+        var viewEventLabel = getString(strings, 'viewEvent', 'Voir l\'événement');
+        var allOccurrencesOptionLabel = getString(strings, 'allOccurrencesOption', 'Toutes les séances');
+        var customOccurrencesOptionLabel = getString(strings, 'customOccurrencesOption', 'Séances spécifiques');
+        var noOccurrencesSelectedLabel = getString(strings, 'noOccurrencesSelected', 'Aucune séance sélectionnée');
+        var savingLabel = getString(strings, 'saving', 'Enregistrement...');
+
+        var canDelete = allowDelete && onDelete;
+
+        var handleToggleExpand = useCallback(function () {
+            setExpanded(function (prev) { return !prev; });
+        }, []);
+
+        var handleStartEditOccurrences = useCallback(function () {
+            var currentAssignments = reg.occurrenceAssignments || {};
+            var mode = currentAssignments.mode || 'all';
+            var currentOccs = Array.isArray(currentAssignments.occurrences) ? currentAssignments.occurrences : [];
+            
+            setIsAllMode(mode === 'all');
+            setSelectedOccurrences(mode === 'all' ? [] : currentOccs);
+            setEditingOccurrences(true);
+        }, [reg]);
+
+        var handleCancelEditOccurrences = useCallback(function () {
+            setEditingOccurrences(false);
+        }, []);
+
+        var handleToggleOccurrence = useCallback(function (occurrenceStart) {
+            setSelectedOccurrences(function (prev) {
+                if (prev.indexOf(occurrenceStart) !== -1) {
+                    return prev.filter(function (o) { return o !== occurrenceStart; });
+                }
+                return prev.concat([occurrenceStart]);
+            });
+        }, []);
+
+        var handleModeChange = useCallback(function (newMode) {
+            setIsAllMode(newMode === 'all');
+            if (newMode === 'all') {
+                setSelectedOccurrences([]);
+            }
+        }, []);
+
+        var handleSaveOccurrences = useCallback(function () {
+            if (!onUpdateOccurrences) return;
+
+            var mode = isAllMode ? 'all' : 'custom';
+            var occurrences = isAllMode ? [] : localSelectedOccurrences;
+
+            setSaving(true);
+            onUpdateOccurrences(reg.id, mode, occurrences)
+                .then(function () {
+                    setEditingOccurrences(false);
+                })
+                .catch(function () {
+                    // Error handled by parent
+                })
+                .finally(function () {
+                    setSaving(false);
+                });
+        }, [onUpdateOccurrences, reg.id, isAllMode, localSelectedOccurrences]);
+
+        var handleDelete = useCallback(function () {
+            if (onDelete) {
+                onDelete(reg);
+            }
+        }, [onDelete, reg]);
+
+        var handleViewEvent = useCallback(function (e) {
+            e.stopPropagation();
+            if (onSelectEvent && reg.eventId) {
+                onSelectEvent(reg.eventId);
+            }
+        }, [onSelectEvent, reg.eventId]);
+
+        // Cover image or fallback
+        var coverUrl = reg.eventCover && reg.eventCover.url ? reg.eventCover.url : '';
+
+        // Count sessions
+        var sessionCount = coversAllSessions ? totalOccurrences : sessions.length;
+        var sessionSummary = coversAllSessions 
+            ? allSessionsLabel 
+            : (sessionCount > 0 ? sessionCount + ' ' + sessionsLabel.toLowerCase() : '');
+
+        return h('div', { 
+            class: classNames('mj-regmgr-history-item', {
+                'mj-regmgr-history-item--expanded': isExpanded,
+                'mj-regmgr-history-item--cancelled': reg.status === 'annule',
+            }),
+        }, [
+            // Main row (always visible)
+            h('div', { 
+                class: 'mj-regmgr-history-item__header',
+                onClick: handleToggleExpand,
+            }, [
+                // Cover thumbnail
+                h('div', { class: 'mj-regmgr-history-item__cover' }, [
+                    coverUrl 
+                        ? h('img', { src: coverUrl, alt: '', class: 'mj-regmgr-history-item__cover-img' })
+                        : h('div', { class: 'mj-regmgr-history-item__cover-placeholder' }, [
+                            h('span', { 
+                                class: 'mj-regmgr-history-item__cover-icon',
+                                dangerouslySetInnerHTML: { __html: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' },
+                            }),
+                        ]),
+                ]),
+
+                // Main info
+                h('div', { class: 'mj-regmgr-history-item__main' }, [
+                    h('div', { class: 'mj-regmgr-history-item__title' }, reg.eventTitle || 'Événement'),
+                    h('div', { class: 'mj-regmgr-history-item__meta' }, [
+                        h('span', { class: 'mj-regmgr-history-item__date' }, formatDate(reg.createdAt)),
+                        sessionSummary && h('span', { class: 'mj-regmgr-history-item__sessions-count' }, sessionSummary),
+                    ]),
+                ]),
+
+                // Status badge and expand icon
+                h('div', { class: 'mj-regmgr-history-item__end' }, [
+                    h('span', {
+                        class: classNames('mj-regmgr-badge mj-regmgr-badge--sm', statusClasses[reg.status] || ''),
+                    }, reg.statusLabel || reg.status),
+                    h('span', { 
+                        class: classNames('mj-regmgr-history-item__expand-icon', {
+                            'mj-regmgr-history-item__expand-icon--open': isExpanded,
+                        }),
+                        dangerouslySetInnerHTML: { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>' },
+                    }),
+                ]),
+            ]),
+
+            // Expanded content
+            isExpanded && h('div', { class: 'mj-regmgr-history-item__body' }, [
+                // Sessions section (if has occurrences)
+                (totalOccurrences > 0 && !isEditingOccurrences) && h('div', { class: 'mj-regmgr-history-item__section' }, [
+                    h('div', { class: 'mj-regmgr-history-item__section-header' }, [
+                        h('span', { class: 'mj-regmgr-history-item__section-label' }, sessionsLabel),
+                        canEditOccurrences && h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--ghost mj-btn--small',
+                            onClick: handleStartEditOccurrences,
+                        }, [
+                            h('span', { 
+                                class: 'mj-btn__icon',
+                                dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' },
+                            }),
+                            editOccurrencesLabel,
+                        ]),
+                    ]),
+                    coversAllSessions
+                        ? h('div', { class: 'mj-regmgr-history-item__all-sessions' }, [
+                            h('span', { class: 'mj-regmgr-history-item__all-sessions-badge' }, allSessionsLabel),
+                        ])
+                        : (sessions.length > 0
+                            ? h('div', { class: 'mj-regmgr-history-item__sessions-grid' },
+                                sessions.map(function (session, idx) {
+                                    var key = session.start ? 'session-' + session.start : 'session-' + idx;
+                                    var label = session.label || (session.start ? formatDate(session.start) : '');
+                                    return h('span', { 
+                                        key: key, 
+                                        class: classNames('mj-regmgr-session-chip', {
+                                            'mj-regmgr-session-chip--past': !!session.isPast,
+                                        }),
+                                    }, label);
+                                })
+                            )
+                            : h('span', { class: 'mj-regmgr-history-item__no-sessions' }, noOccurrencesSelectedLabel)
+                        ),
+                ]),
+
+                // Occurrences edit mode
+                isEditingOccurrences && h('div', { class: 'mj-regmgr-history-item__section mj-regmgr-history-item__section--editing' }, [
+                    h('div', { class: 'mj-regmgr-history-item__section-label' }, editOccurrencesLabel),
+                    
+                    // Mode selector
+                    h('div', { class: 'mj-regmgr-history-item__mode-selector' }, [
+                        h('label', { class: 'mj-regmgr-radio' }, [
+                            h('input', {
+                                type: 'radio',
+                                name: 'occurrence-mode-' + reg.id,
+                                checked: isAllMode,
+                                onChange: function () { handleModeChange('all'); },
+                            }),
+                            h('span', { class: 'mj-regmgr-radio__label' }, allOccurrencesOptionLabel),
+                        ]),
+                        h('label', { class: 'mj-regmgr-radio' }, [
+                            h('input', {
+                                type: 'radio',
+                                name: 'occurrence-mode-' + reg.id,
+                                checked: !isAllMode,
+                                onChange: function () { handleModeChange('custom'); },
+                            }),
+                            h('span', { class: 'mj-regmgr-radio__label' }, customOccurrencesOptionLabel),
+                        ]),
+                    ]),
+
+                    // Occurrences checkboxes (only when custom mode)
+                    !isAllMode && h('div', { class: 'mj-regmgr-history-item__occurrences-list' },
+                        allOccurrences.map(function (occ, idx) {
+                            var occStart = occ.start || '';
+                            var key = occStart ? 'occ-' + occStart : 'occ-' + idx;
+                            var label = occ.label || (occStart ? formatDate(occStart) : '');
+                            var isChecked = localSelectedOccurrences.indexOf(occStart) !== -1;
+                            var isPast = !!occ.isPast;
+
+                            return h('label', { 
+                                key: key, 
+                                class: classNames('mj-regmgr-checkbox', {
+                                    'mj-regmgr-checkbox--past': isPast,
+                                }),
+                            }, [
+                                h('input', {
+                                    type: 'checkbox',
+                                    checked: isChecked,
+                                    onChange: function () { handleToggleOccurrence(occStart); },
+                                }),
+                                h('span', { class: 'mj-regmgr-checkbox__label' }, label),
+                                isPast && h('span', { class: 'mj-regmgr-checkbox__hint' }, '(passé)'),
+                            ]);
+                        })
+                    ),
+
+                    // Save/Cancel buttons
+                    h('div', { class: 'mj-regmgr-history-item__edit-actions' }, [
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--secondary mj-btn--small',
+                            onClick: handleCancelEditOccurrences,
+                            disabled: isSaving,
+                        }, cancelLabel),
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--primary mj-btn--small',
+                            onClick: handleSaveOccurrences,
+                            disabled: isSaving || (!isAllMode && localSelectedOccurrences.length === 0),
+                        }, isSaving ? savingLabel : saveLabel),
+                    ]),
+                ]),
+
+                // Actions row
+                !isEditingOccurrences && h('div', { class: 'mj-regmgr-history-item__actions' }, [
+                    onSelectEvent && reg.eventId && h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--ghost mj-btn--small',
+                        onClick: handleViewEvent,
+                    }, [
+                        h('span', { 
+                            class: 'mj-btn__icon',
+                            dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>' },
+                        }),
+                        viewEventLabel,
+                    ]),
+                    canDelete && h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--ghost mj-btn--danger mj-btn--small',
+                        onClick: handleDelete,
+                    }, [
+                        h('span', { 
+                            class: 'mj-btn__icon',
+                            dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>' },
+                        }),
+                        deleteLabel,
+                    ]),
+                ]),
+            ]),
+        ]);
+    }
+
+    // ============================================
     // MEMBER DETAIL PANEL
     // ============================================
 
@@ -534,6 +855,7 @@
         var onPayMembershipOnline = props.onPayMembershipOnline;
         var onMarkMembershipPaid = props.onMarkMembershipPaid;
         var onUpdateIdea = typeof props.onUpdateIdea === 'function' ? props.onUpdateIdea : null;
+        var onDeleteIdea = typeof props.onDeleteIdea === 'function' ? props.onDeleteIdea : null;
         var onUpdatePhoto = typeof props.onUpdatePhoto === 'function' ? props.onUpdatePhoto : null;
         var onDeletePhoto = typeof props.onDeletePhoto === 'function' ? props.onDeletePhoto : null;
         var onUpdateAvatar = typeof props.onUpdateAvatar === 'function' ? props.onUpdateAvatar : null;
@@ -543,6 +865,7 @@
         var onManageAccount = typeof props.onManageAccount === 'function' ? props.onManageAccount : null;
         var onDeleteMember = typeof props.onDeleteMember === 'function' ? props.onDeleteMember : null;
         var onDeleteRegistration = typeof props.onDeleteRegistration === 'function' ? props.onDeleteRegistration : null;
+        var onUpdateRegistrationOccurrences = typeof props.onUpdateRegistrationOccurrences === 'function' ? props.onUpdateRegistrationOccurrences : null;
         var onOpenMember = typeof props.onOpenMember === 'function' ? props.onOpenMember : null;
         var onSyncBadgeCriteria = typeof props.onSyncBadgeCriteria === 'function' ? props.onSyncBadgeCriteria : null;
         var onAdjustXp = typeof props.onAdjustXp === 'function' ? props.onAdjustXp : null;
@@ -550,6 +873,8 @@
         var onSelectEvent = typeof props.onSelectEvent === 'function' ? props.onSelectEvent : null;
         var pendingEditRequest = props.pendingEditRequest || null;
         var onPendingEditHandled = typeof props.onPendingEditHandled === 'function' ? props.onPendingEditHandled : null;
+        var initialTab = props.initialTab || null;
+        var onTabChange = typeof props.onTabChange === 'function' ? props.onTabChange : null;
 
         if (!member) {
             var loadingLabel = getString(strings, 'memberLoadingDetails', 'Chargement des informations...');
@@ -569,9 +894,22 @@
 
         var memberId = member && member.id ? member.id : null;
 
-        var _useStateActiveTab = useState('information');
+        // Onglets valides pour les membres
+        var validMemberTabs = ['information', 'membership', 'badges', 'photos', 'ideas', 'messages', 'notes', 'history'];
+        var resolvedInitialTab = initialTab && validMemberTabs.indexOf(initialTab) !== -1 ? initialTab : 'information';
+        var initialTabAppliedRef = useRef(false);
+
+        var _useStateActiveTab = useState(resolvedInitialTab);
         var activeTab = _useStateActiveTab[0];
-        var setActiveTab = _useStateActiveTab[1];
+        var setActiveTabInternal = _useStateActiveTab[1];
+
+        // Wrapper pour setActiveTab qui notifie aussi le parent
+        var setActiveTab = useCallback(function (tab) {
+            setActiveTabInternal(tab);
+            if (onTabChange) {
+                onTabChange(tab);
+            }
+        }, [onTabChange]);
 
         var _useStateEditMode = useState(false);
         var editMode = _useStateEditMode[0];
@@ -612,6 +950,10 @@
         var _useStateIdeaSaving = useState(false);
         var ideaSaving = _useStateIdeaSaving[0];
         var setIdeaSaving = _useStateIdeaSaving[1];
+
+        var _useStateIdeaDeletingId = useState(null);
+        var ideaDeletingId = _useStateIdeaDeletingId[0];
+        var setIdeaDeletingId = _useStateIdeaDeletingId[1];
 
         var _useStateEditingPhotoId = useState(null);
         var editingPhotoId = _useStateEditingPhotoId[0];
@@ -674,7 +1016,14 @@
         useEffect(function () {
             setEditData(buildInitialEditData(member));
             setEditMode(false);
-            setActiveTab('information');
+            // Utiliser l'onglet initial seulement au premier chargement
+            if (!initialTabAppliedRef.current && initialTab && validMemberTabs.indexOf(initialTab) !== -1) {
+                setActiveTab(initialTab);
+                initialTabAppliedRef.current = true;
+            } else if (initialTabAppliedRef.current) {
+                // Après le premier chargement, réinitialiser à 'information'
+                setActiveTab('information');
+            }
             setEditingNoteId(null);
             setEditingNoteContent('');
             setEditingNoteSaving(false);
@@ -1301,6 +1650,20 @@
                 })
                 .finally(function () {
                     setIdeaSaving(false);
+                });
+        };
+
+        var handleDeleteIdea = function (idea) {
+            if (!onDeleteIdea || !member || !member.id || !idea || !idea.id) {
+                return;
+            }
+            if (!window.confirm('Supprimer cette idée ?')) {
+                return;
+            }
+            setIdeaDeletingId(idea.id);
+            Promise.resolve(onDeleteIdea(member.id, idea.id))
+                .finally(function () {
+                    setIdeaDeletingId(null);
                 });
         };
 
@@ -2750,11 +3113,26 @@
                                                     class: 'mj-regmgr-idea-card__edit-btn',
                                                     onClick: function () { handleIdeaEditStart(idea); },
                                                     title: 'Modifier l\'idée',
+                                                    disabled: ideaDeletingId === idea.id,
                                                 }, [
                                                     h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
                                                         h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
                                                         h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
                                                     ]),
+                                                ]),
+                                                onDeleteIdea && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-regmgr-idea-card__delete-btn',
+                                                    onClick: function () { handleDeleteIdea(idea); },
+                                                    title: 'Supprimer l\'idée',
+                                                    disabled: ideaDeletingId === idea.id,
+                                                }, [
+                                                    ideaDeletingId === idea.id
+                                                        ? h('span', { class: 'mj-regmgr-spinner mj-regmgr-spinner--small' })
+                                                        : h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                            h('polyline', { points: '3 6 5 6 21 6' }),
+                                                            h('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' }),
+                                                        ]),
                                                 ]),
                                             ]),
                                             h('div', { class: 'mj-regmgr-idea-card__badges' }, [
@@ -3017,68 +3395,17 @@
                         registrations.length > 0
                             ? h('div', { class: 'mj-regmgr-member-detail__section' }, [
                                 h('h2', { class: 'mj-regmgr-member-detail__section-title' }, registrationsTitle + ' (' + registrations.length + ')'),
-                                h('div', { class: 'mj-regmgr-member-detail__registrations' },
+                                h('div', { class: 'mj-regmgr-history-list' },
                                     registrations.map(function (reg) {
-                                        var statusClasses = {
-                                            'valide': 'mj-regmgr-badge--success',
-                                            'en_attente': 'mj-regmgr-badge--warning',
-                                            'annule': 'mj-regmgr-badge--danger',
-                                        };
-
-                                        var sessions = Array.isArray(reg.occurrenceDetails) ? reg.occurrenceDetails : [];
-                                        var coversAllSessions = !!reg.coversAllOccurrences;
-                                        var totalOccurrences = typeof reg.totalOccurrences === 'number' ? reg.totalOccurrences : 0;
-
-                                        var sessionsContent = null;
-
-                                        if (sessions.length > 0) {
-                                            sessionsContent = h('div', { class: 'mj-regmgr-registration-item__sessions' }, [
-                                                h('span', { class: 'mj-regmgr-registration-item__sessions-label' }, sessionsLabel + ' :'),
-                                                h('div', { class: 'mj-regmgr-registration-item__sessions-list' },
-                                                    sessions.map(function (session, idx) {
-                                                        var chipClasses = classNames('mj-regmgr-session-chip', {
-                                                            'mj-regmgr-session-chip--past': !!session.isPast,
-                                                        });
-                                                        var key = session.start ? 'session-' + session.start : 'session-' + idx;
-                                                        var label = session.label || (session.start ? formatDate(session.start) : '');
-                                                        return h('span', { key: key, class: chipClasses }, label);
-                                                    })
-                                                ),
-                                            ]);
-                                        } else if (coversAllSessions && totalOccurrences > 0) {
-                                            sessionsContent = h('div', { class: 'mj-regmgr-registration-item__sessions' }, [
-                                                h('span', { class: 'mj-regmgr-registration-item__sessions-label' }, sessionsLabel + ' :'),
-                                                h('span', { class: 'mj-regmgr-registration-item__sessions-placeholder' }, allSessionsLabel),
-                                            ]);
-                                        } else if (!coversAllSessions && totalOccurrences > 0) {
-                                            sessionsContent = h('div', { class: 'mj-regmgr-registration-item__sessions' }, [
-                                                h('span', { class: 'mj-regmgr-registration-item__sessions-label' }, sessionsLabel + ' :'),
-                                                h('span', { class: 'mj-regmgr-registration-item__sessions-placeholder' }, noSessionsLabel),
-                                            ]);
-                                        }
-
-                                        var deleteLabel = getString(strings, 'deleteRegistration', 'Supprimer');
-                                        var canDelete = allowDeleteRegistration && onDeleteRegistration;
-
-                                        return h('div', { key: reg.id, class: 'mj-regmgr-registration-item' }, [
-                                            h('div', { class: 'mj-regmgr-registration-item__info' }, [
-                                                h('span', { class: 'mj-regmgr-registration-item__event' }, reg.eventTitle || 'Événement'),
-                                                h('span', { class: 'mj-regmgr-registration-item__date' }, formatDate(reg.createdAt)),
-                                                sessionsContent,
-                                            ].filter(Boolean)),
-                                            h('div', { class: 'mj-regmgr-registration-item__meta' }, [
-                                                h('span', {
-                                                    class: classNames('mj-regmgr-badge', statusClasses[reg.status] || ''),
-                                                }, reg.statusLabel || reg.status),
-                                                canDelete && h('button', {
-                                                    type: 'button',
-                                                    class: 'mj-btn mj-btn--ghost mj-btn--danger mj-btn--small',
-                                                    onClick: function () { onDeleteRegistration(reg); },
-                                                    title: deleteLabel,
-                                                    'aria-label': deleteLabel,
-                                                }, deleteLabel),
-                                            ].filter(Boolean)),
-                                        ]);
+                                        return h(RegistrationHistoryItem, {
+                                            key: reg.id,
+                                            registration: reg,
+                                            strings: strings,
+                                            allowDelete: allowDeleteRegistration,
+                                            onDelete: onDeleteRegistration,
+                                            onUpdateOccurrences: onUpdateRegistrationOccurrences,
+                                            onSelectEvent: onSelectEvent,
+                                        });
                                     })
                                 ),
                             ])

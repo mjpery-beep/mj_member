@@ -174,12 +174,31 @@ class MjEventPhotos implements CrudRepositoryInterface {
         $reviewed_by = isset($args['reviewed_by']) ? (int) $args['reviewed_by'] : get_current_user_id();
         $rejection_reason = isset($args['rejection_reason']) ? sanitize_text_field($args['rejection_reason']) : null;
 
-        return self::update($photo_id, array(
+        // Récupérer la photo avant mise à jour pour avoir l'ancien statut
+        $photo = self::get($photo_id);
+        $old_status = $photo ? ($photo->status ?? '') : '';
+
+        $result = self::update($photo_id, array(
             'status' => $status,
             'reviewed_at' => $reviewed_at,
             'reviewed_by' => $reviewed_by > 0 ? $reviewed_by : null,
             'rejection_reason' => ($status === self::STATUS_REJECTED) ? $rejection_reason : null,
         ));
+
+        // Déclencher l'action si la mise à jour a réussi
+        if ($result === true && $photo && $old_status !== $status) {
+            /**
+             * Déclenché après changement de statut d'une photo.
+             *
+             * @param int    $photo_id    ID de la photo
+             * @param string $new_status  Nouveau statut (approved, rejected, pending)
+             * @param string $old_status  Ancien statut
+             * @param object $photo       Objet photo (avant mise à jour)
+             */
+            do_action('mj_member_event_photo_status_changed', (int) $photo_id, $status, $old_status, $photo);
+        }
+
+        return $result;
     }
 
     /**

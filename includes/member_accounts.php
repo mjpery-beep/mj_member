@@ -1147,6 +1147,9 @@ if (!function_exists('mj_member_ajax_update_child_profile')) {
             wp_send_json_error(array('message' => $result->get_error_message()), 500);
         }
 
+        // Déclencher la notification pour la mise à jour du profil
+        do_action('mj_member_profile_updated', $child_id, $updates, array('source' => 'child_profile', 'guardian_id' => (int) $guardian->id));
+
         $refreshed_child = null;
         $refreshed_children = mj_member_get_guardian_children_statuses($guardian);
         if (!empty($refreshed_children)) {

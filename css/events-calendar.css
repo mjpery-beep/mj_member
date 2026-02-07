@@ -741,7 +741,7 @@
     top: 50%;
     left: calc(100% + 12px);
     z-index: 160;
-    width: min(420px, 95vw);
+    width: min(520px, 95vw);
     background: #ffffff;
     color: var(--mj-events-calendar-event-text);
     border-radius: 14px;

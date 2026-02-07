@@ -232,7 +232,19 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             );
         }
 
-        if (!empty($filters['role'])) {
+        if (!empty($filters['roles']) && is_array($filters['roles'])) {
+            $allowed = self::getAllowedRoles();
+            $valid_roles = array();
+            foreach ($filters['roles'] as $r) {
+                $r = sanitize_key($r);
+                if (in_array($r, $allowed, true)) {
+                    $valid_roles[] = $r;
+                }
+            }
+            if (!empty($valid_roles)) {
+                $builder->where_in_strings('role', $valid_roles, 'sanitize_key');
+            }
+        } elseif (!empty($filters['role'])) {
             $role = sanitize_key($filters['role']);
             if (in_array($role, self::getAllowedRoles(), true)) {
                 $builder->where_equals('role', $role, 'sanitize_key');

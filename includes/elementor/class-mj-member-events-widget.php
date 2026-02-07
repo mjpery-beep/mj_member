@@ -13,6 +13,7 @@ use Elementor\Group_Control_Typography;
 use Elementor\Utils;
 use Elementor\Widget_Base;
 use Mj\Member\Core\AssetsManager;
+use Mj\Member\Classes\Crud\MjEventLocationLinks;
 
 class Mj_Member_Elementor_Events_Widget extends Widget_Base {
     use Mj_Member_Elementor_Widget_Visibility;
@@ -756,6 +757,17 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         echo '<div class="' . esc_attr(implode(' ', $grid_classes)) . '">';
 
         foreach ($events as $event) {
+            // Charger les lieux multiples pour cet événement
+            $location_links = array();
+            $event_id_for_locations = isset($event['id']) ? (int) $event['id'] : 0;
+            if ($event_id_for_locations > 0 && class_exists(MjEventLocationLinks::class) && method_exists(MjEventLocationLinks::class, 'get_with_locations')) {
+                $location_links = MjEventLocationLinks::get_with_locations($event_id_for_locations);
+            }
+            // Fallback pour les données de preview
+            if (empty($location_links) && isset($event['location_links']) && is_array($event['location_links'])) {
+                $location_links = $event['location_links'];
+            }
+
             $cover_url = '';
             if (!empty($event['cover_url'])) {
                 $cover_url = esc_url($event['cover_url']);
@@ -1006,6 +1018,8 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 echo '<p class="mj-member-events__excerpt">' . esc_html($event['excerpt']) . '</p>';
             }
 
+            // Affichage des lieux (multiples ou unique)
+            $has_multiple_locations = !empty($location_links);
             $location_detail_notes = isset($event['location_description']) ? trim((string) $event['location_description']) : '';
             $location_logo = isset($event['location_cover']) ? esc_url($event['location_cover']) : '';
             $location_address = isset($event['location_address']) ? trim((string) $event['location_address']) : '';
@@ -1014,7 +1028,72 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 $location_name = (string) $event['location'];
             }
 
-            if ($show_location && ($location_logo !== '' || $location_name !== '' || $location_address !== '' || $location_detail_notes !== '')) {
+            // Si des lieux multiples existent, les afficher
+            if ($show_location && $has_multiple_locations) {
+                echo '<div class="mj-member-events__locations">';
+                echo '<ul class="mj-member-events__locations-list">';
+                foreach ($location_links as $loc_link) {
+                    $loc_type_label = isset($loc_link['locationTypeLabel']) ? (string) $loc_link['locationTypeLabel'] : '';
+                    $loc_type_key = isset($loc_link['locationType']) ? sanitize_key((string) $loc_link['locationType']) : '';
+                    $loc_data = isset($loc_link['location']) && is_array($loc_link['location']) ? $loc_link['location'] : null;
+                    $loc_meeting_time = isset($loc_link['meetingTime']) ? (string) $loc_link['meetingTime'] : '';
+                    $loc_meeting_time_end = isset($loc_link['meetingTimeEnd']) ? (string) $loc_link['meetingTimeEnd'] : '';
+                    $loc_name = '';
+                    $loc_city = '';
+                    $loc_postal_code = '';
+                    $loc_address_line = '';
+                    if ($loc_data) {
+                        $loc_name = isset($loc_data['name']) ? (string) $loc_data['name'] : '';
+                        $loc_city = isset($loc_data['city']) ? (string) $loc_data['city'] : '';
+                        $loc_postal_code = isset($loc_data['postal_code']) ? (string) $loc_data['postal_code'] : '';
+                        $loc_address_line = isset($loc_data['address_line']) ? (string) $loc_data['address_line'] : '';
+                        if ($loc_address_line === '' && isset($loc_data['address'])) {
+                            $loc_address_line = (string) $loc_data['address'];
+                        }
+                    }
+                    if ($loc_name === '') {
+                        continue;
+                    }
+
+                    // Construire l'adresse complète
+                    $loc_full_address_parts = array();
+                    if ($loc_address_line !== '') {
+                        $loc_full_address_parts[] = $loc_address_line;
+                    }
+                    if ($loc_postal_code !== '' && $loc_city !== '') {
+                        $loc_full_address_parts[] = $loc_postal_code . ' ' . $loc_city;
+                    } elseif ($loc_city !== '') {
+                        $loc_full_address_parts[] = $loc_city;
+                    }
+                    $loc_full_address = implode(', ', $loc_full_address_parts);
+
+                    $item_classes = array('mj-member-events__location-item');
+                    if ($loc_type_key !== '') {
+                        $item_classes[] = 'type-' . $loc_type_key;
+                    }
+                    echo '<li class="' . esc_attr(implode(' ', $item_classes)) . '">';
+                    if ($loc_type_label !== '') {
+                        echo '<span class="mj-member-events__location-type">' . esc_html($loc_type_label) . '</span>';
+                    }
+                    echo '<div class="mj-member-events__location-details">';
+                    echo '<span class="mj-member-events__location-name">' . esc_html($loc_name) . '</span>';
+                    if ($loc_full_address !== '') {
+                        echo '<span class="mj-member-events__location-address">' . esc_html($loc_full_address) . '</span>';
+                    }
+                    if ($loc_meeting_time !== '') {
+                        $time_display = $loc_meeting_time;
+                        if ($loc_meeting_time_end !== '' && $loc_meeting_time_end !== $loc_meeting_time) {
+                            $time_display .= ' – ' . $loc_meeting_time_end;
+                        }
+                        echo '<span class="mj-member-events__location-time">' . esc_html($time_display) . '</span>';
+                    }
+                    echo '</div>';
+                    echo '</li>';
+                }
+                echo '</ul>';
+                echo '</div>';
+            } elseif ($show_location && ($location_logo !== '' || $location_name !== '' || $location_address !== '' || $location_detail_notes !== '')) {
+                // Fallback : affichage du lieu unique
                 echo '<div class="mj-member-events__location-card">';
                 if ($location_logo !== '') {
                     $location_logo_alt = $location_name !== '' ? $location_name : $event['title'];
@@ -1213,6 +1292,56 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 'location_description' => $preset['note'],
                 'location_types' => array($type_key),
                 'location_cover' => '',
+                'location_links' => array(
+                    array(
+                        'id' => 1,
+                        'locationId' => 100 + $index,
+                        'locationType' => 'departure',
+                        'locationTypeLabel' => __('Lieu de départ', 'mj-member'),
+                        'customLabel' => '',
+                        'meetingTime' => '08:30',
+                        'meetingTimeEnd' => '',
+                        'sortOrder' => 0,
+                        'location' => array(
+                            'id' => 100 + $index,
+                            'name' => __('Maison des Jeunes', 'mj-member'),
+                            'address_line' => __('12 rue des Arts', 'mj-member'),
+                            'city' => __('Mons', 'mj-member'),
+                        ),
+                    ),
+                    array(
+                        'id' => 2,
+                        'locationId' => 200 + $index,
+                        'locationType' => 'activity',
+                        'locationTypeLabel' => __("Lieu d'activité", 'mj-member'),
+                        'customLabel' => '',
+                        'meetingTime' => '',
+                        'meetingTimeEnd' => '',
+                        'sortOrder' => 1,
+                        'location' => array(
+                            'id' => 200 + $index,
+                            'name' => isset($preset['location']) ? $preset['location'] : __('Parc du Loup', 'mj-member'),
+                            'address_line' => isset($preset['address']) ? $preset['address'] : '',
+                            'city' => __('Jemappes', 'mj-member'),
+                        ),
+                    ),
+                    array(
+                        'id' => 3,
+                        'locationId' => 100 + $index,
+                        'locationType' => 'return',
+                        'locationTypeLabel' => __('Lieu de retour', 'mj-member'),
+                        'customLabel' => '',
+                        'meetingTime' => '17:00',
+                        'meetingTimeEnd' => '',
+                        'sortOrder' => 2,
+                        'location' => array(
+                            'id' => 100 + $index,
+                            'name' => __('Maison des Jeunes', 'mj-member'),
+                            'address_line' => __('12 rue des Arts', 'mj-member'),
+                            'city' => __('Mons', 'mj-member'),
+                        ),
+                    ),
+                ),
                 'price' => 12 + ($index * 4),
                 'start_date' => $start_date,
                 'end_date' => $end_date,

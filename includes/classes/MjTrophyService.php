@@ -105,6 +105,10 @@ final class MjTrophyService
             return null;
         }
 
+        // Vérifier si le membre a déjà ce trophée actif (évite les notifications dupliquées)
+        $existingAssignment = MjMemberTrophies::get_assignment($memberId, $trophy['id']);
+        $wasAlreadyAwarded = $existingAssignment && $existingAssignment['status'] === MjMemberTrophies::STATUS_AWARDED;
+
         // Préparer les options d'attribution
         $awardOptions = array();
         if (isset($options['notes'])) {
@@ -130,15 +134,7 @@ final class MjTrophyService
             return null;
         }
 
-        /**
-         * Action déclenchée après l'attribution automatique d'un trophée.
-         *
-         * @param int    $memberId       ID du membre
-         * @param string $slug           Slug du trophée
-         * @param int    $assignmentId   ID de l'attribution
-         * @param array  $trophy         Données du trophée
-         */
-        do_action('mj_member_trophy_auto_assigned', $memberId, $slug, $result, $trophy);
+        // Le hook mj_member_trophy_awarded est déclenché directement dans MjMemberTrophies::award()
 
         return (int) $result;
     }

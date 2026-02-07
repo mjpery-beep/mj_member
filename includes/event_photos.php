@@ -1138,6 +1138,10 @@ if (!function_exists('mj_member_event_photos_submission_handler')) {
             $redirect_with_notice('store');
         }
 
+        // Déclencher la notification pour la photo uploadée
+        $photo_status = $should_auto_approve ? MjEventPhotos::STATUS_APPROVED : MjEventPhotos::STATUS_PENDING;
+        do_action('mj_member_event_photo_created', (int) $insert, $event_id, (int) $current_member->id, $photo_status);
+
         // Attribuer le trophée "Première photo publiée" au membre
         if (class_exists('Mj\\Member\\Classes\\MjTrophyService')) {
             \Mj\Member\Classes\MjTrophyService::assignBySlug(

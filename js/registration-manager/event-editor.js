@@ -95,8 +95,10 @@
         addLocationLink: 'Ajouter un lieu',
         editLocation: 'Modifier le lieu',
         removeLocationLink: 'Retirer',
-        locationSection: 'Lieux et equipe',
-        locationSectionHint: "Associez un ou plusieurs lieux a l evenement avec leur role.",
+        locationSection: 'Lieux',
+        locationSectionHint: "Associez un ou plusieurs lieux a l'evenement avec leur role.",
+        teamSection: 'Equipe',
+        teamSectionHint: "Selectionnez les animateurs et benevoles referents pour cet evenement.",
         locationLinksTitle: 'Lieux associes',
         locationLinksHint: 'Ajoutez plusieurs lieux avec differents roles: depart, activite, retour, etc.',
         locationLinksEmpty: 'Aucun lieu associe.',
@@ -3695,7 +3697,6 @@
         };
 
         return h('div', { class: 'mj-regmgr-location-links' }, [
-            h('p', { class: 'mj-regmgr-multiselect__label' }, getString(strings, 'locationLinksTitle', 'Lieux associes')),
             links.length === 0 && h('p', { class: 'mj-regmgr-location-links__empty' }, getString(strings, 'locationLinksEmpty', 'Aucun lieu associe.')),
             links.length > 0 && h('div', { class: 'mj-regmgr-location-links__list' }, links.map(function (link, idx) {
                 return h(LocationLinkRow, {
@@ -4786,8 +4787,8 @@
 
                 h('div', { class: 'mj-regmgr-event-editor__section' }, [
                     h('div', { class: 'mj-regmgr-event-editor__section-header' }, [
-                        h('h2', null, getString(strings, 'locationSection', 'Lieu et equipe')),
-                        h('p', { class: 'mj-regmgr-event-editor__section-hint' }, getString(strings, 'locationSectionHint', "Choisissez les lieux et les referents associes.")),
+                        h('h2', null, getString(strings, 'locationSection', 'Lieux')),
+                        h('p', { class: 'mj-regmgr-event-editor__section-hint' }, getString(strings, 'locationSectionHint', "Associez un ou plusieurs lieux a l'evenement avec leur role.")),
                     ]),
                     h(LocationLinksEditor, {
                         links: locationLinks,
@@ -4798,6 +4799,13 @@
                         onEditLocation: handleEditLocationForLinks,
                         canManage: manageLocationEnabled,
                     }),
+                ]),
+
+                (animateurOptions.length > 0 || volunteerOptions.length > 0) && h('div', { class: 'mj-regmgr-event-editor__section' }, [
+                    h('div', { class: 'mj-regmgr-event-editor__section-header' }, [
+                        h('h2', null, getString(strings, 'teamSection', 'Equipe')),
+                        h('p', { class: 'mj-regmgr-event-editor__section-hint' }, getString(strings, 'teamSectionHint', "Selectionnez les animateurs et benevoles referents pour cet evenement.")),
+                    ]),
                     animateurOptions.length > 0 && h('div', { class: 'mj-regmgr-multiselect' }, [
                         h('p', { class: 'mj-regmgr-multiselect__label' }, getString(strings, 'animateurs', 'Animateurs referents')),
                         h('div', { class: 'mj-regmgr-multiselect__options' }, animateurOptions.map(function (option) {

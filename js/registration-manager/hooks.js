@@ -70,6 +70,33 @@
     }
 
     /**
+     * Formate un temps écoulé relatif (ex: "2h", "3j", "1sem")
+     */
+    function formatTimeAgo(dateStr) {
+        if (!dateStr) return '';
+        var date = new Date(dateStr);
+        if (isNaN(date.getTime())) return '';
+
+        var now = new Date();
+        var diffMs = now.getTime() - date.getTime();
+        if (diffMs < 0) return '';
+
+        var diffSec = Math.floor(diffMs / 1000);
+        var diffMin = Math.floor(diffSec / 60);
+        var diffHour = Math.floor(diffMin / 60);
+        var diffDay = Math.floor(diffHour / 24);
+        var diffWeek = Math.floor(diffDay / 7);
+        var diffMonth = Math.floor(diffDay / 30);
+
+        if (diffMin < 1) return 'à l\'instant';
+        if (diffMin < 60) return diffMin + 'min';
+        if (diffHour < 24) return diffHour + 'h';
+        if (diffDay < 7) return diffDay + 'j';
+        if (diffWeek < 4) return diffWeek + 'sem';
+        return diffMonth + 'mois';
+    }
+
+    /**
      * Extrait les initiales d'un nom
      */
     function getInitials(name) {
@@ -446,6 +473,7 @@
         escapeHtml: escapeHtml,
         formatDate: formatDate,
         formatShortDate: formatShortDate,
+        formatTimeAgo: formatTimeAgo,
         getInitials: getInitials,
         stringToColor: stringToColor,
         debounce: debounce,

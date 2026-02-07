@@ -316,6 +316,17 @@
             },
 
             /**
+             * Met à jour les occurrences assignées à une inscription
+             */
+            updateRegistrationOccurrences: function (registrationId, mode, occurrences) {
+                return post('mj_regmgr_update_registration_occurrences', {
+                    registrationId: registrationId,
+                    mode: mode,
+                    occurrences: JSON.stringify(occurrences || []),
+                });
+            },
+
+            /**
              * Met à jour la présence
              */
             updateAttendance: function (eventId, memberId, occurrence, status) {
@@ -540,6 +551,16 @@
                     ideaId: ideaId,
                     memberId: memberId,
                     data: data,
+                });
+            },
+
+            /**
+             * Supprime une idée liée à un membre
+             */
+            deleteMemberIdea: function (ideaId, memberId) {
+                return post('mj_regmgr_delete_member_idea', {
+                    ideaId: ideaId,
+                    memberId: memberId,
                 });
             },
 

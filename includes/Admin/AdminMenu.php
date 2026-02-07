@@ -21,6 +21,7 @@ use Mj\Member\Admin\Page\TodoProjectsPage;
 use Mj\Member\Admin\Page\BadgesPage;
 use Mj\Member\Admin\Page\TrophiesPage;
 use Mj\Member\Admin\Page\LevelsPage;
+use Mj\Member\Admin\Page\NotificationsPage;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -234,5 +235,15 @@ final class AdminMenu
             array(TodoProjectsPage::class, 'render')
         );
         TodoProjectsPage::registerHooks($projectsHook);
+
+        $notificationsHook = add_submenu_page(
+            'mj_member',
+            __('Notifications', 'mj-member'),
+            __('Notifications', 'mj-member'),
+            $capability,
+            NotificationsPage::slug(),
+            array(NotificationsPage::class, 'render')
+        );
+        NotificationsPage::registerHooks($notificationsHook);
     }
 }

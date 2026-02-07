@@ -859,10 +859,6 @@ if (!function_exists('mj_member_render_login_modal_component')) {
                                 <?php endif; ?>
                             </span>
                         <?php endif; ?>
-                        <?php if ($unread_total_count > 0) : ?>
-                            <?php $badge_value = $unread_total_count > 99 ? '99+' : number_format_i18n($unread_total_count); ?>
-                            <span class="mj-member-login-component__badge" data-unread-count="<?php echo esc_attr($unread_total_count); ?>"><?php echo esc_html($badge_value); ?></span>
-                        <?php endif; ?>
                     </span>
                     <span class="mj-member-login-component__trigger-info">
                         <span class="mj-member-login-component__trigger-label"><?php echo esc_html($account_button_label); ?></span>

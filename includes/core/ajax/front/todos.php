@@ -126,6 +126,17 @@ if (!function_exists('mj_member_ajax_todos_toggle')) {
             wp_send_json_error(array('message' => $result->get_error_message()));
         }
 
+        // Notifier les autres membres assignés si la tâche est terminée
+        if ($complete) {
+            $memberId = (int) $member->get('id', 0);
+            $todoTitle = isset($todo['title']) ? (string) $todo['title'] : '';
+            $assigneeIds = isset($todo['assigned_member_ids']) ? (array) $todo['assigned_member_ids'] : array();
+            if (empty($assigneeIds) && isset($todo['assigned_member_id']) && (int) $todo['assigned_member_id'] > 0) {
+                $assigneeIds = array((int) $todo['assigned_member_id']);
+            }
+            do_action('mj_member_todo_completed', $todoId, $memberId, $todoTitle, $assigneeIds);
+        }
+
         $updated = MjTodos::get($todoId);
         if (!$updated) {
             wp_send_json_error(array('message' => __('Tâche introuvable après mise à jour.', 'mj-member')));
@@ -257,6 +268,11 @@ if (!function_exists('mj_member_ajax_todos_create')) {
         $todo = MjTodos::get($todoId);
         if (!$todo) {
             wp_send_json_error(array('message' => __('Impossible de récupérer la tâche créée.', 'mj-member')));
+        }
+
+        // Notifier les membres assignés
+        if (!empty($assignedMemberIds)) {
+            do_action('mj_member_todo_assigned', $todoId, $assignedMemberIds, $title, get_current_user_id());
         }
 
         $projectMap = array();
@@ -456,6 +472,14 @@ if (!function_exists('mj_member_ajax_todo_note_create')) {
         if (!is_array($note)) {
             wp_send_json_error(array('message' => __('Impossible de récupérer la note créée.', 'mj-member')));
         }
+
+        // Notifier les autres membres assignés
+        $todoTitle = isset($todo['title']) ? (string) $todo['title'] : '';
+        $assigneeIds = isset($todo['assigned_member_ids']) ? (array) $todo['assigned_member_ids'] : array();
+        if (empty($assigneeIds) && isset($todo['assigned_member_id']) && (int) $todo['assigned_member_id'] > 0) {
+            $assigneeIds = array((int) $todo['assigned_member_id']);
+        }
+        do_action('mj_member_todo_note_added', $todoId, (int) $created, $memberId, $todoTitle, $assigneeIds);
 
         $payload = mj_member_todo_prepare_note_payload($note);
 
@@ -761,6 +785,14 @@ if (!function_exists('mj_member_ajax_todo_media_attach')) {
         if (is_wp_error($result)) {
             wp_send_json_error(array('message' => $result->get_error_message()));
         }
+
+        // Notifier les autres membres assignés
+        $todoTitle = isset($todo['title']) ? (string) $todo['title'] : '';
+        $assigneeIds = isset($todo['assigned_member_ids']) ? (array) $todo['assigned_member_ids'] : array();
+        if (empty($assigneeIds) && isset($todo['assigned_member_id']) && (int) $todo['assigned_member_id'] > 0) {
+            $assigneeIds = array((int) $todo['assigned_member_id']);
+        }
+        do_action('mj_member_todo_media_added', $todoId, $memberId, $todoTitle, $assigneeIds, count($attachmentIds));
 
         $updated = MjTodos::get($todoId);
         if (!$updated) {

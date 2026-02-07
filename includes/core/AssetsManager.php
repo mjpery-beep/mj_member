@@ -300,6 +300,10 @@ final class AssetsManager
         self::registerStyle('mj-member-notification-preferences', 'css/notification-preferences.css');
         self::registerScript('mj-member-notification-preferences', 'js/notification-preferences.js');
 
+        // Notification Bell Widget
+        self::registerStyle('mj-member-notification-bell', 'css/notification-bell.css');
+        self::registerScript('mj-member-notification-bell', 'js/notification-bell.js', array('jquery'));
+
         // Registration Manager Widget
         self::registerStyle('mj-member-registration-manager', 'css/registration-manager.css', array('mj-member-components'));
         self::registerScript('mj-member-regmgr-services', 'js/registration-manager/services.js', array('mj-member-utils'));
@@ -485,6 +489,15 @@ final class AssetsManager
             case 'notification-preferences':
                 wp_enqueue_style('mj-member-notification-preferences');
                 wp_enqueue_script('mj-member-notification-preferences');
+                break;
+
+            case 'notification-bell':
+                wp_enqueue_style('mj-member-notification-bell');
+                wp_enqueue_script('mj-member-notification-bell');
+                wp_localize_script('mj-member-notification-bell', 'mjNotificationBell', array(
+                    'ajaxUrl' => admin_url('admin-ajax.php'),
+                    'nonce' => wp_create_nonce('mj-notification-bell'),
+                ));
                 break;
 
             case 'registration-manager':

@@ -148,8 +148,21 @@ final class EventFormOptionsBuilder
                     $display = 'Animateur #' . $animateurId;
                 }
                 $animateurMap[$animateurId] = $display;
+                $avatarUrl = '';
+                if (!empty($animateurItem->photo_id)) {
+                    $avatarUrl = wp_get_attachment_image_url((int) $animateurItem->photo_id, 'thumbnail') ?: '';
+                }
+                if ($avatarUrl === '' && !empty($animateurItem->wp_user_id)) {
+                    $avatarUrl = get_avatar_url((int) $animateurItem->wp_user_id, array('size' => 64));
+                }
+                if ($avatarUrl === '' && !empty($animateurItem->email) && is_email($animateurItem->email)) {
+                    $avatarUrl = get_avatar_url($animateurItem->email, array('size' => 64));
+                }
+                $animateurAttr[$animateurId] = array(
+                    'data-avatar' => $avatarUrl !== '' ? esc_url_raw($avatarUrl) : '',
+                );
                 if (!empty($animateurItem->email) && is_email($animateurItem->email)) {
-                    $animateurAttr[$animateurId] = array('data-email' => (string) $animateurItem->email);
+                    $animateurAttr[$animateurId]['data-email'] = (string) $animateurItem->email;
                 }
             }
         }
@@ -172,8 +185,21 @@ final class EventFormOptionsBuilder
                     $display = 'Bénévole #' . $volunteerId;
                 }
                 $volunteerMap[$volunteerId] = $display;
+                $avatarUrl = '';
+                if (!empty($volunteerItem->photo_id)) {
+                    $avatarUrl = wp_get_attachment_image_url((int) $volunteerItem->photo_id, 'thumbnail') ?: '';
+                }
+                if ($avatarUrl === '' && !empty($volunteerItem->wp_user_id)) {
+                    $avatarUrl = get_avatar_url((int) $volunteerItem->wp_user_id, array('size' => 64));
+                }
+                if ($avatarUrl === '' && !empty($volunteerItem->email) && is_email($volunteerItem->email)) {
+                    $avatarUrl = get_avatar_url($volunteerItem->email, array('size' => 64));
+                }
+                $volunteerAttr[$volunteerId] = array(
+                    'data-avatar' => $avatarUrl !== '' ? esc_url_raw($avatarUrl) : '',
+                );
                 if (!empty($volunteerItem->email) && is_email($volunteerItem->email)) {
-                    $volunteerAttr[$volunteerId] = array('data-email' => (string) $volunteerItem->email);
+                    $volunteerAttr[$volunteerId]['data-email'] = (string) $volunteerItem->email;
                 }
             }
         }

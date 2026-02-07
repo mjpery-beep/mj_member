@@ -843,7 +843,7 @@ function mj_regmgr_collect_event_editor_assets($event, array &$form_values) {
         }
     }
 
-    $animateur_filters = array('role' => MjRoles::ANIMATEUR);
+    $animateur_filters = array('roles' => array(MjRoles::ANIMATEUR, MjRoles::COORDINATEUR));
     $animateurs = MjMembers::getAll(0, 0, 'last_name', 'ASC', '', $animateur_filters);
     if (!is_array($animateurs)) {
         $animateurs = array();

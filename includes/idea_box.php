@@ -198,6 +198,10 @@ if (!function_exists('mj_member_ajax_idea_box_create')) {
         }
 
         $ideaId = (int) $created;
+
+        // Déclencher la notification pour la nouvelle idée
+        do_action('mj_member_idea_published', $ideaId, $memberId, $title, $content);
+
         $ideas = MjIdeas::get_with_votes(array(
             'include_ids' => array($ideaId),
             'status' => MjIdeas::STATUS_PUBLISHED,
@@ -248,6 +252,19 @@ if (!function_exists('mj_member_ajax_idea_box_vote')) {
             $result = MjIdeaVotes::remove($ideaId, $memberId);
         } else {
             $result = MjIdeaVotes::add($ideaId, $memberId);
+
+            // Déclencher une notification si le vote a été ajouté avec succès
+            if ($result === true) {
+                /**
+                 * Action déclenchée quand un membre vote pour une idée.
+                 *
+                 * @param int $ideaId   ID de l'idée
+                 * @param int $ownerId  ID du propriétaire de l'idée
+                 * @param int $voterId  ID du membre qui a voté
+                 * @param array $idea   Données de l'idée
+                 */
+                do_action('mj_member_idea_voted', $ideaId, $ownerId, $memberId, $idea);
+            }
         }
 
         if (is_wp_error($result)) {

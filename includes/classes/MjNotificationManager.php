@@ -502,44 +502,38 @@ class MjNotificationManager {
             return array();
         }
 
-        if (!function_exists('get_users')) {
-            return array();
-        }
-
-        $users = get_users(array(
-            'role' => $role,
-            'fields' => array('ID'),
-        ));
-
-        if (empty($users)) {
-            return array();
-        }
-
         $results = array();
         $seen = array();
 
-        foreach ($users as $user) {
-            if (!isset($user->ID)) {
-                continue;
-            }
+        // Chercher les membres MJ Member avec ce rôle
+        if (class_exists(MjMembers::class)) {
+            global $wpdb;
+            $table = MjMembers::getTableName(MjMembers::TABLE_NAME);
+            if (!empty($table)) {
+                $members = $wpdb->get_results($wpdb->prepare(
+                    "SELECT id, wp_user_id FROM {$table} WHERE role = %s AND status = 'active'",
+                    $role
+                ));
 
-            $user_id = (int) $user->ID;
-            if ($user_id <= 0 || isset($seen[$user_id])) {
-                continue;
-            }
+                if (!empty($members)) {
+                    foreach ($members as $member) {
+                        $member_id = (int) $member->id;
+                        if ($member_id <= 0 || isset($seen['member:' . $member_id])) {
+                            continue;
+                        }
 
-            $seen[$user_id] = true;
+                        $seen['member:' . $member_id] = true;
 
-            $spec = array('user_id' => $user_id, 'role' => $role);
+                        $spec = array('member_id' => $member_id);
 
-            if (class_exists(MjMembers::class)) {
-                $member = MjMembers::getByWpUserId($user_id);
-                if ($member && isset($member->id)) {
-                    $spec['member_id'] = (int) $member->id;
+                        if (!empty($member->wp_user_id)) {
+                            $spec['user_id'] = (int) $member->wp_user_id;
+                        }
+
+                        $results[] = $spec;
+                    }
                 }
             }
-
-            $results[] = $spec;
         }
 
         return $results;
