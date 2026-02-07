@@ -2,6 +2,7 @@
 
 use Mj\Member\Core\Config;
 use Mj\Member\Classes\Crud\MjEventOccurrences;
+use Mj\Member\Classes\Crud\MjEventLocationLinks;
 use Mj\Member\Classes\Forms\EventFormDataMapper;
 use Mj\Member\Classes\Forms\EventFormFactory;
 use Mj\Member\Classes\Forms\EventFormOptionsBuilder;
@@ -28,6 +29,7 @@ require_once $basePath . 'includes/classes/crud/MjEventAnimateurs.php';
 require_once $basePath . 'includes/classes/crud/MjEventVolunteers.php';
 require_once $basePath . 'includes/classes/crud/MjEventRegistrations.php';
 require_once $basePath . 'includes/classes/crud/MjEventLocations.php';
+require_once $basePath . 'includes/classes/crud/MjEventLocationLinks.php';
 require_once $basePath . 'includes/classes/crud/MjEventAttendance.php';
 require_once $basePath . 'includes/classes/MjEventSchedule.php';
 
@@ -1109,6 +1111,9 @@ if ($event) {
     $form_values['animateur_ids'] = $assigned_animateurs;
     $form_values['animateur_id'] = !empty($assigned_animateurs) ? (int) $assigned_animateurs[0] : 0;
     $form_values['volunteer_ids'] = $assigned_volunteers;
+
+    // Location links (multiple locations with types)
+    $form_values['location_links'] = class_exists(MjEventLocationLinks::class) ? MjEventLocationLinks::get_with_locations($event_id) : array();
     $occurrence_mode_value = isset($event->occurrence_selection_mode) ? sanitize_key((string) $event->occurrence_selection_mode) : 'member_choice';
     if (!in_array($occurrence_mode_value, array('member_choice', 'all_occurrences'), true)) {
         $occurrence_mode_value = 'member_choice';
@@ -3051,6 +3056,51 @@ $title_text = ($action === 'add') ? 'Ajouter un evenement' : 'Modifier l eveneme
                             <p class="description">Choisissez un lieu pour afficher un apercu.</p>
                         <?php endif; ?>
                     </div>
+                </td>
+            </tr>
+            <?php
+            // Location links display
+            $location_links_display = isset($form_values['location_links']) && is_array($form_values['location_links']) ? $form_values['location_links'] : array();
+            $location_type_labels = class_exists(MjEventLocationLinks::class) ? MjEventLocationLinks::get_type_labels() : array(
+                'departure' => 'Lieu de départ',
+                'activity' => "Lieu d'activité",
+                'return' => 'Lieu de retour',
+                'other' => 'Autre',
+            );
+            ?>
+            <tr>
+                <th scope="row"><?php esc_html_e('Lieux associés', 'mj-member'); ?></th>
+                <td>
+                    <?php if (!empty($location_links_display)) : ?>
+                        <table class="widefat striped" style="max-width: 600px;">
+                            <thead>
+                                <tr>
+                                    <th><?php esc_html_e('Lieu', 'mj-member'); ?></th>
+                                    <th><?php esc_html_e('Type', 'mj-member'); ?></th>
+                                    <th><?php esc_html_e('Ville', 'mj-member'); ?></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($location_links_display as $link) : ?>
+                                    <?php
+                                    $link_location = isset($link['location']) ? $link['location'] : null;
+                                    $link_name = $link_location && isset($link_location['name']) ? $link_location['name'] : 'Lieu #' . (isset($link['locationId']) ? $link['locationId'] : 0);
+                                    $link_city = $link_location && isset($link_location['city']) ? $link_location['city'] : '';
+                                    $link_type = isset($link['locationType']) ? $link['locationType'] : 'activity';
+                                    $link_type_label = isset($location_type_labels[$link_type]) ? $location_type_labels[$link_type] : $link_type;
+                                    ?>
+                                    <tr>
+                                        <td><strong><?php echo esc_html($link_name); ?></strong></td>
+                                        <td><span class="mj-location-type-badge mj-location-type-badge--<?php echo esc_attr($link_type); ?>"><?php echo esc_html($link_type_label); ?></span></td>
+                                        <td><?php echo esc_html($link_city); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php else : ?>
+                        <p class="description"><?php esc_html_e('Aucun lieu associé. Utilisez le widget Gestionnaire pour associer plusieurs lieux avec différents rôles.', 'mj-member'); ?></p>
+                    <?php endif; ?>
+                    <p class="description" style="margin-top: 8px;"><?php esc_html_e('La gestion multi-lieux (départ, activité, retour) est disponible depuis le widget Gestionnaire.', 'mj-member'); ?></p>
                 </td>
             </tr>
             <tr>

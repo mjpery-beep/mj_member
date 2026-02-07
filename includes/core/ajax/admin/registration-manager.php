@@ -12,6 +12,7 @@ use Mj\Member\Classes\Crud\MjEventOccurrences;
 use Mj\Member\Classes\Crud\MjEventAnimateurs;
 use Mj\Member\Classes\Crud\MjEventVolunteers;
 use Mj\Member\Classes\Crud\MjEventLocations;
+use Mj\Member\Classes\Crud\MjEventLocationLinks;
 use Mj\Member\Classes\Crud\MjEventPhotos;
 use Mj\Member\Classes\Crud\MjContactMessages;
 use Mj\Member\Classes\Crud\MjIdeas;
@@ -1398,6 +1399,12 @@ function mj_regmgr_get_event_details() {
         }
     }
 
+    // Get location links (multiple locations with types)
+    $location_links = array();
+    if (class_exists(MjEventLocationLinks::class)) {
+        $location_links = MjEventLocationLinks::get_with_locations($event_id);
+    }
+
     // Get animateurs
     $animateurs = array();
     if (class_exists('Mj\Member\Classes\Crud\MjEventAnimateurs')) {
@@ -1469,6 +1476,7 @@ function mj_regmgr_get_event_details() {
             'occurrences' => $occurrences,
             'occurrenceGenerator' => $occurrence_generator_plan,
             'location' => $location,
+            'locationLinks' => $location_links,
             'animateurs' => $animateurs,
             'frontUrl' => $front_url ?: null,
             'eventPageUrl' => !empty($event_page_url) ? $event_page_url : null,
@@ -1681,6 +1689,12 @@ function mj_regmgr_update_event() {
     }
     if (class_exists(MjEventVolunteers::class)) {
         MjEventVolunteers::sync_for_event($event_id, $volunteer_ids);
+    }
+
+    // Sync location links if provided
+    $location_links = isset($build['location_links']) && is_array($build['location_links']) ? $build['location_links'] : null;
+    if ($location_links !== null && class_exists(MjEventLocationLinks::class)) {
+        MjEventLocationLinks::sync_for_event($event_id, $location_links);
     }
 
     $updated_event = MjEvents::find($event_id);
@@ -3192,6 +3206,19 @@ function mj_regmgr_prepare_event_form_values($event, array $schedule_weekdays, a
         $volunteer_ids = class_exists(MjEventVolunteers::class) ? MjEventVolunteers::get_ids_by_event((int) $event->id) : array();
         $form_values['volunteer_ids'] = array_values(array_unique(array_map('intval', $volunteer_ids)));
 
+        // Location links (multiple locations with types)
+        $location_links = class_exists(MjEventLocationLinks::class) ? MjEventLocationLinks::get_by_event((int) $event->id) : array();
+        $form_values['location_links'] = array_map(function($link) {
+            return array(
+                'locationId' => $link['location_id'],
+                'locationType' => $link['location_type'],
+                'customLabel' => isset($link['custom_label']) ? $link['custom_label'] : '',
+                'meetingTime' => isset($link['meeting_time']) ? $link['meeting_time'] : '',
+                'meetingTimeEnd' => isset($link['meeting_time_end']) ? $link['meeting_time_end'] : '',
+                'sortOrder' => $link['sort_order'],
+            );
+        }, $location_links);
+
         $form_values = mj_regmgr_fill_schedule_values($event, $form_values, $schedule_weekdays, $schedule_month_ordinals);
 
     } else {
@@ -3443,6 +3470,7 @@ function mj_regmgr_collect_event_editor_assets($event, array &$form_values) {
         'article_categories' => $article_categories,
         'articles' => $articles,
         'locations' => $locations,
+        'location_type_labels' => class_exists(MjEventLocationLinks::class) ? MjEventLocationLinks::get_type_labels() : array(),
         'animateurs' => $animateurs,
         'volunteers' => $volunteers,
         'available_animateur_ids' => $available_animateur_ids,
@@ -4004,6 +4032,56 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
     }
     $volunteer_ids = array_values($volunteer_ids);
 
+    // Location links (multiple locations with types)
+    $location_links = null;
+    if (isset($form_values['location_links']) && is_array($form_values['location_links'])) {
+        $location_links = array();
+        $valid_location_types = class_exists(MjEventLocationLinks::class) ? MjEventLocationLinks::get_valid_types() : array('departure', 'activity', 'return', 'other');
+        $sort = 0;
+        foreach ($form_values['location_links'] as $link) {
+            $link_location_id = isset($link['locationId']) ? (int) $link['locationId'] : (isset($link['location_id']) ? (int) $link['location_id'] : 0);
+            $link_type = isset($link['locationType']) ? sanitize_key($link['locationType']) : (isset($link['location_type']) ? sanitize_key($link['location_type']) : 'activity');
+            $link_custom_label = isset($link['customLabel']) ? sanitize_textarea_field($link['customLabel']) : (isset($link['custom_label']) ? sanitize_textarea_field($link['custom_label']) : '');
+            $link_meeting_time = isset($link['meetingTime']) ? sanitize_text_field($link['meetingTime']) : (isset($link['meeting_time']) ? sanitize_text_field($link['meeting_time']) : '');
+            $link_meeting_time_end = isset($link['meetingTimeEnd']) ? sanitize_text_field($link['meetingTimeEnd']) : (isset($link['meeting_time_end']) ? sanitize_text_field($link['meeting_time_end']) : '');
+            
+            if ($link_location_id <= 0) {
+                continue;
+            }
+            if (!empty($references['location_ids']) && !isset($references['location_ids'][$link_location_id])) {
+                continue;
+            }
+            if (!in_array($link_type, $valid_location_types, true)) {
+                $link_type = 'activity';
+            }
+            
+            $location_links[] = array(
+                'location_id' => $link_location_id,
+                'location_type' => $link_type,
+                'custom_label' => $link_custom_label,
+                'meeting_time' => $link_meeting_time,
+                'meeting_time_end' => $link_meeting_time_end,
+                'sort_order' => $sort,
+            );
+            $sort++;
+        }
+    }
+
+    // If location_links are provided, derive primary location_id from first activity or first link
+    if ($location_links !== null && !empty($location_links)) {
+        $primary_location = 0;
+        foreach ($location_links as $link) {
+            if ($primary_location === 0) {
+                $primary_location = $link['location_id'];
+            }
+            if ($link['location_type'] === 'activity') {
+                $primary_location = $link['location_id'];
+                break;
+            }
+        }
+        $location_id = $primary_location;
+    }
+
     $primary_animateur_id = !empty($animateur_ids) ? (int) $animateur_ids[0] : 0;
 
     $allow_guardian_registration = !empty($form_values['allow_guardian_registration']);
@@ -4090,6 +4168,7 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
             'payload' => array(),
             'animateur_ids' => array(),
             'volunteer_ids' => array(),
+            'location_links' => null,
             'values' => $form_values,
         );
     }
@@ -4105,6 +4184,7 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
         'payload' => $payload,
         'animateur_ids' => $animateur_ids,
         'volunteer_ids' => $volunteer_ids,
+        'location_links' => $location_links,
         'values' => $form_values,
     );
 }

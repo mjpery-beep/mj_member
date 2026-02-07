@@ -646,6 +646,54 @@
     color: #b45309;
 }
 
+.mj-member-events-calendar__badge--registered {
+    background: rgba(59, 130, 246, 0.18);
+    color: #1d4ed8;
+}
+
+.mj-member-events-calendar__badge--icon {
+    padding: 3px 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.mj-member-events-calendar__badge--icon svg {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+}
+
+.mj-member-events-calendar__badge-name {
+    font-weight: 600;
+}
+
+.mj-member-events-calendar__badge-status {
+    font-weight: 500;
+    opacity: 0.85;
+}
+
+.mj-member-events-calendar__badge-name + .mj-member-events-calendar__badge-status::before {
+    content: "—";
+    margin: 0 4px;
+    opacity: 0.5;
+}
+
+.mj-member-events-calendar__badge--paid {
+    background: rgba(34, 197, 94, 0.18);
+    color: #047857;
+}
+
+.mj-member-events-calendar__badge--unpaid {
+    background: rgba(249, 115, 22, 0.18);
+    color: #b45309;
+}
+
+.mj-member-events-calendar__badge--waitlist {
+    background: rgba(148, 163, 184, 0.2);
+    color: #475569;
+}
+
 /* ==========================================================================
    Event Type Badge
    ========================================================================== */
@@ -842,6 +890,62 @@
     font-size: 0.85rem;
     line-height: 1.45;
     color: var(--mj-events-calendar-event-time);
+}
+
+/* ==========================================================================
+   Event Preview - Multiple Locations
+   ========================================================================== */
+
+.mj-member-events-calendar__event-preview-locations {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mj-member-events-calendar__event-preview-locations-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mj-member-events-calendar__event-preview-location-item {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--mj-events-calendar-event-text);
+    flex-wrap: wrap;
+}
+
+.mj-member-events-calendar__event-preview-location-type {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--mj-events-calendar-accent);
+    background: rgba(99, 102, 241, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.mj-member-events-calendar__event-preview-location-name {
+    font-weight: 600;
+    color: var(--mj-events-calendar-event-text);
+}
+
+.mj-member-events-calendar__event-preview-location-address {
+    color: var(--mj-events-calendar-event-time);
+    font-size: 0.8rem;
+}
+
+.mj-member-events-calendar__event-preview-location-name + .mj-member-events-calendar__event-preview-location-address::before {
+    content: "—";
+    margin: 0 4px;
+    opacity: 0.5;
 }
 
 .mj-member-events-calendar__event-preview-recurring {

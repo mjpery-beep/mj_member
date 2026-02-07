@@ -267,6 +267,29 @@ function mj_member_get_event_volunteers_table_name() {
     return $cached;
 }
 
+function mj_member_get_event_location_links_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_event_location_links',
+        $wpdb->prefix . 'event_location_links',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
 function mj_member_get_event_attendance_table_name() {
     return mj_member_get_event_registrations_table_name();
 }
@@ -4833,5 +4856,45 @@ function mj_uninstall()
     $wpdb->query("DROP TABLE IF EXISTS $table_name");
 }
 
+/**
+ * Ensure the event_location_links table exists
+ * 
+ * This table allows associating multiple locations to an event with different types:
+ * - departure: Lieu de départ
+ * - activity: Lieu d'activité
+ * - return: Lieu de retour  
+ * - other: Autre
+ */
+function mj_member_ensure_event_location_links_table() {
+    global $wpdb;
+
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $table = mj_member_get_event_location_links_table_name();
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql = "CREATE TABLE {$table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        event_id bigint(20) unsigned NOT NULL,
+        location_id bigint(20) unsigned NOT NULL,
+        location_type varchar(30) NOT NULL DEFAULT 'activity',
+        custom_label varchar(100) DEFAULT NULL,
+        meeting_time varchar(10) DEFAULT NULL,
+        meeting_time_end varchar(10) DEFAULT NULL,
+        sort_order int unsigned NOT NULL DEFAULT 0,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uniq_event_location_type (event_id, location_id, location_type),
+        KEY idx_event (event_id),
+        KEY idx_location (location_id),
+        KEY idx_type (location_type)
+    ) {$charset_collate};";
+
+    dbDelta($sql);
+}
+
 add_action('init', 'mj_member_run_schema_upgrade', 5);
 add_action('admin_init', 'mj_check_and_add_columns');
+add_action('plugins_loaded', 'mj_member_ensure_event_location_links_table', 20);

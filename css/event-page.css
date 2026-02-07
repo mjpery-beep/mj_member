@@ -1096,6 +1096,220 @@
     font-size: 1rem;
 }
 
+/* Location Links (multiple locations with types) */
+.mj-event-page__location-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.mj-event-page__location-link-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+.mj-event-page__location-type-column {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.mj-event-page__location-link-cover {
+    flex-shrink: 0;
+    width: 80px;
+    height: 80px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+}
+
+.mj-event-page__location-link-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.mj-event-page__location-type-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    border-radius: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.mj-event-page__location-type-icon {
+    flex-shrink: 0;
+}
+
+.mj-event-page__location-type-badge--departure {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.mj-event-page__location-type-badge--activity {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.mj-event-page__location-type-badge--return {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.mj-event-page__location-type-badge--other {
+    background: #f3f4f6;
+    color: #4b5563;
+    display: inline-block;
+    white-space: normal;
+    text-align: left;
+}
+
+.mj-event-page__location-type-badge--other .mj-event-page__location-type-icon {
+    vertical-align: middle;
+    margin-right: 0.35rem;
+}
+
+.mj-event-page__location-link-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.mj-event-page__location-link-content .mj-event-page__location-name {
+    margin: 0 0 0.125rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.mj-event-page__location-link-content .mj-event-page__location-address {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #6b7280;
+}
+
+.mj-event-page__location-meeting-time {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0.35rem 0 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #2563eb;
+}
+
+.mj-event-page__location-meeting-time-icon {
+    flex-shrink: 0;
+}
+
+/* Location link wrapper for folding map */
+.mj-event-page__location-link-wrapper {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.mj-event-page__location-link-item {
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.mj-event-page__location-link-item:hover {
+    background: #f1f5f9;
+}
+
+.mj-event-page__location-link-item[aria-expanded="true"] {
+    border-radius: 8px 8px 0 0;
+    border-bottom: none;
+}
+
+.mj-event-page__location-expand-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    color: #6b7280;
+    transition: transform 0.2s ease;
+}
+
+.mj-event-page__location-link-item[aria-expanded="true"] .mj-event-page__location-expand-icon {
+    transform: rotate(180deg);
+}
+
+/* Map panel (folding) */
+.mj-event-page__location-map-panel {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    overflow: hidden;
+}
+
+.mj-event-page__location-map-container {
+    width: 100%;
+    height: 350px;
+}
+
+.mj-event-page__location-no-map {
+    padding: 2rem;
+    text-align: center;
+    color: #6b7280;
+    background: #f9fafb;
+}
+
+.mj-event-page__location-no-map p {
+    margin: 0;
+}
+
+.mj-event-page__location-map-external {
+    display: block;
+    padding: 0.75rem 1rem;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--mj-event-accent, #0a5b85);
+    text-decoration: none;
+    border-top: 1px solid #e5e7eb;
+    transition: background 0.15s ease;
+}
+
+.mj-event-page__location-map-external:hover {
+    background: #f8f9fa;
+}
+
+.mj-event-page__location-map-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: var(--mj-event-accent, #0a5b85);
+    color: #fff;
+    text-decoration: none;
+    flex-shrink: 0;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mj-event-page__location-map-btn:hover,
+.mj-event-page__location-map-btn:focus {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
 /* =====================================================
    Sidebar / Details Section
    ===================================================== */

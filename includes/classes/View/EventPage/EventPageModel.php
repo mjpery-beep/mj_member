@@ -6,6 +6,7 @@ use DateTime;
 use Mj\Member\Classes\Crud\MjEventAnimateurs;
 use Mj\Member\Classes\Crud\MjEventAttendance;
 use Mj\Member\Classes\Crud\MjEventLocations;
+use Mj\Member\Classes\Crud\MjEventLocationLinks;
 use Mj\Member\Classes\Crud\MjEventOccurrences;
 use Mj\Member\Classes\Crud\MjEventRegistrations;
 use Mj\Member\Classes\Crud\MjEvents;
@@ -1368,7 +1369,100 @@ final class EventPageModel
             'notes' => isset($locationArray['notes']) ? (string) $locationArray['notes'] : '',
             'map_embed' => $mapEmbed ?: '',
             'map_link' => $mapLink,
+            'location_links' => $this->buildLocationLinksData(),
         );
+    }
+
+    /**
+     * Build location links data with types.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildLocationLinksData(): array
+    {
+        $eventId = $this->event ? (int) $this->event->get('id', 0) : 0;
+        if ($eventId <= 0) {
+            return [];
+        }
+
+        $links = MjEventLocationLinks::get_with_locations($eventId);
+        if (empty($links)) {
+            return [];
+        }
+
+        $typeLabels = MjEventLocationLinks::get_type_labels();
+        $result = [];
+
+        foreach ($links as $link) {
+            // Keys from get_with_locations are camelCase
+            $locationId = isset($link['locationId']) ? (int) $link['locationId'] : 0;
+            $locationType = isset($link['locationType']) ? (string) $link['locationType'] : 'other';
+            
+            // Use the pre-computed locationTypeLabel which includes customLabel for 'other' type
+            $typeLabel = isset($link['locationTypeLabel']) ? (string) $link['locationTypeLabel'] : ($typeLabels[$locationType] ?? $typeLabels['other']);
+            $customLabel = isset($link['customLabel']) ? (string) $link['customLabel'] : '';
+            $meetingTime = isset($link['meetingTime']) ? (string) $link['meetingTime'] : '';
+            $meetingTimeEnd = isset($link['meetingTimeEnd']) ? (string) $link['meetingTimeEnd'] : '';
+
+            // Location data is nested in 'location' key
+            $location = isset($link['location']) && is_array($link['location']) ? $link['location'] : [];
+
+            // Extract location details
+            $locationName = isset($location['name']) ? (string) $location['name'] : '';
+            $addressLine = isset($location['address']) ? (string) $location['address'] : '';
+            $postalCode = isset($location['postal_code']) ? (string) $location['postal_code'] : '';
+            $city = isset($location['city']) ? (string) $location['city'] : '';
+            $country = isset($location['country']) ? (string) $location['country'] : '';
+
+            // Build map link - use coordinates if available, otherwise use address
+            $lat = isset($location['latitude']) ? (float) $location['latitude'] : 0.0;
+            $lng = isset($location['longitude']) ? (float) $location['longitude'] : 0.0;
+            $hasValidCoords = (abs($lat) > 0.0001 || abs($lng) > 0.0001);
+            
+            $mapLink = '';
+            if ($hasValidCoords) {
+                // With coordinates, use place format for a marker
+                $mapLink = sprintf('https://www.google.com/maps/place/%f,%f/@%f,%f,17z', $lat, $lng, $lat, $lng);
+            } else {
+                // Build address query for Google Maps - use simpler format with marker
+                $addressParts = array_filter([$addressLine, $postalCode, $city, $country]);
+                if (!empty($addressParts)) {
+                    $addressQuery = implode(', ', $addressParts);
+                    // Use place format for better marker display
+                    $mapLink = 'https://www.google.com/maps/place/' . rawurlencode($addressQuery);
+                }
+            }
+
+            // Get cover URL from cover_id
+            $coverUrl = '';
+            $coverId = isset($location['cover_id']) ? (int) $location['cover_id'] : 0;
+            if ($coverId > 0) {
+                $coverUrl = (string) wp_get_attachment_image_url($coverId, 'thumbnail');
+            }
+
+            $result[] = [
+                'id' => $locationId,
+                'type' => $locationType,
+                'type_label' => $typeLabel,
+                'custom_label' => $customLabel,
+                'meeting_time' => $meetingTime,
+                'meeting_time_end' => $meetingTimeEnd,
+                'name' => $locationName,
+                'short_address' => $addressLine,
+                'street' => isset($location['street']) ? (string) $location['street'] : '',
+                'postal_code' => $postalCode,
+                'city' => $city,
+                'country' => $country,
+                'latitude' => $lat,
+                'longitude' => $lng,
+                'map_link' => $mapLink,
+                'cover_url' => $coverUrl,
+                'notes' => isset($location['notes']) ? (string) $location['notes'] : '',
+                'sort_order' => isset($link['sortOrder']) ? (int) $link['sortOrder'] : 0,
+            ];
+        }
+
+        return $result;
     }
 
     /**

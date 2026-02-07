@@ -470,6 +470,10 @@ final class EventPageViewBuilder
             ? $this->model['location']
             : array();
 
+        $locationLinks = isset($location['location_links']) && is_array($location['location_links'])
+            ? $location['location_links']
+            : array();
+
         return array(
             'has_location' => !empty($location['has_location']),
             'name' => isset($location['name']) ? (string) $location['name'] : '',
@@ -478,6 +482,8 @@ final class EventPageViewBuilder
             'notes' => isset($location['notes']) ? (string) $location['notes'] : '',
             'map_embed' => isset($location['map_embed']) ? (string) $location['map_embed'] : '',
             'map_link' => isset($location['map_link']) ? (string) $location['map_link'] : '',
+            'location_links' => $locationLinks,
+            'has_multiple_locations' => count($locationLinks) > 0,
         );
     }
 

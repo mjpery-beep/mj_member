@@ -12,6 +12,7 @@ use Elementor\Widget_Base;
 use Mj\Member\Core\AssetsManager;
 use Mj\Member\Core\Config;
 use Mj\Member\Classes\Crud\MjEventAnimateurs;
+use Mj\Member\Classes\Crud\MjEventLocationLinks;
 use Mj\Member\Classes\MjEventSchedule;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper;
@@ -578,6 +579,94 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             }
         }
 
+        // Récupérer les inscriptions de l'utilisateur connecté pour marquer les événements
+        $user_registered_events = array();
+        $current_member_id = 0;
+        $children_ids_map = array();
+        if (!$is_elementor_preview && function_exists('mj_member_get_current_member') && class_exists(MjEventRegistrations::class)) {
+            $current_member = mj_member_get_current_member();
+            if ($current_member) {
+                $current_member_id = is_object($current_member) && isset($current_member->id) ? (int) $current_member->id : (is_array($current_member) && isset($current_member['id']) ? (int) $current_member['id'] : 0);
+                $member_ids_to_check = array();
+                if ($current_member_id > 0) {
+                    $member_ids_to_check[] = $current_member_id;
+                    // Inclure les enfants si le membre est un tuteur
+                    if (class_exists('MjMembers') && method_exists('MjMembers', 'getChildrenForGuardian')) {
+                        $children = \MjMembers::getChildrenForGuardian($current_member_id);
+                        if (!empty($children)) {
+                            foreach ($children as $child) {
+                                $child_id = is_object($child) && isset($child->id) ? (int) $child->id : (is_array($child) && isset($child['id']) ? (int) $child['id'] : 0);
+                                $child_name = '';
+                                if (is_object($child)) {
+                                    $child_name = trim((isset($child->first_name) ? $child->first_name : '') . ' ' . (isset($child->last_name) ? substr($child->last_name, 0, 1) . '.' : ''));
+                                } elseif (is_array($child)) {
+                                    $child_name = trim((isset($child['first_name']) ? $child['first_name'] : '') . ' ' . (isset($child['last_name']) ? substr($child['last_name'], 0, 1) . '.' : ''));
+                                }
+                                if ($child_id > 0) {
+                                    $member_ids_to_check[] = $child_id;
+                                    $children_ids_map[$child_id] = $child_name !== '' ? $child_name : __('Enfant', 'mj-member');
+                                }
+                            }
+                        }
+                    }
+                }
+                if (!empty($member_ids_to_check)) {
+                    $active_statuses = array(
+                        MjEventRegistrations::STATUS_CONFIRMED,
+                        MjEventRegistrations::STATUS_PENDING,
+                        MjEventRegistrations::STATUS_WAITLIST,
+                    );
+                    $registrations = MjEventRegistrations::get_all(array(
+                        'member_ids' => $member_ids_to_check,
+                        'statuses' => $active_statuses,
+                    ));
+                    foreach ($registrations as $registration) {
+                        $reg_event_id = 0;
+                        $reg_member_id = 0;
+                        $reg_payment_status = '';
+                        $reg_status = '';
+                        $reg_first_name = '';
+                        if ($registration instanceof \Mj\Member\Classes\Value\EventRegistrationData) {
+                            $reg_event_id = $registration->event_id;
+                            $reg_member_id = $registration->member_id;
+                            $reg_payment_status = $registration->payment_status ?? '';
+                            $reg_status = $registration->statut ?? '';
+                            $reg_first_name = $registration->first_name ?? '';
+                        } elseif (is_object($registration)) {
+                            $reg_event_id = isset($registration->event_id) ? (int) $registration->event_id : 0;
+                            $reg_member_id = isset($registration->member_id) ? (int) $registration->member_id : 0;
+                            $reg_payment_status = isset($registration->payment_status) ? (string) $registration->payment_status : '';
+                            $reg_status = isset($registration->statut) ? (string) $registration->statut : '';
+                            $reg_first_name = isset($registration->first_name) ? (string) $registration->first_name : '';
+                        } elseif (is_array($registration)) {
+                            $reg_event_id = isset($registration['event_id']) ? (int) $registration['event_id'] : 0;
+                            $reg_member_id = isset($registration['member_id']) ? (int) $registration['member_id'] : 0;
+                            $reg_payment_status = isset($registration['payment_status']) ? (string) $registration['payment_status'] : '';
+                            $reg_status = isset($registration['statut']) ? (string) $registration['statut'] : '';
+                            $reg_first_name = isset($registration['first_name']) ? (string) $registration['first_name'] : '';
+                        }
+                        if ($reg_event_id > 0) {
+                            $is_child = isset($children_ids_map[$reg_member_id]);
+                            $registrant_label = $is_child ? $children_ids_map[$reg_member_id] : __('Moi', 'mj-member');
+                            if (!isset($user_registered_events[$reg_event_id])) {
+                                $user_registered_events[$reg_event_id] = array();
+                            }
+                            $user_registered_events[$reg_event_id][] = array(
+                                'member_id' => $reg_member_id,
+                                'is_child' => $is_child,
+                                'name' => $registrant_label,
+                                'first_name' => $reg_first_name,
+                                'payment_status' => $reg_payment_status,
+                                'status' => $reg_status,
+                                'is_paid' => $reg_payment_status === 'paid',
+                                'is_waitlist' => $reg_status === MjEventRegistrations::STATUS_WAITLIST,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         $months = array();
         for ($i = 0; $i < $total_months; $i++) {
             $month_point = $first_month->modify('+' . $i . ' month');
@@ -735,7 +824,13 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 $location_label = sanitize_text_field((string) $event['location']);
             }
 
-            $description_preview = '';
+            // Récupérer les lieux multiples
+            $location_links = array();
+            if (class_exists(MjEventLocationLinks::class) && method_exists(MjEventLocationLinks::class, 'get_with_locations')) {
+                $location_links = MjEventLocationLinks::get_with_locations($event_id);
+            }
+
+            $description_preview = '';;
             if (!empty($event['excerpt']) && !is_array($event['excerpt'])) {
                 $description_preview = wp_strip_all_tags((string) $event['excerpt']);
             } elseif (!empty($event['description']) && !is_array($event['description'])) {
@@ -1041,6 +1136,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     'start_ts' => $start_ts,
                     'price' => $price_value,
                     'location_label' => $location_label,
+                    'location_links' => $location_links,
                     'description_excerpt' => $description_preview,
                     'age_min' => $age_min,
                     'age_max' => $age_max,
@@ -1058,6 +1154,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     'recurring_schedule_preview' => $recurring_schedule_preview,
                     'is_cancelled' => $occurrence_is_cancelled,
                     'cancellation_reason' => $occurrence_cancellation_reason,
+                    'is_registered' => isset($user_registered_events[$event_id]),
+                    'registration_details' => isset($user_registered_events[$event_id]) ? $user_registered_events[$event_id] : array(),
                 );
 
                 $has_any_event = true;
@@ -1097,6 +1195,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                     'palette' => $palette,
                                     'is_cancelled' => $occurrence_is_cancelled,
                                     'cancellation_reason' => $occurrence_cancellation_reason,
+                                    'is_registered' => isset($user_registered_events[$event_id]),
+                                    'registration_details' => isset($user_registered_events[$event_id]) ? $user_registered_events[$event_id] : array(),
                                 );
 
                                 $marker = $segment_start_dt;
@@ -1464,6 +1564,8 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             'palette' => isset($multi_event['palette']) && is_array($multi_event['palette']) ? $multi_event['palette'] : array(),
                             'is_cancelled' => !empty($multi_event['is_cancelled']),
                             'cancellation_reason' => !empty($multi_event['cancellation_reason']) ? (string) $multi_event['cancellation_reason'] : '',
+                            'is_registered' => !empty($multi_event['is_registered']),
+                            'registration_details' => isset($multi_event['registration_details']) ? $multi_event['registration_details'] : array(),
                         );
 
                         $segment_cursor = $segment_cursor->modify('+' . $span_days . ' day');
@@ -1837,6 +1939,39 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 if ($preview_location !== '') {
                                     echo '<div class="mj-member-events-calendar__event-preview-line"><span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Lieu', 'mj-member') . '</span><span class="mj-member-events-calendar__event-preview-value">' . esc_html($preview_location) . '</span></div>';
                                 }
+                                // Afficher les lieux multiples
+                                $preview_location_links = isset($event_entry['location_links']) && is_array($event_entry['location_links']) ? $event_entry['location_links'] : array();
+                                if (!empty($preview_location_links)) {
+                                    echo '<div class="mj-member-events-calendar__event-preview-locations">';
+                                    echo '<span class="mj-member-events-calendar__event-preview-label">' . esc_html__('Lieux', 'mj-member') . '</span>';
+                                    echo '<ul class="mj-member-events-calendar__event-preview-locations-list">';
+                                    foreach ($preview_location_links as $loc_link) {
+                                        $loc_type_label = isset($loc_link['locationTypeLabel']) ? (string) $loc_link['locationTypeLabel'] : '';
+                                        $loc_data = isset($loc_link['location']) && is_array($loc_link['location']) ? $loc_link['location'] : null;
+                                        $loc_name = '';
+                                        $loc_address = '';
+                                        if ($loc_data) {
+                                            $loc_name = isset($loc_data['name']) ? (string) $loc_data['name'] : '';
+                                            $loc_city = isset($loc_data['city']) ? (string) $loc_data['city'] : '';
+                                            if ($loc_city !== '') {
+                                                $loc_address = $loc_city;
+                                            }
+                                        }
+                                        if ($loc_name !== '') {
+                                            echo '<li class="mj-member-events-calendar__event-preview-location-item">';
+                                            if ($loc_type_label !== '') {
+                                                echo '<span class="mj-member-events-calendar__event-preview-location-type">' . esc_html($loc_type_label) . '</span>';
+                                            }
+                                            echo '<span class="mj-member-events-calendar__event-preview-location-name">' . esc_html($loc_name) . '</span>';
+                                            if ($loc_address !== '') {
+                                                echo '<span class="mj-member-events-calendar__event-preview-location-address">' . esc_html($loc_address) . '</span>';
+                                            }
+                                            echo '</li>';
+                                        }
+                                    }
+                                    echo '</ul>';
+                                    echo '</div>';
+                                }
                                 if ($preview_description !== '') {
                                     echo '<p class="mj-member-events-calendar__event-preview-description">' . esc_html($preview_description) . '</p>';
                                 }
@@ -2128,6 +2263,37 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
         $badges = array();
 
+        // Badge inscription avec détails
+        if (!empty($event_entry['is_registered']) && !empty($event_entry['registration_details'])) {
+            $details = $event_entry['registration_details'];
+            foreach ($details as $reg) {
+                $name = isset($reg['name']) ? (string) $reg['name'] : '';
+                $status_label = '';
+                if (!empty($reg['is_waitlist'])) {
+                    $status_label = __('attente', 'mj-member');
+                } elseif (!empty($reg['is_paid'])) {
+                    $status_label = __('payé', 'mj-member');
+                } else {
+                    $status_label = __('à payer', 'mj-member');
+                }
+                $badges[] = array(
+                    'label' => $name,
+                    'sublabel' => $status_label,
+                    'modifier' => 'registered',
+                    'icon' => true,
+                    'is_waitlist' => !empty($reg['is_waitlist']),
+                    'is_paid' => !empty($reg['is_paid']),
+                );
+            }
+        } elseif (!empty($event_entry['is_registered'])) {
+            $badges[] = array(
+                'label' => __('Inscrit', 'mj-member'),
+                'sublabel' => '',
+                'modifier' => 'registered',
+                'icon' => true,
+            );
+        }
+
         if (!empty($event_entry['is_free_participation'])) {
             $badges[] = array(
                 'label' => __('Participation libre', 'mj-member'),
@@ -2157,7 +2323,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
         foreach ($badges as $badge) {
             $label = isset($badge['label']) ? (string) $badge['label'] : '';
-            if ($label === '') {
+            $sublabel = isset($badge['sublabel']) ? (string) $badge['sublabel'] : '';
+            $is_icon = !empty($badge['icon']);
+            if ($label === '' && !$is_icon) {
                 continue;
             }
 
@@ -2172,7 +2340,23 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 }
             }
 
-            $badge_markup_parts[] = '<span class="' . esc_attr(implode(' ', $badge_classes)) . '">' . esc_html($label) . '</span>';
+            if ($is_icon && $modifier === 'registered') {
+                // Badge inscription avec icône et détails
+                $badge_classes[] = 'mj-member-events-calendar__badge--icon';
+                if (!empty($badge['is_waitlist'])) {
+                    $badge_classes[] = 'mj-member-events-calendar__badge--waitlist';
+                } elseif (!empty($badge['is_paid'])) {
+                    $badge_classes[] = 'mj-member-events-calendar__badge--paid';
+                } else {
+                    $badge_classes[] = 'mj-member-events-calendar__badge--unpaid';
+                }
+                $icon_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>';
+                $label_html = $label !== '' ? '<span class="mj-member-events-calendar__badge-name">' . esc_html($label) . '</span>' : '';
+                $sublabel_html = $sublabel !== '' ? '<span class="mj-member-events-calendar__badge-status">' . esc_html($sublabel) . '</span>' : '';
+                $badge_markup_parts[] = '<span class="' . esc_attr(implode(' ', $badge_classes)) . '">' . $icon_svg . $label_html . $sublabel_html . '</span>';
+            } else {
+                $badge_markup_parts[] = '<span class="' . esc_attr(implode(' ', $badge_classes)) . '">' . esc_html($label) . '</span>';
+            }
         }
 
         if (empty($badge_markup_parts)) {

@@ -1,6 +1,230 @@
 {% set has_location = location.has_location|default(false) %}
+{% set has_multiple_locations = location.has_multiple_locations|default(false) %}
+{% set location_links = location.location_links|default([]) %}
 
-{% if has_location %}
+{% if has_multiple_locations %}
+    {# Affichage des lieux multiples avec types #}
+    <section class="mj-event-page__card mj-event-page__location">
+        <h2>{{ __('Lieux', 'mj-member') }}</h2>
+
+        <div class="mj-event-page__location-links">
+            {% for loc in location_links %}
+                <div class="mj-event-page__location-link-wrapper" data-lat="{{ loc.latitude }}" data-lng="{{ loc.longitude }}">
+                    <div class="mj-event-page__location-link-item" role="button" tabindex="0" aria-expanded="false">
+                        {# Badge du type + Logo du lieu (colonne) #}
+                        <div class="mj-event-page__location-type-column">
+                            <span class="mj-event-page__location-type-badge mj-event-page__location-type-badge--{{ loc.type }}">
+                                {% if loc.type == 'departure' %}
+                                    <svg class="mj-event-page__location-type-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+                                {% elseif loc.type == 'activity' %}
+                                    <svg class="mj-event-page__location-type-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                {% elseif loc.type == 'return' %}
+                                    <svg class="mj-event-page__location-type-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                                {% else %}
+                                    <svg class="mj-event-page__location-type-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                {% endif %}
+                                {{ loc.type_label|e|nl2br }}
+                            </span>
+
+                            {% if loc.cover_url %}
+                                <span class="mj-event-page__location-link-cover">
+                                    <img src="{{ loc.cover_url|esc_url }}" alt="{{ loc.name|esc_attr }}" loading="lazy" />
+                                </span>
+                            {% endif %}
+                        </div>
+
+                        {# Informations du lieu #}
+                        <div class="mj-event-page__location-link-content">
+                            {% if loc.name %}
+                                <p class="mj-event-page__location-name">{{ loc.name }}</p>
+                            {% endif %}
+                            <p class="mj-event-page__location-address">
+                                {% if loc.short_address %}
+                                    {{ loc.short_address }}
+                                {% else %}
+                                    {% if loc.street %}{{ loc.street }}{% endif %}
+                                {% endif %}
+                                {% if loc.postal_code or loc.city %}
+                                    <br>
+                                    {% if loc.postal_code %}{{ loc.postal_code }} {% endif %}
+                                    {% if loc.city %}{{ loc.city }}{% endif %}
+                                {% endif %}
+                                {% if loc.country %}
+                                    <br>{{ loc.country }}
+                                {% endif %}
+                            </p>
+                            {% if loc.meeting_time %}
+                                <p class="mj-event-page__location-meeting-time">
+                                    <svg class="mj-event-page__location-meeting-time-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                    <span>
+                                        {{ loc.meeting_time }}
+                                        {%- if loc.meeting_time_end %} – {{ loc.meeting_time_end }}{% endif -%}
+                                    </span>
+                                </p>
+                            {% endif %}
+                        </div>
+
+                        {# Icône expand/collapse #}
+                        <span class="mj-event-page__location-expand-icon" aria-hidden="true">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </span>
+                    </div>
+
+                    {# Carte OpenStreetMap (dépliable) #}
+                    <div class="mj-event-page__location-map-panel" hidden>
+                        <div class="mj-event-page__location-map-container" 
+                             data-location-name="{{ loc.name|esc_attr }}"
+                             data-address="{{ loc.short_address|esc_attr }}"
+                             data-city="{{ loc.city|esc_attr }}"
+                             data-postal-code="{{ loc.postal_code|esc_attr }}"
+                             data-country="{{ loc.country|esc_attr }}"></div>
+                        {% if loc.map_link %}
+                            <a 
+                                href="{{ loc.map_link|esc_url }}" 
+                                class="mj-event-page__location-map-external"
+                                target="_blank" 
+                                rel="noopener"
+                            >
+                                {{ __('Ouvrir dans Google Maps', 'mj-member') }} →
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    {# Leaflet CSS & JS #}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script>
+    (function() {
+        function initLocationMaps() {
+            if (typeof L === 'undefined') {
+                setTimeout(initLocationMaps, 100);
+                return;
+            }
+            
+            var maps = {};
+            var geocodeCache = {};
+            var wrappers = document.querySelectorAll('.mj-event-page__location-link-wrapper');
+            
+            function geocodeAddress(address, callback) {
+                if (geocodeCache[address]) {
+                    callback(geocodeCache[address]);
+                    return;
+                }
+                
+                var url = 'https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(address);
+                fetch(url, {
+                    headers: { 'Accept-Language': 'fr' }
+                })
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    if (data && data.length > 0) {
+                        var result = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+                        geocodeCache[address] = result;
+                        callback(result);
+                    } else {
+                        callback(null);
+                    }
+                })
+                .catch(function() { callback(null); });
+            }
+            
+            function initMap(container, lat, lng, locationName, index) {
+                container.style.height = '350px';
+                var map = L.map(container).setView([lat, lng], 15);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                }).addTo(map);
+                L.marker([lat, lng]).addTo(map).bindPopup(locationName).openPopup();
+                maps[index] = map;
+            }
+            
+            wrappers.forEach(function(wrapper, index) {
+                var item = wrapper.querySelector('.mj-event-page__location-link-item');
+                var panel = wrapper.querySelector('.mj-event-page__location-map-panel');
+                var container = wrapper.querySelector('.mj-event-page__location-map-container');
+                var lat = parseFloat(wrapper.dataset.lat) || 0;
+                var lng = parseFloat(wrapper.dataset.lng) || 0;
+                
+                if (!container) return;
+                
+                var locationName = container.dataset.locationName || '';
+                var address = container.dataset.address || '';
+                var city = container.dataset.city || '';
+                var postalCode = container.dataset.postalCode || '';
+                var country = container.dataset.country || '';
+                
+                // Construire l'adresse pour le géocodage
+                var fullAddress = [address, postalCode, city, country].filter(Boolean).join(', ');
+                
+                function toggle() {
+                    var isExpanded = item.getAttribute('aria-expanded') === 'true';
+                    
+                    // Fermer les autres panels
+                    wrappers.forEach(function(w, i) {
+                        if (i !== index) {
+                            w.querySelector('.mj-event-page__location-link-item').setAttribute('aria-expanded', 'false');
+                            w.querySelector('.mj-event-page__location-map-panel').hidden = true;
+                        }
+                    });
+                    
+                    if (isExpanded) {
+                        item.setAttribute('aria-expanded', 'false');
+                        panel.hidden = true;
+                    } else {
+                        item.setAttribute('aria-expanded', 'true');
+                        panel.hidden = false;
+                        
+                        if (!maps[index]) {
+                            setTimeout(function() {
+                                // Si coordonnées disponibles, utiliser directement
+                                if (lat !== 0 && lng !== 0) {
+                                    initMap(container, lat, lng, locationName, index);
+                                } 
+                                // Sinon, géocoder l'adresse
+                                else if (fullAddress) {
+                                    container.innerHTML = '<div style="padding:2rem;text-align:center;color:#6b7280;">Chargement de la carte...</div>';
+                                    geocodeAddress(fullAddress, function(coords) {
+                                        container.innerHTML = '';
+                                        if (coords) {
+                                            initMap(container, coords.lat, coords.lng, locationName, index);
+                                        } else {
+                                            container.innerHTML = '<div style="padding:2rem;text-align:center;color:#6b7280;">Impossible de localiser cette adresse.</div>';
+                                        }
+                                    });
+                                } else {
+                                    container.innerHTML = '<div style="padding:2rem;text-align:center;color:#6b7280;">Adresse non disponible.</div>';
+                                }
+                            }, 150);
+                        } else {
+                            setTimeout(function() { maps[index].invalidateSize(); }, 100);
+                        }
+                    }
+                }
+                
+                item.addEventListener('click', toggle);
+                item.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggle();
+                    }
+                });
+            });
+        }
+        
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initLocationMaps);
+        } else {
+            initLocationMaps();
+        }
+    })();
+    </script>
+{% elseif has_location %}
     {% set name = location.name|default('') %}
     {% set address = location.address|default('') %}
     {% set cover_url = location.cover_url|default('') %}

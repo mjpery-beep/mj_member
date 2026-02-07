@@ -105,6 +105,7 @@ final class EventFormDataMapper
             'event_description' => isset($values['description']) ? (string) $values['description'] : '',
             'event_registration_document' => isset($values['registration_document']) ? (string) $values['registration_document'] : '',
             'event_occurrences_payload' => $occurrence_payload_json,
+            'event_location_links' => isset($values['location_links']) && is_array($values['location_links']) ? $values['location_links'] : array(),
         );
     }
 
@@ -190,6 +191,20 @@ final class EventFormDataMapper
         $values['prix'] = isset($formData['event_price']) ? (float) $formData['event_price'] : $values['prix'];
         $values['description'] = isset($formData['event_description']) ? (string) $formData['event_description'] : $values['description'];
         $values['registration_document'] = array_key_exists('event_registration_document', $formData) ? (string) $formData['event_registration_document'] : (isset($values['registration_document']) ? $values['registration_document'] : '');
+
+        // Location links mapping
+        if (array_key_exists('event_location_links', $formData) && is_array($formData['event_location_links'])) {
+            $values['location_links'] = array_map(function($link) {
+                return array(
+                    'location_id' => isset($link['location_id']) ? (int) $link['location_id'] : (isset($link['locationId']) ? (int) $link['locationId'] : 0),
+                    'location_type' => isset($link['location_type']) ? sanitize_key($link['location_type']) : (isset($link['locationType']) ? sanitize_key($link['locationType']) : 'activity'),
+                    'custom_label' => isset($link['custom_label']) ? sanitize_textarea_field($link['custom_label']) : (isset($link['customLabel']) ? sanitize_textarea_field($link['customLabel']) : ''),
+                    'meeting_time' => isset($link['meeting_time']) ? sanitize_text_field($link['meeting_time']) : (isset($link['meetingTime']) ? sanitize_text_field($link['meetingTime']) : ''),
+                    'meeting_time_end' => isset($link['meeting_time_end']) ? sanitize_text_field($link['meeting_time_end']) : (isset($link['meetingTimeEnd']) ? sanitize_text_field($link['meetingTimeEnd']) : ''),
+                    'sort_order' => isset($link['sort_order']) ? (int) $link['sort_order'] : (isset($link['sortOrder']) ? (int) $link['sortOrder'] : 0),
+                );
+            }, $formData['event_location_links']);
+        }
 
         if (array_key_exists('event_schedule_exceptions', $formData)) {
             $values['schedule_exceptions'] = self::sanitizeExceptionsField($formData['event_schedule_exceptions']);

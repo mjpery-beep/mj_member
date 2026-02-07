@@ -92,9 +92,19 @@
         locationHint: 'Administrez les lieux depuis la page des lieux du tableau de bord.',
         manageLocationHint: 'Ajoutez ou editez un lieu sans quitter ce formulaire.',
         addLocation: 'Ajouter un lieu',
+        addLocationLink: 'Ajouter un lieu',
         editLocation: 'Modifier le lieu',
-        locationSection: 'Lieu et equipe',
-        locationSectionHint: "Choisissez le lieu d accueil et les referents associes.",
+        removeLocationLink: 'Retirer',
+        locationSection: 'Lieux et equipe',
+        locationSectionHint: "Associez un ou plusieurs lieux a l evenement avec leur role.",
+        locationLinksTitle: 'Lieux associes',
+        locationLinksHint: 'Ajoutez plusieurs lieux avec differents roles: depart, activite, retour, etc.',
+        locationLinksEmpty: 'Aucun lieu associe.',
+        locationSelectPlaceholder: 'Choisir un lieu',
+        locationTypeDeparture: 'Lieu de depart',
+        locationTypeActivity: "Lieu d activite",
+        locationTypeReturn: 'Lieu de retour',
+        locationTypeOther: 'Autre',
         noArticle: 'Aucun article',
         noCategory: 'Choisir une categorie',
         noLocation: 'Aucun lieu defini',
@@ -3506,6 +3516,220 @@
     */
     }
 
+    // ============================================
+    // LOCATION LINKS EDITOR
+    // ============================================
+
+    var LOCATION_TYPE_OPTIONS = [
+        { value: 'departure', labelKey: 'locationTypeDeparture', defaultLabel: 'Lieu de depart' },
+        { value: 'activity', labelKey: 'locationTypeActivity', defaultLabel: "Lieu d activite" },
+        { value: 'return', labelKey: 'locationTypeReturn', defaultLabel: 'Lieu de retour' },
+        { value: 'other', labelKey: 'locationTypeOther', defaultLabel: 'Autre' },
+    ];
+
+    function LocationLinkRow(props) {
+        var link = props.link;
+        var index = props.index;
+        var locationChoices = props.locationChoices || {};
+        var strings = props.strings;
+        var onUpdate = props.onUpdate;
+        var onRemove = props.onRemove;
+        var onEditLocation = props.onEditLocation;
+        var canManage = props.canManage;
+
+        var handleLocationChange = function (e) {
+            var newId = parseInt(e.target.value, 10) || 0;
+            onUpdate(index, { locationId: newId, locationType: link.locationType, customLabel: link.customLabel || '', meetingTime: link.meetingTime || '', meetingTimeEnd: link.meetingTimeEnd || '' });
+        };
+
+        var handleTypeChange = function (e) {
+            var newType = e.target.value;
+            // Reset customLabel if not "other"
+            var newCustomLabel = newType === 'other' ? (link.customLabel || '') : '';
+            onUpdate(index, { locationId: link.locationId, locationType: newType, customLabel: newCustomLabel, meetingTime: link.meetingTime || '', meetingTimeEnd: link.meetingTimeEnd || '' });
+        };
+
+        var handleCustomLabelChange = function (e) {
+            onUpdate(index, { locationId: link.locationId, locationType: link.locationType, customLabel: e.target.value, meetingTime: link.meetingTime || '', meetingTimeEnd: link.meetingTimeEnd || '' });
+        };
+
+        var handleMeetingTimeChange = function (e) {
+            onUpdate(index, { locationId: link.locationId, locationType: link.locationType, customLabel: link.customLabel || '', meetingTime: e.target.value, meetingTimeEnd: link.meetingTimeEnd || '' });
+        };
+
+        var handleMeetingTimeEndChange = function (e) {
+            onUpdate(index, { locationId: link.locationId, locationType: link.locationType, customLabel: link.customLabel || '', meetingTime: link.meetingTime || '', meetingTimeEnd: e.target.value });
+        };
+
+        var handleRemove = function () {
+            onRemove(index);
+        };
+
+        var handleEdit = function () {
+            if (link.locationId > 0 && onEditLocation) {
+                onEditLocation(link.locationId);
+            }
+        };
+
+        var locationName = locationChoices[String(link.locationId)] || '';
+        var isOtherType = link.locationType === 'other';
+
+        return h('div', { class: 'mj-regmgr-location-link-row' }, [
+            h('div', { class: 'mj-regmgr-location-link-row__location' }, [
+                h('select', {
+                    value: String(link.locationId || 0),
+                    onChange: handleLocationChange,
+                    class: 'mj-regmgr-location-link-row__select',
+                }, [
+                    h('option', { value: '0' }, getString(strings, 'locationSelectPlaceholder', 'Choisir un lieu')),
+                    Object.keys(locationChoices).map(function (key) {
+                        return h('option', { key: key, value: key }, locationChoices[key]);
+                    }),
+                ]),
+            ]),
+            h('div', { class: 'mj-regmgr-location-link-row__type' }, [
+                h('select', {
+                    value: link.locationType || 'activity',
+                    onChange: handleTypeChange,
+                    class: 'mj-regmgr-location-link-row__type-select',
+                }, LOCATION_TYPE_OPTIONS.map(function (opt) {
+                    return h('option', { key: opt.value, value: opt.value }, getString(strings, opt.labelKey, opt.defaultLabel));
+                })),
+            ]),
+            isOtherType && h('div', { class: 'mj-regmgr-location-link-row__custom-label' }, [
+                h('textarea', {
+                    value: link.customLabel || '',
+                    onInput: handleCustomLabelChange,
+                    placeholder: getString(strings, 'customLabelPlaceholder', 'Précisez le type...'),
+                    class: 'mj-regmgr-location-link-row__custom-input',
+                    maxLength: 200,
+                    rows: 2,
+                }),
+            ]),
+            h('div', { class: 'mj-regmgr-location-link-row__meeting-time' }, [
+                h('input', {
+                    type: 'time',
+                    value: link.meetingTime || '',
+                    onChange: handleMeetingTimeChange,
+                    class: 'mj-regmgr-location-link-row__time-input',
+                    title: getString(strings, 'meetingTimePlaceholder', 'Heure de RDV (début)'),
+                }),
+                h('span', { class: 'mj-regmgr-location-link-row__time-separator' }, '-'),
+                h('input', {
+                    type: 'time',
+                    value: link.meetingTimeEnd || '',
+                    onChange: handleMeetingTimeEndChange,
+                    class: 'mj-regmgr-location-link-row__time-input',
+                    title: getString(strings, 'meetingTimeEndPlaceholder', 'Heure de fin (optionnel)'),
+                }),
+            ]),
+            h('div', { class: 'mj-regmgr-location-link-row__actions' }, [
+                canManage && link.locationId > 0 && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--ghost mj-btn--tiny',
+                    onClick: handleEdit,
+                    title: getString(strings, 'editLocation', 'Modifier le lieu'),
+                }, [
+                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                        h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
+                        h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+                    ]),
+                ]),
+                h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--ghost mj-btn--tiny mj-btn--danger',
+                    onClick: handleRemove,
+                    title: getString(strings, 'removeLocationLink', 'Retirer'),
+                }, [
+                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                        h('line', { x1: 18, y1: 6, x2: 6, y2: 18 }),
+                        h('line', { x1: 6, y1: 6, x2: 18, y2: 18 }),
+                    ]),
+                ]),
+            ]),
+        ]);
+    }
+
+    function LocationLinksEditor(props) {
+        var links = props.links || [];
+        var locationChoices = props.locationChoices || {};
+        var strings = props.strings;
+        var onChange = props.onChange;
+        var onCreateLocation = props.onCreateLocation;
+        var onEditLocation = props.onEditLocation;
+        var canManage = props.canManage;
+
+        var handleAddLink = function () {
+            var newLinks = links.slice();
+            newLinks.push({ locationId: 0, locationType: 'activity', customLabel: '', meetingTime: '', meetingTimeEnd: '', sortOrder: newLinks.length });
+            onChange(newLinks);
+        };
+
+        var handleUpdateLink = function (index, updatedLink) {
+            var newLinks = links.slice();
+            newLinks[index] = {
+                locationId: updatedLink.locationId,
+                locationType: updatedLink.locationType,
+                customLabel: updatedLink.customLabel || '',
+                meetingTime: updatedLink.meetingTime || '',
+                meetingTimeEnd: updatedLink.meetingTimeEnd || '',
+                sortOrder: index,
+            };
+            onChange(newLinks);
+        };
+
+        var handleRemoveLink = function (index) {
+            var newLinks = links.slice();
+            newLinks.splice(index, 1);
+            // Re-index sortOrder
+            newLinks = newLinks.map(function (link, idx) {
+                return { locationId: link.locationId, locationType: link.locationType, customLabel: link.customLabel || '', meetingTime: link.meetingTime || '', meetingTimeEnd: link.meetingTimeEnd || '', sortOrder: idx };
+            });
+            onChange(newLinks);
+        };
+
+        var handleEditLocation = function (locationId) {
+            if (onEditLocation) {
+                onEditLocation(locationId);
+            }
+        };
+
+        return h('div', { class: 'mj-regmgr-location-links' }, [
+            h('p', { class: 'mj-regmgr-multiselect__label' }, getString(strings, 'locationLinksTitle', 'Lieux associes')),
+            links.length === 0 && h('p', { class: 'mj-regmgr-location-links__empty' }, getString(strings, 'locationLinksEmpty', 'Aucun lieu associe.')),
+            links.length > 0 && h('div', { class: 'mj-regmgr-location-links__list' }, links.map(function (link, idx) {
+                return h(LocationLinkRow, {
+                    key: idx,
+                    link: link,
+                    index: idx,
+                    locationChoices: locationChoices,
+                    strings: strings,
+                    onUpdate: handleUpdateLink,
+                    onRemove: handleRemoveLink,
+                    onEditLocation: handleEditLocation,
+                    canManage: canManage,
+                });
+            })),
+            h('div', { class: 'mj-regmgr-location-links__actions' }, [
+                h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--ghost mj-btn--small',
+                    onClick: handleAddLink,
+                }, getString(strings, 'addLocationLink', 'Ajouter un lieu')),
+                canManage && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--ghost mj-btn--small',
+                    onClick: onCreateLocation,
+                }, getString(strings, 'addLocation', 'Ajouter un nouveau lieu')),
+            ]),
+            h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'locationLinksHint', 'Ajoutez plusieurs lieux avec differents roles: depart, activite, retour, etc.')),
+        ]);
+    }
+
+    // ============================================
+    // EVENT EDITOR
+    // ============================================
+
     function EventEditor(props) {
         var data = props.data;
         var eventSummary = props.eventSummary;
@@ -3563,6 +3787,24 @@
         var _coverPreview = useState(initialCoverUrl);
         var coverPreview = _coverPreview[0];
         var setCoverPreview = _coverPreview[1];
+
+        var _locationLinks = useState(function () {
+            if (initialValues && Array.isArray(initialValues.event_location_links)) {
+                return initialValues.event_location_links.map(function (link, idx) {
+                    return {
+                        locationId: parseInt(link.location_id || link.locationId || 0, 10),
+                        locationType: link.location_type || link.locationType || 'activity',
+                        customLabel: link.custom_label || link.customLabel || '',
+                        meetingTime: link.meeting_time || link.meetingTime || '',
+                        meetingTimeEnd: link.meeting_time_end || link.meetingTimeEnd || '',
+                        sortOrder: typeof link.sort_order !== 'undefined' ? link.sort_order : idx,
+                    };
+                });
+            }
+            return [];
+        });
+        var locationLinks = _locationLinks[0];
+        var setLocationLinks = _locationLinks[1];
 
         var _exceptionDialogState = useState({
             isOpen: false,
@@ -3634,6 +3876,7 @@
                 setFormState({});
                 setMetaState({});
                 setSeriesItems([]);
+                setLocationLinks([]);
                 setIsDirty(false);
                 setCoverPreview('');
                 previousTypeRef.current = '';
@@ -3652,6 +3895,21 @@
             setFormState(nextValues);
             setMetaState(nextMeta);
             setSeriesItems(parseSeriesItems(nextValues.event_series_items));
+            // Parse location links from values
+            var nextLocationLinks = [];
+            if (nextValues.event_location_links && Array.isArray(nextValues.event_location_links)) {
+                nextLocationLinks = nextValues.event_location_links.map(function (link, idx) {
+                    return {
+                        locationId: parseInt(link.location_id || link.locationId || 0, 10),
+                        locationType: link.location_type || link.locationType || 'activity',
+                        customLabel: link.custom_label || link.customLabel || '',
+                        meetingTime: link.meeting_time || link.meetingTime || '',
+                        meetingTimeEnd: link.meeting_time_end || link.meetingTimeEnd || '',
+                        sortOrder: typeof link.sort_order !== 'undefined' ? link.sort_order : idx,
+                    };
+                });
+            }
+            setLocationLinks(nextLocationLinks);
             setIsDirty(false);
             var nextCover = eventSummary && eventSummary.coverUrl ? eventSummary.coverUrl : '';
             setCoverPreview(nextCover);
@@ -3799,6 +4057,95 @@
                 onComplete: handleLocationSaved,
             });
         }, [onManageLocation, formState.event_location_id, handleLocationSaved]);
+
+        // Handler for location links changes
+        var handleLocationLinksChange = useCallback(function (newLinks) {
+            setLocationLinks(newLinks);
+            setIsDirty(true);
+        }, [setLocationLinks, setIsDirty]);
+
+        // Handler when a new location is created for use in location links
+        var handleLocationSavedForLinks = useCallback(function (result) {
+            if (!result || !result.option) {
+                return;
+            }
+            var option = result.option;
+            var rawId = option && Object.prototype.hasOwnProperty.call(option, 'id') ? option.id : null;
+            var optionId = parseInt(rawId, 10);
+            if (isNaN(optionId) || optionId <= 0) {
+                return;
+            }
+            var choiceKey = String(optionId);
+            setLocationOptions(function (prev) {
+                var nextChoices = Object.assign({}, prev.choices);
+                nextChoices[choiceKey] = option.label || nextChoices[choiceKey] || 'Lieu #' + optionId;
+                var nextAttributes = Object.assign({}, prev.attributes);
+                if (option.attributes && typeof option.attributes === 'object') {
+                    nextAttributes[choiceKey] = option.attributes;
+                }
+                return {
+                    choices: nextChoices,
+                    attributes: nextAttributes,
+                };
+            });
+            // Auto-add the newly created location to links
+            setLocationLinks(function (prev) {
+                return prev.concat([{
+                    locationId: optionId,
+                    locationType: 'activity',
+                    sortOrder: prev.length,
+                }]);
+            });
+            setIsDirty(true);
+        }, [setLocationOptions, setLocationLinks, setIsDirty]);
+
+        var handleCreateLocationForLinks = useCallback(function () {
+            if (!onManageLocation) {
+                return;
+            }
+            onManageLocation({
+                mode: 'create',
+                onComplete: handleLocationSavedForLinks,
+            });
+        }, [onManageLocation, handleLocationSavedForLinks]);
+
+        var handleEditLocationForLinks = useCallback(function (locationId) {
+            if (!onManageLocation) {
+                return;
+            }
+            if (!locationId || locationId <= 0) {
+                return;
+            }
+            onManageLocation({
+                mode: 'edit',
+                locationId: locationId,
+                onComplete: function (result) {
+                    // Just update the location options, no need to change links
+                    if (!result || !result.option) {
+                        return;
+                    }
+                    var option = result.option;
+                    var rawId = option && Object.prototype.hasOwnProperty.call(option, 'id') ? option.id : null;
+                    var optionId = parseInt(rawId, 10);
+                    if (isNaN(optionId) || optionId <= 0) {
+                        return;
+                    }
+                    var choiceKey = String(optionId);
+                    setLocationOptions(function (prev) {
+                        var nextChoices = Object.assign({}, prev.choices);
+                        nextChoices[choiceKey] = option.label || nextChoices[choiceKey] || 'Lieu #' + optionId;
+                        var nextAttributes = Object.assign({}, prev.attributes);
+                        if (option.attributes && typeof option.attributes === 'object') {
+                            nextAttributes[choiceKey] = option.attributes;
+                        }
+                        return {
+                            choices: nextChoices,
+                            attributes: nextAttributes,
+                        };
+                    });
+                },
+            });
+        }, [onManageLocation, setLocationOptions]);
 
         var toggleWeekday = useCallback(function (weekday) {
             toggleArrayValue('event_recurring_weekdays', weekday);
@@ -4158,6 +4505,19 @@
                     return parseInt(id, 10) || 0;
                 });
             }
+            // Include location links in payload
+            payloadForm.event_location_links = locationLinks.map(function (link, idx) {
+                return {
+                    location_id: parseInt(link.locationId, 10) || 0,
+                    location_type: link.locationType || 'activity',
+                    custom_label: link.customLabel || '',
+                    meeting_time: link.meetingTime || '',
+                    meeting_time_end: link.meetingTimeEnd || '',
+                    sort_order: idx,
+                };
+            }).filter(function (link) {
+                return link.location_id > 0;
+            });
             payloadForm.event_schedule_exceptions = normalizedScheduleExceptions;
             var resolvedRecurringStart = normalizeTime(payloadForm.event_recurring_start_time);
             if (!resolvedRecurringStart) {
@@ -4222,7 +4582,7 @@
                     // keep dirty flag so user can retry
                 });
             }
-        }, [onSubmit, formState, metaState, seriesItems]);
+        }, [onSubmit, formState, metaState, seriesItems, locationLinks]);
 
         var animateurOptions = useMemo(function () {
             var map = initialOptions.animateurs || {};
@@ -4427,37 +4787,17 @@
                 h('div', { class: 'mj-regmgr-event-editor__section' }, [
                     h('div', { class: 'mj-regmgr-event-editor__section-header' }, [
                         h('h2', null, getString(strings, 'locationSection', 'Lieu et equipe')),
-                        h('p', { class: 'mj-regmgr-event-editor__section-hint' }, getString(strings, 'locationSectionHint', "Choisissez le lieu d accueil et les referents associes.")),
+                        h('p', { class: 'mj-regmgr-event-editor__section-hint' }, getString(strings, 'locationSectionHint', "Choisissez les lieux et les referents associes.")),
                     ]),
-                    h('div', { class: 'mj-regmgr-form-grid' }, [
-                        h('div', { class: 'mj-regmgr-form-field' }, [
-                            h('label', null, getString(strings, 'location', 'Lieu')),
-                            h('select', {
-                                value: locationSelectValue,
-                                onChange: function (e) { updateFormValue('event_location_id', parseInt(e.target.value, 10) || 0); },
-                            }, [
-                                h('option', { value: '0' }, getString(strings, 'noLocation', 'Aucun lieu defini')),
-                                Object.keys(locationOptions.choices || {}).map(function (key) {
-                                    return h('option', { key: key, value: key }, locationOptions.choices[key]);
-                                }),
-                            ]),
-                            manageLocationEnabled && h('div', { class: 'mj-regmgr-location-actions' }, [
-                                h('button', {
-                                    type: 'button',
-                                    class: 'mj-btn mj-btn--ghost mj-btn--small',
-                                    onClick: handleCreateLocation,
-                                }, getString(strings, 'addLocation', 'Ajouter un lieu')),
-                                currentLocationSelected > 0 && h('button', {
-                                    type: 'button',
-                                    class: 'mj-btn mj-btn--ghost mj-btn--small',
-                                    onClick: handleEditLocation,
-                                }, getString(strings, 'editLocation', 'Modifier le lieu')),
-                            ]),
-                            h('p', { class: 'mj-regmgr-field-hint' }, manageLocationEnabled
-                                ? getString(strings, 'manageLocationHint', 'Ajoutez ou editez un lieu sans quitter ce formulaire.')
-                                : getString(strings, 'locationHint', 'Administrez les lieux depuis la page des lieux du tableau de bord.')),
-                        ]),
-                    ]),
+                    h(LocationLinksEditor, {
+                        links: locationLinks,
+                        locationChoices: locationOptions.choices || {},
+                        strings: strings,
+                        onChange: handleLocationLinksChange,
+                        onCreateLocation: handleCreateLocationForLinks,
+                        onEditLocation: handleEditLocationForLinks,
+                        canManage: manageLocationEnabled,
+                    }),
                     animateurOptions.length > 0 && h('div', { class: 'mj-regmgr-multiselect' }, [
                         h('p', { class: 'mj-regmgr-multiselect__label' }, getString(strings, 'animateurs', 'Animateurs referents')),
                         h('div', { class: 'mj-regmgr-multiselect__options' }, animateurOptions.map(function (option) {

@@ -33,12 +33,12 @@
             <div class="mj-event-page__main">
                 {% include 'event-page/partials/description.html.twig' with { description: partials.description|default({}) } only %}
 
+                {% include 'event-page/partials/location.html.twig' with { location: partials.location|default({}) } only %}
+
                 {% include 'event-page/partials/registration.html.twig' with {
                     registration: partials.registration|default({}),
                     sidebar: partials.sidebar|default({})
                 } only %}
-
-                {% include 'event-page/partials/location.html.twig' with { location: partials.location|default({}) } only %}
 
                 {% include 'event-page/partials/photos.html.twig' with { photos: partials.photos|default({}) } only %}
             </div>
