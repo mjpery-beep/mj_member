@@ -408,6 +408,11 @@ class MjEvents implements CrudRepositoryInterface {
             return new WP_Error('mj_event_missing', 'Evenement introuvable.');
         }
 
+        // Capturer l'ancien statut pour détecter les changements
+        $old_event = self::find($event_id);
+        $old_status = ($old_event && isset($old_event->status)) ? (string) $old_event->status : '';
+        $new_status = isset($data['status']) ? (string) $data['status'] : null;
+
         global $wpdb;
         $table = self::table_name();
 
@@ -515,6 +520,14 @@ class MjEvents implements CrudRepositoryInterface {
         }
 
         self::refresh_event_occurrences($event_id);
+
+        // Déclencher le hook si le statut passe de brouillon à actif
+        if ($new_status === self::STATUS_ACTIVE && $old_status === self::STATUS_DRAFT) {
+            $published_event = self::find($event_id);
+            if ($published_event) {
+                do_action('mj_member_event_published', $event_id, $published_event);
+            }
+        }
 
         return true;
     }

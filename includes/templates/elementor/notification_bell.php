@@ -22,8 +22,9 @@ if (!defined('ABSPATH')) {
 
 /**
  * Retourne l'emoji selon le type de notification
+ * @since 1.0.0
  */
-function mj_notification_bell_get_type_icon($type) {
+function mj_notification_bell_get_type_emoji($type) {
     $icons = array(
         // Événements / Inscriptions
         'event_registration_created' => '📅',
@@ -235,8 +236,9 @@ $widget_unique_id = 'mj-notification-bell-' . esc_attr($widget_id);
                             <a href="<?php echo esc_url($url); ?>" class="mj-notification-bell__item-link" aria-label="<?php echo esc_attr($title); ?>"></a>
                             <?php endif; ?>
                             
-                            <div class="mj-notification-bell__item-icon <?php echo $icon_class; ?>">
-                                <?php echo mj_notification_bell_get_type_icon($type); ?>
+                            <div class="mj-notification-bell__item-icon <?php echo $icon_class; ?>" title="<?php echo esc_attr($type); ?>">
+                                <?php echo mj_notification_bell_get_type_emoji($type); ?>
+                                <small style="font-size:9px;display:block;color:#666;"><?php echo esc_html($type); ?></small>
                             </div>
                             
                             <div class="mj-notification-bell__item-content">

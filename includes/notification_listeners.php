@@ -68,6 +68,9 @@ final class MjNotificationTypes
     const TODO_MEDIA_ADDED = 'todo_media_added';
     const TODO_COMPLETED = 'todo_completed';
 
+    // Articles
+    const POST_PUBLISHED = 'post_published';
+
     /**
      * Retourne les labels pour chaque type de notification.
      *
@@ -99,6 +102,7 @@ final class MjNotificationTypes
             self::TODO_NOTE_ADDED => __('Note ajoutée', 'mj-member'),
             self::TODO_MEDIA_ADDED => __('Document ajouté', 'mj-member'),
             self::TODO_COMPLETED => __('Tâche terminée', 'mj-member'),
+            self::POST_PUBLISHED => __('Nouvel article publié', 'mj-member'),
         );
     }
 }
@@ -1515,6 +1519,89 @@ if (!function_exists('mj_member_notification_on_todo_completed')) {
     }
 
     add_action('mj_member_todo_completed', 'mj_member_notification_on_todo_completed', 10, 4);
+}
+
+// ============================================================================
+// LISTENER: Événement publié
+// ============================================================================
+
+if (!function_exists('mj_member_notification_on_event_published')) {
+    /**
+     * Déclenché lorsqu'un événement passe de brouillon à actif.
+     *
+     * @param int    $event_id ID de l'événement
+     * @param object $event    L'événement publié
+     * @return void
+     */
+    function mj_member_notification_on_event_published($event_id, $event): void
+    {
+        if (!function_exists('mj_member_record_notification')) {
+            return;
+        }
+
+        $event_id = (int) $event_id;
+        if ($event_id <= 0 || !$event) {
+            return;
+        }
+
+        // Récupérer les infos de l'événement
+        $event_title = isset($event->title) ? sanitize_text_field((string) $event->title) : sprintf(__('Événement #%d', 'mj-member'), $event_id);
+        $event_emoji = isset($event->emoji) ? (string) $event->emoji : '📅';
+        $event_slug = isset($event->slug) ? (string) $event->slug : '';
+
+        // Construire l'URL vers l'événement
+        $event_url = '';
+        if ($event_slug !== '') {
+            $event_url = home_url('/evenement/' . $event_slug . '/');
+        } else {
+            $event_url = home_url('/evenement/?id=' . $event_id);
+        }
+
+        // Récupérer tous les membres actifs
+        $recipients = array();
+        if (class_exists(MjMembers::class)) {
+            $active_members = MjMembers::get_all(array(
+                'filters' => array('status' => MjMembers::STATUS_ACTIVE),
+                'limit' => 10000,
+            ));
+            if (is_array($active_members)) {
+                foreach ($active_members as $member) {
+                    if (isset($member->id) && (int) $member->id > 0) {
+                        $recipients[] = (int) $member->id;
+                    }
+                }
+            }
+        }
+
+        if (empty($recipients)) {
+            return;
+        }
+
+        $notification_data = array(
+            'type' => MjNotificationTypes::EVENT_NEW_PUBLISHED,
+            'title' => sprintf(__('%s Nouvel événement !', 'mj-member'), $event_emoji),
+            'excerpt' => sprintf(__('Découvre le nouvel événement « %s » et inscris-toi !', 'mj-member'), $event_title),
+            'url' => $event_url,
+            'context' => 'events',
+            'source' => 'system',
+            'payload' => array(
+                'event_id' => $event_id,
+                'event_title' => $event_title,
+                'event_emoji' => $event_emoji,
+                'event_slug' => $event_slug,
+            ),
+        );
+
+        mj_member_record_notification($notification_data, $recipients);
+
+        mj_member_notification_log('event_published', array(
+            'event_id' => $event_id,
+            'event_title' => $event_title,
+            'recipients_count' => count($recipients),
+        ));
+    }
+
+    add_action('mj_member_event_published', 'mj_member_notification_on_event_published', 10, 2);
 }
 
 // ============================================================================

@@ -3423,6 +3423,184 @@
         }
     }
 
+    // ========================================================================
+    // Slider Mode
+    // ========================================================================
+
+    function initSliders() {
+        if (typeof document === 'undefined') {
+            return;
+        }
+
+        var sliders = document.querySelectorAll('.mj-member-events.is-slider[data-mj-slider="true"]');
+        toArray(sliders).forEach(function (slider) {
+            initSlider(slider);
+        });
+    }
+
+    function initSlider(container) {
+        var track = container.querySelector('.mj-member-events__grid.is-slider-track');
+        var prevBtn = container.querySelector('.mj-member-events__slider-arrow--prev');
+        var nextBtn = container.querySelector('.mj-member-events__slider-arrow--next');
+        var dotsContainer = container.querySelector('.mj-member-events__slider-dots');
+        var dots = dotsContainer ? toArray(dotsContainer.querySelectorAll('.mj-member-events__slider-dot')) : [];
+        var slides = track ? toArray(track.querySelectorAll('.mj-member-events__item')) : [];
+
+        if (!track || slides.length === 0) {
+            return;
+        }
+
+        var currentIndex = 0;
+        var autoplayDelay = parseInt(container.getAttribute('data-autoplay') || '0', 10);
+        var autoplayTimer = null;
+
+        function getSlideWidth() {
+            if (slides.length === 0) {
+                return 0;
+            }
+            var slideRect = slides[0].getBoundingClientRect();
+            var style = window.getComputedStyle(track);
+            var gap = parseFloat(style.gap) || 24;
+            return slideRect.width + gap;
+        }
+
+        function scrollToSlide(index) {
+            if (index < 0) {
+                index = 0;
+            }
+            if (index >= slides.length) {
+                index = slides.length - 1;
+            }
+            currentIndex = index;
+
+            var slideWidth = getSlideWidth();
+            track.scrollTo({
+                left: index * slideWidth,
+                behavior: 'smooth'
+            });
+
+            updateDots();
+            updateArrows();
+        }
+
+        function updateDots() {
+            dots.forEach(function (dot, idx) {
+                if (idx === currentIndex) {
+                    dot.classList.add('is-active');
+                    dot.setAttribute('aria-selected', 'true');
+                } else {
+                    dot.classList.remove('is-active');
+                    dot.setAttribute('aria-selected', 'false');
+                }
+            });
+        }
+
+        function updateArrows() {
+            if (prevBtn) {
+                prevBtn.disabled = currentIndex === 0;
+            }
+            if (nextBtn) {
+                nextBtn.disabled = currentIndex >= slides.length - 1;
+            }
+        }
+
+        function handleScroll() {
+            var slideWidth = getSlideWidth();
+            if (slideWidth === 0) {
+                return;
+            }
+            var newIndex = Math.round(track.scrollLeft / slideWidth);
+            if (newIndex !== currentIndex && newIndex >= 0 && newIndex < slides.length) {
+                currentIndex = newIndex;
+                updateDots();
+                updateArrows();
+            }
+        }
+
+        function startAutoplay() {
+            if (autoplayDelay < 2000) {
+                return;
+            }
+            stopAutoplay();
+            autoplayTimer = setInterval(function () {
+                var nextIndex = currentIndex + 1;
+                if (nextIndex >= slides.length) {
+                    nextIndex = 0;
+                }
+                scrollToSlide(nextIndex);
+            }, autoplayDelay);
+        }
+
+        function stopAutoplay() {
+            if (autoplayTimer) {
+                clearInterval(autoplayTimer);
+                autoplayTimer = null;
+            }
+        }
+
+        // Event listeners
+        if (prevBtn) {
+            prevBtn.addEventListener('click', function () {
+                scrollToSlide(currentIndex - 1);
+                stopAutoplay();
+            });
+        }
+
+        if (nextBtn) {
+            nextBtn.addEventListener('click', function () {
+                scrollToSlide(currentIndex + 1);
+                stopAutoplay();
+            });
+        }
+
+        dots.forEach(function (dot, idx) {
+            dot.addEventListener('click', function () {
+                scrollToSlide(idx);
+                stopAutoplay();
+            });
+        });
+
+        // Scroll detection for manual scrolling
+        var scrollTimeout = null;
+        track.addEventListener('scroll', function () {
+            if (scrollTimeout) {
+                clearTimeout(scrollTimeout);
+            }
+            scrollTimeout = setTimeout(handleScroll, 100);
+        }, { passive: true });
+
+        // Pause autoplay on hover/focus
+        container.addEventListener('mouseenter', stopAutoplay);
+        container.addEventListener('mouseleave', function () {
+            if (autoplayDelay >= 2000) {
+                startAutoplay();
+            }
+        });
+        container.addEventListener('focusin', stopAutoplay);
+
+        // Keyboard navigation
+        container.addEventListener('keydown', function (event) {
+            if (event.key === 'ArrowLeft') {
+                scrollToSlide(currentIndex - 1);
+                stopAutoplay();
+                event.preventDefault();
+            } else if (event.key === 'ArrowRight') {
+                scrollToSlide(currentIndex + 1);
+                stopAutoplay();
+                event.preventDefault();
+            }
+        });
+
+        // Initial state
+        updateArrows();
+        updateDots();
+
+        // Start autoplay if enabled
+        if (autoplayDelay >= 2000) {
+            startAutoplay();
+        }
+    }
+
     if (typeof document !== 'undefined') {
         document.addEventListener('mj-member:refresh-reservations', function () {
             refreshReservationPanel({ silent: true });
@@ -3431,6 +3609,7 @@
 
     domReady(function () {
         initEventRegistrationForms();
+        initSliders();
 
         var loginButtons = document.querySelectorAll('[data-mj-event-open-login]');
         toArray(loginButtons).forEach(function (loginButton) {

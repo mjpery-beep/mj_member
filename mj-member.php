@@ -27,6 +27,7 @@ require_once __DIR__ . '/includes/core/Autoloader.php';
 require_once __DIR__ . '/includes/core/Config.php';
 
 use Mj\Member\Admin\AdminMenu;
+use Mj\Member\Admin\PostNotifyMetaBox;
 use Mj\Member\Bootstrap;
 use Mj\Member\Core\Autoloader;
 use Mj\Member\Core\Config;
@@ -89,6 +90,7 @@ Autoloader::register(
 
 Bootstrap::init();
 AdminMenu::boot();
+PostNotifyMetaBox::boot();
 
 add_action('init', 'mj_member_load_textdomain');
 function mj_member_load_textdomain() {

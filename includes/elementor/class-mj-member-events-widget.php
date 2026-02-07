@@ -140,8 +140,64 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                     'standard' => __('Carte visuelle', 'mj-member'),
                     'compact' => __('Liste compacte', 'mj-member'),
                     'horizontal' => __('Carte horizontale', 'mj-member'),
+                    'slider' => __('Slider design', 'mj-member'),
                 ),
                 'default' => 'standard',
+            )
+        );
+
+        $this->add_control(
+            'slider_autoplay',
+            array(
+                'label' => __('Lecture automatique', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'no',
+                'condition' => array('card_layout' => 'slider'),
+            )
+        );
+
+        $this->add_control(
+            'slider_autoplay_delay',
+            array(
+                'label' => __('Délai autoplay (ms)', 'mj-member'),
+                'type' => Controls_Manager::NUMBER,
+                'min' => 2000,
+                'max' => 15000,
+                'step' => 500,
+                'default' => 5000,
+                'condition' => array(
+                    'card_layout' => 'slider',
+                    'slider_autoplay' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'slider_show_dots',
+            array(
+                'label' => __('Afficher les indicateurs', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'condition' => array('card_layout' => 'slider'),
+            )
+        );
+
+        $this->add_control(
+            'slider_show_arrows',
+            array(
+                'label' => __('Afficher les flèches', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'condition' => array('card_layout' => 'slider'),
             )
         );
 
@@ -244,6 +300,33 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 'label_off' => __('Non', 'mj-member'),
                 'return_value' => 'yes',
                 'default' => 'yes',
+            )
+        );
+
+        $this->add_control(
+            'show_event_schedule',
+            array(
+                'label' => __('Afficher l\'horaire de l\'événement', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'description' => __('Affiche le résumé horaire (ex: "Tous les mercredis de 14h à 17h").', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
+            'show_location_schedule',
+            array(
+                'label' => __('Afficher l\'horaire du lieu', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'description' => __('Affiche l\'heure de rendez-vous pour chaque lieu (départ, retour, etc.).', 'mj-member'),
+                'condition' => array('show_location' => 'yes'),
             )
         );
 
@@ -686,13 +769,20 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         $empty_message = isset($settings['empty_message']) ? $settings['empty_message'] : __('Aucun événement disponible pour le moment.', 'mj-member');
         $show_description = isset($settings['show_description']) && $settings['show_description'] === 'yes';
         $show_next_dates = !isset($settings['show_next_dates']) || $settings['show_next_dates'] === 'yes';
+        $show_event_schedule = !isset($settings['show_event_schedule']) || $settings['show_event_schedule'] === 'yes';
         $show_location = isset($settings['show_location']) && $settings['show_location'] === 'yes';
+        $show_location_schedule = !isset($settings['show_location_schedule']) || $settings['show_location_schedule'] === 'yes';
         $layout = isset($settings['layout']) ? $settings['layout'] : 'grid';
         $card_layout = isset($settings['card_layout']) ? $settings['card_layout'] : 'standard';
-        $allowed_card_layouts = array('standard', 'compact', 'horizontal');
+        $allowed_card_layouts = array('standard', 'compact', 'horizontal', 'slider');
         if (!in_array($card_layout, $allowed_card_layouts, true)) {
             $card_layout = 'standard';
         }
+
+        $slider_autoplay = isset($settings['slider_autoplay']) && $settings['slider_autoplay'] === 'yes';
+        $slider_autoplay_delay = isset($settings['slider_autoplay_delay']) ? (int) $settings['slider_autoplay_delay'] : 5000;
+        $slider_show_dots = !isset($settings['slider_show_dots']) || $settings['slider_show_dots'] === 'yes';
+        $slider_show_arrows = !isset($settings['slider_show_arrows']) || $settings['slider_show_arrows'] === 'yes';
 
         $card_title_tag = isset($settings['card_title_tag']) ? strtolower((string) $settings['card_title_tag']) : 'h4';
         $allowed_title_tags = array('h2', 'h3', 'h4', 'h5', 'p');
@@ -738,8 +828,19 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         if ($wide_mode) {
             $root_classes[] = 'is-wide';
         }
+        if ($card_layout === 'slider') {
+            $root_classes[] = 'is-slider';
+        }
 
-        echo '<div class="' . esc_attr(implode(' ', $root_classes)) . '" data-mj-events-root="' . esc_attr($instance_id) . '">';
+        $slider_data_attrs = '';
+        if ($card_layout === 'slider') {
+            $slider_data_attrs = ' data-mj-slider="true"';
+            if ($slider_autoplay) {
+                $slider_data_attrs .= ' data-autoplay="' . esc_attr($slider_autoplay_delay) . '"';
+            }
+        }
+
+        echo '<div class="' . esc_attr(implode(' ', $root_classes)) . '" data-mj-events-root="' . esc_attr($instance_id) . '"' . $slider_data_attrs . '>';
         if ($display_title && $title !== '') {
             echo '<h3 class="mj-member-events__title">' . esc_html($title) . '</h3>';
         }
@@ -752,8 +853,30 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
 
         AssetsManager::requirePackage('events-widget', array('instance' => $instance_id));
 
+        // Slider: wrapper for track + floating arrows
+        $is_slider_mode = $card_layout === 'slider';
+        if ($is_slider_mode) {
+            echo '<div class="mj-member-events__slider-wrapper">';
+        }
+
+        // Slider: floating navigation arrows
+        if ($is_slider_mode && $slider_show_arrows) {
+            echo '<div class="mj-member-events__slider-nav">';
+            echo '<button type="button" class="mj-member-events__slider-arrow mj-member-events__slider-arrow--prev" aria-label="' . esc_attr__('Précédent', 'mj-member') . '">';
+            echo '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>';
+            echo '</button>';
+            echo '<button type="button" class="mj-member-events__slider-arrow mj-member-events__slider-arrow--next" aria-label="' . esc_attr__('Suivant', 'mj-member') . '">';
+            echo '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+            echo '</button>';
+            echo '</div>';
+        }
+
         $grid_classes = array('mj-member-events__grid');
-        $grid_classes[] = $layout === 'list' ? 'is-list' : 'is-grid';
+        if ($is_slider_mode) {
+            $grid_classes[] = 'is-slider-track';
+        } else {
+            $grid_classes[] = $layout === 'list' ? 'is-list' : 'is-grid';
+        }
         echo '<div class="' . esc_attr(implode(' ', $grid_classes)) . '">';
 
         foreach ($events as $event) {
@@ -778,6 +901,10 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
             }
             $resolved_layout = $card_layout;
             if ($resolved_layout === 'horizontal' && $cover_url === '') {
+                $resolved_layout = 'standard';
+            }
+            // Slider mode uses 'standard' card layout internally
+            if ($resolved_layout === 'slider') {
                 $resolved_layout = 'standard';
             }
 
@@ -931,7 +1058,7 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                 echo $heading_open . esc_html($event['title']) . $heading_close;
             }
 
-            if ($recurring_summary_text !== '' || $recurring_summary_time !== '') {
+            if ($show_event_schedule && ($recurring_summary_text !== '' || $recurring_summary_time !== '')) {
                 echo '<div class="mj-member-events__recurring-summary">';
                 if ($recurring_summary_text !== '') {
                     echo '<span class="mj-member-events__recurring-heading">' . esc_html($recurring_summary_text) . '</span>';
@@ -1042,6 +1169,7 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                     $loc_city = '';
                     $loc_postal_code = '';
                     $loc_address_line = '';
+                    $loc_cover_url = '';
                     if ($loc_data) {
                         $loc_name = isset($loc_data['name']) ? (string) $loc_data['name'] : '';
                         $loc_city = isset($loc_data['city']) ? (string) $loc_data['city'] : '';
@@ -1049,6 +1177,14 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                         $loc_address_line = isset($loc_data['address_line']) ? (string) $loc_data['address_line'] : '';
                         if ($loc_address_line === '' && isset($loc_data['address'])) {
                             $loc_address_line = (string) $loc_data['address'];
+                        }
+                        // Récupérer l'image du lieu
+                        $loc_cover_id = isset($loc_data['cover_id']) ? (int) $loc_data['cover_id'] : 0;
+                        if ($loc_cover_id > 0) {
+                            $cover_image = wp_get_attachment_image_src($loc_cover_id, 'thumbnail');
+                            if (!empty($cover_image[0])) {
+                                $loc_cover_url = esc_url($cover_image[0]);
+                            }
                         }
                     }
                     if ($loc_name === '') {
@@ -1071,22 +1207,30 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
                     if ($loc_type_key !== '') {
                         $item_classes[] = 'type-' . $loc_type_key;
                     }
+                    if ($loc_cover_url !== '') {
+                        $item_classes[] = 'has-cover';
+                    }
                     echo '<li class="' . esc_attr(implode(' ', $item_classes)) . '">';
                     if ($loc_type_label !== '') {
                         echo '<span class="mj-member-events__location-type">' . esc_html($loc_type_label) . '</span>';
+                    }
+                    echo '<div class="mj-member-events__location-body">';
+                    if ($loc_cover_url !== '') {
+                        echo '<img class="mj-member-events__location-cover" src="' . $loc_cover_url . '" alt="' . esc_attr($loc_name) . '" loading="lazy" />';
                     }
                     echo '<div class="mj-member-events__location-details">';
                     echo '<span class="mj-member-events__location-name">' . esc_html($loc_name) . '</span>';
                     if ($loc_full_address !== '') {
                         echo '<span class="mj-member-events__location-address">' . esc_html($loc_full_address) . '</span>';
                     }
-                    if ($loc_meeting_time !== '') {
+                    if ($show_location_schedule && $loc_meeting_time !== '') {
                         $time_display = $loc_meeting_time;
                         if ($loc_meeting_time_end !== '' && $loc_meeting_time_end !== $loc_meeting_time) {
                             $time_display .= ' – ' . $loc_meeting_time_end;
                         }
-                        echo '<span class="mj-member-events__location-time">' . esc_html($time_display) . '</span>';
+                        echo '<span class="mj-member-events__location-time"><svg class="mj-member-events__location-time-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm0 14.5a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13zM8.5 4h-1v4.5l3.5 2.1.5-.8-3-1.8V4z"/></svg>' . esc_html($time_display) . '</span>';
                     }
+                    echo '</div>';
                     echo '</div>';
                     echo '</li>';
                 }
@@ -1120,6 +1264,23 @@ class Mj_Member_Elementor_Events_Widget extends Widget_Base {
         }
 
         echo '</div>';
+
+        // Close slider wrapper
+        if ($is_slider_mode) {
+            echo '</div>'; // .mj-member-events__slider-wrapper
+        }
+
+        // Slider: dots navigation
+        if ($is_slider_mode && $slider_show_dots && count($events) > 1) {
+            echo '<div class="mj-member-events__slider-dots" role="tablist">';
+            foreach ($events as $idx => $event_item) {
+                $dot_label = sprintf(__('Aller à l\'événement %d', 'mj-member'), $idx + 1);
+                $active_class = $idx === 0 ? ' is-active' : '';
+                echo '<button type="button" class="mj-member-events__slider-dot' . $active_class . '" role="tab" aria-label="' . esc_attr($dot_label) . '" data-slide="' . $idx . '"></button>';
+            }
+            echo '</div>';
+        }
+
         echo '<p class="mj-member-events__filtered-empty" hidden>' . esc_html__('Aucun événement ne correspond à ce filtre.', 'mj-member') . '</p>';
         echo '</div>';
     }
