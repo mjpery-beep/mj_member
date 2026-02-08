@@ -877,6 +877,22 @@
             });
         });
         
+        // Click on post to navigate to single view (only in list mode)
+        $(document).on('click', '.mj-feed-post-wrapper:not(.mj-feed-post-wrapper--single)', function(e) {
+            // Don't navigate if clicking on interactive elements
+            const $target = $(e.target);
+            const isInteractive = $target.closest('button, a, input, textarea, video, .mj-feed-post__actions, .mj-feed-post__reactions-bar, .mj-feed-post__comments, .mj-feed-post__reaction-picker, .mj-feed-post__photo').length > 0;
+            
+            if (isInteractive) {
+                return;
+            }
+            
+            const postUrl = $(this).data('post-url');
+            if (postUrl) {
+                window.location.href = postUrl;
+            }
+        });
+        
         console.log('[MJ] Feed events initialized');
     }
 

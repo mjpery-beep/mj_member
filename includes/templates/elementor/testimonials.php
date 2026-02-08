@@ -46,6 +46,20 @@ $current_member = function_exists('mj_member_get_current_member') ? mj_member_ge
 $is_logged_in = $current_member && isset($current_member->id);
 $member_id = $is_logged_in ? (int) $current_member->id : 0;
 
+// Check for single post mode (URL parameter)
+$single_post_id = isset($_GET['post']) ? (int) $_GET['post'] : 0;
+$is_single_mode = $single_post_id > 0;
+$single_testimonial = null;
+
+if ($is_single_mode && !$is_preview) {
+    $single_testimonial = MjTestimonials::get_by_id($single_post_id);
+    // Only show if approved
+    if (!$single_testimonial || $single_testimonial->status !== MjTestimonials::STATUS_APPROVED) {
+        $single_testimonial = null;
+        $is_single_mode = false;
+    }
+}
+
 // Get approved testimonials (or all if none approved yet)
 $testimonials = array();
 if ($show_list && !$is_preview) {
@@ -115,6 +129,7 @@ $localize_data = array(
         'videoUse' => __('Utiliser cette vidéo', 'mj-member'),
         'loadMore' => __('Voir plus', 'mj-member'),
         'noTestimonials' => __('Aucun témoignage pour le moment.', 'mj-member'),
+        'back' => __('← Retour aux témoignages', 'mj-member'),
         'like' => __('J\'aime', 'mj-member'),
         'comment' => __('Commenter', 'mj-member'),
         'share' => __('Partager', 'mj-member'),
@@ -127,10 +142,14 @@ $localize_data = array(
     ),
 );
 
+$localize_data['isSingleMode'] = $is_single_mode;
+$localize_data['singlePostId'] = $single_post_id;
+$localize_data['baseUrl'] = remove_query_arg('post');
+
 wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_data);
 ?>
 
-<div id="<?php echo esc_attr($widget_id); ?>" class="mj-testimonials mj-testimonials--layout-<?php echo esc_attr($layout); ?>" data-columns="<?php echo esc_attr((string)$columns); ?>">
+<div id="<?php echo esc_attr($widget_id); ?>" class="mj-testimonials mj-testimonials--layout-<?php echo esc_attr($layout); ?><?php echo $is_single_mode ? ' mj-testimonials--single' : ''; ?>" data-columns="<?php echo esc_attr((string)$columns); ?>">
 
     <?php if ($title): ?>
         <h2 class="mj-testimonials__title"><?php echo esc_html($title); ?></h2>
@@ -241,12 +260,25 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
         </div>
     <?php endif; ?>
 
+    <?php if ($is_single_mode && $single_testimonial): ?>
+        <div class="mj-testimonials__single-header">
+            <a href="<?php echo esc_url(remove_query_arg('post')); ?>" class="mj-btn mj-btn--ghost mj-testimonials__back-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                <span><?php esc_html_e('Retour aux témoignages', 'mj-member'); ?></span>
+            </a>
+        </div>
+    <?php endif; ?>
+
     <?php if ($show_list): ?>
         <div class="mj-testimonials__feed">
-            <?php if (empty($testimonials) && !$is_preview): ?>
+            <?php 
+            // En mode single, utiliser uniquement le témoignage sélectionné
+            $display_testimonials = ($is_single_mode && $single_testimonial) ? array($single_testimonial) : $testimonials;
+            ?>
+            <?php if (empty($display_testimonials) && !$is_preview): ?>
                 <p class="mj-testimonials__empty"><?php esc_html_e('Aucun témoignage pour le moment. Soyez le premier à partager votre expérience !', 'mj-member'); ?></p>
             <?php else: ?>
-                <?php foreach ($testimonials as $testimonial): 
+                <?php foreach ($display_testimonials as $testimonial): 
                     $photos = MjTestimonials::get_photo_urls($testimonial, 'large');
                     $video = MjTestimonials::get_video_data($testimonial);
                     $member_name = '';
@@ -277,8 +309,8 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                     
                     $post_id = (int)$testimonial->id;
                 ?>
-                <article class="mj-feed-post-wrapper" data-post-id="<?php echo $post_id; ?>">
-                    <div class="mj-feed-post" data-id="<?php echo $post_id; ?>">
+                <article class="mj-feed-post-wrapper<?php echo $is_single_mode ? ' mj-feed-post-wrapper--single' : ''; ?>" data-post-id="<?php echo $post_id; ?>" data-post-url="<?php echo esc_url(add_query_arg('post', $post_id)); ?>">
+                    <div class="mj-feed-post<?php echo $is_single_mode ? ' mj-feed-post--single' : ''; ?>" data-id="<?php echo $post_id; ?>">
                         <div class="mj-feed-post__header">
                             <div class="mj-feed-post__avatar">
                                 <?php if ($member_avatar_url): ?>
@@ -305,7 +337,7 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                             <div class="mj-feed-post__media mj-feed-post__media--photos-<?php echo min(count($photos), 5); ?>">
                                 <?php foreach (array_slice($photos, 0, 5) as $index => $photo): ?>
                                     <a href="<?php echo esc_url($photo['full']); ?>" class="mj-feed-post__photo" data-lightbox="post-<?php echo $post_id; ?>">
-                                        <img src="<?php echo esc_url($photo['thumb']); ?>" alt="" loading="lazy">
+                                        <img src="<?php echo esc_url($photo['url']); ?>" alt="" loading="lazy">
                                         <?php if ($index === 4 && count($photos) > 5): ?>
                                             <span class="mj-feed-post__photo-more">+<?php echo (count($photos) - 5); ?></span>
                                         <?php endif; ?>
@@ -452,8 +484,9 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
         </div> <!-- .mj-testimonials__feed -->
 
         <?php
+        // Masquer le bouton load more en mode single
         $total_approved = MjTestimonials::count(array('status' => MjTestimonials::STATUS_APPROVED));
-        if ($total_approved > $per_page):
+        if ($total_approved > $per_page && !$is_single_mode):
         ?>
             <div class="mj-testimonials__load-more">
                 <button type="button" class="mj-btn mj-btn--secondary mj-testimonials__load-more-btn" data-page="1" data-total-pages="<?php echo esc_attr((string)ceil($total_approved / $per_page)); ?>">

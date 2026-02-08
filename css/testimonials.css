@@ -1,25 +1,26 @@
 /**
- * Testimonials Widget Styles - Facebook News Feed Style
+ * Testimonials Widget Styles - Modern Clean Style
  *
  * @package MjMember
  */
 
 /* Container */
 .mj-testimonials {
-    --feed-bg: #f0f2f5;
-    --feed-card-bg: #fff;
-    --feed-card-border: #dddfe2;
-    --feed-card-radius: 8px;
-    --feed-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-    --feed-accent: #1877f2;
-    --feed-text: #050505;
-    --feed-text-secondary: #65676b;
-    --feed-separator: #ced0d4;
-    --feed-hover: #f2f3f5;
-    --feed-avatar-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --feed-bg: #f8fafc;
+    --feed-card-bg: #ffffff;
+    --feed-card-border: #e2e8f0;
+    --feed-card-radius: 16px;
+    --feed-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    --feed-accent: #0ea5e9;
+    --feed-accent-light: #e0f2fe;
+    --feed-text: #0f172a;
+    --feed-text-secondary: #64748b;
+    --feed-separator: #f1f5f9;
+    --feed-hover: #f8fafc;
+    --feed-avatar-bg: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
 
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    max-width: 680px;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    max-width: 640px;
     margin: 0 auto;
 }
 
@@ -548,14 +549,14 @@
 }
 
 /* =====================================================
-   FACEBOOK NEWS FEED STYLE
+   MODERN TESTIMONIALS FEED STYLE
    ===================================================== */
 
 /* Feed Container */
 .mj-testimonials__feed {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 20px;
 }
 
 /* Feed Post Wrapper */
@@ -568,23 +569,29 @@
     background: var(--feed-card-bg);
     border-radius: var(--feed-card-radius);
     box-shadow: var(--feed-card-shadow);
+    border: 1px solid var(--feed-card-border);
     overflow: hidden;
     max-width: 100%;
     box-sizing: border-box;
+    transition: box-shadow 0.2s ease;
+}
+
+.mj-feed-post:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 /* Post Header */
 .mj-feed-post__header {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
+    gap: 14px;
+    padding: 16px 20px;
 }
 
 .mj-feed-post__avatar {
-    width: 68px;
-    height: 68px;
-    
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -629,9 +636,9 @@
 
 /* Post Content */
 .mj-feed-post__content {
-    padding: 0 16px 12px;
+    padding: 0 20px 16px;
     font-size: 15px;
-    line-height: 1.5;
+    line-height: 1.6;
     color: var(--feed-text);
 }
 
@@ -785,16 +792,16 @@
 }
 
 .mj-feed-post__reaction-emoji {
-    width: 20px;
-    height: 20px;
+    width: 28px;
+    height: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
+    font-size: 18px;
     background: #fff;
     border-radius: 50%;
     border: 2px solid #fff;
-    margin-left: -4px;
+    margin-left: -6px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 
@@ -829,34 +836,36 @@
 /* Action Buttons */
 .mj-feed-post__actions {
     display: flex;
-    padding: 4px 16px;
-    border-bottom: 1px solid var(--feed-separator);
+    padding: 8px 20px 12px;
+    gap: 8px;
 }
 
 .mj-feed-post__action {
-    flex: 1;
-    display: flex;
+    flex: 0 1 auto;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 12px 8px;
-    background: none;
+    gap: 6px;
+    padding: 8px 16px;
+    background: var(--feed-separator);
     border: none;
-    border-radius: 4px;
-    font-size: 15px;
-    font-weight: 600;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
     color: var(--feed-text-secondary);
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: all 0.2s ease;
     font-family: inherit;
     position: relative;
 }
 
 .mj-feed-post__action:hover {
-    background: var(--feed-hover);
+    background: var(--feed-accent-light);
+    color: var(--feed-accent);
 }
 
 .mj-feed-post__action.is-active {
+    background: var(--feed-accent-light);
     color: var(--feed-accent);
 }
 
@@ -879,14 +888,16 @@
 .mj-feed-post__reaction-picker {
     position: absolute;
     bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%) scale(0.8);
+    left: 0;
+    transform: scale(0.9);
     display: flex;
-    gap: 4px;
+    gap: 2px;
+    width: 250px;
+    justify-content: space-around;
     background: #fff;
-    border-radius: 40px;
-    padding: 6px 10px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15), 0 0 1px rgba(0, 0, 0, 0.1);
+    border-radius: 28px;
+    padding: 8px 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
     opacity: 0;
     visibility: hidden;
     transition: all 0.2s ease;
@@ -898,7 +909,7 @@
 .mj-feed-post__reaction-picker:hover {
     opacity: 1;
     visibility: visible;
-    transform: translateX(-50%) scale(1);
+    transform: scale(1);
 }
 
 .mj-feed-post__reaction-option {
@@ -916,14 +927,15 @@
 }
 
 .mj-feed-post__reaction-option-emoji {
-    font-size: 28px;
+    font-size: 32px;
     display: block;
 }
 
 /* Comments Section - inside the post card */
 .mj-feed-post__comments {
-    padding: 8px 16px 16px;
-    border-top: 1px solid var(--feed-separator);
+    padding: 12px 20px 20px;
+    background: var(--feed-separator);
+    border-top: none;
 }
 
 .mj-feed-post__comments-list {
@@ -942,7 +954,7 @@
 .mj-feed-comment__avatar {
     width: 32px;
     height: 32px;
-    border-radius: 50%;
+    border-radius: 8px;
     background: var(--feed-avatar-bg);
     display: flex;
     align-items: center;
@@ -962,11 +974,12 @@
 }
 
 .mj-feed-comment__bubble {
-    background: var(--feed-hover);
-    border-radius: 18px;
-    padding: 8px 12px;
+    background: #fff;
+    border-radius: 12px;
+    padding: 10px 14px;
     display: inline-block;
     max-width: 100%;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .mj-feed-comment__author {
@@ -1195,4 +1208,58 @@
 
 .mj-testimonials .mj-btn svg {
     flex-shrink: 0;
+}
+/* =====================================================
+   Single Post Mode
+   ===================================================== */
+
+/* Back button header */
+.mj-testimonials__single-header {
+    margin-bottom: 1rem;
+}
+
+.mj-testimonials__back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    color: var(--feed-text-secondary);
+    font-weight: 500;
+    border-radius: 8px;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.mj-testimonials__back-btn:hover {
+    background: var(--feed-hover);
+    color: var(--feed-text);
+}
+
+.mj-testimonials__back-btn svg {
+    flex-shrink: 0;
+}
+
+/* Single mode container */
+.mj-testimonials--single .mj-testimonials__title,
+.mj-testimonials--single .mj-testimonials__intro,
+.mj-testimonials--single .mj-testimonials__form-section,
+.mj-testimonials--single .mj-testimonials__load-more {
+    display: none;
+}
+
+/* Clickable post */
+.mj-feed-post-wrapper:not(.mj-feed-post-wrapper--single) {
+    cursor: pointer;
+}
+
+.mj-feed-post-wrapper:not(.mj-feed-post-wrapper--single):hover .mj-feed-post {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+/* Single post styling */
+.mj-feed-post--single {
+    max-width: 100%;
+}
+
+.mj-feed-post--single .mj-feed-post__comments {
+    display: block !important;
 }
