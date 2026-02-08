@@ -1615,12 +1615,24 @@ function mj_member_run_schema_upgrade() {
         $missing_badge_tables[] = $member_badges_table;
     }
 
+    $testimonials_table = function_exists('mj_member_get_testimonials_table_name')
+        ? mj_member_get_testimonials_table_name()
+        : $wpdb->prefix . 'mj_testimonials';
+    $missing_testimonials_table = !mj_member_table_exists($testimonials_table);
+
+    // Check for testimonial reactions and comments tables
+    $reactions_table = mj_member_get_testimonial_reactions_table_name();
+    $comments_table = mj_member_get_testimonial_comments_table_name();
+    $missing_testimonial_social_tables = !mj_member_table_exists($reactions_table) || !mj_member_table_exists($comments_table);
+
     $schema_needs_upgrade = version_compare($stored_version, Config::schemaVersion(), '<')
         || !empty($missing_columns)
         || !empty($missing_event_columns)
         || !empty($missing_todo_tables)
         || !empty($missing_idea_tables)
-        || !empty($missing_badge_tables);
+        || !empty($missing_badge_tables)
+        || $missing_testimonials_table
+        || $missing_testimonial_social_tables;
     
  
     
@@ -1684,7 +1696,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_49($wpdb);
     mj_member_upgrade_to_2_50($wpdb);
     mj_member_upgrade_to_2_51($wpdb);
-    
+    mj_member_upgrade_to_2_52($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -4836,6 +4848,101 @@ function mj_install_test_data($table_name) {
         'whatsapp_opt_in' => 1,
         'joined_date' => $now
     ), array('%s','%s','%s','%s','%s','%s','%d','%d','%d','%s','%s','%s','%d','%d','%d','%s'));
+}
+
+/**
+ * Get the testimonials table name.
+ *
+ * @return string
+ */
+function mj_member_get_testimonials_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $cached = $wpdb->prefix . 'mj_testimonials';
+    return $cached;
+}
+
+function mj_member_get_testimonial_reactions_table_name() {
+    global $wpdb;
+    return $wpdb->prefix . 'mj_testimonial_reactions';
+}
+
+function mj_member_get_testimonial_comments_table_name() {
+    global $wpdb;
+    return $wpdb->prefix . 'mj_testimonial_comments';
+}
+
+/**
+ * Schema upgrade 2.52: Create testimonials table for member testimonials with photos and video.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_52($wpdb) {
+    $table = mj_member_get_testimonials_table_name();
+
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    // Main testimonials table
+    $sql = "CREATE TABLE {$table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        member_id bigint(20) unsigned NOT NULL,
+        content longtext DEFAULT NULL,
+        photo_ids longtext DEFAULT NULL,
+        video_id bigint(20) unsigned DEFAULT NULL,
+        status varchar(20) NOT NULL DEFAULT 'pending',
+        rejection_reason text DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        reviewed_at datetime DEFAULT NULL,
+        reviewed_by bigint(20) unsigned DEFAULT NULL,
+        PRIMARY KEY  (id),
+        KEY idx_member (member_id),
+        KEY idx_status (status),
+        KEY idx_created (created_at)
+    ) {$charset_collate};";
+
+    dbDelta($sql);
+
+    // Reactions table (Facebook-style reactions)
+    $reactions_table = mj_member_get_testimonial_reactions_table_name();
+    $sql_reactions = "CREATE TABLE {$reactions_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        testimonial_id bigint(20) unsigned NOT NULL,
+        member_id bigint(20) unsigned NOT NULL,
+        reaction_type varchar(20) NOT NULL DEFAULT 'like',
+        reacted_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        UNIQUE KEY uniq_testimonial_member (testimonial_id, member_id),
+        KEY idx_testimonial (testimonial_id),
+        KEY idx_member (member_id),
+        KEY idx_type (reaction_type)
+    ) {$charset_collate};";
+
+    dbDelta($sql_reactions);
+
+    // Comments table
+    $comments_table = mj_member_get_testimonial_comments_table_name();
+    $sql_comments = "CREATE TABLE {$comments_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        testimonial_id bigint(20) unsigned NOT NULL,
+        member_id bigint(20) unsigned NOT NULL,
+        content text NOT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime DEFAULT NULL,
+        PRIMARY KEY  (id),
+        KEY idx_testimonial (testimonial_id),
+        KEY idx_member (member_id),
+        KEY idx_created (created_at)
+    ) {$charset_collate};";
+
+    dbDelta($sql_comments);
 }
 
 function mj_uninstall()

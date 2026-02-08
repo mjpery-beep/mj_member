@@ -119,6 +119,34 @@ function mj_member_notification_bell_mark_all_read_handler() {
 }
 
 /**
+ * Archive une notification (la supprime de la vue utilisateur)
+ */
+add_action('wp_ajax_mj_member_notification_bell_archive', 'mj_member_notification_bell_archive_handler');
+function mj_member_notification_bell_archive_handler() {
+    check_ajax_referer('mj-notification-bell', 'nonce');
+
+    $recipient_id = isset($_POST['recipient_id']) ? absint($_POST['recipient_id']) : 0;
+
+    if ($recipient_id <= 0) {
+        wp_send_json_error(array('message' => __('ID de notification invalide.', 'mj-member')));
+    }
+
+    // Vérifier que le recipient appartient bien à l'utilisateur connecté
+    if (!mj_member_notification_bell_user_owns_recipient($recipient_id)) {
+        wp_send_json_error(array('message' => __('Accès non autorisé.', 'mj-member')));
+    }
+
+    // Archiver en mettant le statut à 'archived'
+    $result = MjNotificationManager::mark_recipient_status(array($recipient_id), 'archived');
+
+    if ($result !== false && !is_wp_error($result)) {
+        wp_send_json_success(array('archived' => true));
+    } else {
+        wp_send_json_error(array('message' => __('Impossible d\'archiver la notification.', 'mj-member')));
+    }
+}
+
+/**
  * Vérifie si l'utilisateur connecté possède le membre spécifié
  */
 function mj_member_notification_bell_user_owns_member($member_id) {

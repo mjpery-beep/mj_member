@@ -6133,6 +6133,143 @@ input.mj-regmgr-search-input__field {
     color: var(--regmgr-gray-500);
 }
 
+/* =============================================================================
+   Testimonial Cards (Member Detail)
+   ============================================================================= */
+.mj-regmgr-testimonials-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.mj-regmgr-testimonial-card {
+    background: #fff;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius-lg);
+    overflow: hidden;
+    box-shadow: var(--regmgr-shadow-xs);
+}
+
+.mj-regmgr-testimonial-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--regmgr-gray-100);
+    background: var(--regmgr-gray-50);
+}
+
+.mj-regmgr-testimonial-card__date {
+    font-size: 12px;
+    color: var(--regmgr-gray-500);
+}
+
+.mj-regmgr-testimonial-card__content {
+    padding: 16px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--regmgr-gray-700);
+    white-space: pre-wrap;
+}
+
+.mj-regmgr-testimonial-card__photos {
+    display: flex;
+    gap: 8px;
+    padding: 0 16px 16px;
+    flex-wrap: wrap;
+}
+
+.mj-regmgr-testimonial-card__photo {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: var(--regmgr-radius-md);
+    border: 1px solid var(--regmgr-gray-200);
+}
+
+.mj-regmgr-testimonial-card__video {
+    padding: 0 16px 16px;
+}
+
+.mj-regmgr-testimonial-card__video video {
+    width: 100%;
+    max-height: 240px;
+    border-radius: var(--regmgr-radius-md);
+    background: #000;
+}
+
+.mj-regmgr-testimonial-card__rejection {
+    padding: 12px 16px;
+    margin: 0 16px 16px;
+    background: rgba(239, 68, 68, 0.08);
+    border-radius: var(--regmgr-radius-md);
+    font-size: 13px;
+    color: #b91c1c;
+}
+
+.mj-regmgr-testimonial-card__rejection strong {
+    font-weight: 600;
+}
+
+/* Testimonial card status variants */
+.mj-regmgr-testimonial-card--pending {
+    border-left: 3px solid var(--regmgr-warning-500, #f59e0b);
+}
+
+.mj-regmgr-testimonial-card--approved {
+    border-left: 3px solid var(--regmgr-success-500, #10b981);
+}
+
+.mj-regmgr-testimonial-card--rejected {
+    border-left: 3px solid var(--regmgr-danger-500, #ef4444);
+    opacity: 0.85;
+}
+
+.mj-regmgr-testimonial-card__header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.mj-regmgr-testimonial-card__delete-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--regmgr-gray-400);
+    border-radius: var(--regmgr-radius-md);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.mj-regmgr-testimonial-card__delete-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--regmgr-danger-500, #ef4444);
+}
+
+.mj-regmgr-testimonial-card__footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--regmgr-gray-100);
+    background: var(--regmgr-gray-50);
+}
+
+.mj-regmgr-testimonial-card__footer .mj-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.mj-regmgr-testimonial-card__footer .mj-btn svg {
+    flex-shrink: 0;
+}
+
 /* Section header with icon */
 .mj-regmgr-member-detail__section-icon {
     flex-shrink: 0;

@@ -22,6 +22,7 @@ use Mj\Member\Admin\Page\BadgesPage;
 use Mj\Member\Admin\Page\TrophiesPage;
 use Mj\Member\Admin\Page\LevelsPage;
 use Mj\Member\Admin\Page\NotificationsPage;
+use Mj\Member\Admin\Page\TestimonialsPage;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -245,5 +246,14 @@ final class AdminMenu
             array(NotificationsPage::class, 'render')
         );
         NotificationsPage::registerHooks($notificationsHook);
+
+        add_submenu_page(
+            'mj_member',
+            __('Témoignages', 'mj-member'),
+            __('Témoignages', 'mj-member'),
+            $capability,
+            TestimonialsPage::slug(),
+            array(TestimonialsPage::class, 'render')
+        );
     }
 }

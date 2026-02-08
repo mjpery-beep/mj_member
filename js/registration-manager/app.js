@@ -5487,6 +5487,38 @@
                 });
         }, [api, showSuccess, showError, loadMemberDetails]);
 
+        var handleDeleteMemberTestimonial = useCallback(function (testimonialId) {
+            var memberId = selectedMember && selectedMember.id ? selectedMember.id : null;
+            return api.deleteMemberTestimonial(testimonialId)
+                .then(function (result) {
+                    showSuccess(result.message || 'Témoignage supprimé');
+                    if (memberId) {
+                        loadMemberDetails(memberId);
+                    }
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err.message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails, selectedMember]);
+
+        var handleUpdateMemberTestimonialStatus = useCallback(function (testimonialId, status, rejectionReason) {
+            var memberId = selectedMember && selectedMember.id ? selectedMember.id : null;
+            return api.updateMemberTestimonialStatus(testimonialId, status, rejectionReason)
+                .then(function (result) {
+                    showSuccess(result.message || 'Statut mis à jour');
+                    if (memberId) {
+                        loadMemberDetails(memberId);
+                    }
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err.message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails, selectedMember]);
+
         var handleSyncMemberBadge = useCallback(function (memberId, badgeId, criterionIds) {
             return api.syncMemberBadge(memberId, badgeId, criterionIds)
                 .then(function (result) {
@@ -7234,6 +7266,8 @@
                             pendingEditRequest: pendingMemberEdit,
                             onPendingEditHandled: handleConsumePendingMemberEdit,
                             onDeleteMessage: handleDeleteMemberMessage,
+                            onDeleteTestimonial: handleDeleteMemberTestimonial,
+                            onUpdateTestimonialStatus: handleUpdateMemberTestimonialStatus,
                             onDeleteMember: handleDeleteMember,
                             onSyncBadgeCriteria: handleSyncMemberBadge,
                             onAdjustXp: handleAdjustMemberXp,

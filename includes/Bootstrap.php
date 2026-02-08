@@ -68,6 +68,8 @@ final class Bootstrap
         'includes/core/ajax/admin/hours.php',
         'includes/core/ajax/admin/todos.php',
         'includes/core/ajax/admin/registration-manager.php',
+        'includes/core/ajax/admin/testimonials.php',
+        'includes/core/ajax/front/testimonials_ajax.php',
     );
 
     /** @var bool */

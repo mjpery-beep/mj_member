@@ -166,8 +166,12 @@
                 : '';
 
             const markReadBtn = isUnread 
-                ? `<button type="button" class="mj-notification-bell__item-mark-read" data-recipient-id="${recipientId}" title="Marquer comme lu"><span class="mj-notification-bell__unread-dot"></span></button>` 
+                ? `<button type="button" class="mj-notification-bell__item-action mj-notification-bell__item-mark-read" data-recipient-id="${recipientId}" title="Marquer comme lu"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" /></svg></button>` 
                 : '';
+
+            const archiveBtn = `<button type="button" class="mj-notification-bell__item-action mj-notification-bell__item-archive" data-recipient-id="${recipientId}" title="Supprimer"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.519.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd" /></svg></button>`;
+
+            const actionsHtml = `<div class="mj-notification-bell__item-actions">${markReadBtn}${archiveBtn}</div>`;
 
             return `
                 <div class="mj-notification-bell__item ${isUnread ? 'mj-notification-bell__item--unread' : ''}${clickableClass}" 
@@ -187,7 +191,7 @@
                         </time>
                     </div>
                     ${chevronHtml}
-                    ${markReadBtn}
+                    ${actionsHtml}
                 </div>
             `;
         }
@@ -293,18 +297,16 @@
                 return;
             }
 
-            // Vérifier si on clique sur le dot directement (fallback)
-            const unreadDot = e.target.closest('.mj-notification-bell__unread-dot');
-            if (unreadDot) {
+            // Vérifier si on clique sur le bouton archive
+            const archiveBtn = e.target.closest('.mj-notification-bell__item-archive');
+            if (archiveBtn) {
                 e.preventDefault();
                 e.stopPropagation();
-                const parentBtn = unreadDot.closest('.mj-notification-bell__item-mark-read');
-                if (parentBtn) {
-                    const recipientId = parentBtn.dataset.recipientId || parentBtn.getAttribute('data-recipient-id');
-                    if (recipientId) {
-                        this.markAsRead(recipientId, parentBtn.closest('.mj-notification-bell__item'));
-                    }
+                const recipientId = archiveBtn.dataset.recipientId || archiveBtn.getAttribute('data-recipient-id');
+                if (recipientId) {
+                    this.archiveNotification(recipientId, archiveBtn.closest('.mj-notification-bell__item'));
                 }
+                return;
             }
         }
 
@@ -328,6 +330,53 @@
                 }
             } catch (error) {
                 console.error('NotificationBell: Erreur mark read', error);
+            }
+        }
+
+        async archiveNotification(recipientId, itemElement) {
+            if (this.config.preview) return;
+
+            // Animation de suppression
+            if (itemElement) {
+                itemElement.style.transition = 'all 0.3s ease';
+                itemElement.style.opacity = '0';
+                itemElement.style.transform = 'translateX(20px)';
+            }
+
+            try {
+                const response = await this.ajaxRequest('mj_member_notification_bell_archive', {
+                    recipient_id: recipientId
+                });
+
+                if (response.success) {
+                    // Vérifier si c'était non-lu pour décrémenter le compteur
+                    if (itemElement?.classList.contains('mj-notification-bell__item--unread')) {
+                        this.unreadCount = Math.max(0, this.unreadCount - 1);
+                        this.updateBadge();
+                    }
+
+                    // Supprimer l'élément après l'animation
+                    setTimeout(() => {
+                        itemElement?.remove();
+                        // Afficher le message vide si plus de notifications
+                        if (this.list && this.list.querySelectorAll('.mj-notification-bell__item').length === 0) {
+                            this.list.innerHTML = this.getEmptyHtml();
+                        }
+                    }, 300);
+                } else {
+                    // Restaurer si erreur
+                    if (itemElement) {
+                        itemElement.style.opacity = '1';
+                        itemElement.style.transform = 'translateX(0)';
+                    }
+                }
+            } catch (error) {
+                console.error('NotificationBell: Erreur archive', error);
+                // Restaurer si erreur
+                if (itemElement) {
+                    itemElement.style.opacity = '1';
+                    itemElement.style.transform = 'translateX(0)';
+                }
             }
         }
 

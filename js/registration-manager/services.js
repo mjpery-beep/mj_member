@@ -596,6 +596,26 @@
             },
 
             /**
+             * Supprime un témoignage d'un membre
+             */
+            deleteMemberTestimonial: function (testimonialId) {
+                return post('mj_regmgr_delete_member_testimonial', {
+                    testimonialId: testimonialId,
+                });
+            },
+
+            /**
+             * Met à jour le statut d'un témoignage (approuver/rejeter)
+             */
+            updateMemberTestimonialStatus: function (testimonialId, status, rejectionReason) {
+                return post('mj_regmgr_update_member_testimonial_status', {
+                    testimonialId: testimonialId,
+                    status: status,
+                    rejectionReason: rejectionReason || '',
+                });
+            },
+
+            /**
              * Récupère l'historique d'inscriptions d'un membre
              */
             getMemberRegistrations: function (memberId) {

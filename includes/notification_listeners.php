@@ -71,6 +71,15 @@ final class MjNotificationTypes
     // Articles
     const POST_PUBLISHED = 'post_published';
 
+    // Témoignages
+    const TESTIMONIAL_NEW_PENDING = 'testimonial_new_pending';
+    const TESTIMONIAL_COMMENT_REPLY = 'testimonial_comment_reply';
+    const TESTIMONIAL_COMMENT = 'testimonial_comment';
+    const TESTIMONIAL_APPROVED = 'testimonial_approved';
+    const TESTIMONIAL_REJECTED = 'testimonial_rejected';
+    const TESTIMONIAL_REACTION = 'testimonial_reaction';
+
+
     /**
      * Retourne les labels pour chaque type de notification.
      *
@@ -103,6 +112,12 @@ final class MjNotificationTypes
             self::TODO_MEDIA_ADDED => __('Document ajouté', 'mj-member'),
             self::TODO_COMPLETED => __('Tâche terminée', 'mj-member'),
             self::POST_PUBLISHED => __('Nouvel article publié', 'mj-member'),
+            self::TESTIMONIAL_NEW_PENDING => __('Témoignage à modérer', 'mj-member'),
+            self::TESTIMONIAL_COMMENT_REPLY => __('Réponse à un commentaire de témoignage', 'mj-member'),
+            self::TESTIMONIAL_COMMENT => __('Nouveau commentaire de témoignage', 'mj-member'),
+            self::TESTIMONIAL_APPROVED => __('Témoignage approuvé', 'mj-member'),
+            self::TESTIMONIAL_REJECTED => __('Témoignage rejeté', 'mj-member'),
+            self::TESTIMONIAL_REACTION => __('Réaction à un témoignage', 'mj-member')
         );
     }
 }
@@ -1604,6 +1619,7 @@ if (!function_exists('mj_member_notification_on_event_published')) {
     add_action('mj_member_event_published', 'mj_member_notification_on_event_published', 10, 2);
 }
 
+
 // ============================================================================
 // HOOK: Ajouter do_action dans les endroits manquants
 // ============================================================================
@@ -1629,3 +1645,305 @@ if (!function_exists('mj_member_notification_on_event_published')) {
  *    - Après: MjIdeas::create(...)
  *    - Params: $idea_id, $member_id, $title, $content
  */
+
+// ============================================================================
+// TÉMOIGNAGES NOTIFICATIONS
+// ============================================================================
+
+if (!function_exists('mj_member_notification_on_testimonial_approved')) {
+    /**
+     * Notification quand un témoignage est approuvé.
+     *
+     * @param int $testimonial_id
+     * @param int $member_id Auteur du témoignage
+     */
+    function mj_member_notification_on_testimonial_approved(int $testimonial_id, int $member_id): void
+    {
+        if (!class_exists(MjNotifications::class)) {
+            return;
+        }
+
+        $notification_data = array(
+            'type' => MjNotificationTypes::TESTIMONIAL_APPROVED,
+            'title' => __('✔ Ton témoignage a été publié !', 'mj-member'),
+            'excerpt' => __('Ton témoignage a été approuvé et est maintenant visible par tous les membres.', 'mj-member'),
+            'url' => home_url('/temoignages/'),
+            'context' => 'testimonials',
+            'source' => 'system',
+            'payload' => array(
+                'testimonial_id' => $testimonial_id,
+            ),
+        );
+
+        mj_member_record_notification($notification_data, array($member_id));
+
+        mj_member_notification_log('testimonial_approved', array(
+            'testimonial_id' => $testimonial_id,
+            'member_id' => $member_id,
+        ));
+    }
+
+    add_action('mj_member_testimonial_approved', 'mj_member_notification_on_testimonial_approved', 10, 2);
+}
+
+if (!function_exists('mj_member_notification_on_testimonial_rejected')) {
+    /**
+     * Notification quand un témoignage est refusé.
+     *
+     * @param int    $testimonial_id
+     * @param int    $member_id Auteur du témoignage
+     * @param string $reason Raison du refus
+     */
+    function mj_member_notification_on_testimonial_rejected(int $testimonial_id, int $member_id, string $reason = ''): void
+    {
+        if (!class_exists(MjNotifications::class)) {
+            return;
+        }
+
+        $excerpt = __('Ton témoignage n\'a pas été approuvé.', 'mj-member');
+        if (!empty($reason)) {
+            $excerpt .= ' ' . sprintf(__('Raison : %s', 'mj-member'), $reason);
+        }
+
+        $notification_data = array(
+            'type' => MjNotificationTypes::TESTIMONIAL_REJECTED,
+            'title' => __('Témoignage non publié', 'mj-member'),
+            'excerpt' => $excerpt,
+            'url' => home_url('/temoignages/'),
+            'context' => 'testimonials',
+            'source' => 'system',
+            'payload' => array(
+                'testimonial_id' => $testimonial_id,
+                'reason' => $reason,
+            ),
+        );
+
+        mj_member_record_notification($notification_data, array($member_id));
+
+        mj_member_notification_log('testimonial_rejected', array(
+            'testimonial_id' => $testimonial_id,
+            'member_id' => $member_id,
+            'reason' => $reason,
+        ));
+    }
+
+    add_action('mj_member_testimonial_rejected', 'mj_member_notification_on_testimonial_rejected', 10, 3);
+}
+
+if (!function_exists('mj_member_notification_on_testimonial_reaction')) {
+    /**
+     * Notification quand quelqu'un réagit à un témoignage.
+     *
+     * @param int    $testimonial_id
+     * @param int    $author_member_id Auteur du témoignage
+     * @param int    $reactor_member_id Membre qui a réagi
+     * @param string $reaction_type Type de réaction (like, love, etc.)
+     */
+    function mj_member_notification_on_testimonial_reaction(int $testimonial_id, int $author_member_id, int $reactor_member_id, string $reaction_type): void
+    {
+        // Ne pas notifier si l'auteur réagit à son propre témoignage
+        if ($author_member_id === $reactor_member_id) {
+            return;
+        }
+
+        if (!class_exists(MjNotifications::class) || !class_exists(MjMembers::class)) {
+            return;
+        }
+
+        $reactor = MjMembers::getById($reactor_member_id);
+        $reactor_name = mj_member_notification_get_member_name($reactor);
+
+        $reaction_emojis = array(
+            'like' => '👍',
+            'love' => '❤️',
+            'haha' => '😂',
+            'wow' => '😮',
+            'sad' => '😢',
+            'angry' => '😡',
+        );
+        $emoji = isset($reaction_emojis[$reaction_type]) ? $reaction_emojis[$reaction_type] : '👍';
+
+        $notification_data = array(
+            'type' => MjNotificationTypes::TESTIMONIAL_REACTION,
+            'title' => sprintf(__('%s %s a réagi à ton témoignage', 'mj-member'), $emoji, $reactor_name),
+            'excerpt' => __('Clique pour voir ton témoignage.', 'mj-member'),
+            'url' => home_url('/temoignages/'),
+            'context' => 'testimonials',
+            'source' => 'member',
+            'payload' => array(
+                'testimonial_id' => $testimonial_id,
+                'reactor_member_id' => $reactor_member_id,
+                'reaction_type' => $reaction_type,
+            ),
+        );
+
+        mj_member_record_notification($notification_data, array($author_member_id));
+
+        mj_member_notification_log('testimonial_reaction', array(
+            'testimonial_id' => $testimonial_id,
+            'author_member_id' => $author_member_id,
+            'reactor_member_id' => $reactor_member_id,
+            'reaction_type' => $reaction_type,
+        ));
+    }
+
+    add_action('mj_member_testimonial_reaction', 'mj_member_notification_on_testimonial_reaction', 10, 4);
+}
+
+if (!function_exists('mj_member_notification_on_testimonial_comment')) {
+    /**
+     * Notification quand quelqu'un commente un témoignage.
+     *
+     * @param int $testimonial_id
+     * @param int $author_member_id Auteur du témoignage
+     * @param int $commenter_member_id Membre qui a commenté
+     * @param int $comment_id
+     */
+    function mj_member_notification_on_testimonial_comment(int $testimonial_id, int $author_member_id, int $commenter_member_id, int $comment_id): void
+    {
+        // Ne pas notifier si l'auteur commente son propre témoignage
+        if ($author_member_id === $commenter_member_id) {
+            return;
+        }
+
+        if (!class_exists(MjNotifications::class) || !class_exists(MjMembers::class)) {
+            return;
+        }
+
+        $commenter = MjMembers::getById($commenter_member_id);
+        $commenter_name = mj_member_notification_get_member_name($commenter);
+
+        $notification_data = array(
+            'type' => MjNotificationTypes::TESTIMONIAL_COMMENT,
+            'title' => sprintf(__('💬 %s a commenté ton témoignage', 'mj-member'), $commenter_name),
+            'excerpt' => __('Clique pour voir le commentaire.', 'mj-member'),
+            'url' => home_url('/temoignages/'),
+            'context' => 'testimonials',
+            'source' => 'member',
+            'payload' => array(
+                'testimonial_id' => $testimonial_id,
+                'commenter_member_id' => $commenter_member_id,
+                'comment_id' => $comment_id,
+            ),
+        );
+
+        mj_member_record_notification($notification_data, array($author_member_id));
+
+        mj_member_notification_log('testimonial_comment', array(
+            'testimonial_id' => $testimonial_id,
+            'author_member_id' => $author_member_id,
+            'commenter_member_id' => $commenter_member_id,
+            'comment_id' => $comment_id,
+        ));
+    }
+
+    add_action('mj_member_testimonial_comment', 'mj_member_notification_on_testimonial_comment', 10, 4);
+}
+
+if (!function_exists('mj_member_notification_on_testimonial_comment_reply')) {
+    /**
+     * Notification quand quelqu'un répond à un commentaire.
+     *
+     * @param int $testimonial_id
+     * @param int $original_commenter_id Auteur du commentaire original
+     * @param int $replier_member_id Membre qui a répondu
+     * @param int $reply_comment_id
+     */
+    function mj_member_notification_on_testimonial_comment_reply(int $testimonial_id, int $original_commenter_id, int $replier_member_id, int $reply_comment_id): void
+    {
+        // Ne pas notifier si on répond à son propre commentaire
+        if ($original_commenter_id === $replier_member_id) {
+            return;
+        }
+
+        if (!class_exists(MjNotifications::class) || !class_exists(MjMembers::class)) {
+            return;
+        }
+
+        $replier = MjMembers::getById($replier_member_id);
+        $replier_name = mj_member_notification_get_member_name($replier);
+
+        $notification_data = array(
+            'type' => MjNotificationTypes::TESTIMONIAL_COMMENT_REPLY,
+            'title' => sprintf(__('%s a répondu à ton commentaire', 'mj-member'), $replier_name),
+            'excerpt' => __('Clique pour voir la réponse.', 'mj-member'),
+            'url' => home_url('/temoignages/'),
+            'context' => 'testimonials',
+            'source' => 'member',
+            'payload' => array(
+                'testimonial_id' => $testimonial_id,
+                'replier_member_id' => $replier_member_id,
+                'reply_comment_id' => $reply_comment_id,
+            ),
+        );
+
+        mj_member_record_notification($notification_data, array($original_commenter_id));
+
+        mj_member_notification_log('testimonial_comment_reply', array(
+            'testimonial_id' => $testimonial_id,
+            'original_commenter_id' => $original_commenter_id,
+            'replier_member_id' => $replier_member_id,
+            'reply_comment_id' => $reply_comment_id,
+        ));
+    }
+
+    add_action('mj_member_testimonial_comment_reply', 'mj_member_notification_on_testimonial_comment_reply', 10, 4);
+}
+
+if (!function_exists('mj_member_notification_on_testimonial_new_pending')) {
+    /**
+     * Notification aux admins quand un nouveau témoignage est soumis.
+     *
+     * @param int $testimonial_id
+     * @param int $member_id Auteur du témoignage
+     */
+    function mj_member_notification_on_testimonial_new_pending(int $testimonial_id, int $member_id): void
+    {
+        if (!class_exists(MjNotifications::class) || !class_exists(MjMembers::class) || !class_exists(MjRoles::class)) {
+            return;
+        }
+
+        $author = MjMembers::getById($member_id);
+        $author_name = mj_member_notification_get_member_name($author);
+
+        // Récupérer les coordinateurs et animateurs (staff)
+        $coordinateurs = MjMembers::getByRole(MjRoles::COORDINATEUR);
+        $animateurs = MjMembers::getByRole(MjRoles::ANIMATEUR);
+        $staff = array_merge($coordinateurs ?: [], $animateurs ?: []);
+        if (empty($staff)) {
+            return;
+        }
+
+        $admin_ids = array_map(function ($member) {
+            return isset($member->id) ? (int) $member->id : 0;
+        }, $staff);
+        $admin_ids = array_filter($admin_ids);
+
+        if (empty($admin_ids)) {
+            return;
+        }
+
+        $notification_data = array(
+            'type' => MjNotificationTypes::TESTIMONIAL_NEW_PENDING,
+            'title' => __('Nouveau témoignage à modérer', 'mj-member'),
+            'excerpt' => sprintf(__('%s a soumis un témoignage.', 'mj-member'), $author_name),
+            'url' => mj_member_notification_get_manager_url('member', $member_id, 'testimonials'),
+            'context' => 'testimonials',
+            'source' => 'system',
+            'payload' => array(
+                'testimonial_id' => $testimonial_id,
+                'author_member_id' => $member_id,
+            ),
+        );
+
+        mj_member_record_notification($notification_data, $admin_ids);
+
+        mj_member_notification_log('testimonial_new_pending', array(
+            'testimonial_id' => $testimonial_id,
+            'member_id' => $member_id,
+            'admins_count' => count($admin_ids),
+        ));
+    }
+
+    add_action('mj_member_testimonial_created', 'mj_member_notification_on_testimonial_new_pending', 10, 2);
+}

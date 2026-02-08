@@ -344,7 +344,7 @@
     border-radius: 12px;
     color: #64748b;
     transition: all 0.2s ease;
-    font-size: 20px;
+    font-size: 30px;
     line-height: 1;
 }
 
@@ -511,7 +511,7 @@
 .mj-notification-bell__item-title {
     display: block;
     margin: 0;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 600;
     color: #1e293b;
     line-height: 1.2;
@@ -556,8 +556,19 @@
     border-radius: 50%;
 }
 
-/* Mark as read button */
-.mj-notification-bell__item-mark-read {
+/* Actions group */
+.mj-notification-bell__item-actions {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    align-self: center;
+    position: relative;
+    z-index: 2;
+}
+
+/* Action button base */
+.mj-notification-bell__item-action {
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -565,19 +576,46 @@
     width: 28px;
     height: 28px;
     padding: 0;
-    background: transparent;
+    background: #f1f5f9;
     border: none;
     cursor: pointer;
-    border-radius: 8px;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    align-self: center;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+    color: #64748b;
 }
 
-.mj-notification-bell__item-mark-read:hover {
-    background-color: rgba(99, 102, 241, 0.12);
+.mj-notification-bell__item-action svg {
+    width: 14px;
+    height: 14px;
+}
+
+.mj-notification-bell__item-action:hover {
     transform: scale(1.1);
 }
 
+/* Mark as read button */
+.mj-notification-bell__item-mark-read {
+    background: #dbeafe;
+    color: #3b82f6;
+}
+
+.mj-notification-bell__item-mark-read:hover {
+    background: #bfdbfe;
+    color: #2563eb;
+}
+
+/* Archive/delete button */
+.mj-notification-bell__item-archive {
+    background: #fee2e2;
+    color: #ef4444;
+}
+
+.mj-notification-bell__item-archive:hover {
+    background: #fecaca;
+    color: #dc2626;
+}
+
+/* Deprecated: old unread dot style */
 .mj-notification-bell__unread-dot {
     width: 10px;
     height: 10px;

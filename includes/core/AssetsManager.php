@@ -300,6 +300,10 @@ final class AssetsManager
         self::registerStyle('mj-member-notification-preferences', 'css/notification-preferences.css');
         self::registerScript('mj-member-notification-preferences', 'js/notification-preferences.js');
 
+        // Testimonials Widget
+        self::registerStyle('mj-member-testimonials', 'css/testimonials.css', array('mj-member-components'));
+        self::registerScript('mj-member-testimonials', 'js/testimonials.js', array('jquery', 'mj-member-utils'));
+
         // Notification Bell Widget
         self::registerStyle('mj-member-notification-bell', 'css/notification-bell.css');
         self::registerScript('mj-member-notification-bell', 'js/notification-bell.js', array('jquery'));
@@ -520,6 +524,12 @@ final class AssetsManager
                 wp_enqueue_script('mj-member-regmgr-event-editor');
                 wp_enqueue_script('mj-member-regmgr-modals');
                 wp_enqueue_script('mj-member-regmgr-app');
+                break;
+
+            case 'testimonials':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-testimonials');
+                wp_enqueue_script('mj-member-testimonials');
                 break;
 
             default:

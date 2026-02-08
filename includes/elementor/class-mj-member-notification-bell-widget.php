@@ -300,16 +300,9 @@ class Mj_Member_Elementor_Notification_Bell_Widget extends Widget_Base {
                 ),
             );
         } elseif ($member_id > 0 && !$is_preview) {
-            // Récupérer les vraies notifications
+            // Récupérer uniquement le count - les notifications seront chargées via AJAX à l'ouverture
             if (function_exists('mj_member_get_member_unread_notifications_count')) {
                 $unread_count = mj_member_get_member_unread_notifications_count($member_id);
-            }
-
-            if (function_exists('mj_member_get_member_notifications_feed')) {
-                $max_items = isset($settings['max_items']) ? (int) $settings['max_items'] : 10;
-                $notifications = mj_member_get_member_notifications_feed($member_id, array(
-                    'limit' => $max_items,
-                ));
             }
         }
 
@@ -325,7 +318,6 @@ class Mj_Member_Elementor_Notification_Bell_Widget extends Widget_Base {
         $config = array(
             'memberId' => $member_id,
             'unreadCount' => $unread_count,
-            'notifications' => $notifications,
             'autoRefresh' => $auto_refresh,
             'refreshInterval' => max(30, $refresh_interval) * 1000,
             'preview' => $is_preview,

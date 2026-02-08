@@ -862,6 +862,8 @@
         var onRemoveAvatar = typeof props.onRemoveAvatar === 'function' ? props.onRemoveAvatar : null;
         var onCaptureAvatar = typeof props.onCaptureAvatar === 'function' ? props.onCaptureAvatar : null;
         var onDeleteMessage = typeof props.onDeleteMessage === 'function' ? props.onDeleteMessage : null;
+        var onDeleteTestimonial = typeof props.onDeleteTestimonial === 'function' ? props.onDeleteTestimonial : null;
+        var onUpdateTestimonialStatus = typeof props.onUpdateTestimonialStatus === 'function' ? props.onUpdateTestimonialStatus : null;
         var onManageAccount = typeof props.onManageAccount === 'function' ? props.onManageAccount : null;
         var onDeleteMember = typeof props.onDeleteMember === 'function' ? props.onDeleteMember : null;
         var onDeleteRegistration = typeof props.onDeleteRegistration === 'function' ? props.onDeleteRegistration : null;
@@ -895,7 +897,7 @@
         var memberId = member && member.id ? member.id : null;
 
         // Onglets valides pour les membres
-        var validMemberTabs = ['information', 'membership', 'badges', 'photos', 'ideas', 'messages', 'notes', 'history'];
+        var validMemberTabs = ['information', 'membership', 'badges', 'photos', 'ideas', 'messages', 'testimonials', 'notes', 'history'];
         var resolvedInitialTab = initialTab && validMemberTabs.indexOf(initialTab) !== -1 ? initialTab : 'information';
         var initialTabAppliedRef = useRef(false);
 
@@ -2037,8 +2039,13 @@
         var tabPhotosLabel = getString(strings, 'tabMemberPhotos', 'Photos');
         var tabIdeasLabel = getString(strings, 'tabMemberIdeas', 'Idées');
         var tabMessagesLabel = getString(strings, 'tabMemberMessages', 'Messages');
+        var tabTestimonialsLabel = getString(strings, 'tabMemberTestimonials', 'Témoignages');
         var tabNotesLabel = getString(strings, 'tabMemberNotes', 'Notes');
         var tabHistoryLabel = getString(strings, 'tabMemberHistory', 'Historique');
+
+        var memberTestimonials = Array.isArray(member.testimonials) ? member.testimonials : [];
+        var pendingTestimonialsCount = memberTestimonials.filter(function (t) { return t.status === 'pending'; }).length;
+        var testimonialsCount = memberTestimonials.length;
 
         var photosCount = memberPhotos.length;
         var pendingPhotosCount = memberPhotos.filter(function (p) { return p.status === 'pending'; }).length;
@@ -2085,6 +2092,7 @@
             messages: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.5A8.38 8.38 0 0 1 3 11.5 8.38 8.38 0 0 1 12 3a8.38 8.38 0 0 1 9 8.5z"></path><polyline points="8 11 12 15 16 11"></polyline></svg>',
             notes: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"></path><polyline points="15 2 15 7 20 7"></polyline><line x1="9" y1="12" x2="15" y2="12"></line><line x1="9" y1="16" x2="13" y2="16"></line></svg>',
             history: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>',
+            testimonials: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><line x1="9" y1="9" x2="15" y2="9"></line><line x1="9" y1="13" x2="13" y2="13"></line></svg>',
         };
 
         var memberTabs = [
@@ -2094,6 +2102,7 @@
             { key: 'photos', label: tabPhotosLabel, badge: pendingPhotosCount > 0 ? pendingPhotosCount : undefined, badgeType: pendingPhotosCount > 0 ? 'warning' : undefined, icon: tabIcons.photos },
             { key: 'ideas', label: tabIdeasLabel, badge: ideasCount > 0 ? ideasCount : undefined, icon: tabIcons.ideas },
             { key: 'messages', label: tabMessagesLabel, badge: messagesCount > 0 ? messagesCount : undefined, icon: tabIcons.messages },
+            { key: 'testimonials', label: tabTestimonialsLabel, badge: pendingTestimonialsCount > 0 ? pendingTestimonialsCount : undefined, badgeType: pendingTestimonialsCount > 0 ? 'warning' : undefined, icon: tabIcons.testimonials },
             { key: 'notes', label: tabNotesLabel, badge: notesCount > 0 ? notesCount : undefined, icon: tabIcons.notes },
             { key: 'history', label: tabHistoryLabel, badge: registrations.length > 0 ? registrations.length : undefined, icon: tabIcons.history },
         ];
@@ -3389,6 +3398,116 @@
                                     ]);
                                 })
                             ),
+                        ]),
+                    ]),
+                    activeTab === 'testimonials' && h(Fragment, null, [
+                        h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                            h('h2', { class: 'mj-regmgr-member-detail__section-title' }, 
+                                getString(strings, 'memberTestimonials', 'Témoignages') + (testimonialsCount > 0 ? ' (' + testimonialsCount + ')' : '')
+                            ),
+                            testimonialsCount > 0
+                                ? h('div', { class: 'mj-regmgr-testimonials-list' },
+                                    memberTestimonials.map(function (testimonial) {
+                                        var statusLabel = testimonial.status === 'approved' 
+                                            ? getString(strings, 'testimonialStatusApproved', 'Approuvé')
+                                            : testimonial.status === 'rejected' 
+                                                ? getString(strings, 'testimonialStatusRejected', 'Rejeté') 
+                                                : getString(strings, 'testimonialStatusPending', 'En attente');
+                                        var statusClass = testimonial.status === 'approved' ? 'mj-regmgr-badge--success' :
+                                            testimonial.status === 'rejected' ? 'mj-regmgr-badge--danger' : 'mj-regmgr-badge--warning';
+                                        var isPending = testimonial.status === 'pending';
+                                        var isApproved = testimonial.status === 'approved';
+                                        var isRejected = testimonial.status === 'rejected';
+                                        
+                                        return h('div', { 
+                                            key: testimonial.id, 
+                                            class: classNames('mj-regmgr-testimonial-card', {
+                                                'mj-regmgr-testimonial-card--pending': isPending,
+                                                'mj-regmgr-testimonial-card--approved': isApproved,
+                                                'mj-regmgr-testimonial-card--rejected': isRejected,
+                                            }),
+                                        }, [
+                                            h('div', { class: 'mj-regmgr-testimonial-card__header' }, [
+                                                h('div', { class: 'mj-regmgr-testimonial-card__header-left' }, [
+                                                    h('span', { class: classNames('mj-regmgr-badge', statusClass) }, statusLabel),
+                                                    testimonial.created_at && h('span', { class: 'mj-regmgr-testimonial-card__date' }, testimonial.created_at),
+                                                ]),
+                                                h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-regmgr-testimonial-card__delete-btn',
+                                                    title: getString(strings, 'deleteTestimonial', 'Supprimer'),
+                                                    onClick: function () {
+                                                        if (confirm(getString(strings, 'confirmDeleteTestimonial', 'Voulez-vous vraiment supprimer ce témoignage ?'))) {
+                                                            onDeleteTestimonial && onDeleteTestimonial(testimonial.id);
+                                                        }
+                                                    },
+                                                }, [
+                                                    h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                        h('polyline', { points: '3 6 5 6 21 6' }),
+                                                        h('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' }),
+                                                    ]),
+                                                ]),
+                                            ]),
+                                            testimonial.content && h('div', { class: 'mj-regmgr-testimonial-card__content' }, testimonial.content),
+                                            testimonial.photos && testimonial.photos.length > 0 && h('div', { class: 'mj-regmgr-testimonial-card__photos' },
+                                                testimonial.photos.slice(0, 4).map(function (photo, idx) {
+                                                    return h('img', { key: idx, src: photo.thumb || photo.url, alt: '', class: 'mj-regmgr-testimonial-card__photo' });
+                                                })
+                                            ),
+                                            testimonial.video && h('div', { class: 'mj-regmgr-testimonial-card__video' }, [
+                                                h('video', { controls: true, src: testimonial.video.url, poster: testimonial.video.poster }),
+                                            ]),
+                                            isRejected && testimonial.rejection_reason && h('div', { class: 'mj-regmgr-testimonial-card__rejection' }, [
+                                                h('strong', null, getString(strings, 'rejectionReasonLabel', 'Raison du rejet : ')),
+                                                testimonial.rejection_reason,
+                                            ]),
+                                            (isPending || onUpdateTestimonialStatus) && h('div', { class: 'mj-regmgr-testimonial-card__footer' }, [
+                                                !isApproved && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--success mj-btn--small',
+                                                    onClick: function () {
+                                                        onUpdateTestimonialStatus && onUpdateTestimonialStatus(testimonial.id, 'approved');
+                                                    },
+                                                }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.5 }, [
+                                                        h('polyline', { points: '20 6 9 17 4 12' }),
+                                                    ]),
+                                                    h('span', null, getString(strings, 'approveTestimonial', 'Approuver')),
+                                                ]),
+                                                !isRejected && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--outline mj-btn--small',
+                                                    onClick: function () {
+                                                        var reason = prompt(getString(strings, 'rejectTestimonialReason', 'Raison du refus (optionnel) :'));
+                                                        if (reason !== null) {
+                                                            onUpdateTestimonialStatus && onUpdateTestimonialStatus(testimonial.id, 'rejected', reason);
+                                                        }
+                                                    },
+                                                }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                        h('line', { x1: 18, y1: 6, x2: 6, y2: 18 }),
+                                                        h('line', { x1: 6, y1: 6, x2: 18, y2: 18 }),
+                                                    ]),
+                                                    h('span', null, getString(strings, 'rejectTestimonial', 'Refuser')),
+                                                ]),
+                                                isRejected && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--secondary mj-btn--small',
+                                                    onClick: function () {
+                                                        onUpdateTestimonialStatus && onUpdateTestimonialStatus(testimonial.id, 'pending');
+                                                    },
+                                                }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                        h('polyline', { points: '1 4 1 10 7 10' }),
+                                                        h('path', { d: 'M3.51 15a9 9 0 1 0 2.13-9.36L1 10' }),
+                                                    ]),
+                                                    h('span', null, getString(strings, 'resetTestimonial', 'Remettre en attente')),
+                                                ]),
+                                            ]),
+                                        ]);
+                                    })
+                                )
+                                : h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoTestimonials', 'Aucun témoignage.')),
                         ]),
                     ]),
                     activeTab === 'history' && h(Fragment, null, [

@@ -16,6 +16,7 @@ use Mj\Member\Classes\Crud\MjEventLocationLinks;
 use Mj\Member\Classes\Crud\MjEventPhotos;
 use Mj\Member\Classes\Crud\MjContactMessages;
 use Mj\Member\Classes\Crud\MjIdeas;
+use Mj\Member\Classes\Crud\MjTestimonials;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Crud\MjBadges;
 use Mj\Member\Classes\Crud\MjMemberBadges;
@@ -85,6 +86,8 @@ add_action('wp_ajax_mj_regmgr_delete_member', 'mj_regmgr_delete_member');
 add_action('wp_ajax_mj_regmgr_sync_member_badge', 'mj_regmgr_sync_member_badge');
 add_action('wp_ajax_mj_regmgr_adjust_member_xp', 'mj_regmgr_adjust_member_xp');
 add_action('wp_ajax_mj_regmgr_toggle_member_trophy', 'mj_regmgr_toggle_member_trophy');
+add_action('wp_ajax_mj_regmgr_delete_member_testimonial', 'mj_regmgr_delete_member_testimonial');
+add_action('wp_ajax_mj_regmgr_update_member_testimonial_status', 'mj_regmgr_update_member_testimonial_status');
 
 /**
  * Verify nonce and check user permissions
@@ -2898,6 +2901,95 @@ function mj_regmgr_save_member_note() {
 }
 
 /**
+ * Delete member testimonial
+ */
+function mj_regmgr_delete_member_testimonial() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) return;
+
+    if (!$auth['is_coordinateur']) {
+        wp_send_json_error(array('message' => __('Vous n\'avez pas la permission de supprimer des témoignages.', 'mj-member')));
+        return;
+    }
+
+    $testimonial_id = isset($_POST['testimonialId']) ? (int) $_POST['testimonialId'] : 0;
+
+    if ($testimonial_id <= 0) {
+        wp_send_json_error(array('message' => __('ID témoignage invalide.', 'mj-member')));
+        return;
+    }
+
+    $result = MjTestimonials::delete($testimonial_id);
+
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+        return;
+    }
+
+    wp_send_json_success(array(
+        'message' => __('Témoignage supprimé.', 'mj-member'),
+    ));
+}
+
+/**
+ * Update member testimonial status (approve/reject)
+ */
+function mj_regmgr_update_member_testimonial_status() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) return;
+
+    if (!$auth['is_coordinateur']) {
+        wp_send_json_error(array('message' => __('Vous n\'avez pas la permission de valider des témoignages.', 'mj-member')));
+        return;
+    }
+
+    $testimonial_id = isset($_POST['testimonialId']) ? (int) $_POST['testimonialId'] : 0;
+    $status = isset($_POST['status']) ? sanitize_text_field(wp_unslash($_POST['status'])) : '';
+    $rejection_reason = isset($_POST['rejectionReason']) ? sanitize_textarea_field(wp_unslash($_POST['rejectionReason'])) : '';
+
+    if ($testimonial_id <= 0) {
+        wp_send_json_error(array('message' => __('ID témoignage invalide.', 'mj-member')));
+        return;
+    }
+
+    $valid_statuses = array('pending', 'approved', 'rejected');
+    if (!in_array($status, $valid_statuses, true)) {
+        wp_send_json_error(array('message' => __('Statut invalide.', 'mj-member')));
+        return;
+    }
+
+    $update_data = array(
+        'status' => $status,
+        'reviewed_at' => current_time('mysql'),
+        'reviewed_by' => $auth['member_id'],
+    );
+
+    if ($status === 'rejected') {
+        $update_data['rejection_reason'] = $rejection_reason;
+    } else {
+        $update_data['rejection_reason'] = null;
+    }
+
+    $result = MjTestimonials::update($testimonial_id, $update_data);
+
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+        return;
+    }
+
+    $status_labels = array(
+        'approved' => __('Témoignage approuvé.', 'mj-member'),
+        'rejected' => __('Témoignage refusé.', 'mj-member'),
+        'pending' => __('Témoignage remis en attente.', 'mj-member'),
+    );
+
+    wp_send_json_success(array(
+        'message' => $status_labels[$status],
+        'status' => $status,
+    ));
+}
+
+/**
  * Delete member note
  */
 function mj_regmgr_delete_member_note() {
@@ -5407,6 +5499,41 @@ function mj_regmgr_get_member_details() {
 
     $member['badges'] = mj_regmgr_get_member_badges_payload($member_id);
     $member['trophies'] = mj_regmgr_get_member_trophies_payload($member_id);
+
+    // Retrieve testimonials submitted by the member
+    $testimonials_results = MjTestimonials::query(array(
+        'member_id' => $member_id,
+        'per_page' => 20,
+        'page' => 1,
+        'orderby' => 'created_at',
+        'order' => 'DESC',
+    ));
+
+    if (!empty($testimonials_results)) {
+        $member['testimonials'] = array();
+        foreach ($testimonials_results as $testimonial) {
+            $photos = MjTestimonials::get_photo_urls($testimonial, 'medium');
+            $video = MjTestimonials::get_video_data($testimonial);
+
+            $member['testimonials'][] = array(
+                'id' => (int) $testimonial->id,
+                'content' => isset($testimonial->content) ? (string) $testimonial->content : '',
+                'status' => isset($testimonial->status) ? (string) $testimonial->status : 'pending',
+                'rejection_reason' => isset($testimonial->rejection_reason) ? (string) $testimonial->rejection_reason : '',
+                'photos' => array_map(function ($p) {
+                    return array(
+                        'thumb' => $p['thumb'],
+                        'url' => $p['full'],
+                    );
+                }, $photos),
+                'video' => $video ? array(
+                    'url' => $video['url'],
+                    'poster' => $video['poster'],
+                ) : null,
+                'created_at' => isset($testimonial->created_at) ? (string) $testimonial->created_at : '',
+            );
+        }
+    }
 
     // Ajouter les informations de niveau
     $member['levelProgression'] = mj_regmgr_get_member_level_progression($member['xpTotal']);
