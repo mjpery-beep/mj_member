@@ -1697,6 +1697,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_50($wpdb);
     mj_member_upgrade_to_2_51($wpdb);
     mj_member_upgrade_to_2_52($wpdb);
+    mj_member_upgrade_to_2_53($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -4943,6 +4944,23 @@ function mj_member_upgrade_to_2_52($wpdb) {
     ) {$charset_collate};";
 
     dbDelta($sql_comments);
+}
+
+/**
+ * Schema upgrade 2.53: Add link_preview column to testimonials table for URL previews.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_53($wpdb) {
+    $table = mj_member_get_testimonials_table_name();
+    
+    if (!mj_member_table_exists($table)) {
+        return;
+    }
+    
+    if (!mj_member_column_exists($table, 'link_preview')) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN link_preview longtext DEFAULT NULL AFTER video_id");
+    }
 }
 
 function mj_uninstall()

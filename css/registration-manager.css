@@ -2361,6 +2361,15 @@ input.mj-regmgr-search-input__field {
     color: var(--regmgr-gray-900);
 }
 
+.mj-btn--ghost.mj-btn--danger {
+    color: var(--regmgr-danger);
+}
+
+.mj-btn--ghost.mj-btn--danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+}
+
 .mj-btn--sm {
     padding: 6px 10px;
     font-size: 12px;

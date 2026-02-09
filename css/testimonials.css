@@ -172,7 +172,8 @@
 
 /* Video Preview / Recording */
 .mj-testimonials__video-preview,
-.mj-testimonials__video-result {
+.mj-testimonials__video-result,
+.mj-testimonials__camera-preview {
     background: #000;
     border-radius: 8px;
     overflow: hidden;
@@ -180,14 +181,16 @@
 }
 
 .mj-testimonials__video-element,
-.mj-testimonials__video-playback {
+.mj-testimonials__video-playback,
+.mj-testimonials__camera-element {
     width: 100%;
     max-height: 300px;
     display: block;
 }
 
 .mj-testimonials__video-controls,
-.mj-testimonials__video-result-actions {
+.mj-testimonials__video-result-actions,
+.mj-testimonials__camera-controls {
     display: flex;
     gap: 0.5rem;
     justify-content: center;
@@ -535,7 +538,7 @@
 
 .mj-testimonials .mj-btn--ghost {
     background: transparent;
-    color: #fff;
+    color: var(--feed-text-secondary);
 }
 
 .mj-testimonials .mj-btn--ghost:hover {
@@ -770,6 +773,150 @@
     justify-content: center;
     font-size: 28px;
     font-weight: 600;
+}
+
+/* Link Preview */
+.mj-feed-post__link-preview,
+.mj-testimonials__link-preview-card {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--feed-separator);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 12px 16px;
+    background: var(--feed-card-bg);
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.mj-feed-post__link-preview:hover,
+.mj-testimonials__link-preview-card:hover {
+    background: var(--feed-hover);
+    border-color: var(--feed-accent);
+}
+
+.mj-feed-post__link-preview-image,
+.mj-testimonials__link-preview-image {
+    width: 100%;
+    max-height: 250px;
+    object-fit: cover;
+    border-bottom: 1px solid var(--feed-separator);
+}
+
+.mj-feed-post__link-preview-content,
+.mj-testimonials__link-preview-content {
+    padding: 12px;
+}
+
+.mj-feed-post__link-preview-site,
+.mj-testimonials__link-preview-site {
+    font-size: 12px;
+    color: var(--feed-secondary);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.mj-feed-post__link-preview-title,
+.mj-testimonials__link-preview-title {
+    font-weight: 600;
+    font-size: 15px;
+    line-height: 1.3;
+    margin-bottom: 4px;
+    color: var(--feed-text);
+}
+
+.mj-feed-post__link-preview-desc,
+.mj-testimonials__link-preview-desc {
+    font-size: 13px;
+    color: var(--feed-secondary);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Link Preview in Form */
+.mj-testimonials__link-preview {
+    margin-top: 12px;
+}
+
+.mj-testimonials__link-preview-card {
+    position: relative;
+    margin: 0;
+}
+
+.mj-testimonials__link-preview-remove {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mj-testimonials__link-preview-remove:hover {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+.mj-testimonials__link-preview-loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    color: var(--feed-secondary);
+    font-size: 13px;
+}
+
+/* Testimonial Card Link Preview (for load more) */
+.mj-testimonial-card__link-preview {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--feed-separator);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 12px 0;
+    background: var(--feed-card-bg);
+    text-decoration: none;
+    color: inherit;
+}
+
+.mj-testimonial-card__link-image {
+    width: 100%;
+    max-height: 200px;
+    object-fit: cover;
+}
+
+.mj-testimonial-card__link-content {
+    padding: 10px 12px;
+}
+
+.mj-testimonial-card__link-site {
+    font-size: 11px;
+    color: var(--feed-secondary);
+    text-transform: uppercase;
+}
+
+.mj-testimonial-card__link-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-top: 2px;
+}
+
+.mj-testimonial-card__link-desc {
+    font-size: 12px;
+    color: var(--feed-secondary);
+    margin-top: 4px;
 }
 
 /* Reactions Summary Bar */

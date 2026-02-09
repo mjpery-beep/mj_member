@@ -215,6 +215,18 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'manage_events_button_url',
+            array(
+                'label' => __('Lien Gestion des événements', 'mj-member'),
+                'type' => Controls_Manager::URL,
+                'placeholder' => home_url('/gestion-evenement/'),
+                'show_external' => false,
+                'dynamic' => array('active' => true),
+                'description' => __('Laissez vide pour utiliser le lien par défaut (/gestion-evenement/).', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
             'event_button_url',
             array(
                 'label' => __('Lien de la page Événements', 'mj-member'),
@@ -937,9 +949,18 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
             $icon_url = '';
         }
 
+        $button_url = '';
+        if (!empty($settings['manage_events_button_url']) && is_array($settings['manage_events_button_url'])) {
+            $url_data = $settings['manage_events_button_url'];
+            if (!empty($url_data['url']) && is_string($url_data['url'])) {
+                $button_url = esc_url_raw($url_data['url']);
+            }
+        }
+
         return array(
             'icon_id' => $icon_id,
             'icon_url' => $icon_url,
+            'url' => $button_url,
         );
     }
 

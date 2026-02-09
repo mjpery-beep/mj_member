@@ -53,7 +53,10 @@
             this.$photosGrid = $form.find('.mj-testimonials__photos-grid');
             this.$photoInput = $form.find('.mj-testimonials__photo-input');
             this.$addPhotoBtn = $form.find('.mj-testimonials__add-photo');
+            this.$capturePhotoBtn = $form.find('.mj-testimonials__capture-photo');
             this.$addVideoBtn = $form.find('.mj-testimonials__add-video');
+            this.$cameraPreview = $form.find('.mj-testimonials__camera-preview');
+            this.$cameraElement = $form.find('.mj-testimonials__camera-element');
             this.$videoPreview = $form.find('.mj-testimonials__video-preview');
             this.$videoResult = $form.find('.mj-testimonials__video-result');
             this.$videoElement = $form.find('.mj-testimonials__video-element');
@@ -69,10 +72,24 @@
             this.mediaRecorder = null;
             this.recordedChunks = [];
             this.stream = null;
+            this.cameraStream = null;
             this.isRecording = false;
             this.isSubmitting = false;
+            
+            // Link preview
+            this.linkPreview = null;
+            this.linkPreviewFetching = false;
+            this.linkPreviewDebounce = null;
+            this.$linkPreviewContainer = null;
 
             this.bindEvents();
+            this.initLinkPreviewContainer();
+        }
+
+        initLinkPreviewContainer() {
+            // Create link preview container after photos grid
+            this.$linkPreviewContainer = $('<div class="mj-testimonials__link-preview" style="display:none;"></div>');
+            this.$photosGrid.after(this.$linkPreviewContainer);
         }
 
         bindEvents() {
@@ -80,6 +97,14 @@
             this.$addPhotoBtn.on('click', () => this.$photoInput.trigger('click'));
             this.$photoInput.on('change', (e) => this.handlePhotoSelect(e));
             this.$photosGrid.on('click', '.mj-testimonials__photo-remove', (e) => this.removePhoto(e));
+            
+            // Link preview detection on textarea input
+            this.$textarea.on('input', () => this.detectUrl());
+            
+            // Photo capture events
+            this.$capturePhotoBtn.on('click', () => this.startPhotoCapture());
+            this.$form.find('.mj-testimonials__camera-capture').on('click', () => this.capturePhoto());
+            this.$form.find('.mj-testimonials__camera-cancel').on('click', () => this.cancelPhotoCapture());
             
             // Video events
             this.$addVideoBtn.on('click', () => this.startVideoCapture());
@@ -175,6 +200,197 @@
             const ids = this.photos.map(p => p.id);
             this.$photoIdsInput.val(JSON.stringify(ids));
         }
+
+        // ===== LINK PREVIEW METHODS =====
+
+        detectUrl() {
+            // Debounce URL detection
+            clearTimeout(this.linkPreviewDebounce);
+            this.linkPreviewDebounce = setTimeout(() => this.checkForUrl(), 800);
+        }
+
+        checkForUrl() {
+            // Don't fetch if already have a preview
+            if (this.linkPreview) return;
+            if (this.linkPreviewFetching) return;
+
+            const content = this.$textarea.val();
+            // Match URLs
+            const urlRegex = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
+            const matches = content.match(urlRegex);
+
+            if (matches && matches.length > 0) {
+                this.fetchLinkPreview(matches[0]);
+            }
+        }
+
+        async fetchLinkPreview(url) {
+            if (this.linkPreviewFetching) return;
+            this.linkPreviewFetching = true;
+
+            // Show loading state
+            this.$linkPreviewContainer.html(`
+                <div class="mj-testimonials__link-preview-loading">
+                    <div class="mj-testimonials__photo-loader"></div>
+                    <span>Chargement de l'aperçu...</span>
+                </div>
+            `).show();
+
+            try {
+                const response = await $.ajax({
+                    url: config.ajaxUrl,
+                    method: 'POST',
+                    data: {
+                        action: 'mj_front_testimonial_link_preview',
+                        _wpnonce: config.nonce,
+                        url: url
+                    },
+                    dataType: 'json'
+                });
+
+                if (response.success && response.data) {
+                    this.linkPreview = response.data;
+                    this.renderLinkPreview();
+                } else {
+                    this.$linkPreviewContainer.hide();
+                }
+            } catch (err) {
+                console.error('Link preview error:', err);
+                this.$linkPreviewContainer.hide();
+            } finally {
+                this.linkPreviewFetching = false;
+            }
+        }
+
+        renderLinkPreview() {
+            if (!this.linkPreview) {
+                this.$linkPreviewContainer.hide();
+                return;
+            }
+
+            const { url, title, description, image, site_name } = this.linkPreview;
+            const imageHtml = image ? `<img src="${image}" alt="" class="mj-testimonials__link-preview-image">` : '';
+            
+            this.$linkPreviewContainer.html(`
+                <div class="mj-testimonials__link-preview-card">
+                    ${imageHtml}
+                    <div class="mj-testimonials__link-preview-content">
+                        <div class="mj-testimonials__link-preview-site">${site_name || ''}</div>
+                        <div class="mj-testimonials__link-preview-title">${title || url}</div>
+                        ${description ? `<div class="mj-testimonials__link-preview-desc">${description}</div>` : ''}
+                    </div>
+                    <button type="button" class="mj-testimonials__link-preview-remove">&times;</button>
+                </div>
+            `).show();
+
+            // Bind remove event
+            this.$linkPreviewContainer.find('.mj-testimonials__link-preview-remove').on('click', () => this.removeLinkPreview());
+        }
+
+        removeLinkPreview() {
+            this.linkPreview = null;
+            this.$linkPreviewContainer.hide().empty();
+        }
+
+        // ===== PHOTO CAPTURE METHODS =====
+        
+        async startPhotoCapture() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                this.showStatus('Votre navigateur ne supporte pas la capture photo.', 'error');
+                return;
+            }
+
+            try {
+                this.cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+                    audio: false
+                });
+
+                this.$cameraElement[0].srcObject = this.cameraStream;
+                await this.$cameraElement[0].play();
+                this.$cameraPreview.show();
+            } catch (err) {
+                console.error('Camera access error:', err);
+                this.showStatus('Impossible d\'accéder à la caméra.', 'error');
+            }
+        }
+
+        async capturePhoto() {
+            const video = this.$cameraElement[0];
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            
+            // Convert to blob and upload
+            canvas.toBlob(async (blob) => {
+                if (!blob) {
+                    this.showStatus('Erreur lors de la capture.', 'error');
+                    return;
+                }
+                
+                const maxPhotos = config.maxPhotos || 5;
+                if (this.photos.length >= maxPhotos) {
+                    this.showStatus(i18n.maxPhotosReached || `Maximum ${maxPhotos} photos`, 'error');
+                    this.cancelPhotoCapture();
+                    return;
+                }
+                
+                // Create placeholder
+                const placeholder = $(`
+                    <div class="mj-testimonials__photo-item is-uploading">
+                        <div class="mj-testimonials__photo-loader"></div>
+                    </div>
+                `);
+                this.$photosGrid.append(placeholder);
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('action', 'mj_front_testimonial_upload');
+                    formData.append('_wpnonce', config.nonce);
+                    formData.append('type', 'photo');
+                    formData.append('file', blob, 'capture-' + Date.now() + '.jpg');
+
+                    const response = await $.ajax({
+                        url: config.ajaxUrl,
+                        method: 'POST',
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        dataType: 'json'
+                    });
+
+                    if (response.success && response.data && response.data.id) {
+                        this.photos.push({
+                            id: response.data.id,
+                            url: response.data.url
+                        });
+                        this.updatePhotoIdsInput();
+                        this.renderPhoto(placeholder, response.data);
+                    } else {
+                        placeholder.remove();
+                        this.showStatus(response.data?.message || i18n.submitError, 'error');
+                    }
+                } catch (err) {
+                    placeholder.remove();
+                    this.showStatus(i18n.submitError, 'error');
+                    console.error('Photo capture upload error:', err);
+                }
+                
+                this.cancelPhotoCapture();
+            }, 'image/jpeg', 0.9);
+        }
+
+        cancelPhotoCapture() {
+            if (this.cameraStream) {
+                this.cameraStream.getTracks().forEach(track => track.stop());
+                this.cameraStream = null;
+            }
+            this.$cameraPreview.hide();
+        }
+
+        // ===== VIDEO CAPTURE METHODS =====
 
         async startVideoCapture() {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -337,6 +553,10 @@
                 if (this.videoId) {
                     formData.append('video_id', this.videoId);
                 }
+                
+                if (this.linkPreview) {
+                    formData.append('link_preview', JSON.stringify(this.linkPreview));
+                }
 
                 const response = await $.ajax({
                     url: config.ajaxUrl,
@@ -368,6 +588,7 @@
             this.$photosGrid.empty();
             this.$photoIdsInput.val('[]');
             this.removeVideo();
+            this.removeLinkPreview();
         }
 
         showStatus(message, type) {
@@ -474,6 +695,22 @@
                 `;
             }
 
+            let linkPreviewHtml = '';
+            if (t.linkPreview && t.linkPreview.url) {
+                const lp = t.linkPreview;
+                const imageHtml = lp.image ? `<img src="${this.escapeHtml(lp.image)}" alt="" class="mj-testimonial-card__link-image">` : '';
+                linkPreviewHtml = `
+                    <a href="${this.escapeHtml(lp.url)}" class="mj-testimonial-card__link-preview" target="_blank" rel="noopener">
+                        ${imageHtml}
+                        <div class="mj-testimonial-card__link-content">
+                            <div class="mj-testimonial-card__link-site">${this.escapeHtml(lp.site_name || '')}</div>
+                            <div class="mj-testimonial-card__link-title">${this.escapeHtml(lp.title || lp.url)}</div>
+                            ${lp.description ? `<div class="mj-testimonial-card__link-desc">${this.escapeHtml(lp.description)}</div>` : ''}
+                        </div>
+                    </a>
+                `;
+            }
+
             const contentHtml = t.content ? `
                 <div class="mj-testimonial-card__content">
                     <blockquote>${this.formatContent(t.content)}</blockquote>
@@ -484,6 +721,7 @@
                 <article class="mj-testimonial-card" data-id="${t.id}">
                     ${photosHtml}
                     ${videoHtml}
+                    ${linkPreviewHtml}
                     ${contentHtml}
                     <footer class="mj-testimonial-card__footer">
                         <div class="mj-testimonial-card__author">

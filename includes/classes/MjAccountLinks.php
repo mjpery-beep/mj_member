@@ -158,6 +158,17 @@ class MjAccountLinks {
                 'type' => 'standard',
                 'icon_id' => 0,
             ),
+            'testimonials' => array(
+                'label' => __('Témoignages', 'mj-member'),
+                'slug' => 'temoignages',
+                'query' => array(),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'all',
+                'editable_label' => true,
+                'type' => 'standard',
+                'icon_id' => 0,
+            ),
             'logout' => array(
                 'label' => __('Déconnexion', 'mj-member'),
                 'slug' => '',

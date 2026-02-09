@@ -204,6 +204,7 @@ class MjTestimonials implements CrudRepositoryInterface {
             'content' => '',
             'photo_ids' => array(),
             'video_id' => null,
+            'link_preview' => null,
             'status' => self::STATUS_PENDING,
             'rejection_reason' => null,
             'created_at' => current_time('mysql'),
@@ -224,6 +225,31 @@ class MjTestimonials implements CrudRepositoryInterface {
         $video_id = isset($payload['video_id']) && (int) $payload['video_id'] > 0
             ? (int) $payload['video_id']
             : null;
+        
+        // Handle link preview (JSON object with url, title, description, image)
+        $link_preview = null;
+        if (!empty($payload['link_preview'])) {
+            if (is_string($payload['link_preview'])) {
+                $decoded = json_decode(wp_unslash($payload['link_preview']), true);
+                if (is_array($decoded) && !empty($decoded['url'])) {
+                    $link_preview = wp_json_encode(array(
+                        'url' => esc_url_raw($decoded['url']),
+                        'title' => isset($decoded['title']) ? sanitize_text_field($decoded['title']) : '',
+                        'description' => isset($decoded['description']) ? sanitize_text_field($decoded['description']) : '',
+                        'image' => isset($decoded['image']) ? esc_url_raw($decoded['image']) : '',
+                        'site_name' => isset($decoded['site_name']) ? sanitize_text_field($decoded['site_name']) : '',
+                    ));
+                }
+            } elseif (is_array($payload['link_preview']) && !empty($payload['link_preview']['url'])) {
+                $link_preview = wp_json_encode(array(
+                    'url' => esc_url_raw($payload['link_preview']['url']),
+                    'title' => isset($payload['link_preview']['title']) ? sanitize_text_field($payload['link_preview']['title']) : '',
+                    'description' => isset($payload['link_preview']['description']) ? sanitize_text_field($payload['link_preview']['description']) : '',
+                    'image' => isset($payload['link_preview']['image']) ? esc_url_raw($payload['link_preview']['image']) : '',
+                    'site_name' => isset($payload['link_preview']['site_name']) ? sanitize_text_field($payload['link_preview']['site_name']) : '',
+                ));
+            }
+        }
 
         // At least some content is required
         if (empty($content) && empty($photo_ids) && !$video_id) {
@@ -247,6 +273,7 @@ class MjTestimonials implements CrudRepositoryInterface {
             'content' => $content,
             'photo_ids' => wp_json_encode($photo_ids),
             'video_id' => $video_id,
+            'link_preview' => $link_preview,
             'status' => $status,
             'rejection_reason' => $rejection_reason,
             'created_at' => $created_at,
@@ -254,7 +281,7 @@ class MjTestimonials implements CrudRepositoryInterface {
             'reviewed_by' => $reviewed_by,
         );
 
-        $formats = array('%d', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%d');
+        $formats = array('%d', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%d');
 
         $result = $wpdb->insert($table, $insert_data, $formats);
         if ($result === false) {
@@ -522,6 +549,31 @@ class MjTestimonials implements CrudRepositoryInterface {
             'id' => $video_id,
             'url' => $url,
             'poster' => $poster_url,
+        );
+    }
+
+    /**
+     * Get link preview data for a testimonial.
+     *
+     * @param object $testimonial
+     * @return array{url:string,title:string,description:string,image:string,site_name:string}|null
+     */
+    public static function get_link_preview($testimonial) {
+        if (empty($testimonial->link_preview)) {
+            return null;
+        }
+
+        $data = json_decode($testimonial->link_preview, true);
+        if (!is_array($data) || empty($data['url'])) {
+            return null;
+        }
+
+        return array(
+            'url' => $data['url'] ?? '',
+            'title' => $data['title'] ?? '',
+            'description' => $data['description'] ?? '',
+            'image' => $data['image'] ?? '',
+            'site_name' => $data['site_name'] ?? '',
         );
     }
 }

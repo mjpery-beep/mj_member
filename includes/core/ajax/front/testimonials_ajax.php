@@ -48,6 +48,12 @@ function mj_front_testimonial_submit_handler() {
     // Parse video ID
     $video_id = isset($_POST['video_id']) ? (int) $_POST['video_id'] : 0;
 
+    // Parse link preview
+    $link_preview = null;
+    if (isset($_POST['link_preview']) && !empty($_POST['link_preview'])) {
+        $link_preview = wp_unslash($_POST['link_preview']);
+    }
+
     // Validate that at least some content exists
     if (empty($content) && empty($photo_ids) && $video_id <= 0) {
         wp_send_json_error(__('Veuillez ajouter du texte, des photos ou une vidéo.', 'mj-member'), 400);
@@ -59,6 +65,7 @@ function mj_front_testimonial_submit_handler() {
         'content' => $content,
         'photo_ids' => $photo_ids,
         'video_id' => $video_id > 0 ? $video_id : null,
+        'link_preview' => $link_preview,
         'status' => MjTestimonials::STATUS_PENDING,
     ));
 
@@ -105,11 +112,14 @@ function mj_front_testimonial_list_handler() {
             }
         }
 
+        $link_preview = MjTestimonials::get_link_preview($t);
+
         $items[] = array(
             'id' => (int) $t->id,
             'content' => isset($t->content) ? $t->content : '',
             'photos' => $photos,
             'video' => $video,
+            'linkPreview' => $link_preview,
             'memberName' => $member_name,
             'createdAt' => isset($t->created_at) ? $t->created_at : '',
         );
@@ -492,3 +502,146 @@ function mj_front_testimonial_reactions_summary_handler() {
 }
 add_action('wp_ajax_mj_front_testimonial_reactions_summary', 'mj_front_testimonial_reactions_summary_handler');
 add_action('wp_ajax_nopriv_mj_front_testimonial_reactions_summary', 'mj_front_testimonial_reactions_summary_handler');
+
+/**
+ * AJAX: Fetch link preview (Open Graph metadata) for a URL.
+ */
+function mj_front_testimonial_link_preview_handler() {
+    check_ajax_referer('mj-testimonial-submit', '_wpnonce');
+
+    // Must be logged in
+    $current_member = function_exists('mj_member_get_current_member') ? mj_member_get_current_member() : null;
+    if (!$current_member || !isset($current_member->id)) {
+        wp_send_json_error(__('Vous devez être connecté.', 'mj-member'), 403);
+    }
+
+    $url = isset($_POST['url']) ? esc_url_raw(wp_unslash($_POST['url'])) : '';
+    if (empty($url) || !filter_var($url, FILTER_VALIDATE_URL)) {
+        wp_send_json_error(__('URL invalide.', 'mj-member'), 400);
+    }
+
+    // Fetch the URL content
+    $response = wp_remote_get($url, array(
+        'timeout' => 10,
+        'user-agent' => 'Mozilla/5.0 (compatible; MjMember/1.0; +https://www.mj-pery.be)',
+        'sslverify' => false,
+    ));
+
+    if (is_wp_error($response)) {
+        wp_send_json_error(__('Impossible de récupérer la page.', 'mj-member'), 500);
+    }
+
+    $body = wp_remote_retrieve_body($response);
+    if (empty($body)) {
+        wp_send_json_error(__('Contenu vide.', 'mj-member'), 500);
+    }
+
+    // Parse Open Graph and meta tags
+    $preview = mj_parse_link_preview($body, $url);
+
+    if (empty($preview['title']) && empty($preview['description']) && empty($preview['image'])) {
+        wp_send_json_error(__('Aucun aperçu disponible pour ce lien.', 'mj-member'), 404);
+    }
+
+    wp_send_json_success($preview);
+}
+add_action('wp_ajax_mj_front_testimonial_link_preview', 'mj_front_testimonial_link_preview_handler');
+
+/**
+ * Parse Open Graph and meta tags from HTML to extract link preview data.
+ *
+ * @param string $html
+ * @param string $url
+ * @return array
+ */
+function mj_parse_link_preview($html, $url) {
+    $preview = array(
+        'url' => $url,
+        'title' => '',
+        'description' => '',
+        'image' => '',
+        'site_name' => '',
+    );
+
+    // Use DOMDocument for parsing
+    libxml_use_internal_errors(true);
+    $doc = new DOMDocument();
+    $doc->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_NOWARNING | LIBXML_NOERROR);
+    libxml_clear_errors();
+
+    $xpath = new DOMXPath($doc);
+
+    // Open Graph tags
+    $og_tags = array(
+        'og:title' => 'title',
+        'og:description' => 'description',
+        'og:image' => 'image',
+        'og:site_name' => 'site_name',
+    );
+
+    foreach ($og_tags as $property => $key) {
+        $nodes = $xpath->query("//meta[@property='{$property}']/@content");
+        if ($nodes->length > 0) {
+            $preview[$key] = trim($nodes->item(0)->nodeValue);
+        }
+    }
+
+    // Twitter Card fallbacks
+    if (empty($preview['title'])) {
+        $nodes = $xpath->query("//meta[@name='twitter:title']/@content");
+        if ($nodes->length > 0) {
+            $preview['title'] = trim($nodes->item(0)->nodeValue);
+        }
+    }
+    if (empty($preview['description'])) {
+        $nodes = $xpath->query("//meta[@name='twitter:description']/@content");
+        if ($nodes->length > 0) {
+            $preview['description'] = trim($nodes->item(0)->nodeValue);
+        }
+    }
+    if (empty($preview['image'])) {
+        $nodes = $xpath->query("//meta[@name='twitter:image']/@content");
+        if ($nodes->length > 0) {
+            $preview['image'] = trim($nodes->item(0)->nodeValue);
+        }
+    }
+
+    // Standard meta fallbacks
+    if (empty($preview['title'])) {
+        $nodes = $xpath->query("//title");
+        if ($nodes->length > 0) {
+            $preview['title'] = trim($nodes->item(0)->textContent);
+        }
+    }
+    if (empty($preview['description'])) {
+        $nodes = $xpath->query("//meta[@name='description']/@content");
+        if ($nodes->length > 0) {
+            $preview['description'] = trim($nodes->item(0)->nodeValue);
+        }
+    }
+
+    // Make image URL absolute if relative
+    if (!empty($preview['image']) && strpos($preview['image'], 'http') !== 0) {
+        $parsed_url = parse_url($url);
+        $base = $parsed_url['scheme'] . '://' . $parsed_url['host'];
+        if (strpos($preview['image'], '/') === 0) {
+            $preview['image'] = $base . $preview['image'];
+        } else {
+            $preview['image'] = $base . '/' . $preview['image'];
+        }
+    }
+
+    // Sanitize output
+    $preview['title'] = sanitize_text_field($preview['title']);
+    $preview['description'] = sanitize_text_field(wp_trim_words($preview['description'], 30, '...'));
+    $preview['image'] = esc_url_raw($preview['image']);
+    $preview['site_name'] = sanitize_text_field($preview['site_name']);
+
+    // Extract site name from URL if not found
+    if (empty($preview['site_name'])) {
+        $parsed = parse_url($url);
+        $preview['site_name'] = isset($parsed['host']) ? preg_replace('/^www\./', '', $parsed['host']) : '';
+    }
+
+    return $preview;
+}

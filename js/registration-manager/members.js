@@ -1706,6 +1706,11 @@
 
         var handleDeletePhoto = function (photo) {
             if (!onDeletePhoto || !member || !member.id || !photo || !photo.id) {
+                console.error('[MJ-Member] handleDeletePhoto failed preconditions:', {
+                    hasCallback: !!onDeletePhoto,
+                    memberId: member ? member.id : undefined,
+                    photoId: photo ? photo.id : undefined
+                });
                 return;
             }
             if (!window.confirm('Supprimer cette photo ?')) {

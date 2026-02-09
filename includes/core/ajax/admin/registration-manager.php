@@ -1291,8 +1291,7 @@ function mj_regmgr_get_events() {
                 break;
 
             case 'past':
-                $args['statuses'] = array(MjEvents::STATUS_PAST, MjEvents::STATUS_ACTIVE);
-                $args['before'] = $now;
+                $args['statuses'] = array(MjEvents::STATUS_PAST);
                 break;
 
             case 'draft':
@@ -6354,11 +6353,19 @@ function mj_regmgr_delete_member_photo() {
         return;
     }
 
+    // Debug: log received POST data
+    error_log('[MJ-Member] delete_member_photo POST: ' . print_r($_POST, true));
+
     $photo_id = isset($_POST['photoId']) ? (int) $_POST['photoId'] : 0;
     $member_id = isset($_POST['memberId']) ? (int) $_POST['memberId'] : 0;
 
-    if ($photo_id <= 0 || $member_id <= 0) {
-        wp_send_json_error(array('message' => __('Identifiant de photo ou de membre invalide.', 'mj-member')));
+    if ($photo_id <= 0) {
+        wp_send_json_error(array('message' => __('Identifiant de photo invalide.', 'mj-member')));
+        return;
+    }
+
+    if ($member_id <= 0) {
+        wp_send_json_error(array('message' => __('Identifiant de membre invalide.', 'mj-member')));
         return;
     }
 

@@ -558,6 +558,11 @@ if (!function_exists('mj_member_render_account_menu_component')) {
             $manage_events_icon_url_setting = esc_url_raw((string) $manage_events_button_settings['icon_url']);
         }
 
+        $manage_events_url_setting = '';
+        if (!empty($manage_events_button_settings['url'])) {
+            $manage_events_url_setting = esc_url_raw((string) $manage_events_button_settings['url']);
+        }
+
         $layout = $args['layout'] === 'desktop' ? 'desktop' : 'modal';
         $desktop_alignment = in_array($args['desktop_alignment'], array('left', 'center', 'right'), true)
             ? $args['desktop_alignment']
@@ -658,7 +663,10 @@ if (!function_exists('mj_member_render_account_menu_component')) {
         }
 
         if ($has_manage_events_button) {
-            $manage_events_url = (string) apply_filters('mj_member_account_menu_manage_events_url', home_url('/gestion-evenement/'));
+            $default_manage_events_url = $manage_events_url_setting !== ''
+                ? $manage_events_url_setting
+                : home_url('/gestion-evenement/');
+            $manage_events_url = (string) apply_filters('mj_member_account_menu_manage_events_url', $default_manage_events_url);
             if ($manage_events_url === '') {
                 $has_manage_events_button = false;
             } elseif ($manage_events_url === '#' && !$is_preview) {

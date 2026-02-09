@@ -188,18 +188,41 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                                     <circle cx="8.5" cy="8.5" r="1.5"></circle>
                                     <polyline points="21 15 16 10 5 21"></polyline>
                                 </svg>
-                                <span><?php esc_html_e('Photos', 'mj-member'); ?></span>
+                                <span><?php esc_html_e('Photos / Vidéos', 'mj-member'); ?></span>
+                            </button>
+                            
+                            <button type="button" class="mj-btn mj-btn--secondary mj-testimonials__capture-photo">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                    <circle cx="12" cy="13" r="4"></circle>
+                                </svg>
+                                <span><?php esc_html_e('Prendre une photo', 'mj-member'); ?></span>
                             </button>
                             
                             <?php if ($allow_video): ?>
                                 <button type="button" class="mj-btn mj-btn--secondary mj-testimonials__add-video">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polygon points="23 7 16 12 23 17 23 7"></polygon>
-                                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
                                     </svg>
-                                    <span><?php esc_html_e('Vidéo', 'mj-member'); ?></span>
+                                    <span><?php esc_html_e('Filmer', 'mj-member'); ?></span>
                                 </button>
                             <?php endif; ?>
+                        </div>
+
+                        <div class="mj-testimonials__camera-preview" style="display: none;">
+                            <video class="mj-testimonials__camera-element" playsinline></video>
+                            <div class="mj-testimonials__camera-controls">
+                                <button type="button" class="mj-btn mj-btn--primary mj-testimonials__camera-capture">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                    </svg>
+                                    <span><?php esc_html_e('Capturer', 'mj-member'); ?></span>
+                                </button>
+                                <button type="button" class="mj-btn mj-btn--ghost mj-testimonials__camera-cancel">
+                                    <?php esc_html_e('Annuler', 'mj-member'); ?>
+                                </button>
+                            </div>
                         </div>
 
                         <div class="mj-testimonials__video-preview" style="display: none;">
@@ -231,7 +254,7 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                         </div>
                     </div>
 
-                    <input type="file" class="mj-testimonials__photo-input" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display: none;">
+                    <input type="file" class="mj-testimonials__photo-input" accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime" multiple style="display: none;">
                     <input type="hidden" name="photo_ids" value="[]">
                     <input type="hidden" name="video_id" value="">
 
@@ -281,6 +304,7 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                 <?php foreach ($display_testimonials as $testimonial): 
                     $photos = MjTestimonials::get_photo_urls($testimonial, 'large');
                     $video = MjTestimonials::get_video_data($testimonial);
+                    $link_preview = MjTestimonials::get_link_preview($testimonial);
                     $member_name = '';
                     if (isset($testimonial->first_name)) {
                         $member_name = $testimonial->first_name;
@@ -352,6 +376,23 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                                     <source src="<?php echo esc_url($video['url']); ?>" type="video/mp4">
                                 </video>
                             </div>
+                        <?php endif; ?>
+
+                        <?php if ($link_preview && !empty($link_preview['url'])): ?>
+                            <a href="<?php echo esc_url($link_preview['url']); ?>" class="mj-feed-post__link-preview" target="_blank" rel="noopener noreferrer">
+                                <?php if (!empty($link_preview['image'])): ?>
+                                    <img src="<?php echo esc_url($link_preview['image']); ?>" alt="" class="mj-feed-post__link-preview-image" loading="lazy">
+                                <?php endif; ?>
+                                <div class="mj-feed-post__link-preview-content">
+                                    <?php if (!empty($link_preview['site_name'])): ?>
+                                        <div class="mj-feed-post__link-preview-site"><?php echo esc_html($link_preview['site_name']); ?></div>
+                                    <?php endif; ?>
+                                    <div class="mj-feed-post__link-preview-title"><?php echo esc_html($link_preview['title'] ?: $link_preview['url']); ?></div>
+                                    <?php if (!empty($link_preview['description'])): ?>
+                                        <div class="mj-feed-post__link-preview-desc"><?php echo esc_html($link_preview['description']); ?></div>
+                                    <?php endif; ?>
+                                </div>
+                            </a>
                         <?php endif; ?>
 
                         <div class="mj-feed-post__reactions-bar">

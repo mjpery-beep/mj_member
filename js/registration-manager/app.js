@@ -5462,6 +5462,7 @@
         }, [api, showSuccess, showError, loadMemberDetails]);
 
         var handleDeleteMemberPhoto = useCallback(function (memberId, photoId) {
+            console.log('[MJ-Member] handleDeleteMemberPhoto called with:', { memberId: memberId, photoId: photoId });
             return api.deleteMemberPhoto(photoId, memberId)
                 .then(function (result) {
                     showSuccess(result.message || 'Photo supprimée');
