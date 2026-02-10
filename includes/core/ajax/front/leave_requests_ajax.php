@@ -13,6 +13,7 @@ use Mj\Member\Classes\Crud\MjLeaveRequests;
 use Mj\Member\Classes\Crud\MjLeaveTypes;
 use Mj\Member\Classes\Crud\MjLeaveQuotas;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjMemberWorkSchedules;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\Config;
 
@@ -46,6 +47,39 @@ function mj_member_leave_requests_localize(): void
 
     // Own requests for current year
     $ownRequests = $memberId ? MjLeaveRequests::get_by_member($memberId, ['year' => $year]) : [];
+    // Enrich requests with type and member data
+    $ownRequests = !empty($ownRequests) ? MjLeaveRequests::enrich($ownRequests) : [];
+    
+    // Build reserved dates (dates already used by pending or approved requests)
+    $reservedDates = [];
+    foreach ($ownRequests as $req) {
+        if ($req->status === MjLeaveRequests::STATUS_REJECTED) {
+            continue;
+        }
+        $dates = json_decode($req->dates, true) ?: [];
+        foreach ($dates as $d) {
+            $reservedDates[$d] = [
+                'status' => $req->status,
+                'type_id' => (int) $req->type_id,
+            ];
+        }
+    }
+    
+    // Get active work schedule for member
+    $workSchedule = null;
+    if ($memberId && $isAnimateur) {
+        $activeSchedule = MjMemberWorkSchedules::get_active_for_member($memberId);
+        if ($activeSchedule) {
+            $decoded = is_string($activeSchedule->schedule) 
+                ? json_decode($activeSchedule->schedule, true) 
+                : $activeSchedule->schedule;
+            $workSchedule = [
+                'startDate' => $activeSchedule->start_date,
+                'endDate' => $activeSchedule->end_date,
+                'schedule' => is_array($decoded) ? $decoded : [],
+            ];
+        }
+    }
 
     // Pending requests for coordinators
     $pendingRequests = [];
@@ -87,6 +121,8 @@ function mj_member_leave_requests_localize(): void
         'quotas' => $quotas,
         'usage' => $usage,
         'year' => $year,
+        'workSchedule' => $workSchedule,
+        'reservedDates' => $reservedDates,
         'ownRequests' => array_values($ownRequests),
         'pendingRequests' => array_values($pendingRequests),
         'animateurs' => $isCoordinator ? array_values(array_map(function ($m) {
@@ -120,6 +156,7 @@ function mj_member_leave_requests_localize(): void
             'certificate' => __('Certificat médical', 'mj-member'),
             'certificateRequired' => __('Certificat médical requis', 'mj-member'),
             'uploadCertificate' => __('Télécharger le certificat', 'mj-member'),
+            'downloadCertificate' => __('Télécharger le certificat', 'mj-member'),
             'rejectionReason' => __('Motif du refus', 'mj-member'),
             'rejectionReasonRequired' => __('Veuillez indiquer un motif de refus.', 'mj-member'),
             'noRequests' => __('Aucune demande pour le moment.', 'mj-member'),
@@ -131,14 +168,19 @@ function mj_member_leave_requests_localize(): void
             'confirmCancel' => __('Êtes-vous sûr de vouloir annuler cette demande ?', 'mj-member'),
             'selectedDates' => __('Dates sélectionnées', 'mj-member'),
             'noDatesSelected' => __('Aucune date sélectionnée', 'mj-member'),
+            'today' => __('Aujourd\'hui', 'mj-member'),
+            'requestsInPeriod' => __('Demandes sur cette période', 'mj-member'),
+            'delete' => __('Supprimer', 'mj-member'),
+            'day' => __('jour', 'mj-member'),
+            'days' => __('jours', 'mj-member'),
             'weekdays' => [
+                __('Dim', 'mj-member'),
                 __('Lun', 'mj-member'),
                 __('Mar', 'mj-member'),
                 __('Mer', 'mj-member'),
                 __('Jeu', 'mj-member'),
                 __('Ven', 'mj-member'),
                 __('Sam', 'mj-member'),
-                __('Dim', 'mj-member'),
             ],
             'months' => [
                 __('Janvier', 'mj-member'),

@@ -334,6 +334,38 @@
     flex-shrink: 0;
 }
 
+.mj-leave-requests__item-certificate {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.mj-leave-requests__item-certificate-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #2563eb !important;
+    text-decoration: none !important;
+    transition: all 0.15s ease;
+}
+
+.mj-leave-requests__item-certificate-link:hover,
+.mj-leave-requests__item-certificate-link:focus {
+    text-decoration: underline !important;
+    color: #1d4ed8 !important;
+}
+
+.mj-leave-requests__item-certificate-icon {
+    display: inline-block;
+    font-size: 0.95rem;
+}
+
+.mj-leave-requests__item-certificate-text {
+    display: inline;
+}
+
 /* ==========================================================================
    Status Badges
    ========================================================================== */
@@ -439,6 +471,13 @@
     font-size: 0.8rem;
 }
 
+.mj-leave-requests__btn--xs {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+    min-width: 28px;
+    justify-content: center;
+}
+
 /* ==========================================================================
    Calendar Picker
    ========================================================================== */
@@ -448,7 +487,8 @@
     border: 1px solid #e9ecef;
     border-radius: 12px;
     padding: 1rem;
-    max-width: 320px;
+    max-width: 100%;
+    width: 100%;
 }
 
 .mj-leave-requests__calendar-header {
@@ -553,6 +593,24 @@
 
 .mj-leave-requests__calendar-day--weekend.mj-leave-requests__calendar-day--selected {
     color: #fff;
+}
+
+.mj-leave-requests__calendar-day--not-working {
+    background: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 3px,
+        #f0f0f0 3px,
+        #f0f0f0 6px
+    );
+    color: #adb5bd;
+    cursor: not-allowed;
+}
+
+.mj-leave-requests__calendar-day--reserved {
+    color: #fff;
+    cursor: not-allowed;
+    opacity: 0.85;
 }
 
 /* ==========================================================================
@@ -779,6 +837,60 @@
     white-space: nowrap;
 }
 
+.mj-leave-requests__overview-request-certificate {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #e3f2fd;
+    border: 1px solid #90caf9;
+    border-radius: 4px;
+    color: #1976d2;
+    font-size: 0.9rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    text-decoration: none !important;
+    transition: all 0.2s;
+}
+
+.mj-leave-requests__overview-request-certificate:hover {
+    background: #1976d2;
+    border-color: #1565c0;
+    color: #fff;
+}
+
+.mj-leave-requests__overview-request-note,
+.mj-leave-requests__overview-request-comment {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    display: inline-block;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: help;
+}
+
+.mj-leave-requests__overview-request-note {
+    background: #f0f0f0;
+    color: #555;
+    border: 1px solid #ddd;
+}
+
+.mj-leave-requests__overview-request-comment {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border: 1px solid #81c784;
+}
+
+.mj-leave-requests__overview-request-comment--rejected {
+    background: #ffebee;
+    color: #c62828;
+    border: 1px solid #ef5350;
+}
+
 .mj-leave-requests__overview-request-delete {
     width: 24px;
     height: 24px;
@@ -962,6 +1074,7 @@
 .mj-leave-requests__type-option--selected {
     border-color: #0d6efd;
     background: #e7f1ff;
+    
 }
 
 .mj-leave-requests__type-option input {
@@ -992,7 +1105,7 @@
 
 .mj-leave-requests__type-option--selected .mj-leave-requests__type-option-quota {
     background: rgba(255, 255, 255, 0.2);
-    color: rgba(255, 255, 255, 0.9);
+    color: rgba(56, 56, 56, 0.9);
 }
 
 .mj-leave-requests__type-option-auto {
@@ -1434,5 +1547,214 @@
     
     .mj-leave-requests__coordinator-main {
         padding: 1rem;
+    }
+}
+
+/* ==========================================================================
+   Mobile Font Size Adjustments
+   ========================================================================== */
+
+@media (max-width: 768px) {
+    /* Increase main font sizes for better readability */
+    .mj-leave-requests__title {
+        font-size: 1.25rem;
+    }
+    
+    .mj-leave-requests__item-title {
+        font-size: 1rem;
+    }
+    
+    .mj-leave-requests__item-member-name {
+        font-size: 0.95rem;
+    }
+    
+    .mj-leave-requests__item-dates {
+        font-size: 0.95rem;
+    }
+    
+    .mj-leave-requests__item-reason {
+        font-size: 0.95rem;
+    }
+    
+    .mj-leave-requests__item-attachment {
+        font-size: 0.85rem;
+    }
+    
+    .mj-leave-requests__status {
+        font-size: 0.8rem;
+        padding: 0.4rem 0.75rem;
+    }
+    
+    .mj-leave-requests__tab {
+        font-size: 0.95rem;
+        padding: 0.7rem 1.25rem;
+    }
+    
+    .mj-leave-requests__tab-badge {
+        min-width: 1.5rem;
+        height: 1.5rem;
+        font-size: 0.75rem;
+    }
+    
+    .mj-leave-requests__quota-value {
+        font-size: 1.75rem;
+    }
+    
+    .mj-leave-requests__quota-label {
+        font-size: 0.85rem;
+    }
+    
+    .mj-leave-requests__year-tab {
+        font-size: 1rem;
+        padding: 0.6rem 1.25rem;
+    }
+    
+    .mj-leave-requests__btn {
+        font-size: 0.95rem;
+        padding: 0.6rem 1.25rem;
+    }
+    
+    .mj-leave-requests__btn--sm {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.85rem;
+    }
+    
+    .mj-leave-requests__btn--xs {
+        font-size: 0.75rem;
+        padding: 0.3rem 0.6rem;
+    }
+    
+    .mj-leave-requests__form-label {
+        font-size: 1rem;
+    }
+    
+    .mj-leave-requests__form-input,
+    .mj-leave-requests__form-select,
+    .mj-leave-requests__form-textarea {
+        font-size: 1rem;
+        padding: 0.75rem 1rem;
+    }
+    
+    .mj-leave-requests__form-hint,
+    .mj-leave-requests__form-error {
+        font-size: 0.9rem;
+    }
+    
+    .mj-leave-requests__modal-title {
+        font-size: 1.5rem;
+    }
+    
+    .mj-leave-requests__type-option-name {
+        font-size: 0.9rem;
+    }
+    
+    .mj-leave-requests__type-option-quota {
+        font-size: 0.8rem;
+    }
+    
+    .mj-leave-requests__type-option-icon {
+        font-size: 2rem;
+    }
+    
+    .mj-leave-requests__file-upload-text {
+        font-size: 1rem;
+    }
+    
+    .mj-leave-requests__file-upload-hint {
+        font-size: 0.9rem;
+    }
+    
+    .mj-leave-requests__file-upload-icon {
+        font-size: 2.5rem;
+    }
+    
+    .mj-leave-requests__selected-date {
+        font-size: 0.9rem;
+        padding: 0.35rem 0.65rem;
+    }
+    
+    .mj-leave-requests__calendar-title {
+        font-size: 1.1rem;
+    }
+    
+    .mj-leave-requests__calendar-day {
+        font-size: 0.95rem;
+    }
+    
+    .mj-leave-requests__calendar-weekday {
+        font-size: 0.8rem;
+    }
+    
+    .mj-leave-requests__overview-request {
+        font-size: 0.95rem;
+        padding: 0.75rem 1rem;
+    }
+    
+    .mj-leave-requests__overview-month-title {
+        font-size: 1rem;
+    }
+    
+    .mj-leave-requests__overview-legend-item {
+        font-size: 0.9rem;
+    }
+    
+    .mj-leave-requests__coordinator-name {
+        font-size: 1rem;
+    }
+    
+    .mj-leave-requests__coordinator-meta {
+        font-size: 0.9rem;
+    }
+    
+    .mj-leave-requests__coordinator-animateur {
+        font-size: 0.95rem;
+        padding: 1rem;
+    }
+    
+    .mj-leave-requests__coordinator-member-header h2 {
+        font-size: 1.4rem;
+    }
+    
+    /* Increase item padding for better touch targets */
+    .mj-leave-requests__item {
+        padding: 1.25rem;
+    }
+    
+    .mj-leave-requests__quota-card {
+        padding: 1.25rem;
+    }
+    
+    .mj-leave-requests__coordinator-item {
+        padding: 1.25rem;
+        gap: 1.25rem;
+    }
+}
+
+@media (max-width: 480px) {
+    /* Further adjustments for very small screens */
+    .mj-leave-requests__title {
+        font-size: 1.15rem;
+    }
+    
+    .mj-leave-requests__item-title {
+        font-size: 0.95rem;
+    }
+    
+    .mj-leave-requests__tab {
+        font-size: 0.9rem;
+        padding: 0.6rem 1rem;
+    }
+    
+    .mj-leave-requests__btn {
+        font-size: 0.9rem;
+        padding: 0.55rem 1rem;
+    }
+    
+    .mj-leave-requests__quota-value {
+        font-size: 1.5rem;
+    }
+    
+    .mj-leave-requests__modal-title {
+        font-size: 1.35rem;
     }
 }

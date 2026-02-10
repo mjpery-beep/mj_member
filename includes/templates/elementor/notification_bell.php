@@ -79,7 +79,7 @@ function mj_notification_bell_get_type_emoji($type) {
         'testimonial_new_pending' => '📝',
 
         // Congés
-        'leave_request_created' => '�',
+        'leave_request_created' => '⛵',
         'leave_request_approved' => '🏖️',
         'leave_request_rejected' => '🚫',
 
@@ -87,7 +87,7 @@ function mj_notification_bell_get_type_emoji($type) {
         'info' => 'ℹ️',
     );
     
-    return isset($icons[$type]) ? $icons[$type] : $icons['info'];
+    return isset($icons[$type]) ? $icons[$type] : $type . '---'; //$icons['info'];
 }
 
 $config_json = wp_json_encode($config);
@@ -250,7 +250,7 @@ $widget_unique_id = 'mj-notification-bell-' . esc_attr($widget_id);
                             <?php endif; ?>
                             
                             <div class="mj-notification-bell__item-icon <?php echo $icon_class; ?>" title="<?php echo esc_attr($type); ?>">
-                                <?php echo mj_notification_bell_get_type_emoji($type); ?>
+                                <?php echo mj_notification_bell_get_type_emoji($type); ?> 
                             </div>
                             
                             <div class="mj-notification-bell__item-content">

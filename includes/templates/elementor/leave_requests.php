@@ -317,6 +317,8 @@ $config = array(
         'requestsInPeriod' => __('Demandes sur cette période', 'mj-member'),
         'delete' => __('Supprimer', 'mj-member'),
         'confirmDelete' => __('Supprimer cette demande ?', 'mj-member'),
+        'months' => array('Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'),
+        'weekdays' => array('Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'),
     ),
     'previewData' => $isPreview ? array(
         'requests' => $sampleRequests,

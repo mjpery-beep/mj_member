@@ -25,7 +25,8 @@
     const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
     const getFirstDayOfMonth = (year, month) => {
         const day = new Date(year, month, 1).getDay();
-        return day === 0 ? 6 : day - 1; // Monday = 0
+        // Convert JS getDay (0=Sunday) to our week format (0=Monday, 6=Sunday)
+        return day === 0 ? 6 : day - 1;
     };
 
     const isWeekend = (year, month, day) => {
@@ -110,14 +111,55 @@
     };
 
     // Calendar Picker Component
-    function CalendarPicker({ selectedDates, onToggleDate, minDate }) {
+    function CalendarPicker({ selectedDates, onToggleDate, minDate, workSchedule, reservedDates, types }) {
         const today = new Date();
         const [viewYear, setViewYear] = useState(today.getFullYear());
         const [viewMonth, setViewMonth] = useState(today.getMonth());
-
+        const weekdays = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
         const i18n = mjLeaveRequests.i18n;
         const daysInMonth = getDaysInMonth(viewYear, viewMonth);
         const firstDay = getFirstDayOfMonth(viewYear, viewMonth);
+
+        // Map day name strings to JS getDay() numbers (0=Sunday, 1=Monday, etc.)
+        const dayNameToJs = {
+            sunday: 0,
+            monday: 1,
+            tuesday: 2,
+            wednesday: 3,
+            thursday: 4,
+            friday: 5,
+            saturday: 6
+        };
+
+        // Get working days from schedule (array of day numbers 0-6, where 0=Sunday, 1=Monday, etc.)
+        const workingDays = useMemo(() => {
+            if (!workSchedule || !workSchedule.schedule) return null; // null means no restriction
+            const days = new Set();
+            workSchedule.schedule.forEach(entry => {
+                if (entry.day !== undefined) {
+                    // day can be stored as string ('monday') or number
+                    if (typeof entry.day === 'string') {
+                        const jsDay = dayNameToJs[entry.day.toLowerCase()];
+                        if (jsDay !== undefined) {
+                            days.add(jsDay);
+                        }
+                    } else {
+                        // Numeric: 1=Monday to 7=Sunday, convert to JS (0=Sunday)
+                        const jsDay = entry.day === 7 ? 0 : entry.day;
+                        days.add(jsDay);
+                    }
+                }
+            });
+            return days.size > 0 ? days : null;
+        }, [workSchedule]);
+
+        // Check if a date is within the work schedule period
+        const isWithinSchedulePeriod = useCallback((dateStr) => {
+            if (!workSchedule) return true;
+            if (workSchedule.startDate && dateStr < workSchedule.startDate) return false;
+            if (workSchedule.endDate && dateStr > workSchedule.endDate) return false;
+            return true;
+        }, [workSchedule]);
 
         const prevMonth = () => {
             if (viewMonth === 0) {
@@ -146,27 +188,61 @@
         // Days of the month
         for (let day = 1; day <= daysInMonth; day++) {
             const dateStr = dateToString(viewYear, viewMonth, day);
+            const jsDate = new Date(viewYear, viewMonth, day);
+            const dayOfWeek = jsDate.getDay(); // 0=Sunday, 1=Monday, etc.
+            
             const isSelected = selectedDates.includes(dateStr);
             const isToday = today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === day;
-            const isPast = new Date(dateStr) < new Date(today.toDateString());
-            const weekend = isWeekend(viewYear, viewMonth, day);
+            const isPast = jsDate < new Date(today.toDateString());
+            const weekend = dayOfWeek === 0 || dayOfWeek === 6;
+            
+            // Check if this is a working day according to schedule
+            const isWorkingDay = workingDays === null || workingDays.has(dayOfWeek);
+            const inSchedulePeriod = isWithinSchedulePeriod(dateStr);
+            
+            // Check if date is already reserved (has an existing leave request)
+            const reserved = reservedDates ? reservedDates[dateStr] : null;
+            const isReserved = reserved && !isSelected; // Don't block if currently selected
+            
+            // Find the type for color
+            const reservedType = reserved ? types.find(t => t.id === reserved.type_id) : null;
+            const reservedColor = reservedType?.color || null;
+            const isPending = reserved?.status === 'pending';
+
+            // Determine if day is disabled
+            const isDisabled = isPast || !isWorkingDay || !inSchedulePeriod || isReserved;
 
             let className = 'mj-leave-requests__calendar-day';
             if (isSelected) className += ' mj-leave-requests__calendar-day--selected';
             if (isToday) className += ' mj-leave-requests__calendar-day--today';
             if (weekend) className += ' mj-leave-requests__calendar-day--weekend';
+            if (!isWorkingDay && !weekend) className += ' mj-leave-requests__calendar-day--not-working';
+            if (isReserved) className += ' mj-leave-requests__calendar-day--reserved';
+
+            // Style for reserved dates
+            const style = {};
+            if (isReserved && reservedColor) {
+                style.backgroundColor = reservedColor;
+                style.color = '#fff';
+                style.borderColor = reservedColor;
+                if (isPending) {
+                    style.opacity = '0.6';
+                }
+            }
 
             days.push(
                 h('button', {
                     type: 'button',
                     class: className,
-                    disabled: isPast,
-                    onClick: () => onToggleDate(dateStr),
+                    style,
+                    disabled: isDisabled,
+                    onClick: () => !isDisabled && onToggleDate(dateStr),
+                    title: isReserved ? (reservedType?.name || 'Réservé') : (!isWorkingDay ? 'Jour non travaillé' : ''),
                     key: dateStr
                 }, day)
             );
         }
-
+        
         return h('div', { class: 'mj-leave-requests__calendar' },
             h('div', { class: 'mj-leave-requests__calendar-header' },
                 h('div', { class: 'mj-leave-requests__calendar-nav' },
@@ -178,11 +254,13 @@
                 )
             ),
             h('div', { class: 'mj-leave-requests__calendar-weekdays' },
-                i18n.weekdays.map((day, i) => h('div', { class: 'mj-leave-requests__calendar-weekday', key: i }, day))
+                weekdays.map((day, i) => h('div', { class: 'mj-leave-requests__calendar-weekday', key: i }, day))
             ),
             h('div', { class: 'mj-leave-requests__calendar-days' }, days)
         );
     }
+
+    
 
     // Single Month Calendar for Overview (read-only with colored leave days)
     function OverviewMonth({ year, month, requests, types, compact }) {
@@ -265,11 +343,19 @@
     }
 
     // Calendar Overview Component - 3 months side by side
-    function CalendarOverview({ requests, types, onDelete }) {
+    function CalendarOverview({ requests, types, onDelete, selectedYear, isCoordinator, onApprove, onReject, onRejectModal }) {
         const today = new Date();
-        const [startMonth, setStartMonth] = useState(today.getMonth());
-        const [startYear, setStartYear] = useState(today.getFullYear());
+        const [startMonth, setStartMonth] = useState(selectedYear !== today.getFullYear() ? 0 : today.getMonth());
+        const [startYear, setStartYear] = useState(selectedYear || today.getFullYear());
         const i18n = mjLeaveRequests.i18n;
+
+        // Reset calendar when selected year changes
+        useEffect(() => {
+            if (selectedYear) {
+                setStartYear(selectedYear);
+                setStartMonth(0); // January of the selected year
+            }
+        }, [selectedYear]);
 
         // Get requests for visible period
         const getMonthRequests = useCallback((year, month) => {
@@ -410,6 +496,10 @@
                         const todayStr = new Date().toISOString().slice(0, 10);
                         const allDatesInFuture = dates.every(d => d > todayStr);
                         const canDelete = req.status === 'pending' || (req.status === 'approved' && allDatesInFuture);
+                        
+                        // Check if is sick leave with certificate
+                        const isSickLeave = type && type.slug === 'sick';
+                        const hasCertificate = req.certificate_file && req.certificate_file.length > 0;
 
                         return h('div', { 
                             class: 'mj-leave-requests__overview-request',
@@ -427,6 +517,37 @@
                             dateCount > 1 && h('span', { class: 'mj-leave-requests__overview-request-days' }, 
                                 `${dateCount} ${dateCount > 1 ? i18n.days : i18n.day}`
                             ),
+                            req.reason && h('span', { 
+                                class: 'mj-leave-requests__overview-request-note',
+                                title: req.reason
+                            }, req.reason),
+                            req.status === 'rejected' && req.reviewer_comment && h('span', {
+                                class: 'mj-leave-requests__overview-request-comment mj-leave-requests__overview-request-comment--rejected',
+                                title: req.reviewer_comment
+                            }, req.reviewer_comment),
+                            req.status === 'approved' && req.reviewer_comment && req.reviewer_comment !== 'Approuvé automatiquement' && h('span', {
+                                class: 'mj-leave-requests__overview-request-comment mj-leave-requests__overview-request-comment--approved',
+                                title: req.reviewer_comment
+                            }, req.reviewer_comment),
+                            isSickLeave && hasCertificate && h('a', {
+                                href: `${mjLeaveRequests.ajaxUrl}?action=mj_leave_request_certificate&request_id=${req.id}&nonce=${mjLeaveRequests.nonce}`,
+                                download: true,
+                                target: '_blank',
+                                class: 'mj-leave-requests__overview-request-certificate',
+                                title: i18n.downloadCertificate || 'Télécharger certificat'
+                            }, '📥'),
+                            isCoordinator && req.status === 'pending' && h('button', {
+                                type: 'button',
+                                class: 'mj-leave-requests__btn mj-leave-requests__btn--success mj-leave-requests__btn--xs',
+                                onClick: () => onApprove && onApprove(req),
+                                title: i18n.approve
+                            }, '✓'),
+                            isCoordinator && req.status === 'pending' && h('button', {
+                                type: 'button',
+                                class: 'mj-leave-requests__btn mj-leave-requests__btn--danger mj-leave-requests__btn--xs',
+                                onClick: () => onRejectModal && onRejectModal(req),
+                                title: i18n.reject
+                            }, '✕'),
                             onDelete && canDelete && h('button', {
                                 type: 'button',
                                 class: 'mj-leave-requests__overview-request-delete',
@@ -457,7 +578,7 @@
     }
 
     // Leave Request Form Component
-    function LeaveRequestForm({ onClose, onSuccess, types, quotas, usage }) {
+    function LeaveRequestForm({ onClose, onSuccess, types, quotas, usage, workSchedule, reservedDates }) {
         const i18n = mjLeaveRequests.i18n;
         const [typeId, setTypeId] = useState(null);
         const [dates, setDates] = useState([]);
@@ -525,16 +646,22 @@
                         const quota = quotas?.[type.slug] ?? null;
                         const used = usage?.[type.slug] ?? 0;
                         const remaining = quota !== null ? Math.max(0, quota - used) : null;
+                        const isSelected = typeId === type.id;
+                        const style = isSelected ? {
+                            borderColor: type.color,
+                            backgroundColor: type.color.substring(0, 7) + '15'
+                        } : {};
                         
                         return h('label', { 
-                            class: `mj-leave-requests__type-option ${typeId === type.id ? 'mj-leave-requests__type-option--selected' : ''}`,
+                            class: `mj-leave-requests__type-option ${isSelected ? 'mj-leave-requests__type-option--selected' : ''}`,
+                            style,
                             key: type.id 
                         },
                             h('input', { 
                                 type: 'radio', 
                                 name: 'leave_type', 
                                 value: type.id,
-                                checked: typeId === type.id,
+                                checked: isSelected,
                                 onChange: () => setTypeId(type.id)
                             }),
                             h('span', { class: 'mj-leave-requests__type-option-name' }, type.name),
@@ -549,7 +676,13 @@
             // Calendar
             h('div', { class: 'mj-leave-requests__form-group' },
                 h('label', { class: 'mj-leave-requests__form-label mj-leave-requests__form-label--required' }, i18n.selectDates),
-                h(CalendarPicker, { selectedDates: dates, onToggleDate: toggleDate }),
+                h(CalendarPicker, { 
+                    selectedDates: dates, 
+                    onToggleDate: toggleDate,
+                    workSchedule,
+                    reservedDates,
+                    types
+                }),
                 dates.length > 0 
                     ? h('div', { class: 'mj-leave-requests__selected-dates' },
                         dates.map(d => 
@@ -647,11 +780,16 @@
                 ),
                 h('div', { class: 'mj-leave-requests__item-dates' }, dateDisplay),
                 request.reason && h('div', { class: 'mj-leave-requests__item-reason' }, request.reason),
-                request.certificate_file && h('a', { 
-                    href: `${mjLeaveRequests.ajaxUrl}?action=mj_leave_request_certificate&request_id=${request.id}&nonce=${mjLeaveRequests.nonce}`, 
-                    target: '_blank',
-                    class: 'mj-leave-requests__item-attachment' 
-                }, '📎 Certificat'),
+                request.certificate_file && h('div', { class: 'mj-leave-requests__item-certificate' },
+                    h('a', { 
+                        href: `${mjLeaveRequests.ajaxUrl}?action=mj_leave_request_certificate&request_id=${request.id}&nonce=${mjLeaveRequests.nonce}`, 
+                        target: '_blank',
+                        class: 'mj-leave-requests__item-certificate-link' 
+                    }, 
+                        h('span', { class: 'mj-leave-requests__item-certificate-icon' }, '📎'),
+                        h('span', { class: 'mj-leave-requests__item-certificate-text' }, 'Certificat médical')
+                    )
+                ),
                 request.status === 'rejected' && request.reviewer_comment && 
                     h('div', { class: 'mj-leave-requests__rejection-comment' }, request.reviewer_comment)
             ),
@@ -868,26 +1006,16 @@
                             })
                         )
                     ),
-
-                    // Requests list
-                    h('div', { class: 'mj-leave-requests__coordinator-requests' },
-                        h('h4', null, i18n.requests || 'Demandes'),
-                        memberData.requests && memberData.requests.length > 0 
-                            ? h('div', { class: 'mj-leave-requests__list' },
-                                memberData.requests.map(request => 
-                                    h(RequestItem, { 
-                                        key: request.id, 
-                                        request, 
-                                        types, 
-                                        onApprove: handleApprove,
-                                        onReject: (r) => setRejectingRequest(r),
-                                        isCoordinator: true,
-                                        showMember: false
-                                    })
-                                )
-                            )
-                            : h('div', { class: 'mj-leave-requests__empty' }, i18n.noRequests)
-                    )
+                    // Calendar overview
+                    h(CalendarOverview, {
+                        requests: memberData.requests || [],
+                        types,
+                        onDelete: null,
+                        selectedYear: viewYear,
+                        isCoordinator: true,
+                        onApprove: handleApprove,
+                        onRejectModal: (r) => setRejectingRequest(r)
+                    })
                 ) : null
             ),
 
@@ -906,6 +1034,8 @@
         const i18n = config.i18n;
         const isCoordinator = config.isCoordinator;
         const isAnimateur = config.isAnimateur;
+        const workSchedule = config.workSchedule || null;
+        const reservedDates = config.reservedDates || {};
 
         // Check URL for member_id parameter (from notification link)
         const urlParams = new URLSearchParams(window.location.search);
@@ -1054,7 +1184,8 @@
                     h(CalendarOverview, {
                         requests: ownRequests,
                         types,
-                        onDelete: handleCancel
+                        onDelete: handleCancel,
+                        selectedYear
                     })
                 ),
                 tab === 'team' && isCoordinator && h(CoordinatorView, {
@@ -1080,7 +1211,9 @@
                     onSuccess: handleCreateSuccess,
                     types,
                     quotas,
-                    usage
+                    usage,
+                    workSchedule,
+                    reservedDates
                 })
             ),
 

@@ -254,6 +254,11 @@
                 'todo_media_added': '📎',
                 'todo_completed': '✅',
 
+                // Congés
+                'leave_request_created': '📋',
+                'leave_request_approved': '🏖️',
+                'leave_request_rejected': '🚫',
+
                 // Défaut / Info
                 'info': 'ℹ️',
             };

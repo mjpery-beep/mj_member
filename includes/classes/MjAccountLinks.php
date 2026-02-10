@@ -89,6 +89,17 @@ class MjAccountLinks {
                 'type' => 'standard',
                 'icon_id' => 0,
             ),
+            'human_resources' => array(
+                'label' => __('Ressources humaines', 'mj-member'),
+                'slug' => 'ressources-humaines',
+                'query' => array('section' => 'human_resources'),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'staff',
+                'editable_label' => true,
+                'type' => 'standard',
+                'icon_id' => 0,
+            ),
             'contact_messages' => array(
                 'label' => __('Messages', 'mj-member'),
                 'slug' => 'messages',
@@ -425,6 +436,10 @@ class MjAccountLinks {
             $visibility = isset($config['visibility']) ? $config['visibility'] : 'all';
             // Vérifier la visibilité basée sur les rôles
             if ($visibility === MjRoles::ANIMATEUR && !$isAnimateur) {
+                continue;
+            }
+
+            if ($visibility === 'staff' && !$isAnimateur && !$isCoordinateur) {
                 continue;
             }
 

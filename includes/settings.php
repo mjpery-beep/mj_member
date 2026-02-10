@@ -827,6 +827,7 @@ function mj_settings_page() {
                                 $animateur_role = class_exists('Mj\\Member\\Classes\\MjRoles') ? \Mj\Member\Classes\MjRoles::ANIMATEUR : 'animateur';
                                 $is_for_animateur = isset($link_config['visibility']) && $link_config['visibility'] === $animateur_role;
                                 $is_for_hours_team = isset($link_config['visibility']) && $link_config['visibility'] === 'hours_team';
+                                $is_for_staff = isset($link_config['visibility']) && $link_config['visibility'] === 'staff';
                                 $requires_capability = isset($link_config['requires_capability']) ? (string) $link_config['requires_capability'] : '';
                                 $editable_label = !empty($link_config['editable_label']);
                                 $current_label = isset($link_config['label']) ? $link_config['label'] : $default_label;
@@ -880,6 +881,8 @@ function mj_settings_page() {
                                     <span class="mj-account-link-label<?php echo !$is_enabled ? ' is-disabled' : ''; ?>"><?php echo esc_html($current_label); ?></span>
                                     <?php if ($is_for_animateur) : ?>
                                         <span class="mj-account-link-badge mj-account-link-badge--animateur" title="Visible uniquement pour les animateurs">Anim.</span>
+                                    <?php elseif ($is_for_staff) : ?>
+                                        <span class="mj-account-link-badge mj-account-link-badge--staff" title="Visible pour les animateurs et coordinateurs">Staff</span>
                                     <?php elseif ($is_for_hours_team) : ?>
                                         <span class="mj-account-link-badge mj-account-link-badge--hours" title="Visible pour l'équipe heures">Équipe</span>
                                     <?php endif; ?>

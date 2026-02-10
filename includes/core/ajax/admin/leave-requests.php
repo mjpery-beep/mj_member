@@ -252,6 +252,8 @@ function mj_member_leave_request_by_member_handler(): void
 
     // Get requests for selected year
     $requests = MjLeaveRequests::get_by_member($memberId, ['year' => $year]);
+    // Enrich requests with type and member data so JS can display dates_array
+    $requests = !empty($requests) ? MjLeaveRequests::enrich($requests) : [];
 
     // Get quotas
     $quotas = [
