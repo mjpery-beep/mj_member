@@ -1,0 +1,5 @@
+# Deny all access to certificate files
+# Files must be accessed through the secure PHP endpoint
+
+Order deny,allow
+Deny from all

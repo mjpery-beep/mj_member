@@ -8,6 +8,8 @@ use Mj\Member\Classes\Crud\MjMemberXp;
 use Mj\Member\Classes\Crud\MjMemberCoins;
 use Mj\Member\Classes\Crud\MjTrophies;
 use Mj\Member\Classes\Crud\MjMemberTrophies;
+use Mj\Member\Classes\Crud\MjActionTypes;
+use Mj\Member\Classes\Crud\MjMemberActions;
 use Mj\Member\Classes\Crud\MjLevels;
 use Mj\Member\Core\AssetsManager;
 
@@ -467,6 +469,101 @@ if ($isPreview) {
     }
 }
 
+// Récupérer les actions du membre
+$actionEntries = array();
+$actionCategories = MjActionTypes::get_category_labels();
+$totalActions = 0;
+
+if ($isPreview) {
+    // Données de prévisualisation pour les actions
+    $actionEntries = array(
+        array(
+            'id' => 1,
+            'slug' => 'idea_submitted',
+            'title' => __('Idée soumise', 'mj-member'),
+            'description' => __('Proposition soumise via le formulaire', 'mj-member'),
+            'emoji' => '💡',
+            'category' => 'site_ideas',
+            'categoryLabel' => __('Idées', 'mj-member'),
+            'xp' => 5,
+            'coins' => 0,
+            'count' => 3,
+        ),
+        array(
+            'id' => 2,
+            'slug' => 'testimonial_submitted',
+            'title' => __('Témoignage soumis', 'mj-member'),
+            'description' => __('Témoignage partagé', 'mj-member'),
+            'emoji' => '📝',
+            'category' => 'site_testimonials',
+            'categoryLabel' => __('Témoignages', 'mj-member'),
+            'xp' => 10,
+            'coins' => 0,
+            'count' => 1,
+        ),
+        array(
+            'id' => 3,
+            'slug' => 'cleaning_site',
+            'title' => __('Nettoyage du site', 'mj-member'),
+            'description' => __('Participation au nettoyage', 'mj-member'),
+            'emoji' => '🧹',
+            'category' => 'mj_cleaning',
+            'categoryLabel' => __('Nettoyage', 'mj-member'),
+            'xp' => 15,
+            'coins' => 1,
+            'count' => 2,
+        ),
+        array(
+            'id' => 4,
+            'slug' => 'excellent_attitude',
+            'title' => __('Attitude exemplaire', 'mj-member'),
+            'description' => __('Comportement remarquable', 'mj-member'),
+            'emoji' => '🌟',
+            'category' => 'mj_attitude',
+            'categoryLabel' => __('Comportement', 'mj-member'),
+            'xp' => 10,
+            'coins' => 0,
+            'count' => 5,
+        ),
+    );
+    $totalActions = 11;
+} elseif ($memberId > 0) {
+    // Récupérer les actions avec les compteurs
+    $actions = MjMemberActions::get_counts_for_member($memberId);
+    
+    if (!empty($actions)) {
+        foreach ($actions as $action) {
+            $count = isset($action['count']) ? (int) $action['count'] : 0;
+            $actionEntries[] = array(
+                'id' => isset($action['id']) ? (int) $action['id'] : 0,
+                'slug' => isset($action['slug']) ? (string) $action['slug'] : '',
+                'title' => isset($action['title']) ? (string) $action['title'] : '',
+                'description' => isset($action['description']) ? (string) $action['description'] : '',
+                'emoji' => isset($action['emoji']) ? (string) $action['emoji'] : '',
+                'category' => isset($action['category']) ? (string) $action['category'] : '',
+                'categoryLabel' => isset($action['categoryLabel']) ? (string) $action['categoryLabel'] : '',
+                'xp' => isset($action['xp']) ? (int) $action['xp'] : 0,
+                'coins' => isset($action['coins']) ? (int) $action['coins'] : 0,
+                'count' => $count,
+            );
+            $totalActions += $count;
+        }
+    }
+}
+
+// Grouper les actions par catégorie
+$groupedActions = array();
+foreach ($actionEntries as $action) {
+    $cat = isset($action['category']) ? $action['category'] : 'other';
+    if (!isset($groupedActions[$cat])) {
+        $groupedActions[$cat] = array(
+            'label' => isset($action['categoryLabel']) ? $action['categoryLabel'] : $cat,
+            'actions' => array(),
+        );
+    }
+    $groupedActions[$cat]['actions'][] = $action;
+}
+
 $headingTitle = $title !== '' ? $title : __('Mes Succès', 'mj-member');
 
 ?>
@@ -702,6 +799,56 @@ $headingTitle = $title !== '' ? $title : __('Mes Succès', 'mj-member');
                                     <span class="mj-trophy__awarded-date"><?php echo esc_html($trophyAwardedLabel); ?></span>
                                 <?php endif; ?>
                             <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    <?php endif; ?>
+
+    <?php if (!empty($actionEntries)) : ?>
+        <!-- Actions Section -->
+        <div class="mj-actions-section">
+            <div class="mj-actions-section__header">
+                <div class="mj-actions-section__title-wrapper">
+                    <span class="mj-actions-section__icon">⚡</span>
+                    <h3 class="mj-actions-section__title"><?php echo esc_html__('Mes Actions', 'mj-member'); ?></h3>
+                </div>
+                <div class="mj-actions-section__counter">
+                    <span class="mj-actions-section__counter-value"><?php echo esc_html($totalActions); ?></span>
+                    <span class="mj-actions-section__counter-label"><?php echo esc_html(_n('action', 'actions', $totalActions, 'mj-member')); ?></span>
+                </div>
+            </div>
+            <div class="mj-actions-section__categories">
+                <?php foreach ($groupedActions as $categoryKey => $categoryGroup) : ?>
+                    <div class="mj-actions-category" data-category="<?php echo esc_attr($categoryKey); ?>">
+                        <h4 class="mj-actions-category__title"><?php echo esc_html($categoryGroup['label']); ?></h4>
+                        <div class="mj-actions-category__list">
+                            <?php foreach ($categoryGroup['actions'] as $action) :
+                                $actionXp = isset($action['xp']) ? (int) $action['xp'] : 0;
+                                $actionCoins = isset($action['coins']) ? (int) $action['coins'] : 0;
+                                $actionCount = isset($action['count']) ? (int) $action['count'] : 0;
+                                $actionClass = 'mj-action';
+                                if ($actionCount === 0) {
+                                    $actionClass .= ' mj-action--not-earned';
+                                }
+                                ?>
+                                <div class="<?php echo esc_attr($actionClass); ?>" data-action-id="<?php echo esc_attr($action['id']); ?>">
+                                    <?php if (!empty($action['emoji'])) : ?>
+                                        <span class="mj-action__emoji"><?php echo esc_html($action['emoji']); ?></span>
+                                    <?php endif; ?>
+                                    <span class="mj-action__title"><?php echo esc_html($action['title']); ?></span>
+                                    <span class="mj-action__count"><?php echo esc_html($actionCount); ?></span>
+                                    <span class="mj-action__rewards">
+                                        <?php if ($actionXp > 0) : ?>
+                                            <span class="mj-action__xp">+<?php echo esc_html($actionXp); ?> XP</span>
+                                        <?php endif; ?>
+                                        <?php if ($actionCoins > 0) : ?>
+                                            <span class="mj-action__coins">🪙</span>
+                                        <?php endif; ?>
+                                    </span>
+                                </div>
+                            <?php endforeach; ?>
                         </div>
                     </div>
                 <?php endforeach; ?>

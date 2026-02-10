@@ -356,6 +356,11 @@ class MjTestimonials implements CrudRepositoryInterface {
             $formats[] = '%d';
         }
 
+        if (array_key_exists('featured', $data)) {
+            $fields['featured'] = !empty($data['featured']) ? 1 : 0;
+            $formats[] = '%d';
+        }
+
         if (empty($fields)) {
             return true;
         }
@@ -460,6 +465,74 @@ class MjTestimonials implements CrudRepositoryInterface {
             'reviewed_by' => $reviewer_id > 0 ? $reviewer_id : get_current_user_id(),
             'rejection_reason' => $reason,
         ));
+    }
+
+    /**
+     * Get featured testimonials (for homepage display).
+     *
+     * @param array<string,mixed> $args
+     * @return array<int,object>
+     */
+    public static function get_featured(array $args = array()) {
+        global $wpdb;
+        $table = self::get_table_name();
+        $members_table = MjMembers::getTableName();
+
+        $defaults = array(
+            'per_page' => 10,
+            'page' => 1,
+            'orderby' => 'created_at',
+            'order' => 'DESC',
+        );
+        $args = wp_parse_args($args, $defaults);
+
+        $per_page = max(1, (int) $args['per_page']);
+        $page = max(1, (int) $args['page']);
+        $offset = ($page - 1) * $per_page;
+
+        $sql = $wpdb->prepare(
+            "SELECT t.*, m.first_name, m.last_name, m.photo_id as member_photo_id
+             FROM {$table} t
+             LEFT JOIN {$members_table} m ON t.member_id = m.id
+             WHERE t.status = %s AND t.featured = 1
+             ORDER BY t.created_at DESC
+             LIMIT %d OFFSET %d",
+            self::STATUS_APPROVED,
+            $per_page,
+            $offset
+        );
+
+        return $wpdb->get_results($sql);
+    }
+
+    /**
+     * Toggle featured status for a testimonial.
+     *
+     * @param int $id
+     * @return array{featured:bool}|WP_Error
+     */
+    public static function toggle_featured($id) {
+        global $wpdb;
+        $table = self::get_table_name();
+        $id = (int) $id;
+
+        if ($id <= 0) {
+            return new \WP_Error('mj_testimonial_invalid_id', __('Identifiant témoignage invalide.', 'mj-member'));
+        }
+
+        $testimonial = self::get_by_id($id);
+        if (!$testimonial) {
+            return new \WP_Error('mj_testimonial_not_found', __('Témoignage non trouvé.', 'mj-member'));
+        }
+
+        $new_featured = empty($testimonial->featured) ? 1 : 0;
+        $result = self::update($id, array('featured' => $new_featured));
+
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        return array('featured' => (bool) $new_featured);
     }
 
     /**

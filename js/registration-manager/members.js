@@ -385,6 +385,118 @@
         return entries;
     }
 
+    /**
+     * Normalize a single action entry.
+     */
+    function normalizeActionEntry(entry) {
+        if (!entry) return null;
+
+        var actionId = 0;
+        if (typeof entry.id === 'number') {
+            actionId = entry.id;
+        } else if (typeof entry.id === 'string' && entry.id !== '') {
+            var parsedId = parseInt(entry.id, 10);
+            actionId = isNaN(parsedId) ? 0 : parsedId;
+        }
+
+        if (actionId <= 0) return null;
+
+        var xp = 0;
+        if (typeof entry.xp === 'number') {
+            xp = entry.xp;
+        } else if (typeof entry.xp === 'string' && entry.xp !== '') {
+            var parsedXp = parseInt(entry.xp, 10);
+            xp = isNaN(parsedXp) ? 0 : parsedXp;
+        }
+
+        var coins = 0;
+        if (typeof entry.coins === 'number') {
+            coins = entry.coins;
+        } else if (typeof entry.coins === 'string' && entry.coins !== '') {
+            var parsedCoins = parseInt(entry.coins, 10);
+            coins = isNaN(parsedCoins) ? 0 : parsedCoins;
+        }
+
+        var count = 0;
+        if (typeof entry.count === 'number') {
+            count = entry.count;
+        } else if (typeof entry.count === 'string' && entry.count !== '') {
+            var parsedCount = parseInt(entry.count, 10);
+            count = isNaN(parsedCount) ? 0 : parsedCount;
+        }
+
+        var isAuto = false;
+        if (typeof entry.isAuto === 'boolean') {
+            isAuto = entry.isAuto;
+        } else if (typeof entry.is_auto === 'boolean') {
+            isAuto = entry.is_auto;
+        } else if (entry.attribution === 'auto') {
+            isAuto = true;
+        }
+
+        var canAward = false;
+        if (typeof entry.canAward === 'boolean') {
+            canAward = entry.canAward;
+        } else if (typeof entry.can_award === 'boolean') {
+            canAward = entry.can_award;
+        } else {
+            canAward = !isAuto;
+        }
+
+        return {
+            id: actionId,
+            slug: typeof entry.slug === 'string' ? entry.slug : '',
+            title: typeof entry.title === 'string' ? entry.title : '',
+            description: typeof entry.description === 'string' ? entry.description : '',
+            emoji: typeof entry.emoji === 'string' ? entry.emoji : '',
+            category: typeof entry.category === 'string' ? entry.category : '',
+            categoryLabel: typeof entry.categoryLabel === 'string' ? entry.categoryLabel : '',
+            attribution: typeof entry.attribution === 'string' ? entry.attribution : 'manual',
+            xp: xp,
+            coins: coins,
+            count: count,
+            isAuto: isAuto,
+            canAward: canAward,
+        };
+    }
+
+    /**
+     * Normalize action entries from member data.
+     */
+    function normalizeActionEntries(member) {
+        if (!member || !Array.isArray(member.actions)) {
+            return [];
+        }
+
+        var entries = [];
+        for (var i = 0; i < member.actions.length; i++) {
+            var normalized = normalizeActionEntry(member.actions[i]);
+            if (normalized) {
+                entries.push(normalized);
+            }
+        }
+        return entries;
+    }
+
+    /**
+     * Group actions by category.
+     */
+    function groupActionsByCategory(actions) {
+        var groups = {};
+        for (var i = 0; i < actions.length; i++) {
+            var action = actions[i];
+            var category = action.category || 'other';
+            if (!groups[category]) {
+                groups[category] = {
+                    label: action.categoryLabel || category,
+                    actions: [],
+                };
+            }
+            groups[category].actions.push(action);
+        }
+        return groups;
+    }
+
     // ============================================
     // MEMBER CARD (for sidebar list)
     // ============================================
@@ -839,6 +951,717 @@
     }
 
     // ============================================
+    // MEMBER LEAVE QUOTAS SECTION
+    // ============================================
+
+    /**
+     * Leave quotas management section for animateurs
+     */
+    function MemberLeaveQuotasSection(props) {
+        var member = props.member;
+        var config = props.config || {};
+        var strings = props.strings || {};
+        var onRefresh = props.onRefresh;
+
+        var currentYear = new Date().getFullYear();
+        var _useStateYear = useState(currentYear);
+        var selectedYear = _useStateYear[0];
+        var setSelectedYear = _useStateYear[1];
+
+        var _useStateSaving = useState(false);
+        var isSaving = _useStateSaving[0];
+        var setIsSaving = _useStateSaving[1];
+
+        var _useStateEditing = useState(false);
+        var isEditing = _useStateEditing[0];
+        var setIsEditing = _useStateEditing[1];
+
+        var _useStateEditedQuotas = useState({});
+        var editedQuotas = _useStateEditedQuotas[0];
+        var setEditedQuotas = _useStateEditedQuotas[1];
+
+        // Local state for quotas (to update after save)
+        var _useStateLocalQuotas = useState(null);
+        var localQuotas = _useStateLocalQuotas[0];
+        var setLocalQuotas = _useStateLocalQuotas[1];
+
+        // Get quotas for selected year (prefer local state if available)
+        var memberQuotas = member && member.leaveQuotas ? member.leaveQuotas : {};
+        var leaveQuotas = localQuotas !== null ? localQuotas : memberQuotas;
+        var yearQuotas = leaveQuotas[selectedYear] || [];
+
+        // Sync local state when member changes
+        useEffect(function () {
+            if (member && member.leaveQuotas) {
+                setLocalQuotas(member.leaveQuotas);
+            }
+        }, [member]);
+
+        // Available years
+        var years = [currentYear - 1, currentYear, currentYear + 1];
+
+        // Start editing
+        var handleStartEdit = useCallback(function () {
+            var initial = {};
+            yearQuotas.forEach(function (q) {
+                initial[q.typeId] = q.quota;
+            });
+            setEditedQuotas(initial);
+            setIsEditing(true);
+        }, [yearQuotas]);
+
+        // Cancel editing
+        var handleCancelEdit = useCallback(function () {
+            setIsEditing(false);
+            setEditedQuotas({});
+        }, []);
+
+        // Handle quota change
+        var handleQuotaChange = useCallback(function (typeId, value) {
+            setEditedQuotas(function (prev) {
+                var next = Object.assign({}, prev);
+                next[typeId] = parseInt(value, 10) || 0;
+                return next;
+            });
+        }, []);
+
+        // Save quotas
+        var handleSave = useCallback(function () {
+            if (!member || !member.id) return;
+
+            var quotasToSave = yearQuotas.map(function (q) {
+                return {
+                    typeId: q.typeId,
+                    quota: editedQuotas[q.typeId] !== undefined ? editedQuotas[q.typeId] : q.quota,
+                };
+            });
+
+            setIsSaving(true);
+
+            var formData = new FormData();
+            formData.append('action', 'mj_regmgr_update_member_leave_quotas');
+            formData.append('nonce', config.nonce || '');
+            formData.append('memberId', member.id);
+            formData.append('year', selectedYear);
+            formData.append('quotas', JSON.stringify(quotasToSave));
+
+            fetch(config.ajaxUrl || '', {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+            })
+                .then(function (res) { return res.json(); })
+                .then(function (response) {
+                    setIsSaving(false);
+                    if (response.success) {
+                        setIsEditing(false);
+                        setEditedQuotas({});
+                        // Update local quotas with response data
+                        if (response.data && response.data.quotas && response.data.year) {
+                            setLocalQuotas(function (prev) {
+                                var updated = Object.assign({}, prev || {});
+                                updated[response.data.year] = response.data.quotas;
+                                return updated;
+                            });
+                        }
+                        if (onRefresh) {
+                            onRefresh();
+                        }
+                    } else {
+                        alert(response.data && response.data.message ? response.data.message : 'Erreur');
+                    }
+                })
+                .catch(function () {
+                    setIsSaving(false);
+                    alert('Erreur de connexion');
+                });
+        }, [member, selectedYear, editedQuotas, yearQuotas, config, onRefresh]);
+
+        // Copy from previous year
+        var handleCopyFromPreviousYear = useCallback(function () {
+            var prevYearQuotas = leaveQuotas[selectedYear - 1] || [];
+            if (prevYearQuotas.length > 0) {
+                var copied = {};
+                prevYearQuotas.forEach(function (q) {
+                    copied[q.typeId] = q.quota;
+                });
+                setEditedQuotas(copied);
+                setIsEditing(true);
+            }
+        }, [leaveQuotas, selectedYear]);
+
+        var sectionTitle = getString(strings, 'leaveQuotasTitle', 'Quotas de congés');
+        var yearLabel = getString(strings, 'leaveQuotasYear', 'Année');
+        var typeLabel = getString(strings, 'leaveQuotasType', 'Type');
+        var quotaLabel = getString(strings, 'leaveQuotasQuota', 'Jours');
+        var editLabel = getString(strings, 'edit', 'Modifier');
+        var saveLabel = getString(strings, 'save', 'Enregistrer');
+        var cancelLabel = getString(strings, 'cancel', 'Annuler');
+        var savingLabel = getString(strings, 'saving', 'Enregistrement...');
+        var copyLabel = getString(strings, 'leaveQuotasCopyPrevious', 'Copier depuis l\'année précédente');
+        var noQuotasLabel = getString(strings, 'leaveQuotasEmpty', 'Aucun type de congé configuré.');
+
+        return h('div', { class: 'mj-regmgr-member-detail__section mj-regmgr-leave-quotas' }, [
+            h('div', { class: 'mj-regmgr-leave-quotas__header' }, [
+                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, sectionTitle),
+                h('div', { class: 'mj-regmgr-leave-quotas__year-select' }, [
+                    h('label', { htmlFor: 'leave-quotas-year' }, yearLabel + ' : '),
+                    h('select', {
+                        id: 'leave-quotas-year',
+                        class: 'mj-regmgr-select',
+                        value: selectedYear,
+                        onChange: function (e) {
+                            setSelectedYear(parseInt(e.target.value, 10));
+                            setIsEditing(false);
+                            setEditedQuotas({});
+                        },
+                    }, years.map(function (y) {
+                        return h('option', { key: y, value: y }, y);
+                    })),
+                ]),
+            ]),
+
+            yearQuotas.length > 0
+                ? h('div', { class: 'mj-regmgr-leave-quotas__table-wrapper' }, [
+                    h('table', { class: 'mj-regmgr-leave-quotas__table' }, [
+                        h('thead', null, [
+                            h('tr', null, [
+                                h('th', null, typeLabel),
+                                h('th', { class: 'mj-regmgr-leave-quotas__quota-col' }, quotaLabel),
+                            ]),
+                        ]),
+                        h('tbody', null,
+                            yearQuotas.map(function (q) {
+                                var displayQuota = isEditing && editedQuotas[q.typeId] !== undefined
+                                    ? editedQuotas[q.typeId]
+                                    : q.quota;
+
+                                return h('tr', { key: q.typeId }, [
+                                    h('td', null, q.name),
+                                    h('td', { class: 'mj-regmgr-leave-quotas__quota-col' }, [
+                                        isEditing
+                                            ? h('input', {
+                                                type: 'number',
+                                                class: 'mj-regmgr-input mj-regmgr-input--small',
+                                                min: 0,
+                                                value: displayQuota,
+                                                onInput: function (e) {
+                                                    handleQuotaChange(q.typeId, e.target.value);
+                                                },
+                                            })
+                                            : h('span', { class: 'mj-regmgr-leave-quotas__quota-value' }, displayQuota),
+                                    ]),
+                                ]);
+                            })
+                        ),
+                    ]),
+                ])
+                : h('p', { class: 'mj-regmgr-member-detail__empty' }, noQuotasLabel),
+
+            h('div', { class: 'mj-regmgr-leave-quotas__actions' }, [
+                !isEditing && yearQuotas.length > 0 && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--primary',
+                    onClick: handleStartEdit,
+                }, editLabel),
+                !isEditing && leaveQuotas[selectedYear - 1] && leaveQuotas[selectedYear - 1].length > 0 && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--secondary',
+                    onClick: handleCopyFromPreviousYear,
+                }, copyLabel),
+                isEditing && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--secondary',
+                    onClick: handleCancelEdit,
+                    disabled: isSaving,
+                }, cancelLabel),
+                isEditing && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--primary',
+                    onClick: handleSave,
+                    disabled: isSaving,
+                }, isSaving ? savingLabel : saveLabel),
+            ]),
+        ]);
+    }
+
+    // ============================================
+    // MEMBER WORK SCHEDULES SECTION
+    // ============================================
+
+    /**
+     * Work schedules management section for staff members
+     * Allows managing multiple schedule periods with start/end dates
+     */
+    function MemberWorkSchedulesSection(props) {
+        var member = props.member;
+        var config = props.config || {};
+        var strings = props.strings || {};
+        var onRefresh = props.onRefresh;
+
+        var _useStateSchedules = useState(null);
+        var localSchedules = _useStateSchedules[0];
+        var setLocalSchedules = _useStateSchedules[1];
+
+        var _useStateSaving = useState(false);
+        var isSaving = _useStateSaving[0];
+        var setIsSaving = _useStateSaving[1];
+
+        var _useStateEditing = useState(null);
+        var editingId = _useStateEditing[0];
+        var setEditingId = _useStateEditing[1];
+
+        var _useStateFormData = useState(null);
+        var formData = _useStateFormData[0];
+        var setFormData = _useStateFormData[1];
+
+        var _useStateExpandedId = useState(null);
+        var expandedId = _useStateExpandedId[0];
+        var setExpandedId = _useStateExpandedId[1];
+
+        // Get schedules from local state or member
+        var memberSchedules = member && member.workSchedules ? member.workSchedules : [];
+        var schedules = localSchedules !== null ? localSchedules : memberSchedules;
+
+        // Sync local state when member changes
+        useEffect(function () {
+            if (member && member.workSchedules) {
+                setLocalSchedules(member.workSchedules);
+            }
+        }, [member]);
+
+        // Day labels
+        var dayLabels = strings.workScheduleDays || {
+            monday: 'Lundi',
+            tuesday: 'Mardi',
+            wednesday: 'Mercredi',
+            thursday: 'Jeudi',
+            friday: 'Vendredi',
+            saturday: 'Samedi',
+            sunday: 'Dimanche',
+        };
+
+        var dayOrder = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+        // Labels
+        var sectionTitle = getString(strings, 'workSchedulesTitle', 'Horaires contractuels');
+        var addLabel = getString(strings, 'workScheduleAdd', 'Ajouter une période');
+        var editLabel = getString(strings, 'edit', 'Modifier');
+        var deleteLabel = getString(strings, 'workScheduleDelete', 'Supprimer');
+        var saveLabel = getString(strings, 'save', 'Enregistrer');
+        var cancelLabel = getString(strings, 'cancel', 'Annuler');
+        var savingLabel = getString(strings, 'saving', 'Enregistrement...');
+        var emptyLabel = getString(strings, 'workScheduleEmpty', 'Aucun horaire défini.');
+        var startDateLabel = getString(strings, 'workScheduleStartDate', 'Date de début');
+        var endDateLabel = getString(strings, 'workScheduleEndDate', 'Date de fin');
+        var endDateHint = getString(strings, 'workScheduleEndDateHint', 'Laisser vide si en cours');
+        var ongoingLabel = getString(strings, 'workScheduleOngoing', 'En cours');
+        var confirmDeleteLabel = getString(strings, 'workScheduleConfirmDelete', 'Êtes-vous sûr de vouloir supprimer cette période ?');
+        var dayLabel = getString(strings, 'workScheduleDay', 'Jour');
+        var startLabel = getString(strings, 'workScheduleStart', 'Début');
+        var endLabel = getString(strings, 'workScheduleEnd', 'Fin');
+        var breakLabel = getString(strings, 'workScheduleBreak', 'Pause (min)');
+        var addSlotLabel = getString(strings, 'workScheduleAddSlot', 'Ajouter un créneau');
+
+        // Helper to format date for display
+        function formatDate(dateStr) {
+            if (!dateStr) return ongoingLabel;
+            var parts = dateStr.split('-');
+            if (parts.length === 3) {
+                return parts[2] + '/' + parts[1] + '/' + parts[0];
+            }
+            return dateStr;
+        }
+
+        // Helper to calculate total hours for a schedule
+        function calculateTotalHours(schedule) {
+            if (!Array.isArray(schedule)) return 0;
+            var totalMinutes = 0;
+            schedule.forEach(function (slot) {
+                if (!slot.start || !slot.end) return;
+                var startParts = slot.start.split(':');
+                var endParts = slot.end.split(':');
+                if (startParts.length >= 2 && endParts.length >= 2) {
+                    var startMins = parseInt(startParts[0], 10) * 60 + parseInt(startParts[1], 10);
+                    var endMins = parseInt(endParts[0], 10) * 60 + parseInt(endParts[1], 10);
+                    var breakMins = slot.break_minutes ? parseInt(slot.break_minutes, 10) : 0;
+                    totalMinutes += Math.max(0, endMins - startMins - breakMins);
+                }
+            });
+            var hours = Math.floor(totalMinutes / 60);
+            var mins = totalMinutes % 60;
+            return hours + 'h' + (mins > 0 ? mins.toString().padStart(2, '0') : '');
+        }
+
+        // Start adding a new schedule
+        var handleAdd = useCallback(function () {
+            setEditingId('new');
+            setFormData({
+                startDate: '',
+                endDate: '',
+                schedule: [],
+            });
+        }, []);
+
+        // Start editing an existing schedule
+        var handleEdit = useCallback(function (sched) {
+            setEditingId(sched.id);
+            setFormData({
+                startDate: sched.startDate || '',
+                endDate: sched.endDate || '',
+                schedule: Array.isArray(sched.schedule) ? sched.schedule.slice() : [],
+            });
+        }, []);
+
+        // Cancel editing
+        var handleCancel = useCallback(function () {
+            setEditingId(null);
+            setFormData(null);
+        }, []);
+
+        // Handle form field change
+        var handleFieldChange = useCallback(function (field, value) {
+            setFormData(function (prev) {
+                if (!prev) return prev;
+                var next = Object.assign({}, prev);
+                next[field] = value;
+                return next;
+            });
+        }, []);
+
+        // Handle slot change
+        var handleSlotChange = useCallback(function (index, field, value) {
+            setFormData(function (prev) {
+                if (!prev) return prev;
+                var next = Object.assign({}, prev);
+                var slots = next.schedule.slice();
+                slots[index] = Object.assign({}, slots[index]);
+                slots[index][field] = value;
+                next.schedule = slots;
+                return next;
+            });
+        }, []);
+
+        // Add a new slot
+        var handleAddSlot = useCallback(function () {
+            setFormData(function (prev) {
+                if (!prev) return prev;
+                var next = Object.assign({}, prev);
+                next.schedule = next.schedule.slice();
+                next.schedule.push({ day: 'monday', start: '09:00', end: '17:00', break_minutes: 60 });
+                return next;
+            });
+        }, []);
+
+        // Remove a slot
+        var handleRemoveSlot = useCallback(function (index) {
+            setFormData(function (prev) {
+                if (!prev) return prev;
+                var next = Object.assign({}, prev);
+                next.schedule = next.schedule.filter(function (_, i) { return i !== index; });
+                return next;
+            });
+        }, []);
+
+        // Save schedule
+        var handleSave = useCallback(function () {
+            if (!member || !member.id || !formData) return;
+
+            setIsSaving(true);
+
+            var postData = new FormData();
+            postData.append('action', 'mj_regmgr_save_member_work_schedule');
+            postData.append('nonce', config.nonce || '');
+            postData.append('memberId', member.id);
+            if (editingId !== 'new') {
+                postData.append('scheduleId', editingId);
+            }
+            postData.append('startDate', formData.startDate);
+            postData.append('endDate', formData.endDate);
+            postData.append('schedule', JSON.stringify(formData.schedule));
+
+            fetch(config.ajaxUrl || '', {
+                method: 'POST',
+                body: postData,
+                credentials: 'same-origin',
+            })
+                .then(function (res) { return res.json(); })
+                .then(function (response) {
+                    setIsSaving(false);
+                    if (response.success) {
+                        setEditingId(null);
+                        setFormData(null);
+                        if (response.data && response.data.workSchedules) {
+                            setLocalSchedules(response.data.workSchedules);
+                        }
+                        if (onRefresh) {
+                            onRefresh();
+                        }
+                    } else {
+                        alert(response.data && response.data.message ? response.data.message : 'Erreur');
+                    }
+                })
+                .catch(function () {
+                    setIsSaving(false);
+                    alert('Erreur de connexion');
+                });
+        }, [member, formData, editingId, config, onRefresh]);
+
+        // Delete schedule
+        var handleDelete = useCallback(function (scheduleId) {
+            if (!confirm(confirmDeleteLabel)) return;
+
+            setIsSaving(true);
+
+            var postData = new FormData();
+            postData.append('action', 'mj_regmgr_delete_member_work_schedule');
+            postData.append('nonce', config.nonce || '');
+            postData.append('memberId', member.id);
+            postData.append('scheduleId', scheduleId);
+
+            fetch(config.ajaxUrl || '', {
+                method: 'POST',
+                body: postData,
+                credentials: 'same-origin',
+            })
+                .then(function (res) { return res.json(); })
+                .then(function (response) {
+                    setIsSaving(false);
+                    if (response.success) {
+                        if (response.data && response.data.workSchedules) {
+                            setLocalSchedules(response.data.workSchedules);
+                        }
+                        if (onRefresh) {
+                            onRefresh();
+                        }
+                    } else {
+                        alert(response.data && response.data.message ? response.data.message : 'Erreur');
+                    }
+                })
+                .catch(function () {
+                    setIsSaving(false);
+                    alert('Erreur de connexion');
+                });
+        }, [member, config, confirmDeleteLabel, onRefresh]);
+
+        // Toggle expand/collapse schedule details
+        var handleToggleExpand = useCallback(function (id) {
+            setExpandedId(function (prev) { return prev === id ? null : id; });
+        }, []);
+
+        // Render schedule slots editor
+        function renderSlotsEditor() {
+            if (!formData) return null;
+
+            var weeklyTotal = calculateTotalHours(formData.schedule);
+            var weeklyTotalLabel = getString(strings, 'workScheduleWeeklyTotal', 'Total hebdomadaire');
+
+            return h('div', { class: 'mj-regmgr-work-schedules__slots' }, [
+                h('table', { class: 'mj-regmgr-work-schedules__slots-table' }, [
+                    h('thead', null, [
+                        h('tr', null, [
+                            h('th', null, dayLabel),
+                            h('th', null, startLabel),
+                            h('th', null, endLabel),
+                            h('th', null, breakLabel),
+                            h('th', null, ''),
+                        ]),
+                    ]),
+                    h('tbody', null, [
+                        formData.schedule.map(function (slot, index) {
+                            return h('tr', { key: index }, [
+                                h('td', null, [
+                                    h('select', {
+                                        class: 'mj-regmgr-select mj-regmgr-select--small',
+                                        value: slot.day || 'monday',
+                                        onChange: function (e) { handleSlotChange(index, 'day', e.target.value); },
+                                    }, dayOrder.map(function (d) {
+                                        return h('option', { key: d, value: d }, dayLabels[d] || d);
+                                    })),
+                                ]),
+                                h('td', null, [
+                                    h('input', {
+                                        type: 'time',
+                                        class: 'mj-regmgr-input mj-regmgr-input--small',
+                                        value: slot.start || '',
+                                        onInput: function (e) { handleSlotChange(index, 'start', e.target.value); },
+                                    }),
+                                ]),
+                                h('td', null, [
+                                    h('input', {
+                                        type: 'time',
+                                        class: 'mj-regmgr-input mj-regmgr-input--small',
+                                        value: slot.end || '',
+                                        onInput: function (e) { handleSlotChange(index, 'end', e.target.value); },
+                                    }),
+                                ]),
+                                h('td', null, [
+                                    h('input', {
+                                        type: 'number',
+                                        class: 'mj-regmgr-input mj-regmgr-input--small',
+                                        min: 0,
+                                        max: 120,
+                                        step: 5,
+                                        value: slot.break_minutes || 0,
+                                        onInput: function (e) { handleSlotChange(index, 'break_minutes', parseInt(e.target.value, 10) || 0); },
+                                    }),
+                                ]),
+                                h('td', null, [
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--ghost mj-btn--small mj-btn--danger',
+                                        onClick: function () { handleRemoveSlot(index); },
+                                        title: deleteLabel,
+                                    }, '×'),
+                                ]),
+                            ]);
+                        }),
+                    ]),
+                ]),
+                h('div', { class: 'mj-regmgr-work-schedules__slots-footer' }, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--secondary mj-btn--small',
+                        onClick: handleAddSlot,
+                    }, addSlotLabel),
+                    h('div', { class: 'mj-regmgr-work-schedules__weekly-total' }, [
+                        h('span', { class: 'mj-regmgr-work-schedules__weekly-total-label' }, weeklyTotalLabel + ' : '),
+                        h('span', { class: 'mj-regmgr-work-schedules__weekly-total-value' }, weeklyTotal),
+                    ]),
+                ]),
+            ]);
+        }
+
+        // Render the editor form
+        function renderEditor() {
+            if (!formData) return null;
+
+            return h('div', { class: 'mj-regmgr-work-schedules__editor' }, [
+                h('div', { class: 'mj-regmgr-form-grid mj-regmgr-form-grid--2' }, [
+                    h('div', { class: 'mj-regmgr-form-field' }, [
+                        h('label', null, startDateLabel),
+                        h('input', {
+                            type: 'date',
+                            class: 'mj-regmgr-input',
+                            value: formData.startDate,
+                            onInput: function (e) { handleFieldChange('startDate', e.target.value); },
+                        }),
+                    ]),
+                    h('div', { class: 'mj-regmgr-form-field' }, [
+                        h('label', null, endDateLabel),
+                        h('input', {
+                            type: 'date',
+                            class: 'mj-regmgr-input',
+                            value: formData.endDate,
+                            onInput: function (e) { handleFieldChange('endDate', e.target.value); },
+                        }),
+                        h('small', { class: 'mj-regmgr-form-hint' }, endDateHint),
+                    ]),
+                ]),
+                renderSlotsEditor(),
+                h('div', { class: 'mj-regmgr-work-schedules__actions' }, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--secondary',
+                        onClick: handleCancel,
+                        disabled: isSaving,
+                    }, cancelLabel),
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--primary',
+                        onClick: handleSave,
+                        disabled: isSaving || !formData.startDate,
+                    }, isSaving ? savingLabel : saveLabel),
+                ]),
+            ]);
+        }
+
+        // Render a schedule card
+        function renderScheduleCard(sched) {
+            var isExpanded = expandedId === sched.id;
+            var isEditing = editingId === sched.id;
+
+            if (isEditing) {
+                return h('div', { key: sched.id, class: 'mj-regmgr-work-schedules__card mj-regmgr-work-schedules__card--editing' }, [
+                    renderEditor(),
+                ]);
+            }
+
+            return h('div', { key: sched.id, class: 'mj-regmgr-work-schedules__card' }, [
+                h('div', {
+                    class: 'mj-regmgr-work-schedules__card-header',
+                    onClick: function () { handleToggleExpand(sched.id); },
+                }, [
+                    h('div', { class: 'mj-regmgr-work-schedules__dates' }, [
+                        h('span', { class: 'mj-regmgr-work-schedules__date' }, formatDate(sched.startDate)),
+                        h('span', { class: 'mj-regmgr-work-schedules__separator' }, ' → '),
+                        h('span', { class: classNames('mj-regmgr-work-schedules__date', { 'mj-regmgr-work-schedules__date--ongoing': !sched.endDate }) },
+                            formatDate(sched.endDate)
+                        ),
+                    ]),
+                    h('div', { class: 'mj-regmgr-work-schedules__total' }, calculateTotalHours(sched.schedule) + '/sem'),
+                    h('svg', {
+                        class: classNames('mj-regmgr-work-schedules__chevron', { 'mj-regmgr-work-schedules__chevron--expanded': isExpanded }),
+                        width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2,
+                    }, [
+                        h('polyline', { points: '6 9 12 15 18 9' }),
+                    ]),
+                ]),
+                isExpanded && h('div', { class: 'mj-regmgr-work-schedules__card-body' }, [
+                    sched.schedule && sched.schedule.length > 0
+                        ? h('ul', { class: 'mj-regmgr-work-schedules__slot-list' },
+                            sched.schedule.map(function (slot, idx) {
+                                var breakInfo = slot.break_minutes ? ' (pause ' + slot.break_minutes + ' min)' : '';
+                                return h('li', { key: idx, class: 'mj-regmgr-work-schedules__slot-item' },
+                                    (dayLabels[slot.day] || slot.day) + ' : ' + slot.start + ' - ' + slot.end + breakInfo
+                                );
+                            })
+                        )
+                        : h('p', { class: 'mj-regmgr-work-schedules__empty-slots' }, 'Aucun créneau défini'),
+                    h('div', { class: 'mj-regmgr-work-schedules__card-actions' }, [
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--secondary mj-btn--small',
+                            onClick: function (e) { e.stopPropagation(); handleEdit(sched); },
+                        }, editLabel),
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--ghost mj-btn--small mj-btn--danger',
+                            onClick: function (e) { e.stopPropagation(); handleDelete(sched.id); },
+                            disabled: isSaving,
+                        }, deleteLabel),
+                    ]),
+                ]),
+            ]);
+        }
+
+        return h('div', { class: 'mj-regmgr-member-detail__section mj-regmgr-work-schedules' }, [
+            h('h2', { class: 'mj-regmgr-member-detail__section-title' }, sectionTitle),
+
+            // List of existing schedules
+            schedules.length > 0
+                ? h('div', { class: 'mj-regmgr-work-schedules__list' },
+                    schedules.map(function (sched) { return renderScheduleCard(sched); })
+                )
+                : editingId !== 'new' && h('p', { class: 'mj-regmgr-member-detail__empty' }, emptyLabel),
+
+            // New schedule editor
+            editingId === 'new' && h('div', { class: 'mj-regmgr-work-schedules__card mj-regmgr-work-schedules__card--new' }, [
+                renderEditor(),
+            ]),
+
+            // Add button
+            editingId === null && h('div', { class: 'mj-regmgr-work-schedules__actions' }, [
+                h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--primary',
+                    onClick: handleAdd,
+                }, addLabel),
+            ]),
+        ]);
+    }
+
+    // ============================================
     // MEMBER DETAIL PANEL
     // ============================================
 
@@ -864,6 +1687,7 @@
         var onDeleteMessage = typeof props.onDeleteMessage === 'function' ? props.onDeleteMessage : null;
         var onDeleteTestimonial = typeof props.onDeleteTestimonial === 'function' ? props.onDeleteTestimonial : null;
         var onUpdateTestimonialStatus = typeof props.onUpdateTestimonialStatus === 'function' ? props.onUpdateTestimonialStatus : null;
+        var onToggleFeatured = typeof props.onToggleFeatured === 'function' ? props.onToggleFeatured : null;
         var onManageAccount = typeof props.onManageAccount === 'function' ? props.onManageAccount : null;
         var onDeleteMember = typeof props.onDeleteMember === 'function' ? props.onDeleteMember : null;
         var onDeleteRegistration = typeof props.onDeleteRegistration === 'function' ? props.onDeleteRegistration : null;
@@ -872,6 +1696,8 @@
         var onSyncBadgeCriteria = typeof props.onSyncBadgeCriteria === 'function' ? props.onSyncBadgeCriteria : null;
         var onAdjustXp = typeof props.onAdjustXp === 'function' ? props.onAdjustXp : null;
         var onToggleTrophy = typeof props.onToggleTrophy === 'function' ? props.onToggleTrophy : null;
+        var onAwardAction = typeof props.onAwardAction === 'function' ? props.onAwardAction : null;
+        var onMemberUpdated = typeof props.onMemberUpdated === 'function' ? props.onMemberUpdated : null;
         var onSelectEvent = typeof props.onSelectEvent === 'function' ? props.onSelectEvent : null;
         var pendingEditRequest = props.pendingEditRequest || null;
         var onPendingEditHandled = typeof props.onPendingEditHandled === 'function' ? props.onPendingEditHandled : null;
@@ -897,7 +1723,7 @@
         var memberId = member && member.id ? member.id : null;
 
         // Onglets valides pour les membres
-        var validMemberTabs = ['information', 'membership', 'badges', 'photos', 'ideas', 'messages', 'testimonials', 'notes', 'history'];
+        var validMemberTabs = ['information', 'membership', 'badges', 'photos', 'ideas', 'messages', 'testimonials', 'notes', 'history', 'quotas'];
         var resolvedInitialTab = initialTab && validMemberTabs.indexOf(initialTab) !== -1 ? initialTab : 'information';
         var initialTabAppliedRef = useRef(false);
 
@@ -1013,6 +1839,14 @@
         var trophySaving = _useStateTrophySaving[0];
         var setTrophySaving = _useStateTrophySaving[1];
 
+        var _useStateActionData = useState(normalizeActionEntries(member));
+        var actionData = _useStateActionData[0];
+        var setActionData = _useStateActionData[1];
+
+        var _useStateActionSaving = useState({});
+        var actionSaving = _useStateActionSaving[0];
+        var setActionSaving = _useStateActionSaving[1];
+
         var avatarFrameRef = useRef(null);
 
         useEffect(function () {
@@ -1049,6 +1883,11 @@
         useEffect(function () {
             setTrophyData(normalizeTrophyEntries(member));
             setTrophySaving({});
+        }, [member]);
+
+        useEffect(function () {
+            setActionData(normalizeActionEntries(member));
+            setActionSaving({});
         }, [member]);
 
         useEffect(function () {
@@ -1988,6 +2827,87 @@
                 });
         };
 
+        var handleAwardAction = function (actionId) {
+            if (!onAwardAction || !memberId) {
+                return;
+            }
+
+            var numericActionId = typeof actionId === 'number' ? actionId : parseInt(actionId, 10);
+            var numericMemberId = typeof memberId === 'number' ? memberId : parseInt(memberId, 10);
+
+            if (!numericMemberId || numericMemberId <= 0 || !numericActionId || numericActionId <= 0) {
+                return;
+            }
+
+            if (actionSaving[numericActionId]) {
+                return;
+            }
+
+            var targetAction = null;
+            for (var i = 0; i < actionData.length; i++) {
+                if (actionData[i].id === numericActionId) {
+                    targetAction = actionData[i];
+                    break;
+                }
+            }
+
+            if (!targetAction || !targetAction.canAward) {
+                return;
+            }
+
+            var previousActions = actionData.slice();
+
+            // Optimistic update: increment count
+            var nextActions = actionData.map(function (action) {
+                if (action.id !== numericActionId) {
+                    return action;
+                }
+                return Object.assign({}, action, {
+                    count: (action.count || 0) + 1,
+                });
+            });
+
+            setActionData(nextActions);
+
+            setActionSaving(function (prev) {
+                var next = Object.assign({}, prev);
+                next[numericActionId] = true;
+                return next;
+            });
+
+            Promise.resolve(onAwardAction(numericMemberId, numericActionId))
+                .then(function (result) {
+                    if (result && result.action) {
+                        var normalized = normalizeActionEntry(result.action);
+                        if (normalized) {
+                            setActionData(function (currentActions) {
+                                return currentActions.map(function (action) {
+                                    return action.id === numericActionId ? normalized : action;
+                                });
+                            });
+                        }
+                    }
+                    // Update XP and coins totals if returned
+                    if (result && onMemberUpdated && (result.xp !== undefined || result.coins !== undefined)) {
+                        onMemberUpdated({
+                            id: numericMemberId,
+                            xpTotal: result.xp,
+                            coinsTotal: result.coins,
+                        });
+                    }
+                })
+                .catch(function () {
+                    setActionData(previousActions);
+                })
+                .finally(function () {
+                    setActionSaving(function (prev) {
+                        var next = Object.assign({}, prev);
+                        delete next[numericActionId];
+                        return next;
+                    });
+                });
+        };
+
         var memberId = member && member.id ? member.id : null;
         var hasLinkedAccount = member && member.userId ? true : false;
 
@@ -2098,6 +3018,7 @@
             notes: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"></path><polyline points="15 2 15 7 20 7"></polyline><line x1="9" y1="12" x2="15" y2="12"></line><line x1="9" y1="16" x2="13" y2="16"></line></svg>',
             history: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>',
             testimonials: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><line x1="9" y1="9" x2="15" y2="9"></line><line x1="9" y1="13" x2="13" y2="13"></line></svg>',
+            quotas: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M8 14h.01"></path><path d="M12 14h.01"></path><path d="M16 14h.01"></path><path d="M8 18h.01"></path><path d="M12 18h.01"></path></svg>',
         };
 
         var memberTabs = [
@@ -2111,6 +3032,14 @@
             { key: 'notes', label: tabNotesLabel, badge: notesCount > 0 ? notesCount : undefined, icon: tabIcons.notes },
             { key: 'history', label: tabHistoryLabel, badge: registrations.length > 0 ? registrations.length : undefined, icon: tabIcons.history },
         ];
+
+        // Ajouter l'onglet quotas uniquement pour les animateurs
+        var tabQuotasLabel = getString(strings, 'tabLeaveQuotas', 'Employé');
+        var isAnimateur = member && (member.role === 'animateur' || member.role === 'coordinateur' || member.role === 'benevole');
+        var canManageQuotas = config && (config.isCoordinateur || config.canDeleteMember);
+        if (isAnimateur && canManageQuotas) {
+            memberTabs.push({ key: 'quotas', label: tabQuotasLabel, icon: tabIcons.quotas });
+        }
 
         var newsletterLabel = getString(strings, 'chipNewsletter', 'Newsletter');
         var smsLabel = getString(strings, 'chipSMS', 'SMS');
@@ -2951,6 +3880,59 @@
                                 h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberTrophiesTitle', 'Trophées')),
                                 h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoTrophies', 'Aucun trophée disponible.')),
                             ]),
+                        // Actions Section
+                        actionData.length > 0
+                            ? h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberActionsTitle', 'Actions')),
+                                h('div', { class: 'mj-regmgr-member-actions' }, (function () {
+                                    var grouped = groupActionsByCategory(actionData);
+                                    var categoryKeys = Object.keys(grouped);
+                                    return categoryKeys.map(function (categoryKey) {
+                                        var group = grouped[categoryKey];
+                                        return h('div', { 
+                                            key: 'action-category-' + categoryKey,
+                                            class: 'mj-regmgr-member-actions__category',
+                                        }, [
+                                            h('h3', { class: 'mj-regmgr-member-actions__category-title' }, group.label),
+                                            h('div', { class: 'mj-regmgr-member-actions__list' }, group.actions.map(function (action) {
+                                                var isSaving = !!actionSaving[action.id];
+                                                var hasCount = action.count > 0;
+
+                                                return h('button', {
+                                                    key: 'action-' + action.id,
+                                                    type: 'button',
+                                                    class: classNames('mj-regmgr-member-action', {
+                                                        'mj-regmgr-member-action--has-count': hasCount,
+                                                        'mj-regmgr-member-action--auto': action.isAuto,
+                                                        'mj-regmgr-member-action--saving': isSaving,
+                                                    }),
+                                                    disabled: isSaving || !action.canAward,
+                                                    title: action.description || action.title,
+                                                    onClick: function () {
+                                                        if (action.canAward && !isSaving) {
+                                                            handleAwardAction(action.id);
+                                                        }
+                                                    },
+                                                }, [
+                                                    action.emoji && h('span', { class: 'mj-regmgr-member-action__emoji' }, action.emoji),
+                                                    h('span', { class: 'mj-regmgr-member-action__title' }, action.title),
+                                                    hasCount && h('span', { class: 'mj-regmgr-member-action__count' }, action.count),
+                                                    h('span', { class: 'mj-regmgr-member-action__rewards' }, [
+                                                        action.xp > 0 && h('span', { class: 'mj-regmgr-member-action__xp' }, '+' + action.xp + ' XP'),
+                                                        action.coins > 0 && h('span', { class: 'mj-regmgr-member-action__coins' }, '🪙'),
+                                                    ]),
+                                                    action.isAuto && h('span', { class: 'mj-regmgr-member-action__auto-badge' }, getString(strings, 'memberActionAuto', 'Auto')),
+                                                    isSaving && h('span', { class: 'mj-regmgr-spinner mj-regmgr-spinner--inline mj-regmgr-member-action__spinner' }),
+                                                ]);
+                                            })),
+                                        ]);
+                                    });
+                                })()),
+                            ])
+                            : h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberActionsTitle', 'Actions')),
+                                h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoActions', 'Aucune action disponible.')),
+                            ]),
                     ]),
                     activeTab === 'photos' && h(Fragment, null, [
                         memberPhotos.length > 0
@@ -3508,6 +4490,26 @@
                                                     ]),
                                                     h('span', null, getString(strings, 'resetTestimonial', 'Remettre en attente')),
                                                 ]),
+                                                isApproved && onToggleFeatured && h('button', {
+                                                    type: 'button',
+                                                    class: classNames('mj-btn mj-btn--small', {
+                                                        'mj-btn--warning': testimonial.featured,
+                                                        'mj-btn--outline': !testimonial.featured,
+                                                    }),
+                                                    title: testimonial.featured 
+                                                        ? getString(strings, 'removeFeaturedTestimonial', 'Retirer de la page d\'accueil')
+                                                        : getString(strings, 'addFeaturedTestimonial', 'Afficher sur la page d\'accueil'),
+                                                    onClick: function () {
+                                                        onToggleFeatured(testimonial.id);
+                                                    },
+                                                }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: testimonial.featured ? 'currentColor' : 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                        h('polygon', { points: '12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2' }),
+                                                    ]),
+                                                    h('span', null, testimonial.featured 
+                                                        ? getString(strings, 'featuredActive', 'En vedette')
+                                                        : getString(strings, 'featuredInactive', 'Mettre en vedette')),
+                                                ]),
                                             ]),
                                         ]);
                                     })
@@ -3538,6 +4540,18 @@
                                 h('p', { class: 'mj-regmgr-member-detail__empty' }, registrationsEmptyLabel),
                             ]),
                     ]),
+                    activeTab === 'quotas' && isAnimateur && canManageQuotas && h(MemberLeaveQuotasSection, {
+                        member: member,
+                        config: config,
+                        strings: strings,
+                        onRefresh: onMemberUpdated,
+                    }),
+                    activeTab === 'quotas' && isAnimateur && canManageQuotas && h(MemberWorkSchedulesSection, {
+                        member: member,
+                        config: config,
+                        strings: strings,
+                        onRefresh: onMemberUpdated,
+                    }),
                 ]),
 
                 // Section enfants (si le membre est tuteur)

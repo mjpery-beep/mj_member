@@ -331,6 +331,10 @@ final class AssetsManager
             'mj-member-regmgr-modals',
             'mj-member-regmgr-tabs',
         ));
+
+        // Leave Requests Widget
+        self::registerStyle('mj-member-leave-requests', 'css/leave-requests.css', array('mj-member-components'));
+        self::registerScript('mj-member-leave-requests', 'js/elementor/leave-requests.js', array('mj-member-utils', 'mj-member-preact-hooks'));
     }
 
     /**
@@ -530,6 +534,17 @@ final class AssetsManager
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-testimonials');
                 wp_enqueue_script('mj-member-testimonials');
+                break;
+
+            case 'leave-requests':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-leave-requests');
+                wp_enqueue_script('mj-member-preact');
+                wp_enqueue_script('mj-member-preact-hooks');
+                wp_enqueue_script('mj-member-leave-requests');
+                if (function_exists('mj_member_leave_requests_localize')) {
+                    mj_member_leave_requests_localize();
+                }
                 break;
 
             default:

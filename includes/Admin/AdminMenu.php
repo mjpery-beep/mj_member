@@ -21,6 +21,7 @@ use Mj\Member\Admin\Page\TodoProjectsPage;
 use Mj\Member\Admin\Page\BadgesPage;
 use Mj\Member\Admin\Page\TrophiesPage;
 use Mj\Member\Admin\Page\LevelsPage;
+use Mj\Member\Admin\Page\ActionsPage;
 use Mj\Member\Admin\Page\NotificationsPage;
 use Mj\Member\Admin\Page\TestimonialsPage;
 
@@ -37,9 +38,10 @@ final class AdminMenu
     {
         add_action('admin_menu', array(__CLASS__, 'registerMenu'));
         
-        // Enregistrer les actions admin_post pour TrophiesPage et LevelsPage
+        // Enregistrer les actions admin_post pour TrophiesPage, LevelsPage et ActionsPage
         TrophiesPage::boot();
         LevelsPage::boot();
+        ActionsPage::boot();
     }
 
     /**
@@ -54,6 +56,7 @@ final class AdminMenu
             $hoursCapability = $capability;
         }
 
+        // ===== MENU PRINCIPAL : Maison de Jeune =====
         add_menu_page(
             'Maison de Jeune',
             'Maison de Jeune',
@@ -87,6 +90,26 @@ final class AdminMenu
 
         add_submenu_page(
             'mj_member',
+            'Configuration',
+            'Configuration',
+            'manage_options',
+            SettingsPage::slug(),
+            array(SettingsPage::class, 'render')
+        );
+
+        // ===== MENU ÉVÉNEMENTS =====
+        add_menu_page(
+            __('Événements MJ', 'mj-member'),
+            __('MJ Événements', 'mj-member'),
+            $capability,
+            'mj_events',
+            array(EventsPage::class, 'render'),
+            'dashicons-calendar-alt',
+            31
+        );
+
+        add_submenu_page(
+            'mj_events',
             __('Événements', 'mj-member'),
             __('Événements', 'mj-member'),
             $capability,
@@ -94,8 +117,10 @@ final class AdminMenu
             array(EventsPage::class, 'render')
         );
 
+        remove_submenu_page('mj_events', 'mj_events');
+
         $locationsHook = add_submenu_page(
-            'mj_member',
+            'mj_events',
             __('Lieux', 'mj-member'),
             __('Lieux', 'mj-member'),
             $capability,
@@ -105,110 +130,57 @@ final class AdminMenu
         LocationsPage::registerHooks($locationsHook);
 
         add_submenu_page(
-            'mj_member',
+            'mj_events',
             __('Photos événements', 'mj-member'),
-            __('Photos événements', 'mj-member'),
+            __('Photos', 'mj-member'),
             $capability,
             EventPhotosPage::slug(),
             array(EventPhotosPage::class, 'render')
         );
 
         add_submenu_page(
-            'mj_member',
+            'mj_events',
             __('Fermetures MJ', 'mj-member'),
-            __('Fermetures MJ', 'mj-member'),
+            __('Fermetures', 'mj-member'),
             $capability,
             ClosuresPage::slug(),
             array(ClosuresPage::class, 'render')
         );
 
+        // ===== MENU COMMUNICATION =====
+        add_menu_page(
+            __('Communication MJ', 'mj-member'),
+            __('MJ Communication', 'mj-member'),
+            $capability,
+            'mj_communication',
+            array(EmailTemplatesPage::class, 'render'),
+            'dashicons-email-alt',
+            32
+        );
+
         add_submenu_page(
-            'mj_member',
+            'mj_communication',
             'Template emails',
-            'Template emails',
+            'Templates emails',
             $capability,
             EmailTemplatesPage::slug(),
             array(EmailTemplatesPage::class, 'render')
         );
 
+        remove_submenu_page('mj_communication', 'mj_communication');
+
         add_submenu_page(
-            'mj_member',
-            'Envoye email',
-            'Envoye email',
+            'mj_communication',
+            'Envoyer email',
+            'Envoyer email',
             $capability,
             SendEmailsPage::slug(),
             array(SendEmailsPage::class, 'render')
         );
 
-        add_submenu_page(
-            'mj_member',
-            'Configuration',
-            'Configuration',
-            'manage_options',
-            SettingsPage::slug(),
-            array(SettingsPage::class, 'render')
-        );
-
-        add_submenu_page(
-            'mj_member',
-            'Import CSV membres',
-            'Import CSV',
-            $capability,
-            ImportMembersPage::slug(),
-            array(ImportMembersPage::class, 'render')
-        );
-
-        add_submenu_page(
-            'mj_member',
-            __('Cartes de visite PDF', 'mj-member'),
-            __('Cartes PDF', 'mj-member'),
-            $capability,
-            CardsPdfPage::slug(),
-            array(CardsPdfPage::class, 'render')
-        );
-
-        add_submenu_page(
-            'mj_member',
-            __('Encodage des heures', 'mj-member'),
-            __('Encodage des heures', 'mj-member'),
-            $hoursCapability,
-            HoursPage::slug(),
-            array(HoursPage::class, 'render')
-        );
-
-        $badgesHook = add_submenu_page(
-            'mj_member',
-            __('Badges', 'mj-member'),
-            __('Badges', 'mj-member'),
-            $capability,
-            BadgesPage::slug(),
-            array(BadgesPage::class, 'render')
-        );
-        BadgesPage::registerHooks($badgesHook);
-
-        $trophiesHook = add_submenu_page(
-            'mj_member',
-            __('Trophées', 'mj-member'),
-            __('Trophées', 'mj-member'),
-            $capability,
-            TrophiesPage::slug(),
-            array(TrophiesPage::class, 'render')
-        );
-        TrophiesPage::registerHooks($trophiesHook);
-
-        $levelsHook = add_submenu_page(
-            'mj_member',
-            __('Niveaux', 'mj-member'),
-            __('Niveaux', 'mj-member'),
-            $capability,
-            LevelsPage::slug(),
-            array(LevelsPage::class, 'render')
-        );
-        LevelsPage::registerHooks($levelsHook);
-
         if ($contactCapability !== '') {
             add_submenu_page(
-                'mj_member',
+                'mj_communication',
                 __('Messages', 'mj-member'),
                 __('Messages', 'mj-member'),
                 $contactCapability,
@@ -217,28 +189,8 @@ final class AdminMenu
             );
         }
 
-        $todosHook = add_submenu_page(
-            'mj_member',
-            __('Gestion des tâches', 'mj-member'),
-            __('Todos', 'mj-member'),
-            $capability,
-            TodosPage::slug(),
-            array(TodosPage::class, 'render')
-        );
-        TodosPage::registerHooks($todosHook);
-
-        $projectsHook = add_submenu_page(
-            'mj_member',
-            __('Projets', 'mj-member'),
-            __('Projets', 'mj-member'),
-            $capability,
-            TodoProjectsPage::slug(),
-            array(TodoProjectsPage::class, 'render')
-        );
-        TodoProjectsPage::registerHooks($projectsHook);
-
         $notificationsHook = add_submenu_page(
-            'mj_member',
+            'mj_communication',
             __('Notifications', 'mj-member'),
             __('Notifications', 'mj-member'),
             $capability,
@@ -248,12 +200,125 @@ final class AdminMenu
         NotificationsPage::registerHooks($notificationsHook);
 
         add_submenu_page(
-            'mj_member',
+            'mj_communication',
             __('Témoignages', 'mj-member'),
             __('Témoignages', 'mj-member'),
             $capability,
             TestimonialsPage::slug(),
             array(TestimonialsPage::class, 'render')
+        );
+
+        // ===== MENU GAMIFICATION =====
+        add_menu_page(
+            __('Gamification MJ', 'mj-member'),
+            __('MJ Gamification', 'mj-member'),
+            $capability,
+            'mj_gamification',
+            array(BadgesPage::class, 'render'),
+            'dashicons-awards',
+            33
+        );
+
+        $badgesHook = add_submenu_page(
+            'mj_gamification',
+            __('Badges', 'mj-member'),
+            __('Badges', 'mj-member'),
+            $capability,
+            BadgesPage::slug(),
+            array(BadgesPage::class, 'render')
+        );
+        BadgesPage::registerHooks($badgesHook);
+
+        remove_submenu_page('mj_gamification', 'mj_gamification');
+
+        $trophiesHook = add_submenu_page(
+            'mj_gamification',
+            __('Trophées', 'mj-member'),
+            __('Trophées', 'mj-member'),
+            $capability,
+            TrophiesPage::slug(),
+            array(TrophiesPage::class, 'render')
+        );
+        TrophiesPage::registerHooks($trophiesHook);
+
+        $levelsHook = add_submenu_page(
+            'mj_gamification',
+            __('Niveaux', 'mj-member'),
+            __('Niveaux', 'mj-member'),
+            $capability,
+            LevelsPage::slug(),
+            array(LevelsPage::class, 'render')
+        );
+        LevelsPage::registerHooks($levelsHook);
+
+        $actionsHook = add_submenu_page(
+            'mj_gamification',
+            __('Actions', 'mj-member'),
+            __('Actions', 'mj-member'),
+            $capability,
+            ActionsPage::slug(),
+            array(ActionsPage::class, 'render')
+        );
+        ActionsPage::registerHooks($actionsHook);
+
+        // ===== MENU OUTILS =====
+        add_menu_page(
+            __('Outils MJ', 'mj-member'),
+            __('MJ Outils', 'mj-member'),
+            $capability,
+            'mj_tools',
+            array(TodosPage::class, 'render'),
+            'dashicons-admin-tools',
+            34
+        );
+
+        $todosHook = add_submenu_page(
+            'mj_tools',
+            __('Gestion des tâches', 'mj-member'),
+            __('Todos', 'mj-member'),
+            $capability,
+            TodosPage::slug(),
+            array(TodosPage::class, 'render')
+        );
+        TodosPage::registerHooks($todosHook);
+
+        remove_submenu_page('mj_tools', 'mj_tools');
+
+        $projectsHook = add_submenu_page(
+            'mj_tools',
+            __('Projets', 'mj-member'),
+            __('Projets', 'mj-member'),
+            $capability,
+            TodoProjectsPage::slug(),
+            array(TodoProjectsPage::class, 'render')
+        );
+        TodoProjectsPage::registerHooks($projectsHook);
+
+        add_submenu_page(
+            'mj_tools',
+            __('Encodage des heures', 'mj-member'),
+            __('Heures', 'mj-member'),
+            $hoursCapability,
+            HoursPage::slug(),
+            array(HoursPage::class, 'render')
+        );
+
+        add_submenu_page(
+            'mj_tools',
+            'Import CSV membres',
+            'Import CSV',
+            $capability,
+            ImportMembersPage::slug(),
+            array(ImportMembersPage::class, 'render')
+        );
+
+        add_submenu_page(
+            'mj_tools',
+            __('Cartes de visite PDF', 'mj-member'),
+            __('Cartes PDF', 'mj-member'),
+            $capability,
+            CardsPdfPage::slug(),
+            array(CardsPdfPage::class, 'render')
         );
     }
 }

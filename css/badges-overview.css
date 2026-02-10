@@ -1446,3 +1446,214 @@
         font-size:0.65rem;
     }
 }
+
+/* ============================================
+   ACTIONS SECTION
+   ============================================ */
+
+.mj-actions-section {
+    margin-top: 32px;
+    padding: 24px;
+    background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 50%, #f0fdf4 100%);
+    border-radius: 16px;
+    border: 1px solid #86efac;
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.1);
+}
+
+.mj-actions-section__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid #86efac;
+}
+
+.mj-actions-section__title-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.mj-actions-section__icon {
+    font-size: 1.5rem;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.mj-actions-section__title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #166534;
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.mj-actions-section__counter {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    border-radius: 20px;
+    color: white;
+    box-shadow: 0 2px 8px rgba(22, 101, 52, 0.3);
+}
+
+.mj-actions-section__counter-value {
+    font-size: 1.5rem;
+    font-weight: 800;
+}
+
+.mj-actions-section__counter-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    opacity: 0.9;
+}
+
+.mj-actions-section__categories {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.mj-actions-category {
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid rgba(134, 239, 172, 0.5);
+}
+
+.mj-actions-category__title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #15803d;
+    margin: 0 0 12px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed #86efac;
+}
+
+.mj-actions-category__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.mj-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+    border: 1px solid #86efac;
+    border-radius: 999px;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.mj-action:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(34, 197, 94, 0.15);
+    border-color: #22c55e;
+}
+
+/* Actions non attribuées - style atténué */
+.mj-action--not-earned {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-color: #cbd5e1;
+    opacity: 0.7;
+}
+
+.mj-action--not-earned:hover {
+    border-color: #94a3b8;
+    box-shadow: 0 4px 8px rgba(100, 116, 139, 0.1);
+}
+
+.mj-action--not-earned .mj-action__title {
+    color: #64748b;
+}
+
+.mj-action--not-earned .mj-action__count {
+    background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+    box-shadow: 0 2px 4px rgba(100, 116, 139, 0.2);
+}
+
+.mj-action__emoji {
+    font-size: 1rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.mj-action__title {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #166534;
+}
+
+.mj-action__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: white;
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    border-radius: 999px;
+    box-shadow: 0 2px 4px rgba(22, 101, 52, 0.3);
+}
+
+.mj-action__rewards {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+.mj-action__xp {
+    color: #7c3aed;
+    font-weight: 600;
+}
+
+.mj-action__coins {
+    font-size: 0.875rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .mj-actions-section {
+        padding: 16px;
+        margin-top: 24px;
+    }
+    
+    .mj-actions-section__header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+    }
+    
+    .mj-actions-section__title {
+        font-size: 1.1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .mj-action {
+        padding: 6px 10px;
+        gap: 6px;
+    }
+    
+    .mj-action__title {
+        font-size: 0.75rem;
+    }
+    
+    .mj-action__count {
+        min-width: 20px;
+        height: 20px;
+        font-size: 0.65rem;
+    }
+}

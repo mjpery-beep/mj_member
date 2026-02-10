@@ -13,6 +13,53 @@ class MjNotifications implements CrudRepositoryInterface {
     const STATUS_DRAFT = 'draft';
     const STATUS_PUBLISHED = 'published';
     const STATUS_ARCHIVED = 'archived';
+    
+    // Types de notifications et leurs priorités par défaut (échelle 1-10)
+    const TYPE_PRIORITIES = [
+        // Paiements (priorité maximale - 10)
+        'payment_completed' => 10,
+        'payment_reminder' => 9,
+        
+        // Tâches (priorité élevée - 8-9)
+        'todo_assigned' => 9,
+        'todo_completed' => 8,
+        'todo_note_added' => 7,
+        'todo_media_added' => 7,
+        
+        // Gamification (priorité élevée - 8-9)
+        'level_up' => 3,
+        'trophy_earned' => 1,
+        'badge_earned' => 1,
+        'criterion_earned' => 1,
+        
+        // Événements (priorité moyenne-élevée - 6-7)
+        'event_registration_created' => 9,
+        'event_registration_cancelled' => 7,
+        'event_reminder' => 6,
+        'event_new_published' => 6,
+        
+        // Membres et modération (priorité moyenne - 5-6)
+        'member_created' => 6,
+        'testimonial_new_pending' => 6,
+        'photo_approved' => 5,
+        'testimonial_approved' => 5,
+        'photo_uploaded' => 5,
+        'post_published' => 5,
+        'member_profile_updated' => 4,
+        
+        // Témoignages et interactions (priorité moyenne-faible - 3-4)
+        'idea_published' => 4,
+        'testimonial_rejected' => 4,
+        'testimonial_comment_reply' => 4,
+        'testimonial_comment' => 3,
+        'message_received' => 3,
+        'attendance_recorded' => 3,
+        
+        // Social et divers (priorité faible - 1-2)
+        'testimonial_reaction' => 2,
+        'idea_voted' => 2,
+        'avatar_applied' => 1,
+    ];
 
     /**
      * @return string
@@ -29,7 +76,7 @@ class MjNotifications implements CrudRepositoryInterface {
             'uid' => '',
             'type' => '',
             'status' => self::STATUS_PUBLISHED,
-            'priority' => 0,
+            'priority' => 5,
             'title' => '',
             'excerpt' => '',
             'payload' => array(),
@@ -290,8 +337,13 @@ class MjNotifications implements CrudRepositoryInterface {
         }
         $record['status'] = $status;
 
-        $priority = isset($record['priority']) ? (int) $record['priority'] : 0;
-        $record['priority'] = max(0, min(65535, $priority));
+        // Si aucune priorité n'est fournie et qu'un type est défini, utiliser la priorité par défaut du type
+        if (!isset($data['priority']) && !empty($record['type'])) {
+            $priority = self::get_priority_by_type($record['type']);
+        } else {
+            $priority = isset($record['priority']) ? (int) $record['priority'] : 5;
+        }
+        $record['priority'] = max(1, min(10, $priority));
 
         $record['title'] = wp_strip_all_tags(isset($record['title']) ? (string) $record['title'] : '');
         $record['excerpt'] = wp_strip_all_tags(isset($record['excerpt']) ? (string) $record['excerpt'] : '');
@@ -410,6 +462,23 @@ class MjNotifications implements CrudRepositoryInterface {
             self::STATUS_PUBLISHED,
             self::STATUS_ARCHIVED,
         );
+    }
+
+    /**
+     * Obtient la priorité par défaut selon le type de notification
+     * @param string $type
+     * @return int
+     */
+    public static function get_priority_by_type($type) {
+        $type = sanitize_title((string) $type);
+        return isset(self::TYPE_PRIORITIES[$type]) ? self::TYPE_PRIORITIES[$type] : 5;
+    }
+
+    /**
+     * @return array<string,int>
+     */
+    public static function get_type_priorities() {
+        return self::TYPE_PRIORITIES;
     }
 
     /**

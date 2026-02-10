@@ -26,7 +26,11 @@ use Mj\Member\Classes\Crud\MjMemberXp;
 use Mj\Member\Classes\Crud\MjMemberCoins;
 use Mj\Member\Classes\Crud\MjTrophies;
 use Mj\Member\Classes\Crud\MjMemberTrophies;
+use Mj\Member\Classes\Crud\MjActionTypes;
+use Mj\Member\Classes\Crud\MjMemberActions;
 use Mj\Member\Classes\Crud\MjLevels;
+use Mj\Member\Classes\Crud\MjLeaveTypes;
+use Mj\Member\Classes\Crud\MjLeaveQuotas;
 use Mj\Member\Classes\Forms\EventFormDataMapper;
 use Mj\Member\Classes\Forms\EventFormOptionsBuilder;
 use Mj\Member\Classes\MjEventSchedule;
@@ -86,8 +90,13 @@ add_action('wp_ajax_mj_regmgr_delete_member', 'mj_regmgr_delete_member');
 add_action('wp_ajax_mj_regmgr_sync_member_badge', 'mj_regmgr_sync_member_badge');
 add_action('wp_ajax_mj_regmgr_adjust_member_xp', 'mj_regmgr_adjust_member_xp');
 add_action('wp_ajax_mj_regmgr_toggle_member_trophy', 'mj_regmgr_toggle_member_trophy');
+add_action('wp_ajax_mj_regmgr_award_member_action', 'mj_regmgr_award_member_action');
 add_action('wp_ajax_mj_regmgr_delete_member_testimonial', 'mj_regmgr_delete_member_testimonial');
 add_action('wp_ajax_mj_regmgr_update_member_testimonial_status', 'mj_regmgr_update_member_testimonial_status');
+add_action('wp_ajax_mj_regmgr_toggle_testimonial_featured', 'mj_regmgr_toggle_testimonial_featured');
+add_action('wp_ajax_mj_regmgr_update_member_leave_quotas', 'mj_regmgr_update_member_leave_quotas');
+add_action('wp_ajax_mj_regmgr_save_member_work_schedule', 'mj_regmgr_save_member_work_schedule');
+add_action('wp_ajax_mj_regmgr_delete_member_work_schedule', 'mj_regmgr_delete_member_work_schedule');
 
 /**
  * Verify nonce and check user permissions
@@ -2989,6 +2998,43 @@ function mj_regmgr_update_member_testimonial_status() {
 }
 
 /**
+ * Toggle le flag "featured" d'un témoignage (affichage page d'accueil)
+ */
+function mj_regmgr_toggle_testimonial_featured() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) return;
+
+    if (!$auth['is_coordinateur']) {
+        wp_send_json_error(array('message' => __('Vous n\'avez pas la permission de modifier ce témoignage.', 'mj-member')));
+        return;
+    }
+
+    $testimonial_id = isset($_POST['testimonialId']) ? (int) $_POST['testimonialId'] : 0;
+
+    if ($testimonial_id <= 0) {
+        wp_send_json_error(array('message' => __('ID témoignage invalide.', 'mj-member')));
+        return;
+    }
+
+    $result = MjTestimonials::toggle_featured($testimonial_id);
+
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+        return;
+    }
+
+    $testimonial = MjTestimonials::get_by_id($testimonial_id);
+    $is_featured = (bool) ($testimonial['featured'] ?? false);
+
+    wp_send_json_success(array(
+        'message' => $is_featured 
+            ? __('Témoignage ajouté à la page d\'accueil.', 'mj-member') 
+            : __('Témoignage retiré de la page d\'accueil.', 'mj-member'),
+        'featured' => $is_featured,
+    ));
+}
+
+/**
  * Delete member note
  */
 function mj_regmgr_delete_member_note() {
@@ -5498,6 +5544,7 @@ function mj_regmgr_get_member_details() {
 
     $member['badges'] = mj_regmgr_get_member_badges_payload($member_id);
     $member['trophies'] = mj_regmgr_get_member_trophies_payload($member_id);
+    $member['actions'] = mj_regmgr_get_member_actions_payload($member_id);
 
     // Retrieve testimonials submitted by the member
     $testimonials_results = MjTestimonials::query(array(
@@ -5518,6 +5565,7 @@ function mj_regmgr_get_member_details() {
                 'id' => (int) $testimonial->id,
                 'content' => isset($testimonial->content) ? (string) $testimonial->content : '',
                 'status' => isset($testimonial->status) ? (string) $testimonial->status : 'pending',
+                'featured' => isset($testimonial->featured) ? (bool) $testimonial->featured : false,
                 'rejection_reason' => isset($testimonial->rejection_reason) ? (string) $testimonial->rejection_reason : '',
                 'photos' => array_map(function ($p) {
                     return array(
@@ -5536,6 +5584,33 @@ function mj_regmgr_get_member_details() {
 
     // Ajouter les informations de niveau
     $member['levelProgression'] = mj_regmgr_get_member_level_progression($member['xpTotal']);
+
+    // Ajouter les quotas de congés (si l'utilisateur a le droit de gérer les membres)
+    if (current_user_can(Config::capability()) || !empty($current_member['is_coordinateur'])) {
+        $current_year = (int) date('Y');
+        $years_to_load = [$current_year - 1, $current_year, $current_year + 1];
+        $member['leaveQuotas'] = [];
+        
+        foreach ($years_to_load as $year) {
+            $quotas = MjLeaveQuotas::get_quotas_for_member($member_id, $year);
+            $member['leaveQuotas'][$year] = [];
+            
+            // Récupérer les types pour construire le tableau complet
+            $leave_types = MjLeaveTypes::get_all(['is_active' => 1]);
+            foreach ($leave_types as $lt) {
+                $member['leaveQuotas'][$year][] = [
+                    'typeId' => (int) $lt->id,
+                    'slug' => $lt->slug,
+                    'name' => $lt->name,
+                    'quota' => isset($quotas[$lt->slug]) ? (int) $quotas[$lt->slug] : 0,
+                ];
+            }
+        }
+
+        // Load work schedules for staff members
+        $schedules = \Mj\Member\Classes\Crud\MjMemberWorkSchedules::get_for_member($member_id);
+        $member['workSchedules'] = \Mj\Member\Classes\Crud\MjMemberWorkSchedules::format_for_response($schedules);
+    }
 
     wp_send_json_success(array('member' => $member));
 }
@@ -5881,6 +5956,236 @@ function mj_regmgr_update_member() {
     }
 
     wp_send_json_success($response);
+}
+
+/**
+ * Update leave quotas for a member
+ */
+function mj_regmgr_update_member_leave_quotas() {
+    $current_member = mj_regmgr_verify_request();
+    if (!$current_member) return;
+
+    // Only coordinators or admins can update quotas
+    if (!current_user_can(Config::capability()) && empty($current_member['is_coordinateur'])) {
+        wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+        return;
+    }
+
+    $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+    $year = isset($_POST['year']) ? absint($_POST['year']) : 0;
+
+    if (!$member_id || !$year) {
+        wp_send_json_error(array('message' => __('Paramètres manquants.', 'mj-member')));
+        return;
+    }
+
+    // Validate year (allow current year -5 to +2)
+    $current_year = (int) date('Y');
+    if ($year < $current_year - 5 || $year > $current_year + 2) {
+        wp_send_json_error(array('message' => __('Année invalide.', 'mj-member')));
+        return;
+    }
+
+    // Parse quotas
+    $quotas_raw = isset($_POST['quotas']) ? $_POST['quotas'] : array();
+    if (is_string($quotas_raw)) {
+        $quotas_raw = json_decode(stripslashes($quotas_raw), true);
+    }
+
+    if (!is_array($quotas_raw) || empty($quotas_raw)) {
+        wp_send_json_error(array('message' => __('Données de quotas manquantes.', 'mj-member')));
+        return;
+    }
+
+    // Build quotas array with type_id as key
+    $quotas = [];
+    foreach ($quotas_raw as $item) {
+        if (!isset($item['typeId']) || !isset($item['quota'])) {
+            continue;
+        }
+        $type_id = absint($item['typeId']);
+        $quota = absint($item['quota']);
+        if ($type_id > 0) {
+            $quotas[$type_id] = $quota;
+        }
+    }
+
+    if (empty($quotas)) {
+        wp_send_json_error(array('message' => __('Aucun quota valide fourni.', 'mj-member')));
+        return;
+    }
+
+    // Save quotas
+    $success = MjLeaveQuotas::set_quotas($member_id, $year, $quotas);
+
+    if (!$success) {
+        wp_send_json_error(array('message' => __('Erreur lors de l\'enregistrement des quotas.', 'mj-member')));
+        return;
+    }
+
+    // Return updated quotas for this year
+    $updated_quotas = MjLeaveQuotas::get_quotas_for_member($member_id, $year);
+    $leave_types = MjLeaveTypes::get_all(['is_active' => 1]);
+    $response_quotas = [];
+    
+    foreach ($leave_types as $lt) {
+        $response_quotas[] = [
+            'typeId' => (int) $lt->id,
+            'slug' => $lt->slug,
+            'name' => $lt->name,
+            'quota' => isset($updated_quotas[$lt->slug]) ? (int) $updated_quotas[$lt->slug] : 0,
+        ];
+    }
+
+    wp_send_json_success([
+        'message' => __('Quotas mis à jour avec succès.', 'mj-member'),
+        'year' => $year,
+        'quotas' => $response_quotas,
+    ]);
+}
+
+/**
+ * Save a member work schedule (create or update)
+ */
+function mj_regmgr_save_member_work_schedule() {
+    $current_member = mj_regmgr_verify_request();
+    if (!$current_member) return;
+
+    // Only coordinators or admins can manage work schedules
+    if (!current_user_can(Config::capability()) && empty($current_member['is_coordinateur'])) {
+        wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+        return;
+    }
+
+    $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+    $schedule_id = isset($_POST['scheduleId']) ? absint($_POST['scheduleId']) : 0;
+    $start_date = isset($_POST['startDate']) ? sanitize_text_field($_POST['startDate']) : '';
+    $end_date = isset($_POST['endDate']) ? sanitize_text_field($_POST['endDate']) : '';
+    $schedule_raw = isset($_POST['schedule']) ? $_POST['schedule'] : '[]';
+
+    if (!$member_id || !$start_date) {
+        wp_send_json_error(array('message' => __('Paramètres manquants.', 'mj-member')));
+        return;
+    }
+
+    // Validate date format
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $start_date)) {
+        wp_send_json_error(array('message' => __('Format de date de début invalide.', 'mj-member')));
+        return;
+    }
+
+    if ($end_date && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $end_date)) {
+        wp_send_json_error(array('message' => __('Format de date de fin invalide.', 'mj-member')));
+        return;
+    }
+
+    // Validate that end date is after start date
+    if ($end_date && $end_date < $start_date) {
+        wp_send_json_error(array('message' => __('La date de fin doit être après la date de début.', 'mj-member')));
+        return;
+    }
+
+    // Parse schedule
+    if (is_string($schedule_raw)) {
+        $schedule = json_decode(stripslashes($schedule_raw), true);
+    } else {
+        $schedule = $schedule_raw;
+    }
+
+    if (!is_array($schedule)) {
+        $schedule = [];
+    }
+
+    // Check for overlapping schedules
+    $has_overlap = \Mj\Member\Classes\Crud\MjMemberWorkSchedules::has_overlap(
+        $member_id,
+        $start_date,
+        $end_date ?: null,
+        $schedule_id ?: null
+    );
+
+    if ($has_overlap) {
+        wp_send_json_error(array('message' => __('Cette période chevauche un horaire existant.', 'mj-member')));
+        return;
+    }
+
+    $data = [
+        'member_id' => $member_id,
+        'start_date' => $start_date,
+        'end_date' => $end_date ?: null,
+        'schedule' => $schedule,
+    ];
+
+    if ($schedule_id > 0) {
+        // Update existing schedule
+        $success = \Mj\Member\Classes\Crud\MjMemberWorkSchedules::update($schedule_id, $data);
+        if (!$success) {
+            wp_send_json_error(array('message' => __('Erreur lors de la mise à jour de l\'horaire.', 'mj-member')));
+            return;
+        }
+    } else {
+        // Create new schedule
+        $insert_id = \Mj\Member\Classes\Crud\MjMemberWorkSchedules::create($data);
+        if (!$insert_id) {
+            wp_send_json_error(array('message' => __('Erreur lors de la création de l\'horaire.', 'mj-member')));
+            return;
+        }
+        $schedule_id = $insert_id;
+    }
+
+    // Return updated schedules list
+    $schedules = \Mj\Member\Classes\Crud\MjMemberWorkSchedules::get_for_member($member_id);
+    $formatted = \Mj\Member\Classes\Crud\MjMemberWorkSchedules::format_for_response($schedules);
+
+    wp_send_json_success([
+        'message' => __('Horaire enregistré avec succès.', 'mj-member'),
+        'scheduleId' => $schedule_id,
+        'workSchedules' => $formatted,
+    ]);
+}
+
+/**
+ * Delete a member work schedule
+ */
+function mj_regmgr_delete_member_work_schedule() {
+    $current_member = mj_regmgr_verify_request();
+    if (!$current_member) return;
+
+    // Only coordinators or admins can manage work schedules
+    if (!current_user_can(Config::capability()) && empty($current_member['is_coordinateur'])) {
+        wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+        return;
+    }
+
+    $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+    $schedule_id = isset($_POST['scheduleId']) ? absint($_POST['scheduleId']) : 0;
+
+    if (!$member_id || !$schedule_id) {
+        wp_send_json_error(array('message' => __('Paramètres manquants.', 'mj-member')));
+        return;
+    }
+
+    // Verify that the schedule belongs to the member
+    $schedule = \Mj\Member\Classes\Crud\MjMemberWorkSchedules::get($schedule_id);
+    if (!$schedule || (int) $schedule->member_id !== $member_id) {
+        wp_send_json_error(array('message' => __('Horaire introuvable.', 'mj-member')));
+        return;
+    }
+
+    $success = \Mj\Member\Classes\Crud\MjMemberWorkSchedules::delete($schedule_id);
+    if (!$success) {
+        wp_send_json_error(array('message' => __('Erreur lors de la suppression de l\'horaire.', 'mj-member')));
+        return;
+    }
+
+    // Return updated schedules list
+    $schedules = \Mj\Member\Classes\Crud\MjMemberWorkSchedules::get_for_member($member_id);
+    $formatted = \Mj\Member\Classes\Crud\MjMemberWorkSchedules::format_for_response($schedules);
+
+    wp_send_json_success([
+        'message' => __('Horaire supprimé avec succès.', 'mj-member'),
+        'workSchedules' => $formatted,
+    ]);
 }
 
 /**
@@ -6861,6 +7166,54 @@ function mj_regmgr_create_membership_payment_link() {
 }
 
 /**
+ * Build actions payload for a member within the registration manager.
+ *
+ * @param int $member_id
+ * @return array<int,array<string,mixed>>
+ */
+function mj_regmgr_get_member_actions_payload($member_id) {
+    $member_id = (int) $member_id;
+    if ($member_id <= 0) {
+        return array();
+    }
+
+    // Get all active action types with counts for this member
+    $actions = MjMemberActions::get_counts_for_member($member_id);
+
+    if (empty($actions)) {
+        return array();
+    }
+
+    $payload = array();
+    foreach ($actions as $action) {
+        $action_id = isset($action['id']) ? (int) $action['id'] : 0;
+        if ($action_id <= 0) {
+            continue;
+        }
+
+        $is_auto = !empty($action['attribution']) && $action['attribution'] === MjActionTypes::ATTRIBUTION_AUTO;
+
+        $payload[] = array(
+            'id' => $action_id,
+            'slug' => isset($action['slug']) ? (string) $action['slug'] : '',
+            'title' => isset($action['title']) ? (string) $action['title'] : '',
+            'description' => isset($action['description']) ? (string) $action['description'] : '',
+            'emoji' => isset($action['emoji']) ? (string) $action['emoji'] : '',
+            'category' => isset($action['category']) ? (string) $action['category'] : '',
+            'categoryLabel' => isset($action['categoryLabel']) ? (string) $action['categoryLabel'] : '',
+            'attribution' => isset($action['attribution']) ? (string) $action['attribution'] : 'manual',
+            'xp' => isset($action['xp']) ? (int) $action['xp'] : 0,
+            'coins' => isset($action['coins']) ? (int) $action['coins'] : 0,
+            'count' => isset($action['count']) ? (int) $action['count'] : 0,
+            'isAuto' => $is_auto,
+            'canAward' => !$is_auto,
+        );
+    }
+
+    return $payload;
+}
+
+/**
  * Build trophies payload for a member within the registration manager.
  *
  * @param int $member_id
@@ -7003,6 +7356,73 @@ function mj_regmgr_toggle_member_trophy() {
         'message' => $awarded
             ? __('Trophée attribué.', 'mj-member')
             : __('Trophée retiré.', 'mj-member'),
+    ));
+}
+
+/**
+ * Award an action to a member
+ */
+function mj_regmgr_award_member_action() {
+    $current_member = mj_regmgr_verify_request();
+    if (!$current_member) return;
+
+    $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+    $action_type_id = isset($_POST['actionTypeId']) ? absint($_POST['actionTypeId']) : 0;
+    $notes = isset($_POST['notes']) ? sanitize_textarea_field($_POST['notes']) : '';
+
+    if ($member_id <= 0 || $action_type_id <= 0) {
+        wp_send_json_error(array('message' => __('Paramètres invalides.', 'mj-member')));
+        return;
+    }
+
+    $target_member = MjMembers::getById($member_id);
+    if (!$target_member) {
+        wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
+        return;
+    }
+
+    $action_type = MjActionTypes::get($action_type_id);
+    if (!$action_type || (isset($action_type['status']) && $action_type['status'] === MjActionTypes::STATUS_ARCHIVED)) {
+        wp_send_json_error(array('message' => __('Type d\'action introuvable ou archivé.', 'mj-member')));
+        return;
+    }
+
+    // Only manual actions can be awarded through this endpoint
+    if (!empty($action_type['attribution']) && $action_type['attribution'] === MjActionTypes::ATTRIBUTION_AUTO) {
+        wp_send_json_error(array('message' => __('Cette action est automatique et ne peut pas être attribuée manuellement.', 'mj-member')));
+        return;
+    }
+
+    $awarded_by = get_current_user_id();
+    $result = MjMemberActions::award($member_id, $action_type_id, $awarded_by, $notes);
+
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+        return;
+    }
+
+    // Build updated actions payload
+    $updated_actions = mj_regmgr_get_member_actions_payload($member_id);
+    $updated_entry = null;
+    foreach ($updated_actions as $entry) {
+        if ((int) $entry['id'] === $action_type_id) {
+            $updated_entry = $entry;
+            break;
+        }
+    }
+
+    // Get updated XP/coins
+    $xp = MjMemberXp::get($member_id);
+    $coins = MjMemberCoins::get($member_id);
+
+    wp_send_json_success(array(
+        'action' => $updated_entry,
+        'xp' => $xp,
+        'coins' => $coins,
+        'message' => sprintf(
+            __('Action « %s » attribuée.', 'mj-member'),
+            $action_type['title'] ?? ''
+        ),
     ));
 }
 

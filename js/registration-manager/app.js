@@ -5520,6 +5520,22 @@
                 });
         }, [api, showSuccess, showError, loadMemberDetails, selectedMember]);
 
+        var handleToggleTestimonialFeatured = useCallback(function (testimonialId) {
+            var memberId = selectedMember && selectedMember.id ? selectedMember.id : null;
+            return api.toggleTestimonialFeatured(testimonialId)
+                .then(function (result) {
+                    showSuccess(result.message || 'Témoignage mis à jour');
+                    if (memberId) {
+                        loadMemberDetails(memberId);
+                    }
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err.message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails, selectedMember]);
+
         var handleSyncMemberBadge = useCallback(function (memberId, badgeId, criterionIds) {
             return api.syncMemberBadge(memberId, badgeId, criterionIds)
                 .then(function (result) {
@@ -5601,6 +5617,25 @@
                     var message = err && err.message
                         ? err.message
                         : getString(strings, 'memberTrophyToggleError', 'Impossible de modifier ce trophée.');
+                    showError(message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails, strings]);
+
+        var handleAwardMemberAction = useCallback(function (memberId, actionTypeId) {
+            return api.awardMemberAction(memberId, actionTypeId)
+                .then(function (result) {
+                    var successMessage = result && result.message
+                        ? result.message
+                        : getString(strings, 'memberActionAwarded', 'Action attribuée.');
+                    showSuccess(successMessage);
+                    loadMemberDetails(memberId);
+                    return result;
+                })
+                .catch(function (err) {
+                    var message = err && err.message
+                        ? err.message
+                        : getString(strings, 'memberActionAwardError', 'Impossible d\'attribuer cette action.');
                     showError(message);
                     throw err;
                 });
@@ -7269,10 +7304,12 @@
                             onDeleteMessage: handleDeleteMemberMessage,
                             onDeleteTestimonial: handleDeleteMemberTestimonial,
                             onUpdateTestimonialStatus: handleUpdateMemberTestimonialStatus,
+                            onToggleFeatured: handleToggleTestimonialFeatured,
                             onDeleteMember: handleDeleteMember,
                             onSyncBadgeCriteria: handleSyncMemberBadge,
                             onAdjustXp: handleAdjustMemberXp,
                             onToggleTrophy: handleToggleMemberTrophy,
+                            onAwardAction: handleAwardMemberAction,
                             onSelectEvent: handleViewEventById,
                         }),
                     ]),

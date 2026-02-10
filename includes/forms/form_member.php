@@ -59,6 +59,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
         'member_description_courte' => isset($_POST['member_description_courte']) ? sanitize_text_field($_POST['member_description_courte']) : '',
         'member_description_longue' => isset($_POST['member_description_longue']) ? wp_kses_post($_POST['member_description_longue']) : '',
         'work_schedule' => isset($_POST['work_schedule']) ? wp_unslash($_POST['work_schedule']) : '[]',
+        'leave_quota_paid' => isset($_POST['leave_quota_paid']) ? intval($_POST['leave_quota_paid']) : 0,
+        'leave_quota_unpaid' => isset($_POST['leave_quota_unpaid']) ? intval($_POST['leave_quota_unpaid']) : 0,
+        'leave_quota_exceptional' => isset($_POST['leave_quota_exceptional']) ? intval($_POST['leave_quota_exceptional']) : 0,
+        'leave_quota_recovery' => isset($_POST['leave_quota_recovery']) ? intval($_POST['leave_quota_recovery']) : 0,
         'status' => isset($_POST['status']) ? sanitize_text_field($_POST['status']) : MjMembers::STATUS_ACTIVE,
         'requires_payment' => $requires_payment,
         'date_last_payement' => $date_last_payement_input,
@@ -161,6 +165,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
             'description_courte' => $input_data['member_description_courte'] !== '' ? $input_data['member_description_courte'] : null,
             'description_longue' => $input_data['member_description_longue'] !== '' ? $input_data['member_description_longue'] : null,
             'work_schedule' => (MjRoles::isStaff($current_role) && $input_data['work_schedule'] !== '[]') ? $input_data['work_schedule'] : null,
+            'leave_quota_paid' => MjRoles::isStaff($current_role) ? $input_data['leave_quota_paid'] : 0,
+            'leave_quota_unpaid' => MjRoles::isStaff($current_role) ? $input_data['leave_quota_unpaid'] : 0,
+            'leave_quota_exceptional' => MjRoles::isStaff($current_role) ? $input_data['leave_quota_exceptional'] : 0,
+            'leave_quota_recovery' => MjRoles::isStaff($current_role) ? $input_data['leave_quota_recovery'] : 0,
             'date_last_payement' => $date_last_payement_db,
             'is_autonomous' => $input_data['member_is_autonomous'] ? 1 : 0,
             'guardian_id' => null,
@@ -289,6 +297,10 @@ $form_defaults = array(
     'member_description_courte' => $extract_member_string($member, 'description_courte'),
     'member_description_longue' => $extract_member_string($member, 'description_longue'),
     'work_schedule' => $member && !empty($member->work_schedule) ? $member->work_schedule : '[]',
+    'leave_quota_paid' => $member && isset($member->leave_quota_paid) ? (int) $member->leave_quota_paid : 0,
+    'leave_quota_unpaid' => $member && isset($member->leave_quota_unpaid) ? (int) $member->leave_quota_unpaid : 0,
+    'leave_quota_exceptional' => $member && isset($member->leave_quota_exceptional) ? (int) $member->leave_quota_exceptional : 0,
+    'leave_quota_recovery' => $member && isset($member->leave_quota_recovery) ? (int) $member->leave_quota_recovery : 0,
     'status' => ($extract_member_string($member, 'status') !== '') ? $extract_member_string($member, 'status') : MjMembers::STATUS_ACTIVE,
     'requires_payment' => $default_requires_payment,
     'date_last_payement' => $last_payment_value,
@@ -574,6 +586,38 @@ $member_email_required = !MjRoles::isJeune($form_values['member_role']);
             </div>
 
             <input type="hidden" name="work_schedule" id="work_schedule_input" value="<?php echo esc_attr($form_values['work_schedule']); ?>" />
+        </div>
+
+        <div class="mj-form-section js-role-staff" id="leave-quotas-section">
+            <h3>Quotas de congés annuels</h3>
+            <p class="description" style="margin-bottom:15px;">Définissez le nombre de jours de congés alloués par an pour ce membre du staff.</p>
+
+            <table class="form-table">
+                <tr>
+                    <th><label for="leave_quota_paid">Congés payés</label></th>
+                    <td>
+                        <input type="number" id="leave_quota_paid" name="leave_quota_paid" value="<?php echo esc_attr($form_values['leave_quota_paid']); ?>" min="0" max="365" class="small-text" /> jours/an
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="leave_quota_unpaid">Congés sans solde</label></th>
+                    <td>
+                        <input type="number" id="leave_quota_unpaid" name="leave_quota_unpaid" value="<?php echo esc_attr($form_values['leave_quota_unpaid']); ?>" min="0" max="365" class="small-text" /> jours/an
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="leave_quota_exceptional">Congés exceptionnels</label></th>
+                    <td>
+                        <input type="number" id="leave_quota_exceptional" name="leave_quota_exceptional" value="<?php echo esc_attr($form_values['leave_quota_exceptional']); ?>" min="0" max="365" class="small-text" /> jours/an
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="leave_quota_recovery">Récupération</label></th>
+                    <td>
+                        <input type="number" id="leave_quota_recovery" name="leave_quota_recovery" value="<?php echo esc_attr($form_values['leave_quota_recovery']); ?>" min="0" max="365" class="small-text" /> jours/an
+                    </td>
+                </tr>
+            </table>
         </div>
 
         <div class="mj-form-section">

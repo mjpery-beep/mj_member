@@ -78,6 +78,11 @@ function mj_notification_bell_get_type_emoji($type) {
         'testimonial_comment_reply' => '↩️',
         'testimonial_new_pending' => '📝',
 
+        // Congés
+        'leave_request_created' => '�',
+        'leave_request_approved' => '🏖️',
+        'leave_request_rejected' => '🚫',
+
         // Défaut / Info
         'info' => 'ℹ️',
     );
@@ -246,7 +251,6 @@ $widget_unique_id = 'mj-notification-bell-' . esc_attr($widget_id);
                             
                             <div class="mj-notification-bell__item-icon <?php echo $icon_class; ?>" title="<?php echo esc_attr($type); ?>">
                                 <?php echo mj_notification_bell_get_type_emoji($type); ?>
-                                <small style="font-size:9px;display:block;color:#666;"><?php echo esc_html($type); ?></small>
                             </div>
                             
                             <div class="mj-notification-bell__item-content">

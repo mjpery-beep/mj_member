@@ -91,9 +91,9 @@ final class EventPageViewBuilder
         $editUrl = '';
         if ($canEdit && $eventId > 0) {
             $editUrl = add_query_arg(
-                'event_id',
+                'event',
                 $eventId,
-                home_url('/mon-compte/gestion-evenement/')
+                home_url('/mon-compte/gestionnaire/')
             );
         }
 

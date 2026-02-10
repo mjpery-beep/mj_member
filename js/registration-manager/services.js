@@ -508,6 +508,17 @@
             },
 
             /**
+             * Attribue une action manuelle à un membre
+             */
+            awardMemberAction: function (memberId, actionTypeId, notes) {
+                return post('mj_regmgr_award_member_action', {
+                    memberId: memberId,
+                    actionTypeId: actionTypeId,
+                    notes: notes || '',
+                });
+            },
+
+            /**
              * Envoie un email de réinitialisation de mot de passe
              */
             resetMemberPassword: function (memberId) {
@@ -612,6 +623,15 @@
                     testimonialId: testimonialId,
                     status: status,
                     rejectionReason: rejectionReason || '',
+                });
+            },
+
+            /**
+             * Active/désactive la mise en vedette d'un témoignage (page d'accueil)
+             */
+            toggleTestimonialFeatured: function (testimonialId) {
+                return post('mj_regmgr_toggle_testimonial_featured', {
+                    testimonialId: testimonialId,
                 });
             },
 

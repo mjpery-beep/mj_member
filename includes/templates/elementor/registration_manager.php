@@ -13,6 +13,7 @@ use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\Crud\MjEventRegistrations;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Crud\MjEventAttendance;
+use Mj\Member\Classes\Crud\MjLeaveTypes;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\AssetsManager;
 use Mj\Member\Core\Config;
@@ -367,6 +368,17 @@ if ($membership_price_manual === '' || $membership_price_manual === null) {
     $membership_price_manual = (float) $membership_price_manual;
 }
 
+// Types de congés pour l'onglet quotas
+$leave_types_raw = MjLeaveTypes::get_all(['is_active' => 1]);
+$leave_types = [];
+foreach ($leave_types_raw as $lt) {
+    $leave_types[] = [
+        'id' => (int) $lt->id,
+        'slug' => $lt->slug,
+        'name' => $lt->name,
+    ];
+}
+
 // Nonce et URL AJAX
 $ajax_url = admin_url('admin-ajax.php');
 $ajax_nonce = wp_create_nonce('mj-registration-manager');
@@ -415,6 +427,7 @@ $config_json = wp_json_encode(array(
     'attendanceStatuses' => $attendance_statuses,
     'roleLabels' => $role_labels,
     'ageRanges' => $age_ranges,
+    'leaveTypes' => $leave_types,
     'locale' => function_exists('determine_locale') ? determine_locale() : get_locale(),
     'prefillEventId' => $prefill_event_id > 0 ? $prefill_event_id : null,
     'regDocHeader' => wpautop(get_option('mj_regdoc_header', '')),
@@ -599,6 +612,47 @@ $config_json = wp_json_encode(array(
         'chipSMS' => __('SMS', 'mj-member'),
         'chipWhatsapp' => __('WhatsApp', 'mj-member'),
         'chipPhotoConsent' => __('Consentement photo', 'mj-member'),
+        
+        // Quotas de congés
+        'tabLeaveQuotas' => __('Employé', 'mj-member'),
+        'leaveQuotasTitle' => __('Quotas de congés', 'mj-member'),
+        'leaveQuotasYear' => __('Année', 'mj-member'),
+        'leaveQuotasType' => __('Type de congé', 'mj-member'),
+        'leaveQuotasQuota' => __('Jours', 'mj-member'),
+        'leaveQuotasCopyPrevious' => __('Copier depuis l\'année précédente', 'mj-member'),
+        'leaveQuotasEmpty' => __('Aucun type de congé configuré.', 'mj-member'),
+        'leaveQuotasSaved' => __('Quotas mis à jour avec succès.', 'mj-member'),
+        
+        // Horaires contractuels
+        'workSchedulesTitle' => __('Horaires contractuels', 'mj-member'),
+        'workScheduleAdd' => __('Ajouter une période', 'mj-member'),
+        'workScheduleEdit' => __('Modifier la période', 'mj-member'),
+        'workScheduleDelete' => __('Supprimer', 'mj-member'),
+        'workScheduleStartDate' => __('Date de début', 'mj-member'),
+        'workScheduleEndDate' => __('Date de fin', 'mj-member'),
+        'workScheduleEndDateHint' => __('Laisser vide si en cours', 'mj-member'),
+        'workScheduleOngoing' => __('En cours', 'mj-member'),
+        'workScheduleEmpty' => __('Aucun horaire défini.', 'mj-member'),
+        'workScheduleSaved' => __('Horaire enregistré avec succès.', 'mj-member'),
+        'workScheduleDeleted' => __('Horaire supprimé.', 'mj-member'),
+        'workScheduleOverlap' => __('Cette période chevauche un horaire existant.', 'mj-member'),
+        'workScheduleConfirmDelete' => __('Êtes-vous sûr de vouloir supprimer cette période ?', 'mj-member'),
+        'workScheduleDay' => __('Jour', 'mj-member'),
+        'workScheduleStart' => __('Début', 'mj-member'),
+        'workScheduleEnd' => __('Fin', 'mj-member'),
+        'workScheduleBreak' => __('Pause (min)', 'mj-member'),
+        'workScheduleAddSlot' => __('Ajouter un créneau', 'mj-member'),
+        'workScheduleWeeklyTotal' => __('Total hebdomadaire', 'mj-member'),
+        'workScheduleDays' => [
+            'monday' => __('Lundi', 'mj-member'),
+            'tuesday' => __('Mardi', 'mj-member'),
+            'wednesday' => __('Mercredi', 'mj-member'),
+            'thursday' => __('Jeudi', 'mj-member'),
+            'friday' => __('Vendredi', 'mj-member'),
+            'saturday' => __('Samedi', 'mj-member'),
+            'sunday' => __('Dimanche', 'mj-member'),
+        ],
+        
         'addLocation' => __('Ajouter un lieu', 'mj-member'),
         'editLocation' => __('Modifier le lieu', 'mj-member'),
         'manageLocationHint' => __('Ajoutez ou éditez un lieu sans quitter ce formulaire.', 'mj-member'),

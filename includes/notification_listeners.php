@@ -79,6 +79,11 @@ final class MjNotificationTypes
     const TESTIMONIAL_REJECTED = 'testimonial_rejected';
     const TESTIMONIAL_REACTION = 'testimonial_reaction';
 
+    // Demandes de congés
+    const LEAVE_REQUEST_CREATED = 'leave_request_created';
+    const LEAVE_REQUEST_APPROVED = 'leave_request_approved';
+    const LEAVE_REQUEST_REJECTED = 'leave_request_rejected';
+
 
     /**
      * Retourne les labels pour chaque type de notification.
@@ -117,7 +122,10 @@ final class MjNotificationTypes
             self::TESTIMONIAL_COMMENT => __('Nouveau commentaire de témoignage', 'mj-member'),
             self::TESTIMONIAL_APPROVED => __('Témoignage approuvé', 'mj-member'),
             self::TESTIMONIAL_REJECTED => __('Témoignage rejeté', 'mj-member'),
-            self::TESTIMONIAL_REACTION => __('Réaction à un témoignage', 'mj-member')
+            self::TESTIMONIAL_REACTION => __('Réaction à un témoignage', 'mj-member'),
+            self::LEAVE_REQUEST_CREATED => __('Nouvelle demande de congé', 'mj-member'),
+            self::LEAVE_REQUEST_APPROVED => __('Demande de congé approuvée', 'mj-member'),
+            self::LEAVE_REQUEST_REJECTED => __('Demande de congé refusée', 'mj-member')
         );
     }
 }
@@ -223,7 +231,7 @@ if (!function_exists('mj_member_notification_get_manager_url')) {
      */
     function mj_member_notification_get_manager_url(string $type, int $id, string $tab = ''): string
     {
-        $base_url = home_url('/mon-compte/gestion-evenement/');
+        $base_url = home_url('/mon-compte/gestionnaire/');
         
         $args = array();
         if ($type === 'member') {

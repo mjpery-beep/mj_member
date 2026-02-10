@@ -354,6 +354,42 @@ function mj_member_get_todos_table_name() {
     return $cached;
 }
 
+function mj_member_get_leave_types_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_leave_types';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
+function mj_member_get_leave_requests_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_leave_requests';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
 function mj_member_get_todo_assignments_table_name() {
     static $cached = null;
     if ($cached !== null) {
@@ -643,6 +679,50 @@ function mj_member_get_levels_table_name() {
     $candidates = array(
         $wpdb->prefix . 'mj_levels',
         $wpdb->prefix . 'levels',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
+function mj_member_get_action_types_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_action_types',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
+function mj_member_get_member_actions_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_member_actions',
     );
 
     foreach ($candidates as $candidate) {
@@ -1698,6 +1778,11 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_51($wpdb);
     mj_member_upgrade_to_2_52($wpdb);
     mj_member_upgrade_to_2_53($wpdb);
+    mj_member_upgrade_to_2_54($wpdb);
+    mj_member_upgrade_to_2_55($wpdb);
+    mj_member_upgrade_to_2_56($wpdb);
+    mj_member_upgrade_to_2_57($wpdb);
+    mj_member_upgrade_to_2_58($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -4960,6 +5045,368 @@ function mj_member_upgrade_to_2_53($wpdb) {
     
     if (!mj_member_column_exists($table, 'link_preview')) {
         $wpdb->query("ALTER TABLE {$table} ADD COLUMN link_preview longtext DEFAULT NULL AFTER video_id");
+    }
+}
+
+/**
+ * Schema upgrade 2.54: Add featured column to testimonials table for homepage display.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_54($wpdb) {
+    $table = mj_member_get_testimonials_table_name();
+    
+    if (!mj_member_table_exists($table)) {
+        return;
+    }
+    
+    if (!mj_member_column_exists($table, 'featured')) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN featured tinyint(1) NOT NULL DEFAULT 0 AFTER link_preview");
+        $wpdb->query("ALTER TABLE {$table} ADD INDEX idx_featured (featured)");
+    }
+}
+
+/**
+ * Schema upgrade 2.55: Create action_types and member_actions tables for gamification actions.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_55($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+    
+    $charset_collate = $wpdb->get_charset_collate();
+    
+    // Create action_types table
+    $action_types_table = mj_member_get_action_types_table_name();
+    if (!mj_member_table_exists($action_types_table)) {
+        $sql = "CREATE TABLE {$action_types_table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            slug varchar(100) NOT NULL,
+            title varchar(255) NOT NULL,
+            description text DEFAULT NULL,
+            emoji varchar(32) DEFAULT NULL,
+            category varchar(50) NOT NULL DEFAULT 'site_interactions',
+            attribution varchar(20) NOT NULL DEFAULT 'manual',
+            auto_hook varchar(100) DEFAULT NULL,
+            xp int(11) NOT NULL DEFAULT 5,
+            coins int(11) NOT NULL DEFAULT 0,
+            display_order int(11) NOT NULL DEFAULT 0,
+            status varchar(20) NOT NULL DEFAULT 'active',
+            created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY slug (slug),
+            KEY idx_category (category),
+            KEY idx_attribution (attribution),
+            KEY idx_status (status),
+            KEY idx_display_order (display_order)
+        ) {$charset_collate};";
+        
+        dbDelta($sql);
+        
+        // Seed default actions
+        mj_member_seed_default_actions();
+    }
+    
+    // Create member_actions table
+    $member_actions_table = mj_member_get_member_actions_table_name();
+    if (!mj_member_table_exists($member_actions_table)) {
+        $sql = "CREATE TABLE {$member_actions_table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            member_id bigint(20) unsigned NOT NULL,
+            action_type_id bigint(20) unsigned NOT NULL,
+            awarded_by bigint(20) unsigned DEFAULT NULL,
+            notes text DEFAULT NULL,
+            created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_member (member_id),
+            KEY idx_action_type (action_type_id),
+            KEY idx_awarded_by (awarded_by),
+            KEY idx_created_at (created_at)
+        ) {$charset_collate};";
+        
+        dbDelta($sql);
+    }
+}
+
+/**
+ * Schema upgrade 2.56: Add emojis to existing action types.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_56($wpdb) {
+    $table = mj_member_get_action_types_table_name();
+    
+    if (!mj_member_table_exists($table)) {
+        return;
+    }
+    
+    // Add emoji column if missing
+    if (!mj_member_column_exists($table, 'emoji')) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN emoji varchar(32) DEFAULT NULL AFTER description");
+    }
+    
+    $emojis = array(
+        'idea_submitted' => '💡',
+        'idea_adopted' => '🎯',
+        'testimonial_submitted' => '📝',
+        'testimonial_published' => '✅',
+        'testimonial_featured' => '⭐',
+        'photo_shared' => '📸',
+        'photo_published' => '🖼️',
+        'photo_cover' => '🏆',
+        'event_created' => '📅',
+        'event_animated' => '🎭',
+        'comment_posted' => '💬',
+        'referral_signup' => '🤝',
+        'social_share' => '📣',
+        'cleaning_site' => '🧹',
+        'equipment_maintenance' => '🔧',
+        'transport_material' => '🚗',
+        'shopping_supplies' => '🛒',
+        'logistics_other' => '📦',
+        'assembly_attended' => '🏛️',
+        'meeting_attended' => '📋',
+        'workshop_facilitated' => '🎓',
+        'external_event' => '🌍',
+        'excellent_attitude' => '🌟',
+        'conflict_resolution' => '🕊️',
+        'newcomer_welcome' => '👋',
+    );
+    
+    foreach ($emojis as $slug => $emoji) {
+        $wpdb->update(
+            $table,
+            array('emoji' => $emoji),
+            array('slug' => $slug),
+            array('%s'),
+            array('%s')
+        );
+    }
+}
+
+/**
+ * Schema upgrade 2.57: Create leave management tables and add quota fields to members.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_57($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+    
+    $charset_collate = $wpdb->get_charset_collate();
+    
+    // Create mj_leave_types table
+    $leave_types_table = mj_member_get_leave_types_table_name();
+    if (!mj_member_table_exists($leave_types_table)) {
+        $sql = "CREATE TABLE {$leave_types_table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            name varchar(100) NOT NULL,
+            slug varchar(50) NOT NULL,
+            requires_document tinyint(1) NOT NULL DEFAULT 0,
+            requires_validation tinyint(1) NOT NULL DEFAULT 1,
+            color varchar(20) DEFAULT '#6366f1',
+            sort_order int NOT NULL DEFAULT 0,
+            is_active tinyint(1) NOT NULL DEFAULT 1,
+            created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY slug (slug),
+            KEY idx_active (is_active),
+            KEY idx_sort (sort_order)
+        ) {$charset_collate};";
+        
+        dbDelta($sql);
+        
+        // Seed default leave types
+        mj_member_seed_leave_types();
+    }
+    
+    // Create mj_leave_requests table
+    $leave_requests_table = mj_member_get_leave_requests_table_name();
+    if (!mj_member_table_exists($leave_requests_table)) {
+        $sql = "CREATE TABLE {$leave_requests_table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            member_id bigint(20) unsigned NOT NULL,
+            type_id bigint(20) unsigned NOT NULL,
+            status varchar(20) NOT NULL DEFAULT 'pending',
+            dates longtext NOT NULL,
+            reason text DEFAULT NULL,
+            certificate_file varchar(255) DEFAULT NULL,
+            reviewed_by bigint(20) unsigned DEFAULT NULL,
+            reviewed_at datetime DEFAULT NULL,
+            reviewer_comment text DEFAULT NULL,
+            created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_member (member_id),
+            KEY idx_type (type_id),
+            KEY idx_status (status),
+            KEY idx_created (created_at)
+        ) {$charset_collate};";
+        
+        dbDelta($sql);
+    }
+    
+    // Add certificate_file column for secure file storage
+    if (mj_member_table_exists($leave_requests_table)) {
+        if (!mj_member_column_exists($leave_requests_table, 'certificate_file')) {
+            $wpdb->query("ALTER TABLE {$leave_requests_table} ADD COLUMN certificate_file varchar(255) DEFAULT NULL AFTER attachment_id");
+        }
+    }
+    
+    // Create mj_leave_quotas table for yearly quotas
+    $leave_quotas_table = $wpdb->prefix . 'mj_leave_quotas';
+    if (!mj_member_table_exists($leave_quotas_table)) {
+        $sql = "CREATE TABLE {$leave_quotas_table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            member_id bigint(20) unsigned NOT NULL,
+            year int NOT NULL,
+            type_id bigint(20) unsigned NOT NULL,
+            quota int NOT NULL DEFAULT 0,
+            created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY idx_member_year_type (member_id, year, type_id),
+            KEY idx_member (member_id),
+            KEY idx_year (year)
+        ) {$charset_collate};";
+        
+        dbDelta($sql);
+    }
+    
+    // Legacy: Add leave quota columns to mj_members (kept for backwards compatibility)
+    $members_table = $wpdb->prefix . 'mj_members';
+    if (mj_member_table_exists($members_table)) {
+        if (!mj_member_column_exists($members_table, 'leave_quota_paid')) {
+            $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN leave_quota_paid int NOT NULL DEFAULT 0 AFTER work_schedule");
+        }
+        if (!mj_member_column_exists($members_table, 'leave_quota_unpaid')) {
+            $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN leave_quota_unpaid int NOT NULL DEFAULT 0 AFTER leave_quota_paid");
+        }
+        if (!mj_member_column_exists($members_table, 'leave_quota_exceptional')) {
+            $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN leave_quota_exceptional int NOT NULL DEFAULT 0 AFTER leave_quota_unpaid");
+        }
+        if (!mj_member_column_exists($members_table, 'leave_quota_recovery')) {
+            $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN leave_quota_recovery int NOT NULL DEFAULT 0 AFTER leave_quota_exceptional");
+        }
+    }
+}
+
+/**
+ * Schema upgrade 2.58: Create member work schedules table for managing time-bounded schedules.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_58($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+    $table = $wpdb->prefix . 'mj_member_work_schedules';
+
+    if (!mj_member_table_exists($table)) {
+        $sql = "CREATE TABLE {$table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            member_id bigint(20) unsigned NOT NULL,
+            start_date date NOT NULL,
+            end_date date DEFAULT NULL,
+            schedule longtext NOT NULL,
+            created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_member (member_id),
+            KEY idx_start_date (start_date),
+            KEY idx_end_date (end_date),
+            KEY idx_member_dates (member_id, start_date, end_date)
+        ) {$charset_collate};";
+
+        dbDelta($sql);
+    }
+}
+
+/**
+ * Seed default leave types.
+ */
+function mj_member_seed_leave_types() {
+    global $wpdb;
+    $table = mj_member_get_leave_types_table_name();
+    
+    $types = array(
+        array('name' => 'Congé payé', 'slug' => 'paid', 'requires_document' => 0, 'requires_validation' => 1, 'color' => '#22c55e', 'sort_order' => 10),
+        array('name' => 'Congé sans solde', 'slug' => 'unpaid', 'requires_document' => 0, 'requires_validation' => 1, 'color' => '#f59e0b', 'sort_order' => 20),
+        array('name' => 'Congé exceptionnel', 'slug' => 'exceptional', 'requires_document' => 0, 'requires_validation' => 1, 'color' => '#8b5cf6', 'sort_order' => 30),
+        array('name' => 'Récupération', 'slug' => 'recovery', 'requires_document' => 0, 'requires_validation' => 1, 'color' => '#3b82f6', 'sort_order' => 40),
+        array('name' => 'Maladie', 'slug' => 'sick', 'requires_document' => 1, 'requires_validation' => 0, 'color' => '#ef4444', 'sort_order' => 50),
+    );
+    
+    foreach ($types as $type) {
+        $wpdb->insert($table, $type);
+    }
+}
+
+/**
+ * Seed default action types from ACTION.md specification.
+ */
+function mj_member_seed_default_actions() {
+    global $wpdb;
+    $table = mj_member_get_action_types_table_name();
+    
+    $actions = array(
+        // site_ideas - Contributions intellectuelles
+        array('slug' => 'idea_submitted', 'title' => 'Idée soumise', 'description' => 'Proposition originale soumise via le formulaire d\'idées', 'category' => 'site_ideas', 'attribution' => 'auto', 'auto_hook' => 'mj_member_idea_submitted', 'xp' => 5, 'coins' => 0, 'emoji' => '💡', 'display_order' => 10),
+        array('slug' => 'idea_adopted', 'title' => 'Idée retenue', 'description' => 'Idée validée par l\'équipe et programmée pour réalisation', 'category' => 'site_ideas', 'attribution' => 'manual', 'xp' => 20, 'coins' => 1, 'emoji' => '🎯', 'display_order' => 20),
+        
+        // site_testimonials - Témoignages
+        array('slug' => 'testimonial_submitted', 'title' => 'Témoignage soumis', 'description' => 'Témoignage envoyé via le formulaire (texte, photo ou vidéo)', 'category' => 'site_testimonials', 'attribution' => 'auto', 'auto_hook' => 'mj_member_testimonial_submitted', 'xp' => 10, 'coins' => 0, 'emoji' => '📝', 'display_order' => 30),
+        array('slug' => 'testimonial_published', 'title' => 'Témoignage publié', 'description' => 'Témoignage validé et visible sur le site', 'category' => 'site_testimonials', 'attribution' => 'auto', 'auto_hook' => 'mj_member_testimonial_approved', 'xp' => 5, 'coins' => 0, 'emoji' => '✅', 'display_order' => 40),
+        array('slug' => 'testimonial_featured', 'title' => 'Témoignage mis en avant', 'description' => 'Témoignage sélectionné pour affichage en page d\'accueil', 'category' => 'site_testimonials', 'attribution' => 'manual', 'xp' => 15, 'coins' => 1, 'emoji' => '⭐', 'display_order' => 50),
+        
+        // site_photos - Contributions visuelles
+        array('slug' => 'photo_shared', 'title' => 'Photo partagée', 'description' => 'Photo d\'activité envoyée via le formulaire dédié', 'category' => 'site_photos', 'attribution' => 'auto', 'auto_hook' => 'mj_member_photo_submitted', 'xp' => 5, 'coins' => 0, 'emoji' => '📸', 'display_order' => 60),
+        array('slug' => 'photo_published', 'title' => 'Photo publiée', 'description' => 'Photo validée et ajoutée à la médiathèque publique', 'category' => 'site_photos', 'attribution' => 'auto', 'auto_hook' => 'mj_member_photo_approved', 'xp' => 3, 'coins' => 0, 'emoji' => '🖼️', 'display_order' => 70),
+        array('slug' => 'photo_cover', 'title' => 'Photo utilisée en couverture', 'description' => 'Photo choisie comme image de couverture d\'un événement ou d\'une page', 'category' => 'site_photos', 'attribution' => 'manual', 'xp' => 10, 'coins' => 1, 'emoji' => '🏆', 'display_order' => 80),
+        
+        // site_activities - Engagement événementiel
+        array('slug' => 'event_created', 'title' => 'Événement proposé', 'description' => 'Nouvel événement créé / proposé dans le système', 'category' => 'site_activities', 'attribution' => 'auto', 'auto_hook' => 'mj_member_event_created', 'xp' => 15, 'coins' => 0, 'emoji' => '📅', 'display_order' => 90),
+        array('slug' => 'event_animated', 'title' => 'Événement animé', 'description' => 'Animation effective d\'un événement (après confirmation présence)', 'category' => 'site_activities', 'attribution' => 'auto', 'auto_hook' => 'mj_member_event_animated', 'xp' => 20, 'coins' => 0, 'emoji' => '🎭', 'display_order' => 100),
+        
+        // site_interactions - Interactions communautaires
+        array('slug' => 'comment_posted', 'title' => 'Commentaire posté', 'description' => 'Commentaire publié sur le blog ou un événement', 'category' => 'site_interactions', 'attribution' => 'auto', 'auto_hook' => 'mj_member_comment_approved', 'xp' => 2, 'coins' => 0, 'emoji' => '💬', 'display_order' => 110),
+        array('slug' => 'referral_signup', 'title' => 'Parrainage', 'description' => 'Nouveau membre inscrit grâce au parrainage', 'category' => 'site_interactions', 'attribution' => 'manual', 'xp' => 30, 'coins' => 1, 'emoji' => '🤝', 'display_order' => 120),
+        array('slug' => 'social_share', 'title' => 'Partage réseaux sociaux', 'description' => 'Partage d\'un contenu MJ sur les réseaux sociaux (vérification manuelle)', 'category' => 'site_interactions', 'attribution' => 'manual', 'xp' => 5, 'coins' => 0, 'emoji' => '📣', 'display_order' => 130),
+        
+        // mj_cleaning - Nettoyage & Entretien
+        array('slug' => 'cleaning_site', 'title' => 'Nettoyage du site', 'description' => 'Participation au nettoyage d\'un lieu d\'activité', 'category' => 'mj_cleaning', 'attribution' => 'manual', 'xp' => 15, 'coins' => 1, 'emoji' => '🧹', 'display_order' => 140),
+        array('slug' => 'equipment_maintenance', 'title' => 'Entretien du matériel', 'description' => 'Maintenance, réparation ou inventaire du matériel', 'category' => 'mj_cleaning', 'attribution' => 'manual', 'xp' => 10, 'coins' => 0, 'emoji' => '🔧', 'display_order' => 150),
+        
+        // mj_logistics - Logistique & Transport
+        array('slug' => 'transport_material', 'title' => 'Transport de matériel', 'description' => 'Acheminement de matériel avant/après une activité', 'category' => 'mj_logistics', 'attribution' => 'manual', 'xp' => 10, 'coins' => 0, 'emoji' => '🚗', 'display_order' => 160),
+        array('slug' => 'shopping_supplies', 'title' => 'Achats & Courses', 'description' => 'Courses pour l\'association (fournitures, nourriture…)', 'category' => 'mj_logistics', 'attribution' => 'manual', 'xp' => 10, 'coins' => 0, 'emoji' => '🛒', 'display_order' => 170),
+        array('slug' => 'logistics_other', 'title' => 'Logistique diverse', 'description' => 'Autre contribution logistique significative', 'category' => 'mj_logistics', 'attribution' => 'manual', 'xp' => 10, 'coins' => 0, 'emoji' => '📦', 'display_order' => 180),
+        
+        // mj_collective - Vie associative
+        array('slug' => 'assembly_attended', 'title' => 'Participation AG', 'description' => 'Présence à l\'Assemblée Générale annuelle', 'category' => 'mj_collective', 'attribution' => 'manual', 'xp' => 20, 'coins' => 1, 'emoji' => '🏛️', 'display_order' => 190),
+        array('slug' => 'meeting_attended', 'title' => 'Réunion de bureau', 'description' => 'Participation à une réunion du bureau ou du CA', 'category' => 'mj_collective', 'attribution' => 'manual', 'xp' => 10, 'coins' => 0, 'emoji' => '📋', 'display_order' => 200),
+        array('slug' => 'workshop_facilitated', 'title' => 'Atelier animé', 'description' => 'Animation d\'un atelier de réflexion ou de formation', 'category' => 'mj_collective', 'attribution' => 'manual', 'xp' => 15, 'coins' => 1, 'emoji' => '🎓', 'display_order' => 210),
+        array('slug' => 'external_event', 'title' => 'Représentation externe', 'description' => 'Participation à un événement externe au nom de l\'association', 'category' => 'mj_collective', 'attribution' => 'manual', 'xp' => 15, 'coins' => 0, 'emoji' => '🌍', 'display_order' => 220),
+        
+        // mj_attitude - Comportement & Valeurs
+        array('slug' => 'excellent_attitude', 'title' => 'Attitude exemplaire', 'description' => 'Comportement remarquable lors d\'une activité (bienveillance, entraide…)', 'category' => 'mj_attitude', 'attribution' => 'manual', 'xp' => 10, 'coins' => 0, 'emoji' => '🌟', 'display_order' => 230),
+        array('slug' => 'conflict_resolution', 'title' => 'Résolution de conflit', 'description' => 'Médiation réussie ou gestion positive d\'une situation tendue', 'category' => 'mj_attitude', 'attribution' => 'manual', 'xp' => 15, 'coins' => 1, 'emoji' => '🕊️', 'display_order' => 240),
+        array('slug' => 'newcomer_welcome', 'title' => 'Accueil des nouveaux', 'description' => 'Accompagnement bienveillant d\'un nouveau participant', 'category' => 'mj_attitude', 'attribution' => 'manual', 'xp' => 10, 'coins' => 0, 'emoji' => '👋', 'display_order' => 250),
+    );
+    
+    $order = 0;
+    foreach ($actions as $action) {
+        $action['display_order'] = $order;
+        $order += 10;
+        
+        $wpdb->insert($table, $action);
     }
 }
 

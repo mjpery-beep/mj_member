@@ -212,3 +212,33 @@ function mj_admin_testimonial_get_for_member_handler() {
     ));
 }
 add_action('wp_ajax_mj_admin_testimonial_get_for_member', 'mj_admin_testimonial_get_for_member_handler');
+
+/**
+ * AJAX: Toggle featured status for a testimonial.
+ */
+function mj_admin_testimonial_toggle_featured_handler() {
+    check_ajax_referer('mj_admin_testimonial', '_wpnonce');
+
+    if (!current_user_can(Config::capability())) {
+        wp_send_json_error(__('Accès non autorisé.', 'mj-member'), 403);
+    }
+
+    $id = isset($_POST['id']) ? (int) $_POST['id'] : 0;
+    if ($id <= 0) {
+        wp_send_json_error(__('Identifiant invalide.', 'mj-member'), 400);
+    }
+
+    $result = MjTestimonials::toggle_featured($id);
+    if (is_wp_error($result)) {
+        wp_send_json_error($result->get_error_message(), 500);
+    }
+
+    wp_send_json_success(array(
+        'message' => $result['featured'] 
+            ? __('Témoignage affiché sur la page d\'accueil.', 'mj-member')
+            : __('Témoignage retiré de la page d\'accueil.', 'mj-member'),
+        'id' => $id,
+        'featured' => $result['featured'],
+    ));
+}
+add_action('wp_ajax_mj_admin_testimonial_toggle_featured', 'mj_admin_testimonial_toggle_featured_handler');

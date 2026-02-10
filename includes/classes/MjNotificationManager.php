@@ -109,6 +109,7 @@ class MjNotificationManager {
 
         if (empty($args['include_archived'])) {
             $where[] = $wpdb->prepare('n.status != %s', MjNotifications::STATUS_ARCHIVED);
+            $where[] = $wpdb->prepare('r.status != %s', MjNotificationRecipients::STATUS_ARCHIVED);
         }
 
         if (empty($args['include_drafts'])) {
@@ -214,6 +215,7 @@ class MjNotificationManager {
 
         if (empty($args['include_archived'])) {
             $where[] = $wpdb->prepare('n.status != %s', MjNotifications::STATUS_ARCHIVED);
+            $where[] = $wpdb->prepare('r.status != %s', MjNotificationRecipients::STATUS_ARCHIVED);
         }
 
         if (empty($args['include_drafts'])) {
