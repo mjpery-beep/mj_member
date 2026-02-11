@@ -59,6 +59,10 @@ function mj_front_testimonial_submit_handler() {
         wp_send_json_error(__('Veuillez ajouter du texte, des photos ou une vidéo.', 'mj-member'), 400);
     }
 
+    // Check if member is trusted - auto-approve if true
+    $is_trusted = isset($current_member->is_trusted_member) && (int) $current_member->is_trusted_member === 1;
+    $initial_status = $is_trusted ? MjTestimonials::STATUS_APPROVED : MjTestimonials::STATUS_PENDING;
+
     // Create testimonial
     $result = MjTestimonials::create(array(
         'member_id' => $member_id,
@@ -66,7 +70,7 @@ function mj_front_testimonial_submit_handler() {
         'photo_ids' => $photo_ids,
         'video_id' => $video_id > 0 ? $video_id : null,
         'link_preview' => $link_preview,
-        'status' => MjTestimonials::STATUS_PENDING,
+        'status' => $initial_status,
     ));
 
     if (is_wp_error($result)) {
@@ -76,8 +80,12 @@ function mj_front_testimonial_submit_handler() {
     // Trigger notification to admins
     do_action('mj_member_testimonial_created', (int) $result, $member_id);
 
+    $success_message = $is_trusted
+        ? __('Merci pour votre témoignage ! Il est maintenant visible.', 'mj-member')
+        : __('Merci pour votre témoignage ! Il sera visible après validation.', 'mj-member');
+
     wp_send_json_success(array(
-        'message' => __('Merci pour votre témoignage ! Il sera visible après validation.', 'mj-member'),
+        'message' => $success_message,
         'id' => $result,
     ));
 }
@@ -530,8 +538,7 @@ function mj_front_testimonial_link_preview_handler() {
             'image' => "https://i.ytimg.com/vi/{$youtube_id}/hqdefault.jpg",
             'site_name' => 'YouTube',
             'is_youtube' => true,
-            'youtube_id' => $youtube_id,
-        ));
+            'youtube_id' => $youtube_id,));
     }
 
     // Fetch the URL content for non-YouTube links
@@ -704,3 +711,178 @@ function mj_parse_link_preview($html, $url) {
 
     return $preview;
 }
+
+/**
+ * AJAX: Approve a testimonial (animators only).
+ */
+function mj_front_testimonial_approve_handler() {
+    check_ajax_referer('mj-testimonial-submit', '_wpnonce');
+
+    // Get current member
+    $current_member = function_exists('mj_member_get_current_member') ? mj_member_get_current_member() : null;
+    if (!$current_member || !isset($current_member->id)) {
+        wp_send_json_error(__('Vous devez être connecté.', 'mj-member'), 403);
+    }
+
+    // Check if user is animator
+    $member_role = isset($current_member->role) ? $current_member->role : null;
+    if (!$member_role || !in_array($member_role, array('animateur', 'coordinateur'), true)) {
+        wp_send_json_error(__('Seuls les animateurs peuvent approuver les témoignages.', 'mj-member'), 403);
+    }
+
+    $id = isset($_POST['id']) ? (int) $_POST['id'] : 0;
+    if ($id <= 0) {
+        wp_send_json_error(__('Identifiant invalide.', 'mj-member'), 400);
+    }
+
+    // Get testimonial
+    $testimonial = MjTestimonials::get_by_id($id);
+    if (!$testimonial) {
+        wp_send_json_error(__('Témoignage introuvable.', 'mj-member'), 404);
+    }
+
+    // Only allow approving pending testimonials
+    if (isset($testimonial->status) && $testimonial->status !== MjTestimonials::STATUS_PENDING) {
+        wp_send_json_error(__('Seuls les témoignages en attente peuvent être approuvés.', 'mj-member'), 400);
+    }
+
+    $result = MjTestimonials::approve($id);
+    if (is_wp_error($result)) {
+        wp_send_json_error($result->get_error_message(), 500);
+    }
+
+    // Trigger notification
+    $member_id = isset($testimonial->member_id) ? (int) $testimonial->member_id : 0;
+    if ($member_id > 0) {
+        do_action('mj_member_testimonial_approved', $id, $member_id);
+    }
+
+    wp_send_json_success(array(
+        'message' => __('Témoignage approuvé.', 'mj-member'),
+        'id' => $id,
+    ));
+}
+add_action('wp_ajax_mj_front_testimonial_approve', 'mj_front_testimonial_approve_handler');
+
+/**
+ * AJAX: Reject a testimonial (animators only).
+ */
+function mj_front_testimonial_reject_handler() {
+    check_ajax_referer('mj-testimonial-submit', '_wpnonce');
+
+    // Get current member
+    $current_member = function_exists('mj_member_get_current_member') ? mj_member_get_current_member() : null;
+    if (!$current_member || !isset($current_member->id)) {
+        wp_send_json_error(__('Vous devez être connecté.', 'mj-member'), 403);
+    }
+
+    // Check if user is animator
+    $member_role = isset($current_member->role) ? $current_member->role : null;
+    if (!$member_role || !in_array($member_role, array('animateur', 'coordinateur'), true)) {
+        wp_send_json_error(__('Seuls les animateurs peuvent refuser les témoignages.', 'mj-member'), 403);
+    }
+
+    $id = isset($_POST['id']) ? (int) $_POST['id'] : 0;
+    if ($id <= 0) {
+        wp_send_json_error(__('Identifiant invalide.', 'mj-member'), 400);
+    }
+
+    $reason = isset($_POST['reason']) ? sanitize_textarea_field(wp_unslash($_POST['reason'])) : '';
+
+    // Get testimonial
+    $testimonial = MjTestimonials::get_by_id($id);
+    if (!$testimonial) {
+        wp_send_json_error(__('Témoignage introuvable.', 'mj-member'), 404);
+    }
+
+    // Only allow rejecting pending testimonials
+    if (isset($testimonial->status) && $testimonial->status !== MjTestimonials::STATUS_PENDING) {
+        wp_send_json_error(__('Seuls les témoignages en attente peuvent être refusés.', 'mj-member'), 400);
+    }
+
+    $result = MjTestimonials::reject($id, $reason);
+    if (is_wp_error($result)) {
+        wp_send_json_error($result->get_error_message(), 500);
+    }
+
+    // Trigger notification
+    $member_id = isset($testimonial->member_id) ? (int) $testimonial->member_id : 0;
+    if ($member_id > 0) {
+        do_action('mj_member_testimonial_rejected', $id, $member_id, $reason);
+    }
+
+    wp_send_json_success(array(
+        'message' => __('Témoignage refusé.', 'mj-member'),
+        'id' => $id,
+    ));
+}
+add_action('wp_ajax_mj_front_testimonial_reject', 'mj_front_testimonial_reject_handler');
+
+/**
+ * AJAX: Get pending testimonials for animators.
+ */
+function mj_front_testimonial_pending_list_handler() {
+    check_ajax_referer('mj-testimonial-submit', '_wpnonce');
+
+    // Get current member
+    $current_member = function_exists('mj_member_get_current_member') ? mj_member_get_current_member() : null;
+    if (!$current_member || !isset($current_member->id)) {
+        wp_send_json_error(__('Vous devez être connecté.', 'mj-member'), 403);
+    }
+
+    // Check if user is animator
+    $member_role = isset($current_member->role) ? $current_member->role : null;
+    if (!$member_role || !in_array($member_role, array('animateur', 'coordinateur'), true)) {
+        wp_send_json_error(__('Accès non autorisé.', 'mj-member'), 403);
+    }
+
+    $page = isset($_POST['page']) ? max(1, (int) $_POST['page']) : 1;
+    $per_page = isset($_POST['per_page']) ? min(50, max(1, (int) $_POST['per_page'])) : 10;
+
+    $testimonials = MjTestimonials::query(array(
+        'status' => MjTestimonials::STATUS_PENDING,
+        'page' => $page,
+        'per_page' => $per_page,
+        'orderby' => 'created_at',
+        'order' => 'ASC',
+    ));
+
+    $total = MjTestimonials::count(array('status' => MjTestimonials::STATUS_PENDING));
+    $items = array();
+
+    foreach ($testimonials as $t) {
+        $photos = MjTestimonials::get_photo_urls($t, 'medium');
+        $video = MjTestimonials::get_video_data($t);
+
+        $member_name = '';
+        if (isset($t->first_name)) {
+            $member_name = $t->first_name;
+            if (isset($t->last_name) && $t->last_name) {
+                $member_name .= ' ' . mb_substr($t->last_name, 0, 1) . '.';
+            }
+        }
+
+        $link_preview = MjTestimonials::get_link_preview($t);
+
+        $items[] = array(
+            'id' => (int) $t->id,
+            'content' => isset($t->content) ? $t->content : '',
+            'photos' => $photos,
+            'video' => $video,
+            'linkPreview' => $link_preview,
+            'memberName' => $member_name,
+            'memberId' => isset($t->member_id) ? (int) $t->member_id : 0,
+            'createdAt' => isset($t->created_at) ? $t->created_at : '',
+            'status' => MjTestimonials::STATUS_PENDING,
+        );
+    }
+
+    wp_send_json_success(array(
+        'testimonials' => $items,
+        'total' => $total,
+        'page' => $page,
+        'perPage' => $per_page,
+        'totalPages' => ceil($total / $per_page),
+    ));
+}
+add_action('wp_ajax_mj_front_testimonial_pending_list', 'mj_front_testimonial_pending_list_handler');

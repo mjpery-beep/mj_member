@@ -7277,6 +7277,7 @@
                             loading: !memberDetails,
                             strings: strings,
                             config: memberDetailConfig,
+                            apiService: api,
                             notes: memberNotes,
                             registrations: memberRegistrations,
                             initialTab: urlMemberId ? urlTab : null,
@@ -7302,6 +7303,12 @@
                             pendingEditRequest: pendingMemberEdit,
                             onPendingEditHandled: handleConsumePendingMemberEdit,
                             onDeleteMessage: handleDeleteMemberMessage,
+                            onMemberUpdated: function (updatedMember) {
+                                // Recharger les détails du membre pour voir les mises à jour
+                                if (updatedMember && updatedMember.id) {
+                                    loadMemberDetails(updatedMember.id);
+                                }
+                            },
                             onDeleteTestimonial: handleDeleteMemberTestimonial,
                             onUpdateTestimonialStatus: handleUpdateMemberTestimonialStatus,
                             onToggleFeatured: handleToggleTestimonialFeatured,

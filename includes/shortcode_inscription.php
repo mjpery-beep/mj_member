@@ -915,27 +915,6 @@ if (!function_exists('mj_member_render_registration_form')) {
             $result = mj_process_frontend_inscription();
         }
 
-        // Handle login form submission
-        if (!$already_registered && $_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mj_inscription_login_form'])) {
-            $login_nonce = isset($_POST['mj_inscription_login_nonce']) ? sanitize_text_field(wp_unslash($_POST['mj_inscription_login_nonce'])) : '';
-            if (wp_verify_nonce($login_nonce, 'mj_inscription_login')) {
-                $login_input = isset($_POST['mj_login']) ? sanitize_text_field(wp_unslash($_POST['mj_login'])) : '';
-                $password = isset($_POST['mj_password']) ? wp_unslash($_POST['mj_password']) : '';
-                $remember = !empty($_POST['mj_remember']);
-
-                if (!empty($login_input) && !empty($password)) {
-                    $user = wp_authenticate($login_input, $password);
-                    if (!is_wp_error($user)) {
-                        wp_set_current_user($user->ID);
-                        wp_set_auth_cookie($user->ID, $remember);
-                        do_action('wp_login', $user->login, $user);
-                        wp_safe_redirect(home_url('/mon-compte'));
-                        exit;
-                    }
-                }
-            }
-        }
-
         $registration_type = mj_member_get_registration_type();
         $guardian_values = mj_collect_guardian_form_values();
         $children_values = mj_collect_children_form_values();
@@ -1405,24 +1384,22 @@ if (!function_exists('mj_member_render_registration_form')) {
                             <?php endif; ?>
                         </div>
                     <?php endif; ?>
-                    <form method="post" class="mj-inscription-login-form" novalidate>
+                    <form method="post" action="<?php echo esc_url(wp_login_url(home_url('/mon-compte'))); ?>" class="mj-inscription-login-form" novalidate>
                         <div class="mj-field-group">
-                            <label for="mj_inscription_login"><?php esc_html_e('Adresse email ou identifiant', 'mj-member'); ?></label>
-                            <input type="text" id="mj_inscription_login" name="mj_login" required />
+                            <label for="user_login"><?php esc_html_e('Adresse email ou identifiant', 'mj-member'); ?></label>
+                            <input type="text" id="user_login" name="log" required />
                         </div>
                         <div class="mj-field-group">
-                            <label for="mj_inscription_password"><?php esc_html_e('Mot de passe', 'mj-member'); ?></label>
-                            <input type="password" id="mj_inscription_password" name="mj_password" required />
+                            <label for="user_pass"><?php esc_html_e('Mot de passe', 'mj-member'); ?></label>
+                            <input type="password" id="user_pass" name="pwd" required />
                         </div>
                         <div class="mj-field-group mj-field-group--remember-row">
                             <label class="mj-checkbox mj-checkbox--remember">
-                                <input type="checkbox" name="mj_remember" value="1" id="mj_remember_me" />
+                                <input type="checkbox" name="rememberme" value="forever" id="rememberme" />
                                 <span class="mj-checkbox__label"><?php esc_html_e('Se souvenir de moi', 'mj-member'); ?></span>
                             </label>
                             <a class="mj-lost-password-link" href="<?php echo esc_url(wp_lostpassword_url()); ?>"><?php esc_html_e('Mot de passe oublié ?', 'mj-member'); ?></a>
                         </div>
-                        <input type="hidden" name="mj_inscription_login_form" value="1" />
-                        <?php wp_nonce_field('mj_inscription_login', 'mj_inscription_login_nonce'); ?>
                         <div class="mj-form-actions">
                             <button type="submit" class="mj-button"><?php esc_html_e('Se connecter', 'mj-member'); ?></button>
                         </div>

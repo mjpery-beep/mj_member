@@ -74,6 +74,7 @@
             city: '',
             isVolunteer: false,
             isAutonomous: false,
+            isTrustedMember: false,
             newsletterOptIn: false,
             smsOptIn: false,
             whatsappOptIn: false,
@@ -112,6 +113,9 @@
         }
         if (typeof member.photoUsageConsent !== 'undefined') {
             base.photoUsageConsent = !!member.photoUsageConsent;
+        }
+        if (typeof member.isTrustedMember !== 'undefined') {
+            base.isTrustedMember = !!member.isTrustedMember;
         }
         base.descriptionShort = member.descriptionShort || '';
         base.descriptionLong = member.descriptionLong || '';
@@ -523,7 +527,7 @@
         };
 
         var volunteerLabel = getString(strings, 'volunteerLabel', 'Bénévole');
-        console.info(member);
+        
         return h('div', {
             class: classNames('mj-regmgr-member-card', {
                 'mj-regmgr-member-card--selected': isSelected,
@@ -1675,6 +1679,13 @@
         var loading = props.loading;
         var strings = props.strings;
         var config = props.config;
+        var apiService = props.apiService;
+        
+        // Créer apiService localement si elle n'est pas fournie
+        if (!apiService && typeof window !== 'undefined' && window.MjRegMgrServices) {
+            apiService = window.MjRegMgrServices.createApiService(config);
+        }
+        
         var notes = props.notes || [];
         var registrations = props.registrations || [];
         var onSaveNote = props.onSaveNote;
@@ -1808,6 +1819,10 @@
         var photoApprovingId = _useStatePhotoApprovingId[0];
         var setPhotoApprovingId = _useStatePhotoApprovingId[1];
 
+        var _useStateTrustedMemberSaving = useState(false);
+        var trustedMemberSaving = _useStateTrustedMemberSaving[0];
+        var setTrustedMemberSaving = _useStateTrustedMemberSaving[1];
+
         var _useStateMessageDeletingId = useState(null);
         var messageDeletingId = _useStateMessageDeletingId[0];
         var setMessageDeletingId = _useStateMessageDeletingId[1];
@@ -1888,6 +1903,13 @@
         var _useStateTestimonialLinkDraft = useState({});
         var testimonialLinkDraft = _useStateTestimonialLinkDraft[0];
         var setTestimonialLinkDraft = _useStateTestimonialLinkDraft[1];
+
+        // Helper pour créer un objet avec clé dynamique
+        var _assignKeyValue = function(obj, key, value) {
+            var temp = Object.assign({}, obj);
+            temp[key] = value;
+            return temp;
+        };
 
         var avatarFrameRef = useRef(null);
 
@@ -2448,6 +2470,51 @@
         var handleSave = function () {
             onUpdateMember(member.id, editData);
             setEditMode(false);
+        };
+
+        var handleToggleTrustedMember = function (isTrusted) {
+            if (!member || !member.id) {
+                return;
+            }
+            console.log('[MjRegMgr] Toggling trusted member status for member ID ' + member.id + ': ' + isTrusted);
+            setTrustedMemberSaving(true);
+
+            var nonce = config && config.nonce ? config.nonce : '';
+            var ajaxUrl = config && config.ajaxUrl ? config.ajaxUrl : '/wp-admin/admin-ajax.php';
+
+            if (typeof window !== 'undefined' && window.jQuery) {
+                window.jQuery.ajax({
+                    url: ajaxUrl,
+                    type: 'POST',
+                    dataType: 'json',
+                    data: {
+                        action: 'mj_regmgr_update_member_trusted_status',
+                        nonce: nonce,
+                        memberId: member.id,
+                        isTrustedMember: isTrusted ? 1 : 0,
+                    },
+                    success: function (response) {
+                        console.log('[MjRegMgr] Trusted member status update response:', response);
+                        if (response.success) {
+                            if (onMemberUpdated) {
+                                var updatedMember = Object.assign({}, member, {
+                                    isTrustedMember: isTrusted,
+                                });
+                                onMemberUpdated(updatedMember);
+                            }
+                        }
+                    },
+                    error: function (jqXHR, textStatus, errorThrown) {
+                        console.error('[MjRegMgr] Error updating trusted member:', textStatus, errorThrown);
+                    },
+                })
+                .always(function () {
+                    setTrustedMemberSaving(false);
+                });
+            } else {
+                console.error('[MjRegMgr] jQuery not available');
+                setTrustedMemberSaving(false);
+            }
         };
 
         var handleAddNote = function () {
@@ -4434,6 +4501,22 @@
                             h('h2', { class: 'mj-regmgr-member-detail__section-title' }, 
                                 getString(strings, 'memberTestimonials', 'Témoignages') + (testimonialsCount > 0 ? ' (' + testimonialsCount + ')' : '')
                             ),
+                            h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--checkbox' }, [
+                                h('label', { class: 'mj-regmgr-checkbox' }, [
+                                    h('input', {
+                                        id: fieldIdPrefix + 'trusted-member',
+                                        type: 'checkbox',
+                                        checked: !!member.isTrustedMember,
+                                        disabled: trustedMemberSaving,
+                                        onChange: function (e) {
+                                            handleToggleTrustedMember(e.target.checked);
+                                        },
+                                    }),
+                                    h('span', null, getString(strings, 'memberTrustedLabel', 'Membre de confiance')),
+                                    h('span', { class: 'mj-regmgr-member-detail__hint' }, getString(strings, 'memberTrustedHint', '(Les témoignages sont auto-approvés)')),
+                                ]),
+                                trustedMemberSaving && h('span', { class: 'mj-regmgr-spinner mj-regmgr-spinner--inline' }),
+                            ]),
                             testimonialsCount > 0
                                 ? h('div', { class: 'mj-regmgr-testimonials-list' },
                                     memberTestimonials.map(function (testimonial) {
@@ -4447,6 +4530,19 @@
                                         var isPending = testimonial.status === 'pending';
                                         var isApproved = testimonial.status === 'approved';
                                         var isRejected = testimonial.status === 'rejected';
+                                        
+                                        var isEditingContent = editingTestimonialId === testimonial.id;
+                                        var contentDraft = testimonialContentDraft[testimonial.id] || testimonial.content || '';
+                                        var isContentSaving = testimonialContentSaving[testimonial.id] || false;
+
+                                        var isEditingLink = testimonialLinkEditing[testimonial.id] || false;
+                                        var linkDraft = testimonialLinkDraft[testimonial.id] || { url: testimonial.linkPreview?.url || '', title: testimonial.linkPreview?.title || '' };
+
+                                        var newCommentDraft = newTestimonialComment[testimonial.id] || '';
+                                        var isCommentSaving = testimonialCommentSaving[testimonial.id] || false;
+
+                                        var comments = Array.isArray(testimonial.comments) ? testimonial.comments : [];
+                                        var reactions = Array.isArray(testimonial.reactions) ? testimonial.reactions : [];
                                         
                                         return h('div', { 
                                             key: testimonial.id, 
@@ -4477,19 +4573,412 @@
                                                     ]),
                                                 ]),
                                             ]),
-                                            testimonial.content && h('div', { class: 'mj-regmgr-testimonial-card__content' }, testimonial.content),
+                                            // CONTENU - Éditable
+                                            isEditingContent
+                                                ? h('div', { class: 'mj-regmgr-testimonial-card__content-edit' }, [
+                                                    h('textarea', {
+                                                        class: 'mj-regmgr-form-control',
+                                                        value: contentDraft,
+                                                        placeholder: getString(strings, 'testimonialContentPlaceholder', 'Contenu du témoignage...'),
+                                                        onChange: function (e) {
+                                                            setTestimonialContentDraft(_assignKeyValue(testimonialContentDraft, testimonial.id, e.target.value));
+                                                        },
+                                                        rows: '4',
+                                                    }),
+                                                    h('div', { class: 'mj-regmgr-button-group mj-regmgr-button-group--small' }, [
+                                                        h('button', {
+                                                            type: 'button',
+                                                            class: 'mj-btn mj-btn--success mj-btn--small',
+                                                            disabled: isContentSaving,
+                                                            onClick: function () {
+                                                                if (contentDraft.trim().length < 10) {
+                                                                    alert(getString(strings, 'testimonialContentMinLength', 'Le contenu doit contenir au moins 10 caractères.'));
+                                                                    return;
+                                                                }
+                                                                setTestimonialContentSaving(_assignKeyValue(testimonialContentSaving, testimonial.id, true));
+                                                                apiService.editTestimonialContent(testimonial.id, contentDraft).then(function () {
+                                                                    // Mettre à jour les données du membre
+                                                                    if (onMemberUpdated) {
+                                                                        var updatedMember = Object.assign({}, member, {
+                                                                            testimonials: member.testimonials.map(function (t) {
+                                                                                return t.id === testimonial.id ? Object.assign({}, t, { content: contentDraft }) : t;
+                                                                            }),
+                                                                        });
+                                                                        onMemberUpdated(updatedMember);
+                                                                    }
+                                                                    setEditingTestimonialId(null);
+                                                                    // Garder le draft visible jusqu'à ce que le parent re-render
+                                                                    setTimeout(function () {
+                                                                        setTestimonialContentDraft({});
+                                                                    }, 100);
+                                                                }).catch(function (e) {
+                                                                    alert(getString(strings, 'errorUpdatingTestimonial', 'Erreur lors de la mise à jour du témoignage.'));
+                                                                }).finally(function () {
+                                                                    setTestimonialContentSaving(_assignKeyValue(testimonialContentSaving, testimonial.id, false));
+                                                                });
+                                                            },
+                                                        }, getString(strings, 'save', 'Enregistrer')),
+                                                        h('button', {
+                                                            type: 'button',
+                                                            class: 'mj-btn mj-btn--outline mj-btn--small',
+                                                            onClick: function () {
+                                                                setEditingTestimonialId(null);
+                                                                setTestimonialContentDraft({});
+                                                            },
+                                                        }, getString(strings, 'cancel', 'Annuler')),
+                                                    ]),
+                                                ])
+                                                : h('div', { class: 'mj-regmgr-testimonial-card__content-view' }, [
+                                                    (contentDraft || testimonial.content) && h('div', { class: 'mj-regmgr-testimonial-card__content' }, contentDraft || testimonial.content),
+                                                    h('button', {
+                                                        type: 'button',
+                                                        class: 'mj-btn mj-btn--link mj-btn--small mj-regmgr-testimonial-card__edit-btn',
+                                                        onClick: function () {
+                                                            setEditingTestimonialId(testimonial.id);
+                                                            setTestimonialContentDraft(_assignKeyValue(testimonialContentDraft, testimonial.id, testimonial.content || ''));
+                                                        },
+                                                    }, [
+                                                        h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                            h('polyline', { points: '17 3 21 7 3 21 3 21' }),
+                                                        ]),
+                                                        h('span', null, getString(strings, 'edit', 'Éditer')),
+                                                    ]),
+                                                ]),
+                                            // LIEN - Avec aperçu
+                                            testimonial.linkPreview || isEditingLink ? h('div', { class: 'mj-regmgr-testimonial-card__link-section' }, [
+                                                h('h4', { class: 'mj-regmgr-testimonial-card__section-title' }, getString(strings, 'linkedContent', 'Lien associé')),
+                                                isEditingLink
+                                                    ? h('div', { class: 'mj-regmgr-testimonial-card__link-edit' }, [
+                                                        h('input', {
+                                                            type: 'url',
+                                                            class: 'mj-regmgr-form-control',
+                                                            placeholder: 'URL du lien social...',
+                                                            value: linkDraft.url || '',
+                                                            onChange: function (e) {
+                                                                setTestimonialLinkDraft(_assignKeyValue(testimonialLinkDraft, testimonial.id, Object.assign({}, linkDraft, { url: e.target.value })));
+                                                            },
+                                                        }),
+                                                        h('input', {
+                                                            type: 'text',
+                                                            class: 'mj-regmgr-form-control',
+                                                            placeholder: 'Titre du lien...',
+                                                            value: linkDraft.title || '',
+                                                            onChange: function (e) {
+                                                                setTestimonialLinkDraft(_assignKeyValue(testimonialLinkDraft, testimonial.id, Object.assign({}, linkDraft, { title: e.target.value })));
+                                                            },
+                                                        }),
+                                                        h('div', { class: 'mj-regmgr-button-group mj-regmgr-button-group--small' }, [
+                                                            h('button', {
+                                                                type: 'button',
+                                                                class: 'mj-btn mj-btn--success mj-btn--small',
+                                                                onClick: function () {
+                                                                    apiService.updateTestimonialLink(testimonial.id, linkDraft.url ? 'add' : 'remove', linkDraft.url, linkDraft.title).then(function () {
+                                                                        if (onMemberUpdated) {
+                                                                            var updatedMember = Object.assign({}, member, {
+                                                                                testimonials: member.testimonials.map(function (t) {
+                                                                                    return t.id === testimonial.id 
+                                                                                        ? Object.assign({}, t, { linkPreview: linkDraft.url ? linkDraft : null })
+                                                                                        : t;
+                                                                                }),
+                                                                            });
+                                                                            onMemberUpdated(updatedMember);
+                                                                        }
+                                                                        setTestimonialLinkEditing(_assignKeyValue(testimonialLinkEditing, testimonial.id, false));
+                                                                        // Garder le draft visible jusqu'à ce que le parent re-render
+                                                                        setTimeout(function () {
+                                                                            setTestimonialLinkDraft({});
+                                                                        }, 100);
+                                                                    });
+                                                                },
+                                                            }, getString(strings, 'save', 'Enregistrer')),
+                                                            h('button', {
+                                                                type: 'button',
+                                                                class: 'mj-btn mj-btn--outline mj-btn--small',
+                                                                onClick: function () {
+                                                                    setTestimonialLinkEditing(_assignKeyValue(testimonialLinkEditing, testimonial.id, false));
+                                                                    setTestimonialLinkDraft({});
+                                                                },
+                                                            }, getString(strings, 'cancel', 'Annuler')),
+                                                        ]),
+                                                    ])
+                                                    : h('div', { class: 'mj-regmgr-testimonial-card__link-view' }, [
+                                                        testimonial.linkPreview && h('div', { class: 'mj-regmgr-testimonial-card__link-preview' }, [
+                                                            testimonial.linkPreview.url && h('a', {
+                                                                href: testimonial.linkPreview.url,
+                                                                target: '_blank',
+                                                                rel: 'noopener noreferrer',
+                                                                class: 'mj-regmgr-testimonial-card__link-url',
+                                                            }, testimonial.linkPreview.title || getString(strings, 'viewLink', 'Voir le lien')),
+                                                            testimonial.linkPreview.preview && h('p', { class: 'mj-regmgr-testimonial-card__link-description' }, testimonial.linkPreview.preview),
+                                                        ]),
+                                                        h('div', { class: 'mj-regmgr-button-group mj-regmgr-button-group--small' }, [
+                                                            h('button', {
+                                                                type: 'button',
+                                                                class: 'mj-btn mj-btn--link mj-btn--small',
+                                                                onClick: function () {
+                                                                    setTestimonialLinkEditing(_assignKeyValue(testimonialLinkEditing, testimonial.id, true));
+                                                                    setTestimonialLinkDraft(_assignKeyValue(testimonialLinkDraft, testimonial.id, Object.assign({}, testimonial.linkPreview)));
+                                                                },
+                                                            }, getString(strings, 'edit', 'Éditer')),
+                                                            h('button', {
+                                                                type: 'button',
+                                                                class: 'mj-btn mj-btn--danger mj-btn--small',
+                                                                onClick: function () {
+                                                                    apiService.updateTestimonialLink(testimonial.id, 'remove').then(function () {
+                                                                        if (onMemberUpdated) {
+                                                                            var updatedMember = Object.assign({}, member, {
+                                                                                testimonials: member.testimonials.map(function (t) {
+                                                                                    return t.id === testimonial.id 
+                                                                                        ? Object.assign({}, t, { linkPreview: null })
+                                                                                        : t;
+                                                                                }),
+                                                                            });
+                                                                            onMemberUpdated(updatedMember);
+                                                                        }
+                                                                    });
+                                                                },
+                                                            }, getString(strings, 'removeLink', 'Supprimer')),
+                                                        ]),
+                                                    ]),
+                                            ]) : null,
+                                            // PHOTOS
                                             testimonial.photos && testimonial.photos.length > 0 && h('div', { class: 'mj-regmgr-testimonial-card__photos' },
                                                 testimonial.photos.slice(0, 4).map(function (photo, idx) {
                                                     return h('img', { key: idx, src: photo.thumb || photo.url, alt: '', class: 'mj-regmgr-testimonial-card__photo' });
                                                 })
                                             ),
+                                            // VIDEO
                                             testimonial.video && h('div', { class: 'mj-regmgr-testimonial-card__video' }, [
                                                 h('video', { controls: true, src: testimonial.video.url, poster: testimonial.video.poster }),
                                             ]),
+                                            // RAISON DU REJET
                                             isRejected && testimonial.rejection_reason && h('div', { class: 'mj-regmgr-testimonial-card__rejection' }, [
                                                 h('strong', null, getString(strings, 'rejectionReasonLabel', 'Raison du rejet : ')),
                                                 testimonial.rejection_reason,
                                             ]),
+                                            // COMMENTAIRES
+                                            h('div', { class: 'mj-regmgr-testimonial-card__comments-section' }, [
+                                                h('h4', { class: 'mj-regmgr-testimonial-card__section-title' }, 
+                                                    getString(strings, 'commentaires', 'Commentaires') + (comments.length > 0 ? ' (' + comments.length + ')' : '')
+                                                ),
+                                                comments.length > 0 && h('div', { class: 'mj-regmgr-testimonial-card__comments-list' },
+                                                    comments.map(function (comment) {
+                                                        var isEditingComment = editingTestimonialCommentId === comment.id;
+                                                        var commentDraft = editingTestimonialCommentDraft[comment.id] || comment.content || '';
+                                                        return h('div', { key: comment.id, class: 'mj-regmgr-testimonial-card__comment' }, [
+                                                            h('div', { class: 'mj-regmgr-testimonial-card__comment-header' }, [
+                                                                h('strong', null, comment.memberName || getString(strings, 'anonymous', 'Anonyme')),
+                                                                h('span', { class: 'mj-regmgr-testimonial-card__comment-date' }, comment.createdAt),
+                                                            ]),
+                                                            isEditingComment
+                                                                ? h('div', { class: 'mj-regmgr-testimonial-card__comment-edit' }, [
+                                                                    h('textarea', {
+                                                                        class: 'mj-regmgr-form-control',
+                                                                        value: commentDraft,
+                                                                        onChange: function (e) {
+                                                                            setEditingTestimonialCommentDraft(_assignKeyValue(editingTestimonialCommentDraft, comment.id, e.target.value));
+                                                                        },
+                                                                        rows: '3',
+                                                                    }),
+                                                                    h('div', { class: 'mj-regmgr-button-group mj-regmgr-button-group--small' }, [
+                                                                        h('button', {
+                                                                            type: 'button',
+                                                                            class: 'mj-btn mj-btn--success mj-btn--small',
+                                                                            onClick: function () {
+                                                                                apiService.editTestimonialComment(comment.id, commentDraft).then(function () {
+                                                                                    if (onMemberUpdated) {
+                                                                                        var updatedMember = Object.assign({}, member, {
+                                                                                            testimonials: member.testimonials.map(function (t) {
+                                                                                                return t.id === testimonial.id
+                                                                                                    ? Object.assign({}, t, {
+                                                                                                        comments: t.comments.map(function (c) {
+                                                                                                            return c.id === comment.id 
+                                                                                                                ? Object.assign({}, c, { content: commentDraft })
+                                                                                                                : c;
+                                                                                                        }),
+                                                                                                    })
+                                                                                                    : t;
+                                                                                            }),
+                                                                                        });
+                                                                                        onMemberUpdated(updatedMember);
+                                                                                    }
+                                                                                    setEditingTestimonialCommentId(null);
+                                                                                    // Garder le draft visible jusqu'à ce que le parent re-render
+                                                                                    setTimeout(function () {
+                                                                                        setEditingTestimonialCommentDraft({});
+                                                                                    }, 100);
+                                                                                });
+                                                                            },
+                                                                        }, getString(strings, 'save', 'Enregistrer')),
+                                                                        h('button', {
+                                                                            type: 'button',
+                                                                            class: 'mj-btn mj-btn--outline mj-btn--small',
+                                                                            onClick: function () {
+                                                                                setEditingTestimonialCommentId(null);
+                                                                                setEditingTestimonialCommentDraft({});
+                                                                            },
+                                                                        }, getString(strings, 'cancel', 'Annuler')),
+                                                                    ]),
+                                                                ])
+                                                                : h('div', { class: 'mj-regmgr-testimonial-card__comment-view' }, [
+                                                                    h('p', { class: 'mj-regmgr-testimonial-card__comment-content' }, commentDraft || comment.content),
+                                                                    h('div', { class: 'mj-regmgr-button-group mj-regmgr-button-group--small' }, [
+                                                                        h('button', {
+                                                                            type: 'button',
+                                                                            class: 'mj-btn mj-btn--link mj-btn--small',
+                                                                            onClick: function () {
+                                                                                setEditingTestimonialCommentId(comment.id);
+                                                                                setEditingTestimonialCommentDraft(_assignKeyValue(editingTestimonialCommentDraft, comment.id, comment.content));
+                                                                            },
+                                                                        }, getString(strings, 'edit', 'Éditer')),
+                                                                        h('button', {
+                                                                            type: 'button',
+                                                                            class: 'mj-btn mj-btn--danger mj-btn--small',
+                                                                            onClick: function () {
+                                                                                if (confirm(getString(strings, 'confirmDeleteComment', 'Supprimer ce commentaire ?'))) {
+                                                                                    apiService.deleteTestimonialComment(comment.id).then(function () {
+                                                                                        if (onMemberUpdated) {
+                                                                                            var updatedMember = Object.assign({}, member, {
+                                                                                                testimonials: member.testimonials.map(function (t) {
+                                                                                                    return t.id === testimonial.id
+                                                                                                        ? Object.assign({}, t, {
+                                                                                                            comments: t.comments.filter(function (c) { return c.id !== comment.id; }),
+                                                                                                        })
+                                                                                                        : t;
+                                                                                                }),
+                                                                                            });
+                                                                                            onMemberUpdated(updatedMember);
+                                                                                        }
+                                                                                    });
+                                                                                }
+                                                                            },
+                                                                        }, getString(strings, 'delete', 'Supprimer')),
+                                                                    ]),
+                                                                ]),
+                                                        ]);
+                                                    })
+                                                ),
+                                                h('div', { class: 'mj-regmgr-testimonial-card__new-comment' }, [
+                                                    h('textarea', {
+                                                        class: 'mj-regmgr-form-control',
+                                                        placeholder: getString(strings, 'addCommentPlaceholder', 'Ajouter un commentaire...'),
+                                                        value: newCommentDraft,
+                                                        onChange: function (e) {
+                                                            setNewTestimonialComment(_assignKeyValue(newTestimonialComment, testimonial.id, e.target.value));
+                                                        },
+                                                        rows: '2',
+                                                    }),
+                                                    h('button', {
+                                                        type: 'button',
+                                                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                                                        disabled: isCommentSaving || !newCommentDraft.trim(),
+                                                        onClick: function () {
+                                                            setTestimonialCommentSaving(_assignKeyValue(testimonialCommentSaving, testimonial.id, true));
+                                                            apiService.addTestimonialComment(testimonial.id, newCommentDraft).then(function (response) {
+                                                                if (response && response.comment) {
+                                                                    if (onMemberUpdated) {
+                                                                        var updatedMember = Object.assign({}, member, {
+                                                                            testimonials: member.testimonials.map(function (t) {
+                                                                                return t.id === testimonial.id
+                                                                                    ? Object.assign({}, t, {
+                                                                                        comments: Array.isArray(t.comments) ? t.comments.concat(response.comment) : [response.comment],
+                                                                                    })
+                                                                                    : t;
+                                                                            }),
+                                                                        });
+                                                                        onMemberUpdated(updatedMember);
+                                                                    }
+                                                                }
+                                                                setNewTestimonialComment(_assignKeyValue(newTestimonialComment, testimonial.id, ''));
+                                                            }).catch(function (err) {
+                                                                alert(getString(strings, 'errorAddingComment', 'Erreur lors de l\'ajout du commentaire.'));
+                                                            }).finally(function () {
+                                                                setTestimonialCommentSaving(_assignKeyValue(testimonialCommentSaving, testimonial.id, false));
+                                                            });
+                                                        },
+                                                    }, getString(strings, 'postComment', 'Poster')),
+                                                ]),
+                                            ]),
+                                            // RÉACTIONS
+                                            h('div', { class: 'mj-regmgr-testimonial-card__reactions-section' }, [
+                                                h('h4', { class: 'mj-regmgr-testimonial-card__section-title' }, getString(strings, 'reactions', 'Réactions')),
+                                                reactions.length > 0 && h('div', { class: 'mj-regmgr-testimonial-card__reactions-list' },
+                                                    reactions.map(function (reaction) {
+                                                        return h('button', {
+                                                            key: reaction.type,
+                                                            type: 'button',
+                                                            class: 'mj-regmgr-testimonial-card__reaction-btn',
+                                                            title: reaction.label,
+                                                            onClick: function () {
+                                                                apiService.removeTestimonialReaction(testimonial.id, reaction.type).then(function () {
+                                                                    if (onMemberUpdated) {
+                                                                        var updatedMember = Object.assign({}, member, {
+                                                                            testimonials: member.testimonials.map(function (t) {
+                                                                                return t.id === testimonial.id
+                                                                                    ? Object.assign({}, t, {
+                                                                                        reactions: t.reactions.filter(function (r) { return r.type !== reaction.type; }),
+                                                                                    })
+                                                                                    : t;
+                                                                            }),
+                                                                        });
+                                                                        onMemberUpdated(updatedMember);
+                                                                    }
+                                                                });
+                                                            },
+                                                        }, [
+                                                            h('span', { class: 'mj-regmgr-testimonial-card__reaction-emoji' }, reaction.emoji),
+                                                            h('span', { class: 'mj-regmgr-testimonial-card__reaction-count' }, reaction.count),
+                                                        ]);
+                                                    })
+                                                ),
+                                                h('div', { class: 'mj-regmgr-testimonial-card__add-reaction' }, [
+                                                    h('button', {
+                                                        type: 'button',
+                                                        class: 'mj-regmgr-testimonial-card__add-reaction-btn',
+                                                        title: getString(strings, 'addReaction', 'Ajouter une réaction'),
+                                                        onClick: function () {
+                                                            // Menu des réactions
+                                                            var reactionTypes = [
+                                                                { type: 'like', emoji: '👍', label: getString(strings, 'reactionLike', 'J\'aime') },
+                                                                { type: 'love', emoji: '❤️', label: getString(strings, 'reactionLove', 'J\'adore') },
+                                                                { type: 'haha', emoji: '😂', label: getString(strings, 'reactionHaha', 'Haha') },
+                                                                { type: 'wow', emoji: '😮', label: getString(strings, 'reactionWow', 'Wouah') },
+                                                                { type: 'sad', emoji: '😢', label: getString(strings, 'reactionSad', 'Triste') },
+                                                                { type: 'angry', emoji: '😠', label: getString(strings, 'reactionAngry', 'Grrr') },
+                                                            ];
+                                                            var selectedType = prompt('Choisir une réaction (like, love, haha, wow, sad, angry):');
+                                                            if (selectedType && reactionTypes.find(function (r) { return r.type === selectedType; })) {
+                                                                apiService.addTestimonialReaction(testimonial.id, selectedType).then(function () {
+                                                                    if (onMemberUpdated) {
+                                                                        var reaction = reactionTypes.find(function (r) { return r.type === selectedType; });
+                                                                        var updatedMember = Object.assign({}, member, {
+                                                                            testimonials: member.testimonials.map(function (t) {
+                                                                                if (t.id !== testimonial.id) return t;
+                                                                                var existingReaction = t.reactions.find(function (r) { return r.type === selectedType; });
+                                                                                if (existingReaction) {
+                                                                                    return Object.assign({}, t, {
+                                                                                        reactions: t.reactions.map(function (r) {
+                                                                                            return r.type === selectedType
+                                                                                                ? Object.assign({}, r, { count: r.count + 1 })
+                                                                                                : r;
+                                                                                        }),
+                                                                                    });
+                                                                                } else {
+                                                                                    return Object.assign({}, t, {
+                                                                                        reactions: Array.isArray(t.reactions) ? t.reactions.concat(reaction || { type: selectedType, emoji: selectedType === 'like' ? '👍' : '❤️', label: selectedType, count: 1 }) : [reaction || { type: selectedType, emoji: selectedType === 'like' ? '👍' : '❤️', label: selectedType, count: 1 }],
+                                                                                    });
+                                                                                }
+                                                                            }),
+                                                                        });
+                                                                        onMemberUpdated(updatedMember);
+                                                                    }
+                                                                });
+                                                            }
+                                                        },
+                                                    }, '+'),
+                                                ]),
+                                            ]),
+                                            // PIED DE PAGE - ACTIONS
                                             (isPending || onUpdateTestimonialStatus) && h('div', { class: 'mj-regmgr-testimonial-card__footer' }, [
                                                 !isApproved && h('button', {
                                                     type: 'button',

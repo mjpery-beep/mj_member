@@ -62,6 +62,9 @@ if ($is_single_mode && !$is_preview) {
 
 // Get approved testimonials (or all if none approved yet)
 $testimonials = array();
+$pending_testimonials = array(); // Testimonials pending approval
+$my_pending_testimonials = array(); // Current member's pending testimonials
+
 if ($show_list && !$is_preview) {
     $testimonials = MjTestimonials::get_approved(array(
         'per_page' => $per_page,
@@ -73,6 +76,29 @@ if ($show_list && !$is_preview) {
         $testimonials = MjTestimonials::query(array(
             'per_page' => $per_page,
             'page' => 1,
+        ));
+    }
+
+    // Get pending testimonials for current member (always show to owner)
+    if ($is_logged_in) {
+        $my_pending_testimonials = MjTestimonials::query(array(
+            'status' => MjTestimonials::STATUS_PENDING,
+            'member_id' => $member_id,
+            'per_page' => 10,
+            'orderby' => 'created_at',
+            'order' => 'DESC',
+        ));
+    }
+
+    // Get all pending testimonials if user is animator
+    $is_animator = $is_logged_in && isset($current_member->role) && in_array($current_member->role, array('animateur', 'coordinateur'), true);
+    if ($is_animator) {
+        $pending_testimonials = MjTestimonials::query(array(
+            'status' => MjTestimonials::STATUS_PENDING,
+            'per_page' => $per_page,
+            'page' => 1,
+            'orderby' => 'created_at',
+            'order' => 'DESC',
         ));
     }
 }
@@ -145,6 +171,8 @@ $localize_data = array(
 $localize_data['isSingleMode'] = $is_single_mode;
 $localize_data['singlePostId'] = $single_post_id;
 $localize_data['baseUrl'] = remove_query_arg('post');
+$localize_data['isAnimator'] = $is_animator ?? false;
+$localize_data['hasPendingApprovals'] = $is_animator && !empty($pending_testimonials);
 
 wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_data);
 ?>
@@ -297,11 +325,37 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
             <?php 
             // En mode single, utiliser uniquement le témoignage sélectionné
             $display_testimonials = ($is_single_mode && $single_testimonial) ? array($single_testimonial) : $testimonials;
+            
+            // Préparer les témoignages à afficher (approuvés + en attente du membre + tous les en attente si animateur)
+            $all_display_testimonials = $display_testimonials;
+            
+            // Ajouter les témoignages en attente du membre
+            if (!empty($my_pending_testimonials)) {
+                $all_display_testimonials = array_merge($all_display_testimonials, $my_pending_testimonials);
+            }
+            
+            // Ajouter tous les témoignages en attente si l'utilisateur est animateur
+            if ($is_animator && !empty($pending_testimonials)) {
+                // Éviter les doublons en vérifiant les IDs
+                $existing_ids = array_map(function($t) { return (int)$t->id; }, $all_display_testimonials);
+                foreach ($pending_testimonials as $pending) {
+                    if (!in_array((int)$pending->id, $existing_ids, true)) {
+                        $all_display_testimonials[] = $pending;
+                    }
+                }
+            }
+            
+            // Trier tous les témoignages par date décroissante (plus récent d'abord)
+            usort($all_display_testimonials, function($a, $b) {
+                $time_a = strtotime($a->created_at ?? '0000-00-00 00:00:00');
+                $time_b = strtotime($b->created_at ?? '0000-00-00 00:00:00');
+                return $time_b - $time_a;
+            });
             ?>
-            <?php if (empty($display_testimonials) && !$is_preview): ?>
+            <?php if (empty($all_display_testimonials) && !$is_preview): ?>
                 <p class="mj-testimonials__empty"><?php esc_html_e('Aucun témoignage pour le moment. Soyez le premier à partager votre expérience !', 'mj-member'); ?></p>
             <?php else: ?>
-                <?php foreach ($display_testimonials as $testimonial): 
+                <?php foreach ($all_display_testimonials as $testimonial): 
                     $photos = MjTestimonials::get_photo_urls($testimonial, 'large');
                     $video = MjTestimonials::get_video_data($testimonial);
                     $link_preview = MjTestimonials::get_link_preview($testimonial);
@@ -328,13 +382,53 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                         $avatar_src = wp_get_attachment_image_src((int)$testimonial->member_photo_id, 'thumbnail');
                         if ($avatar_src) {
                             $member_avatar_url = $avatar_src[0];
-                        }
-                    }
-                    
-                    $post_id = (int)$testimonial->id;
+                                    <?php
+                                    $youtube_title_source = !empty($link_preview['title']) ? $link_preview['title'] : ($link_preview['url'] ?? '');
+                                    $youtube_fallback_label = __('Video on YouTube', 'mj-member');
+                                    $youtube_title_text = $youtube_title_source !== '' ? $youtube_title_source : $youtube_fallback_label;
+                                    $youtube_title_attr = sprintf(
+                                        /* translators: %s: video title or URL */
+                                        __('Video "%s" on YouTube', 'mj-member'),
+                                        $youtube_title_text
+                                    );
+                                    ?>
+                                    <iframe 
+                                        class="mj-feed-post__youtube-embed" 
+                                        src="https://www.youtube.com/embed/<?php echo esc_attr($link_preview['youtube_id']); ?>?rel=0" 
+                                        title="<?php echo esc_attr($youtube_title_attr); ?>" 
+                                        frameborder="0" 
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                        allowfullscreen
+                                        loading="lazy">
+                    $is_my_testimonial = $is_logged_in && ((int)$testimonial->member_id === $member_id);
+                    $is_pending = $testimonial_status === MjTestimonials::STATUS_PENDING;
+                    $show_approval_actions = $is_animator && $is_pending && !$is_my_testimonial;
                 ?>
-                <article class="mj-feed-post-wrapper<?php echo $is_single_mode ? ' mj-feed-post-wrapper--single' : ''; ?>" data-post-id="<?php echo $post_id; ?>" data-post-url="<?php echo esc_url(add_query_arg('post', $post_id)); ?>">
-                    <div class="mj-feed-post<?php echo $is_single_mode ? ' mj-feed-post--single' : ''; ?>" data-id="<?php echo $post_id; ?>">
+                <article class="mj-feed-post-wrapper<?php echo $is_single_mode ? ' mj-feed-post-wrapper--single' : ''; ?><?php echo $is_pending ? ' mj-feed-post-wrapper--pending' : ''; ?>" data-post-id="<?php echo $post_id; ?>" data-post-url="<?php echo esc_url(add_query_arg('post', $post_id)); ?>" data-post-status="<?php echo esc_attr($testimonial_status); ?>">
+                    <div class="mj-feed-post<?php echo $is_single_mode ? ' mj-feed-post--single' : ''; ?><?php echo $is_pending ? ' mj-feed-post--pending' : ''; ?>" data-id="<?php echo $post_id; ?>">
+                        <?php if ($is_pending && $is_my_testimonial): ?>
+                            <div class="mj-feed-post__pending-badge">
+                                <span class="mj-feed-post__pending-badge-icon">⏳</span>
+                                <span class="mj-feed-post__pending-badge-text"><?php esc_html_e('En cours de validation', 'mj-member'); ?></span>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php if ($show_approval_actions): ?>
+                            <div class="mj-feed-post__approval-panel">
+                                <p class="mj-feed-post__approval-message"><?php printf(esc_html__('Témoignage en attente d\'approbation de %s', 'mj-member'), esc_html($member_name)); ?></p>
+                                <div class="mj-feed-post__approval-actions">
+                                    <button type="button" class="mj-btn mj-btn--success mj-feed-post__approve-btn" data-testimonial-id="<?php echo esc_attr((string)$post_id); ?>" data-action="approve-testimonial">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        <span><?php esc_html_e('Approuver', 'mj-member'); ?></span>
+                                    </button>
+                                    <button type="button" class="mj-btn mj-btn--danger mj-feed-post__reject-btn" data-testimonial-id="<?php echo esc_attr((string)$post_id); ?>" data-action="reject-testimonial">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                        <span><?php esc_html_e('Refuser', 'mj-member'); ?></span>
+                                    </button>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+
                         <div class="mj-feed-post__header">
                             <div class="mj-feed-post__avatar">
                                 <?php if ($member_avatar_url): ?>

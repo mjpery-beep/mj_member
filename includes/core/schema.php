@@ -1783,6 +1783,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_56($wpdb);
     mj_member_upgrade_to_2_57($wpdb);
     mj_member_upgrade_to_2_58($wpdb);
+    mj_member_upgrade_to_2_59($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -5465,6 +5466,19 @@ function mj_member_ensure_event_location_links_table() {
     ) {$charset_collate};";
 
     dbDelta($sql);
+}
+
+/**
+ * Migration 2.59: Add is_trusted_member column to mj_members table.
+ */
+function mj_member_upgrade_to_2_59($wpdb) {
+    $table = $wpdb->prefix . 'mj_members';
+    
+    if (mj_member_table_exists($table)) {
+        if (!mj_member_column_exists($table, 'is_trusted_member')) {
+            $wpdb->query("ALTER TABLE {$table} ADD COLUMN is_trusted_member tinyint(1) NOT NULL DEFAULT 0 AFTER role");
+        }
+    }
 }
 
 add_action('init', 'mj_member_run_schema_upgrade', 5);

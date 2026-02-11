@@ -77,6 +77,7 @@ add_action('wp_ajax_mj_regmgr_save_location', 'mj_regmgr_save_location');
 add_action('wp_ajax_mj_regmgr_get_members', 'mj_regmgr_get_members');
 add_action('wp_ajax_mj_regmgr_get_member_details', 'mj_regmgr_get_member_details');
 add_action('wp_ajax_mj_regmgr_update_member', 'mj_regmgr_update_member');
+add_action('wp_ajax_mj_regmgr_update_member_trusted_status', 'mj_regmgr_update_member_trusted_status');
 add_action('wp_ajax_mj_regmgr_get_member_registrations', 'mj_regmgr_get_member_registrations');
 add_action('wp_ajax_mj_regmgr_update_registration_occurrences', 'mj_regmgr_update_registration_occurrences');
 add_action('wp_ajax_mj_regmgr_mark_membership_paid', 'mj_regmgr_mark_membership_paid');
@@ -3033,7 +3034,7 @@ function mj_regmgr_toggle_testimonial_featured() {
     }
 
     $testimonial = MjTestimonials::get_by_id($testimonial_id);
-    $is_featured = (bool) ($testimonial['featured'] ?? false);
+    $is_featured = (bool) ($testimonial->featured ?? false);
 
     wp_send_json_success(array(
         'message' => $is_featured 
@@ -3158,10 +3159,7 @@ function mj_regmgr_edit_testimonial_comment() {
         return;
     }
 
-    $result = MjTestimonialComments::update($comment_id, array(
-        'content' => $content,
-        'updated_at' => current_time('mysql'),
-    ));
+    $result = MjTestimonialComments::update($comment_id, $content);
 
     if (!$result) {
         wp_send_json_error(array('message' => __('Erreur lors de la mise à jour du commentaire.', 'mj-member')));
@@ -5619,6 +5617,7 @@ function mj_regmgr_get_member_details() {
         // Autres infos
         'isAutonomous' => !empty($memberData->is_autonomous),
         'isVolunteer' => !empty($memberData->is_volunteer),
+        'isTrustedMember' => !empty($memberData->is_trusted_member),
         'guardianId' => $memberData->guardian_id ?? null,
         'descriptionShort' => $memberData->description_courte ?? '',
         'descriptionLong' => $memberData->description_longue ?? '',
@@ -6231,6 +6230,9 @@ function mj_regmgr_update_member() {
     if (array_key_exists('isAutonomous', $data)) {
         $update_data['is_autonomous'] = mj_regmgr_to_bool($data['isAutonomous']) ? 1 : 0;
     }
+    if (array_key_exists('isTrustedMember', $data)) {
+        $update_data['is_trusted_member'] = mj_regmgr_to_bool($data['isTrustedMember']) ? 1 : 0;
+    }
     if (array_key_exists('descriptionShort', $data)) {
         $update_data['description_courte'] = wp_kses_post($data['descriptionShort']);
     }
@@ -6312,6 +6314,53 @@ function mj_regmgr_update_member() {
     }
 
     wp_send_json_success($response);
+}
+
+/**
+ * Update member trusted status (is_trusted_member)
+ */
+function mj_regmgr_update_member_trusted_status() {
+    error_log('[MJ-Member] mj_regmgr_update_member_trusted_status called with POST: ' . print_r($_POST, true));
+    
+    $current_member = mj_regmgr_verify_request();
+    if (!$current_member) {
+        error_log('[MJ-Member] Verify request failed');
+        return;
+    }
+
+    $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+    $is_trusted = isset($_POST['isTrustedMember']) ? mj_regmgr_to_bool($_POST['isTrustedMember']) : false;
+
+    error_log('[MJ-Member] Updating member ' . $member_id . ' isTrustedMember: ' . ($is_trusted ? 'true' : 'false'));
+
+    if (!$member_id) {
+        wp_send_json_error(array('message' => __('ID du membre manquant.', 'mj-member')));
+        return;
+    }
+
+    $member = MjMembers::getById($member_id);
+    if (!$member) {
+        wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
+        return;
+    }
+
+    $result = MjMembers::update($member_id, array(
+        'is_trusted_member' => $is_trusted ? 1 : 0,
+    ));
+
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+        return;
+    }
+
+    error_log('[MJ-Member] Member ' . $member_id . ' updated successfully');
+
+    wp_send_json_success(array(
+        'message' => $is_trusted
+            ? __('Membre marqué comme membre de confiance.', 'mj-member')
+            : __('Membre retiré de la liste des membres de confiance.', 'mj-member'),
+        'isTrustedMember' => $is_trusted,
+    ));
 }
 
 /**

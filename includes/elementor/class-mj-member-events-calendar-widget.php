@@ -13,6 +13,8 @@ use Mj\Member\Core\AssetsManager;
 use Mj\Member\Core\Config;
 use Mj\Member\Classes\Crud\MjEventAnimateurs;
 use Mj\Member\Classes\Crud\MjEventLocationLinks;
+use Mj\Member\Classes\Crud\MjLeaveRequests;
+use Mj\Member\Classes\Crud\MjLeaveTypes;
 use Mj\Member\Classes\MjEventSchedule;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper;
@@ -289,6 +291,29 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             )
         );
 
+        $this->add_control(
+            'empty_message',
+            array(
+                'label' => __('Message vide', 'mj-member'),
+                'type' => Controls_Manager::TEXTAREA,
+                'default' => __('Aucun événement disponible pour le moment.', 'mj-member'),
+                'label_block' => true,
+            )
+        );
+
+        $this->add_control(
+            'show_leave_requests',
+            array(
+                'label' => __('Afficher les demandes de congé', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'description' => __('Affiche les demandes de congé approuvées pour les coordinateurs et animateurs.', 'mj-member'),
+            )
+        );
+
         $this->end_controls_section();
 
         $this->register_visibility_controls();
@@ -473,6 +498,132 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
         $now_ts = current_time('timestamp');
         $display_current_week_only = isset($settings['current_week_only']) && $settings['current_week_only'] === 'yes';
+        
+        // Fetch leave requests if enabled and user is coordinator/animator
+        $leave_requests_data = array();
+        $show_leave_requests = isset($settings['show_leave_requests']) && $settings['show_leave_requests'] === 'yes';
+
+        
+        if ($show_leave_requests && !$is_elementor_preview && class_exists(MjLeaveRequests::class)) {
+            
+        /* 
+        je veux récupérer les role lié a la table membre et non a la table user de wordpress
+
+        */
+            $userId = get_current_user_id();
+            
+            if ($userId) {
+                $memberObj = MjMembers::getByWpUserId($userId);
+                $member = $memberObj ? $memberObj->toArray() : null;
+                $user_roles = array($member['role']);
+                
+                
+                // Check if user is coordinator or animator
+                /**
+                 * @TODO: Plutôt que de faire cette vérification de rôles directement dans le widget, il serait préférable de
+                 * cree une classe métier MjUserRolesHelper avec des méthodes comme is_coordinator($user) et is_animator($user) pour centraliser cette logique et éviter de dupliquer le code de vérification des rôles à plusieurs endroits dans le plugin.
+                 */
+                $is_coordinator = in_array(MjRoles::COORDINATEUR, $user_roles, true);
+                $is_animator = in_array(MjRoles::ANIMATEUR, $user_roles, true);
+                
+                
+
+                if ($is_coordinator || $is_animator) {
+                    // Get approved leave requests + auto-approved ones (e.g., sick leave)
+                    $leave_requests = MjLeaveRequests::get_all(array(
+                        'statuses' => array(
+                            MjLeaveRequests::STATUS_APPROVED,
+                            MjLeaveRequests::STATUS_PENDING, // Include pending for types without validation
+                        ),
+                    ));
+                    
+                    if (!empty($leave_requests)) {
+                        $date_from_str = wp_date('Y-m-d', $range_start);
+                        $date_to_str = wp_date('Y-m-d', $range_end);
+                        
+                        foreach ($leave_requests as $leave_request) {
+                            $member_id = isset($leave_request->member_id) ? (int) $leave_request->member_id : 0;
+                            $dates_json = isset($leave_request->dates) ? (string) $leave_request->dates : '[]';
+                            $dates_array = json_decode($dates_json, true);
+                            $dates_array = is_array($dates_array) ? $dates_array : array();
+                            $reason = isset($leave_request->reason) ? (string) $leave_request->reason : '';
+                            $request_status = isset($leave_request->status) ? (string) $leave_request->status : '';
+                            
+                            // Filter dates within the calendar range
+                            $dates_in_range = array_filter($dates_array, function($date) use ($date_from_str, $date_to_str) {
+                                return is_string($date) && trim($date) >= $date_from_str && trim($date) <= $date_to_str;
+                            });
+                            
+                            if (empty($dates_in_range)) {
+                                continue;
+                            }
+                            
+                            // Get leave type info
+                            $type_id = isset($leave_request->type_id) ? (int) $leave_request->type_id : 0;
+                            $type_name = __('Congé', 'mj-member');
+                            $type_color = '#6B7280';
+                            $type_requires_validation = true;
+                            
+                            if ($type_id > 0 && class_exists(MjLeaveTypes::class)) {
+                                $type = MjLeaveTypes::get_by_id($type_id);
+                                if ($type) {
+                                    $type_name = isset($type->name) ? (string) $type->name : $type_name;
+                                    $type_slug = isset($type->slug) ? (string) $type->slug : '';
+                                    $type_color = isset($type->color) ? (string) $type->color : $type_color;
+                                    $type_requires_validation = isset($type->requires_validation) ? (bool) $type->requires_validation : true;
+                                }
+                            }
+                            
+                            // Skip PENDING requests that require validation (only show auto-approved types)
+                            if ($request_status === MjLeaveRequests::STATUS_PENDING && $type_requires_validation) {
+                                continue;
+                            }
+                            
+                            // Get member name
+                            $member_name = __('Animateur', 'mj-member');
+                            if ($member_id > 0 && function_exists('get_user_meta')) {
+                                $user = get_user_by('ID', $member_id);
+                                if ($user) {
+                                    $user_meta = get_user_meta($member_id);
+                                    $first_name = isset($user_meta['first_name'][0]) ? (string) $user_meta['first_name'][0] : '';
+                                    $last_name = isset($user_meta['last_name'][0]) ? (string) $user_meta['last_name'][0] : '';
+                                    $member_name = trim($first_name . ' ' . $last_name);
+                                    if (!$member_name) {
+                                        $member_name = $user->display_name;
+                                    }
+                                }
+                            }
+                            
+                            // Add each date to the calendar
+                            foreach ($dates_in_range as $date_str) {
+                                $date_str = is_string($date_str) ? trim($date_str) : '';
+                                if (!$date_str || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_str)) {
+                                    continue;
+                                }
+                                
+                                if (!isset($leave_requests_data[$date_str])) {
+                                    $leave_requests_data[$date_str] = array();
+                                }
+                                
+                                $leave_requests_data[$date_str][] = array(
+                                    'member_id' => $member_id,
+                                    'member_name' => $member_name,
+                                    'type_name' => $type_name ,
+                                    'type_color' => $type_color,
+                                    'type_slug' => $type_slug,
+                                    'reason' => $reason,
+                                );
+                                
+                                if (isset($_GET['DEBUG_LEAVE'])) {
+                                    error_log('DEBUG: Added to calendar: ' . $date_str);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         $week_days_keys = array();
         $restrict_mobile_to_week = array();
         $week_day_weekend_map = array();
@@ -1226,6 +1377,82 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             }
         }
 
+        // Add leave requests to calendar
+        if (!empty($leave_requests_data)) {
+            foreach ($leave_requests_data as $date_str => $date_leave_requests) {
+                $date_str = is_string($date_str) ? trim($date_str) : '';
+                if (!$date_str || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_str)) {
+                    continue;
+                }
+                
+                $date_ts = strtotime($date_str);
+                if ($date_ts === false || $date_ts < $range_start || $date_ts > $range_end) {
+                    continue;
+                }
+                
+                $month_key = substr($date_str, 0, 7); // Y-m format
+                if (!isset($months[$month_key])) {
+                    continue;
+                }
+                
+                $ensure_day_bucket($months, $month_key, $date_str);
+                
+                foreach ($date_leave_requests as $leave_req) {
+                    $member_name = isset($leave_req['member_name']) ? (string) $leave_req['member_name'] : __('Animateur', 'mj-member');
+                    $type_name = isset($leave_req['type_name']) ? (string) $leave_req['type_name'] : __('Congé', 'mj-member');
+                    $type_color = isset($leave_req['type_color']) ? (string) $leave_req['type_color'] : '#6B7280';
+                    $type_slug = isset($leave_req['type_slug']) ? sanitize_key((string) $leave_req['type_slug']) : 'leave_request';
+                    
+                    $reason = isset($leave_req['reason']) ? (string) $leave_req['reason'] : '';
+                    
+                    // Create a leave request entry for the calendar
+                    $leave_request_id = 'leave:' . $date_str . ':' . (isset($leave_req['member_id']) ? (int) $leave_req['member_id'] : 0);
+                    
+                    $emojis = array(
+                        'sick' => '🤒',
+                        'recovery' => '🏖️',                        
+                    );
+                    $emoji = $emojis[$type_slug] ?? '🏖️';
+
+                    $months[$month_key]['days'][$date_str]['events'][] = array(
+                        'id' => $leave_request_id,
+                        'title' => $member_name,
+                        
+                        'time' => "", //$type_name,
+                        'schedule_label' =>  '', //$type_name ,
+                        'type_label' =>  $type_name ,
+                        'type_key' => 'leave_request',
+                        'start_ts' => $date_ts,
+                        'is_leave_request' => true,
+                        'accent_color' => $type_color,
+                        'description_excerpt' => $reason !== '' ? $reason : '',
+                        'palette' => array(
+                            'base' => $type_color,
+                            'light' => self::lighten_color($type_color, 20),
+                            'text' => '#ffffff',
+                            'highlight' => self::lighten_color($type_color, 40),
+                            'surface' => self::lighten_color($type_color, 60),
+                            'border' => $type_color,
+                            'pill_bg' => $type_color,
+                            'pill_text' => '#ffffff',
+                            'thumb_bg' => self::lighten_color($type_color, 30),
+                            'range_bg' => self::lighten_color($type_color, 50),
+                            'range_border' => $type_color,
+                        ),
+                        'permalink' => '',
+                        'schedule_mode' => 'leave_request',
+                        'recurring_schedule_preview' => array(),
+                        'emoji' => $emoji,
+                        'cover' => '',
+                        'cover_full' => '',
+                        'cover_sources' => array(),
+                    );
+                    
+                    $has_any_event = true;
+                }
+            }
+        }
+
         if ($highlight_closure_days && !empty($closure_dates)) {
             foreach ($closure_dates as $closure_date => $closure_details) {
                 $month_key = substr($closure_date, 0, 7);
@@ -1306,6 +1533,15 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             if (!isset($available_type_filters['closure'])) {
                 $available_type_filters['closure'] = array(
                     'label' => __('Fermeture', 'mj-member'),
+                );
+            }
+        }
+
+        // Add leave_request filter type if any leave requests exist
+        if (!empty($leave_requests_data)) {
+            if (!isset($available_type_filters['leave_request'])) {
+                $available_type_filters['leave_request'] = array(
+                    'label' => __('Congés', 'mj-member'),
                 );
             }
         }
@@ -3150,5 +3386,43 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         }
 
         return ' style="' . esc_attr(implode(';', $styles)) . '"';
+    }
+
+    /**
+     * Lighten a hex color by a percentage.
+     * 
+     * @param string $hex Hex color value (e.g., '#FFFFFF')
+     * @param int $percent Percentage to lighten (0-100)
+     * @return string Lightened hex color
+     */
+    private static function lighten_color($hex, $percent) {
+        $hex = is_string($hex) ? trim($hex) : '';
+        if ($hex === '') {
+            return '#FFFFFF';
+        }
+
+        // Remove # if present
+        $hex = ltrim($hex, '#');
+        if (strlen($hex) !== 6) {
+            return '#FFFFFF';
+        }
+
+        // Convert hex to RGB
+        $rgb = array(
+            hexdec(substr($hex, 0, 2)),
+            hexdec(substr($hex, 2, 2)),
+            hexdec(substr($hex, 4, 2)),
+        );
+
+        // Lighten the color
+        $percent = max(0, min(100, (int) $percent));
+        foreach ($rgb as &$value) {
+            $value = (int) ($value + (255 - $value) * ($percent / 100));
+            $value = max(0, min(255, $value));
+        }
+        unset($value);
+
+        // Convert back to hex
+        return '#' . strtoupper(str_pad(dechex($rgb[0]), 2, '0', STR_PAD_LEFT) . str_pad(dechex($rgb[1]), 2, '0', STR_PAD_LEFT) . str_pad(dechex($rgb[2]), 2, '0', STR_PAD_LEFT));
     }
 }

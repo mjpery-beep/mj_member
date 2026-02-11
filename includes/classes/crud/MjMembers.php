@@ -511,7 +511,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         $updates = array();
 
         $allowed_fields = array(
-            'first_name','last_name','nickname','email','phone','birth_date','role','guardian_id','is_autonomous','is_volunteer','requires_payment','address','city','postal_code','school','birth_country','nationality','notes','description_courte','description_longue','why_mj','how_mj','work_schedule','leave_quota_paid','leave_quota_unpaid','leave_quota_exceptional','leave_quota_recovery','status','date_inscription','date_last_payement','photo_id','photo_usage_consent','newsletter_opt_in','sms_opt_in','whatsapp_opt_in','notification_preferences','wp_user_id','card_access_key','anonymized_at'
+            'first_name','last_name','nickname','email','phone','birth_date','role','guardian_id','is_autonomous','is_volunteer', 'is_trusted_member','requires_payment','address','city','postal_code','school','birth_country','nationality','notes','description_courte','description_longue','why_mj','how_mj','work_schedule','leave_quota_paid','leave_quota_unpaid','leave_quota_exceptional','leave_quota_recovery','status','date_inscription','date_last_payement','photo_id','photo_usage_consent','newsletter_opt_in','sms_opt_in','whatsapp_opt_in','notification_preferences','wp_user_id','card_access_key','anonymized_at'
         );
 
         foreach ($data as $field => $value) {
@@ -570,6 +570,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
                 case 'is_volunteer':
                     $updates[$field] = self::normalizeVolunteerFlag($value, $data['role'] ?? $current->role);
                     break;
+                case 'is_trusted_member':
                 case 'is_autonomous':
                 case 'photo_usage_consent':
                 case 'newsletter_opt_in':

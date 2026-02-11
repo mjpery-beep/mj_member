@@ -836,6 +836,9 @@ if (!function_exists('mj_member_render_login_modal_component')) {
         ?>
         <div class="<?php echo esc_attr(implode(' ', $component_classes)); ?>"<?php echo $wrapper_attributes; ?>>
             <button
+              <?php if (!$is_logged_in) : ?>
+                onclick="window.location.href = '<?php echo esc_url(home_url('/mon-compte/inscription/?tab=login')); ?>';"
+            <?php endif; ?>
                 type="button"
                 class="<?php echo esc_attr(implode(' ', $trigger_classes)); ?>"
                 data-mj-login-trigger

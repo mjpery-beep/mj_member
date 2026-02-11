@@ -1477,3 +1477,160 @@
 .mj-feed-post--single .mj-feed-post__comments {
     display: block !important;
 }
+
+/* =====================================================
+   Pending Testimonials (Member View & Animator Approval)
+   ===================================================== */
+
+/* Pending post wrapper styling */
+.mj-feed-post-wrapper--pending {
+    position: relative;
+}
+
+.mj-feed-post-wrapper--pending .mj-feed-post {
+    background: #fef3c7;
+    border-color: #fcd34d;
+    position: relative;
+}
+
+.mj-feed-post--pending {
+    opacity: 0.95;
+}
+
+/* Pending badge (for post owner) */
+.mj-feed-post__pending-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: #fbbf24;
+    color: #78350f;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    z-index: 10;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.mj-feed-post__pending-badge-icon {
+    font-size: 14px;
+    display: inline-block;
+}
+
+.mj-feed-post__pending-badge-text {
+    white-space: nowrap;
+}
+
+/* Approval panel (for animators) */
+.mj-feed-post__approval-panel {
+    background: #dbeafe;
+    border: 2px solid #3b82f6;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+
+.mj-feed-post__approval-message {
+    margin: 0 0 12px;
+    color: #1e40af;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+/* Approval action buttons */
+.mj-feed-post__approval-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.mj-feed-post__approve-btn,
+.mj-feed-post__reject-btn {
+    flex: 1;
+    min-width: 120px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.3s ease;
+}
+
+.mj-feed-post__approve-btn {
+    background: #22c55e;
+    color: white;
+}
+
+.mj-feed-post__approve-btn:hover:not(:disabled) {
+    background: #16a34a;
+    box-shadow: 0 4px 8px rgba(34, 197, 94, 0.3);
+    transform: translateY(-1px);
+}
+
+.mj-feed-post__reject-btn {
+    background: #ef4444;
+    color: white;
+}
+
+.mj-feed-post__reject-btn:hover:not(:disabled) {
+    background: #dc2626;
+    box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
+    transform: translateY(-1px);
+}
+
+.mj-feed-post__approve-btn:disabled,
+.mj-feed-post__reject-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.mj-feed-post__approve-btn svg,
+.mj-feed-post__reject-btn svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+/* Success/error messages */
+.mj-testimonial-success {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive adjustments for approval panel */
+@media (max-width: 480px) {
+    .mj-feed-post__approval-actions {
+        flex-direction: column;
+    }
+    
+    .mj-feed-post__approve-btn,
+    .mj-feed-post__reject-btn {
+        width: 100%;
+    }
+    
+    .mj-feed-post__pending-badge {
+        top: 8px;
+        right: 8px;
+        font-size: 11px;
+        padding: 4px 8px;
+    }
+}

@@ -20,7 +20,12 @@
     gap: 20px;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
-
+/* ==========================================================================
+   Emoji    
+    ========================================================================== */
+.mj-member-events-calendar .emoji{
+    font-size: 1.6rem;
+}
 /* ==========================================================================
    Title
    ========================================================================== */
@@ -1080,6 +1085,12 @@
     background: #214431;
     color: #ffffff;
 }
+
+.mj-member-events-calendar__event[data-calendar-type="leave_request"] .mj-member-events-calendar__event-type {
+    background: #be123c;
+    color: #ffe3eb;
+}
+
 
 
 /* ==========================================================================

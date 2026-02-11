@@ -1123,6 +1123,80 @@
             });
         });
         
+        // Approve testimonial (animators only)
+        $(document).on('click.mjFeed', '[data-action="approve-testimonial"]', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const $btn = $(this);
+            const testimonialId = $btn.data('testimonial-id');
+            const $wrapper = $btn.closest('.mj-feed-post-wrapper');
+            
+            if ($btn.prop('disabled')) return;
+            $btn.prop('disabled', true);
+            const originalText = $btn.html();
+            $btn.html('<span>⏳ Validation...</span>');
+            
+            $.post(config.ajaxUrl, {
+                action: 'mj_front_testimonial_approve',
+                _wpnonce: config.nonce,
+                id: testimonialId
+            }).done(function(response) {
+                if (response.success) {
+                    $wrapper.removeClass('mj-feed-post-wrapper--pending');
+                    $wrapper.find('.mj-feed-post').removeClass('mj-feed-post--pending');
+                    $wrapper.find('.mj-feed-post__approval-panel').fadeOut(200, function() { $(this).remove(); });
+                    $wrapper.find('.mj-feed-post__pending-badge').fadeOut(200, function() { $(this).remove(); });
+                    
+                    // Show success message
+                    const $message = $('<div class="mj-testimonial-success" style="padding:10px;margin:10px 0;background:#d4edda;color:#155724;border-radius:4px;border:1px solid #c3e6cb;">✓ ' + response.data.message + '</div>');
+                    $wrapper.find('.mj-feed-post__header').after($message);
+                    setTimeout(function() { $message.fadeOut(200, function() { $(this).remove(); }); }, 3000);
+                }
+            }).always(function() {
+                $btn.prop('disabled', false);
+                $btn.html(originalText);
+            });
+        });
+        
+        // Reject testimonial (animators only)
+        $(document).on('click.mjFeed', '[data-action="reject-testimonial"]', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const $btn = $(this);
+            const testimonialId = $btn.data('testimonial-id');
+            const $wrapper = $btn.closest('.mj-feed-post-wrapper');
+            
+            // Prompt for rejection reason
+            const reason = prompt('Motif du refus (optionnel):', '');
+            if (reason === null) return; // User cancelled
+            
+            if ($btn.prop('disabled')) return;
+            $btn.prop('disabled', true);
+            const originalText = $btn.html();
+            $btn.html('<span>⏳ Traitement...</span>');
+            
+            $.post(config.ajaxUrl, {
+                action: 'mj_front_testimonial_reject',
+                _wpnonce: config.nonce,
+                id: testimonialId,
+                reason: reason
+            }).done(function(response) {
+                if (response.success) {
+                    $wrapper.fadeOut(200, function() { $(this).remove(); });
+                    
+                    // Show success message
+                    const $message = $('<div class="mj-testimonial-success" style="padding:10px;margin:10px 0;background:#f8d7da;color:#721c24;border-radius:4px;border:1px solid #f5c6cb;">✓ ' + response.data.message + '</div>');
+                    $wrapper.after($message);
+                    setTimeout(function() { $message.fadeOut(200, function() { $(this).remove(); }); }, 3000);
+                }
+            }).always(function() {
+                $btn.prop('disabled', false);
+                $btn.html(originalText);
+            });
+        });
+        
         // Load more comments
         $(document).on('click.mjFeed', '[data-action="load-more-comments"]', function(e) {
             e.preventDefault();

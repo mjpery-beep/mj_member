@@ -67,6 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
         'requires_payment' => $requires_payment,
         'date_last_payement' => $date_last_payement_input,
         'member_is_volunteer' => !empty($_POST['member_is_volunteer']),
+        'member_is_trusted_member' => !empty($_POST['member_is_trusted_member']),
         'member_is_autonomous' => MjRoles::isJeune($current_role) ? !empty($_POST['member_is_autonomous']) : true,
         'member_newsletter_opt_in' => !empty($_POST['member_newsletter_opt_in']),
         'member_sms_opt_in' => !empty($_POST['member_sms_opt_in']),
@@ -159,6 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
             'status' => $input_data['status'],
             'requires_payment' => $input_data['requires_payment'],
             'is_volunteer' => !empty($input_data['member_is_volunteer']) ? 1 : 0,
+            'is_trusted_member' => !empty($input_data['member_is_trusted_member']) ? 1 : 0,
             'address' => $input_data['member_address'],
             'city' => $input_data['member_city'],
             'postal_code' => $input_data['member_postal'],
@@ -306,6 +308,7 @@ $form_defaults = array(
     'date_last_payement' => $last_payment_value,
     'member_is_autonomous' => $default_is_autonomous,
     'member_is_volunteer' => $member ? (isset($member->is_volunteer) ? (bool) $member->is_volunteer : false) : false,
+    'member_is_trusted_member' => $member ? (isset($member->is_trusted_member) ? (bool) $member->is_trusted_member : false) : false,
     'member_newsletter_opt_in' => $member ? (isset($member->newsletter_opt_in) ? (bool) $member->newsletter_opt_in : true) : true,
     'member_sms_opt_in' => $member ? (isset($member->sms_opt_in) ? (bool) $member->sms_opt_in : true) : true,
     'member_whatsapp_opt_in' => $member ? (isset($member->whatsapp_opt_in) ? (bool) $member->whatsapp_opt_in : true) : true,
@@ -333,6 +336,7 @@ $form_values['status'] = in_array($form_values['status'], array(MjMembers::STATU
 $form_values['requires_payment'] = !empty($form_values['requires_payment']);
 $form_values['member_is_autonomous'] = !empty($form_values['member_is_autonomous']);
 $form_values['member_is_volunteer'] = !empty($form_values['member_is_volunteer']);
+$form_values['member_is_trusted_member'] = !empty($form_values['member_is_trusted_member']);
 $form_values['member_newsletter_opt_in'] = !empty($form_values['member_newsletter_opt_in']);
 $form_values['member_sms_opt_in'] = !empty($form_values['member_sms_opt_in']);
 $form_values['member_whatsapp_opt_in'] = !empty($form_values['member_whatsapp_opt_in']);
@@ -387,6 +391,16 @@ $member_email_required = !MjRoles::isJeune($form_values['member_role']);
                             Marquer ce profil comme bénévole (en plus de son rôle principal)
                         </label>
                         <p class="description">Utilisez cette option pour distinguer les membres impliqués bénévolement sans modifier leurs droits principaux.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="member_is_trusted_member">Membre de confiance</label></th>
+                    <td>
+                        <label style="display:block;margin-bottom:6px;">
+                            <input type="checkbox" id="member_is_trusted_member" name="member_is_trusted_member" value="1" <?php checked($form_values['member_is_trusted_member'], true); ?> />
+                            Ce membre est de confiance (validation automatique des témoignages)
+                        </label>
+                        <p class="description">Les membres de confiance ne passent pas par l'étape de validation de leurs témoignages. Leurs publications sont immédiatement approuvées.</p>
                     </td>
                 </tr>
                 <tr>

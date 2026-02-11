@@ -135,7 +135,7 @@ final class TestimonialsPage
                 <tbody>
                     <?php if (empty($testimonials)): ?>
                         <tr>
-                            <td colspan="7"><?php esc_html_e('Aucun témoignage trouvé.', 'mj-member'); ?></td>
+                            <td colspan="8"><?php esc_html_e('Aucun témoignage trouvé.', 'mj-member'); ?></td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($testimonials as $testimonial): ?>
@@ -469,7 +469,7 @@ final class TestimonialsPage
                             <small style="display: block; margin-top: 10px; color: #666;">
                                 <?php echo esc_html(implode(', ', array_slice($reactions_summary['names'], 0, 3))); ?>
                                 <?php if (count($reactions_summary['names']) > 3): ?>
-                                    <?php printf(esc_html(__('and %d more', 'mj-member')), count($reactions_summary['names']) - 3); ?>
+                                    <?php printf(esc_html(__('et %d autres', 'mj-member')), count($reactions_summary['names']) - 3); ?>
                                 <?php endif; ?>
                             </small>
                         <?php endif; ?>

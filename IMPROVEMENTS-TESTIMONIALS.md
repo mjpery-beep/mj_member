@@ -19,7 +19,7 @@ Les commentaires sont maintenant chargés avec les détails du membre:
 - Contenu du commentaire
 - Date de création
 
-**Fichier source:** `includes/core/ajax/admin/registration-manager.php` ligne 5553-5567
+**Fichier source:** `includes/core/ajax/admin/registration-manager.php`, handlers liés aux témoignages (chargement des commentaires)
 
 ### 3. ✅ Gestion des commentaires
 
