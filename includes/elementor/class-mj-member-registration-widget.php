@@ -182,6 +182,80 @@ class Mj_Member_Elementor_Registration_Widget extends Widget_Base {
             )
         );
 
+        // Login Tab Section
+        $this->add_control(
+            'login_tab_heading',
+            array(
+                'label' => __('Onglet "Se connecter"', 'mj-member'),
+                'type' => Controls_Manager::HEADING,
+                'separator' => 'before',
+            )
+        );
+
+        $this->add_control(
+            'login_show_title',
+            array(
+                'label' => __('Afficher le titre', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'no',
+            )
+        );
+
+        $this->add_control(
+            'login_title_text',
+            array(
+                'label' => __('Titre', 'mj-member'),
+                'type' => Controls_Manager::TEXT,
+                'default' => __('Se connecter', 'mj-member'),
+                'label_block' => true,
+                'condition' => array('login_show_title' => 'yes'),
+            )
+        );
+
+        $this->add_control(
+            'login_title_image',
+            array(
+                'label' => __('Image du titre', 'mj-member'),
+                'type' => Controls_Manager::MEDIA,
+                'condition' => array('login_show_title' => 'yes'),
+                'dynamic' => array('active' => true),
+            )
+        );
+
+        $this->add_control(
+            'login_title_image_position',
+            array(
+                'label' => __('Position de l\'image', 'mj-member'),
+                'type' => Controls_Manager::SELECT,
+                'options' => array(
+                    'inline-right' => __('À droite du titre', 'mj-member'),
+                    'inline-left' => __('À gauche du titre', 'mj-member'),
+                    'above-center' => __('Au-dessus, centré', 'mj-member'),
+                    'above-left' => __('Au-dessus, aligné à gauche', 'mj-member'),
+                    'above-right' => __('Au-dessus, aligné à droite', 'mj-member'),
+                ),
+                'default' => 'inline-right',
+                'condition' => array(
+                    'login_show_title' => 'yes',
+                    'login_title_image[id]!' => '',
+                ),
+                'disabled' => true,
+            )
+        );
+
+        $this->add_control(
+            'login_title_image_alt',
+            array(
+                'label' => __('Texte alternatif de l\'image', 'mj-member'),
+                'type' => Controls_Manager::TEXT,
+                'label_block' => true,
+                'condition' => array('login_show_title' => 'yes'),
+            )
+        );
+
         $this->end_controls_section();
 
         $this->register_visibility_controls();
@@ -756,10 +830,26 @@ class Mj_Member_Elementor_Registration_Widget extends Widget_Base {
             'content' => $regulation_content,
         );
 
+        // Login tab title settings
+        $show_login_title = isset($settings['login_show_title']) && $settings['login_show_title'] === 'yes';
+        $login_image_position = isset($settings['login_title_image_position']) ? (string) $settings['login_title_image_position'] : 'inline-right';
+        if (!in_array($login_image_position, $image_position_allowed, true)) {
+            $login_image_position = 'inline-right';
+        }
+        $login_title_settings = array(
+            'show' => $show_login_title,
+            'text' => $show_login_title && !empty($settings['login_title_text']) ? $settings['login_title_text'] : '',
+            'image_id' => ($show_login_title && !empty($settings['login_title_image']['id'])) ? (int) $settings['login_title_image']['id'] : 0,
+            'image_url' => ($show_login_title && !empty($settings['login_title_image']['url'])) ? $settings['login_title_image']['url'] : '',
+            'image_alt' => $show_login_title && !empty($settings['login_title_image_alt']) ? $settings['login_title_image_alt'] : '',
+            'image_position' => $login_image_position,
+        );
+
         $args = array(
             'message_logged_out' => isset($settings['logged_out_message']) ? $settings['logged_out_message'] : '',
             'message_logged_in' => isset($settings['logged_in_message']) ? $settings['logged_in_message'] : '',
             'title' => $title_settings,
+            'login_title' => $login_title_settings,
             'regulation' => $regulation_data,
         );
 

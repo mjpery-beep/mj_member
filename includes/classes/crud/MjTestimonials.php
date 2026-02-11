@@ -226,28 +226,44 @@ class MjTestimonials implements CrudRepositoryInterface {
             ? (int) $payload['video_id']
             : null;
         
-        // Handle link preview (JSON object with url, title, description, image)
+        // Handle link preview (JSON object with url, title, description, image, and optional YouTube data)
         $link_preview = null;
         if (!empty($payload['link_preview'])) {
             if (is_string($payload['link_preview'])) {
                 $decoded = json_decode(wp_unslash($payload['link_preview']), true);
                 if (is_array($decoded) && !empty($decoded['url'])) {
-                    $link_preview = wp_json_encode(array(
+                    $preview_data = array(
                         'url' => esc_url_raw($decoded['url']),
                         'title' => isset($decoded['title']) ? sanitize_text_field($decoded['title']) : '',
                         'description' => isset($decoded['description']) ? sanitize_text_field($decoded['description']) : '',
                         'image' => isset($decoded['image']) ? esc_url_raw($decoded['image']) : '',
                         'site_name' => isset($decoded['site_name']) ? sanitize_text_field($decoded['site_name']) : '',
-                    ));
+                    );
+                    // Preserve YouTube data if present
+                    if (!empty($decoded['is_youtube'])) {
+                        $preview_data['is_youtube'] = (bool) $decoded['is_youtube'];
+                    }
+                    if (!empty($decoded['youtube_id'])) {
+                        $preview_data['youtube_id'] = sanitize_text_field($decoded['youtube_id']);
+                    }
+                    $link_preview = wp_json_encode($preview_data);
                 }
             } elseif (is_array($payload['link_preview']) && !empty($payload['link_preview']['url'])) {
-                $link_preview = wp_json_encode(array(
+                $preview_data = array(
                     'url' => esc_url_raw($payload['link_preview']['url']),
                     'title' => isset($payload['link_preview']['title']) ? sanitize_text_field($payload['link_preview']['title']) : '',
                     'description' => isset($payload['link_preview']['description']) ? sanitize_text_field($payload['link_preview']['description']) : '',
                     'image' => isset($payload['link_preview']['image']) ? esc_url_raw($payload['link_preview']['image']) : '',
                     'site_name' => isset($payload['link_preview']['site_name']) ? sanitize_text_field($payload['link_preview']['site_name']) : '',
-                ));
+                );
+                // Preserve YouTube data if present
+                if (!empty($payload['link_preview']['is_youtube'])) {
+                    $preview_data['is_youtube'] = (bool) $payload['link_preview']['is_youtube'];
+                }
+                if (!empty($payload['link_preview']['youtube_id'])) {
+                    $preview_data['youtube_id'] = sanitize_text_field($payload['link_preview']['youtube_id']);
+                }
+                $link_preview = wp_json_encode($preview_data);
             }
         }
 
@@ -629,7 +645,7 @@ class MjTestimonials implements CrudRepositoryInterface {
      * Get link preview data for a testimonial.
      *
      * @param object $testimonial
-     * @return array{url:string,title:string,description:string,image:string,site_name:string}|null
+     * @return array{url:string,title:string,description:string,image:string,site_name:string,is_youtube?:bool,youtube_id?:string}|null
      */
     public static function get_link_preview($testimonial) {
         if (empty($testimonial->link_preview)) {
@@ -641,12 +657,22 @@ class MjTestimonials implements CrudRepositoryInterface {
             return null;
         }
 
-        return array(
+        $preview = array(
             'url' => $data['url'] ?? '',
             'title' => $data['title'] ?? '',
             'description' => $data['description'] ?? '',
             'image' => $data['image'] ?? '',
             'site_name' => $data['site_name'] ?? '',
         );
+
+        // Include YouTube data if present
+        if (!empty($data['is_youtube'])) {
+            $preview['is_youtube'] = (bool) $data['is_youtube'];
+        }
+        if (!empty($data['youtube_id'])) {
+            $preview['youtube_id'] = $data['youtube_id'];
+        }
+
+        return $preview;
     }
 }

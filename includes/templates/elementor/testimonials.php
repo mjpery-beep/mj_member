@@ -379,20 +379,35 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                         <?php endif; ?>
 
                         <?php if ($link_preview && !empty($link_preview['url'])): ?>
-                            <a href="<?php echo esc_url($link_preview['url']); ?>" class="mj-feed-post__link-preview" target="_blank" rel="noopener noreferrer">
-                                <?php if (!empty($link_preview['image'])): ?>
-                                    <img src="<?php echo esc_url($link_preview['image']); ?>" alt="" class="mj-feed-post__link-preview-image" loading="lazy">
-                                <?php endif; ?>
-                                <div class="mj-feed-post__link-preview-content">
-                                    <?php if (!empty($link_preview['site_name'])): ?>
-                                        <div class="mj-feed-post__link-preview-site"><?php echo esc_html($link_preview['site_name']); ?></div>
-                                    <?php endif; ?>
-                                    <div class="mj-feed-post__link-preview-title"><?php echo esc_html($link_preview['title'] ?: $link_preview['url']); ?></div>
-                                    <?php if (!empty($link_preview['description'])): ?>
-                                        <div class="mj-feed-post__link-preview-desc"><?php echo esc_html($link_preview['description']); ?></div>
-                                    <?php endif; ?>
+                            <?php if (!empty($link_preview['is_youtube']) && !empty($link_preview['youtube_id'])): ?>
+                                <!-- YouTube Embed -->
+                                <div class="mj-feed-post__youtube-embed-container">
+                                    <iframe 
+                                        class="mj-feed-post__youtube-embed" 
+                                        src="https://www.youtube.com/embed/<?php echo esc_attr($link_preview['youtube_id']); ?>?rel=0" 
+                                        title="YouTube video" 
+                                        frameborder="0" 
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                        allowfullscreen>
+                                    </iframe>
                                 </div>
-                            </a>
+                            <?php else: ?>
+                                <!-- Link Preview -->
+                                <a href="<?php echo esc_url($link_preview['url']); ?>" class="mj-feed-post__link-preview" target="_blank" rel="noopener noreferrer">
+                                    <?php if (!empty($link_preview['image'])): ?>
+                                        <img src="<?php echo esc_url($link_preview['image']); ?>" alt="" class="mj-feed-post__link-preview-image" loading="lazy">
+                                    <?php endif; ?>
+                                    <div class="mj-feed-post__link-preview-content">
+                                        <?php if (!empty($link_preview['site_name'])): ?>
+                                            <div class="mj-feed-post__link-preview-site"><?php echo esc_html($link_preview['site_name']); ?></div>
+                                        <?php endif; ?>
+                                        <div class="mj-feed-post__link-preview-title"><?php echo esc_html($link_preview['title'] ?: $link_preview['url']); ?></div>
+                                        <?php if (!empty($link_preview['description'])): ?>
+                                            <div class="mj-feed-post__link-preview-desc"><?php echo esc_html($link_preview['description']); ?></div>
+                                        <?php endif; ?>
+                                    </div>
+                                </a>
+                            <?php endif; ?>
                         <?php endif; ?>
 
                         <div class="mj-feed-post__reactions-bar">

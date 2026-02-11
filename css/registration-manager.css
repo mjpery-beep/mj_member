@@ -4700,6 +4700,24 @@ input.mj-regmgr-search-input__field {
     color: var(--regmgr-gray-500);
 }
 
+.mj-regmgr-member-card__wordpress-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--regmgr-primary);
+    cursor: help;
+}
+
+.mj-regmgr-member-card__wordpress-icon svg {
+    display: block;
+}
+
+.mj-regmgr-member-card__date {
+    color: var(--regmgr-gray-400);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
 /* ============================================
    MEMBER DETAIL PANEL
    ============================================ */

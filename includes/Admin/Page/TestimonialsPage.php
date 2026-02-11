@@ -3,6 +3,8 @@
 namespace Mj\Member\Admin\Page;
 
 use Mj\Member\Classes\Crud\MjTestimonials;
+use Mj\Member\Classes\Crud\MjTestimonialComments;
+use Mj\Member\Classes\Crud\MjTestimonialReactions;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Core\Config;
 
@@ -120,10 +122,11 @@ final class TestimonialsPage
             <table class="wp-list-table widefat fixed striped" style="margin-top: 15px;">
                 <thead>
                     <tr>
-                        <th style="width: 50px;"><?php esc_html_e('ID', 'mj-member'); ?></th>
+                        <th style="width: 50px;">ID</th>
                         <th><?php esc_html_e('Membre', 'mj-member'); ?></th>
                         <th><?php esc_html_e('Contenu', 'mj-member'); ?></th>
                         <th style="width: 100px;"><?php esc_html_e('Médias', 'mj-member'); ?></th>
+                        <th style="width: 80px;"><?php esc_html_e('En avant', 'mj-member'); ?></th>
                         <th style="width: 100px;"><?php esc_html_e('Statut', 'mj-member'); ?></th>
                         <th style="width: 150px;"><?php esc_html_e('Date', 'mj-member'); ?></th>
                         <th style="width: 150px;"><?php esc_html_e('Actions', 'mj-member'); ?></th>
@@ -184,6 +187,9 @@ final class TestimonialsPage
                                     }
                                     echo esc_html(implode(', ', $media_parts) ?: '-');
                                     ?>
+                                </td>
+                                <td>
+                                    <?php echo !empty($testimonial->featured) ? '⭐ ' . esc_html__('Oui', 'mj-member') : '-'; ?>
                                 </td>
                                 <td>
                                     <?php
@@ -292,9 +298,14 @@ final class TestimonialsPage
 
         $photos = MjTestimonials::get_photo_urls($testimonial, 'medium');
         $video = MjTestimonials::get_video_data($testimonial);
+        $link_preview = MjTestimonials::get_link_preview($testimonial);
         $status_labels = MjTestimonials::get_status_labels();
         $status_key = isset($testimonial->status) ? $testimonial->status : 'pending';
         $status_label = isset($status_labels[$status_key]) ? $status_labels[$status_key] : $status_key;
+
+        // Get comments and reactions
+        $comments = MjTestimonialComments::get_for_testimonial($id, array('per_page' => 100));
+        $reactions_summary = MjTestimonialReactions::get_summary($id);
 
         $back_url = admin_url('admin.php?page=' . static::slug());
         ?>
@@ -305,108 +316,217 @@ final class TestimonialsPage
             </h1>
             <hr class="wp-header-end">
 
-            <div class="postbox" style="max-width: 800px; margin-top: 20px;">
-                <div class="inside">
-                    <table class="form-table">
-                        <tr>
-                            <th><?php esc_html_e('Membre', 'mj-member'); ?></th>
-                            <td>
-                                <strong><?php echo esc_html($member_name); ?></strong>
-                                <?php if (isset($testimonial->email) && $testimonial->email): ?>
-                                    <br><small><?php echo esc_html($testimonial->email); ?></small>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th><?php esc_html_e('Statut', 'mj-member'); ?></th>
-                            <td>
-                                <?php
-                                $status_class = '';
-                                if ($status_key === 'pending') {
-                                    $status_class = 'background: #f0c36d; color: #5a4608;';
-                                } elseif ($status_key === 'approved') {
-                                    $status_class = 'background: #7ad03a; color: #1e4d0d;';
-                                } elseif ($status_key === 'rejected') {
-                                    $status_class = 'background: #dd3d36; color: #fff;';
-                                }
-                                ?>
-                                <span style="display: inline-block; padding: 4px 12px; border-radius: 4px; font-weight: 500; <?php echo esc_attr($status_class); ?>">
-                                    <?php echo esc_html($status_label); ?>
-                                </span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th><?php esc_html_e('Date de création', 'mj-member'); ?></th>
-                            <td>
-                                <?php
-                                $created = isset($testimonial->created_at) ? $testimonial->created_at : '';
-                                echo $created ? esc_html(wp_date('d/m/Y à H:i', strtotime($created))) : '-';
-                                ?>
-                            </td>
-                        </tr>
-                        <?php if (isset($testimonial->reviewed_at) && $testimonial->reviewed_at): ?>
-                        <tr>
-                            <th><?php esc_html_e('Date de révision', 'mj-member'); ?></th>
-                            <td><?php echo esc_html(wp_date('d/m/Y à H:i', strtotime($testimonial->reviewed_at))); ?></td>
-                        </tr>
-                        <?php endif; ?>
-                        <?php if ($status_key === 'rejected' && isset($testimonial->rejection_reason) && $testimonial->rejection_reason): ?>
-                        <tr>
-                            <th><?php esc_html_e('Raison du refus', 'mj-member'); ?></th>
-                            <td><?php echo esc_html($testimonial->rejection_reason); ?></td>
-                        </tr>
-                        <?php endif; ?>
-                        <tr>
-                            <th><?php esc_html_e('Contenu', 'mj-member'); ?></th>
-                            <td>
-                                <?php if (isset($testimonial->content) && $testimonial->content): ?>
-                                    <div style="background: #f9f9f9; padding: 15px; border-radius: 6px; border-left: 4px solid #0073aa;">
-                                        <?php echo wp_kses_post(wpautop($testimonial->content)); ?>
+            <div style="display: grid; grid-template-columns: 1fr 350px; gap: 20px;">
+                <div class="postbox" style="margin-top: 0;">
+                    <div class="inside">
+                        <table class="form-table">
+                            <tr>
+                                <th><?php esc_html_e('Membre', 'mj-member'); ?></th>
+                                <td>
+                                    <strong><?php echo esc_html($member_name); ?></strong>
+                                    <?php if (isset($testimonial->email) && $testimonial->email): ?>
+                                        <br><small><?php echo esc_html($testimonial->email); ?></small>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th><?php esc_html_e('Statut', 'mj-member'); ?></th>
+                                <td>
+                                    <?php
+                                    $status_class = '';
+                                    if ($status_key === 'pending') {
+                                        $status_class = 'background: #f0c36d; color: #5a4608;';
+                                    } elseif ($status_key === 'approved') {
+                                        $status_class = 'background: #7ad03a; color: #1e4d0d;';
+                                    } elseif ($status_key === 'rejected') {
+                                        $status_class = 'background: #dd3d36; color: #fff;';
+                                    }
+                                    ?>
+                                    <span style="display: inline-block; padding: 4px 12px; border-radius: 4px; font-weight: 500; <?php echo esc_attr($status_class); ?>">
+                                        <?php echo esc_html($status_label); ?>
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th><?php esc_html_e('Date de création', 'mj-member'); ?></th>
+                                <td>
+                                    <?php
+                                    $created = isset($testimonial->created_at) ? $testimonial->created_at : '';
+                                    echo $created ? esc_html(wp_date('d/m/Y à H:i', strtotime($created))) : '-';
+                                    ?>
+                                </td>
+                            </tr>
+                            <?php if (isset($testimonial->reviewed_at) && $testimonial->reviewed_at): ?>
+                            <tr>
+                                <th><?php esc_html_e('Date de révision', 'mj-member'); ?></th>
+                                <td><?php echo esc_html(wp_date('d/m/Y à H:i', strtotime($testimonial->reviewed_at))); ?></td>
+                            </tr>
+                            <?php endif; ?>
+                            <?php if ($status_key === 'rejected' && isset($testimonial->rejection_reason) && $testimonial->rejection_reason): ?>
+                            <tr>
+                                <th><?php esc_html_e('Raison du refus', 'mj-member'); ?></th>
+                                <td><?php echo esc_html($testimonial->rejection_reason); ?></td>
+                            </tr>
+                            <?php endif; ?>
+                            <tr>
+                                <th><?php esc_html_e('Contenu', 'mj-member'); ?></th>
+                                <td>
+                                    <div id="mj-testimonial-content-display" style="background: #f9f9f9; padding: 15px; border-radius: 6px; border-left: 4px solid #0073aa; margin-bottom: 10px;">
+                                        <?php if (isset($testimonial->content) && $testimonial->content): ?>
+                                            <?php echo wp_kses_post(wpautop($testimonial->content)); ?>
+                                        <?php else: ?>
+                                            <em><?php esc_html_e('(aucun texte)', 'mj-member'); ?></em>
+                                        <?php endif; ?>
                                     </div>
-                                <?php else: ?>
-                                    <em><?php esc_html_e('(aucun texte)', 'mj-member'); ?></em>
+                                    <button type="button" class="button button-small" id="mj-edit-content-btn" style="margin-top: 10px;">
+                                        <?php esc_html_e('Éditer le contenu', 'mj-member'); ?>
+                                    </button>
+                                    <textarea id="mj-testimonial-content-edit" style="display: none; width: 100%; min-height: 150px; margin-top: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;"><?php echo isset($testimonial->content) ? esc_textarea($testimonial->content) : ''; ?></textarea>
+                                    <div id="mj-edit-content-buttons" style="display: none; margin-top: 10px;">
+                                        <button type="button" class="button button-primary" id="mj-save-content-btn"><?php esc_html_e('Enregistrer', 'mj-member'); ?></button>
+                                        <button type="button" class="button" id="mj-cancel-content-btn"><?php esc_html_e('Annuler', 'mj-member'); ?></button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <?php if ($link_preview && !empty($link_preview['url'])): ?>
+                            <tr>
+                                <th><?php esc_html_e('Lien associé', 'mj-member'); ?></th>
+                                <td>
+                                    <?php if (!empty($link_preview['is_youtube']) && !empty($link_preview['youtube_id'])): ?>
+                                        <!-- YouTube -->
+                                        <div style="background: #000; aspect-ratio: 16/9; border-radius: 6px; overflow: hidden; margin-bottom: 10px;">
+                                            <iframe  
+                                                src="https://www.youtube.com/embed/<?php echo esc_attr($link_preview['youtube_id']); ?>?rel=0" 
+                                                width="100%" 
+                                                height="100%" 
+                                                frameborder="0" 
+                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                                allowfullscreen>
+                                            </iframe>
+                                        </div>
+                                        <small><strong><?php echo esc_html($link_preview['site_name']); ?></strong></small>
+                                    <?php else: ?>
+                                        <!-- Regular link preview -->
+                                        <div style="border: 1px solid #ddd; border-radius: 6px; overflow: hidden; max-width: 400px;">
+                                            <?php if (!empty($link_preview['image'])): ?>
+                                                <img src="<?php echo esc_url($link_preview['image']); ?>" alt="" style="width: 100%; height: 200px; object-fit: cover;">
+                                            <?php endif; ?>
+                                            <div style="padding: 10px;">
+                                                <small style="color: #666;"><?php echo esc_html($link_preview['site_name']); ?></small>
+                                                <div style="font-weight: 600; margin: 5px 0;"><?php echo esc_html($link_preview['title']); ?></div>
+                                                <?php if (!empty($link_preview['description'])): ?>
+                                                    <div style="font-size: 13px; color: #666;"><?php echo esc_html($link_preview['description']); ?></div>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                        <div style="margin-top: 10px;">
+                                            <a href="<?php echo esc_url($link_preview['url']); ?>" target="_blank" rel="noopener noreferrer" style="color: #0073aa; text-decoration: none;">
+                                                <?php echo esc_html(__('Voir le lien', 'mj-member')); ?> →
+                                            </a>
+                                        </div>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                            <?php endif; ?>
+                            <?php if (!empty($photos)): ?>
+                            <tr>
+                                <th><?php esc_html_e('Photos', 'mj-member'); ?></th>
+                                <td>
+                                    <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                                        <?php foreach ($photos as $photo): ?>
+                                            <a href="<?php echo esc_url($photo['full']); ?>" target="_blank">
+                                                <img src="<?php echo esc_url($photo['thumb']); ?>" alt="" style="width: 120px; height: 120px; object-fit: cover; border-radius: 6px; border: 1px solid #ddd;">
+                                            </a>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </td>
+                            </tr>
+                            <?php endif; ?>
+                            <?php if ($video): ?>
+                            <tr>
+                                <th><?php esc_html_e('Vidéo', 'mj-member'); ?></th>
+                                <td>
+                                    <video controls style="max-width: 100%; max-height: 400px; border-radius: 6px;">
+                                        <source src="<?php echo esc_url($video['url']); ?>" type="video/mp4">
+                                        <?php esc_html_e('Votre navigateur ne supporte pas la lecture vidéo.', 'mj-member'); ?>
+                                    </video>
+                                </td>
+                            </tr>
+                            <?php endif; ?>
+                        </table>
+                    </div>
+                    
+                    <!-- Réactions -->
+                    <?php if (!empty($reactions_summary['total'])): ?>
+                    <div style="border-top: 1px solid #ddd; padding: 15px; background: #f9f9f9;">
+                        <h3><?php esc_html_e('Réactions', 'mj-member'); ?> (<?php echo esc_html((string)$reactions_summary['total']); ?>)</h3>
+                        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                            <?php foreach ($reactions_summary['top_emojis'] ?? array() as $emoji): ?>
+                                <span style="font-size: 24px;"><?php echo esc_html($emoji); ?></span>
+                            <?php endforeach; ?>
+                        </div>
+                        <?php if (!empty($reactions_summary['names'])): ?>
+                            <small style="display: block; margin-top: 10px; color: #666;">
+                                <?php echo esc_html(implode(', ', array_slice($reactions_summary['names'], 0, 3))); ?>
+                                <?php if (count($reactions_summary['names']) > 3): ?>
+                                    <?php printf(esc_html(__('and %d more', 'mj-member')), count($reactions_summary['names']) - 3); ?>
                                 <?php endif; ?>
-                            </td>
-                        </tr>
-                        <?php if (!empty($photos)): ?>
-                        <tr>
-                            <th><?php esc_html_e('Photos', 'mj-member'); ?></th>
-                            <td>
-                                <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-                                    <?php foreach ($photos as $photo): ?>
-                                        <a href="<?php echo esc_url($photo['full']); ?>" target="_blank">
-                                            <img src="<?php echo esc_url($photo['thumb']); ?>" alt="" style="width: 120px; height: 120px; object-fit: cover; border-radius: 6px; border: 1px solid #ddd;">
-                                        </a>
-                                    <?php endforeach; ?>
-                                </div>
-                            </td>
-                        </tr>
+                            </small>
                         <?php endif; ?>
-                        <?php if ($video): ?>
-                        <tr>
-                            <th><?php esc_html_e('Vidéo', 'mj-member'); ?></th>
-                            <td>
-                                <video controls style="max-width: 100%; max-height: 400px; border-radius: 6px;">
-                                    <source src="<?php echo esc_url($video['url']); ?>" type="video/mp4">
-                                    <?php esc_html_e('Votre navigateur ne supporte pas la lecture vidéo.', 'mj-member'); ?>
-                                </video>
-                            </td>
-                        </tr>
-                        <?php endif; ?>
-                    </table>
+                    </div>
+                    <?php endif; ?>
 
-                    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd;">
-                        <?php if ($status_key === 'pending'): ?>
-                            <button type="button" class="button button-primary mj-testimonial-action" data-action="approve" data-id="<?php echo esc_attr((string)$testimonial->id); ?>">
-                                <?php esc_html_e('Approuver', 'mj-member'); ?>
+                    <!-- Commentaires -->
+                    <?php if (!empty($comments)): ?>
+                    <div style="border-top: 1px solid #ddd; padding: 15px;">
+                        <h3><?php esc_html_e('Commentaires', 'mj-member'); ?> (<?php echo esc_html((string)count($comments)); ?>)</h3>
+                        <?php foreach ($comments as $comment): ?>
+                            <?php
+                            $comment_author = isset($comment->first_name) ? $comment->first_name : '';
+                            if (isset($comment->last_name) && $comment->last_name) {
+                                $comment_author .= ' ' . $comment->last_name;
+                            }
+                            if (!$comment_author) {
+                                $comment_author = __('Anonyme', 'mj-member');
+                            }
+                            $comment_date = isset($comment->created_at) ? wp_date('d/m/Y H:i', strtotime($comment->created_at)) : '-';
+                            ?>
+                            <div style="background: #f9f9f9; padding: 10px; border-radius: 4px; margin-bottom: 10px;">
+                                <strong><?php echo esc_html($comment_author); ?></strong>
+                                <br><small style="color: #666;"><?php echo esc_html($comment_date); ?></small>
+                                <p style="margin: 8px 0 0 0;"><?php echo wp_kses_post(wpautop($comment->content)); ?></p>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php else: ?>
+                    <div style="border-top: 1px solid #ddd; padding: 15px; color: #666;">
+                        <em><?php esc_html_e('Aucun commentaire', 'mj-member'); ?></em>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Sidebar Actions -->
+                <div>
+                    <div class="postbox">
+                        <h3 class="handle"><?php esc_html_e('Actions', 'mj-member'); ?></h3>
+                        <div class="inside">
+                            <?php if ($status_key === 'pending'): ?>
+                                <button type="button" class="button button-block button-primary mj-testimonial-action" data-action="approve" data-id="<?php echo esc_attr((string)$testimonial->id); ?>" style="margin-bottom: 10px;">
+                                    <?php esc_html_e('✓ Approuver', 'mj-member'); ?>
+                                </button>
+                                <button type="button" class="button button-block mj-testimonial-action" data-action="reject" data-id="<?php echo esc_attr((string)$testimonial->id); ?>" style="margin-bottom: 10px;">
+                                    <?php esc_html_e('✗ Refuser', 'mj-member'); ?>
+                                </button>
+                            <?php endif; ?>
+                            
+                            <button type="button" class="button button-block mj-testimonial-action" data-action="toggle-featured" data-id="<?php echo esc_attr((string)$testimonial->id); ?>" style="margin-bottom: 10px; background: <?php echo !empty($testimonial->featured) ? '#7ad03a' : '#666'; ?>; color: white; border: none;">
+                                <?php echo !empty($testimonial->featured) ? '⭐ ' . esc_html__('Retirer de l\'accueil', 'mj-member') : '☆ ' . esc_html__('Mettre à l\'accueil', 'mj-member'); ?>
                             </button>
-                            <button type="button" class="button mj-testimonial-action" data-action="reject" data-id="<?php echo esc_attr((string)$testimonial->id); ?>">
-                                <?php esc_html_e('Refuser', 'mj-member'); ?>
+
+                            <button type="button" class="button button-block button-link-delete mj-testimonial-action" data-action="delete" data-id="<?php echo esc_attr((string)$testimonial->id); ?>">
+                                <?php esc_html_e('Supprimer', 'mj-member'); ?>
                             </button>
-                        <?php endif; ?>
-                        <button type="button" class="button button-link-delete mj-testimonial-action" data-action="delete" data-id="<?php echo esc_attr((string)$testimonial->id); ?>" style="margin-left: 20px;">
-                            <?php esc_html_e('Supprimer', 'mj-member'); ?>
-                        </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -414,6 +534,42 @@ final class TestimonialsPage
 
         <script>
         jQuery(function($) {
+            // Content edit toggle
+            $('#mj-edit-content-btn').on('click', function() {
+                $('#mj-testimonial-content-display').hide();
+                $('#mj-testimonial-content-edit').show();
+                $('#mj-edit-content-buttons').show();
+                $(this).hide();
+            });
+
+            $('#mj-cancel-content-btn').on('click', function() {
+                $('#mj-testimonial-content-display').show();
+                $('#mj-testimonial-content-edit').hide();
+                $('#mj-edit-content-buttons').hide();
+                $('#mj-edit-content-btn').show();
+            });
+
+            $('#mj-save-content-btn').on('click', function() {
+                var content = $('#mj-testimonial-content-edit').val();
+                $.post(ajaxurl, {
+                    action: 'mj_admin_testimonial_update_content',
+                    id: <?php echo (int) $id; ?>,
+                    content: content,
+                    _wpnonce: '<?php echo esc_js(wp_create_nonce('mj_admin_testimonial')); ?>'
+                }).done(function(response) {
+                    if (response.success) {
+                        $('#mj-testimonial-content-display').html(response.data.content_html).show();
+                        $('#mj-testimonial-content-edit').hide();
+                        $('#mj-edit-content-buttons').hide();
+                        $('#mj-edit-content-btn').show();
+                        alert('<?php echo esc_js(__('Contenu mis à jour avec succès !', 'mj-member')); ?>');
+                    } else {
+                        alert(response.data || '<?php echo esc_js(__('Erreur lors de la mise à jour', 'mj-member')); ?>');
+                    }
+                });
+            });
+
+            // Action buttons
             $('.mj-testimonial-action').on('click', function() {
                 var action = $(this).data('action');
                 var id = $(this).data('id');
@@ -434,6 +590,19 @@ final class TestimonialsPage
                     }).done(function(response) {
                         if (response.success) {
                             location.href = '<?php echo esc_js(admin_url('admin.php?page=' . static::slug() . '&notice=rejected')); ?>';
+                        } else {
+                            alert(response.data || 'Erreur');
+                        }
+                    });
+                    return;
+                } else if (action === 'toggle-featured') {
+                    $.post(ajaxurl, {
+                        action: 'mj_admin_testimonial_toggle_featured',
+                        id: id,
+                        _wpnonce: '<?php echo esc_js(wp_create_nonce('mj_admin_testimonial')); ?>'
+                    }).done(function(response) {
+                        if (response.success) {
+                            location.reload();
                         } else {
                             alert(response.data || 'Erreur');
                         }

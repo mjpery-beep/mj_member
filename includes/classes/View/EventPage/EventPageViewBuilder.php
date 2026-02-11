@@ -458,6 +458,9 @@ final class EventPageViewBuilder
                 'is_logged_in' => !empty($user['is_logged_in']),
                 'can_register' => !empty($user['can_register']),
             ),
+            'signup_url' => function_exists('mj_member_login_component_get_registration_url') 
+                ? mj_member_login_component_get_registration_url() 
+                : home_url('/inscription'),
         );
     }
 

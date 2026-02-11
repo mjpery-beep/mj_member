@@ -842,6 +842,29 @@ if (!function_exists('mj_member_render_registration_form')) {
             'margin_top' => $title_margin_top,
         );
 
+        // Handle login tab title settings
+        $login_title_defaults = array(
+            'show' => false,
+            'text' => __('Se connecter', 'mj-member'),
+            'image_id' => 0,
+            'image_url' => '',
+            'image_alt' => '',
+            'image_position' => 'inline-right',
+        );
+
+        $login_title_settings = is_array($args['login_title'] ?? null) ? $args['login_title'] : array();
+        $login_title_settings = wp_parse_args($login_title_settings, $login_title_defaults);
+        // Force login tab image to always be inline-right
+        $login_title_image_position = 'inline-right';
+        $args['login_title'] = array(
+            'show' => !empty($login_title_settings['show']),
+            'text' => isset($login_title_settings['text']) ? (string) $login_title_settings['text'] : $login_title_defaults['text'],
+            'image_id' => isset($login_title_settings['image_id']) ? (int) $login_title_settings['image_id'] : 0,
+            'image_url' => isset($login_title_settings['image_url']) ? (string) $login_title_settings['image_url'] : '',
+            'image_alt' => isset($login_title_settings['image_alt']) ? (string) $login_title_settings['image_alt'] : '',
+            'image_position' => $login_title_image_position,
+        );
+
         $regulation_defaults = array(
             'enabled' => false,
             'page_id' => 0,
@@ -890,6 +913,27 @@ if (!function_exists('mj_member_render_registration_form')) {
         $result = null;
         if (!$already_registered) {
             $result = mj_process_frontend_inscription();
+        }
+
+        // Handle login form submission
+        if (!$already_registered && $_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mj_inscription_login_form'])) {
+            $login_nonce = isset($_POST['mj_inscription_login_nonce']) ? sanitize_text_field(wp_unslash($_POST['mj_inscription_login_nonce'])) : '';
+            if (wp_verify_nonce($login_nonce, 'mj_inscription_login')) {
+                $login_input = isset($_POST['mj_login']) ? sanitize_text_field(wp_unslash($_POST['mj_login'])) : '';
+                $password = isset($_POST['mj_password']) ? wp_unslash($_POST['mj_password']) : '';
+                $remember = !empty($_POST['mj_remember']);
+
+                if (!empty($login_input) && !empty($password)) {
+                    $user = wp_authenticate($login_input, $password);
+                    if (!is_wp_error($user)) {
+                        wp_set_current_user($user->ID);
+                        wp_set_auth_cookie($user->ID, $remember);
+                        do_action('wp_login', $user->login, $user);
+                        wp_safe_redirect(home_url('/mon-compte'));
+                        exit;
+                    }
+                }
+            }
         }
 
         $registration_type = mj_member_get_registration_type();
@@ -944,61 +988,26 @@ if (!function_exists('mj_member_render_registration_form')) {
                 }
             }
         }
+
+        // Determine initial active tab from URL parameter
+        $initial_tab = 'register';
+        if (isset($_GET['tab'])) {
+            $tab_param = sanitize_text_field(wp_unslash($_GET['tab']));
+            if (in_array($tab_param, array('register', 'login'), true)) {
+                $initial_tab = $tab_param;
+            }
+        }
         ?>
         <div class="mj-inscription-container">
-            <?php if (!empty($args['title']['show']) && (!empty($args['title']['text']) || !empty($args['title']['image_url']))) : ?>
-                <?php
-                $title_image_position = isset($args['title']['image_position']) ? (string) $args['title']['image_position'] : 'inline-right';
-                if (!in_array($title_image_position, array('inline-right', 'inline-left', 'above-center', 'above-left', 'above-right'), true)) {
-                    $title_image_position = 'inline-right';
-                }
-                $title_has_image = !empty($args['title']['image_url']);
-                $title_header_classes = array('mj-inscription-container__header');
-                if ($title_has_image) {
-                    $title_header_classes[] = 'mj-inscription-container__header--has-image';
-                    $title_header_classes[] = 'mj-inscription-container__header--image-' . $title_image_position;
-                    if (in_array($title_image_position, array('above-left', 'above-center', 'above-right'), true)) {
-                        $title_header_classes[] = 'mj-inscription-container__header--stack';
-                    }
-                }
-                $render_image_first = $title_has_image && in_array($title_image_position, array('above-left', 'above-center', 'above-right'), true);
-                $header_class_attr = implode(' ', array_map('sanitize_html_class', $title_header_classes));
-                ?>
-                <div class="<?php echo esc_attr($header_class_attr); ?>">
-                    <?php if ($title_has_image && $render_image_first) :
-                        $title_image_alt = $args['title']['image_alt'] !== '' ? $args['title']['image_alt'] : (isset($args['title']['text']) ? $args['title']['text'] : '');
-                    ?>
-                        <div class="mj-inscription-container__title-image">
-                            <img src="<?php echo esc_url($args['title']['image_url']); ?>" alt="<?php echo esc_attr($title_image_alt); ?>" />
-                        </div>
-                    <?php endif; ?>
-                    <?php
-                    $title_style_attr = '';
-                    if (!empty($args['title']['margin_top'])) {
-                        $raw_margin_top = (string) $args['title']['margin_top'];
-                        $normalized_margin_top = '';
-                        if (is_numeric($raw_margin_top)) {
-                            $normalized_margin_top = $raw_margin_top . 'px';
-                        } elseif (preg_match('/^-?\d+(?:\.\d+)?(px|rem|em|%)$/', $raw_margin_top)) {
-                            $normalized_margin_top = $raw_margin_top;
-                        }
-                        if ($normalized_margin_top !== '') {
-                            $title_style_attr = ' style="--mj-title-margin-top: ' . esc_attr($normalized_margin_top) . '"';
-                        }
-                    }
-                    ?>
-                    <?php if (!empty($args['title']['text'])) : ?>
-                        <h2 class="mj-inscription-container__title"<?php echo $title_style_attr; ?>><?php echo esc_html($args['title']['text']); ?></h2>
-                    <?php endif; ?>
-                    <?php if ($title_has_image && !$render_image_first) :
-                        $title_image_alt = $args['title']['image_alt'] !== '' ? $args['title']['image_alt'] : (isset($args['title']['text']) ? $args['title']['text'] : '');
-                    ?>
-                        <div class="mj-inscription-container__title-image">
-                            <img src="<?php echo esc_url($args['title']['image_url']); ?>" alt="<?php echo esc_attr($title_image_alt); ?>" />
-                        </div>
-                    <?php endif; ?>
-                </div>
-            <?php endif; ?>
+            <!-- Tabs Navigation -->
+            <div class="mj-inscription-tabs-nav">
+                <button type="button" class="mj-inscription-tab-button <?php echo $initial_tab === 'register' ? 'mj-inscription-tab-button--active' : ''; ?>" data-tab="register" aria-selected="<?php echo $initial_tab === 'register' ? 'true' : 'false'; ?>">
+                    <?php esc_html_e('Devenir membre', 'mj-member'); ?>
+                </button>
+                <button type="button" class="mj-inscription-tab-button <?php echo $initial_tab === 'login' ? 'mj-inscription-tab-button--active' : ''; ?>" data-tab="login" aria-selected="<?php echo $initial_tab === 'login' ? 'true' : 'false'; ?>">
+                    <?php esc_html_e('Se connecter', 'mj-member'); ?>
+                </button>
+            </div>
             <?php if ($intro_message !== '') :
                 $message_classes = array('mj-inscription-message');
                 if (!$show_form) {
@@ -1166,6 +1175,61 @@ if (!function_exists('mj_member_render_registration_form')) {
             <?php endif; ?>
 
             <?php if ($show_form) : ?>
+                <!-- Registration Tab -->
+                <div class="mj-inscription-tab-content <?php echo $initial_tab === 'register' ? 'mj-inscription-tab-content--active' : ''; ?>" data-tab-panel="register" role="tabpanel">
+                <?php if (!empty($args['title']['show']) && (!empty($args['title']['text']) || !empty($args['title']['image_url']))) : ?>
+                    <?php
+                    $title_image_position = isset($args['title']['image_position']) ? (string) $args['title']['image_position'] : 'inline-right';
+                    if (!in_array($title_image_position, array('inline-right', 'inline-left', 'above-center', 'above-left', 'above-right'), true)) {
+                        $title_image_position = 'inline-right';
+                    }
+                    $title_has_image = !empty($args['title']['image_url']);
+                    $title_header_classes = array('mj-inscription-container__header');
+                    if ($title_has_image) {
+                        $title_header_classes[] = 'mj-inscription-container__header--has-image';
+                        $title_header_classes[] = 'mj-inscription-container__header--image-' . $title_image_position;
+                        if (in_array($title_image_position, array('above-left', 'above-center', 'above-right'), true)) {
+                            $title_header_classes[] = 'mj-inscription-container__header--stack';
+                        }
+                    }
+                    $render_image_first = $title_has_image && in_array($title_image_position, array('above-left', 'above-center', 'above-right'), true);
+                    $header_class_attr = implode(' ', array_map('sanitize_html_class', $title_header_classes));
+                    ?>
+                    <div class="<?php echo esc_attr($header_class_attr); ?>">
+                        <?php if ($title_has_image && $render_image_first) :
+                            $title_image_alt = $args['title']['image_alt'] !== '' ? $args['title']['image_alt'] : (isset($args['title']['text']) ? $args['title']['text'] : '');
+                        ?>
+                            <div class="mj-inscription-container__title-image">
+                                <img src="<?php echo esc_url($args['title']['image_url']); ?>" alt="<?php echo esc_attr($title_image_alt); ?>" />
+                            </div>
+                        <?php endif; ?>
+                        <?php
+                        $title_style_attr = '';
+                        if (!empty($args['title']['margin_top'])) {
+                            $raw_margin_top = (string) $args['title']['margin_top'];
+                            $normalized_margin_top = '';
+                            if (is_numeric($raw_margin_top)) {
+                                $normalized_margin_top = $raw_margin_top . 'px';
+                            } elseif (preg_match('/^-?\d+(?:\.\d+)?(px|rem|em|%)$/', $raw_margin_top)) {
+                                $normalized_margin_top = $raw_margin_top;
+                            }
+                            if ($normalized_margin_top !== '') {
+                                $title_style_attr = ' style="--mj-title-margin-top: ' . esc_attr($normalized_margin_top) . '"';
+                            }
+                        }
+                        ?>
+                        <?php if (!empty($args['title']['text'])) : ?>
+                            <h2 class="mj-inscription-container__title"<?php echo $title_style_attr; ?>><?php echo esc_html($args['title']['text']); ?></h2>
+                        <?php endif; ?>
+                        <?php if ($title_has_image && !$render_image_first) :
+                            $title_image_alt = $args['title']['image_alt'] !== '' ? $args['title']['image_alt'] : (isset($args['title']['text']) ? $args['title']['text'] : '');
+                        ?>
+                            <div class="mj-inscription-container__title-image">
+                                <img src="<?php echo esc_url($args['title']['image_url']); ?>" alt="<?php echo esc_attr($title_image_alt); ?>" />
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
                 <form method="post" class="mj-inscription-form" novalidate>
                     <?php wp_nonce_field('mj_frontend_form', 'mj_frontend_nonce'); ?>
 
@@ -1299,6 +1363,71 @@ if (!function_exists('mj_member_render_registration_form')) {
                         <button type="submit" class="mj-button">Envoyer l'inscription</button>
                     </div>
                 </form>
+                </div>
+
+                <!-- Login Tab -->
+                <div class="mj-inscription-tab-content <?php echo $initial_tab === 'login' ? 'mj-inscription-tab-content--active' : ''; ?>" data-tab-panel="login" role="tabpanel">
+                    <?php if (!empty($args['login_title']['show']) && (!empty($args['login_title']['text']) || !empty($args['login_title']['image_url']))) : ?>
+                        <?php
+                        $login_title_image_position = isset($args['login_title']['image_position']) ? (string) $args['login_title']['image_position'] : 'inline-right';
+                        if (!in_array($login_title_image_position, array('inline-right', 'inline-left', 'above-center', 'above-left', 'above-right'), true)) {
+                            $login_title_image_position = 'inline-right';
+                        }
+                        $login_title_has_image = !empty($args['login_title']['image_url']);
+                        $login_title_header_classes = array('mj-inscription-container__header');
+                        if ($login_title_has_image) {
+                            $login_title_header_classes[] = 'mj-inscription-container__header--has-image';
+                            $login_title_header_classes[] = 'mj-inscription-container__header--image-' . $login_title_image_position;
+                            if (in_array($login_title_image_position, array('above-left', 'above-center', 'above-right'), true)) {
+                                $login_title_header_classes[] = 'mj-inscription-container__header--stack';
+                            }
+                        }
+                        $login_render_image_first = $login_title_has_image && in_array($login_title_image_position, array('above-left', 'above-center', 'above-right'), true);
+                        $login_header_class_attr = implode(' ', array_map('sanitize_html_class', $login_title_header_classes));
+                        ?>
+                        <div class="<?php echo esc_attr($login_header_class_attr); ?>">
+                            <?php if ($login_title_has_image && $login_render_image_first) :
+                                $login_title_image_alt = $args['login_title']['image_alt'] !== '' ? $args['login_title']['image_alt'] : (isset($args['login_title']['text']) ? $args['login_title']['text'] : '');
+                            ?>
+                                <div class="mj-inscription-container__title-image">
+                                    <img src="<?php echo esc_url($args['login_title']['image_url']); ?>" alt="<?php echo esc_attr($login_title_image_alt); ?>" />
+                                </div>
+                            <?php endif; ?>
+                            <?php if (!empty($args['login_title']['text'])) : ?>
+                                <h2 class="mj-inscription-container__title"><?php echo esc_html($args['login_title']['text']); ?></h2>
+                            <?php endif; ?>
+                            <?php if ($login_title_has_image && !$login_render_image_first) :
+                                $login_title_image_alt = $args['login_title']['image_alt'] !== '' ? $args['login_title']['image_alt'] : (isset($args['login_title']['text']) ? $args['login_title']['text'] : '');
+                            ?>
+                                <div class="mj-inscription-container__title-image">
+                                    <img src="<?php echo esc_url($args['login_title']['image_url']); ?>" alt="<?php echo esc_attr($login_title_image_alt); ?>" />
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                    <form method="post" class="mj-inscription-login-form" novalidate>
+                        <div class="mj-field-group">
+                            <label for="mj_inscription_login"><?php esc_html_e('Adresse email ou identifiant', 'mj-member'); ?></label>
+                            <input type="text" id="mj_inscription_login" name="mj_login" required />
+                        </div>
+                        <div class="mj-field-group">
+                            <label for="mj_inscription_password"><?php esc_html_e('Mot de passe', 'mj-member'); ?></label>
+                            <input type="password" id="mj_inscription_password" name="mj_password" required />
+                        </div>
+                        <div class="mj-field-group mj-field-group--remember-row">
+                            <label class="mj-checkbox mj-checkbox--remember">
+                                <input type="checkbox" name="mj_remember" value="1" id="mj_remember_me" />
+                                <span class="mj-checkbox__label"><?php esc_html_e('Se souvenir de moi', 'mj-member'); ?></span>
+                            </label>
+                            <a class="mj-lost-password-link" href="<?php echo esc_url(wp_lostpassword_url()); ?>"><?php esc_html_e('Mot de passe oublié ?', 'mj-member'); ?></a>
+                        </div>
+                        <input type="hidden" name="mj_inscription_login_form" value="1" />
+                        <?php wp_nonce_field('mj_inscription_login', 'mj_inscription_login_nonce'); ?>
+                        <div class="mj-form-actions">
+                            <button type="submit" class="mj-button"><?php esc_html_e('Se connecter', 'mj-member'); ?></button>
+                        </div>
+                    </form>
+                </div>
             <?php endif; ?>
             <?php if ($show_form && !empty($args['regulation']['enabled']) && !empty($args['regulation']['content'])) : ?>
                 <div class="mj-modal-backdrop" data-mj-regulation-backdrop hidden></div>
@@ -1344,6 +1473,10 @@ if (!function_exists('mj_member_render_registration_form')) {
                 box-shadow: 0 22px 48px rgba(15, 23, 42, 0.08);
             }
 
+            .mj-inscription-tab-content .mj-inscription-form {
+                margin: 0;
+            }
+
             .mj-inscription-message {
                 font-size: 18px;
                 font-weight: 600;
@@ -1365,7 +1498,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                 border-color: rgba(100, 116, 139, 0.22);
                 color: #1f2937;
             }
-
+            
             .mj-inscription-container__header {
                 display: flex;
                 align-items: center;
@@ -1523,21 +1656,30 @@ if (!function_exists('mj_member_render_registration_form')) {
                 margin-top: -4px;
             }
 
+            .mj-field-group--remember-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 16px;
+                margin: 0;
+            }
+
             .mj-checkbox {
                 display: flex;
-                align-items: flex-start;
+                align-items: center;
                 gap: 12px;
-                margin-bottom: 14px;
+                margin-bottom: 0;
                 font-size: 15px;
                 color: #0f172a;
+                flex: 1;
             }
 
             .mj-checkbox input {
-                margin-top: 3px;
-                width: 20px;
-                height: 20px;
-                border-radius: 6px;
-                border: 1px solid rgba(148, 163, 184, 0.7);
+                margin-top: 0;
+                width: 24px;
+                height: 24px;
+                border-radius: 8px;
+                border: 2px solid rgba(148, 163, 184, 0.8);
                 background: #fff;
                 -webkit-appearance: none;
                 appearance: none;
@@ -1545,11 +1687,19 @@ if (!function_exists('mj_member_render_registration_form')) {
                 align-items: center;
                 justify-content: center;
                 transition: all 0.2s ease;
+                cursor: pointer;
+                flex-shrink: 0;
+            }
+
+            .mj-checkbox input:hover:not(:checked) {
+                border-color: var(--mj-accent);
+                background: rgba(37, 99, 235, 0.04);
             }
 
             .mj-checkbox input:focus-visible {
                 outline: 2px solid var(--mj-accent);
                 outline-offset: 2px;
+                border-color: var(--mj-accent);
             }
 
             .mj-checkbox input:checked {
@@ -1561,8 +1711,31 @@ if (!function_exists('mj_member_render_registration_form')) {
 
             .mj-checkbox input:checked::after {
                 content: '\2713';
-                font-size: 13px;
+                font-size: 15px;
+                font-weight: bold;
                 line-height: 1;
+            }
+
+            .mj-checkbox__label {
+                cursor: pointer;
+                font-weight: 500;
+                user-select: none;
+            }
+
+            .mj-checkbox--remember {
+                margin-bottom: 0;
+            }
+
+            @media (max-width: 768px) {
+                .mj-field-group--remember-row {
+                    flex-direction: column;
+                    align-items: flex-start;
+                    gap: 12px;
+                }
+
+                .mj-lost-password-link {
+                    align-self: flex-start;
+                }
             }
 
             .mj-radio {
@@ -1872,6 +2045,167 @@ if (!function_exists('mj_member_render_registration_form')) {
                     gap: 12px;
                 }
             }
+
+            /* Tabs Styles */
+            .mj-inscription-tabs-nav {
+                display: flex;
+                gap: 12px;
+                margin-bottom: 32px;
+                background: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(239, 246, 255, 0.5) 100%);
+                padding: 8px;
+                border-radius: 16px;
+                border: 1px solid rgba(208, 218, 240, 0.5);
+                box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+            }
+
+            .mj-inscription-tab-button {
+                flex: 1;
+                padding: 14px 20px;
+                border: 1px solid transparent;
+                background: transparent;
+                color: var(--mj-muted);
+                font-weight: 500;
+                font-size: 15px;
+                cursor: pointer;
+                position: relative;
+                transition: all 0.3s ease;
+                border-radius: 12px;
+                text-align: center;
+            }
+
+            .mj-inscription-tab-button:hover {
+                color: #1f2937;
+                background: rgba(255, 255, 255, 0.6);
+                border-color: rgba(208, 218, 240, 0.3);
+            }
+
+            .mj-inscription-tab-button--active,
+            .mj-inscription-tab-button[aria-selected="true"] {
+                color: #ffffff;
+                background: linear-gradient(135deg, var(--mj-accent) 0%, var(--mj-accent-dark) 100%);
+                border-color: var(--mj-accent);
+                font-weight: 600;
+                box-shadow: 0 8px 16px rgba(37, 99, 235, 0.3);
+            }
+
+            .mj-inscription-tab-content {
+                display: none;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            }
+
+            .mj-inscription-tab-content--active {
+                display: block;
+                opacity: 1;
+            }
+
+            .mj-inscription-login-form {
+                display: grid;
+                gap: 18px;
+                background: #ffffff;
+                border-radius: 18px;
+                padding: 30px;
+                border: 1px solid rgba(208, 218, 240, 0.75);
+                box-shadow: 0 22px 48px rgba(15, 23, 42, 0.08);
+                max-width: 450px;
+                margin: 0 auto;
+            }
+
+            .mj-inscription-login-form .mj-field-group {
+                margin: 0;
+            }
+
+            .mj-inscription-login-form .mj-field-group label {
+                display: block;
+                font-weight: 600;
+                font-size: 14px;
+                margin-bottom: 8px;
+                color: #1f2937;
+            }
+
+            .mj-inscription-login-form .mj-field-group input {
+                width: 100%;
+                padding: 10px 12px;
+                border-radius: 8px;
+                border: 1px solid var(--mj-border);
+                
+                transition: border-color 0.2s ease, box-shadow 0.2s ease;
+                font-size: 14px;
+            }
+
+            .mj-inscription-login-form .mj-field-group input:focus {
+                border-color: var(--mj-accent);
+                box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+                outline: none;
+                
+            }
+
+            .mj-inscription-login-form .mj-field-group--inline {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                flex-wrap: wrap;
+            }
+
+            .mj-inscription-login-form .mj-checkbox {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                font-weight: 500;
+                font-size: 14px;
+                cursor: pointer;
+                margin: 0;
+            }
+
+            .mj-inscription-login-form .mj-checkbox input {
+                width: auto;
+                margin: 0;
+            }
+
+            .mj-inscription-login-form .mj-lost-password-link {
+                color: var(--mj-accent);
+                text-decoration: none;
+                font-weight: 500;
+                font-size: 14px;
+            }
+
+            .mj-inscription-login-form .mj-lost-password-link:hover {
+                text-decoration: underline;
+            }
+
+            .mj-inscription-login-form .mj-form-actions {
+                margin-top: 12px;
+            }
+
+            .mj-inscription-login-form .mj-button {
+                width: 100%;
+                padding: 12px 24px;
+                font-size: 15px;
+                font-weight: 600;
+            }
+
+            @media (max-width: 768px) {
+                .mj-inscription-tabs-nav {
+                    gap: 8px;
+                    padding: 6px;
+                    margin-bottom: 24px;
+                }
+
+                .mj-inscription-tab-button {
+                    padding: 12px 12px;
+                    font-size: 14px;
+                }
+
+                .mj-inscription-tab-button--active,
+                .mj-inscription-tab-button[aria-selected="true"] {
+                    box-shadow: 0 6px 12px rgba(37, 99, 235, 0.2);
+                }
+
+                .mj-inscription-login-form {
+                    padding: 24px;
+                }
+            }
         </style>
 
         <script>
@@ -2173,6 +2507,39 @@ if (!function_exists('mj_member_render_registration_form')) {
 
                 refreshChildNumbers();
                 applyRegistrationType(currentType);
+
+                // Initialize tabs
+                const tabButtons = document.querySelectorAll('[data-tab]');
+                const tabPanels = document.querySelectorAll('[data-tab-panel]');
+
+                tabButtons.forEach(function (button) {
+                    button.addEventListener('click', function (event) {
+                        event.preventDefault();
+                        const tabName = button.getAttribute('data-tab');
+                        if (!tabName) {
+                            return;
+                        }
+
+                        // Deactivate all tabs
+                        tabButtons.forEach(function (btn) {
+                            btn.classList.remove('mj-inscription-tab-button--active');
+                            btn.setAttribute('aria-selected', 'false');
+                        });
+
+                        tabPanels.forEach(function (panel) {
+                            panel.classList.remove('mj-inscription-tab-content--active');
+                        });
+
+                        // Activate selected tab
+                        button.classList.add('mj-inscription-tab-button--active');
+                        button.setAttribute('aria-selected', 'true');
+
+                        const targetPanel = document.querySelector('[data-tab-panel="' + tabName + '"]');
+                        if (targetPanel) {
+                            targetPanel.classList.add('mj-inscription-tab-content--active');
+                        }
+                    });
+                });
             })();
         </script>
         <?php

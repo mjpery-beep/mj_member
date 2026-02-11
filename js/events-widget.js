@@ -478,6 +478,160 @@
         }
     }
 
+    function toggleLoginForm(button) {
+        var loginForm = document.querySelector('[data-mj-event-login-form]');
+        if (!loginForm) {
+            return;
+        }
+
+        if (loginForm.hasAttribute('hidden')) {
+            showLoginForm(button, loginForm);
+        } else {
+            hideLoginForm(button, loginForm);
+        }
+    }
+
+    function showLoginForm(button, loginForm) {
+        if (!loginForm) {
+            loginForm = document.querySelector('[data-mj-event-login-form]');
+        }
+        if (!loginForm) {
+            return;
+        }
+
+        loginForm.removeAttribute('hidden');
+        loginForm.classList.add('is-open');
+        
+        if (button) {
+            button.textContent = strings.cancel || 'Annuler';
+        }
+
+        // Focus sur le premier champ
+        var usernameField = loginForm.querySelector('input[name="username"]');
+        if (usernameField) {
+            setTimeout(function() {
+                usernameField.focus();
+            }, 100);
+        }
+    }
+
+    function hideLoginForm(button, loginForm) {
+        if (!loginForm) {
+            loginForm = document.querySelector('[data-mj-event-login-form]');
+        }
+        if (!loginForm) {
+            return;
+        }
+
+        loginForm.setAttribute('hidden', 'hidden');
+        loginForm.classList.remove('is-open');
+
+        // Réinitialiser le texte du bouton principal
+        var toggleButton = document.querySelector('[data-mj-event-toggle-login]');
+        if (toggleButton) {
+            toggleButton.textContent = strings.login || 'Se connecter';
+        }
+
+        // Nettoyer les champs
+        var form = loginForm.querySelector('form');
+        if (form) {
+            form.reset();
+        }
+
+        // Nettoyer le feedback
+        var feedback = loginForm.querySelector('[data-mj-event-login-feedback]');
+        if (feedback) {
+            feedback.textContent = '';
+            feedback.className = 'mj-member-event-single__login-feedback';
+        }
+    }
+
+    function initLoginForms() {
+        var loginForms = document.querySelectorAll('[data-mj-event-login-submit]');
+        toArray(loginForms).forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                event.preventDefault();
+                handleLoginSubmit(form);
+            });
+        });
+    }
+
+    function handleLoginSubmit(form) {
+        var username = form.querySelector('input[name="username"]').value.trim();
+        var password = form.querySelector('input[name="password"]').value;
+        var feedback = form.querySelector('[data-mj-event-login-feedback]');
+
+        if (!username || !password) {
+            setLoginFeedback(feedback, strings.fieldRequired || 'Tous les champs sont obligatoires.', true);
+            return;
+        }
+
+        // Désactiver le formulaire pendant la requête
+        var submitButton = form.querySelector('button[type="submit"]');
+        var originalText = submitButton ? submitButton.textContent : '';
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.textContent = strings.loading || 'Connexion...';
+        }
+
+        // Préparer les données pour l'AJAX
+        var formData = new FormData();
+        formData.append('action', 'mj_member_ajax_login');
+        formData.append('username', username);
+        formData.append('password', password);
+        formData.append('nonce', nonce);
+
+        // Requête AJAX
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', ajaxUrl);
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) {
+                return;
+            }
+
+            // Réactiver le bouton
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.textContent = originalText;
+            }
+
+            try {
+                var response = JSON.parse(xhr.responseText);
+                if (response.success) {
+                    // Connexion réussie - recharger la page
+                    setLoginFeedback(feedback, strings.loginSuccess || 'Connexion réussie. Rechargement...', false);
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    var message = response.data && response.data.message 
+                        ? response.data.message 
+                        : (strings.loginError || 'Identifiants incorrects.');
+                    setLoginFeedback(feedback, message, true);
+                }
+            } catch (error) {
+                setLoginFeedback(feedback, strings.genericError || 'Une erreur est survenue. Merci de réessayer.', true);
+            }
+        };
+
+        xhr.send(formData);
+    }
+
+    function setLoginFeedback(element, message, isError) {
+        if (!element) {
+            return;
+        }
+        
+        element.textContent = message;
+        if (isError) {
+            element.classList.add('is-error');
+            element.classList.remove('is-success');
+        } else {
+            element.classList.add('is-success');
+            element.classList.remove('is-error');
+        }
+    }
+
     function setupInlineRegistrationForm(form) {
         if (!form || form.dataset.mjEventRegistrationInit === '1') {
             return;
@@ -3610,12 +3764,21 @@
     domReady(function () {
         initEventRegistrationForms();
         initSliders();
+        initLoginForms();
 
-        var loginButtons = document.querySelectorAll('[data-mj-event-open-login]');
+        var loginButtons = document.querySelectorAll('[data-mj-event-toggle-login]');
         toArray(loginButtons).forEach(function (loginButton) {
             loginButton.addEventListener('click', function (event) {
                 event.preventDefault();
-                openLoginModal();
+                toggleLoginForm(loginButton);
+            });
+        });
+
+        var cancelButtons = document.querySelectorAll('[data-mj-event-cancel-login]');
+        toArray(cancelButtons).forEach(function (cancelButton) {
+            cancelButton.addEventListener('click', function (event) {
+                event.preventDefault();
+                hideLoginForm(cancelButton);
             });
         });
 
@@ -3677,6 +3840,29 @@
                 loginNotice.className = 'mj-member-events__signup-empty';
                 loginNotice.textContent = strings.loginRequired || 'Connecte-toi pour continuer.';
                 signup.appendChild(loginNotice);
+
+                // Conteneur pour les boutons
+                var buttonContainer = document.createElement('div');
+                buttonContainer.className = 'mj-member-events__login-buttons';
+
+                // Bouton "Se connecter"
+                var loginButton = document.createElement('button');
+                loginButton.type = 'button';
+                loginButton.className = 'mj-member-events__login-button';
+                loginButton.textContent = strings.loginButtonLabel || 'Se connecter';
+                loginButton.addEventListener('click', function() {
+                    openLoginModal();
+                });
+                buttonContainer.appendChild(loginButton);
+
+                // Bouton "Devenir membre"
+                var signupButton = document.createElement('a');
+                signupButton.href = settings.registrationUrl || '';
+                signupButton.className = 'mj-member-events__signup-button';
+                signupButton.textContent = strings.signupButtonLabel || 'Devenir membre';
+                buttonContainer.appendChild(signupButton);
+
+                signup.appendChild(buttonContainer);
 
                 signup.dataset.persistent = '1';
                 return;

@@ -48,7 +48,36 @@
                 <div class="mj-member-event-single__registration-interactive">
                     {% if requires_login %}
                         <p class="mj-member-event-single__registration-note">{{ __('Connecte-toi pour continuer.', 'mj-member') }}</p>
-                        <button type="button" class="mj-member-event-single__registration-login" data-mj-event-open-login>{{ __('Se connecter', 'mj-member') }}</button>
+                        <button type="button" class="mj-member-event-single__registration-login" data-mj-event-toggle-login>{{ __('Se connecter', 'mj-member') }}</button>
+                        <div class="mj-member-event-single__login-form" data-mj-event-login-form hidden>
+                            <form class="mj-member-event-single__login-form-content" data-mj-event-login-submit>
+                                <div class="mj-member-event-single__login-field">
+                                    <label for="mj-event-login-username">{{ __('Identifiant ou e-mail', 'mj-member') }}</label>
+                                    <input 
+                                        type="text" 
+                                        id="mj-event-login-username" 
+                                        name="username" 
+                                        required 
+                                        autocomplete="username"
+                                    />
+                                </div>
+                                <div class="mj-member-event-single__login-field">
+                                    <label for="mj-event-login-password">{{ __('Mot de passe', 'mj-member') }}</label>
+                                    <input 
+                                        type="password" 
+                                        id="mj-event-login-password" 
+                                        name="password" 
+                                        required 
+                                        autocomplete="current-password"
+                                    />
+                                </div>
+                                <div class="mj-member-event-single__login-actions">
+                                    <button type="submit" class="mj-member-event-single__login-submit">{{ __('Se connecter', 'mj-member') }}</button>
+                                    <button type="button" class="mj-member-event-single__login-cancel" data-mj-event-cancel-login>{{ __('Annuler', 'mj-member') }}</button>
+                                </div>
+                                <div class="mj-member-event-single__login-feedback" data-mj-event-login-feedback aria-live="polite"></div>
+                            </form>
+                        </div>
                     {% elseif participants.entries|default([])|length %}
                         <form
                             class="mj-member-event-single__registration-form"

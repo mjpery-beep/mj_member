@@ -214,6 +214,43 @@ function mj_admin_testimonial_get_for_member_handler() {
 add_action('wp_ajax_mj_admin_testimonial_get_for_member', 'mj_admin_testimonial_get_for_member_handler');
 
 /**
+ * AJAX: Update testimonial content (plain text editor).
+ */
+function mj_admin_testimonial_update_content_handler() {
+    check_ajax_referer('mj_admin_testimonial', '_wpnonce');
+
+    if (!current_user_can(Config::capability())) {
+        wp_send_json_error(__('Accès non autorisé.', 'mj-member'), 403);
+    }
+
+    $id = isset($_POST['id']) ? (int) $_POST['id'] : 0;
+    if ($id <= 0) {
+        wp_send_json_error(__('Identifiant invalide.', 'mj-member'), 400);
+    }
+
+    $content = isset($_POST['content']) ? sanitize_textarea_field(wp_unslash($_POST['content'])) : '';
+
+    $testimonial = MjTestimonials::get_by_id($id);
+    if (!$testimonial) {
+        wp_send_json_error(__('Témoignage introuvable.', 'mj-member'), 404);
+    }
+
+    $result = MjTestimonials::update($id, array('content' => $content));
+    if (is_wp_error($result)) {
+        wp_send_json_error($result->get_error_message(), 500);
+    }
+
+    $content_html = $content ? wp_kses_post(wpautop($content)) : '<em>' . esc_html__('(aucun texte)', 'mj-member') . '</em>';
+    
+    wp_send_json_success(array(
+        'message' => __('Contenu mis à jour avec succès.', 'mj-member'),
+        'id' => $id,
+        'content_html' => $content_html,
+    ));
+}
+add_action('wp_ajax_mj_admin_testimonial_update_content', 'mj_admin_testimonial_update_content_handler');
+
+/**
  * AJAX: Toggle featured status for a testimonial.
  */
 function mj_admin_testimonial_toggle_featured_handler() {

@@ -987,6 +987,24 @@
     font-size: 1.25rem;
 }
 
+.mj-event-page__registration-login-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+@media (min-width: 640px) {
+    .mj-event-page__registration-login-buttons {
+        flex-direction: row;
+        gap: 12px;
+    }
+
+    .mj-event-page__registration-login-buttons .mj-event-page__btn {
+        flex: 1;
+    }
+}
+
 /* =====================================================
    Spinner
    ===================================================== */

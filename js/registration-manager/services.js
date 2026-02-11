@@ -636,6 +636,78 @@
             },
 
             /**
+             * Édite le contenu d'un témoignage
+             */
+            editTestimonialContent: function (testimonialId, content) {
+                return post('mj_regmgr_edit_testimonial_content', {
+                    testimonialId: testimonialId,
+                    content: content,
+                });
+            },
+
+            /**
+             * Ajoute un commentaire à un témoignage
+             */
+            addTestimonialComment: function (testimonialId, content) {
+                return post('mj_regmgr_add_testimonial_comment', {
+                    testimonialId: testimonialId,
+                    content: content,
+                });
+            },
+
+            /**
+             * Met à jour un commentaire de témoignage
+             */
+            editTestimonialComment: function (commentId, content) {
+                return post('mj_regmgr_edit_testimonial_comment', {
+                    commentId: commentId,
+                    content: content,
+                });
+            },
+
+            /**
+             * Supprime un commentaire de témoignage
+             */
+            deleteTestimonialComment: function (commentId) {
+                return post('mj_regmgr_delete_testimonial_comment', {
+                    commentId: commentId,
+                });
+            },
+
+            /**
+             * Ajoute une réaction à un témoignage
+             */
+            addTestimonialReaction: function (testimonialId, reactionType) {
+                return post('mj_regmgr_add_testimonial_reaction', {
+                    testimonialId: testimonialId,
+                    reactionType: reactionType,
+                });
+            },
+
+            /**
+             * Supprime une réaction d'un témoignage
+             */
+            removeTestimonialReaction: function (testimonialId, reactionType) {
+                return post('mj_regmgr_remove_testimonial_reaction', {
+                    testimonialId: testimonialId,
+                    reactionType: reactionType,
+                });
+            },
+
+            /**
+             * Met à jour le lien social d'un témoignage
+             */
+            updateTestimonialLink: function (testimonialId, action, url, title, preview) {
+                return post('mj_regmgr_update_social_link', {
+                    testimonialId: testimonialId,
+                    action: action,
+                    url: url || '',
+                    title: title || '',
+                    preview: preview || '',
+                });
+            },
+
+            /**
              * Récupère l'historique d'inscriptions d'un membre
              */
             getMemberRegistrations: function (memberId) {

@@ -64,10 +64,15 @@
         {# Login requis #}
         {% if requires_login %}
             <div class="mj-event-page__registration-login">
-                <p class="mj-event-page__registration-note">{{ __('Connecte-toi pour t\'inscrire.', 'mj-member') }}</p>
-                <button type="button" class="mj-event-page__btn mj-event-page__btn--primary" data-mj-event-open-login>
-                    {{ __('Se connecter', 'mj-member') }}
-                </button>
+                <p class="mj-event-page__registration-note">{{ __('Connecte-toi pour t\'inscrire à cet événement.', 'mj-member') }}</p>
+                <div class="mj-event-page__registration-login-buttons">
+                    <button type="button" class="mj-event-page__btn mj-event-page__btn--primary" data-mj-event-open-login>
+                        {{ __('Se connecter', 'mj-member') }}
+                    </button>
+                    <a href="{{ registration.signup_url|default('#')|esc_url }}" class="mj-event-page__btn mj-event-page__btn--secondary">
+                        {{ __('Devenir membre', 'mj-member') }}
+                    </a>
+                </div>
             </div>
 
         {# Inscriptions fermées #}

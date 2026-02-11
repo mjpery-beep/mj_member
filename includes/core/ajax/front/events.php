@@ -1142,4 +1142,67 @@ if (!function_exists('mj_member_ajax_unregister_event')) {
     }
 }
 
+/**
+ * AJAX: Login from event page.
+ *
+ * Handles user login directly from the event registration form.
+ *
+ * POST Parameters:
+ * - username (string): Username or email
+ * - password (string): User password
+ * - nonce (string): Security token (mj-member-event-register)
+ *
+ * Response: JSON with success/error message
+ */
+if (!function_exists('mj_member_ajax_login')) {
+    function mj_member_ajax_login() {
+        if (!wp_doing_ajax()) {
+            return;
+        }
+
+        check_ajax_referer('mj-member-event-register', 'nonce');
+
+        // Vérifier que l'utilisateur n'est pas déjà connecté
+        if (is_user_logged_in()) {
+            wp_send_json_success(
+                array('message' => __('Tu es déjà connecté.', 'mj-member'))
+            );
+        }
+
+        $username = isset($_POST['username']) ? sanitize_text_field($_POST['username']) : '';
+        $password = isset($_POST['password']) ? $_POST['password'] : '';
+
+        if (empty($username) || empty($password)) {
+            wp_send_json_error(
+                array('message' => __('Nom d\'utilisateur et mot de passe requis.', 'mj-member')),
+                400
+            );
+        }
+
+        // Tentative de connexion
+        $user_data = array(
+            'user_login'    => $username,
+            'user_password' => $password,
+            'remember'      => true
+        );
+
+        $user = wp_signon($user_data, false);
+
+        if (is_wp_error($user)) {
+            wp_send_json_error(
+                array('message' => __('Identifiants incorrects.', 'mj-member')),
+                401
+            );
+        }
+
+        // Connexion réussie
+        wp_set_current_user($user->ID);
+
+        wp_send_json_success(
+            array('message' => __('Connexion réussie.', 'mj-member'))
+        );
+    }
+}
+
+add_action('wp_ajax_nopriv_mj_member_ajax_login', 'mj_member_ajax_login');
 add_action('wp_ajax_mj_member_unregister_event', 'mj_member_ajax_unregister_event');

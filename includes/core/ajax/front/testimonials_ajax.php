@@ -520,7 +520,21 @@ function mj_front_testimonial_link_preview_handler() {
         wp_send_json_error(__('URL invalide.', 'mj-member'), 400);
     }
 
-    // Fetch the URL content
+    // Check if it's YouTube first
+    $youtube_id = mj_extract_youtube_id($url);
+    if ($youtube_id) {
+        wp_send_json_success(array(
+            'url' => $url,
+            'title' => 'YouTube',
+            'description' => 'Vidéo YouTube',
+            'image' => "https://i.ytimg.com/vi/{$youtube_id}/hqdefault.jpg",
+            'site_name' => 'YouTube',
+            'is_youtube' => true,
+            'youtube_id' => $youtube_id,
+        ));
+    }
+
+    // Fetch the URL content for non-YouTube links
     $response = wp_remote_get($url, array(
         'timeout' => 10,
         'user-agent' => 'Mozilla/5.0 (compatible; MjMember/1.0; +https://www.mj-pery.be)',
@@ -548,13 +562,58 @@ function mj_front_testimonial_link_preview_handler() {
 add_action('wp_ajax_mj_front_testimonial_link_preview', 'mj_front_testimonial_link_preview_handler');
 
 /**
+ * Extract YouTube video ID from a URL.
+ *
+ * @param string $url
+ * @return string|null YouTube video ID or null
+ */
+function mj_extract_youtube_id($url) {
+    // List of YouTube URL patterns to match
+    $patterns = array(
+        // youtu.be/VIDEO_ID
+        '/youtu\.be\/([a-zA-Z0-9_-]{11})/',
+        // youtube.com/watch?v=VIDEO_ID
+        '/youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})/',
+        // youtube.com/embed/VIDEO_ID
+        '/youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/',
+        // youtube.com/v/VIDEO_ID
+        '/youtube\.com\/v\/([a-zA-Z0-9_-]{11})/',
+        // v=VIDEO_ID anywhere (as fallback)
+        '/v=([a-zA-Z0-9_-]{11})/',
+    );
+
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $url, $matches)) {
+            return isset($matches[1]) ? trim($matches[1]) : null;
+        }
+    }
+
+    return null;
+}
+
+/**
  * Parse Open Graph and meta tags from HTML to extract link preview data.
+ * Also detects YouTube URLs and returns embed data.
  *
  * @param string $html
  * @param string $url
  * @return array
  */
 function mj_parse_link_preview($html, $url) {
+    // First check if it's a YouTube URL
+    $youtube_id = mj_extract_youtube_id($url);
+    if ($youtube_id) {
+        return array(
+            'url' => $url,
+            'title' => 'YouTube',
+            'description' => 'Vidéo YouTube',
+            'image' => "https://i.ytimg.com/vi/{$youtube_id}/hqdefault.jpg",
+            'site_name' => 'YouTube',
+            'is_youtube' => true,
+            'youtube_id' => $youtube_id,
+        );
+    }
+
     $preview = array(
         'url' => $url,
         'title' => '',

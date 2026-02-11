@@ -506,7 +506,7 @@
         var isSelected = props.isSelected;
         var onClick = props.onClick;
         var strings = props.strings;
-
+        
         var roleLabels = {
             'jeune': 'Jeune',
             'animateur': 'Animateur',
@@ -523,7 +523,7 @@
         };
 
         var volunteerLabel = getString(strings, 'volunteerLabel', 'Bénévole');
-
+        console.info(member);
         return h('div', {
             class: classNames('mj-regmgr-member-card', {
                 'mj-regmgr-member-card--selected': isSelected,
@@ -544,6 +544,10 @@
                     (member.firstName || '') + ' ' + (member.lastName || '')
                 ),
                 h('div', { class: 'mj-regmgr-member-card__meta' }, [
+                    member.wpUserId && h('span', {
+                        class: 'mj-regmgr-member-card__wordpress-icon',
+                        title: 'Compte WordPress associé',
+                    }, '⚡'),
                     member.role && h('span', { class: 'mj-regmgr-member-card__role' }, 
                         roleLabels[member.role] || member.role
                     ),
@@ -557,10 +561,11 @@
                     member.isVolunteer && h('span', {
                         class: classNames('mj-regmgr-member-card__volunteer', 'mj-regmgr-badge', 'mj-regmgr-badge--volunteer'),
                     }, volunteerLabel),
+                    
                     member.createdAt && h('span', {
-                        class: 'mj-regmgr-member-card__time-ago',
+                        class: 'mj-regmgr-member-card__date',
                         title: formatDate(member.createdAt, true),
-                    }, formatTimeAgo(member.createdAt)),
+                    }, formatDate(member.createdAt)),
                 ]),
             ]),
         ]);
@@ -1846,6 +1851,43 @@
         var _useStateActionSaving = useState({});
         var actionSaving = _useStateActionSaving[0];
         var setActionSaving = _useStateActionSaving[1];
+
+        // States pour la gestion des témoignages
+        var _useStateEditingTestimonialId = useState(null);
+        var editingTestimonialId = _useStateEditingTestimonialId[0];
+        var setEditingTestimonialId = _useStateEditingTestimonialId[1];
+
+        var _useStateTestimonialContentDraft = useState({});
+        var testimonialContentDraft = _useStateTestimonialContentDraft[0];
+        var setTestimonialContentDraft = _useStateTestimonialContentDraft[1];
+
+        var _useStateTestimonialContentSaving = useState({});
+        var testimonialContentSaving = _useStateTestimonialContentSaving[0];
+        var setTestimonialContentSaving = _useStateTestimonialContentSaving[1];
+
+        var _useStateNewTestimonialComment = useState({});
+        var newTestimonialComment = _useStateNewTestimonialComment[0];
+        var setNewTestimonialComment = _useStateNewTestimonialComment[1];
+
+        var _useStateTestimonialCommentSaving = useState({});
+        var testimonialCommentSaving = _useStateTestimonialCommentSaving[0];
+        var setTestimonialCommentSaving = _useStateTestimonialCommentSaving[1];
+
+        var _useStateEditingTestimonialCommentId = useState(null);
+        var editingTestimonialCommentId = _useStateEditingTestimonialCommentId[0];
+        var setEditingTestimonialCommentId = _useStateEditingTestimonialCommentId[1];
+
+        var _useStateEditingTestimonialCommentDraft = useState({});
+        var editingTestimonialCommentDraft = _useStateEditingTestimonialCommentDraft[0];
+        var setEditingTestimonialCommentDraft = _useStateEditingTestimonialCommentDraft[1];
+
+        var _useStateTestimonialLinkEditing = useState({});
+        var testimonialLinkEditing = _useStateTestimonialLinkEditing[0];
+        var setTestimonialLinkEditing = _useStateTestimonialLinkEditing[1];
+
+        var _useStateTestimonialLinkDraft = useState({});
+        var testimonialLinkDraft = _useStateTestimonialLinkDraft[0];
+        var setTestimonialLinkDraft = _useStateTestimonialLinkDraft[1];
 
         var avatarFrameRef = useRef(null);
 

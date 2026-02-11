@@ -1541,6 +1541,209 @@
     color: #475569;
 }
 
+.mj-member-events__login-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+/* Styles pour le formulaire de connexion pliable */
+.mj-member-event-single__login-form {
+    margin-top: 16px;
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: all 0.3s ease-in-out;
+}
+
+.mj-member-event-single__login-form.is-open {
+    opacity: 1;
+    max-height: 400px;
+    margin-bottom: 16px;
+}
+
+.mj-member-event-single__login-form[hidden] {
+    display: none;
+}
+
+.mj-member-event-single__login-form-content {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.mj-member-event-single__login-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mj-member-event-single__login-field label {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #374151;
+}
+
+.mj-member-event-single__login-field input {
+    padding: 10px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.mj-member-event-single__login-field input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.mj-member-event-single__login-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.mj-member-event-single__login-submit {
+    border: none;
+    border-radius: 8px;
+    background: #2563eb;
+    color: #ffffff;
+    padding: 10px 20px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.18s ease;
+}
+
+.mj-member-event-single__login-submit:hover,
+.mj-member-event-single__login-submit:focus-visible {
+    background: #1d4ed8;
+    outline: none;
+}
+
+.mj-member-event-single__login-submit:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.mj-member-event-single__login-cancel {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #374151;
+    padding: 10px 16px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.mj-member-event-single__login-cancel:hover,
+.mj-member-event-single__login-cancel:focus-visible {
+    background: #f9fafb;
+    border-color: #9ca3af;
+    outline: none;
+}
+
+.mj-member-event-single__login-feedback {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.mj-member-event-single__login-feedback.is-error {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+    opacity: 1;
+    max-height: 60px;
+}
+
+.mj-member-event-single__login-feedback.is-success {
+    background: #f0fdf4;
+    color: #16a34a;
+    border: 1px solid #bbf7d0;
+    opacity: 1;
+    max-height: 60px;
+}
+
+/* Animation d'apparition plus fluide */
+.mj-member-event-single__login-form:not([hidden]) {
+    animation: slideDown 0.3s ease-out forwards;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+        max-height: 0;
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+        max-height: 400px;
+    }
+}
+
+.mj-member-events__login-button,
+.mj-member-events__signup-button {
+    padding: 10px 16px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
+    transition: background-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.mj-member-events__login-button {
+    background: #2563eb;
+    color: #ffffff;
+}
+
+.mj-member-events__login-button:hover {
+    background: #1d4ed8;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.mj-member-events__login-button:focus-visible {
+    background: #1d4ed8;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    outline: none;
+}
+
+.mj-member-events__signup-button {
+    background: #ffffff;
+    color: #2563eb;
+    border: 2px solid #2563eb;
+}
+
+.mj-member-events__signup-button:hover {
+    background: #eff6ff;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+}
+
+.mj-member-events__signup-button:focus-visible {
+    background: #eff6ff;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    outline: none;
+}
+
 .mj-member-event-single__registration-login {
     align-self: flex-start;
 }

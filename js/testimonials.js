@@ -248,8 +248,11 @@
                     dataType: 'json'
                 });
 
+                console.log('Link preview response:', response);
+                
                 if (response.success && response.data) {
                     this.linkPreview = response.data;
+                    console.log('Link preview data:', this.linkPreview);
                     this.renderLinkPreview();
                 } else {
                     this.$linkPreviewContainer.hide();
@@ -268,6 +271,18 @@
                 return;
             }
 
+            console.log('renderLinkPreview - linkPreview:', this.linkPreview);
+            console.log('renderLinkPreview - is_youtube:', this.linkPreview.is_youtube);
+            console.log('renderLinkPreview - youtube_id:', this.linkPreview.youtube_id);
+
+            // Check if it's a YouTube video
+            if (this.linkPreview.is_youtube && this.linkPreview.youtube_id) {
+                console.log('Rendering YouTube embed');
+                this.renderYouTubeEmbed();
+                return;
+            }
+
+            console.log('Rendering regular link preview');
             const { url, title, description, image, site_name } = this.linkPreview;
             const imageHtml = image ? `<img src="${image}" alt="" class="mj-testimonials__link-preview-image">` : '';
             
@@ -285,6 +300,33 @@
 
             // Bind remove event
             this.$linkPreviewContainer.find('.mj-testimonials__link-preview-remove').on('click', () => this.removeLinkPreview());
+        }
+
+        renderYouTubeEmbed() {
+            if (!this.linkPreview.youtube_id) {
+                this.$linkPreviewContainer.hide();
+                return;
+            }
+
+            const youtubeId = this.linkPreview.youtube_id;
+            const embedUrl = `https://www.youtube.com/embed/${youtubeId}?rel=0`;
+
+            this.$linkPreviewContainer.html(`
+                <div class="mj-testimonials__youtube-embed-container">
+                    <iframe 
+                        class="mj-testimonials__youtube-embed" 
+                        src="${embedUrl}" 
+                        title="YouTube video" 
+                        frameborder="0" 
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                        allowfullscreen>
+                    </iframe>
+                    <button type="button" class="mj-testimonials__youtube-embed-remove">&times;</button>
+                </div>
+            `).show();
+
+            // Bind remove event
+            this.$linkPreviewContainer.find('.mj-testimonials__youtube-embed-remove').on('click', () => this.removeLinkPreview());
         }
 
         removeLinkPreview() {
