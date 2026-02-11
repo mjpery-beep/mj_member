@@ -382,24 +382,13 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                         $avatar_src = wp_get_attachment_image_src((int)$testimonial->member_photo_id, 'thumbnail');
                         if ($avatar_src) {
                             $member_avatar_url = $avatar_src[0];
-                                    <?php
-                                    $youtube_title_source = !empty($link_preview['title']) ? $link_preview['title'] : ($link_preview['url'] ?? '');
-                                    $youtube_fallback_label = __('Video on YouTube', 'mj-member');
-                                    $youtube_title_text = $youtube_title_source !== '' ? $youtube_title_source : $youtube_fallback_label;
-                                    $youtube_title_attr = sprintf(
-                                        /* translators: %s: video title or URL */
-                                        __('Video "%s" on YouTube', 'mj-member'),
-                                        $youtube_title_text
-                                    );
-                                    ?>
-                                    <iframe 
-                                        class="mj-feed-post__youtube-embed" 
-                                        src="https://www.youtube.com/embed/<?php echo esc_attr($link_preview['youtube_id']); ?>?rel=0" 
-                                        title="<?php echo esc_attr($youtube_title_attr); ?>" 
-                                        frameborder="0" 
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                                        allowfullscreen
-                                        loading="lazy">
+                        }
+                    }
+                    
+                    $post_id = (int)$testimonial->id;
+                    
+                    // Déterminer le statut et si c'est mon témoignage
+                    $testimonial_status = isset($testimonial->status) ? $testimonial->status : MjTestimonials::STATUS_APPROVED;
                     $is_my_testimonial = $is_logged_in && ((int)$testimonial->member_id === $member_id);
                     $is_pending = $testimonial_status === MjTestimonials::STATUS_PENDING;
                     $show_approval_actions = $is_animator && $is_pending && !$is_my_testimonial;
