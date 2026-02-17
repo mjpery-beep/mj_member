@@ -481,6 +481,7 @@
     global.MjRegMgrUtils = {
         // Utilitaires
         escapeHtml: escapeHtml,
+        decodeHtml: decodeHtml,
         formatDate: formatDate,
         formatShortDate: formatShortDate,
         formatTimeAgo: formatTimeAgo,

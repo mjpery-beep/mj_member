@@ -2843,7 +2843,7 @@ function mj_regmgr_get_member_notes() {
     foreach ($notes as $note) {
         $note_data = array(
             'id' => $note->id,
-            'content' => $note->content,
+            'content' => wp_unslash($note->content),
             'authorId' => $note->author_id,
             'authorName' => trim(($note->author_first_name ?? '') . ' ' . ($note->author_last_name ?? '')),
             'createdAt' => $note->created_at,
