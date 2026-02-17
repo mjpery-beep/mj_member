@@ -33,6 +33,16 @@
     }
 
     /**
+     * Décode les entités HTML
+     */
+    function decodeHtml(html) {
+        if (typeof html !== 'string') return '';
+        var div = document.createElement('div');
+        div.innerHTML = html;
+        return div.textContent || div.innerText || '';
+    }
+
+    /**
      * Formate une date
      */
     function formatDate(dateStr, withTime) {

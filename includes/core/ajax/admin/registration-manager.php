@@ -2812,6 +2812,10 @@ function mj_regmgr_get_member_notes() {
     global $wpdb;
     $table = $wpdb->prefix . 'mj_member_notes';
     $members_table = $wpdb->prefix . 'mj_members';
+    $events_table = $wpdb->prefix . 'mj_events';
+
+    // Ensure table exists with event_id column
+    mj_regmgr_ensure_notes_table();
 
     // Check if table exists
     $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
@@ -2822,9 +2826,14 @@ function mj_regmgr_get_member_notes() {
     }
 
     $notes = $wpdb->get_results($wpdb->prepare(
-        "SELECT n.*, m.first_name AS author_first_name, m.last_name AS author_last_name 
+        "SELECT n.*, 
+                m.first_name AS author_first_name, 
+                m.last_name AS author_last_name,
+                e.title AS event_title,
+                e.emoji AS event_emoji
          FROM {$table} n
          LEFT JOIN {$members_table} m ON n.author_id = m.id
+         LEFT JOIN {$events_table} e ON n.event_id = e.id
          WHERE n.member_id = %d
          ORDER BY n.created_at DESC",
         $member_id
@@ -2832,7 +2841,7 @@ function mj_regmgr_get_member_notes() {
 
     $data = array();
     foreach ($notes as $note) {
-        $data[] = array(
+        $note_data = array(
             'id' => $note->id,
             'content' => $note->content,
             'authorId' => $note->author_id,
@@ -2840,7 +2849,11 @@ function mj_regmgr_get_member_notes() {
             'createdAt' => $note->created_at,
             'createdAtFormatted' => mj_regmgr_format_date($note->created_at, true),
             'canEdit' => (int) $note->author_id === $auth['member_id'] || $auth['is_coordinateur'],
+            'eventId' => isset($note->event_id) ? (int) $note->event_id : null,
+            'eventTitle' => $note->event_title ?? null,
+            'eventEmoji' => $note->event_emoji ?? null,
         );
+        $data[] = $note_data;
     }
 
     wp_send_json_success(array('notes' => $data));
@@ -2855,6 +2868,7 @@ function mj_regmgr_save_member_note() {
 
     $member_id = isset($_POST['memberId']) ? (int) $_POST['memberId'] : 0;
     $note_id = isset($_POST['noteId']) ? (int) $_POST['noteId'] : 0;
+    $event_id = isset($_POST['eventId']) ? (int) $_POST['eventId'] : 0;
     $content = isset($_POST['content']) ? sanitize_textarea_field($_POST['content']) : '';
 
     if ($member_id <= 0) {
@@ -2898,16 +2912,20 @@ function mj_regmgr_save_member_note() {
         $message = __('Note mise à jour.', 'mj-member');
     } else {
         // Create new note
-        $wpdb->insert(
-            $table,
-            array(
-                'member_id' => $member_id,
-                'author_id' => $auth['member_id'],
-                'content' => $content,
-                'created_at' => current_time('mysql'),
-            ),
-            array('%d', '%d', '%s', '%s')
+        $insert_data = array(
+            'member_id' => $member_id,
+            'author_id' => $auth['member_id'],
+            'content' => $content,
+            'created_at' => current_time('mysql'),
         );
+        $insert_format = array('%d', '%d', '%s', '%s');
+        
+        if ($event_id > 0) {
+            $insert_data['event_id'] = $event_id;
+            $insert_format[] = '%d';
+        }
+        
+        $wpdb->insert($table, $insert_data, $insert_format);
 
         $note_id = $wpdb->insert_id;
         $message = __('Note ajoutée.', 'mj-member');

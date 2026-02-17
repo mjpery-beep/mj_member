@@ -243,6 +243,7 @@
         var requiresPayment = props.requiresPayment === true;
         var requiresValidation = props.requiresValidation !== false;
         var onViewMember = props.onViewMember;
+        var onShowNotes = props.onShowNotes;
         var hideOccurrenceIrregular = props.hideOccurrenceIrregular === true;
 
         var member = registration.member;
@@ -377,6 +378,23 @@
                     ]),
                 ]),
 
+                // Notes
+                onShowNotes && h('button', {
+                    type: 'button',
+                    class: classNames('mj-att-member__notes-btn', {
+                        'mj-att-member__notes-btn--has-badge': registration.notesCount > 0,
+                    }),
+                    onClick: function () { onShowNotes(registration); },
+                    disabled: loading,
+                    title: getString(strings, 'addNote', 'Notes'),
+                }, [
+                    h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                        h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
+                        h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+                    ]),
+                    registration.notesCount > 0 && h('span', { class: 'mj-att-member__notes-badge' }, registration.notesCount),
+                ]),
+
                 // Boutons de présence stylisés
                 h('button', {
                     type: 'button',
@@ -449,12 +467,22 @@
         var onValidateRegistration = props.onValidateRegistration;
         var onChangeOccurrences = props.onChangeOccurrences;
         var onViewMember = props.onViewMember;
+        var onShowNotes = props.onShowNotes;
         var strings = props.strings;
         var loading = props.loading;
         var loadingMembers = props.loadingMembers || {};
         var requiresValidation = props.eventRequiresValidation !== false;
         var allowAttendanceAll = useMemo(function () {
-            if (event && (event.attendanceShowAllMembers || event.attendance_show_all_members)) {
+            if (!event) {
+                return Array.isArray(attendanceMembers) && attendanceMembers.length > 0;
+            }
+            // Mode "toutes les séances" : pas de filtrage par occurrence
+            var occurrenceMode = event.occurrenceSelectionMode || event.occurrence_selection_mode || '';
+            if (occurrenceMode === 'all_occurrences') {
+                return true;
+            }
+            // Ou flag explicite pour afficher tous les membres
+            if (event.attendanceShowAllMembers || event.attendance_show_all_members) {
                 return true;
             }
             return Array.isArray(attendanceMembers) && attendanceMembers.length > 0;
@@ -545,7 +573,7 @@
         // Filtrer les inscriptions par catégorie
         var categorizedRegistrations = useMemo(function () {
             var valid = [];        // Validé + inscrit à cette séance
-            var unpaid = [];       // Non payé mais inscrit à cette séance  
+            var unpaid = [];       // En attente de validation OU non payé mais inscrit à cette séance  
             var notRegistered = []; // Validé mais pas inscrit à cette séance
 
             var selectedOccNormalized = normalizeOccurrenceKey(selectedOccurrence);
@@ -555,8 +583,6 @@
                 if (!reg) {
                     return;
                 }
-                var isValidated = reg.status === 'valide'
-                    || (!requiresValidation && reg.status === 'en_attente');
                 var isAttendanceOnly = reg.attendanceOnly === true;
                 var registrationOccurrences = Array.isArray(reg.occurrences) ? reg.occurrences : [];
                 if (registrationOccurrences.length === 0 && Array.isArray(reg.assignedOccurrences)) {
@@ -589,18 +615,35 @@
                     isRegisteredToOccurrence = true;
                 }
 
-                if (isValidated && isRegisteredToOccurrence) {
-                    valid.push(reg);
-                } else if (!isValidated && isRegisteredToOccurrence) {
-                    unpaid.push(reg);
-                } else if (isValidated && !isRegisteredToOccurrence) {
+                // Une inscription est considérée comme "active/utilisable" si :
+                // - Statut = 'valide' OU
+                // - Statut = 'en_attente' ET validation manuelle non requise
+                var isActive = reg.status === 'valide' 
+                    || (!requiresValidation && reg.status === 'en_attente');
+
+                // Problèmes qui rendent une inscription "irrégulière" :
+                var paymentStatus = reg.paymentStatus || 'unpaid';
+                var hasValidationProblem = requiresValidation && reg.status === 'en_attente';
+                // Problème de paiement : paiement requis ET non payé ET inscription active
+                var hasPaymentProblem = requiresPayment && paymentStatus !== 'paid' && isActive;
+
+                if (isRegisteredToOccurrence) {
+                    if (hasValidationProblem || hasPaymentProblem) {
+                        // Inscription à valider OU non payée (inscription active mais non payée)
+                        unpaid.push(reg);
+                    } else if (isActive) {
+                        // Inscription OK pour marquer la présence
+                        valid.push(reg);
+                    }
+                    // Sinon: ignoré (non validé ET validation non requise ? cas rare)
+                } else if (isActive) {
+                    // Active mais pas inscrite à cette séance spécifique
                     notRegistered.push(reg);
                 }
-                // Ignore: non validé ET non inscrit à cette séance
             });
 
             return { valid: valid, unpaid: unpaid, notRegistered: notRegistered };
-        }, [mergedRegistrations, selectedOccurrence, occurrences, requiresValidation, allowAttendanceAll]);
+        }, [mergedRegistrations, selectedOccurrence, occurrences, requiresValidation, requiresPayment, allowAttendanceAll]);
 
         // Obtenir le statut de présence
         var getAttendanceStatus = useCallback(function (memberId) {
@@ -754,6 +797,7 @@
                             requiresPayment: requiresPayment,
                             requiresValidation: requiresValidation,
                             onViewMember: onViewMember,
+                            onShowNotes: onShowNotes,
                             hideOccurrenceIrregular: allowAttendanceAll,
                         });
                     }),
@@ -786,6 +830,7 @@
                                 requiresPayment: requiresPayment,
                                 requiresValidation: requiresValidation,
                                 onViewMember: onViewMember,
+                                onShowNotes: onShowNotes,
                                 hideOccurrenceIrregular: allowAttendanceAll,
                             });
                         }),
@@ -804,6 +849,7 @@
                                 strings: strings,
                                 requiresPayment: requiresPayment,
                                 requiresValidation: requiresValidation,
+                                onShowNotes: onShowNotes,
                                 onViewMember: onViewMember,
                                 hideOccurrenceIrregular: allowAttendanceAll,
                             });

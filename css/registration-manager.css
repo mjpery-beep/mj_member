@@ -594,7 +594,7 @@ input.mj-regmgr-search-input__field {
 }
 
 .mj-regmgr-event-card--selected {
-    border-color: var(--regmgr-primary);
+    border: 6px solid var(--regmgr-primary);
     background: var(--regmgr-primary-light);
 }
 
@@ -1700,6 +1700,57 @@ input.mj-regmgr-search-input__field {
 .mj-att-member__contact-icon {
     width: 28px;
     height: 28px;
+}
+
+/* Notes Button */
+.mj-att-member__notes-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(59, 130, 246, 0.08);
+    color: #3b82f6;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all var(--regmgr-transition);
+    padding: 0;
+}
+
+.mj-att-member__notes-btn:hover,
+.mj-att-member__notes-btn:focus {
+    background: #3b82f6;
+    color: #fff;
+    outline: none;
+}
+
+.mj-att-member__notes-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.mj-att-member__notes-btn--has-badge {
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.mj-att-member__notes-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    min-width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #ef4444;
+    color: #fff;
+    border-radius: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 0 5px;
+    box-shadow: 0 0 0 2px #fff;
 }
 
 /* Attendance Buttons */
@@ -3088,10 +3139,39 @@ input.mj-regmgr-search-input__field {
     margin-bottom: 8px;
 }
 
+.mj-regmgr-note__header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 .mj-regmgr-note__author {
     font-size: 12px;
     font-weight: 600;
     color: var(--regmgr-gray-700);
+}
+
+.mj-regmgr-note__event-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 4px;
+}
+
+.mj-regmgr-note__event-badge--general {
+    background: rgba(107, 114, 128, 0.1);
+    color: #6b7280;
+}
+
+.mj-regmgr-note__event-emoji {
+    font-size: 13px;
+    line-height: 1;
 }
 
 .mj-regmgr-note__date {
@@ -5667,9 +5747,22 @@ input.mj-regmgr-search-input__field {
 .mj-regmgr-note-card__header {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
     margin-bottom: 8px;
     font-size: 12px;
+}
+
+.mj-regmgr-note-card__header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.mj-regmgr-note-card__header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .mj-regmgr-note-card__author {
@@ -5677,12 +5770,35 @@ input.mj-regmgr-search-input__field {
     color: var(--regmgr-gray-700);
 }
 
+.mj-regmgr-note-card__event-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.mj-regmgr-note-card__event-badge:hover {
+    background: rgba(59, 130, 246, 0.2);
+    transform: translateY(-1px);
+}
+
+.mj-regmgr-note-card__event-emoji {
+    font-size: 13px;
+    line-height: 1;
+}
+
 .mj-regmgr-note-card__date {
     color: var(--regmgr-gray-400);
 }
 
 .mj-regmgr-note-card__actions {
-    margin-left: auto;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -9684,6 +9800,23 @@ textarea.mj-regmgr-form-control {
     .mj-att-member__contact-icon {
         width: 22px;
         height: 22px;
+    }
+
+    .mj-att-member__notes-btn {
+        width: 34px;
+        height: 34px;
+    }
+
+    .mj-att-member__notes-btn svg {
+        width: 14px;
+        height: 14px;
+    }
+
+    .mj-att-member__notes-badge {
+        min-width: 16px;
+        height: 16px;
+        font-size: 10px;
+        padding: 0 4px;
     }
 
     .mj-att-member__actions {

@@ -398,11 +398,12 @@
             /**
              * Sauvegarde une note
              */
-            saveMemberNote: function (memberId, content, noteId) {
+            saveMemberNote: function (memberId, content, noteId, eventId) {
                 return post('mj_regmgr_save_member_note', {
                     memberId: memberId,
                     content: content,
                     noteId: noteId || 0,
+                    eventId: eventId || 0,
                 });
             },
 

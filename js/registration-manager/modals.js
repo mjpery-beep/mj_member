@@ -1154,7 +1154,16 @@
 
                     return h('div', { key: note.id, class: 'mj-regmgr-note' }, [
                         h('div', { class: 'mj-regmgr-note__header' }, [
-                            h('span', { class: 'mj-regmgr-note__author' }, note.authorName || 'Anonyme'),
+                            h('div', { class: 'mj-regmgr-note__header-left' }, [
+                                h('span', { class: 'mj-regmgr-note__author' }, note.authorName || 'Anonyme'),
+                                note.eventId && note.eventTitle && h('span', { class: 'mj-regmgr-note__event-badge' }, [
+                                    note.eventEmoji && h('span', { class: 'mj-regmgr-note__event-emoji' }, note.eventEmoji),
+                                    note.eventTitle,
+                                ]),
+                                !note.eventId && h('span', { class: 'mj-regmgr-note__event-badge mj-regmgr-note__event-badge--general' }, [
+                                    getString(strings, 'generalNote', 'Note générale'),
+                                ]),
+                            ]),
                             h('span', { class: 'mj-regmgr-note__date' }, note.createdAtFormatted),
                         ]),
 

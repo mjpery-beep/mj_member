@@ -6231,7 +6231,8 @@
 
         // Sauvegarder note
         var handleSaveNote = useCallback(function (memberId, content, noteId) {
-            return api.saveMemberNote(memberId, content, noteId)
+            var eventId = selectedEvent ? selectedEvent.id : 0;
+            return api.saveMemberNote(memberId, content, noteId, eventId)
                 .then(function () {
                     // Recharger les notes
                     return api.getMemberNotes(memberId);
@@ -6239,7 +6240,7 @@
                 .then(function (data) {
                     setNotes(data.notes || []);
                 });
-        }, [api]);
+        }, [api, selectedEvent]);
 
         // Supprimer note
         var handleDeleteNote = useCallback(function (noteId) {
@@ -6900,6 +6901,7 @@
                                 onValidateRegistration: eventRequiresValidation ? handleValidateRegistration : null,
                                 onChangeOccurrences: allowOccurrenceSelection ? handleChangeOccurrences : null,
                                 onViewMember: handleViewMemberFromRegistration,
+                                onShowNotes: handleShowNotes,
                                 strings: strings,
                                 loading: registrationsLoading,
                                 loadingMembers: loadingMembers,

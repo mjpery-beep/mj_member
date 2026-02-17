@@ -4429,9 +4429,20 @@
                                     var isEditing = editingNoteId === note.id;
                                     return h('div', { key: note.id, class: 'mj-regmgr-note-card' }, [
                                         h('div', { class: 'mj-regmgr-note-card__header' }, [
-                                            h('span', { class: 'mj-regmgr-note-card__author' }, note.authorName || 'Anonyme'),
-                                            h('span', { class: 'mj-regmgr-note-card__date' }, formatDate(note.createdAt)),
-                                            h('div', { class: 'mj-regmgr-note-card__actions' }, [
+                                            h('div', { class: 'mj-regmgr-note-card__header-left' }, [
+                                                h('span', { class: 'mj-regmgr-note-card__author' }, note.authorName || 'Anonyme'),
+                                                note.eventId && note.eventTitle && h('a', { 
+                                                    class: 'mj-regmgr-note-card__event-badge',
+                                                    href: '?event=' + note.eventId + '&tab=registrations',
+                                                    title: 'Voir l\'événement ' + note.eventTitle,
+                                                }, [
+                                                    note.eventEmoji && h('span', { class: 'mj-regmgr-note-card__event-emoji' }, note.eventEmoji),
+                                                    note.eventTitle,
+                                                ]),
+                                            ]),
+                                            h('div', { class: 'mj-regmgr-note-card__header-right' }, [
+                                                h('span', { class: 'mj-regmgr-note-card__date' }, formatDate(note.createdAt)),
+                                                h('div', { class: 'mj-regmgr-note-card__actions' }, [
                                                 note.canEdit && !isEditing && h('button', {
                                                     type: 'button',
                                                     class: 'mj-btn mj-btn--icon mj-btn--ghost',
@@ -4465,6 +4476,7 @@
                                                         h('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' }),
                                                     ]),
                                                 ]),
+                                            ]),
                                             ]),
                                         ]),
                                         isEditing

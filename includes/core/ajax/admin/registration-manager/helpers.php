@@ -1821,16 +1821,25 @@ function mj_regmgr_ensure_notes_table() {
         id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
         member_id bigint(20) unsigned NOT NULL,
         author_id bigint(20) unsigned NOT NULL,
+        event_id bigint(20) unsigned DEFAULT NULL,
         content text NOT NULL,
         created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at datetime DEFAULT NULL,
         PRIMARY KEY (id),
         KEY member_id (member_id),
-        KEY author_id (author_id)
+        KEY author_id (author_id),
+        KEY event_id (event_id)
     ) {$charset_collate};";
 
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
     dbDelta($sql);
+    
+    // Ajouter la colonne event_id si elle n'existe pas (pour les tables existantes)
+    $column_exists = $wpdb->get_results("SHOW COLUMNS FROM {$table} LIKE 'event_id'");
+    if (empty($column_exists)) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN event_id bigint(20) unsigned DEFAULT NULL AFTER author_id");
+        $wpdb->query("ALTER TABLE {$table} ADD KEY event_id (event_id)");
+    }
 }
 
 function mj_regmgr_create_notes_table_if_not_exists() {

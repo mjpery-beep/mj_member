@@ -725,6 +725,7 @@ $config_json = wp_json_encode(array(
         'notePrivate' => __('Note privée (visible uniquement par l\'équipe)', 'mj-member'),
         'notePlaceholder' => __('Saisissez votre note ici...', 'mj-member'),
         'noNotes' => __('Aucune note', 'mj-member'),
+        'generalNote' => __('Note générale', 'mj-member'),
         
         // Restrictions
         'ageExceeded' => __('Âge supérieur au maximum (%d ans).', 'mj-member'),
