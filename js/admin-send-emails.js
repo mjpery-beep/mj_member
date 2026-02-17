@@ -4,6 +4,7 @@
     let editorReady = false;
     let pendingContent = null;
     let isSending = false;
+    let cancelRequested = false;
 
     function getLocalized(key) {
         if (!window.mjSendEmails || !mjSendEmails.i18n) {
@@ -120,6 +121,10 @@
         ensureProgressVisible($progress);
         $summary.removeClass('is-error').text('');
         $log.empty();
+        const $stopButton = $('#mj-email-stop');
+        if ($stopButton.length) {
+            $stopButton.addClass('mj-hidden').prop('disabled', false);
+        }
     }
 
     function statusClass(status) {
@@ -555,15 +560,28 @@
         const $summary = $('#mj-email-progress-summary');
         const $log = $('#mj-email-progress-log');
         const $submitButton = $form.find('button[type="submit"]');
+        const $testButton = $('#mj-send-email-test');
+        const $testModeInput = $('#mj-email-test-mode');
+        const $stopButton = $('#mj-email-stop');
 
         function disableForm() {
             $submitButton.prop('disabled', true);
+            $testButton.prop('disabled', true);
             $form.addClass('is-sending');
         }
 
         function enableForm() {
             $submitButton.prop('disabled', false);
+            $testButton.prop('disabled', false);
             $form.removeClass('is-sending');
+        }
+
+        function setStopButtonState(visible, disabled) {
+            if (!$stopButton.length) {
+                return;
+            }
+            $stopButton.toggleClass('mj-hidden', !visible);
+            $stopButton.prop('disabled', !!disabled);
         }
 
         if (loader.length) {
@@ -639,6 +657,27 @@
             }
         }
 
+        if ($testButton.length) {
+            $testButton.on('click', function () {
+                if ($testModeInput.length) {
+                    $testModeInput.val('1');
+                }
+                $form.trigger('submit');
+            });
+        }
+
+        if ($stopButton.length) {
+            $stopButton.on('click', function () {
+                if (!isSending || cancelRequested) {
+                    return;
+                }
+                cancelRequested = true;
+                setStopButtonState(true, true);
+                const note = getLocalized('sendCanceled') || 'Envoi interrompu.';
+                $summary.append($('<span>', { class: 'mj-email-progress-note', text: ' ' + note }));
+            });
+        }
+
         $form.on('submit', function (event) {
             event.preventDefault();
             if (isSending) {
@@ -650,15 +689,20 @@
             }
 
             const formData = serializeForm($form);
+            if ($testModeInput.length && $testModeInput.val() === '1') {
+                $testModeInput.val('0');
+            }
             const payload = $.extend({}, formData, {
                 action: 'mj_member_prepare_email_send',
                 nonce: mjSendEmails.nonce
             });
 
             isSending = true;
+            cancelRequested = false;
             disableForm();
             resetProgress($progress, $summary, $log);
             $summary.text(getLocalized('logPending') || 'Préparation…');
+            setStopButtonState(true, false);
 
             $.ajax({
                 url: mjSendEmails.ajaxUrl,
@@ -667,6 +711,7 @@
                 data: payload
             }).done(function (response) {
                 if (!response) {
+                    setStopButtonState(false, false);
                     handlePrepareError($summary, getLocalized('prepareError'), enableForm);
                     return;
                 }
@@ -679,12 +724,14 @@
                         resetProgress($progress, $summary, $log);
                         renderSkippedRecipients(skippedOnly, $log, counters);
                         finishSending($summary, counters, enableForm, false);
+                        setStopButtonState(false, false);
                         if (data.message) {
                             $summary.addClass('is-error');
                             $summary.append($('<span>', { class: 'mj-email-progress-note', text: ' ' + data.message }));
                         }
                     } else {
                         const message = data.message || getLocalized('prepareError');
+                        setStopButtonState(false, false);
                         handlePrepareError($summary, message, enableForm);
                     }
                     return;
@@ -702,6 +749,7 @@
 
                 if (!queue.length) {
                     finishSending($summary, counters, enableForm);
+                    setStopButtonState(false, false);
                     return;
                 }
 
@@ -710,17 +758,24 @@
                 function processNext() {
                     if (index >= queue.length) {
                         finishSending($summary, counters, enableForm);
+                        setStopButtonState(false, false);
                         return;
                     }
 
                     const recipient = queue[index++];
                     sendEmailForRecipient(recipient, request, $summary, $log, counters).always(function () {
+                        if (cancelRequested) {
+                            finishSending($summary, counters, enableForm, false);
+                            setStopButtonState(false, false);
+                            return;
+                        }
                         processNext();
                     });
                 }
 
                 processNext();
             }).fail(function () {
+                setStopButtonState(false, false);
                 handlePrepareError($summary, getLocalized('prepareError'), enableForm);
             });
         });

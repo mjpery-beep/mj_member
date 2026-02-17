@@ -1675,7 +1675,7 @@ if (!function_exists('mj_member_notification_on_testimonial_approved')) {
             'type' => MjNotificationTypes::TESTIMONIAL_APPROVED,
             'title' => __('✔ Ton témoignage a été publié !', 'mj-member'),
             'excerpt' => __('Ton témoignage a été approuvé et est maintenant visible par tous les membres.', 'mj-member'),
-            'url' => home_url('/temoignages/?post=' . $testimonial_id),
+            'url' => home_url('/mon-compte/temoignages/?section=testimonials&post=' . $testimonial_id),
             'context' => 'testimonials',
             'source' => 'system',
             'payload' => array(
@@ -1717,7 +1717,7 @@ if (!function_exists('mj_member_notification_on_testimonial_rejected')) {
             'type' => MjNotificationTypes::TESTIMONIAL_REJECTED,
             'title' => __('Témoignage non publié', 'mj-member'),
             'excerpt' => $excerpt,
-            'url' => home_url('/temoignages/?post=' . $testimonial_id),
+            'url' => home_url('/mon-compte/temoignages/?section=testimonials&post=' . $testimonial_id),
             'context' => 'testimonials',
             'source' => 'system',
             'payload' => array(
@@ -1775,7 +1775,7 @@ if (!function_exists('mj_member_notification_on_testimonial_reaction')) {
             'type' => MjNotificationTypes::TESTIMONIAL_REACTION,
             'title' => sprintf(__('%s %s a réagi à ton témoignage', 'mj-member'), $emoji, $reactor_name),
             'excerpt' => __('Clique pour voir ton témoignage.', 'mj-member'),
-            'url' => home_url('/temoignages/?post=' . $testimonial_id),
+            'url' => home_url('/mon-compte/temoignages/?section=testimonials&post=' . $testimonial_id),
             'context' => 'testimonials',
             'source' => 'member',
             'payload' => array(
@@ -1825,7 +1825,7 @@ if (!function_exists('mj_member_notification_on_testimonial_comment')) {
             'type' => MjNotificationTypes::TESTIMONIAL_COMMENT,
             'title' => sprintf(__('💬 %s a commenté ton témoignage', 'mj-member'), $commenter_name),
             'excerpt' => __('Clique pour voir le commentaire.', 'mj-member'),
-            'url' => home_url('/temoignages/?post=' . $testimonial_id),
+            'url' => home_url('/mon-compte/temoignages/?section=testimonials&post=' . $testimonial_id),
             'context' => 'testimonials',
             'source' => 'member',
             'payload' => array(
@@ -1875,7 +1875,7 @@ if (!function_exists('mj_member_notification_on_testimonial_comment_reply')) {
             'type' => MjNotificationTypes::TESTIMONIAL_COMMENT_REPLY,
             'title' => sprintf(__('%s a répondu à ton commentaire', 'mj-member'), $replier_name),
             'excerpt' => __('Clique pour voir la réponse.', 'mj-member'),
-            'url' => home_url('/temoignages/?post=' . $testimonial_id),
+            'url' => home_url('/mon-compte/temoignages/?section=testimonials&post=' . $testimonial_id),
             'context' => 'testimonials',
             'source' => 'member',
             'payload' => array(

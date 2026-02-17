@@ -65,7 +65,6 @@ class MjMail extends MjTools {
             </a>
         </div>
         <div class="mj-email-content">
-use Mj\Member\Classes\Crud\MjMembers;
 '.$content.'
         </div>
     </div>
@@ -113,7 +112,7 @@ use Mj\Member\Classes\Crud\MjMembers;
             'MIME-Version: 1.0',
             'Content-Type: text/html; charset=UTF-8'
         );
-        $test_mode = self::is_test_mode_enabled();
+        $test_mode = !empty($context['force_test_mode']) ? true : self::is_test_mode_enabled();
         if ($test_mode) {
             $headers[] = 'X-MJ-Test-Mode: 1';
         }
@@ -288,6 +287,9 @@ use Mj\Member\Classes\Crud\MjMembers;
         if ($payment_link_raw !== '') {
             $payment_link_raw = esc_url_raw($payment_link_raw);
         }
+        if ($payment_link_raw === '') {
+            $payment_link_raw = esc_url_raw(home_url('/mon-compte/mes-paiements/'));
+        }
         $payment_link_href = $payment_link_raw !== '' ? esc_url($payment_link_raw) : '';
 
         $payment_qr_raw = isset($context['payment_qr_url']) ? trim((string) $context['payment_qr_url']) : '';
@@ -317,6 +319,14 @@ use Mj\Member\Classes\Crud\MjMembers;
             );
         }
 
+        $member_subscribe_url = '';
+        if (function_exists('mj_member_get_card_claim_url') && isset($member->id)) {
+            $member_subscribe_url = mj_member_get_card_claim_url((int) $member->id);
+            if ($member_subscribe_url !== '') {
+                $member_subscribe_url = esc_url_raw($member_subscribe_url);
+            }
+        }
+
         $placeholders = array(
             '{{member_first_name}}' => $member_first,
             '{{member_last_name}}' => $member_last,
@@ -325,6 +335,7 @@ use Mj\Member\Classes\Crud\MjMembers;
             '{{member_phone}}' => $member_phone,
             '{{member_role}}' => $member_role,
             '{{member_id}}' => isset($member->id) ? $member->id : '',
+            '{{member_subscribe_url}}' => $member_subscribe_url,
             '{{date_inscription}}' => isset($member->date_inscription) ? $member->date_inscription : '',
             '{{date_last_payement}}' => isset($member->date_last_payement) ? $member->date_last_payement : '',
             '{{payment_last_date}}' => isset($member->date_last_payement) ? $member->date_last_payement : '',
@@ -701,13 +712,6 @@ use Mj\Member\Classes\Crud\MjMembers;
         $original_content = (string) $original_content;
 
         $final = trim(wpautop($body));
-
-        $cash_note_html = isset($placeholders['{{cash_payment_note}}']) ? $placeholders['{{cash_payment_note}}'] : '';
-        if ($cash_note_html !== '') {
-            if (strpos($original_content, '{{cash_payment_note}}') === false) {
-                $final .= "\n" . $cash_note_html;
-            }
-        }
 
         $guardian_note_html = isset($placeholders['{{guardian_children_note}}']) ? $placeholders['{{guardian_children_note}}'] : '';
         if ($guardian_note_html !== '') {

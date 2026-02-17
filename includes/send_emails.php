@@ -76,6 +76,7 @@ function mj_send_emails_page() {
                         <label><input type="radio" name="target" value="all" checked> <?php esc_html_e('Tous les membres', 'mj-member'); ?></label>
                         <label><input type="radio" name="target" value="unpaid"> <?php esc_html_e('Membres n’ayant pas payé', 'mj-member'); ?></label>
                         <label><input type="radio" name="target" value="expired"> <?php esc_html_e('Cotisation expirée', 'mj-member'); ?></label>
+                        <label><input type="radio" name="target" value="no_wp_account"> <?php esc_html_e('Email sans compte WordPress lié', 'mj-member'); ?></label>
                     </div>
                     <p class="mj-recipient-hint"><?php esc_html_e('La sélection d’un membre désactive automatiquement les segments pour éviter les erreurs.', 'mj-member'); ?></p>
                 </div>
@@ -119,7 +120,7 @@ function mj_send_emails_page() {
                     <p class="mj-template-help"><?php esc_html_e('Placeholders disponibles (remplacés automatiquement) :', 'mj-member'); ?></p>
                     <ul class="mj-placeholder-list">
                         <li><code>{{member_first_name}}</code>, <code>{{member_last_name}}</code>, <code>{{member_full_name}}</code></li>
-                        <li><code>{{member_email}}</code>, <code>{{member_phone}}</code></li>
+                        <li><code>{{member_email}}</code>, <code>{{member_phone}}</code>, <code>{{member_subscribe_url}}</code></li>
                         <li><code>{{guardian_full_name}}</code>, <code>{{guardian_email}}</code>, <code>{{guardian_children_note}}</code></li>
                         <li><code>{{guardian_children_list}}</code>, <code>{{guardian_children_inline}}</code>, <code>{{guardian_children_count}}</code></li>
                         <li><code>{{payment_button}}</code>, <code>{{payment_link}}</code>, <code>{{payment_amount}}</code>, <code>{{cash_payment_note}}</code>, <code>{{payment_reference}}</code></li>
@@ -139,12 +140,19 @@ function mj_send_emails_page() {
             </fieldset>
 
             <p class="mj-actions">
+                <input type="hidden" name="test_mode" id="mj-email-test-mode" value="0">
                 <button class="button button-primary" type="submit"><?php esc_html_e('Envoyer', 'mj-member'); ?></button>
+                <button class="button" type="button" id="mj-send-email-test"><?php esc_html_e('Envoyer en mode test', 'mj-member'); ?></button>
             </p>
         </form>
 
         <div id="mj-email-progress" class="mj-email-progress mj-hidden" aria-live="polite">
-            <h2><?php esc_html_e('Résultats de l’envoi', 'mj-member'); ?></h2>
+            <div class="mj-email-progress-header" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                <h2 style="margin:0;"><?php esc_html_e('Résultats de l’envoi', 'mj-member'); ?></h2>
+                <button type="button" class="button mj-email-progress-stop mj-hidden" id="mj-email-stop">
+                    <?php esc_html_e('Arrêter l’envoi', 'mj-member'); ?>
+                </button>
+            </div>
             <div id="mj-email-progress-summary" class="mj-email-progress-summary"></div>
             <div id="mj-email-progress-log" class="mj-email-progress-log"></div>
         </div>

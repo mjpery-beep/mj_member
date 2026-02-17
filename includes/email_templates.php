@@ -145,6 +145,7 @@ function mj_email_templates_page() {
                                                 <li><code>{{member_email}}</code> – Email principal</li>
                                                 <li><code>{{member_phone}}</code> – Téléphone principal</li>
                                                 <li><code>{{member_role}}</code> – Rôle MJ (jeune, tuteur…)</li>
+                                                <li><code>{{member_subscribe_url}}</code> – URL d'activation du compte</li>
                                             </ul>
                                         </div>
                                         <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">

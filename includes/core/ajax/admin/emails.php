@@ -66,6 +66,7 @@ function mj_member_prepare_email_send_callback() {
     $send_sms            = in_array('sms', $channels_input, true);
     $sms_body_raw        = isset($_POST['mj_sms_body']) ? wp_unslash($_POST['mj_sms_body']) : '';
     $sms_body            = $send_sms ? sanitize_textarea_field($sms_body_raw) : '';
+    $force_test_mode     = !empty($_POST['test_mode']);
 
     if (!$send_email && !$send_sms) {
         wp_send_json_error(array('message' => __('Sélectionnez au moins un canal d’envoi (email ou SMS).', 'mj-member')));
@@ -91,7 +92,7 @@ function mj_member_prepare_email_send_callback() {
     $members_table = $wpdb->prefix . 'mj_members';
     $recipients    = array();
 
-    $allowed_targets = array('all', 'unpaid', 'expired');
+    $allowed_targets = array('all', 'unpaid', 'expired', 'no_wp_account');
     if ($selected_member_id > 0) {
         $selected_target = '';
     } elseif (!in_array($selected_target, $allowed_targets, true)) {
@@ -124,6 +125,11 @@ function mj_member_prepare_email_send_callback() {
                     '',
                     $cutoff_date
                 ));
+                break;
+            case 'no_wp_account':
+                $recipients = $wpdb->get_results(
+                    "SELECT * FROM $members_table WHERE email IS NOT NULL AND email <> '' AND (wp_user_id IS NULL OR wp_user_id = 0)"
+                );
                 break;
             case 'all':
             default:
@@ -218,10 +224,11 @@ function mj_member_prepare_email_send_callback() {
                 'sms' => $send_sms ? 1 : 0,
             ),
             'sms_body'      => $sms_body,
+            'test_mode'     => $force_test_mode ? 1 : 0,
         ),
         'sendQueue' => $send_queue,
         'skipped'   => $skipped_list,
-        'testModeEnabled' => MjMail::is_test_mode_enabled(),
+        'testModeEnabled' => $force_test_mode || MjMail::is_test_mode_enabled(),
     ));
 }
 
@@ -243,6 +250,7 @@ function mj_member_send_single_email_callback() {
     $send_sms            = !empty($channels_param['sms']);
     $sms_body_raw        = isset($_POST['sms_body']) ? wp_unslash($_POST['sms_body']) : '';
     $sms_body            = $send_sms ? sanitize_textarea_field($sms_body_raw) : '';
+    $force_test_mode     = !empty($_POST['test_mode']);
 
     if ($member_id <= 0) {
         wp_send_json_error(array('message' => __('Identifiant membre manquant.', 'mj-member')));
@@ -285,6 +293,9 @@ function mj_member_send_single_email_callback() {
     }
 
     list($resolved_recipients, $context) = mj_member_build_email_context($member, $selected_template);
+    if ($force_test_mode) {
+        $context['force_test_mode'] = true;
+    }
     $label = mj_member_format_send_label($member);
 
     $email_result = array(
@@ -371,10 +382,11 @@ function mj_member_send_single_email_callback() {
                 $email_result['testMode'] = !empty($prepared['test_mode']);
 
                 $mail_failures = array();
-                if (!empty($prepared['test_mode'])) {
+                if (!empty($prepared['test_mode']) || $force_test_mode) {
                     do_action('mj_member_email_simulated', $member, $prepared, $context);
                     $email_result['status'] = 'sent';
                     $email_result['message'] = __('Mode test actif : envoi simulé (aucun email sortant).', 'mj-member');
+                    $email_result['testMode'] = true;
                     MjMail::log_email_event(array(
                         'member_id' => $member_id,
                         'template_id' => $template_id,
