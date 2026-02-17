@@ -544,9 +544,13 @@ if (!function_exists('mj_member_notification_on_member_created')) {
             return;
         }
 
+        error_log('[MJ DEBUG] Notification trigger called for member_id: ' . $member_id);
+
         $member_name = mj_member_notification_get_member_name($member);
         $role = isset($member->role) ? sanitize_key((string) $member->role) : '';
         $role_label = class_exists(MjRoles::class) ? MjRoles::getLabel($role) : $role;
+
+        error_log('[MJ DEBUG] Member data - ID: ' . $member_id . ', Role: ' . $role . ', Name: ' . $member_name);
 
         // Notification pour les admins/coordinateurs
         $admin_notification = array(
@@ -565,7 +569,12 @@ if (!function_exists('mj_member_notification_on_member_created')) {
         );
 
         $admin_recipients = mj_member_notification_get_admin_recipients();
+        error_log('[MJ DEBUG] Admin recipients count: ' . count($admin_recipients));
+        error_log('[MJ DEBUG] Admin recipients: ' . wp_json_encode($admin_recipients));
+
         if (!empty($admin_recipients)) {
+            $result = mj_member_record_notification($admin_notification, $admin_recipients);
+            error_log('[MJ DEBUG] Notification record result: ' . wp_json_encode($result));
             mj_member_record_notification($admin_notification, $admin_recipients);
         }
 
