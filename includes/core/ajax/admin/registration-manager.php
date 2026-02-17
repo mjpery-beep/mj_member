@@ -2258,6 +2258,7 @@ function mj_regmgr_add_registration() {
             'member_id' => $member_id,
             'statut' => $event->requires_validation ? MjEventRegistrations::STATUS_PENDING : MjEventRegistrations::STATUS_CONFIRMED,
             'payment_status' => ((float) $event->prix > 0 && empty($event->free_participation)) ? 'unpaid' : 'paid',
+            'allow_late_registration' => true, // Allow retrospective registration from admin
         );
 
         if (!empty($occurrences)) {
