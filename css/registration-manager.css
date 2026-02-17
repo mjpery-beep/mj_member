@@ -4798,6 +4798,13 @@ input.mj-regmgr-search-input__field {
     white-space: nowrap;
 }
 
+.mj-regmgr-member-card__age {
+    color: var(--regmgr-gray-500);
+    font-size: 12px;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
 /* ============================================
    MEMBER DETAIL PANEL
    ============================================ */
