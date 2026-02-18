@@ -429,6 +429,16 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             return new WP_Error('mj_member_insert_failed', 'Impossible de creer ce membre.');
         }
 
+        // Récupérer l'objet membre créé pour le passer au hook
+        $created_member = self::getById($member_id);
+        
+        error_log('🚀 CRÉATION MEMBRE - ID: ' . $member_id . ' - Déclenchement du hook mj_member_quick_member_created');
+        
+        // Déclencher le hook pour notifier la création du nouveau membre
+        do_action('mj_member_quick_member_created', $member_id, $created_member, [
+            'source' => 'mj_members_create',
+        ]);
+
         return $member_id;
     }
 

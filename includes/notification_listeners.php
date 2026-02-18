@@ -535,7 +535,10 @@ if (!function_exists('mj_member_notification_on_member_created')) {
      */
     function mj_member_notification_on_member_created($member_id, $member, $context = array()): void
     {
+        error_log('🎯 LISTENER DÉCLENCHÉ - member_id: ' . $member_id);
+        
         if (!function_exists('mj_member_record_notification')) {
+            error_log('⚠️ mj_member_record_notification n\'existe pas');
             return;
         }
 
@@ -546,7 +549,7 @@ if (!function_exists('mj_member_notification_on_member_created')) {
 
         $member_name = mj_member_notification_get_member_name($member);
         $role = isset($member->role) ? sanitize_key((string) $member->role) : '';
-        $role_label = class_exists(MjRoles::class) ? MjRoles::getLabel($role) : $role;
+        $role_label = class_exists(MjRoles::class) ? MjRoles::getRoleLabel($role) : $role;
 
         // Notification pour les admins/coordinateurs
         $admin_notification = array(
