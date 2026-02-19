@@ -6,6 +6,18 @@
     let isSending = false;
     let cancelRequested = false;
 
+    /**
+     * Parse JSON from raw AJAX text, stripping any leading BOM.
+     * Returns the parsed object or null on failure.
+     */
+    function parseBomJson(rawText) {
+        try {
+            return JSON.parse(rawText.replace(/^\uFEFF/, ''));
+        } catch (e) {
+            return null;
+        }
+    }
+
     function getLocalized(key) {
         if (!window.mjSendEmails || !mjSendEmails.i18n) {
             return '';
@@ -52,10 +64,35 @@
         textarea.value = value || '';
     }
 
+    function setWhatsappContent(value) {
+        const textarea = document.getElementById('mj-whatsapp-body');
+        if (!textarea) {
+            return;
+        }
+        textarea.value = value || '';
+    }
+
     function updateSmsFieldsetVisibility() {
         const fieldset = document.getElementById('mj-sms-fieldset');
         const checkbox = document.getElementById('mj-channel-sms');
         const textarea = document.getElementById(smsFieldId);
+
+        if (!fieldset || !checkbox) {
+            return;
+        }
+
+        const isActive = checkbox.checked;
+        fieldset.classList.toggle('mj-hidden', !isActive);
+
+        if (textarea) {
+            textarea.disabled = !isActive;
+        }
+    }
+
+    function updateWhatsappFieldsetVisibility() {
+        const fieldset = document.getElementById('mj-whatsapp-fieldset');
+        const checkbox = document.getElementById('mj-channel-whatsapp');
+        const textarea = document.getElementById('mj-whatsapp-body');
 
         if (!fieldset || !checkbox) {
             return;
@@ -487,9 +524,10 @@
         return $.ajax({
             url: mjSendEmails.ajaxUrl,
             method: 'POST',
-            dataType: 'json',
+            dataType: 'text',
             data: payload
-        }).done(function (response) {
+        }).done(function (rawText) {
+            var response = parseBomJson(rawText);
             if (!response || !response.success || !response.data) {
                 counters.failed += 1;
                 updateLogEntry($entry, 'failed', getLocalized('sendError'), recipient.emails || [], recipient.phones || [], [], null, null, null);
@@ -619,29 +657,47 @@
                 $.ajax({
                     url: mjSendEmails.ajaxUrl,
                     method: 'POST',
-                    dataType: 'json',
+                    dataType: 'text',
                     data: {
                         action: 'mj_get_email_template',
                         nonce: mjSendEmails.nonce,
                         template_id: templateId
                     }
-                }).done(function (response) {
+                }).done(function (rawText) {
+                    var response = parseBomJson(rawText);
+                    if (!response) {
+                        window.alert(mjSendEmails.errorLoadTemplate);
+                        return;
+                    }
+                    
                     if (!response || !response.success || !response.data) {
                         window.alert(mjSendEmails.errorLoadTemplate);
                         return;
                     }
 
-                    const data = response.data;
-                    if (subjectInput.length && typeof data.subject === 'string') {
-                        subjectInput.val(data.subject);
-                    }
 
-                    if (typeof data.content === 'string') {
-                        updateEditorContent(data.content);
-                    }
+                    try {
+                        const data = response.data;
 
-                    if (typeof data.sms_content === 'string') {
-                        setSmsContent(data.sms_content);
+                        if (subjectInput.length && typeof data.subject === 'string') {
+                            subjectInput.val(data.subject);
+                        }
+
+                        if (typeof data.content === 'string') {
+                            updateEditorContent(data.content);
+                        }
+
+                        if (typeof data.sms_content === 'string') {
+                            setSmsContent(data.sms_content);
+                        }
+
+                        if (typeof data.whatsapp_content === 'string') {
+                            setWhatsappContent(data.whatsapp_content);
+                        }
+                        
+                    } catch (error) {
+                        console.error('Erreur chargement template:', error);
+                        window.alert(mjSendEmails.errorLoadTemplate);
                     }
                 }).fail(function () {
                     window.alert(mjSendEmails.errorLoadTemplate);
@@ -707,9 +763,10 @@
             $.ajax({
                 url: mjSendEmails.ajaxUrl,
                 method: 'POST',
-                dataType: 'json',
+                dataType: 'text',
                 data: payload
-            }).done(function (response) {
+            }).done(function (rawText) {
+                var response = parseBomJson(rawText);
                 if (!response) {
                     setStopButtonState(false, false);
                     handlePrepareError($summary, getLocalized('prepareError'), enableForm);
@@ -784,6 +841,12 @@
         if (smsChannel) {
             smsChannel.addEventListener('change', updateSmsFieldsetVisibility);
             updateSmsFieldsetVisibility();
+        }
+
+        const whatsappChannel = document.getElementById('mj-channel-whatsapp');
+        if (whatsappChannel) {
+            whatsappChannel.addEventListener('change', updateWhatsappFieldsetVisibility);
+            updateWhatsappFieldsetVisibility();
         }
     });
 })(window.jQuery);

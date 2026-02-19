@@ -16,6 +16,7 @@ function mj_send_emails_page() {
     $subject              = $selected_template ? sanitize_text_field($selected_template->subject ?? '') : '';
     $content              = $selected_template ? wp_kses_post($selected_template->content ?? '') : '';
     $sms_body             = $selected_template && isset($selected_template->sms_content) ? (string) $selected_template->sms_content : '';
+    $whatsapp_body        = $selected_template && isset($selected_template->whatsapp_content) ? (string) $selected_template->whatsapp_content : '';
     ?>
     <div class="wrap">
         <h1><?php esc_html_e('Envoyer des emails', 'mj-member'); ?></h1>
@@ -28,6 +29,11 @@ function mj_send_emails_page() {
         <?php if (class_exists('MjSms') && MjSms::is_test_mode_enabled()) : ?>
             <div class="notice notice-success" style="padding:1px 12px;">
                 <p style="margin:8px 0;"><strong><?php esc_html_e('Mode test SMS activé', 'mj-member'); ?></strong> — <?php esc_html_e('Les SMS sont simulés : aucun message ne sera envoyé tant que ce mode reste actif.', 'mj-member'); ?></p>
+            </div>
+        <?php endif; ?>
+        <?php if (class_exists('MjWhatsapp') && MjWhatsapp::is_test_mode_enabled()) : ?>
+            <div class="notice notice-info" style="padding:1px 12px;">
+                <p style="margin:8px 0;"><strong><?php esc_html_e('Mode test WhatsApp activé', 'mj-member'); ?></strong> — <?php esc_html_e('Les messages WhatsApp sont simulés : aucun message ne sera envoyé tant que ce mode reste actif.', 'mj-member'); ?></p>
             </div>
         <?php endif; ?>
 
@@ -93,8 +99,12 @@ function mj_send_emails_page() {
                         <input type="checkbox" name="delivery_channels[]" value="sms" id="mj-channel-sms">
                         <?php esc_html_e('SMS', 'mj-member'); ?>
                     </label>
+                    <label>
+                        <input type="checkbox" name="delivery_channels[]" value="whatsapp" id="mj-channel-whatsapp">
+                        <?php esc_html_e('WhatsApp', 'mj-member'); ?>
+                    </label>
                 </div>
-                <p class="mj-recipient-hint"><?php esc_html_e('Les SMS et newsletters respectent les préférences de chaque membre.', 'mj-member'); ?></p>
+                <p class="mj-recipient-hint"><?php esc_html_e('Les SMS, messages WhatsApp et newsletters respectent les préférences de chaque membre.', 'mj-member'); ?></p>
             </fieldset>
 
             <fieldset class="mj-fieldset">
@@ -104,7 +114,7 @@ function mj_send_emails_page() {
                     <input type="text" name="mj_email_subject" id="mj-email-subject" value="<?php echo esc_attr($subject); ?>" required>
                 </div>
 
-                <div class="mj-field-group mj-email-editor-wrapper">
+                                <div class="mj-field-group mj-email-editor-wrapper">
                     <label for="mj_email_content"><?php esc_html_e('Contenu', 'mj-member'); ?></label>
                     <?php
                     wp_editor(
@@ -117,7 +127,7 @@ function mj_send_emails_page() {
                         )
                     );
                     ?>
-                    <p class="mj-template-help"><?php esc_html_e('Placeholders disponibles (remplacés automatiquement) :', 'mj-member'); ?></p>
+                    <p class="mj-template-help"><?php esc_html_e('Placeholders disponibles (remplacés automatiquement) :', 'mj-member'); ?></p>
                     <ul class="mj-placeholder-list">
                         <li><code>{{member_first_name}}</code>, <code>{{member_last_name}}</code>, <code>{{member_full_name}}</code></li>
                         <li><code>{{member_email}}</code>, <code>{{member_phone}}</code>, <code>{{member_subscribe_url}}</code></li>
@@ -127,6 +137,7 @@ function mj_send_emails_page() {
                         <li><code>{{today}}</code>, <code>{{site_name}}</code>, <code>{{site_url}}</code></li>
                     </ul>
                 </div>
+
             </fieldset>
 
             <fieldset class="mj-fieldset mj-sms-fieldset mj-hidden" id="mj-sms-fieldset">
@@ -136,6 +147,16 @@ function mj_send_emails_page() {
                     <textarea name="mj_sms_body" id="mj-sms-body" rows="4" class="large-text" placeholder="<?php esc_attr_e('Message concis…', 'mj-member'); ?>"><?php echo esc_textarea($sms_body); ?></textarea>
                     <p class="mj-template-help"><?php esc_html_e('Placeholders utilisables :', 'mj-member'); ?> <code>{{member_first_name}}</code> <code>{{member_last_name}}</code> <code>{{site_name}}</code> <code>{{today}}</code></p>
                     <p class="mj-recipient-hint"><?php esc_html_e('Conseil : limitez-vous à 160 caractères. Les SMS sont envoyés uniquement aux membres ayant donné leur accord.', 'mj-member'); ?></p>
+                </div>
+            </fieldset>
+
+            <fieldset class="mj-fieldset mj-whatsapp-fieldset mj-hidden" id="mj-whatsapp-fieldset">
+                <legend><?php esc_html_e('Message WhatsApp', 'mj-member'); ?></legend>
+                <div class="mj-field-group">
+                    <label for="mj-whatsapp-body"><?php esc_html_e('Contenu du message', 'mj-member'); ?></label>
+                    <textarea name="mj_whatsapp_body" id="mj-whatsapp-body" rows="4" class="large-text" placeholder="<?php esc_attr_e('Votre message WhatsApp…', 'mj-member'); ?>"><?php echo esc_textarea($whatsapp_body); ?></textarea>
+                    <p class="mj-template-help"><?php esc_html_e('Placeholders utilisables :', 'mj-member'); ?> <code>{{member_first_name}}</code> <code>{{member_last_name}}</code> <code>{{site_name}}</code> <code>{{today}}</code></p>
+                    <p class="mj-recipient-hint"><?php esc_html_e('Conseil : se limite à 4096 caractères. Les messages WhatsApp sont envoyés uniquement aux membres ayant donné leur accord.', 'mj-member'); ?></p>
                 </div>
             </fieldset>
 

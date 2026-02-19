@@ -35,11 +35,13 @@ function mj_member_get_email_template_callback() {
     $subject = isset($template->subject) ? $template->subject : (isset($template->sujet) ? $template->sujet : '');
     $content = isset($template->content) ? $template->content : (isset($template->text) ? $template->text : '');
     $sms_content = isset($template->sms_content) ? sanitize_textarea_field($template->sms_content) : '';
+    $whatsapp_content = isset($template->whatsapp_content) ? sanitize_textarea_field($template->whatsapp_content) : '';
 
     wp_send_json_success(array(
         'subject' => $subject,
         'content' => $content,
         'sms_content' => $sms_content,
+        'whatsapp_content' => $whatsapp_content,
     ));
 }
 
@@ -64,24 +66,31 @@ function mj_member_prepare_email_send_callback() {
     $channels_input      = array_values(array_unique(array_filter($channels_input)));
     $send_email          = in_array('email', $channels_input, true);
     $send_sms            = in_array('sms', $channels_input, true);
+    $send_whatsapp       = in_array('whatsapp', $channels_input, true);
     $sms_body_raw        = isset($_POST['mj_sms_body']) ? wp_unslash($_POST['mj_sms_body']) : '';
     $sms_body            = $send_sms ? sanitize_textarea_field($sms_body_raw) : '';
+    $whatsapp_body_raw   = isset($_POST['mj_whatsapp_body']) ? wp_unslash($_POST['mj_whatsapp_body']) : '';
+    $whatsapp_body       = $send_whatsapp ? sanitize_textarea_field($whatsapp_body_raw) : '';
     $force_test_mode     = !empty($_POST['test_mode']);
 
-    if (!$send_email && !$send_sms) {
-        wp_send_json_error(array('message' => __('Sélectionnez au moins un canal d’envoi (email ou SMS).', 'mj-member')));
+    if (!$send_email && !$send_sms && !$send_whatsapp) {
+        wp_send_json_error(array('message' => __('Sélectionnez au moins un canal d\'envoi (email, SMS ou WhatsApp).', 'mj-member')));
     }
 
     if ($send_email && $subject === '') {
-        wp_send_json_error(array('message' => __('Le sujet est requis pour l’envoi par email.', 'mj-member')));
+        wp_send_json_error(array('message' => __('Le sujet est requis pour l�?Tenvoi par email.', 'mj-member')));
     }
 
     if ($send_email && $content === '') {
-        wp_send_json_error(array('message' => __('Le contenu de l’email est requis.', 'mj-member')));
+        wp_send_json_error(array('message' => __('Le contenu de l�?Temail est requis.', 'mj-member')));
     }
 
     if ($send_sms && $sms_body === '') {
         wp_send_json_error(array('message' => __('Le contenu du SMS est requis.', 'mj-member')));
+    }
+
+    if ($send_whatsapp && $whatsapp_body === '') {
+        wp_send_json_error(array('message' => __('Le contenu du message WhatsApp est requis.', 'mj-member')));
     }
 
     $selected_template = null;
@@ -151,6 +160,7 @@ function mj_member_prepare_email_send_callback() {
 
         $emails = $send_email ? mj_member_collect_email_targets($member, false) : array();
         $phones = $send_sms ? mj_member_collect_sms_targets($member) : array();
+        $whatsapp_phones = $send_whatsapp ? (class_exists('MjWhatsapp') ? MjWhatsapp::collect_targets($member) : array()) : array();
 
         $newsletter_allowed = true;
         if ($send_email && MjMembers::hasField($member, 'newsletter_opt_in')) {
@@ -162,10 +172,16 @@ function mj_member_prepare_email_send_callback() {
             $sms_allowed = MjSms::is_allowed($member);
         }
 
+        $whatsapp_allowed = true;
+        if ($send_whatsapp && class_exists('MjWhatsapp')) {
+            $whatsapp_allowed = MjWhatsapp::is_allowed($member);
+        }
+
         $email_ready = $send_email && $newsletter_allowed && !empty($emails);
         $sms_ready = $send_sms && $sms_allowed && !empty($phones);
+        $whatsapp_ready = $send_whatsapp && $whatsapp_allowed && !empty($whatsapp_phones);
 
-        $channel_notes = array('email' => '', 'sms' => '');
+        $channel_notes = array('email' => '', 'sms' => '', 'whatsapp' => '');
         if ($send_email) {
             if (!$newsletter_allowed) {
                 $channel_notes['email'] = __('Email ignoré : consentement newsletter retiré.', 'mj-member');
@@ -180,14 +196,22 @@ function mj_member_prepare_email_send_callback() {
                 $channel_notes['sms'] = __('SMS ignoré : aucun numéro de téléphone valide.', 'mj-member');
             }
         }
+        if ($send_whatsapp) {
+            if (!$whatsapp_allowed) {
+                $channel_notes['whatsapp'] = __('WhatsApp ignoré : ce membre a refusé ce canal.', 'mj-member');
+            } elseif (empty($whatsapp_phones)) {
+                $channel_notes['whatsapp'] = __('WhatsApp ignoré : aucun numéro de téléphone valide.', 'mj-member');
+            }
+        }
 
-        if (!$email_ready && !$sms_ready) {
+        if (!$email_ready && !$sms_ready && !$whatsapp_ready) {
             $reason = trim(implode(' ', array_filter($channel_notes)));
             $skipped_list[] = array(
                 'member_id' => $member_id,
                 'label' => $label,
                 'emails' => $emails,
                 'phones' => $phones,
+                'whatsapp_phones' => $whatsapp_phones,
                 'reason' => $reason !== '' ? $reason : __('Aucun canal disponible pour ce membre.', 'mj-member'),
             );
             continue;
@@ -198,9 +222,11 @@ function mj_member_prepare_email_send_callback() {
             'label' => $label,
             'emails' => $emails,
             'phones' => $phones,
+            'whatsapp_phones' => $whatsapp_phones,
             'channels' => array(
                 'email' => $email_ready ? 1 : 0,
                 'sms' => $sms_ready ? 1 : 0,
+                'whatsapp' => $whatsapp_ready ? 1 : 0,
             ),
             'notes' => $channel_notes,
         );
@@ -222,8 +248,10 @@ function mj_member_prepare_email_send_callback() {
             'channels'      => array(
                 'email' => $send_email ? 1 : 0,
                 'sms' => $send_sms ? 1 : 0,
+                'whatsapp' => $send_whatsapp ? 1 : 0,
             ),
             'sms_body'      => $sms_body,
+            'whatsapp_body' => $whatsapp_body,
             'test_mode'     => $force_test_mode ? 1 : 0,
         ),
         'sendQueue' => $send_queue,
@@ -248,16 +276,19 @@ function mj_member_send_single_email_callback() {
     $channels_param      = isset($_POST['channels']) && is_array($_POST['channels']) ? $_POST['channels'] : array();
     $send_email          = !empty($channels_param['email']);
     $send_sms            = !empty($channels_param['sms']);
+    $send_whatsapp       = !empty($channels_param['whatsapp']);
     $sms_body_raw        = isset($_POST['sms_body']) ? wp_unslash($_POST['sms_body']) : '';
     $sms_body            = $send_sms ? sanitize_textarea_field($sms_body_raw) : '';
+    $whatsapp_body_raw   = isset($_POST['whatsapp_body']) ? wp_unslash($_POST['whatsapp_body']) : '';
+    $whatsapp_body       = $send_whatsapp ? sanitize_textarea_field($whatsapp_body_raw) : '';
     $force_test_mode     = !empty($_POST['test_mode']);
 
     if ($member_id <= 0) {
         wp_send_json_error(array('message' => __('Identifiant membre manquant.', 'mj-member')));
     }
 
-    if (!$send_email && !$send_sms) {
-        wp_send_json_error(array('message' => __('Sélectionnez au moins un canal d’envoi.', 'mj-member')));
+    if (!$send_email && !$send_sms && !$send_whatsapp) {
+        wp_send_json_error(array('message' => __('Sélectionnez au moins un canal d\'envoi.', 'mj-member')));
     }
 
     if ($send_email && ($subject === '' || $content === '')) {
@@ -266,6 +297,10 @@ function mj_member_send_single_email_callback() {
 
     if ($send_sms && $sms_body === '') {
         wp_send_json_error(array('message' => __('Le contenu du SMS est requis.', 'mj-member')));
+    }
+
+    if ($send_whatsapp && $whatsapp_body === '') {
+        wp_send_json_error(array('message' => __('Le contenu du message WhatsApp est requis.', 'mj-member')));
     }
 
     $member = MjMembers::getById($member_id);
@@ -308,6 +343,14 @@ function mj_member_send_single_email_callback() {
     );
     $sms_result = array(
         'status' => $send_sms ? 'pending' : 'disabled',
+        'message' => '',
+        'errors' => array(),
+        'phones' => array(),
+        'testMode' => false,
+        'preview' => null,
+    );
+    $whatsapp_result = array(
+        'status' => $send_whatsapp ? 'pending' : 'disabled',
         'message' => '',
         'errors' => array(),
         'phones' => array(),
@@ -455,7 +498,7 @@ function mj_member_send_single_email_callback() {
                         }
 
                         $email_result['status'] = 'failed';
-                        $email_result['message'] = __('Impossible d’envoyer cet email.', 'mj-member');
+                        $email_result['message'] = __('Impossible d�?Tenvoyer cet email.', 'mj-member');
                         $email_result['errors'] = $failure_messages;
 
                         MjMail::log_email_event(array(
@@ -516,7 +559,7 @@ function mj_member_send_single_email_callback() {
                 $sms_result['message'] = !empty($sms_delivery['message']) ? (string) $sms_delivery['message'] : __('SMS envoyé.', 'mj-member');
             } else {
                 $sms_result['status'] = 'failed';
-                $error_message = !empty($sms_delivery['error']) ? (string) $sms_delivery['error'] : __('Impossible d’envoyer le SMS.', 'mj-member');
+                $error_message = !empty($sms_delivery['error']) ? (string) $sms_delivery['error'] : __('Impossible d�?Tenvoyer le SMS.', 'mj-member');
                 $sms_result['message'] = $error_message;
                 $sms_result['errors'][] = $error_message;
 
@@ -542,12 +585,78 @@ function mj_member_send_single_email_callback() {
         }
     }
 
+    if ($send_whatsapp) {
+        $whatsapp_raw = MjMembers::hasField($member, 'whatsapp_opt_in') ? MjMembers::getField($member, 'whatsapp_opt_in', 0) : null;
+        $whatsapp_allowed = ($whatsapp_raw === null) ? true : ((int) $whatsapp_raw === 1);
+        if (!$whatsapp_allowed) {
+            $whatsapp_result['status'] = 'skipped';
+            $whatsapp_result['message'] = __('WhatsApp ignoré : consentement WhatsApp retiré.', 'mj-member');
+        } else {
+            $whatsapp_context = $context;
+            $whatsapp_context['channel'] = 'whatsapp';
+            $whatsapp_context['template_id'] = $template_id;
+            $whatsapp_context['template_slug'] = $template_slug;
+
+            $whatsapp_delivery = class_exists('MjWhatsapp')
+                ? MjWhatsapp::send_to_member($member, $whatsapp_body, $whatsapp_context)
+                : array('success' => false, 'phones' => array(), 'test_mode' => false, 'message' => '', 'error' => __('Service WhatsApp indisponible.', 'mj-member'));
+
+            $whatsapp_result['phones'] = isset($whatsapp_delivery['phones']) ? (array) $whatsapp_delivery['phones'] : array();
+            $whatsapp_result['testMode'] = !empty($whatsapp_delivery['test_mode']);
+            $rendered_whatsapp_body = '';
+            if (!empty($whatsapp_delivery['rendered_message'])) {
+                $rendered_whatsapp_body = (string) $whatsapp_delivery['rendered_message'];
+            } elseif ($whatsapp_body !== '') {
+                $rendered_whatsapp_body = $whatsapp_body;
+            }
+            if ($rendered_whatsapp_body !== '') {
+                $whatsapp_result['preview'] = array(
+                    'body' => $rendered_whatsapp_body,
+                    'raw' => $whatsapp_body,
+                    'testMode' => $whatsapp_result['testMode'],
+                );
+            }
+
+            if (!empty($whatsapp_delivery['success'])) {
+                $whatsapp_result['status'] = 'sent';
+                $whatsapp_result['message'] = !empty($whatsapp_delivery['message']) ? (string) $whatsapp_delivery['message'] : __('Message WhatsApp envoyé.', 'mj-member');
+            } else {
+                $whatsapp_result['status'] = 'failed';
+                $error_message = !empty($whatsapp_delivery['error']) ? (string) $whatsapp_delivery['error'] : __('Impossible d\'envoyer le message WhatsApp.', 'mj-member');
+                $whatsapp_result['message'] = $error_message;
+                $whatsapp_result['errors'][] = $error_message;
+
+                $error_details = array();
+                if (!empty($whatsapp_delivery['error_details']) && is_array($whatsapp_delivery['error_details'])) {
+                    $error_details = $whatsapp_delivery['error_details'];
+                } elseif (!empty($whatsapp_delivery['errors']) && is_array($whatsapp_delivery['errors'])) {
+                    $error_details = $whatsapp_delivery['errors'];
+                }
+
+                if (!empty($error_details)) {
+                    foreach ($error_details as $detail) {
+                        $detail = trim((string) $detail);
+                        if ($detail === '') {
+                            continue;
+                        }
+                        if (!in_array($detail, $whatsapp_result['errors'], true)) {
+                            $whatsapp_result['errors'][] = $detail;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     $channel_statuses = array();
     if ($send_email) {
         $channel_statuses[] = $email_result['status'];
     }
     if ($send_sms) {
         $channel_statuses[] = $sms_result['status'];
+    }
+    if ($send_whatsapp) {
+        $channel_statuses[] = $whatsapp_result['status'];
     }
 
     $overall_status = 'skipped';
@@ -559,16 +668,16 @@ function mj_member_send_single_email_callback() {
         $overall_status = 'skipped';
     }
 
-    $combined_errors = array_merge($email_result['errors'], $sms_result['errors']);
+    $combined_errors = array_merge($email_result['errors'], $sms_result['errors'], $whatsapp_result['errors']);
     if (!empty($combined_errors)) {
         $combined_errors = array_values(array_unique(array_map('strval', $combined_errors)));
     }
-    $combined_message = trim(implode(' ', array_filter(array($email_result['message'], $sms_result['message']))));
+    $combined_message = trim(implode(' ', array_filter(array($email_result['message'], $sms_result['message'], $whatsapp_result['message']))));
     if ($combined_message === '' && $overall_status === 'sent') {
         $combined_message = __('Communication envoyée.', 'mj-member');
     }
     if ($combined_message === '' && $overall_status === 'skipped') {
-        $combined_message = __('Aucun canal n’a été envoyé pour ce membre.', 'mj-member');
+        $combined_message = __('Aucun canal n�?Ta été envoyé pour ce membre.', 'mj-member');
     }
 
     wp_send_json_success(array(
@@ -576,15 +685,18 @@ function mj_member_send_single_email_callback() {
         'label'     => $label,
         'emails'    => $email_result['recipients'],
         'phones'    => $sms_result['phones'],
+        'whatsappPhones' => $whatsapp_result['phones'],
         'status'    => $overall_status,
         'message'   => $combined_message,
         'errors'    => $combined_errors,
         'preview'   => $email_result['preview'],
         'smsPreview' => $sms_result['preview'],
-        'testMode'  => ($email_result['testMode'] || $sms_result['testMode']),
+        'whatsappPreview' => $whatsapp_result['preview'],
+        'testMode'  => ($email_result['testMode'] || $sms_result['testMode'] || $whatsapp_result['testMode']),
         'channels'  => array(
             'email' => $email_result['status'],
             'sms' => $sms_result['status'],
+            'whatsapp' => $whatsapp_result['status'],
         ),
     ));
 }

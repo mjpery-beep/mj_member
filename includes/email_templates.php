@@ -23,6 +23,8 @@ function mj_email_templates_page() {
         $content = isset($post_data['template_content']) ? wp_kses_post($post_data['template_content']) : '';
         $sms_raw = isset($post_data['template_sms_content']) ? $post_data['template_sms_content'] : '';
         $sms_content = is_string($sms_raw) ? sanitize_textarea_field($sms_raw) : '';
+        $whatsapp_raw = isset($post_data['template_whatsapp_content']) ? $post_data['template_whatsapp_content'] : '';
+        $whatsapp_content = is_string($whatsapp_raw) ? sanitize_textarea_field($whatsapp_raw) : '';
 
         if ($id > 0) {
             $wpdb->update(
@@ -32,9 +34,10 @@ function mj_email_templates_page() {
                     'subject' => $subject,
                     'content' => $content,
                     'sms_content' => $sms_content,
+                    'whatsapp_content' => $whatsapp_content,
                 ),
                 array('id' => $id),
-                array('%s','%s','%s','%s'),
+                array('%s','%s','%s','%s','%s'),
                 array('%d')
             );
         } else {
@@ -45,8 +48,9 @@ function mj_email_templates_page() {
                     'subject' => $subject,
                     'content' => $content,
                     'sms_content' => $sms_content,
+                    'whatsapp_content' => $whatsapp_content,
                 ),
-                array('%s','%s','%s','%s')
+                array('%s','%s','%s','%s','%s')
             );
             $id = $wpdb->insert_id;
         }
@@ -96,7 +100,7 @@ function mj_email_templates_page() {
                     <td><?php echo esc_html($t->slug); ?></td>
                     <td><?php echo esc_html($t->subject); ?></td>
                     <td>
-                        <a class="button" href="<?php echo esc_url(add_query_arg(array('page'=>'mj_email_templates','action'=>'edit','id'=>$t->id))); ?>">Éditer</a>
+                        <a class="button" href="<?php echo esc_url(add_query_arg(array('page'=>'mj_email_templates','action'=>'edit','id'=>$t->id))); ?>">�?diter</a>
                         <a class="button button-danger" href="<?php echo esc_url(wp_nonce_url(add_query_arg(array('page'=>'mj_email_templates','action'=>'delete','id'=>$t->id)), 'mj_delete_template')); ?>" onclick="return confirm('Supprimer ?')">Supprimer</a>
                     </td>
                 </tr>
@@ -106,7 +110,7 @@ function mj_email_templates_page() {
 
         <?php if ($editing || $adding): ?>
             <div style="margin-top:30px; max-width:900px;">
-                <h2><?php echo $editing ? 'Éditer' : 'Nouveau'; ?> Template</h2>
+                <h2><?php echo $editing ? '�?diter' : 'Nouveau'; ?> Template</h2>
                 <form method="post">
                     <?php wp_nonce_field('mj_save_template_nonce'); ?>
                     <input type="hidden" name="template_id" value="<?php echo $editing ? esc_attr($template->id) : ''; ?>">
@@ -123,6 +127,7 @@ function mj_email_templates_page() {
                             <?php
                             $content = $editing ? $template->content : '';
                             $sms_content_value = $editing ? (isset($template->sms_content) ? (string) $template->sms_content : '') : '';
+                            $whatsapp_content_value = $editing ? (isset($template->whatsapp_content) ? (string) $template->whatsapp_content : '') : '';
                             ?>
                             <div class="mj-template-editor-wrapper" style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
                                 <div class="mj-template-editor-main" style="flex:1 1 480px; min-width:280px;">
@@ -139,101 +144,101 @@ function mj_email_templates_page() {
                                         <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">
                                             <strong style="display:block; margin-bottom:6px;">Membre</strong>
                                             <ul style="margin:0; padding:0; list-style:none;">
-                                                <li><code>{{member_first_name}}</code> – Prénom du membre</li>
-                                                <li><code>{{member_last_name}}</code> – Nom du membre</li>
-                                                <li><code>{{member_full_name}}</code> – Nom complet</li>
-                                                <li><code>{{member_email}}</code> – Email principal</li>
-                                                <li><code>{{member_phone}}</code> – Téléphone principal</li>
-                                                <li><code>{{member_role}}</code> – Rôle MJ (jeune, tuteur…)</li>
-                                                <li><code>{{member_subscribe_url}}</code> – URL d'activation du compte</li>
+                                                <li><code>{{member_first_name}}</code> �?" Prénom du membre</li>
+                                                <li><code>{{member_last_name}}</code> �?" Nom du membre</li>
+                                                <li><code>{{member_full_name}}</code> �?" Nom complet</li>
+                                                <li><code>{{member_email}}</code> �?" Email principal</li>
+                                                <li><code>{{member_phone}}</code> �?" Téléphone principal</li>
+                                                <li><code>{{member_role}}</code> �?" Rôle MJ (jeune, tuteur�?�)</li>
+                                                <li><code>{{member_subscribe_url}}</code> �?" URL d'activation du compte</li>
                                             </ul>
                                         </div>
                                         <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">
                                             <strong style="display:block; margin-bottom:6px;">Tuteur</strong>
                                             <ul style="margin:0; padding:0; list-style:none;">
-                                                <li><code>{{guardian_first_name}}</code> – Prénom du tuteur</li>
-                                                <li><code>{{guardian_last_name}}</code> – Nom du tuteur</li>
-                                                <li><code>{{guardian_full_name}}</code> – Nom complet</li>
-                                                <li><code>{{guardian_email}}</code> – Email de contact</li>
-                                                <li><code>{{guardian_summary_plain}}</code> – Résumé texte</li>
-                                                <li><code>{{guardian_summary_html}}</code> – Résumé mis en forme</li>
+                                                <li><code>{{guardian_first_name}}</code> �?" Prénom du tuteur</li>
+                                                <li><code>{{guardian_last_name}}</code> �?" Nom du tuteur</li>
+                                                <li><code>{{guardian_full_name}}</code> �?" Nom complet</li>
+                                                <li><code>{{guardian_email}}</code> �?" Email de contact</li>
+                                                <li><code>{{guardian_summary_plain}}</code> �?" Résumé texte</li>
+                                                <li><code>{{guardian_summary_html}}</code> �?" Résumé mis en forme</li>
                                             </ul>
                                         </div>
                                         <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">
                                             <strong style="display:block; margin-bottom:6px;">Paiement</strong>
                                             <ul style="margin:0; padding:0; list-style:none;">
-                                                <li><code>{{payment_amount}}</code> – Montant formaté (ex : 20,00)</li>
-                                                <li><code>{{payment_amount_raw}}</code> – Montant brut (ex : 20)</li>
-                                                <li><code>{{payment_link}}</code> – Lien de paiement</li>
-                                                <li><code>{{payment_checkout_url}}</code> – URL complète de paiement</li>
-                                                <li><code>{{payment_qr_url}}</code> – URL vers le QR code</li>
-                                                <li><code>{{payment_qr_block}}</code> – Bloc HTML du QR code</li>
-                                                <li><code>{{payment_reference}}</code> – Référence interne</li>
-                                                <li><code>{{payment_date}}</code> – Date de paiement</li>
-                                                <li><code>{{payment_last_date}}</code> – Dernier paiement enregistré</li>
-                                                <li><code>{{cash_payment_note}}</code> – Message de paiement en espèces</li>
+                                                <li><code>{{payment_amount}}</code> �?" Montant formaté (ex : 20,00)</li>
+                                                <li><code>{{payment_amount_raw}}</code> �?" Montant brut (ex : 20)</li>
+                                                <li><code>{{payment_link}}</code> �?" Lien de paiement</li>
+                                                <li><code>{{payment_checkout_url}}</code> �?" URL complète de paiement</li>
+                                                <li><code>{{payment_qr_url}}</code> �?" URL vers le QR code</li>
+                                                <li><code>{{payment_qr_block}}</code> �?" Bloc HTML du QR code</li>
+                                                <li><code>{{payment_reference}}</code> �?" Référence interne</li>
+                                                <li><code>{{payment_date}}</code> �?" Date de paiement</li>
+                                                <li><code>{{payment_last_date}}</code> �?" Dernier paiement enregistré</li>
+                                                <li><code>{{cash_payment_note}}</code> �?" Message de paiement en espèces</li>
                                             </ul>
                                         </div>
                                         <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">
                                             <strong style="display:block; margin-bottom:6px;">Paiements multiples</strong>
                                             <ul style="margin:0; padding:0; list-style:none;">
-                                                <li><code>{{children_payment_table}}</code> – Tableau HTML des paiements</li>
-                                                <li><code>{{children_payment_list}}</code> – Liste HTML</li>
-                                                <li><code>{{children_payment_list_plain}}</code> – Liste texte</li>
-                                                <li><code>{{children_payment_total}}</code> – Total formaté</li>
-                                                <li><code>{{children_payment_total_raw}}</code> – Total brut</li>
-                                                <li><code>{{children_payment_count}}</code> – Nombre de paiements</li>
+                                                <li><code>{{children_payment_table}}</code> �?" Tableau HTML des paiements</li>
+                                                <li><code>{{children_payment_list}}</code> �?" Liste HTML</li>
+                                                <li><code>{{children_payment_list_plain}}</code> �?" Liste texte</li>
+                                                <li><code>{{children_payment_total}}</code> �?" Total formaté</li>
+                                                <li><code>{{children_payment_total_raw}}</code> �?" Total brut</li>
+                                                <li><code>{{children_payment_count}}</code> �?" Nombre de paiements</li>
                                             </ul>
                                         </div>
                                         <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">
-                                            <strong style="display:block; margin-bottom:6px;">Événement</strong>
+                                            <strong style="display:block; margin-bottom:6px;">�?vénement</strong>
                                             <ul style="margin:0; padding:0; list-style:none;">
-                                                <li><code>{{event_title}}</code> – Titre de l'événement</li>
-                                                <li><code>{{event_dates}}</code> – Dates formatées</li>
-                                                <li><code>{{capacity_total}}</code> – Capacité totale</li>
-                                                <li><code>{{active_registrations}}</code> – Inscriptions actives</li>
-                                                <li><code>{{remaining_slots}}</code> – Places restantes</li>
-                                                <li><code>{{threshold}}</code> – Seuil d'alerte</li>
-                                                <li><code>{{event_admin_url}}</code> – URL d'administration</li>
-                                                <li><code>{{event_admin_link}}</code> – Lien HTML vers l'événement</li>
-                                                <li><code>{{event_details_list}}</code> – Liste HTML des détails</li>
+                                                <li><code>{{event_title}}</code> �?" Titre de l'événement</li>
+                                                <li><code>{{event_dates}}</code> �?" Dates formatées</li>
+                                                <li><code>{{capacity_total}}</code> �?" Capacité totale</li>
+                                                <li><code>{{active_registrations}}</code> �?" Inscriptions actives</li>
+                                                <li><code>{{remaining_slots}}</code> �?" Places restantes</li>
+                                                <li><code>{{threshold}}</code> �?" Seuil d'alerte</li>
+                                                <li><code>{{event_admin_url}}</code> �?" URL d'administration</li>
+                                                <li><code>{{event_admin_link}}</code> �?" Lien HTML vers l'événement</li>
+                                                <li><code>{{event_details_list}}</code> �?" Liste HTML des détails</li>
                                             </ul>
                                         </div>
                                         <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">
                                             <strong style="display:block; margin-bottom:6px;">Inscriptions</strong>
                                             <ul style="margin:0; padding:0; list-style:none;">
-                                                <li><code>{{registration_type}}</code> – Code du type (guardian/member)</li>
-                                                <li><code>{{registration_type_label}}</code> – Libellé lisible</li>
-                                                <li><code>{{registration_status}}</code> – Statut</li>
-                                                <li><code>{{registration_created_at}}</code> – Date de création</li>
-                                                <li><code>{{registration_notes}}</code> – Notes internes</li>
-                                                <li><code>{{participant_name}}</code> – Nom du participant</li>
-                                                <li><code>{{animateurs_list}}</code> – Animateurs référents</li>
-                                                <li><code>{{is_waitlist}}</code> – "1" si liste d'attente</li>
-                                                <li><code>{{is_promotion}}</code> – "1" si promotion</li>
+                                                <li><code>{{registration_type}}</code> �?" Code du type (guardian/member)</li>
+                                                <li><code>{{registration_type_label}}</code> �?" Libellé lisible</li>
+                                                <li><code>{{registration_status}}</code> �?" Statut</li>
+                                                <li><code>{{registration_created_at}}</code> �?" Date de création</li>
+                                                <li><code>{{registration_notes}}</code> �?" Notes internes</li>
+                                                <li><code>{{participant_name}}</code> �?" Nom du participant</li>
+                                                <li><code>{{animateurs_list}}</code> �?" Animateurs référents</li>
+                                                <li><code>{{is_waitlist}}</code> �?" "1" si liste d'attente</li>
+                                                <li><code>{{is_promotion}}</code> �?" "1" si promotion</li>
                                             </ul>
                                         </div>
                                         <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">
                                             <strong style="display:block; margin-bottom:6px;">Participants</strong>
                                             <ul style="margin:0; padding:0; list-style:none;">
-                                                <li><code>{{children_list}}</code> – Liste texte des jeunes</li>
-                                                <li><code>{{children_list_html}}</code> – Liste HTML des jeunes</li>
-                                                <li><code>{{member_contact_plain}}</code> – Coordonnées membre (texte)</li>
-                                                <li><code>{{member_contact_html}}</code> – Coordonnées membre (HTML)</li>
+                                                <li><code>{{children_list}}</code> �?" Liste texte des jeunes</li>
+                                                <li><code>{{children_list_html}}</code> �?" Liste HTML des jeunes</li>
+                                                <li><code>{{member_contact_plain}}</code> �?" Coordonnées membre (texte)</li>
+                                                <li><code>{{member_contact_html}}</code> �?" Coordonnées membre (HTML)</li>
                                             </ul>
                                         </div>
                                         <div class="mj-template-variables__group" style="background:#fff; border:1px solid #ffe08a; border-radius:6px; padding:10px;">
                                             <strong style="display:block; margin-bottom:6px;">Divers</strong>
                                             <ul style="margin:0; padding:0; list-style:none;">
-                                                <li><code>{{date_inscription}}</code> – Date d'inscription</li>
-                                                <li><code>{{site_name}}</code> – Nom du site</li>
-                                                <li><code>{{site_url}}</code> – Adresse du site</li>
-                                                <li><code>{{today}}</code> – Date du jour</li>
-                                                <li><code>{{audience}}</code> – Public visé (admin, member…)</li>
-                                                <li><code>{{tutor_nom}}</code> – Nom tuteur (legacy)</li>
-                                                <li><code>{{tutor_prenom}}</code> – Prénom tuteur (legacy)</li>
-                                                <li><code>{{tutor_email}}</code> – Email tuteur (legacy)</li>
-                                                <li><code>{{date_last_payement}}</code> – Dernier paiement (legacy)</li>
+                                                <li><code>{{date_inscription}}</code> �?" Date d'inscription</li>
+                                                <li><code>{{site_name}}</code> �?" Nom du site</li>
+                                                <li><code>{{site_url}}</code> �?" Adresse du site</li>
+                                                <li><code>{{today}}</code> �?" Date du jour</li>
+                                                <li><code>{{audience}}</code> �?" Public visé (admin, member�?�)</li>
+                                                <li><code>{{tutor_nom}}</code> �?" Nom tuteur (legacy)</li>
+                                                <li><code>{{tutor_prenom}}</code> �?" Prénom tuteur (legacy)</li>
+                                                <li><code>{{tutor_email}}</code> �?" Email tuteur (legacy)</li>
+                                                <li><code>{{date_last_payement}}</code> �?" Dernier paiement (legacy)</li>
                                             </ul>
                                         </div>
                                     </div>
@@ -244,6 +249,11 @@ function mj_email_templates_page() {
                         <label>Contenu SMS (texte court, sans mise en forme)</label><br>
                         <textarea name="template_sms_content" rows="4" class="large-text" placeholder="Message concis avec variables optionnelles."><?php echo esc_textarea($sms_content_value); ?></textarea>
                         <span class="description">Utilisez les mêmes variables que pour l'email (ex&nbsp;: <code>{{member_first_name}}</code>). Gardez le message sous 160 caractères.</span>
+                    </p>
+                    <p>
+                        <label>Contenu WhatsApp (texte court, sans mise en forme)</label><br>
+                        <textarea name="template_whatsapp_content" rows="4" class="large-text" placeholder="Message WhatsApp avec variables optionnelles."><?php echo esc_textarea($whatsapp_content_value); ?></textarea>
+                        <span class="description">Utilisez les mêmes variables que pour l'email (ex&nbsp;: <code>{{member_first_name}}</code>). Limite de 4096 caractères.</span>
                     </p>
                     <p>
                         <button class="button button-primary" type="submit" name="mj_save_template"><?php echo $editing ? 'Mettre à jour' : 'Créer'; ?></button>

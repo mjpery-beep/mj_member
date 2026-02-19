@@ -752,6 +752,7 @@ function mj_member_ensure_auxiliary_tables() {
             subject varchar(255) NOT NULL,
             content longtext NOT NULL,
             sms_content longtext DEFAULT NULL,
+            whatsapp_content longtext DEFAULT NULL,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY  (id),
@@ -761,6 +762,9 @@ function mj_member_ensure_auxiliary_tables() {
     } else {
         if (!mj_member_column_exists($templates_table, 'sms_content')) {
             $wpdb->query("ALTER TABLE $templates_table ADD COLUMN sms_content longtext DEFAULT NULL AFTER content");
+        }
+        if (!mj_member_column_exists($templates_table, 'whatsapp_content')) {
+            $wpdb->query("ALTER TABLE $templates_table ADD COLUMN whatsapp_content longtext DEFAULT NULL AFTER sms_content");
         }
     }
 
