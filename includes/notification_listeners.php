@@ -577,7 +577,7 @@ if (!function_exists('mj_member_notification_on_member_created')) {
             'type' => MjNotificationTypes::MEMBER_CREATED,
             'title' => __('Bienvenue à la MJ Péry !', 'mj-member'),
             'excerpt' => __('Votre profil a été créé avec succès. Découvrez les événements à venir !', 'mj-member'),
-            'url' => home_url('/activites/'),
+            'url' => home_url('/mon-compte/'),
             'context' => 'welcome',
             'source' => 'system',
             'payload' => array(
