@@ -80,11 +80,11 @@ function mj_member_prepare_email_send_callback() {
     }
 
     if ($send_email && $subject === '') {
-        wp_send_json_error(array('message' => __('Le sujet est requis pour l�?Tenvoi par email.', 'mj-member')));
+        wp_send_json_error(array('message' => __('Le sujet est requis pour l\'envoi par email.', 'mj-member')));
     }
 
     if ($send_email && $content === '') {
-        wp_send_json_error(array('message' => __('Le contenu de l�?Temail est requis.', 'mj-member')));
+        wp_send_json_error(array('message' => __('Le contenu de l\'email est requis.', 'mj-member')));
     }
 
     if ($send_sms && $sms_body === '') {
