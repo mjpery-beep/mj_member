@@ -74,8 +74,17 @@ class MjWhatsapp extends MjTools {
             return '';
         }
 
-        $normalized = $has_plus ? '+' . ltrim($digits, '+') : $digits;
-        if (strlen($normalized) < 6) {
+        if ($has_plus) {
+            $normalized = '+' . $digits;
+        } elseif (strpos($digits, '0') === 0 && strlen($digits) >= 9) {
+            // Local number: replace leading 0 with default country dial code.
+            $country_code = apply_filters('mj_member_default_phone_country_code', '32');
+            $normalized = '+' . $country_code . substr($digits, 1);
+        } else {
+            $normalized = $digits;
+        }
+
+        if (strlen(preg_replace('/[^0-9]/', '', $normalized)) < 6) {
             return '';
         }
 
@@ -101,7 +110,18 @@ class MjWhatsapp extends MjTools {
             $targets[] = $normalized;
         }
 
-        return $targets;
+        // Si le membre n'a pas de numéro, chercher celui du tuteur (guardian)
+        if (empty($targets) && !empty($member->guardian_id) && class_exists('Mj\Member\Classes\Crud\MjMembers')) {
+            $guardian = \Mj\Member\Classes\Crud\MjMembers::getById((int) $member->guardian_id);
+            if ($guardian && !empty($guardian->phone)) {
+                $guardian_normalized = self::normalize_number($guardian->phone);
+                if ($guardian_normalized !== '') {
+                    $targets[] = $guardian_normalized;
+                }
+            }
+        }
+
+        return array_values(array_unique($targets));
     }
 
     /**
@@ -320,7 +340,9 @@ class MjWhatsapp extends MjTools {
         if ($provider === 'twilio') {
             $account_sid = trim((string) get_option('mj_sms_twilio_sid', ''));
             $auth_token = trim((string) get_option('mj_sms_twilio_token', ''));
-            $from = trim((string) get_option('mj_sms_twilio_from', ''));
+            $whatsapp_from = trim((string) get_option('mj_whatsapp_twilio_from', ''));
+            $from = $whatsapp_from !== '' ? $whatsapp_from : trim((string) get_option('mj_sms_twilio_from', ''));
+            $from = self::normalize_number($from);
 
             if ($account_sid === '' || $auth_token === '' || $from === '') {
                 return new WP_Error('mj_whatsapp_twilio_config', __('Configuration Twilio WhatsApp incomplète.', 'mj-member'));

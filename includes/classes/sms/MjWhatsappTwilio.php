@@ -60,7 +60,7 @@ class MjWhatsappTwilio {
                     'Authorization' => 'Basic ' . $auth,
                 ),
                 'body' => array(
-                    'From' => 'whatsapp:' . $phone,
+                    'From' => 'whatsapp:' . $this->from,
                     'To' => 'whatsapp:' . $phone,
                     'Body' => $message,
                 ),

@@ -74,8 +74,17 @@ class MjSms extends MjTools {
             return '';
         }
 
-        $normalized = $has_plus ? '+' . ltrim($digits, '+') : $digits;
-        if (strlen($normalized) < 6) {
+        if ($has_plus) {
+            $normalized = '+' . $digits;
+        } elseif (strpos($digits, '0') === 0 && strlen($digits) >= 9) {
+            // Local number: replace leading 0 with default country dial code.
+            $country_code = apply_filters('mj_member_default_phone_country_code', '32');
+            $normalized = '+' . $country_code . substr($digits, 1);
+        } else {
+            $normalized = $digits;
+        }
+
+        if (strlen(preg_replace('/[^0-9]/', '', $normalized)) < 6) {
             return '';
         }
 

@@ -91,6 +91,7 @@ function mj_settings_page() {
         $sms_twilio_sid = isset($_POST['mj_sms_twilio_sid']) ? sanitize_text_field($_POST['mj_sms_twilio_sid']) : '';
         $sms_twilio_token = isset($_POST['mj_sms_twilio_token']) ? sanitize_text_field($_POST['mj_sms_twilio_token']) : '';
         $sms_twilio_from = isset($_POST['mj_sms_twilio_from']) ? sanitize_text_field($_POST['mj_sms_twilio_from']) : '';
+        $whatsapp_twilio_from = isset($_POST['mj_whatsapp_twilio_from']) ? sanitize_text_field($_POST['mj_whatsapp_twilio_from']) : '';
         $stripe_success_page = isset($_POST['mj_stripe_success_page']) ? intval($_POST['mj_stripe_success_page']) : 0;
         $stripe_cancel_page = isset($_POST['mj_stripe_cancel_page']) ? intval($_POST['mj_stripe_cancel_page']) : 0;
         $registration_page = isset($_POST['mj_login_registration_page']) ? intval($_POST['mj_login_registration_page']) : 0;
@@ -115,6 +116,7 @@ function mj_settings_page() {
         update_option('mj_sms_twilio_sid', $sms_twilio_sid);
         update_option('mj_sms_twilio_token', $sms_twilio_token);
         update_option('mj_sms_twilio_from', $sms_twilio_from);
+        update_option('mj_whatsapp_twilio_from', $whatsapp_twilio_from);
         update_option('mj_stripe_success_page', $stripe_success_page > 0 ? $stripe_success_page : 0);
         update_option('mj_stripe_cancel_page', $stripe_cancel_page > 0 ? $stripe_cancel_page : 0);
         update_option('mj_login_registration_page', $registration_page > 0 ? $registration_page : 0);
@@ -350,6 +352,7 @@ function mj_settings_page() {
     $sms_twilio_sid = get_option('mj_sms_twilio_sid', '');
     $sms_twilio_token = get_option('mj_sms_twilio_token', '');
     $sms_twilio_from = get_option('mj_sms_twilio_from', '');
+    $whatsapp_twilio_from = get_option('mj_whatsapp_twilio_from', '');
     $stripe_success_page_id = (int) get_option('mj_stripe_success_page', 0);
     $stripe_cancel_page_id = (int) get_option('mj_stripe_cancel_page', 0);
     $stripe_success_redirect = get_option('mj_stripe_success_redirect', '');
@@ -990,11 +993,18 @@ function mj_settings_page() {
                                         <?php esc_html_e('Utilisez le jeton API principal ou un jeton secondaire disposant des droits SMS.', 'mj-member'); ?>
                                     </small>
                                 </p>
-                                <p style="margin:0;">
-                                    <label for="mj-sms-twilio-from"><?php esc_html_e('Numéro Twilio expéditeur', 'mj-member'); ?></label><br>
+                                <p style="margin:0 0 12px 0;">
+                                    <label for="mj-sms-twilio-from"><?php esc_html_e('Numéro Twilio expéditeur (SMS)', 'mj-member'); ?></label><br>
                                     <input type="text" name="mj_sms_twilio_from" id="mj-sms-twilio-from" value="<?php echo esc_attr($sms_twilio_from); ?>" class="regular-text" autocomplete="off" placeholder="+324XXXXXXXX">
                                     <small style="color:#666; display:block; margin-top:4px;">
                                         <?php esc_html_e('Renseignez un numéro Twilio valide (format international, ex. +32412345678).', 'mj-member'); ?>
+                                    </small>
+                                </p>
+                                <p style="margin:0;">
+                                    <label for="mj-whatsapp-twilio-from"><?php esc_html_e('Numéro WhatsApp expéditeur', 'mj-member'); ?></label><br>
+                                    <input type="text" name="mj_whatsapp_twilio_from" id="mj-whatsapp-twilio-from" value="<?php echo esc_attr($whatsapp_twilio_from); ?>" class="regular-text" autocomplete="off" placeholder="+14155238886">
+                                    <small style="color:#666; display:block; margin-top:4px;">
+                                        <?php esc_html_e('Numéro WhatsApp Business Twilio (sandbox : +14155238886). Si vide, le numéro SMS ci-dessus sera utilisé.', 'mj-member'); ?>
                                     </small>
                                 </p>
                             </div>

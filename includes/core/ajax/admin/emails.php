@@ -3,6 +3,8 @@
 use Mj\Member\Core\Config;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\MjMail;
+use Mj\Member\Classes\MjSms;
+use Mj\Member\Classes\MjWhatsapp;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -160,7 +162,7 @@ function mj_member_prepare_email_send_callback() {
 
         $emails = $send_email ? mj_member_collect_email_targets($member, false) : array();
         $phones = $send_sms ? mj_member_collect_sms_targets($member) : array();
-        $whatsapp_phones = $send_whatsapp ? (class_exists('MjWhatsapp') ? MjWhatsapp::collect_targets($member) : array()) : array();
+        $whatsapp_phones = $send_whatsapp ? (class_exists(MjWhatsapp::class) ? MjWhatsapp::collect_targets($member) : array()) : array();
 
         $newsletter_allowed = true;
         if ($send_email && MjMembers::hasField($member, 'newsletter_opt_in')) {
@@ -168,12 +170,12 @@ function mj_member_prepare_email_send_callback() {
         }
 
         $sms_allowed = true;
-        if ($send_sms && class_exists('MjSms')) {
+        if ($send_sms && class_exists(MjSms::class)) {
             $sms_allowed = MjSms::is_allowed($member);
         }
 
         $whatsapp_allowed = true;
-        if ($send_whatsapp && class_exists('MjWhatsapp')) {
+        if ($send_whatsapp && class_exists(MjWhatsapp::class)) {
             $whatsapp_allowed = MjWhatsapp::is_allowed($member);
         }
 
@@ -534,7 +536,7 @@ function mj_member_send_single_email_callback() {
             $sms_context['template_id'] = $template_id;
             $sms_context['template_slug'] = $template_slug;
 
-            $sms_delivery = class_exists('MjSms')
+            $sms_delivery = class_exists(MjSms::class)
                 ? MjSms::send_to_member($member, $sms_body, $sms_context)
                 : array('success' => false, 'phones' => array(), 'test_mode' => false, 'message' => '', 'error' => __('Service SMS indisponible.', 'mj-member'));
 
@@ -597,7 +599,7 @@ function mj_member_send_single_email_callback() {
             $whatsapp_context['template_id'] = $template_id;
             $whatsapp_context['template_slug'] = $template_slug;
 
-            $whatsapp_delivery = class_exists('MjWhatsapp')
+            $whatsapp_delivery = class_exists(MjWhatsapp::class)
                 ? MjWhatsapp::send_to_member($member, $whatsapp_body, $whatsapp_context)
                 : array('success' => false, 'phones' => array(), 'test_mode' => false, 'message' => '', 'error' => __('Service WhatsApp indisponible.', 'mj-member'));
 
