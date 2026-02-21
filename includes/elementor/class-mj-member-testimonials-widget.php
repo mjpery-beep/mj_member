@@ -137,6 +137,37 @@ class Mj_Member_Elementor_Testimonials_Widget extends Widget_Base
             )
         );
 
+        $this->add_control(
+            'featured_only',
+            array(
+                'label' => __('Uniquement les mis en avant', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => '',
+                'condition' => array(
+                    'show_approved_list' => 'yes',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'display_template',
+            array(
+                'label' => __('Template d\'affichage', 'mj-member'),
+                'type' => Controls_Manager::SELECT,
+                'default' => 'feed',
+                'options' => array(
+                    'feed' => __('Par défaut (fil d\'actualité)', 'mj-member'),
+                    'carousel-3' => __('Carrousel 3 témoignages', 'mj-member'),
+                ),
+                'condition' => array(
+                    'show_approved_list' => 'yes',
+                ),
+            )
+        );
+
         $this->end_controls_section();
 
         $this->start_controls_section(

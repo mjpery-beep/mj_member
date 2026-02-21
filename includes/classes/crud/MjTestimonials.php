@@ -152,6 +152,11 @@ class MjTestimonials implements CrudRepositoryInterface {
             $values[] = (int) $args['member_id'];
         }
 
+        if (isset($args['featured']) && $args['featured'] !== null) {
+            $where[] = 'featured = %d';
+            $values[] = (int) $args['featured'];
+        }
+
         $where_sql = implode(' AND ', $where);
 
         $sql = "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}";
@@ -492,7 +497,7 @@ class MjTestimonials implements CrudRepositoryInterface {
     public static function get_featured(array $args = array()) {
         global $wpdb;
         $table = self::get_table_name();
-        $members_table = MjMembers::getTableName();
+        $members_table = MjMembers::getTableName(MjMembers::TABLE_NAME);
 
         $defaults = array(
             'per_page' => 10,

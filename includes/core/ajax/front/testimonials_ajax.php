@@ -97,15 +97,22 @@ add_action('wp_ajax_mj_front_testimonial_submit', 'mj_front_testimonial_submit_h
 function mj_front_testimonial_list_handler() {
     $page = isset($_POST['page']) ? max(1, (int) $_POST['page']) : 1;
     $per_page = isset($_POST['per_page']) ? min(50, max(1, (int) $_POST['per_page'])) : 10;
+    $featured_only = isset($_POST['featured_only']) && $_POST['featured_only'] === '1';
 
-    $testimonials = MjTestimonials::get_approved(array(
+    $query_args = array(
         'page' => $page,
         'per_page' => $per_page,
         'orderby' => 'created_at',
         'order' => 'DESC',
-    ));
+    );
 
-    $total = MjTestimonials::count(array('status' => MjTestimonials::STATUS_APPROVED));
+    if ($featured_only) {
+        $testimonials = MjTestimonials::get_featured($query_args);
+        $total = MjTestimonials::count(array('status' => MjTestimonials::STATUS_APPROVED, 'featured' => 1));
+    } else {
+        $testimonials = MjTestimonials::get_approved($query_args);
+        $total = MjTestimonials::count(array('status' => MjTestimonials::STATUS_APPROVED));
+    }
     $items = array();
 
     foreach ($testimonials as $t) {

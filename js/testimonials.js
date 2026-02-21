@@ -41,6 +41,50 @@
             $btn.data('mj-testimonials-init', true);
             new TestimonialsLoadMore($btn);
         });
+
+        // Initialize carousel if present
+        initTestimonialsCarousel();
+    }
+
+    /**
+     * Initialize carousel navigation for carousel-3 template
+     */
+    function initTestimonialsCarousel() {
+        $('.mj-testimonials--template-carousel-3').each(function() {
+            const $container = $(this);
+            if ($container.data('carousel-init')) return;
+            $container.data('carousel-init', true);
+
+            const $viewport = $container.find('.mj-testimonials__carousel-viewport');
+            const $prevBtn = $container.find('.mj-testimonials__carousel-btn--prev');
+            const $nextBtn = $container.find('.mj-testimonials__carousel-btn--next');
+
+            if (!$viewport.length) return;
+
+            function getCardWidth() {
+                const $card = $viewport.find('.mj-carousel-card').first();
+                if (!$card.length) return 300;
+                return $card.outerWidth(true);
+            }
+
+            function updateButtons() {
+                const el = $viewport[0];
+                $prevBtn.prop('disabled', el.scrollLeft <= 5);
+                $nextBtn.prop('disabled', el.scrollLeft + el.clientWidth >= el.scrollWidth - 5);
+            }
+
+            $prevBtn.on('click', function() {
+                $viewport[0].scrollBy({ left: -getCardWidth(), behavior: 'smooth' });
+            });
+
+            $nextBtn.on('click', function() {
+                $viewport[0].scrollBy({ left: getCardWidth(), behavior: 'smooth' });
+            });
+
+            $viewport.on('scroll', updateButtons);
+            $(window).on('resize', updateButtons);
+            setTimeout(updateButtons, 100);
+        });
     }
 
     /**
@@ -681,7 +725,8 @@
                         action: 'mj_front_testimonial_list',
                         nonce: config.nonce,
                         page: this.page + 1,
-                        per_page: this.perPage
+                        per_page: this.perPage,
+                        featured_only: config.featuredOnly ? 'yes' : ''
                     }
                 });
 

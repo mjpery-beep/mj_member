@@ -40,11 +40,14 @@ $max_photos = isset($settings['max_photos']) ? (int) $settings['max_photos'] : 5
 $allow_video = !isset($settings['allow_video']) || $settings['allow_video'] === 'yes';
 $layout = isset($settings['layout']) ? sanitize_key($settings['layout']) : 'grid';
 $columns = isset($settings['columns']) ? (int) $settings['columns'] : 2;
+$featured_only = isset($settings['featured_only']) && $settings['featured_only'] === 'yes';
+$display_template = isset($settings['display_template']) ? sanitize_key($settings['display_template']) : 'feed';
 
 // Get current member
 $current_member = function_exists('mj_member_get_current_member') ? mj_member_get_current_member() : null;
 $is_logged_in = $current_member && isset($current_member->id);
 $member_id = $is_logged_in ? (int) $current_member->id : 0;
+$is_animator = false;
 
 // Check for single post mode (URL parameter)
 $single_post_id = isset($_GET['post']) ? (int) $_GET['post'] : 0;
@@ -66,10 +69,17 @@ $pending_testimonials = array(); // Testimonials pending approval
 $my_pending_testimonials = array(); // Current member's pending testimonials
 
 if ($show_list && !$is_preview) {
-    $testimonials = MjTestimonials::get_approved(array(
-        'per_page' => $per_page,
-        'page' => 1,
-    ));
+    if ($featured_only) {
+        $testimonials = MjTestimonials::get_featured(array(
+            'per_page' => $per_page,
+            'page' => 1,
+        ));
+    } else {
+        $testimonials = MjTestimonials::get_approved(array(
+            'per_page' => $per_page,
+            'page' => 1,
+        ));
+    }
     
     // Fallback: if no approved testimonials, get all (for debugging)
     if (empty($testimonials)) {
@@ -108,21 +118,36 @@ if ($is_preview) {
     $testimonials = array(
         (object) array(
             'id' => 1,
+            'member_id' => 0,
             'content' => 'La MJ c\'est vraiment un endroit génial pour se retrouver entre amis. Les animateurs sont super sympas et il y a toujours des activités fun à faire !',
             'first_name' => 'Léa',
             'last_name' => 'Martin',
             'created_at' => date('Y-m-d H:i:s', strtotime('-3 days')),
             'photo_ids' => '[]',
             'video_id' => null,
+            'status' => MjTestimonials::STATUS_APPROVED,
         ),
         (object) array(
             'id' => 2,
+            'member_id' => 0,
             'content' => 'J\'ai adoré le stage de musique l\'été dernier. J\'ai appris tellement de choses et j\'ai rencontré des gens géniaux !',
             'first_name' => 'Mathis',
             'last_name' => 'Dubois',
             'created_at' => date('Y-m-d H:i:s', strtotime('-1 week')),
             'photo_ids' => '[]',
             'video_id' => null,
+            'status' => MjTestimonials::STATUS_APPROVED,
+        ),
+        (object) array(
+            'id' => 3,
+            'member_id' => 0,
+            'content' => 'Les soirées jeux de société sont trop bien ! On rigole bien et on découvre plein de nouveaux jeux chaque semaine.',
+            'first_name' => 'Camille',
+            'last_name' => 'Leroy',
+            'created_at' => date('Y-m-d H:i:s', strtotime('-2 weeks')),
+            'photo_ids' => '[]',
+            'video_id' => null,
+            'status' => MjTestimonials::STATUS_APPROVED,
         ),
     );
 }
@@ -173,11 +198,13 @@ $localize_data['singlePostId'] = $single_post_id;
 $localize_data['baseUrl'] = remove_query_arg('post');
 $localize_data['isAnimator'] = $is_animator ?? false;
 $localize_data['hasPendingApprovals'] = $is_animator && !empty($pending_testimonials);
+$localize_data['featuredOnly'] = $featured_only;
+$localize_data['displayTemplate'] = $display_template;
 
 wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_data);
 ?>
 
-<div id="<?php echo esc_attr($widget_id); ?>" class="mj-testimonials mj-testimonials--layout-<?php echo esc_attr($layout); ?><?php echo $is_single_mode ? ' mj-testimonials--single' : ''; ?>" data-columns="<?php echo esc_attr((string)$columns); ?>">
+<div id="<?php echo esc_attr($widget_id); ?>" class="mj-testimonials mj-testimonials--layout-<?php echo esc_attr($layout); ?> mj-testimonials--template-<?php echo esc_attr($display_template); ?><?php echo $is_single_mode ? ' mj-testimonials--single' : ''; ?>" data-columns="<?php echo esc_attr((string)$columns); ?>">
 
     <?php if ($title): ?>
         <h2 class="mj-testimonials__title"><?php echo esc_html($title); ?></h2>
@@ -354,6 +381,114 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
             ?>
             <?php if (empty($all_display_testimonials) && !$is_preview): ?>
                 <p class="mj-testimonials__empty"><?php esc_html_e('Aucun témoignage pour le moment. Soyez le premier à partager votre expérience !', 'mj-member'); ?></p>
+            <?php elseif ($display_template === 'carousel-3'): ?>
+                <!-- Carousel 3 columns template -->
+                <div class="mj-testimonials__carousel-viewport">
+                    <div class="mj-testimonials__carousel-track">
+                        <?php foreach ($all_display_testimonials as $testimonial):
+                            $photos = MjTestimonials::get_photo_urls($testimonial, 'medium');
+                            $video = MjTestimonials::get_video_data($testimonial);
+                            $link_preview = MjTestimonials::get_link_preview($testimonial);
+                            $member_name = '';
+                            if (isset($testimonial->first_name)) {
+                                $member_name = $testimonial->first_name;
+                                if (isset($testimonial->last_name) && $testimonial->last_name) {
+                                    $member_name .= ' ' . mb_substr($testimonial->last_name, 0, 1) . '.';
+                                }
+                            }
+                            $member_initial = isset($testimonial->first_name) && $testimonial->first_name ? mb_strtoupper(mb_substr($testimonial->first_name, 0, 1)) : '?';
+                            $member_avatar_url = '';
+                            if (!$is_preview && isset($testimonial->member_photo_id) && $testimonial->member_photo_id) {
+                                $avatar_src = wp_get_attachment_image_src((int)$testimonial->member_photo_id, 'thumbnail');
+                                if ($avatar_src) {
+                                    $member_avatar_url = $avatar_src[0];
+                                }
+                            }
+                            $created_ago = '';
+                            if (isset($testimonial->created_at)) {
+                                $created_ago = human_time_diff(strtotime($testimonial->created_at), current_time('timestamp'));
+                            }
+                            $reactions_summary = $is_preview ? array('counts' => array('like' => 12, 'love' => 5), 'total' => 17, 'top_emojis' => array('👍', '❤️'), 'names' => array('Marie', 'Lucas')) : MjTestimonialReactions::get_summary($testimonial->id);
+                            $comment_count = $is_preview ? 3 : MjTestimonialComments::count_for_testimonial($testimonial->id);
+                            $post_id = (int)$testimonial->id;
+                        ?>
+                            <div class="mj-carousel-card" data-post-id="<?php echo $post_id; ?>">
+                                <!-- Header : avatar + nom + date -->
+                                <div class="mj-carousel-card__header">
+                                    <div class="mj-carousel-card__avatar">
+                                        <?php if ($member_avatar_url): ?>
+                                            <img src="<?php echo esc_url($member_avatar_url); ?>" alt="<?php echo esc_attr($member_name); ?>">
+                                        <?php else: ?>
+                                            <span class="mj-carousel-card__avatar-initial"><?php echo esc_html($member_initial); ?></span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="mj-carousel-card__meta">
+                                        <span class="mj-carousel-card__author"><?php echo esc_html($member_name); ?></span>
+                                        <?php if ($created_ago): ?>
+                                            <span class="mj-carousel-card__date"><?php printf(esc_html__('Il y a %s', 'mj-member'), esc_html($created_ago)); ?></span>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+
+                                <!-- Contenu texte -->
+                                <?php if (isset($testimonial->content) && $testimonial->content): ?>
+                                    <div class="mj-carousel-card__content">
+                                        <?php echo wp_kses_post(wpautop($testimonial->content)); ?>
+                                    </div>
+                                <?php endif; ?>
+
+                                <!-- Photos -->
+                                <?php if (!empty($photos)): ?>
+                                    <div class="mj-carousel-card__media mj-carousel-card__media--photos-<?php echo min(count($photos), 4); ?>">
+                                        <?php foreach (array_slice($photos, 0, 4) as $index => $photo): ?>
+                                            <a href="<?php echo esc_url($photo['full']); ?>" class="mj-carousel-card__photo" data-lightbox="carousel-<?php echo $post_id; ?>">
+                                                <img src="<?php echo esc_url($photo['url']); ?>" alt="" loading="lazy">
+                                                <?php if ($index === 3 && count($photos) > 4): ?>
+                                                    <span class="mj-carousel-card__photo-more">+<?php echo (count($photos) - 4); ?></span>
+                                                <?php endif; ?>
+                                            </a>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endif; ?>
+
+                                <!-- Vidéo -->
+                                <?php if ($video): ?>
+                                    <div class="mj-carousel-card__media mj-carousel-card__media--video">
+                                        <video controls playsinline preload="metadata" poster="<?php echo esc_url($video['poster']); ?>">
+                                            <source src="<?php echo esc_url($video['url']); ?>" type="video/mp4">
+                                        </video>
+                                    </div>
+                                <?php endif; ?>
+
+                                <!-- Lien YouTube -->
+                                <?php if ($link_preview && !empty($link_preview['is_youtube']) && !empty($link_preview['youtube_id'])): ?>
+                                    <div class="mj-carousel-card__media mj-carousel-card__media--youtube">
+                                        <iframe src="https://www.youtube.com/embed/<?php echo esc_attr($link_preview['youtube_id']); ?>?rel=0" title="YouTube" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                                    </div>
+                                <?php endif; ?>
+
+                                <!-- Réactions + commentaires résumé -->
+                                <div class="mj-carousel-card__stats">
+                                    <?php if ($reactions_summary['total'] > 0): ?>
+                                        <span class="mj-carousel-card__reactions">
+                                            <?php foreach ($reactions_summary['top_emojis'] as $emoji): ?>
+                                                <span class="mj-carousel-card__reaction-emoji"><?php echo esc_html($emoji); ?></span>
+                                            <?php endforeach; ?>
+                                            <span class="mj-carousel-card__reactions-count"><?php echo esc_html($reactions_summary['total']); ?></span>
+                                        </span>
+                                    <?php endif; ?>
+                                    <?php if ($comment_count > 0): ?>
+                                        <span class="mj-carousel-card__comments-count">
+                                            <?php printf(esc_html(_n('%d commentaire', '%d commentaires', $comment_count, 'mj-member')), $comment_count); ?>
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <button type="button" class="mj-testimonials__carousel-btn mj-testimonials__carousel-btn--prev" aria-label="<?php esc_attr_e('Précédent', 'mj-member'); ?>">&#8249;</button>
+                <button type="button" class="mj-testimonials__carousel-btn mj-testimonials__carousel-btn--next" aria-label="<?php esc_attr_e('Suivant', 'mj-member'); ?>">&#8250;</button>
             <?php else: ?>
                 <?php foreach ($all_display_testimonials as $testimonial): 
                     $photos = MjTestimonials::get_photo_urls($testimonial, 'large');
@@ -389,7 +524,8 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                     
                     // Déterminer le statut et si c'est mon témoignage
                     $testimonial_status = isset($testimonial->status) ? $testimonial->status : MjTestimonials::STATUS_APPROVED;
-                    $is_my_testimonial = $is_logged_in && ((int)$testimonial->member_id === $member_id);
+                    $t_member_id = isset($testimonial->member_id) ? (int)$testimonial->member_id : 0;
+                    $is_my_testimonial = $is_logged_in && ($t_member_id === $member_id);
                     $is_pending = $testimonial_status === MjTestimonials::STATUS_PENDING;
                     $show_approval_actions = $is_animator && $is_pending && !$is_my_testimonial;
                 ?>
@@ -619,19 +755,24 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                     </div> <!-- .mj-feed-post -->
                 </article> <!-- .mj-feed-post-wrapper -->
                 <?php endforeach; ?>
-            <?php endif; ?>
+            <?php endif; /* end carousel-3 / feed branching */ ?>
         </div> <!-- .mj-testimonials__feed -->
 
         <?php
-        // Masquer le bouton load more en mode single
-        $total_approved = MjTestimonials::count(array('status' => MjTestimonials::STATUS_APPROVED));
-        if ($total_approved > $per_page && !$is_single_mode):
+        // Load more only for feed template, not carousel
+        if ($display_template === 'feed'):
+            $count_args = array('status' => MjTestimonials::STATUS_APPROVED);
+            if ($featured_only) {
+                $count_args['featured'] = 1;
+            }
+            $total_approved = MjTestimonials::count($count_args);
+            if ($total_approved > $per_page && !$is_single_mode):
         ?>
             <div class="mj-testimonials__load-more">
                 <button type="button" class="mj-btn mj-btn--secondary mj-testimonials__load-more-btn" data-page="1" data-total-pages="<?php echo esc_attr((string)ceil($total_approved / $per_page)); ?>">
                     <?php esc_html_e('Voir plus de témoignages', 'mj-member'); ?>
                 </button>
             </div>
-        <?php endif; ?>
+        <?php endif; endif; ?>
     <?php endif; ?>
 </div>
