@@ -431,11 +431,11 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                                 </div>
 
                                 <!-- Contenu texte -->
-                                <?php if (isset($testimonial->content) && $testimonial->content): ?>
-                                    <div class="mj-carousel-card__content">
+                                <div class="mj-carousel-card__content">
+                                    <?php if (isset($testimonial->content) && $testimonial->content): ?>
                                         <?php echo wp_kses_post(wpautop($testimonial->content)); ?>
-                                    </div>
-                                <?php endif; ?>
+                                    <?php endif; ?>
+                                </div>
 
                                 <!-- Photos -->
                                 <?php if (!empty($photos)): ?>
