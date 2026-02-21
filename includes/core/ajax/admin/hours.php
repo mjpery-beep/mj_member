@@ -15,6 +15,9 @@ add_action('wp_ajax_mj_member_hours_calendar', 'mj_member_ajax_hours_calendar');
 add_action('wp_ajax_mj_member_hours_list', 'mj_member_ajax_hours_list');
 add_action('wp_ajax_mj_member_hours_rename_task', 'mj_member_ajax_hours_rename_task');
 add_action('wp_ajax_mj_member_hours_rename_project', 'mj_member_ajax_hours_rename_project');
+add_action('wp_ajax_mj_member_project_hours_list', 'mj_member_ajax_project_hours_list');
+add_action('wp_ajax_mj_member_project_hours_reassign', 'mj_member_ajax_project_hours_reassign');
+add_action('wp_ajax_mj_member_project_hours_rename_task', 'mj_member_ajax_project_hours_rename_task');
 
 function mj_member_ajax_hours_create() {
     check_ajax_referer('mj_member_hours', 'nonce');
@@ -382,4 +385,149 @@ function mj_member_ajax_hours_rename_project() {
     }
 
     wp_send_json_success(array('updated' => (int) $result));
+}
+
+/**
+ * AJAX handler: list hour entries for a given project_id.
+ */
+function mj_member_ajax_project_hours_list() {
+    check_ajax_referer('mj_member_project_hours', 'nonce');
+
+    $capability = Config::capability();
+    if ($capability === '' || !current_user_can($capability)) {
+        wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
+    }
+
+    $projectId = isset($_POST['project_id']) ? (int) $_POST['project_id'] : 0;
+    if ($projectId <= 0) {
+        wp_send_json_error(array('message' => __('Projet invalide.', 'mj-member')));
+    }
+
+    $entries = MjMemberHours::get_all(array(
+        'project_id' => $projectId,
+        'orderby' => 'activity_date',
+        'order' => 'DESC',
+        'limit' => 200,
+    ));
+
+    // Collect unique member IDs
+    $memberIds = array();
+    foreach ($entries as $entry) {
+        $mid = isset($entry['member_id']) ? (int) $entry['member_id'] : 0;
+        if ($mid > 0) {
+            $memberIds[$mid] = $mid;
+        }
+    }
+
+    // Resolve member names
+    $memberLabels = array();
+    if (!empty($memberIds)) {
+        global $wpdb;
+        $table = MjMembers::getTableName(MjMembers::TABLE_NAME);
+        $placeholders = implode(',', array_fill(0, count($memberIds), '%d'));
+        $sql = $wpdb->prepare(
+            "SELECT id, first_name, last_name FROM {$table} WHERE id IN ({$placeholders})",
+            ...array_values($memberIds)
+        );
+        $rows = $wpdb->get_results($sql);
+        if (is_array($rows)) {
+            foreach ($rows as $row) {
+                $id = (int) $row->id;
+                $label = trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? ''));
+                if ($label === '') {
+                    $label = sprintf(__('Membre #%d', 'mj-member'), $id);
+                }
+                $memberLabels[$id] = $label;
+            }
+        }
+    }
+
+    $result = array();
+    foreach ($entries as $entry) {
+        $memberId = isset($entry['member_id']) ? (int) $entry['member_id'] : 0;
+        $duration = isset($entry['duration_minutes']) ? (int) $entry['duration_minutes'] : 0;
+
+        $result[] = array(
+            'id' => isset($entry['id']) ? (int) $entry['id'] : 0,
+            'member_label' => $memberLabels[$memberId] ?? sprintf(__('Membre #%d', 'mj-member'), $memberId),
+            'task_label' => isset($entry['task_label']) ? (string) $entry['task_label'] : '',
+            'activity_date' => isset($entry['activity_date']) ? (string) $entry['activity_date'] : '',
+            'activity_date_display' => HoursPage::formatDate(isset($entry['activity_date']) ? (string) $entry['activity_date'] : ''),
+            'duration_minutes' => $duration,
+            'duration_human' => HoursPage::formatDuration($duration),
+            'notes' => isset($entry['notes']) ? (string) $entry['notes'] : '',
+            'project_id' => isset($entry['project_id']) ? (int) $entry['project_id'] : 0,
+        );
+    }
+
+    wp_send_json_success(array('entries' => $result));
+}
+
+/**
+ * AJAX handler: reassign an hour entry to a different project.
+ */
+function mj_member_ajax_project_hours_reassign() {
+    check_ajax_referer('mj_member_project_hours', 'nonce');
+
+    $capability = Config::capability();
+    if ($capability === '' || !current_user_can($capability)) {
+        wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
+    }
+
+    $entryId = isset($_POST['entry_id']) ? (int) $_POST['entry_id'] : 0;
+    $newProjectId = isset($_POST['new_project_id']) ? (int) $_POST['new_project_id'] : -1;
+
+    if ($entryId <= 0) {
+        wp_send_json_error(array('message' => __('Entrée invalide.', 'mj-member')));
+    }
+
+    if ($newProjectId < 0) {
+        wp_send_json_error(array('message' => __('Projet invalide.', 'mj-member')));
+    }
+
+    $result = MjMemberHours::update($entryId, array(
+        'project_id' => $newProjectId,
+    ));
+
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+    }
+
+    wp_send_json_success(array('message' => __('Projet mis à jour.', 'mj-member')));
+}
+
+/**
+ * AJAX handler: rename the task label of an hour entry.
+ */
+function mj_member_ajax_project_hours_rename_task() {
+    check_ajax_referer('mj_member_project_hours', 'nonce');
+
+    $capability = Config::capability();
+    if ($capability === '' || !current_user_can($capability)) {
+        wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
+    }
+
+    $entryId = isset($_POST['entry_id']) ? (int) $_POST['entry_id'] : 0;
+    $newLabel = isset($_POST['new_label']) ? sanitize_text_field(wp_unslash((string) $_POST['new_label'])) : '';
+
+    if ($entryId <= 0) {
+        wp_send_json_error(array('message' => __('Entrée invalide.', 'mj-member')));
+    }
+
+    if ($newLabel === '') {
+        wp_send_json_error(array('message' => __('Le libellé de tâche ne peut pas être vide.', 'mj-member')));
+    }
+
+    $result = MjMemberHours::update($entryId, array(
+        'task_label' => $newLabel,
+    ));
+
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+    }
+
+    wp_send_json_success(array(
+        'message' => __('Tâche renommée.', 'mj-member'),
+        'task_label' => $newLabel,
+    ));
 }

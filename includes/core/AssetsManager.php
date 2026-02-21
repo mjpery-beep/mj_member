@@ -200,6 +200,55 @@ final class AssetsManager
                 ),
             ));
         }
+
+        if (is_string($hook) && strpos($hook, 'mj_member_projects') !== false) {
+            $phmCssPath = $basePath . 'css/admin-project-hours-modal.css';
+            $phmCssVersion = file_exists($phmCssPath) ? filemtime($phmCssPath) : Config::version();
+            wp_enqueue_style('mj-member-project-hours-modal', $baseUrl . 'css/admin-project-hours-modal.css', array(), $phmCssVersion);
+
+            $phmJsPath = $basePath . 'js/admin-project-hours-modal.js';
+            $phmJsVersion = file_exists($phmJsPath) ? filemtime($phmJsPath) : Config::version();
+            wp_enqueue_script('mj-member-project-hours-modal', $baseUrl . 'js/admin-project-hours-modal.js', array('jquery'), $phmJsVersion, true);
+
+            $allProjects = \Mj\Member\Classes\Crud\MjTodoProjects::get_all(array(
+                'orderby' => 'title',
+                'order' => 'ASC',
+                'limit' => 0,
+            ));
+            $projectsList = array();
+            if (is_array($allProjects)) {
+                foreach ($allProjects as $p) {
+                    $projectsList[] = array(
+                        'id' => isset($p['id']) ? (int) $p['id'] : 0,
+                        'title' => isset($p['title']) ? (string) $p['title'] : '',
+                    );
+                }
+            }
+
+            wp_localize_script('mj-member-project-hours-modal', 'mjProjectHoursModal', array(
+                'ajaxUrl' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('mj_member_project_hours'),
+                'projects' => $projectsList,
+                'i18n' => array(
+                    'title' => __('Entrées d\'heures', 'mj-member'),
+                    'close' => __('Fermer', 'mj-member'),
+                    'loading' => __('Chargement…', 'mj-member'),
+                    'error' => __('Impossible de charger les entrées.', 'mj-member'),
+                    'empty' => __('Aucune entrée pour ce projet.', 'mj-member'),
+                    'colDate' => __('Date', 'mj-member'),
+                    'colMember' => __('Membre', 'mj-member'),
+                    'colTask' => __('Tâche', 'mj-member'),
+                    'colDuration' => __('Durée', 'mj-member'),
+                    'colNotes' => __('Notes', 'mj-member'),
+                    'colProject' => __('Projet', 'mj-member'),
+                    'noProject' => __('— Aucun projet —', 'mj-member'),
+                    'reassignSuccess' => __('Entrée déplacée avec succès.', 'mj-member'),
+                    'reassignError' => __('Impossible de déplacer l\'entrée.', 'mj-member'),
+                    'renameTaskTitle' => __('Cliquer pour renommer', 'mj-member'),
+                    'renameTaskError' => __('Impossible de renommer la tâche.', 'mj-member'),
+                ),
+            ));
+        }
     }
 
     /**

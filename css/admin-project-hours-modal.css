@@ -1,0 +1,175 @@
+/* Project Hours Modal */
+.mj-phm-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 100000;
+}
+
+.mj-phm-overlay--open {
+    display: block;
+}
+
+.mj-phm-modal {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+    z-index: 100001;
+    width: 90%;
+    max-width: 860px;
+    max-height: 80vh;
+    overflow: hidden;
+    display: none;
+    flex-direction: column;
+}
+
+.mj-phm-modal--open {
+    display: flex;
+}
+
+.mj-phm-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid #dcdcde;
+    flex-shrink: 0;
+}
+
+.mj-phm-modal__title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.mj-phm-modal__close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    color: #646970;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+}
+
+.mj-phm-modal__close:hover,
+.mj-phm-modal__close:focus {
+    color: #1d2327;
+    background: #f0f0f1;
+}
+
+.mj-phm-modal__body {
+    padding: 16px 20px 20px;
+    overflow-y: auto;
+    flex: 1 1 auto;
+}
+
+.mj-phm-modal__loading {
+    text-align: center;
+    color: #646970;
+    padding: 32px 0;
+}
+
+.mj-phm-modal__error {
+    text-align: center;
+    color: #d63638;
+    padding: 24px 0;
+}
+
+.mj-phm-modal__empty {
+    text-align: center;
+    color: #646970;
+    padding: 24px 0;
+}
+
+.mj-phm-table {
+    margin: 0;
+}
+
+.mj-phm-table th {
+    font-weight: 600;
+}
+
+.mj-phm-table td,
+.mj-phm-table th {
+    padding: 8px 10px;
+    font-size: 13px;
+}
+
+/* Button link in the hours column */
+.mj-project-hours-detail {
+    color: #2271b1;
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.mj-project-hours-detail:hover,
+.mj-project-hours-detail:focus {
+    color: #135e96;
+}
+
+/* Editable task label */
+.mj-phm-task-label {
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: background 0.15s;
+}
+
+.mj-phm-task-label:hover {
+    background: #f0f0f1;
+}
+
+.mj-phm-task-label--editing {
+    padding: 0;
+    background: none;
+}
+
+.mj-phm-task-input {
+    width: 100%;
+    padding: 3px 6px;
+    font-size: 13px;
+    border: 1px solid #2271b1;
+    border-radius: 3px;
+    box-shadow: 0 0 0 1px #2271b1;
+    outline: none;
+    box-sizing: border-box;
+}
+
+/* Project select in modal table */
+.mj-phm-project-select {
+    width: 100%;
+    min-width: 140px;
+    padding: 4px 6px;
+    font-size: 12px;
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.mj-phm-project-select:hover {
+    border-color: #2271b1;
+}
+
+.mj-phm-project-select:focus {
+    border-color: #2271b1;
+    box-shadow: 0 0 0 1px #2271b1;
+    outline: none;
+}
+
+.mj-phm-project-select:disabled {
+    opacity: 0.5;
+    cursor: wait;
+}

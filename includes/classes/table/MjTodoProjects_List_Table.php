@@ -221,7 +221,11 @@ final class MjTodoProjects_List_Table extends WP_List_Table
             $entries
         );
 
-        return '<strong>' . esc_html($formatted) . '</strong><br><span class="description">' . esc_html($label) . '</span>';
+        $title = isset($item['title']) ? esc_attr((string) $item['title']) : '';
+
+        return '<strong>' . esc_html($formatted) . '</strong><br>'
+            . '<button type="button" class="button-link mj-project-hours-detail" data-project-id="' . esc_attr((string) $id) . '" data-project-title="' . $title . '">'
+            . esc_html($label) . '</button>';
     }
 
     protected function column_description($item)

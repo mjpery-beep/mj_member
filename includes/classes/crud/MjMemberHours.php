@@ -443,6 +443,12 @@ class MjMemberHours extends MjTools implements CrudRepositoryInterface {
             $formats[] = '%d';
         }
 
+        if (array_key_exists('project_id', $data)) {
+            $projectId = (int) $data['project_id'];
+            $fields['project_id'] = $projectId > 0 ? $projectId : 0;
+            $formats[] = '%d';
+        }
+
         if (array_key_exists('notes', $data)) {
             $notes = sanitize_textarea_field($data['notes']);
             $fields['notes'] = $notes;
