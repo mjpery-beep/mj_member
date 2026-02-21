@@ -135,6 +135,7 @@ function mj_member_leave_requests_localize(): void
         'i18n' => [
             'title' => __('Demandes de Congés', 'mj-member'),
             'newRequest' => __('Nouvelle demande', 'mj-member'),
+            'newRequestFor' => __('Nouvelle demande pour %s', 'mj-member'),
             'pending' => __('En attente', 'mj-member'),
             'approved' => __('Approuvée', 'mj-member'),
             'rejected' => __('Refusée', 'mj-member'),

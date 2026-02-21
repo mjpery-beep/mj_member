@@ -26,6 +26,8 @@ function mj_member_register_leave_requests_admin_ajax(): void
     add_action('wp_ajax_mj_leave_request_reject', 'mj_member_leave_request_reject_handler');
     add_action('wp_ajax_mj_leave_request_list', 'mj_member_leave_request_list_handler');
     add_action('wp_ajax_mj_leave_request_by_member', 'mj_member_leave_request_by_member_handler');
+    add_action('wp_ajax_mj_leave_request_create_by_coordinator', 'mj_member_leave_request_create_by_coordinator_handler');
+    add_action('wp_ajax_mj_leave_request_delete', 'mj_member_leave_request_delete_handler');
 }
 add_action('init', 'mj_member_register_leave_requests_admin_ajax');
 
@@ -341,4 +343,155 @@ function mj_member_notify_leave_request_reviewed(int $requestId, string $action)
         ],
         [['member_id' => (int) $request->member_id]]
     );
+}
+
+/**
+ * Handle creating a leave request by coordinator for another member.
+ * This request is automatically approved.
+ *
+ * @return void
+ */
+function mj_member_leave_request_create_by_coordinator_handler(): void
+{
+    // Verify nonce
+    if (!isset($_POST['nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['nonce'])), 'mj-leave-requests')) {
+        wp_send_json_error(['message' => __('Sécurité échouée.', 'mj-member')], 403);
+    }
+
+    // Check coordinator access
+    $coordinator = mj_member_leave_requests_check_coordinator();
+    if (!$coordinator) {
+        wp_send_json_error(['message' => __('Accès réservé aux coordinateurs.', 'mj-member')], 403);
+    }
+
+    // Get target member ID
+    $memberId = isset($_POST['member_id']) ? (int) $_POST['member_id'] : 0;
+    if ($memberId <= 0) {
+        wp_send_json_error(['message' => __('Membre invalide.', 'mj-member')], 400);
+    }
+
+    // Get target member
+    $targetMember = MjMembers::getById($memberId);
+    if (!$targetMember) {
+        wp_send_json_error(['message' => __('Membre non trouvé.', 'mj-member')], 404);
+    }
+
+    // Validate leave type
+    $typeId = isset($_POST['type_id']) ? (int) $_POST['type_id'] : 0;
+    $type = MjLeaveTypes::get_by_id($typeId);
+    if (!$type || !$type->is_active) {
+        wp_send_json_error(['message' => __('Type de congé invalide.', 'mj-member')], 400);
+    }
+
+    // Validate dates
+    $datesRaw = isset($_POST['dates']) ? sanitize_text_field(wp_unslash($_POST['dates'])) : '';
+    $dates = json_decode($datesRaw, true);
+    if (!is_array($dates) || empty($dates)) {
+        wp_send_json_error(['message' => __('Veuillez sélectionner au moins une date.', 'mj-member')], 400);
+    }
+
+    // Sanitize and validate each date
+    $validDates = [];
+    foreach ($dates as $date) {
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            $validDates[] = $date;
+        }
+    }
+    if (empty($validDates)) {
+        wp_send_json_error(['message' => __('Format de date invalide.', 'mj-member')], 400);
+    }
+    sort($validDates);
+
+    // Get optional reason/comment
+    $reason = isset($_POST['reason']) ? sanitize_textarea_field(wp_unslash($_POST['reason'])) : '';
+
+    // Create the request with auto-approval
+    $data = [
+        'member_id' => $memberId,
+        'type_id' => $typeId,
+        'status' => MjLeaveRequests::STATUS_APPROVED,
+        'dates' => wp_json_encode($validDates),
+        'reason' => $reason,
+        'reviewed_by' => (int) $coordinator['id'],
+        'reviewed_at' => current_time('mysql'),
+        'reviewer_comment' => sprintf(__('Créée par %s', 'mj-member'), $coordinator['first_name'] . ' ' . $coordinator['last_name']),
+    ];
+
+    $requestId = MjLeaveRequests::create($data);
+    if (!$requestId) {
+        wp_send_json_error(['message' => __('Erreur lors de la création de la demande.', 'mj-member')], 500);
+    }
+
+    // Send notification to member
+    $notifyMember = $targetMember instanceof \Mj\Member\Classes\Value\MemberData
+        ? $targetMember->toArray()
+        : (array) $targetMember;
+
+    // Notify the member
+    $typeName = $type ? $type->name : __('Congé', 'mj-member');
+    $dateCount = count($validDates);
+    mj_member_record_notification(
+        [
+            'type' => 'leave_request_created',
+            'title' => __('Nouvelle demande de congé', 'mj-member'),
+            'excerpt' => sprintf(
+                /* translators: 1: leave type, 2: number of days, 3: coordinator name */
+                __('Une demande de %1$s (%2$d jour(s)) a été créée par %3$s.', 'mj-member'),
+                $typeName,
+                $dateCount,
+                $coordinator['first_name'] . ' ' . $coordinator['last_name']
+            ),
+            'url' => home_url('/ressources-humaine/'),
+            'payload' => [
+                'request_id' => $requestId,
+            ],
+        ],
+        [['member_id' => $memberId]]
+    );
+
+    // Return the created request
+    $request = MjLeaveRequests::get_by_id($requestId);
+
+    wp_send_json_success([
+        'message' => __('Demande de congé créée et approuvée automatiquement.', 'mj-member'),
+        'request' => $request,
+    ]);
+}
+
+/**
+ * Handle deleting a leave request (coordinator only).
+ *
+ * @return void
+ */
+function mj_member_leave_request_delete_handler(): void
+{
+    // Verify nonce
+    if (!isset($_POST['nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['nonce'])), 'mj-leave-requests')) {
+        wp_send_json_error(['message' => __('Sécurité échouée.', 'mj-member')], 403);
+    }
+
+    // Check coordinator access
+    $coordinator = mj_member_leave_requests_check_coordinator();
+    if (!$coordinator) {
+        wp_send_json_error(['message' => __('Accès réservé aux coordinateurs.', 'mj-member')], 403);
+    }
+
+    $requestId = isset($_POST['request_id']) ? (int) $_POST['request_id'] : 0;
+    if (!$requestId) {
+        wp_send_json_error(['message' => __('ID de demande invalide.', 'mj-member')], 400);
+    }
+
+    // Get the request
+    $request = MjLeaveRequests::get_by_id($requestId);
+    if (!$request) {
+        wp_send_json_error(['message' => __('Demande non trouvée.', 'mj-member')], 404);
+    }
+
+    // Delete the request
+    $deleted = MjLeaveRequests::delete($requestId);
+    if (is_wp_error($deleted)) {
+        wp_send_json_error(['message' => $deleted->get_error_message()], 500);
+    }
+
+    wp_send_json_success(['message' => __('Demande supprimée avec succès.', 'mj-member')]);
 }

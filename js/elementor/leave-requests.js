@@ -107,6 +107,14 @@
             }
             const response = await fetch(mjLeaveRequests.ajaxUrl, { method: 'POST', body: formData });
             return response.json();
+        },
+        delete: async (requestId) => {
+            const formData = new FormData();
+            formData.append('action', 'mj_leave_request_delete');
+            formData.append('nonce', mjLeaveRequests.nonce);
+            formData.append('request_id', requestId);
+            const response = await fetch(mjLeaveRequests.ajaxUrl, { method: 'POST', body: formData });
+            return response.json();
         }
     };
 
@@ -492,10 +500,12 @@
                             : `${formatDateShort(dates[0])} → ${formatDateShort(dates[dateCount - 1])}`;
                         const statusLabel = i18n[req.status] || req.status;
 
-                        // Check if request can be deleted (pending, or approved with all future dates)
+                        // Check if request can be deleted (coordinator: any status; self: pending/approved in future)
                         const todayStr = new Date().toISOString().slice(0, 10);
                         const allDatesInFuture = dates.every(d => d > todayStr);
-                        const canDelete = req.status === 'pending' || (req.status === 'approved' && allDatesInFuture);
+                        const canDelete = isCoordinator
+                            ? true
+                            : (req.status === 'pending' || (req.status === 'approved' && allDatesInFuture));
                         
                         // Check if is sick leave with certificate
                         const isSickLeave = type && type.slug === 'sick';
@@ -750,7 +760,7 @@
     }
 
     // Request Item Component
-    function RequestItem({ request, types, onCancel, onApprove, onReject, isCoordinator, showMember }) {
+    function RequestItem({ request, types, onCancel, onApprove, onReject, onDelete, isCoordinator, showMember }) {
         const i18n = mjLeaveRequests.i18n;
         const type = types.find(t => t.id === parseInt(request.type_id)) || { name: 'Congé', slug: 'unknown' };
         const dates = JSON.parse(request.dates || '[]');
@@ -812,7 +822,14 @@
                         class: 'mj-leave-requests__btn mj-leave-requests__btn--danger mj-leave-requests__btn--sm',
                         onClick: () => onReject(request)
                     }, i18n.reject)
-                )
+                ),
+                // Coordinator can delete any request
+                isCoordinator && onDelete && h('button', {
+                    type: 'button',
+                    class: 'mj-leave-requests__btn mj-leave-requests__btn--outline mj-leave-requests__btn--sm',
+                    onClick: () => onDelete(request.id),
+                    style: { marginLeft: '4px' }
+                }, i18n.delete || 'Supprimer')
             )
         );
     }
@@ -888,6 +905,7 @@
         const [loading, setLoading] = useState(false);
         const [rejectingRequest, setRejectingRequest] = useState(null);
         const [viewYear, setViewYear] = useState(selectedYear || currentYear);
+        const [showCreateForm, setShowCreateForm] = useState(false);
         const availableYears = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
 
         // Count pending per animateur
@@ -949,6 +967,19 @@
             }
         };
 
+        const handleDelete = async (requestId) => {
+            if (!confirm(i18n.confirmDelete || 'Êtes-vous sûr de vouloir supprimer cette demande ?')) {
+                return;
+            }
+            const result = await api.delete(requestId);
+            if (result.success) {
+                loadMemberData(selectedAnimateur, viewYear);
+                onRefresh();
+            } else {
+                alert(result.data?.message || i18n.error);
+            }
+        };
+
         return h('div', { class: 'mj-leave-requests__coordinator' },
             // Animateurs sidebar
             h('div', { class: 'mj-leave-requests__coordinator-sidebar' },
@@ -980,7 +1011,14 @@
                     // Member info
                     h('div', { class: 'mj-leave-requests__coordinator-member-header' },
                         h('h2', null, memberData.member?.name || 'Animateur'),
-                        h('span', { class: 'mj-leave-requests__coordinator-role' }, memberData.member?.role)
+                        h('span', { class: 'mj-leave-requests__coordinator-role' }, memberData.member?.role),
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--secondary mj-btn--small',
+                            onClick: () => setShowCreateForm(true)
+                        }, 
+                            (i18n.newRequestFor || 'Nouvelle demande pour %s').replace('%s', memberData.member?.name || 'Animateur')
+                        )
                     ),
 
                     // Year tabs
@@ -1010,7 +1048,7 @@
                     h(CalendarOverview, {
                         requests: memberData.requests || [],
                         types,
-                        onDelete: null,
+                        onDelete: handleDelete,
                         selectedYear: viewYear,
                         isCoordinator: true,
                         onApprove: handleApprove,
@@ -1024,7 +1062,166 @@
                 request: rejectingRequest,
                 onClose: () => setRejectingRequest(null),
                 onConfirm: handleReject
+            }),
+
+            // Create request for member (Coordinator)
+            showCreateForm && selectedAnimateur && h(CoordinatorCreateRequestModal, {
+                memberId: selectedAnimateur,
+                memberName: memberData?.member?.name || 'Animateur',
+                types,
+                year: viewYear,
+                onClose: () => setShowCreateForm(false),
+                onSuccess: () => {
+                    setShowCreateForm(false);
+                    loadMemberData(selectedAnimateur, viewYear);
+                    onRefresh();
+                }
             })
+        );
+    }
+
+    // Coordinator Create Request Modal
+    function CoordinatorCreateRequestModal({ memberId, memberName, types, year, onClose, onSuccess }) {
+        const i18n = mjLeaveRequests.i18n;
+        const [typeId, setTypeId] = useState(null);
+        const [dates, setDates] = useState([]);
+        const [reason, setReason] = useState('');
+        const [loading, setLoading] = useState(false);
+        const [error, setError] = useState('');
+
+        const selectedType = useMemo(() => types.find(t => t.id === typeId), [types, typeId]);
+
+        const removeDate = (dateStr) => {
+            setDates(prev => prev.filter(d => d !== dateStr));
+        };
+
+        const handleSubmit = async () => {
+            setError('');
+
+            if (!typeId) {
+                setError(i18n.selectType);
+                return;
+            }
+            if (dates.length === 0) {
+                setError(i18n.selectDates);
+                return;
+            }
+
+            setLoading(true);
+            try {
+                const formData = new FormData();
+                formData.append('action', 'mj_leave_request_create_by_coordinator');
+                formData.append('nonce', mjLeaveRequests.nonce);
+                formData.append('member_id', memberId);
+                formData.append('type_id', typeId);
+                formData.append('dates', JSON.stringify(dates));
+                formData.append('reason', reason);
+
+                const response = await fetch(mjLeaveRequests.ajaxUrl, { method: 'POST', body: formData });
+                const result = await response.json();
+
+                if (result.success) {
+                    onSuccess();
+                } else {
+                    setError(result.data?.message || i18n.error);
+                }
+            } catch (e) {
+                setError(i18n.error);
+            }
+            setLoading(false);
+        };
+
+        return h(Modal, { 
+            isOpen: true, 
+            onClose: loading ? () => {} : onClose,
+            title: (i18n.newRequestFor || 'Nouvelle demande pour %s').replace('%s', memberName),
+            footer: h(Fragment, null,
+                h('button', { 
+                    type: 'button', 
+                    class: 'mj-leave-requests__btn mj-leave-requests__btn--secondary',
+                    onClick: onClose,
+                    disabled: loading
+                }, i18n.cancel),
+                h('button', { 
+                    type: 'button', 
+                    class: 'mj-leave-requests__btn mj-leave-requests__btn--primary',
+                    onClick: handleSubmit,
+                    disabled: loading || !typeId || dates.length === 0
+                }, loading ? '...' : i18n.submit)
+            )
+        },
+            // Type selector
+            h('div', { class: 'mj-leave-requests__form-group' },
+                h('label', { class: 'mj-leave-requests__form-label mj-leave-requests__form-label--required' }, i18n.selectType),
+                h('div', { class: 'mj-leave-requests__type-selector' },
+                    types.map(type => {
+                        const isSelected = typeId === type.id;
+                        const style = isSelected ? {
+                            borderColor: type.color,
+                            backgroundColor: type.color.substring(0, 7) + '15'
+                        } : {};
+                        
+                        return h('label', { 
+                            class: `mj-leave-requests__type-option ${isSelected ? 'mj-leave-requests__type-option--selected' : ''}`,
+                            style,
+                            key: type.id 
+                        },
+                            h('input', { 
+                                type: 'radio', 
+                                name: 'leave_type', 
+                                value: type.id,
+                                checked: isSelected,
+                                onChange: () => setTypeId(type.id)
+                            }),
+                            h('span', { class: 'mj-leave-requests__type-option-name' }, type.name),
+                            !type.requires_validation && h('span', { class: 'mj-leave-requests__type-option-auto' }, i18n.autoApproved)
+                        );
+                    })
+                )
+            ),
+            // Simple date picker
+            h('div', { class: 'mj-leave-requests__form-group' },
+                h('label', { class: 'mj-leave-requests__form-label mj-leave-requests__form-label--required' }, i18n.selectDates),
+                h('div', { style: { marginBottom: '12px' } },
+                    h('input', { 
+                        type: 'date',
+                        class: 'mj-leave-requests__form-input',
+                        onChange: (e) => {
+                            if (e.target.value && !dates.includes(e.target.value)) {
+                                setDates([...dates, e.target.value].sort());
+                                e.target.value = '';
+                            }
+                        }
+                    })
+                ),
+                dates.length > 0 
+                    ? h('div', { class: 'mj-leave-requests__selected-dates' },
+                        dates.map(d => 
+                            h('span', { class: 'mj-leave-requests__selected-date', key: d },
+                                formatDateShort(d),
+                                h('button', { 
+                                    type: 'button', 
+                                    class: 'mj-leave-requests__selected-date-remove',
+                                    onClick: () => removeDate(d)
+                                }, '×')
+                            )
+                        )
+                    )
+                    : h('p', { class: 'mj-leave-requests__form-hint' }, i18n.noDatesSelected)
+            ),
+            // Reason
+            h('div', { class: 'mj-leave-requests__form-group' },
+                h('label', { class: 'mj-leave-requests__form-label' }, i18n.reason),
+                h('textarea', { 
+                    class: 'mj-leave-requests__form-textarea',
+                    value: reason,
+                    onInput: (e) => setReason(e.target.value),
+                    rows: 3,
+                    placeholder: 'Ex: Formation, repos, etc.'
+                })
+            ),
+            // Error
+            error && h('p', { class: 'mj-leave-requests__form-error' }, error)
         );
     }
 

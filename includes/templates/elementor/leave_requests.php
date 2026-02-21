@@ -7,6 +7,7 @@ use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Crud\MjMemberWorkSchedules;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\AssetsManager;
+use Mj\Member\Core\Config;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -24,24 +25,33 @@ $currentMember = null;
 $isCoordinator = false;
 $hasAccess = false;
 
-if (!$isPreview && $currentUserId > 0) {
-    // Find member linked to user
-    if (class_exists('Mj\\Member\\Classes\\Crud\\MjMembers')) {
+if ($isPreview) {
+    $hasAccess = true;
+    $isCoordinator = true;
+} elseif (!$isPreview && $currentUserId > 0) {
+    // First check: WordPress capability
+    $hoursCapability = Config::hoursCapability();
+    if ($hoursCapability !== '' && current_user_can($hoursCapability)) {
+        $hasAccess = true;
+    }
+    
+    // Second check: Try to find member linked to user
+    if (!$hasAccess && class_exists('Mj\\Member\\Classes\\Crud\\MjMembers')) {
         $members = MjMembers::get_all(array(
             'filters' => array('wp_user_id' => $currentUserId),
             'limit' => 1,
         ));
         if (!empty($members)) {
             $currentMember = $members[0];
-            $isCoordinator = MjRoles::isCoordinateur($currentMember->role);
             $hasAccess = MjRoles::isStaff($currentMember->role);
+            $isCoordinator = MjRoles::isCoordinateur($currentMember->role);
         }
     }
-}
-
-if ($isPreview) {
-    $hasAccess = true;
-    $isCoordinator = true;
+    
+    // If found member, update coordinator status
+    if (!$isCoordinator && $currentMember) {
+        $isCoordinator = MjRoles::isCoordinateur($currentMember->role);
+    }
 }
 
 // Get leave types
