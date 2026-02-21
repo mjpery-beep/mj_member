@@ -8,6 +8,7 @@ use Mj\Member\Classes\Crud\MjLeaveRequests;
 use Mj\Member\Classes\Crud\MjLeaveTypes;
 use Mj\Member\Classes\Crud\MjMemberHours;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjTodoProjects;
 use Mj\Member\Classes\MjEventSchedule;
 use Mj\Member\Core\Config;
 
@@ -22,6 +23,21 @@ add_action('wp_ajax_mj_member_hour_encode_delete', 'mj_member_ajax_hour_encode_d
 add_action('wp_ajax_mj_member_hour_encode_rename_project', 'mj_member_ajax_hour_encode_rename_project');
 add_action('wp_ajax_mj_member_hour_encode_rename_task', 'mj_member_ajax_hour_encode_rename_task');
 add_action('wp_ajax_mj_member_hour_encode_move_task_to_project', 'mj_member_ajax_hour_encode_move_task_to_project');
+add_action('wp_ajax_mj_member_hour_encode_toggle_fav_task', 'mj_member_ajax_hour_encode_toggle_fav_task');
+add_action('wp_ajax_mj_member_hour_encode_update_project_color', 'mj_member_ajax_hour_encode_update_project_color');
+
+// Apply project color from MjTodoProjects to each entry
+add_filter('mj_member_hour_encode_entry_color', function ($color, $record) {
+    $project = isset($record['notes']) ? trim((string) $record['notes']) : '';
+    if ($project === '') {
+        return $color;
+    }
+    $map = mj_member_hour_encode_get_project_color_map();
+    if (isset($map[$project]) && $map[$project] !== '') {
+        return $map[$project];
+    }
+    return $color;
+}, 10, 2);
 
 function mj_member_hour_encode_user_can_manage_others() {
     if (current_user_can('manage_options')) {
@@ -388,6 +404,68 @@ function mj_member_ajax_hour_encode_rename_project() {
     wp_send_json_success(array('updated' => (int) $result));
 }
 
+function mj_member_ajax_hour_encode_update_project_color() {
+    check_ajax_referer('mj-member-hour-encode', 'nonce');
+
+    $capability = Config::hoursCapability();
+    if ($capability === '') {
+        $capability = Config::capability();
+    }
+
+    if (!current_user_can($capability)) {
+        wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
+    }
+
+    $userId = get_current_user_id();
+    if ($userId <= 0) {
+        wp_send_json_error(array('message' => __('Utilisateur non authentifié.', 'mj-member')), 401);
+    }
+
+    $projectLabel = isset($_POST['project_label']) ? sanitize_text_field(wp_unslash((string) $_POST['project_label'])) : '';
+    $color = isset($_POST['color']) ? sanitize_hex_color(wp_unslash((string) $_POST['color'])) : '';
+
+    if ($projectLabel === '') {
+        wp_send_json_error(array('message' => __('Le nom du projet est requis.', 'mj-member')));
+    }
+
+    // Find the matching MjTodoProject by title
+    $allProjects = MjTodoProjects::get_all();
+    $targetProject = null;
+    foreach ($allProjects as $project) {
+        if (strcasecmp(trim((string) ($project['title'] ?? '')), $projectLabel) === 0) {
+            $targetProject = $project;
+            break;
+        }
+    }
+
+    if (!$targetProject) {
+        // No matching todo project — create one so the color can be stored
+        $createResult = MjTodoProjects::create(array(
+            'title' => $projectLabel,
+            'color' => $color ?: null,
+        ));
+        if (is_wp_error($createResult)) {
+            wp_send_json_error(array('message' => $createResult->get_error_message()));
+        }
+        // Reset the cached color map
+        mj_member_hour_encode_get_project_color_map(true);
+        wp_send_json_success(array('color' => $color ?: '', 'created' => true));
+    }
+
+    $updateResult = MjTodoProjects::update((int) $targetProject['id'], array(
+        'color' => $color ?: null,
+    ));
+
+    if (is_wp_error($updateResult)) {
+        wp_send_json_error(array('message' => $updateResult->get_error_message()));
+    }
+
+    // Reset the cached color map
+    mj_member_hour_encode_get_project_color_map(true);
+
+    wp_send_json_success(array('color' => $color ?: ''));
+}
+
 function mj_member_ajax_hour_encode_rename_task() {
     check_ajax_referer('mj-member-hour-encode', 'nonce');
 
@@ -489,6 +567,63 @@ function mj_member_ajax_hour_encode_move_task_to_project() {
     wp_send_json_success(array(
         'updated' => (int) $result,
         'message' => sprintf(__('%d entrée(s) déplacée(s).', 'mj-member'), (int) $result),
+    ));
+}
+
+/**
+ * Toggle une tâche favorite pour l'utilisateur courant.
+ * Stocké en user_meta sous la clé 'mj_member_fav_tasks'.
+ * Format : { "project_key": { "task_name": true, ... }, ... }
+ */
+function mj_member_ajax_hour_encode_toggle_fav_task() {
+    check_ajax_referer('mj-member-hour-encode', 'nonce');
+
+    $capability = Config::hoursCapability();
+    if ($capability === '') {
+        $capability = Config::capability();
+    }
+
+    if (!current_user_can($capability)) {
+        wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
+    }
+
+    $userId = get_current_user_id();
+    if ($userId <= 0) {
+        wp_send_json_error(array('message' => __('Utilisateur non authentifié.', 'mj-member')), 401);
+    }
+
+    $projectKey = isset($_POST['project_key']) ? sanitize_text_field(wp_unslash((string) $_POST['project_key'])) : '';
+    $taskName   = isset($_POST['task_name']) ? sanitize_text_field(wp_unslash((string) $_POST['task_name'])) : '';
+
+    if ($projectKey === '' || $taskName === '') {
+        wp_send_json_error(array('message' => __('Projet ou tâche invalide.', 'mj-member')));
+    }
+
+    $metaKey = 'mj_member_fav_tasks';
+    $favorites = get_user_meta($userId, $metaKey, true);
+    if (!is_array($favorites)) {
+        $favorites = array();
+    }
+
+    $isFavorite = false;
+    if (isset($favorites[$projectKey]) && is_array($favorites[$projectKey]) && isset($favorites[$projectKey][$taskName])) {
+        unset($favorites[$projectKey][$taskName]);
+        if (empty($favorites[$projectKey])) {
+            unset($favorites[$projectKey]);
+        }
+    } else {
+        if (!isset($favorites[$projectKey]) || !is_array($favorites[$projectKey])) {
+            $favorites[$projectKey] = array();
+        }
+        $favorites[$projectKey][$taskName] = true;
+        $isFavorite = true;
+    }
+
+    update_user_meta($userId, $metaKey, $favorites);
+
+    wp_send_json_success(array(
+        'favorites'  => $favorites,
+        'isFavorite' => $isFavorite,
     ));
 }
 
@@ -1340,6 +1475,38 @@ function mj_member_hour_encode_collect_entries_for_week($memberId, DateTimeImmut
     return array(array_values($entries), array_values($projects));
 }
 
+/**
+ * Build a map of project name (title) => hex color from MjTodoProjects.
+ * Used to colour entries and project summaries.
+ *
+ * @return array<string,string>  title => '#hex'
+ */
+function mj_member_hour_encode_get_project_color_map($reset = false) {
+    static $cache = null;
+    if ($reset) {
+        $cache = null;
+    }
+    if ($cache !== null) {
+        return $cache;
+    }
+    $cache = array();
+    if (!class_exists(MjTodoProjects::class)) {
+        return $cache;
+    }
+    $allProjects = MjTodoProjects::get_all(array('limit' => 0));
+    if (!is_array($allProjects)) {
+        return $cache;
+    }
+    foreach ($allProjects as $project) {
+        $title = isset($project['title']) ? trim((string) $project['title']) : '';
+        $color = isset($project['color']) ? trim((string) $project['color']) : '';
+        if ($title !== '' && $color !== '') {
+            $cache[$title] = $color;
+        }
+    }
+    return $cache;
+}
+
 function mj_member_hour_encode_collect_project_catalog($memberId) {
     if (!class_exists(MjMemberHours::class)) {
         return array();
@@ -1391,6 +1558,7 @@ function mj_member_hour_encode_collect_project_totals($memberId, DateTimeZone $t
     }
 
     $projects = array();
+    $colorMap = mj_member_hour_encode_get_project_color_map();
 
     foreach ($rows as $record) {
         if (!is_array($record)) {
@@ -1413,6 +1581,7 @@ function mj_member_hour_encode_collect_project_totals($memberId, DateTimeZone $t
                 'years' => array(),
                 'weeks' => array(),
                 'tasks' => array(),
+                'color' => isset($colorMap[$projectLabel]) ? $colorMap[$projectLabel] : '',
             );
         }
 

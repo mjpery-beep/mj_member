@@ -258,6 +258,8 @@ $config = array(
         'deleteAction' => 'mj_member_hour_encode_delete',
         'renameProjectAction' => 'mj_member_hour_encode_rename_project',
         'renameTaskAction' => 'mj_member_hour_encode_rename_task',
+        'toggleFavTaskAction' => 'mj_member_hour_encode_toggle_fav_task',
+        'updateProjectColorAction' => 'mj_member_hour_encode_update_project_color',
         'nonce' => wp_create_nonce('mj-member-hour-encode'),
         'renameNonce' => wp_create_nonce('mj-member-hour-encode'),
     ),
@@ -300,8 +302,20 @@ $config = array(
             'months' => isset($total['months']) && is_array($total['months']) ? array_map('intval', $total['months']) : array(),
             'years' => isset($total['years']) && is_array($total['years']) ? array_map('intval', $total['years']) : array(),
             'tasks' => $sanitizedTasks,
+            'color' => isset($total['color']) ? (sanitize_hex_color((string) $total['color']) ?: '') : '',
         );
     }, $projectTotalsPreview),
+    'favoriteTasks' => (function () {
+        $userId = get_current_user_id();
+        if ($userId <= 0) {
+            return (object) array();
+        }
+        $favorites = get_user_meta($userId, 'mj_member_fav_tasks', true);
+        if (!is_array($favorites) || empty($favorites)) {
+            return (object) array();
+        }
+        return $favorites;
+    })(),
     'workSchedule' => array_map(static function ($slot) {
         return array(
             'day' => isset($slot['day']) ? sanitize_text_field((string) $slot['day']) : '',

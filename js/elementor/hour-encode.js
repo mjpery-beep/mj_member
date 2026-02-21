@@ -653,13 +653,15 @@
                         var years = normalizeNumberMapValues(entry.years || entry.yearTotals || entry.year_totals || {});
                         var weeks = normalizeNumberMapValues(entry.weeks || entry.weekTotals || entry.week_totals || {});
                         var tasks = normalizeTaskTotalsMap(entry.tasks || entry.taskTotals || entry.task_totals || {});
+                        var color = isString(entry.color) ? entry.color : '';
                         map[key] = {
                             project: projectValue,
                             totalMinutes: totalMinutes,
                             months: months,
                             years: years,
                             weeks: weeks,
-                            tasks: tasks
+                            tasks: tasks,
+                            color: color
                         };
                     });
                     return map;
@@ -852,6 +854,7 @@
                         key: key,
                         label: safeValue || (labels.projectWithoutLabel || 'Sans projet'),
                         value: safeValue,
+                        color: summary && isString(summary.color) ? summary.color : '',
                         totalMinutes: totalMinutes,
                         totalLabel: formatTotalMinutes(totalMinutes, labels),
                         lifetimeMinutes: lifetimeMinutes,
@@ -2717,6 +2720,43 @@
                                         className: 'mj-hour-encode-calendar__selection-duration'
                                     }, props.selectedSlot.duration));
                                 }
+
+                                // Quick-encode favorites panel
+                                if (Array.isArray(props.favoriteItems) && props.favoriteItems.length > 0) {
+                                    selectionChildren.push(h('div', {
+                                        key: 'quick-favs',
+                                        className: 'mj-hour-encode-calendar__quick-favs',
+                                        onPointerDown: function(ev) { ev.stopPropagation(); },
+                                        onTouchStart: function(ev) { ev.stopPropagation(); }
+                                    }, props.favoriteItems.map(function(favItem, favIndex) {
+                                        return h('button', {
+                                            key: favIndex,
+                                            type: 'button',
+                                            className: 'mj-hour-encode-calendar__quick-fav-item',
+                                            title: favItem.projectLabel + ' \u203A ' + favItem.taskName,
+                                            onClick: function(event) {
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                if (typeof props.onFavoriteQuickSubmit === 'function') {
+                                                    props.onFavoriteQuickSubmit(favItem);
+                                                }
+                                            }
+                                        }, [
+                                            favItem.projectColor
+                                                ? h('span', {
+                                                    key: 'dot',
+                                                    className: 'mj-hour-encode-calendar__quick-fav-dot',
+                                                    style: { backgroundColor: favItem.projectColor }
+                                                })
+                                                : h('span', { key: 'star', className: 'mj-hour-encode-calendar__quick-fav-star' }, '\u2B50'),
+                                            h('span', { key: 'label', className: 'mj-hour-encode-calendar__quick-fav-label' }, [
+                                                h('span', { key: 'project', className: 'mj-hour-encode-calendar__quick-fav-project' }, favItem.projectLabel),
+                                                h('span', { key: 'task', className: 'mj-hour-encode-calendar__quick-fav-task' }, favItem.taskName)
+                                            ])
+                                        ]);
+                                    })));
+                                }
+
                                 canvasChildren.push(h('div', selectionAttrs, selectionChildren));
                             }
 
@@ -3410,6 +3450,9 @@
                             if (first.key !== second.key || first.label !== second.label || first.value !== second.value) {
                                 return false;
                             }
+                            if ((first.color || '') !== (second.color || '')) {
+                                return false;
+                            }
                             if (Number(first.totalMinutes || 0) !== Number(second.totalMinutes || 0)) {
                                 return false;
                             }
@@ -3520,6 +3563,7 @@
                                         key: key,
                                         label: labelValue,
                                         value: normalizedValue,
+                                        color: isString(item.color) ? item.color : '',
                                         totalMinutes: totalMinutesValue,
                                         totalLabel: formatTotalMinutes(totalMinutesValue, props.labels),
                                         lifetimeMinutes: lifetimeMinutesValue,
@@ -3556,6 +3600,7 @@
                                             key: key,
                                             label: labelValue,
                                             value: normalizedName,
+                                            color: '',
                                             totalMinutes: 0,
                                             totalLabel: formatTotalMinutes(0, props.labels),
                                             lifetimeMinutes: 0,
@@ -3724,6 +3769,13 @@
                         var weekOnlyState = hooks.useState(false);
                         var showWeekOnly = weekOnlyState[0];
                         var setShowWeekOnly = weekOnlyState[1];
+
+                        // ── Favorite tasks (from parent via props) ──
+                        var favorites = props.favorites || {};
+
+                        function isTaskFavorite(projectKey, taskName) {
+                            return Boolean(favorites[projectKey] && favorites[projectKey][taskName]);
+                        }
 
                         var projectRenameState = hooks.useState(function() {
                             return {
@@ -4098,6 +4150,12 @@
                                             }
                                         }
                                     }, [
+                                        summary.color
+                                            ? h('span', {
+                                                className: 'mj-hour-encode-app__project-pill-dot',
+                                                style: { backgroundColor: summary.color }
+                                            })
+                                            : null,
                                         h('div', { className: 'mj-hour-encode-app__project-pill-content' }, [
                                             h('span', { className: 'mj-hour-encode-app__project-pill-name' }, summary.label),
                                             summary.lifetimeLabel ? h('span', { className: 'mj-hour-encode-app__project-pill-total' }, summary.lifetimeLabel) : null
@@ -4191,7 +4249,48 @@
                                                         }
                                                     }
                                                 }, activeProject.label)
+                                            ]),
+                                        h('div', { className: 'mj-hour-encode-app__project-color-row' }, [
+                                            h('label', {
+                                                className: 'mj-hour-encode-app__project-color-label',
+                                                htmlFor: 'mj-hour-encode-project-color-' + activeProject.key
+                                            }, props.labels.projectColor || 'Couleur'),
+                                            h('div', { className: 'mj-hour-encode-app__project-color-picker' }, [
+                                                h('input', {
+                                                    id: 'mj-hour-encode-project-color-' + activeProject.key,
+                                                    type: 'color',
+                                                    className: 'mj-hour-encode-app__project-color-input',
+                                                    value: activeProject.color || '#2a55ff',
+                                                    onChange: function(event) {
+                                                        var nextColor = event.target.value || '';
+                                                        if (typeof props.onProjectColorChange === 'function') {
+                                                            props.onProjectColorChange({
+                                                                key: activeProject.key,
+                                                                label: activeProject.label || activeProject.value || '',
+                                                                color: nextColor
+                                                            });
+                                                        }
+                                                    }
+                                                }),
+                                                activeProject.color
+                                                    ? h('button', {
+                                                        type: 'button',
+                                                        className: 'mj-hour-encode-app__project-color-clear',
+                                                        title: props.labels.clearColor || 'Supprimer la couleur',
+                                                        onClick: function(event) {
+                                                            event.preventDefault();
+                                                            if (typeof props.onProjectColorChange === 'function') {
+                                                                props.onProjectColorChange({
+                                                                    key: activeProject.key,
+                                                                    label: activeProject.label || activeProject.value || '',
+                                                                    color: ''
+                                                                });
+                                                            }
+                                                        }
+                                                    }, '\u00D7')
+                                                    : null
                                             ])
+                                        ])
                                     ]),
                                     h('div', { className: 'mj-hour-encode-app__project-tasks-header-totals' }, [
                                         h('span', { className: 'mj-hour-encode-app__project-week-total' }, (props.labels.totalWeek || 'Total semaine') + ' : ' + activeProject.weekLabel),
@@ -4201,7 +4300,11 @@
                                     ])
                                 ]),
                                 tasksList.length > 0
-                                    ? h('div', { className: 'mj-hour-encode-app__project-tasks' }, tasksList.map(function(task) {
+                                    ? h('div', { className: 'mj-hour-encode-app__project-tasks' }, tasksList.slice().sort(function(a, b) {
+                                        var aFav = isTaskFavorite(activeProject.key, a.name) ? 1 : 0;
+                                        var bFav = isTaskFavorite(activeProject.key, b.name) ? 1 : 0;
+                                        return bFav - aFav;
+                                    }).map(function(task) {
                                         var isEditingTask = taskRename.key === task.key;
                                         if (isEditingTask) {
                                             return h('div', { key: task.key, className: 'mj-hour-encode-app__project-task is-editing' }, [
@@ -4338,7 +4441,31 @@
                                                 }, task.name)
                                             ]),
                                             h('div', { className: 'mj-hour-encode-app__project-task-controls' }, [
-                                                h('span', { className: 'mj-hour-encode-app__project-task-total' }, task.totalLabel)
+                                                h('span', { className: 'mj-hour-encode-app__project-task-total' }, task.totalLabel),
+                                                h('button', {
+                                                    type: 'button',
+                                                    className: 'mj-hour-encode-app__task-fav-btn' + (isTaskFavorite(activeProject.key, task.name) ? ' is-favorite' : ''),
+                                                    'aria-label': isTaskFavorite(activeProject.key, task.name) ? 'Retirer des favoris' : 'Ajouter aux favoris',
+                                                    title: isTaskFavorite(activeProject.key, task.name) ? 'Retirer des favoris' : 'Ajouter aux favoris',
+                                                    onClick: function(event) {
+                                                        event.preventDefault();
+                                                        event.stopPropagation();
+                                                        if (typeof props.onToggleFavorite === 'function') {
+                                                            props.onToggleFavorite(activeProject.key, task.name);
+                                                        }
+                                                    }
+                                                }, h('svg', {
+                                                    width: '14',
+                                                    height: '14',
+                                                    viewBox: '0 0 24 24',
+                                                    fill: isTaskFavorite(activeProject.key, task.name) ? 'currentColor' : 'none',
+                                                    stroke: 'currentColor',
+                                                    strokeWidth: '2',
+                                                    strokeLinecap: 'round',
+                                                    strokeLinejoin: 'round'
+                                                }, [
+                                                    h('polygon', { points: '12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2' })
+                                                ]))
                                             ])
                                         ]);
                                     }))
@@ -4483,9 +4610,77 @@
                         var draggingEntry = draggingEntryState[0];
                         var setDraggingEntry = draggingEntryState[1];
 
+                        // ── Favorite tasks (persisted in database via AJAX) ──
+                        var favoritesState = hooks.useState(function() {
+                            var initial = config.favoriteTasks || {};
+                            if (initial && typeof initial === 'object' && !Array.isArray(initial)) {
+                                return initial;
+                            }
+                            return {};
+                        });
+                        var favorites = favoritesState[0];
+                        var setFavorites = favoritesState[1];
+
+                        function isTaskFavorite(projectKey, taskName) {
+                            return Boolean(favorites[projectKey] && favorites[projectKey][taskName]);
+                        }
+
+                        function handleToggleFavorite(projectKey, taskName) {
+                            setFavorites(function(prev) {
+                                var next = {};
+                                Object.keys(prev).forEach(function(k) {
+                                    next[k] = {};
+                                    if (prev[k] && typeof prev[k] === 'object') {
+                                        Object.keys(prev[k]).forEach(function(t) {
+                                            next[k][t] = true;
+                                        });
+                                    }
+                                });
+                                if (!next[projectKey]) {
+                                    next[projectKey] = {};
+                                }
+                                if (next[projectKey][taskName]) {
+                                    delete next[projectKey][taskName];
+                                    if (Object.keys(next[projectKey]).length === 0) {
+                                        delete next[projectKey];
+                                    }
+                                } else {
+                                    next[projectKey][taskName] = true;
+                                }
+                                return next;
+                            });
+
+                            if (config.ajax && config.ajax.url && config.ajax.toggleFavTaskAction) {
+                                var params = new URLSearchParams();
+                                params.append('action', config.ajax.toggleFavTaskAction);
+                                params.append('nonce', config.ajax.nonce || '');
+                                params.append('project_key', projectKey);
+                                params.append('task_name', taskName);
+                                if (config.ajax.staticParams) {
+                                    appendStaticParams(params, config.ajax.staticParams);
+                                }
+                                fetch(config.ajax.url, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                                    credentials: 'same-origin',
+                                    body: params.toString()
+                                })
+                                .then(function(response) { return response.json(); })
+                                .then(function(payload) {
+                                    if (payload && payload.success === true && payload.data && payload.data.favorites) {
+                                        setFavorites(payload.data.favorites);
+                                    }
+                                })
+                                .catch(function(err) {
+                                    console.error('MJ Hour Encode - toggle favorite error', err);
+                                });
+                            }
+                        }
+
                         var fetchControllerRef = hooks.useRef(null);
                         var hasFetchedInitial = hooks.useRef(false);
                         var pendingDragSubmitRef = hooks.useRef(null);
+                        var pendingQuickFavRef = hooks.useRef(null);
 
                         var calendarModel = hooks.useMemo(function() {
                             return buildCalendarModel(config, weekStart, entries, events);
@@ -4587,6 +4782,7 @@
                                     weeks: Object.assign(Object.create(null), stored.weeks || {}),
                                     months: Object.assign(Object.create(null), stored.months || {}),
                                     years: Object.assign(Object.create(null), stored.years || {}),
+                                    color: isString(stored.color) ? stored.color : '',
                                     serverTotalMinutes: Number.isFinite(stored.serverTotalMinutes) ? stored.serverTotalMinutes : undefined,
                                     weeklyLifetime: Number.isFinite(stored.weeklyLifetime) ? stored.weeklyLifetime : undefined
                                 };
@@ -4606,6 +4802,7 @@
                                         weeks: Object.create(null),
                                         months: Object.create(null),
                                         years: Object.create(null),
+                                        color: isString(totals.color) ? totals.color : '',
                                         serverTotalMinutes: undefined,
                                         weeklyLifetime: undefined
                                     };
@@ -4613,6 +4810,9 @@
                                 var target = result[key];
                                 if (totals.project) {
                                     target.project = normalizeProjectValue(totals.project);
+                                }
+                                if (isString(totals.color) && totals.color) {
+                                    target.color = totals.color;
                                 }
                                 if (!target.months) {
                                     target.months = Object.create(null);
@@ -4711,6 +4911,7 @@
                                         weeks: Object.create(null),
                                         months: Object.create(null),
                                         years: Object.create(null),
+                                        color: '',
                                         serverTotalMinutes: initialMinutes,
                                         weeklyLifetime: initialMinutes
                                     };
@@ -5019,6 +5220,41 @@
                             };
                         }, [selectedSlot, generalTaskSuggestions, projectTasksMap, config.labels]);
 
+                        // ── Flat list of favorite tasks for quick-encode panel ──
+                        var favoriteItems = hooks.useMemo(function() {
+                            var items = [];
+                            if (!favorites || typeof favorites !== 'object') {
+                                return items;
+                            }
+                            Object.keys(favorites).forEach(function(projectKey) {
+                                var tasks = favorites[projectKey];
+                                if (!tasks || typeof tasks !== 'object') {
+                                    return;
+                                }
+                                var projectLabel = projectKey;
+                                var projectValue = '';
+                                var projectColor = '';
+                                for (var i = 0; i < projectSummaryDetails.length; i++) {
+                                    if (projectSummaryDetails[i].key === projectKey) {
+                                        projectLabel = projectSummaryDetails[i].label || projectKey;
+                                        projectValue = projectSummaryDetails[i].value || '';
+                                        projectColor = projectSummaryDetails[i].color || '';
+                                        break;
+                                    }
+                                }
+                                Object.keys(tasks).forEach(function(taskName) {
+                                    items.push({
+                                        projectKey: projectKey,
+                                        projectLabel: projectLabel,
+                                        projectValue: projectValue,
+                                        projectColor: projectColor,
+                                        taskName: taskName
+                                    });
+                                });
+                            });
+                            return items;
+                        }, [favorites, projectSummaryDetails]);
+
                         var visibleDays = hooks.useMemo(function() {
                             var daysList = calendarModel.days || [];
                             if (!isMobileLayout) {
@@ -5056,6 +5292,11 @@
 
                         var selectionHighlight = hooks.useMemo(function() {
                             if (!selectedSlot) {
+                                return null;
+                            }
+                            // When editing an existing entry, don't show the blue selection overlay
+                            // because the entry block itself already serves as the visual indicator
+                            if (selectedSlot.isEditing) {
                                 return null;
                             }
                             var start = createDateFromDayAndTime(selectedSlot.dayIso, selectedSlot.formStart) || parseDateTime(selectedSlot.baseStartIso);
@@ -5546,6 +5787,26 @@
                             });
                         }
 
+                        function handleFavoriteQuickSubmit(item) {
+                            if (!selectedSlot || !item) {
+                                return;
+                            }
+                            if (item.projectKey) {
+                                setActiveProjectKey(item.projectKey);
+                            }
+                            pendingQuickFavRef.current = true;
+                            setSelectedSlot(function(previous) {
+                                if (!previous) {
+                                    return previous;
+                                }
+                                return Object.assign({}, previous, {
+                                    formTask: item.taskName || '',
+                                    formProject: item.projectValue || '',
+                                    error: ''
+                                });
+                            });
+                        }
+
                         function handleSlotSelect(slot) {
                             if (!slot) {
                                 return;
@@ -5975,6 +6236,94 @@
                                         })
                                         .finally(function() {
                                             setLoading(false);
+                                        });
+                                }
+                            }
+                        }
+
+                        function handleProjectColorChange(detail) {
+                            if (!detail || !detail.key) {
+                                return;
+                            }
+                            var targetKey = detail.key;
+                            var nextColor = isString(detail.color) ? detail.color : '';
+                            var projectLabel = normalizeProjectValue(detail.label || '');
+
+                            // Optimistically update projectHistory with new color
+                            setProjectHistory(function(previous) {
+                                var source = previous || Object.create(null);
+                                if (!source[targetKey]) {
+                                    return previous;
+                                }
+                                var nextStore = Object.assign(Object.create(null), source);
+                                nextStore[targetKey] = Object.assign({}, nextStore[targetKey], { color: nextColor });
+                                return nextStore;
+                            });
+
+                            // Optimistically update projectTotals
+                            setProjectTotals(function(previous) {
+                                var source = previous || Object.create(null);
+                                if (!source[targetKey]) {
+                                    return previous;
+                                }
+                                var nextStore = Object.assign(Object.create(null), source);
+                                nextStore[targetKey] = Object.assign({}, nextStore[targetKey], { color: nextColor });
+                                return nextStore;
+                            });
+
+                            // Optimistically update entry colors for this project
+                            setEntries(function(previous) {
+                                if (!Array.isArray(previous) || previous.length === 0) {
+                                    return previous;
+                                }
+                                var changed = false;
+                                var updated = previous.map(function(item) {
+                                    if (!item || typeof item !== 'object') {
+                                        return item;
+                                    }
+                                    var itemKey = ensureProjectKey(item.project || '');
+                                    if (itemKey !== targetKey) {
+                                        return item;
+                                    }
+                                    changed = true;
+                                    return Object.assign({}, item, { color: nextColor });
+                                });
+                                return changed ? updated : previous;
+                            });
+
+                            // Persist via AJAX
+                            if (canRequest && config.ajax && config.ajax.url && config.ajax.updateProjectColorAction) {
+                                var nonce = config.ajax.renameNonce || config.ajax.nonce || '';
+                                if (nonce !== '') {
+                                    var params = new URLSearchParams();
+                                    params.append('action', config.ajax.updateProjectColorAction);
+                                    params.append('nonce', nonce);
+                                    params.append('project_label', projectLabel);
+                                    params.append('color', nextColor);
+                                    appendStaticParams(params, config.ajax.staticParams);
+
+                                    fetch(config.ajax.url, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                                        },
+                                        credentials: 'same-origin',
+                                        body: params.toString()
+                                    })
+                                        .then(function(response) {
+                                            if (!response.ok) {
+                                                throw new Error('Request failed with status ' + response.status);
+                                            }
+                                            return response.json();
+                                        })
+                                        .then(function(payload) {
+                                            if (!payload || payload.success !== true) {
+                                                var message = payload && payload.data && payload.data.message ? payload.data.message : '';
+                                                console.error('MJ Hour Encode - update project color error', message);
+                                            }
+                                        })
+                                        .catch(function(errorMessage) {
+                                            console.error('MJ Hour Encode - update project color error', errorMessage);
                                         });
                                 }
                             }
@@ -6622,6 +6971,14 @@
                                 });
                         }
 
+                        // Auto-submit after favorite quick-select fills the form
+                        hooks.useEffect(function() {
+                            if (pendingQuickFavRef.current && selectedSlot && selectedSlot.formTask) {
+                                pendingQuickFavRef.current = false;
+                                handleSelectionSubmit();
+                            }
+                        }, [selectedSlot]);
+
                         function handleSelectionDelete() {
                             if (!selectedSlot) {
                                 return;
@@ -6927,7 +7284,9 @@
                                         onEntryDragStart: handleEntryDragStart,
                                         onEntryDrag: handleEntryDragUpdate,
                                         onEntryDragEnd: handleEntryDragEnd,
-                                        selectedSlot: selectionHighlight
+                                        selectedSlot: selectionHighlight,
+                                        favoriteItems: favoriteItems,
+                                        onFavoriteQuickSubmit: handleFavoriteQuickSubmit
                                     }),
                                     aggregateSummary
                                 ]),
@@ -6957,9 +7316,12 @@
                                 activeProject: activeProjectKey,
                                 labels: config.labels,
                                 draggingEntry: draggingEntry,
+                                favorites: favorites,
+                                onToggleFavorite: handleToggleFavorite,
                                 onTaskSelect: handleChipSelect,
                                 onProjectSelect: handleProjectSelect,
                                 onProjectRename: handleProjectRename,
+                                onProjectColorChange: handleProjectColorChange,
                                 onTaskRename: handleTaskRename,
                                 onEntryMoveToProject: handleEntryMoveToProject,
                                 onTaskMoveToProject: handleTaskMoveToProject,
