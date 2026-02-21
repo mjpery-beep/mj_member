@@ -1,4 +1,10 @@
 jQuery(document).ready(function($) {
+    // Only run on the events admin page.
+    var pageParam = new URLSearchParams(window.location.search).get('page');
+    if (pageParam !== 'mj_events') {
+        return;
+    }
+
     const config = window.mjEventsList || {};
     const ajaxurl = config.ajaxurl || '';
     const nonce = config.nonce || '';

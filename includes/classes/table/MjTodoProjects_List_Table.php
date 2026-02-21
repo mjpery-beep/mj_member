@@ -3,6 +3,7 @@
 namespace Mj\Member\Classes\Table;
 
 use Mj\Member\Admin\Page\TodoProjectsPage;
+use Mj\Member\Classes\Crud\MjMemberHours;
 use Mj\Member\Classes\Crud\MjTodoProjects;
 use WP_List_Table;
 
@@ -17,6 +18,9 @@ if (!class_exists('\\WP_List_Table')) {
 final class MjTodoProjects_List_Table extends WP_List_Table
 {
     private const PER_PAGE = 20;
+
+    /** @var array<int,array{total_minutes:int,entries:int}> Hours indexed by project_id */
+    private array $hoursByProject = array();
 
     public function __construct()
     {
@@ -34,6 +38,7 @@ final class MjTodoProjects_List_Table extends WP_List_Table
             'title'       => __('Titre', 'mj-member'),
             'slug'        => __('Identifiant', 'mj-member'),
             'color'       => __('Couleur', 'mj-member'),
+            'hours'       => __('Heures', 'mj-member'),
             'description' => __('Description', 'mj-member'),
             'updated_at'  => __('Mis à jour', 'mj-member'),
         );
@@ -94,6 +99,19 @@ final class MjTodoProjects_List_Table extends WP_List_Table
         }
 
         $this->items = $items;
+
+        // Load hours totals per project.
+        $this->hoursByProject = array();
+        $projectTotals = MjMemberHours::get_project_totals();
+        foreach ($projectTotals as $row) {
+            $pid = isset($row['project_id']) ? (int) $row['project_id'] : 0;
+            if ($pid > 0) {
+                $this->hoursByProject[$pid] = array(
+                    'total_minutes' => (int) ($row['total_minutes'] ?? 0),
+                    'entries'       => (int) ($row['entries'] ?? 0),
+                );
+            }
+        }
 
         $countArgs = array();
         if ($search !== '') {
@@ -179,6 +197,31 @@ final class MjTodoProjects_List_Table extends WP_List_Table
         $swatch = '<span class="mj-project-color" style="display:inline-block;width:18px;height:18px;border-radius:50%;margin-right:6px;vertical-align:middle;background:' . esc_attr($color) . ';"></span>';
 
         return $swatch . '<code>' . esc_html($color) . '</code>';
+    }
+
+    protected function column_hours($item)
+    {
+        $id = isset($item['id']) ? (int) $item['id'] : 0;
+        $data = $id > 0 && isset($this->hoursByProject[$id]) ? $this->hoursByProject[$id] : null;
+
+        if (!$data || $data['total_minutes'] <= 0) {
+            return '<span class="description">' . esc_html__('—', 'mj-member') . '</span>';
+        }
+
+        $hours   = floor($data['total_minutes'] / 60);
+        $minutes = $data['total_minutes'] % 60;
+        $formatted = $minutes > 0
+            ? sprintf('%d h %02d min', $hours, $minutes)
+            : sprintf('%d h', $hours);
+
+        $entries = $data['entries'];
+        $label   = sprintf(
+            /* translators: %d = number of entries */
+            _n('%d entrée', '%d entrées', $entries, 'mj-member'),
+            $entries
+        );
+
+        return '<strong>' . esc_html($formatted) . '</strong><br><span class="description">' . esc_html($label) . '</span>';
     }
 
     protected function column_description($item)

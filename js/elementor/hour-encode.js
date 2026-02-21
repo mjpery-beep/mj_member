@@ -3766,7 +3766,11 @@
                         }, [projectSummaries.length, showWeekOnly]);
 
                         var visibleProjectSummaries = hooks.useMemo(function() {
-                            var list = projectSummaries.slice();
+                            var list = projectSummaries.slice().filter(function(item) {
+                                if (!item) { return false; }
+                                var lifetime = Number(item.lifetimeMinutes || item.totalMinutes || 0);
+                                return Number.isFinite(lifetime) && lifetime > 0;
+                            });
                             if (!showWeekOnly) {
                                 return list;
                             }

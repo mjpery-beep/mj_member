@@ -37,7 +37,7 @@ $actionUrl = admin_url('admin-post.php');
             </a>
         </div>
 
-        <form method="post">
+        <form method="get">
             <input type="hidden" name="page" value="<?php echo esc_attr($pageSlug); ?>">
             <?php $table->search_box(__('Rechercher un projet', 'mj-member'), 'mj-member-projects'); ?>
             <?php $table->display(); ?>
