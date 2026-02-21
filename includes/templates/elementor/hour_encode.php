@@ -1,6 +1,7 @@
 <?php
 
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjMemberWorkSchedules;
 use Mj\Member\Core\AssetsManager;
 use Mj\Member\Core\Config;
 
@@ -26,16 +27,19 @@ if (!is_int($weekStartTimestamp)) {
     $weekStartTimestamp = $now;
 }
 
-// Récupérer l'emploi du temps contractuel du membre connecté
+// Récupérer l'emploi du temps contractuel du membre connecté depuis la table member_work_schedules
 $workSchedule = array();
 if (!$isPreview) {
     $currentUserId = get_current_user_id();
-    if ($currentUserId > 0 && class_exists(MjMembers::class)) {
+    if ($currentUserId > 0 && class_exists(MjMembers::class) && class_exists(MjMemberWorkSchedules::class)) {
         $memberRow = MjMembers::getByWpUserId($currentUserId);
-        if ($memberRow && !empty($memberRow->work_schedule)) {
-            $decoded = json_decode($memberRow->work_schedule, true);
-            if (is_array($decoded)) {
-                $workSchedule = $decoded;
+        if ($memberRow && !empty($memberRow->id)) {
+            $activeSchedule = MjMemberWorkSchedules::get_active_for_member((int) $memberRow->id);
+            if ($activeSchedule && !empty($activeSchedule->schedule)) {
+                $decoded = json_decode($activeSchedule->schedule, true);
+                if (is_array($decoded)) {
+                    $workSchedule = $decoded;
+                }
             }
         }
     }
@@ -319,8 +323,8 @@ $config = array(
         'weekRange' => __('Semaine du %s au %s', 'mj-member'),
         'previousWeek' => __('Semaine précédente', 'mj-member'),
         'nextWeek' => __('Semaine suivante', 'mj-member'),
-        'today' => __('Aujourd’hui', 'mj-member'),
-        'currentTime' => __('Maintenant', 'mj-member'),
+        'today' => __('Aujourd’hui', 'mj-member'),        'showAllEvents' => __('Tous les événements', 'mj-member'),
+        'showMyEvents' => __('Mes événements', 'mj-member'),        'currentTime' => __('Maintenant', 'mj-member'),
         'totalWeek' => __('Total semaine', 'mj-member'),
         'totalMonth' => __('Total mois', 'mj-member'),
         'totalYear' => __('Total année', 'mj-member'),

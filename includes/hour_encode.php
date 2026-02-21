@@ -4,6 +4,8 @@ use Mj\Member\Classes\Crud\MjEventAnimateurs;
 use Mj\Member\Classes\Crud\MjEventClosures;
 use Mj\Member\Classes\Crud\MjEventVolunteers;
 use Mj\Member\Classes\Crud\MjEvents;
+use Mj\Member\Classes\Crud\MjLeaveRequests;
+use Mj\Member\Classes\Crud\MjLeaveTypes;
 use Mj\Member\Classes\Crud\MjMemberHours;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\MjEventSchedule;
@@ -123,21 +125,54 @@ function mj_member_ajax_hour_encode_week() {
         ? mj_member_hour_encode_build_closure_occurrences($closures, $weekStart, $weekEnd, $timezone)
         : array();
 
-    $eventIds = mj_member_hour_encode_collect_event_ids($memberId);
-    $events = mj_member_hour_encode_fetch_events($eventIds);
+    // Récupérer les événements : soit ceux du membre, soit tous les événements actifs
+    $showAllEvents = isset($_POST['show_all_events']) && $_POST['show_all_events'] === '1';
+    $eventOccurrences = array();
 
-    $since = $weekStart->format('Y-m-d H:i:s');
-    $until = $weekEnd->format('Y-m-d H:i:s');
-    $weekStartTimestamp = $weekStart->getTimestamp();
-    $weekEndTimestamp = $weekEnd->getTimestamp();
-
-    $occurrences = !empty($events)
-        ? mj_member_hour_encode_build_occurrences($events, $since, $until, $weekStartTimestamp, $weekEndTimestamp)
-        : array();
-
-    if (!empty($closureOccurrences)) {
-        $occurrences = array_merge($occurrences, $closureOccurrences);
+    if ($showAllEvents) {
+        // Tous les événements actifs
+        if (function_exists('mj_member_get_public_events')) {
+            $fetchedEvents = mj_member_get_public_events(array(
+                'include_past' => true,
+                'limit' => 100,
+                'orderby' => 'date_debut',
+                'order' => 'ASC',
+            ));
+            if (!empty($fetchedEvents)) {
+                $since = $weekStart->format('Y-m-d H:i:s');
+                $until = $weekEnd->format('Y-m-d H:i:s');
+                $eventOccurrences = mj_member_hour_encode_build_occurrences(
+                    $fetchedEvents,
+                    $since,
+                    $until,
+                    $weekStart->getTimestamp(),
+                    $weekEnd->getTimestamp()
+                );
+            }
+        }
+    } else {
+        // Événements assignés au membre (animateur / bénévole)
+        $eventIds = mj_member_hour_encode_collect_event_ids($memberId);
+        if (!empty($eventIds)) {
+            $fetchedEvents = mj_member_hour_encode_fetch_events($eventIds);
+            if (!empty($fetchedEvents)) {
+                $since = $weekStart->format('Y-m-d H:i:s');
+                $until = $weekEnd->format('Y-m-d H:i:s');
+                $eventOccurrences = mj_member_hour_encode_build_occurrences(
+                    $fetchedEvents,
+                    $since,
+                    $until,
+                    $weekStart->getTimestamp(),
+                    $weekEnd->getTimestamp()
+                );
+            }
+        }
     }
+
+    // Récupérer les congés / maladies du membre
+    $leaveOccurrences = mj_member_hour_encode_collect_leave_occurrences($memberId, $weekStart, $weekEnd, wp_timezone());
+
+    $occurrences = array_merge($closureOccurrences, $eventOccurrences, $leaveOccurrences);
     if (!empty($occurrences)) {
         usort(
             $occurrences,
@@ -440,6 +475,10 @@ function mj_member_ajax_hour_encode_move_task_to_project() {
 
     if (strcasecmp($sourceProject, $targetProject) === 0) {
         wp_send_json_success(array('updated' => 0, 'message' => __('La tâche est déjà dans ce projet.', 'mj-member')));
+    }
+
+    if (defined('WP_DEBUG') && WP_DEBUG) {
+        error_log('[mj-member][hour-encode] move task: task_label=' . $taskLabel . ' source_project=' . $sourceProject . ' target_project=' . $targetProject . ' member_id=' . $memberId);
     }
 
     $result = MjMemberHours::bulkMoveTaskToProject($taskLabel, $sourceProject, $targetProject, array('member_id' => $memberId));
@@ -897,6 +936,101 @@ function mj_member_hour_encode_build_closure_occurrences(array $closures, DateTi
 }
 
 /**
+ * Collect leave request occurrences (congés / maladies) for the current member and week.
+ *
+ * @param int                $memberId
+ * @param DateTimeImmutable  $weekStart
+ * @param DateTimeImmutable  $weekEnd
+ * @param DateTimeZone       $timezone
+ * @return array<int,array<string,mixed>>
+ */
+function mj_member_hour_encode_collect_leave_occurrences(int $memberId, DateTimeImmutable $weekStart, DateTimeImmutable $weekEnd, DateTimeZone $timezone): array {
+    if ($memberId <= 0) {
+        return array();
+    }
+
+    $requests = MjLeaveRequests::get_by_member($memberId, array(
+        'statuses' => array(MjLeaveRequests::STATUS_PENDING, MjLeaveRequests::STATUS_APPROVED),
+    ));
+
+    if (empty($requests)) {
+        return array();
+    }
+
+    // Pre-load leave types
+    $leaveTypesById = array();
+    $allTypes = MjLeaveTypes::get_active();
+    foreach ($allTypes as $type) {
+        $leaveTypesById[(int) $type->id] = $type;
+    }
+
+    $weekStartIso = $weekStart->format('Y-m-d');
+    $weekEndIso = $weekEnd->format('Y-m-d');
+    $statusLabels = MjLeaveRequests::get_status_labels();
+
+    $occurrences = array();
+
+    foreach ($requests as $request) {
+        $dates = json_decode($request->dates, true);
+        if (!is_array($dates) || empty($dates)) {
+            continue;
+        }
+
+        $typeId = (int) $request->type_id;
+        $type = $leaveTypesById[$typeId] ?? null;
+        $typeName = $type ? $type->name : __('Congé', 'mj-member');
+        $typeSlug = $type ? $type->slug : 'unknown';
+        $typeColor = $type && !empty($type->color) ? $type->color : '#6366f1';
+        $statusLabel = $statusLabels[$request->status] ?? $request->status;
+        $isPending = ($request->status === MjLeaveRequests::STATUS_PENDING);
+        $requestId = (int) $request->id;
+
+        foreach ($dates as $dateStr) {
+            if (!is_string($dateStr) || strlen($dateStr) < 10) {
+                continue;
+            }
+
+            // Only include dates that fall within the current week
+            if ($dateStr < $weekStartIso || $dateStr > $weekEndIso) {
+                continue;
+            }
+
+            $dayDate = DateTimeImmutable::createFromFormat('Y-m-d', $dateStr, $timezone);
+            if (!$dayDate instanceof DateTimeImmutable) {
+                continue;
+            }
+
+            $startDateTime = $dayDate->setTime(0, 0, 0);
+            $endDateTime = $dayDate->setTime(23, 59, 59);
+            $eventId = 'leave-' . $requestId;
+            $occurrenceId = $eventId . '-' . $dateStr;
+
+            $title = $typeName;
+            if ($isPending) {
+                $title .= ' (' . $statusLabel . ')';
+            }
+
+            $occurrences[] = array(
+                'eventId'      => $eventId,
+                'occurrenceId' => $occurrenceId,
+                'title'        => $title,
+                'start'        => $startDateTime->format(DATE_ATOM),
+                'end'          => $endDateTime->format(DATE_ATOM),
+                'location'     => '',
+                'accentColor'  => $typeColor,
+                'type'         => 'leave',
+                'typeLabel'    => $typeName,
+                'leaveSlug'    => $typeSlug,
+                'leaveStatus'  => $request->status,
+                'permalink'    => '',
+            );
+        }
+    }
+
+    return $occurrences;
+}
+
+/**
  * @param array<int,array<string,mixed>> $events
  * @return array<int,array<string,mixed>>
  */
@@ -913,24 +1047,69 @@ function mj_member_hour_encode_build_occurrences(array $events, $since, $until, 
         }
 
         $eventId = (int) $event['id'];
-        $eventPayload = $event;
-        $eventPayload['date_debut'] = isset($event['start_date']) ? $event['start_date'] : '';
-        $eventPayload['date_fin'] = isset($event['end_date']) ? $event['end_date'] : '';
-
         $entries = array();
-        if (class_exists(MjEventSchedule::class)) {
-            $entries = MjEventSchedule::get_occurrences(
+
+        // ── Strategy 1: read occurrence rows directly from the DB ──
+        // MjEventSchedule::get_occurrences() may filter valid rows due to
+        // timezone edge-cases in its internal filter_occurrences(); reading
+        // the raw rows and doing a simple string-based overlap check is
+        // more reliable for the hour-encode widget.
+        if (class_exists(MjEventOccurrences::class)) {
+            $rows = MjEventOccurrences::get_for_event($eventId);
+            foreach ($rows as $row) {
+                $startAt = isset($row['start_at']) ? $row['start_at'] : '';
+                $endAt   = isset($row['end_at'])   ? $row['end_at']   : '';
+                if ($startAt === '' || $endAt === '') {
+                    continue;
+                }
+                // Skip deleted occurrences.
+                $status = isset($row['status']) ? $row['status'] : 'active';
+                if ($status === 'deleted') {
+                    continue;
+                }
+                // Overlap check: the occurrence overlaps the week when
+                // start_at < $until AND end_at > $since  (string comparison
+                // works for 'Y-m-d H:i:s' formatted dates).
+                if ($endAt <= $since || $startAt >= $until) {
+                    continue;
+                }
+                $entries[] = array(
+                    'start' => $startAt,
+                    'end'   => $endAt,
+                );
+            }
+        }
+
+        // ── Strategy 2: MjEventSchedule (legacy, no direct rows) ──
+        if (empty($entries) && class_exists(MjEventSchedule::class)) {
+            $eventPayload = $event;
+            $eventPayload['date_debut'] = isset($event['start_date']) ? $event['start_date'] : '';
+            $eventPayload['date_fin']   = isset($event['end_date'])   ? $event['end_date']   : '';
+
+            $scheduleEntries = MjEventSchedule::get_occurrences(
                 $eventPayload,
                 array(
                     'include_past' => true,
                     'since' => $since,
                     'until' => $until,
-                    'max' => 20,
+                    'max'   => 20,
                 )
             );
+            // Discard fallback entries that span the entire event date range.
+            foreach ($scheduleEntries as $se) {
+                if (isset($se['source']) && $se['source'] === 'fallback') {
+                    continue;
+                }
+                $entries[] = $se;
+            }
         }
 
+        // ── Strategy 3: local fallback ──
         if (empty($entries)) {
+            $eventPayload = $event;
+            $eventPayload['date_debut'] = isset($event['start_date']) ? $event['start_date'] : '';
+            $eventPayload['date_fin']   = isset($event['end_date'])   ? $event['end_date']   : '';
+
             $fallback = mj_member_hour_encode_fallback_occurrence($eventPayload, $weekStartTimestamp, $weekEndTimestamp);
             if (!empty($fallback)) {
                 $entries[] = $fallback;
@@ -946,8 +1125,36 @@ function mj_member_hour_encode_build_occurrences(array $events, $since, $until, 
                 continue;
             }
 
-            $startIso = mj_member_hour_encode_to_iso($entry['start']);
-            $endIso = mj_member_hour_encode_to_iso($entry['end']);
+            // Skip occurrences that span more than 24 hours — these are
+            // typically side-effects of stored event date ranges rather
+            // than real per-day occurrences and produce full-day bars on
+            // every day of the week.
+            $entryStartDt = mj_member_hour_encode_to_iso($entry['start']);
+            $entryEndDt = mj_member_hour_encode_to_iso($entry['end']);
+            if ($entryStartDt !== '' && $entryEndDt !== '') {
+                try {
+                    $dtStart = new DateTimeImmutable($entryStartDt);
+                    $dtEnd = new DateTimeImmutable($entryEndDt);
+                    if (($dtEnd->getTimestamp() - $dtStart->getTimestamp()) > DAY_IN_SECONDS) {
+                        continue;
+                    }
+                } catch (Exception $e) {
+                    // ignore parse errors
+                }
+            }
+
+            // Prefer Unix timestamps when available (timezone-safe).
+            $startTs = isset($entry['timestamp']) ? (int) $entry['timestamp'] : 0;
+            $duration = isset($entry['duration']) ? (int) $entry['duration'] : -1;
+
+            if ($startTs > 0 && $duration >= 0) {
+                $startIso = wp_date('c', $startTs);
+                $endIso   = wp_date('c', $startTs + $duration);
+            } else {
+                $startIso = mj_member_hour_encode_to_iso($entry['start']);
+                $endIso   = mj_member_hour_encode_to_iso($entry['end']);
+            }
+
             if ($startIso === '' || $endIso === '') {
                 continue;
             }
@@ -982,12 +1189,30 @@ function mj_member_hour_encode_fallback_occurrence(array $event, $weekStartTimes
         return array();
     }
 
-    $startTimestamp = strtotime($startRaw);
-    if ($startTimestamp === false) {
-        return array();
+    $timezone = wp_timezone();
+
+    $startDt = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $startRaw, $timezone);
+    if (!$startDt instanceof \DateTimeImmutable) {
+        $ts = strtotime($startRaw);
+        if ($ts === false) {
+            return array();
+        }
+        $startDt = (new \DateTimeImmutable('@' . $ts))->setTimezone($timezone);
+    }
+    $startTimestamp = $startDt->getTimestamp();
+
+    $endTimestamp = false;
+    if ($endRaw !== '') {
+        $endDt = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $endRaw, $timezone);
+        if (!$endDt instanceof \DateTimeImmutable) {
+            $ts = strtotime($endRaw);
+            if ($ts !== false) {
+                $endDt = (new \DateTimeImmutable('@' . $ts))->setTimezone($timezone);
+            }
+        }
+        $endTimestamp = $endDt instanceof \DateTimeImmutable ? $endDt->getTimestamp() : false;
     }
 
-    $endTimestamp = $endRaw !== '' ? strtotime($endRaw) : false;
     if ($endTimestamp === false || $endTimestamp <= $startTimestamp) {
         $endTimestamp = $startTimestamp + HOUR_IN_SECONDS;
     }
@@ -996,10 +1221,18 @@ function mj_member_hour_encode_fallback_occurrence(array $event, $weekStartTimes
         return array();
     }
 
+    // Ne pas créer de fallback pour les événements récurrents (durée > 24h)
+    // car cela génère une barre plein-jour sur toute la semaine.
+    $durationSeconds = $endTimestamp - $startTimestamp;
+    if ($durationSeconds > DAY_IN_SECONDS) {
+        return array();
+    }
+
     return array(
-        'start' => date('Y-m-d H:i:s', $startTimestamp),
-        'end' => date('Y-m-d H:i:s', $endTimestamp),
+        'start' => wp_date('Y-m-d H:i:s', $startTimestamp),
+        'end' => wp_date('Y-m-d H:i:s', $endTimestamp),
         'timestamp' => $startTimestamp,
+        'duration' => max(0, $durationSeconds),
     );
 }
 
@@ -1009,12 +1242,20 @@ function mj_member_hour_encode_to_iso($value) {
         return '';
     }
 
-    $timestamp = strtotime($value);
-    if ($timestamp === false) {
-        return '';
+    // Try timezone-aware parsing first (value may be in WP timezone).
+    $timezone = wp_timezone();
+    $dt = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $value, $timezone);
+    if ($dt instanceof \DateTimeImmutable) {
+        return $dt->format(\DATE_ATOM);
     }
 
-    return function_exists('wp_date') ? wp_date('c', $timestamp) : date('c', $timestamp);
+    // Fallback: let PHP parse the value (handles ISO 8601 and other formats).
+    try {
+        $dt = new \DateTimeImmutable($value, $timezone);
+        return $dt->format(\DATE_ATOM);
+    } catch (\Exception $e) {
+        return '';
+    }
 }
 
 function mj_member_hour_encode_get_entry_for_member($memberId, $entryId) {

@@ -1204,12 +1204,21 @@
                         var isEntry = Boolean(event.isEntry);
                         var eventType = isString(event.type) ? event.type : '';
                         var isClosure = eventType === 'closure';
+                        var isLeave = eventType === 'leave';
                         var locationLabel = event.location ? String(event.location) : '';
                         var titleLabel = isString(event.title) ? event.title : '';
                         var typeLabel = isString(event.typeLabel) ? event.typeLabel : '';
                         if (isClosure) {
                             if (!typeLabel) {
                                 typeLabel = 'Fermeture';
+                            }
+                            if (!titleLabel) {
+                                titleLabel = typeLabel;
+                            }
+                        }
+                        if (isLeave) {
+                            if (!typeLabel) {
+                                typeLabel = 'Congé';
                             }
                             if (!titleLabel) {
                                 titleLabel = typeLabel;
@@ -1228,6 +1237,10 @@
                             if (locationLabel) {
                                 tooltipLabelParts.push(locationLabel);
                             }
+                        } else if (isLeave) {
+                            timeRangeLabel = '';
+                            metaLabel = typeLabel || titleLabel || 'Congé';
+                            tooltipLabelParts.push(titleLabel || typeLabel);
                         } else {
                             timeRangeLabel = timeFormatter.format(start) + ' - ' + timeFormatter.format(end);
                             if (!titleLabel) {
@@ -1263,7 +1276,7 @@
                             },
                             tooltipLabel: tooltipLabel,
                             isEntry: isEntry,
-                            kind: isEntry ? 'entry' : (isClosure ? 'closure' : 'event'),
+                            kind: isEntry ? 'entry' : (isClosure ? 'closure' : (isLeave ? 'leave' : 'event')),
                             source: event
                         });
                     });
@@ -2409,10 +2422,176 @@
                             if (day.isToday) {
                                 headerClass += ' is-today';
                             }
-                            return h('div', { key: day.iso, className: headerClass }, [
-                                h('span', { className: 'mj-hour-encode-calendar__day-name' }, day.label.short),
-                                h('span', { className: 'mj-hour-encode-calendar__day-date' }, day.label.date)
-                            ]);
+
+                            var headerChildren = [
+                                h('span', { key: 'name', className: 'mj-hour-encode-calendar__day-name' }, day.label.short),
+                                h('span', { key: 'date', className: 'mj-hour-encode-calendar__day-date' }, day.label.date)
+                            ];
+
+                            // Occurrence indicators (non-entry, non-leave events)
+                            // Only show dots for events whose start date falls on this day,
+                            // and deduplicate by source eventId to avoid repeats.
+                            var dayOccurrences = [];
+                            var dayLeaves = [];
+                            var seenEventIds = Object.create(null);
+                            if (Array.isArray(day.events)) {
+                                day.events.forEach(function(ev) {
+                                    if (ev.isEntry || ev.kind === 'entry') {
+                                        return;
+                                    }
+                                    // Determine the event's actual start date
+                                    var evSource = ev.source || {};
+                                    var evStart = parseDateTime(evSource.start || ev.tooltip && ev.tooltip.time);
+                                    if (!evStart) {
+                                        // Try parsing from the source event's start field
+                                        evStart = parseDateTime(evSource.start);
+                                    }
+                                    // Check if event starts on this specific day
+                                    if (evStart && isValidDate(evStart)) {
+                                        var evStartIso = toISODate(startOfDay(evStart));
+                                        if (evStartIso !== day.iso) {
+                                            return; // Event doesn't start on this day
+                                        }
+                                    }
+                                    // Deduplicate by eventId
+                                    var eventSourceId = evSource.eventId || evSource.id || ev.id || '';
+                                    if (eventSourceId && seenEventIds[eventSourceId]) {
+                                        return;
+                                    }
+                                    if (eventSourceId) {
+                                        seenEventIds[eventSourceId] = true;
+                                    }
+                                    // Separate leave from other occurrences
+                                    if (ev.kind === 'leave') {
+                                        dayLeaves.push(ev);
+                                    } else {
+                                        dayOccurrences.push(ev);
+                                    }
+                                });
+                            }
+
+                            if (dayOccurrences.length > 0) {
+                                var occDots = dayOccurrences.map(function(occ, idx) {
+                                    var dotColor = occ.colors && occ.colors.border ? occ.colors.border : accentColor;
+                                    var tooltipParts = [];
+                                    if (occ.tooltip) {
+                                        if (occ.tooltip.title) {
+                                            tooltipParts.push(h('div', {
+                                                key: 'tt-title',
+                                                className: 'mj-hour-encode-occ-tooltip__title'
+                                            }, occ.tooltip.title));
+                                        }
+                                        if (occ.tooltip.time) {
+                                            tooltipParts.push(h('div', {
+                                                key: 'tt-time',
+                                                className: 'mj-hour-encode-occ-tooltip__time',
+                                                style: { color: dotColor }
+                                            }, occ.tooltip.time));
+                                        }
+                                        if (occ.tooltip.location) {
+                                            tooltipParts.push(h('div', {
+                                                key: 'tt-loc',
+                                                className: 'mj-hour-encode-occ-tooltip__location'
+                                            }, occ.tooltip.location));
+                                        }
+                                    }
+                                    if (occ.source && occ.source.typeLabel) {
+                                        tooltipParts.push(h('div', {
+                                            key: 'tt-type',
+                                            className: 'mj-hour-encode-occ-tooltip__type'
+                                        }, occ.source.typeLabel));
+                                    }
+                                    var tooltipNode = tooltipParts.length > 0
+                                        ? h('div', {
+                                            className: 'mj-hour-encode-occ-tooltip',
+                                            style: { borderColor: hexToRgba(dotColor, 0.25) }
+                                        }, [
+                                            occ.tooltip && occ.tooltip.cover
+                                                ? h('div', { key: 'tt-cover', className: 'mj-hour-encode-occ-tooltip__cover' }, [
+                                                    h('img', { src: occ.tooltip.cover, alt: occ.tooltip.title || '', loading: 'lazy' })
+                                                ])
+                                                : null,
+                                            h('div', { key: 'tt-details', className: 'mj-hour-encode-occ-tooltip__details' }, tooltipParts)
+                                        ])
+                                        : null;
+
+                                    var dotKindClass = '';
+                                    if (occ.kind === 'closure') { dotKindClass = ' is-closure'; }
+
+                                    return h('span', {
+                                        key: 'occ-' + idx,
+                                        className: 'mj-hour-encode-calendar__occ-dot' + dotKindClass,
+                                        style: { backgroundColor: dotColor },
+                                        'aria-label': occ.tooltipLabel || occ.title || ''
+                                    }, tooltipNode ? [tooltipNode] : null);
+                                });
+
+                                headerChildren.push(h('span', {
+                                    key: 'occ-row',
+                                    className: 'mj-hour-encode-calendar__occ-indicators'
+                                }, occDots));
+                            }
+
+                            // Collect leave emojis for this day to display next to the date
+                            var leaveSlugEmoji = {
+                                'paid': '\uD83C\uDFD6\uFE0F',
+                                'unpaid': '\uD83D\uDCCB',
+                                'exceptional': '\u2B50',
+                                'recovery': '\uD83D\uDD04',
+                                'sick': '\uD83E\uDD12'
+                            };
+                            if (dayLeaves.length > 0) {
+                                headerClass += ' is-leave-day';
+                                var leaveEmojis = dayLeaves.map(function(lv, idx) {
+                                    var lvSource = lv.source || {};
+                                    var slug = lvSource.leaveSlug || '';
+                                    var emoji = leaveSlugEmoji[slug] || '\uD83D\uDCC5';
+                                    var isPending = lvSource.leaveStatus === 'pending';
+                                    var statusText = isPending ? 'En attente' : 'Approuvé';
+                                    var lvTitle = lv.tooltip && lv.tooltip.title ? lv.tooltip.title : (lvSource.typeLabel || 'Congé');
+                                    var emojiClass = 'mj-hour-encode-calendar__leave-emoji' + (isPending ? ' is-pending' : '');
+
+                                    var lvTooltipParts = [];
+                                    if (lv.tooltip && lv.tooltip.title) {
+                                        lvTooltipParts.push(h('div', {
+                                            key: 'lt-title',
+                                            className: 'mj-hour-encode-occ-tooltip__title'
+                                        }, lv.tooltip.title));
+                                    }
+                                    if (slug !== 'sick') {
+                                        lvTooltipParts.push(h('div', {
+                                            key: 'lt-status',
+                                            className: 'mj-hour-encode-occ-tooltip__status' + (isPending ? ' is-pending' : ' is-approved')
+                                        }, statusText));
+                                    }
+
+                                    var lvColor = '#8b5cf6';
+                                    var lvTooltipNode = h('div', {
+                                        className: 'mj-hour-encode-occ-tooltip',
+                                        style: { borderColor: hexToRgba(lvColor, 0.25) }
+                                    }, [
+                                        h('div', { key: 'lt-details', className: 'mj-hour-encode-occ-tooltip__details' }, lvTooltipParts)
+                                    ]);
+
+                                    return h('span', {
+                                        key: 'leave-emoji-' + idx,
+                                        className: emojiClass,
+                                        'aria-label': lvTitle + ' - ' + statusText
+                                    }, [emoji, lvTooltipNode]);
+                                });
+
+                                // Replace the plain date span (index 1) with a row
+                                // containing both the date and the emoji(s)
+                                headerChildren[1] = h('span', {
+                                    key: 'date-leave',
+                                    className: 'mj-hour-encode-calendar__day-date-row'
+                                }, [
+                                    h('span', { key: 'date', className: 'mj-hour-encode-calendar__day-date' }, day.label.date),
+                                    h('span', { key: 'leave-emojis', className: 'mj-hour-encode-calendar__leave-emojis' }, leaveEmojis)
+                                ]);
+                            }
+
+                            return h('div', { key: day.iso, className: headerClass }, headerChildren);
                         });
 
                         // Mapping des noms de jours vers les numéros de jour (0=dimanche, 1=lundi, etc.)
@@ -2541,7 +2720,43 @@
                                 canvasChildren.push(h('div', selectionAttrs, selectionChildren));
                             }
 
+                            // Render leave overlays covering the full timeline height
+                            var leaveSlugEmojiMap = {
+                                'paid': '\uD83C\uDFD6\uFE0F',
+                                'unpaid': '\uD83D\uDCCB',
+                                'exceptional': '\u2B50',
+                                'recovery': '\uD83D\uDD04',
+                                'sick': '\uD83E\uDD12'
+                            };
+                            day.events.forEach(function(eventItem, evIdx) {
+                                if (eventItem.kind !== 'leave') {
+                                    return;
+                                }
+                                var lvSource = eventItem.source || {};
+                                var lvSlug = lvSource.leaveSlug || '';
+                                var lvEmoji = leaveSlugEmojiMap[lvSlug] || '\uD83D\uDCC5';
+                                var lvIsPending = lvSource.leaveStatus === 'pending';
+                                var lvClass = 'mj-hour-encode-calendar__leave-overlay';
+                                if (lvIsPending) { lvClass += ' is-pending'; }
+                                var lvTitle = eventItem.tooltip && eventItem.tooltip.title ? eventItem.tooltip.title : (lvSource.typeLabel || 'Congé');
+                                canvasChildren.push(h('div', {
+                                    key: 'leave-overlay-' + evIdx,
+                                    className: lvClass,
+                                    style: {
+                                        position: 'absolute',
+                                        top: '0',
+                                        left: '0',
+                                        right: '0',
+                                        bottom: '0'
+                                    }
+                                }));
+                            });
+
                             day.events.forEach(function(eventItem) {
+                                // Leave occurrences are rendered as overlays above, skip normal bar rendering
+                                if (eventItem.kind === 'leave') {
+                                    return;
+                                }
                                 var tooltipContent = null;
                                 if (eventItem.tooltip) {
                                     var tooltip = eventItem.tooltip;
@@ -4211,6 +4426,10 @@
                         var projects = projectsState[0];
                         var setProjects = projectsState[1];
 
+                        var showAllEventsState = hooks.useState(false);
+                        var showAllEvents = showAllEventsState[0];
+                        var setShowAllEvents = showAllEventsState[1];
+
                         var activeProjectState = hooks.useState(null);
                         var activeProjectKey = activeProjectState[0];
                         var setActiveProjectKey = activeProjectState[1];
@@ -5139,6 +5358,7 @@
                             params.append('action', action);
                             params.append('nonce', config.ajax.nonce || '');
                             params.append('week', normalizedWeek);
+                            params.append('show_all_events', showAllEvents ? '1' : '0');
                             appendStaticParams(params, config.ajax.staticParams);
 
                             return fetch(config.ajax.url, {
@@ -5175,7 +5395,7 @@
                                         fetchControllerRef.current = null;
                                     }
                                 });
-                        }, [canRequest, config.ajax]);
+                        }, [canRequest, config.ajax, showAllEvents]);
 
                         hooks.useEffect(function() {
                             if (!canRequest || hasFetchedInitial.current) {
@@ -5184,6 +5404,17 @@
                             hasFetchedInitial.current = true;
                             requestWeek(weekStart);
                         }, [canRequest, requestWeek, weekStart]);
+
+                        // Refetch when showAllEvents changes (after initial load)
+                        var prevShowAll = hooks.useRef(showAllEvents);
+                        hooks.useEffect(function() {
+                            if (prevShowAll.current !== showAllEvents) {
+                                prevShowAll.current = showAllEvents;
+                                if (canRequest) {
+                                    requestWeek(weekStart);
+                                }
+                            }
+                        }, [showAllEvents, canRequest, requestWeek, weekStart]);
 
                         hooks.useEffect(function() {
                             return function() {
@@ -6639,7 +6870,22 @@
                                             event.preventDefault();
                                             handleToday();
                                         }
-                                    }, config.labels.today)
+                                    }, config.labels.today),
+                                    h('button', {
+                                        type: 'button',
+                                        className: 'mj-hour-encode-app__events-toggle' + (showAllEvents ? ' is-active' : ''),
+                                        onClick: function(event) {
+                                            event.preventDefault();
+                                            setShowAllEvents(function(prev) { return !prev; });
+                                        },
+                                        title: showAllEvents ? (config.labels.showMyEvents || 'Mes événements') : (config.labels.showAllEvents || 'Tous les événements')
+                                    }, [
+                                        h('svg', { width: '16', height: '16', viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round' }, [
+                                            h('circle', { cx: '8', cy: '8', r: '6.5' }),
+                                            h('path', { d: showAllEvents ? 'M5 8l2 2 4-4' : 'M4.5 8h7' })
+                                        ]),
+                                        h('span', null, showAllEvents ? (config.labels.showMyEvents || 'Mes événements') : (config.labels.showAllEvents || 'Tous les événements'))
+                                    ])
                                     ]),
                                     h('div', { className: 'mj-hour-encode-app__week-label' }, calendarModel.periodLabel)
                             ]),

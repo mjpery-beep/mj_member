@@ -5,6 +5,7 @@ namespace Mj\Member\Admin\Page;
 use Mj\Member\Admin\RequestGuard;
 use Mj\Member\Classes\Crud\MjMemberHours;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjMemberWorkSchedules;
 use Mj\Member\Classes\Value\MemberData;
 use Mj\Member\Core\AssetsManager;
 use Mj\Member\Core\Config;
@@ -1816,7 +1817,7 @@ final class HoursPage
         global $wpdb;
         $table = MjMembers::getTableName(MjMembers::TABLE_NAME);
         $placeholders = implode(',', array_fill(0, count($memberIds), '%d'));
-        $sql = "SELECT id, first_name, last_name, work_schedule FROM {$table} WHERE id IN ({$placeholders})";
+        $sql = "SELECT id, first_name, last_name FROM {$table} WHERE id IN ({$placeholders})";
         $prepared = call_user_func_array(array($wpdb, 'prepare'), array_merge(array($sql), $memberIds));
         $rows = $wpdb->get_results($prepared);
 
@@ -1835,7 +1836,14 @@ final class HoursPage
                     $label = sprintf(__('Membre #%d', 'mj-member'), $id);
                 }
 
-                $workScheduleRaw = isset($row->work_schedule) ? (string) $row->work_schedule : '';
+                // Read work schedule from member_work_schedules table
+                $workScheduleRaw = '';
+                if (class_exists(MjMemberWorkSchedules::class)) {
+                    $activeSchedule = MjMemberWorkSchedules::get_active_for_member($id);
+                    if ($activeSchedule && !empty($activeSchedule->schedule)) {
+                        $workScheduleRaw = (string) $activeSchedule->schedule;
+                    }
+                }
                 $sanitizedSchedule = self::sanitizeWorkScheduleFromString($workScheduleRaw);
                 $weeklyContractMinutes = self::calculateWeeklyContractMinutesFromSchedule($workScheduleRaw);
 

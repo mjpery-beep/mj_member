@@ -1187,6 +1187,87 @@ class MjMemberHours extends MjTools implements CrudRepositoryInterface {
     }
 
     /**
+     * Déplace toutes les entrées d'une tâche vers un autre projet.
+     *
+     * @param string $taskLabel
+     * @param string $sourceProject
+     * @param string $targetProject
+     * @param array<string,mixed> $scope
+     * @return int|WP_Error
+     */
+    public static function bulkMoveTaskToProject(string $taskLabel, string $sourceProject, string $targetProject, array $scope = array())
+    {
+        global $wpdb;
+
+        $task = sanitize_text_field($taskLabel);
+        $from = self::normalize_project_label($sourceProject);
+        $to = self::normalize_project_label($targetProject);
+
+        if ($task === '') {
+            return new WP_Error('mj_member_hours_invalid_task_label', __('Le libellé de tâche est invalide.', 'mj-member'));
+        }
+
+        if ($to === '') {
+            return new WP_Error('mj_member_hours_invalid_project_label', __('Le projet cible est invalide.', 'mj-member'));
+        }
+
+        $table = self::table_name();
+        $taskKey = sanitize_title($task);
+        $collation = self::resolve_unicode_collation();
+        $now = current_time('mysql');
+
+        $setParts = array('notes = %s', 'updated_at = %s');
+        $params = array($to, $now);
+
+        $taskConditions = array('task_label = %s');
+        $params[] = $task;
+        if ($taskKey !== '') {
+            $taskConditions[] = 'task_key = %s';
+            $params[] = $taskKey;
+        }
+        if ($collation !== '') {
+            $taskConditions[] = 'task_label COLLATE ' . $collation . ' = %s';
+            $params[] = $task;
+        }
+
+        $whereParts = array('(' . implode(' OR ', $taskConditions) . ')');
+
+        if ($from === '') {
+            $whereParts[] = "(notes IS NULL OR notes = '')";
+        } else {
+            $whereParts[] = 'notes = %s';
+            $params[] = $from;
+        }
+
+        if (!empty($scope['member_id'])) {
+            $memberId = (int) $scope['member_id'];
+            if ($memberId > 0) {
+                $whereParts[] = 'member_id = %d';
+                $params[] = $memberId;
+            }
+        }
+
+        $sql = 'UPDATE ' . $table . ' SET ' . implode(', ', $setParts) . ' WHERE ' . implode(' AND ', $whereParts);
+        $prepared = $wpdb->prepare($sql, $params);
+
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('[mj-member][hours] bulkMoveTaskToProject SQL: ' . $prepared);
+        }
+
+        $result = $wpdb->query($prepared);
+
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('[mj-member][hours] bulkMoveTaskToProject result: ' . var_export($result, true) . ' last_error: ' . $wpdb->last_error);
+        }
+
+        if ($result === false) {
+            return new WP_Error('mj_member_hours_move_task_failed', __('Impossible de déplacer la tâche.', 'mj-member'));
+        }
+
+        return (int) $result;
+    }
+
+    /**
      * Retourne les totaux d'heures par membre.
      *
      * @param array<string,mixed> $args

@@ -385,6 +385,47 @@
     outline: none;
 }
 
+/* Events toggle (mes events / tous les events) */
+.mj-hour-encode-app__events-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(26, 45, 71, 0.12);
+    background: #ffffff;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(26, 45, 71, 0.60);
+    cursor: pointer;
+    transition: all 180ms ease;
+    white-space: nowrap;
+}
+
+.mj-hour-encode-app__events-toggle svg {
+    flex-shrink: 0;
+}
+
+.mj-hour-encode-app__events-toggle:hover,
+.mj-hour-encode-app__events-toggle:focus {
+    color: #2a55ff;
+    border-color: rgba(42, 85, 255, 0.3);
+    outline: none;
+    box-shadow: 0 4px 12px rgba(42, 85, 255, 0.12);
+}
+
+.mj-hour-encode-app__events-toggle.is-active {
+    color: #2a55ff;
+    border-color: rgba(42, 85, 255, 0.25);
+    background: rgba(42, 85, 255, 0.06);
+}
+
+.mj-hour-encode-app__events-toggle.is-active:hover,
+.mj-hour-encode-app__events-toggle.is-active:focus {
+    background: rgba(42, 85, 255, 0.10);
+    border-color: rgba(42, 85, 255, 0.4);
+}
+
 .mj-hour-encode-app__week-label {
     justify-self: center;
     font-size: 18px;
@@ -515,6 +556,7 @@
     width: 100%;
     padding: 12px 10px;
     gap: 0;
+    margin-top: -18px;
 }
 
 .mj-hour-encode-calendar__timeline-track span {
@@ -549,6 +591,12 @@
     z-index: 60;
 }
 
+/* When hovering an occurrence dot or leave emoji, boost parent day above neighbours */
+.mj-hour-encode-calendar__day:has(.mj-hour-encode-calendar__occ-dot:hover),
+.mj-hour-encode-calendar__day:has(.mj-hour-encode-calendar__leave-emoji:hover) {
+    z-index: 9999;
+}
+
 .mj-hour-encode-calendar__day.is-today {
     border-color: rgba(42, 85, 255, 0.35);
     box-shadow: 0 0 0 2px rgba(42, 85, 255, 0.15);
@@ -575,6 +623,12 @@
     border: 1px solid rgba(26, 45, 71, 0.12);
     min-height: 62px;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    position: relative;
+    overflow: visible;
+}
+
+.mj-hour-encode-calendar__day-header:hover {
+    z-index: 9999;
 }
 
 .mj-hour-encode-calendar__day-name {
@@ -588,6 +642,216 @@
     font-size: 16px;
     font-weight: 700;
     color: rgba(26, 45, 71, 0.9);
+}
+
+/* ── Occurrence indicators in day headers ── */
+.mj-hour-encode-calendar__occ-indicators {
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+    align-items: center;
+    margin-top: 4px;
+    min-height: 10px;
+    flex-wrap: wrap;
+    position: relative;
+    overflow: visible;
+}
+
+.mj-hour-encode-calendar__occ-dot {
+    position: relative;
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #2a55ff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    cursor: default;
+    transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.mj-hour-encode-calendar__occ-dot.is-closure {
+    border-radius: 3px;
+}
+
+/* ── Leave day header styling ── */
+.mj-hour-encode-calendar__day-header.is-leave-day {
+    background: rgba(139, 92, 246, 0.08);
+    border-color: rgba(139, 92, 246, 0.30);
+    box-shadow: inset 0 1px 0 rgba(139, 92, 246, 0.10);
+}
+
+/* Row wrapper: date + emoji side by side */
+.mj-hour-encode-calendar__day-date-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ── Leave emoji indicators in header ── */
+.mj-hour-encode-calendar__leave-emojis {
+    display: inline-flex;
+    gap: 2px;
+    align-items: center;
+    margin-left: 4px;
+    position: relative;
+    overflow: visible;
+}
+
+.mj-hour-encode-calendar__leave-emoji {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    line-height: 1;
+    cursor: default;
+    transition: transform 150ms ease;
+}
+
+.mj-hour-encode-calendar__leave-emoji:hover {
+    transform: scale(1.25);
+    z-index: 9999;
+}
+
+.mj-hour-encode-calendar__leave-emoji.is-pending {
+    
+}
+
+@keyframes mj-leave-pending-pulse {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 0.9; }
+}
+
+.mj-hour-encode-occ-tooltip__status {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.mj-hour-encode-occ-tooltip__status.is-approved {
+    color: #059669;
+    background: rgba(5, 150, 105, 0.10);
+}
+
+.mj-hour-encode-occ-tooltip__status.is-pending {
+    color: #d97706;
+    background: rgba(217, 119, 6, 0.10);
+}
+
+/* ── Leave full-day overlay in timeline ── */
+.mj-hour-encode-calendar__leave-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+        135deg,
+        rgba(139, 92, 246, 0.06),
+        rgba(139, 92, 246, 0.06) 6px,
+        rgba(139, 92, 246, 0.12) 6px,
+        rgba(139, 92, 246, 0.12) 12px
+    );
+    border-radius: 14px;
+    z-index: 2;
+    pointer-events: none;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 60px;
+}
+
+.mj-hour-encode-calendar__leave-overlay.is-pending {
+    opacity: 0.5;
+}
+
+
+
+.mj-hour-encode-calendar__occ-dot:hover {
+    transform: scale(1.4);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.22);
+    z-index: 9999;
+}
+
+/* Occurrence tooltip (on hover) */
+.mj-hour-encode-occ-tooltip {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    width: 220px;
+    padding: 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(42, 85, 255, 0.2);
+    background: #ffffff;
+    color: rgba(26, 45, 71, 0.92);
+    box-shadow: 0 16px 32px rgba(15, 35, 95, 0.16);
+    pointer-events: none;
+    z-index: 9999;
+    text-align: left;
+    white-space: normal;
+}
+
+.mj-hour-encode-calendar__occ-dot:hover .mj-hour-encode-occ-tooltip {
+    display: flex;
+}
+
+.mj-hour-encode-calendar__leave-emoji:hover .mj-hour-encode-occ-tooltip {
+    display: flex;
+}
+
+.mj-hour-encode-occ-tooltip__cover {
+    width: 100%;
+    height: 100px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: rgba(26, 45, 71, 0.06);
+}
+
+.mj-hour-encode-occ-tooltip__cover img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.mj-hour-encode-occ-tooltip__details {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.mj-hour-encode-occ-tooltip__title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1f2d3d;
+    line-height: 1.3;
+}
+
+.mj-hour-encode-occ-tooltip__time {
+    font-size: 12px;
+    font-weight: 600;
+    color: #2a55ff;
+}
+
+.mj-hour-encode-occ-tooltip__location {
+    font-size: 11px;
+    color: rgba(26, 45, 71, 0.60);
+    line-height: 1.3;
+}
+
+.mj-hour-encode-occ-tooltip__type {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: rgba(26, 45, 71, 0.45);
+    margin-top: 2px;
 }
 
 .mj-hour-encode-calendar__day-header.is-weekend {
