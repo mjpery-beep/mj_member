@@ -1147,6 +1147,38 @@ if (!function_exists('mj_member_ajax_update_child_profile')) {
             wp_send_json_error(array('message' => $result->get_error_message()), 500);
         }
 
+        // Save dynamic field values (youth-only fields) for the child
+        $dyn_post_values = array();
+        foreach ($_POST as $pk => $pv) {
+            if (strpos($pk, 'dynfield_') !== 0) continue;
+            if (substr($pk, -6) === '_other') continue;
+
+            $df_fid = (int) substr($pk, 9);
+            if ($df_fid <= 0) continue;
+
+            if (is_array($pv)) {
+                $sanitized = array_map(function ($v) { return sanitize_text_field(wp_unslash($v)); }, $pv);
+                $other_key   = $pk . '_other';
+                $other_text  = isset($_POST[$other_key]) ? sanitize_text_field(wp_unslash($_POST[$other_key])) : '';
+                $sanitized   = array_map(function ($v) use ($other_text) {
+                    return $v === '__other' && $other_text !== '' ? '__other:' . $other_text : $v;
+                }, $sanitized);
+                $sanitized = array_filter($sanitized, function ($v) { return $v !== '__other'; });
+                $dyn_post_values[$df_fid] = wp_json_encode(array_values($sanitized));
+            } else {
+                $val = sanitize_text_field(wp_unslash($pv));
+                if ($val === '__other') {
+                    $other_key  = $pk . '_other';
+                    $other_text = isset($_POST[$other_key]) ? sanitize_text_field(wp_unslash($_POST[$other_key])) : '';
+                    $val = $other_text !== '' ? '__other:' . $other_text : '';
+                }
+                $dyn_post_values[$df_fid] = $val;
+            }
+        }
+        if (!empty($dyn_post_values)) {
+            \Mj\Member\Classes\Crud\MjDynamicFieldValues::saveBulk($child_id, $dyn_post_values);
+        }
+
         // Déclencher la notification pour la mise à jour du profil
         do_action('mj_member_profile_updated', $child_id, $updates, array('source' => 'child_profile', 'guardian_id' => (int) $guardian->id));
 

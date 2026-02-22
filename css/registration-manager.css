@@ -172,6 +172,7 @@ input.mj-regmgr-search-input__field {
    ============================================ */
 .mj-regmgr__layout {
     display: flex;
+    height: calc(100vh - 200px);
     min-height: 600px;
 }
 
@@ -184,6 +185,8 @@ input.mj-regmgr-search-input__field {
     background: #fff;
     display: flex;
     flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .mj-regmgr-sidebar__header {
@@ -1194,8 +1197,8 @@ input.mj-regmgr-search-input__field {
 }
 
 .mj-regmgr-avatar {
-    width: 44px;
-    height: 44px;
+    width: 60px;
+    height: 60px;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -1751,6 +1754,13 @@ input.mj-regmgr-search-input__field {
     font-weight: 600;
     padding: 0 5px;
     box-shadow: 0 0 0 2px #fff;
+}
+.mj-att-member__notes-badge--dyn {
+    background: #7c3aed;
+    top: auto;
+    bottom: -2px;
+    right: -2px;
+    left: auto;
 }
 
 /* Attendance Buttons */
@@ -3087,6 +3097,64 @@ input.mj-regmgr-search-input__field {
     border-bottom: 1px solid var(--regmgr-gray-200);
 }
 
+/* Dynamic-field summary inside notes modal */
+.mj-regmgr-notes__dynfields {
+    background: var(--regmgr-gray-50, #f9fafb);
+    border: 1px solid var(--regmgr-gray-200, #e5e7eb);
+    border-radius: 10px;
+    padding: 14px 16px 12px;
+    margin-bottom: 4px;
+}
+.mj-regmgr-notes__dynfields-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--regmgr-gray-600, #4b5563);
+    letter-spacing: 0.01em;
+}
+.mj-regmgr-notes__dynfields-header svg {
+    flex-shrink: 0;
+    opacity: .65;
+}
+.mj-regmgr-notes__dynfields-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 8px;
+}
+.mj-regmgr-notes__dynfield-item {
+    background: #fff;
+    border: 1px solid var(--regmgr-gray-200, #e5e7eb);
+    border-radius: 7px;
+    padding: 8px 11px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.mj-regmgr-notes__dynfield-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--regmgr-gray-500, #6b7280);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.3;
+}
+.mj-regmgr-notes__dynfield-value {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--regmgr-gray-800, #1f2937);
+    word-break: break-word;
+    line-height: 1.4;
+}
+.mj-regmgr-notes__dynfield-value--empty {
+    color: var(--regmgr-gray-400, #9ca3af);
+    font-style: italic;
+    font-weight: 400;
+}
+
 .mj-regmgr-textarea {
     width: 100%;
     min-height: 80px;
@@ -3713,6 +3781,7 @@ input.mj-regmgr-search-input__field {
 @media (max-width: 1024px) {
     .mj-regmgr__layout {
         flex-direction: column;
+        height: auto;
         max-height: none;
         position: relative;
     }
@@ -4020,8 +4089,9 @@ input.mj-regmgr-search-input__field {
 }
 
 .mj-regmgr-action-btn:hover {
-    background: var(--regmgr-gray-50);
+    background: var(--regmgr-gray-800);
     border-color: var(--regmgr-gray-400);
+    color: var(--regmgr-gray-50);
 }
 
 .mj-regmgr-action-btn:focus {
@@ -4051,6 +4121,13 @@ input.mj-regmgr-search-input__field {
     font-weight: 600;
     line-height: 16px;
     text-align: center;
+}
+.mj-regmgr-action-btn__badge--dyn {
+    background: #7c3aed;
+    top: auto;
+    bottom: -6px;
+    right: -6px;
+    left: auto;
 }
 
 /* Action Button Variants */
@@ -4193,7 +4270,7 @@ input.mj-regmgr-search-input__field {
 }
 
 .mj-regmgr-dropdown__item:hover {
-    background: var(--regmgr-gray-50);
+    background: var(--regmgr-gray-400);
 }
 
 .mj-regmgr-dropdown__item--warning {
@@ -4202,6 +4279,7 @@ input.mj-regmgr-search-input__field {
 
 .mj-regmgr-dropdown__item--warning:hover {
     background: var(--regmgr-warning-light);
+    color: var(--regmgr-warning);
 }
 
 .mj-regmgr-dropdown__item--danger {
@@ -4210,6 +4288,7 @@ input.mj-regmgr-search-input__field {
 
 .mj-regmgr-dropdown__item--danger:hover {
     background: var(--regmgr-danger-light);
+    color: var(--regmgr-danger);
 }
 
 .mj-regmgr-dropdown__overlay {
@@ -4422,8 +4501,7 @@ input.mj-regmgr-search-input__field {
 
 /* Avatar adjustments */
 .mj-regmgr-avatar {
-    width: 40px;
-    height: 40px;
+    
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -4442,8 +4520,8 @@ input.mj-regmgr-search-input__field {
 }
 
 .mj-regmgr-avatar--large {
-    width: 48px;
-    height: 48px;
+    width: 148px;
+    height: 148px;
     font-size: 16px;
 }
 
@@ -4487,17 +4565,17 @@ input.mj-regmgr-search-input__field {
 
 /* Badge subscription status */
 .mj-regmgr-badge--subscription-active {
-    background: var(--regmgr-success-light);
+    background: transparent;
     color: #047857;
 }
 
 .mj-regmgr-badge--subscription-expired {
-    background: var(--regmgr-danger-light);
+    background: transparent;
     color: #b91c1c;
 }
 
 .mj-regmgr-badge--subscription-none {
-    background: var(--regmgr-gray-200);
+    background: transparent;
     color: var(--regmgr-gray-600);
 }
 
@@ -4839,13 +4917,15 @@ input.mj-regmgr-search-input__field {
 
 .mj-regmgr-member-detail__avatar-actions {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: 8px;
     width: 100%;
 }
 
 .mj-regmgr-member-detail__avatar-actions .mj-btn {
     width: 100%;
+    padding: 3px;
+    margin: 1px;
 }
 
 .mj-regmgr-member-detail__identity {

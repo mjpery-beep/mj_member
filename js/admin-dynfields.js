@@ -83,6 +83,8 @@
         if (!isTitle) {
             if (field.showInRegistration) badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--registration">Inscription</span>');
             if (field.showInAccount) badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--account">Mon compte</span>');
+            if (field.showInNotes) badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--notes">Notes</span>');
+            if (field.youthOnly) badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--youth">Jeunes</span>');
             if (field.isRequired) badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--required">Requis</span>');
             if (field.allowOther) badges.push('<span class="mj-dynfields__badge mj-dynfields__badge--other">« Autre »</span>');
         }
@@ -149,8 +151,14 @@
         html += '<div class="mj-dynfields-form__checkboxes">';
         html += '<label class="mj-dynfields-form__checkbox"><input type="checkbox" id="mj-dynfield-registration" /> Afficher dans le formulaire d\'inscription</label>';
         html += '<label class="mj-dynfields-form__checkbox"><input type="checkbox" id="mj-dynfield-account" /> Afficher dans Mes informations</label>';
+        html += '<label class="mj-dynfields-form__checkbox"><input type="checkbox" id="mj-dynfield-notes" /> Afficher dans les notes</label>';
+        html += '<label class="mj-dynfields-form__checkbox"><input type="checkbox" id="mj-dynfield-youth-only" /> Uniquement pour les jeunes</label>';
         html += '<label class="mj-dynfields-form__checkbox"><input type="checkbox" id="mj-dynfield-required" /> Champ obligatoire</label>';
         html += '<label class="mj-dynfields-form__checkbox" id="mj-dynfield-allow-other-row" style="display:none;"><input type="checkbox" id="mj-dynfield-allow-other" /> Proposer une option \u00ab Autre \u00bb (champ texte libre)</label>';
+        html += '<div class="mj-dynfields-form__row" id="mj-dynfield-other-label-row" style="display:none;">';
+        html += '<label for="mj-dynfield-other-label">Libellé de l\'option Autre</label>';
+        html += '<input type="text" id="mj-dynfield-other-label" placeholder="Autre" />';
+        html += '</div>';
         html += '</div>';
 
         html += '</div>';
@@ -175,6 +183,9 @@
 
         var typeSelect = document.getElementById('mj-dynfield-type');
         if (typeSelect) typeSelect.addEventListener('change', toggleOptionsRow);
+
+        var allowOtherCb = document.getElementById('mj-dynfield-allow-other');
+        if (allowOtherCb) allowOtherCb.addEventListener('change', toggleOtherLabelRow);
 
         // Edit/Delete buttons
         var editBtns = container.querySelectorAll('.mj-dynfields-edit');
@@ -213,8 +224,19 @@
         var allowOtherRow = document.getElementById('mj-dynfield-allow-other-row');
         if (allowOtherRow) {
             allowOtherRow.style.display = hasOptions ? '' : 'none';
-            if (!hasOptions) document.getElementById('mj-dynfield-allow-other').checked = false;
+            if (!hasOptions) {
+                document.getElementById('mj-dynfield-allow-other').checked = false;
+                var otherLabelRow = document.getElementById('mj-dynfield-other-label-row');
+                if (otherLabelRow) otherLabelRow.style.display = 'none';
+            }
         }
+        toggleOtherLabelRow();
+    }
+
+    function toggleOtherLabelRow() {
+        var checked = document.getElementById('mj-dynfield-allow-other').checked;
+        var row = document.getElementById('mj-dynfield-other-label-row');
+        if (row) row.style.display = checked ? '' : 'none';
     }
 
     function openAddModal() {
@@ -239,8 +261,11 @@
         document.getElementById('mj-dynfield-options').value = (field.optionsList || []).join('\n');
         document.getElementById('mj-dynfield-registration').checked = !!field.showInRegistration;
         document.getElementById('mj-dynfield-account').checked = !!field.showInAccount;
+        document.getElementById('mj-dynfield-notes').checked = !!field.showInNotes;
+        document.getElementById('mj-dynfield-youth-only').checked = !!field.youthOnly;
         document.getElementById('mj-dynfield-required').checked = !!field.isRequired;
         document.getElementById('mj-dynfield-allow-other').checked = !!field.allowOther;
+        document.getElementById('mj-dynfield-other-label').value = field.otherLabel || '';
 
         toggleOptionsRow();
         showModal();
@@ -253,8 +278,11 @@
         document.getElementById('mj-dynfield-options').value = '';
         document.getElementById('mj-dynfield-registration').checked = false;
         document.getElementById('mj-dynfield-account').checked = false;
+        document.getElementById('mj-dynfield-notes').checked = false;
+        document.getElementById('mj-dynfield-youth-only').checked = false;
         document.getElementById('mj-dynfield-required').checked = false;
         document.getElementById('mj-dynfield-allow-other').checked = false;
+        document.getElementById('mj-dynfield-other-label').value = '';
         toggleOptionsRow();
     }
 
@@ -294,8 +322,11 @@
             field_type: type,
             show_in_registration: document.getElementById('mj-dynfield-registration').checked ? 1 : 0,
             show_in_account: document.getElementById('mj-dynfield-account').checked ? 1 : 0,
+            show_in_notes: document.getElementById('mj-dynfield-notes').checked ? 1 : 0,
+            youth_only: document.getElementById('mj-dynfield-youth-only').checked ? 1 : 0,
             is_required: type === 'title' ? 0 : (document.getElementById('mj-dynfield-required').checked ? 1 : 0),
             allow_other: document.getElementById('mj-dynfield-allow-other').checked ? 1 : 0,
+            other_label: document.getElementById('mj-dynfield-other-label').value.trim(),
             options_list: JSON.stringify(optionsList)
         };
 

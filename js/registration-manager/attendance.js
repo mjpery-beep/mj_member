@@ -393,6 +393,7 @@
                         h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
                     ]),
                     registration.notesCount > 0 && h('span', { class: 'mj-att-member__notes-badge' }, registration.notesCount),
+                    registration.dynFieldsCount > 0 && h('span', { class: 'mj-att-member__notes-badge mj-att-member__notes-badge--dyn' }, registration.dynFieldsCount),
                 ]),
 
                 // Boutons de présence stylisés
@@ -804,7 +805,7 @@
                 ]),
 
                 // Section: Membres irréguliers (non payés ou non inscrits à la séance)
-                !allowAttendanceAll && totalIrregular > 0 && h('div', { class: 'mj-att__irregular-section' }, [
+                totalIrregular > 0 && h('div', { class: 'mj-att__irregular-section' }, [
                     h('h2', { class: 'mj-att__irregular-title' }, [
                         h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
                             h('path', { d: 'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z' }),

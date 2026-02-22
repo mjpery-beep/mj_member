@@ -461,7 +461,7 @@
                             h('div', { class: 'mj-regmgr-member-item__subscription' }, [
                                 h('span', {
                                     class: classNames('mj-regmgr-badge', 'mj-regmgr-badge--subscription-' + member.subscriptionStatus),
-                                }, member.subscriptionStatus === 'active' ? '✓' : member.subscriptionStatus === 'expired' ? '!' : '?'),
+                                }, member.subscriptionStatus === 'active' ? '🟢' : member.subscriptionStatus === 'expired' ? '🔴' : '⚪'),
                             ]),
                         ]);
                     })
@@ -1116,12 +1116,56 @@
             onDelete(noteId);
         }, [onDelete]);
 
+        // Collect dynfields flagged "show in notes"
+        var notesDynFields = (props.dynFields || []).filter(function (df) {
+            return df.type !== 'title';
+        });
+
         return h(Modal, {
             isOpen: isOpen,
             onClose: onClose,
             title: getString(strings, 'notePrivate', 'Notes sur') + ' ' + memberName,
             size: 'medium',
         }, [
+            // Dynamic-field summary block
+            notesDynFields.length > 0 && h('div', { class: 'mj-regmgr-notes__dynfields' }, [
+                h('div', { class: 'mj-regmgr-notes__dynfields-header' }, [
+                    h('svg', { width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, [
+                        h('path', { d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' }),
+                        h('polyline', { points: '14 2 14 8 20 8' }),
+                        h('line', { x1: 16, y1: 13, x2: 8, y2: 13 }),
+                        h('line', { x1: 16, y1: 17, x2: 8, y2: 17 }),
+                    ]),
+                    h('span', null, 'Informations du membre'),
+                ]),
+                h('div', { class: 'mj-regmgr-notes__dynfields-grid' },
+                    notesDynFields.map(function (df) {
+                        var displayVal = '';
+                        if (df.type === 'checkbox') {
+                            displayVal = df.value === '1' ? 'Oui' : 'Non';
+                        } else if (df.type === 'checklist') {
+                            try {
+                                var arr = typeof df.value === 'string' ? JSON.parse(df.value) : (Array.isArray(df.value) ? df.value : []);
+                                displayVal = arr.map(function (v) {
+                                    if (typeof v === 'string' && v.indexOf('__other:') === 0) return v.substring(8);
+                                    return v;
+                                }).join(', ');
+                            } catch (e) { displayVal = df.value || ''; }
+                        } else if ((df.type === 'dropdown' || df.type === 'radio') && typeof df.value === 'string' && df.value.indexOf('__other:') === 0) {
+                            displayVal = df.value.substring(8);
+                        } else {
+                            displayVal = df.value || '';
+                        }
+                        if (!displayVal) return null;
+
+                        return h('div', { key: df.id, class: 'mj-regmgr-notes__dynfield-item' }, [
+                            h('div', { class: 'mj-regmgr-notes__dynfield-label' }, df.title),
+                            h('div', { class: 'mj-regmgr-notes__dynfield-value' }, displayVal),
+                        ]);
+                    }).filter(Boolean)
+                ),
+            ]),
+
             // Ajout de nouvelle note
             h('div', { class: 'mj-regmgr-notes__add' }, [
                 h('textarea', {

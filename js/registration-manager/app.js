@@ -3722,6 +3722,10 @@
         var notesLoading = _notesLoading[0];
         var setNotesLoading = _notesLoading[1];
 
+        var _notesDynFields = useState([]);
+        var notesDynFields = _notesDynFields[0];
+        var setNotesDynFields = _notesDynFields[1];
+
         var _qrData = useState(null);
         var qrData = _qrData[0];
         var setQrData = _qrData[1];
@@ -6217,10 +6221,12 @@
             notesModal.open({ member: registration.member });
             setNotesLoading(true);
             setNotes([]);
+            setNotesDynFields([]);
 
             api.getMemberNotes(registration.member.id)
                 .then(function (data) {
                     setNotes(data.notes || []);
+                    setNotesDynFields(data.dynFields || []);
                     setNotesLoading(false);
                 })
                 .catch(function (err) {
@@ -7372,6 +7378,7 @@
                 onClose: notesModal.close,
                 member: notesModal.data ? notesModal.data.member : null,
                 notes: notes,
+                dynFields: notesDynFields,
                 onSave: handleSaveNote,
                 onDelete: handleDeleteNote,
                 strings: strings,

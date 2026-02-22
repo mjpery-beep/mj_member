@@ -858,6 +858,7 @@ if (!function_exists('mj_render_child_form_block')) {
                 <?php
                     // Decode checklist/other value helpers
                     $df_allow_other = (int) ($df->allow_other ?? 0);
+                    $df_other_label = ($df->other_label ?? '') !== '' ? $df->other_label : 'Autre';
                     $df_is_other    = false;
                     $df_other_text  = '';
                     $df_checked_arr = array();
@@ -881,22 +882,25 @@ if (!function_exists('mj_render_child_form_block')) {
                         }
                     }
                 ?>
-                <div class="mj-field-group<?php echo in_array($df->field_type, array('textarea', 'checklist'), true) ? ' mj-field-group--full' : ''; ?>">
+                <div class="mj-field-group mj-field-group--dyn<?php echo in_array($df->field_type, array('textarea', 'checklist'), true) ? ' mj-field-group--full' : ''; ?>">
                     <?php if ($df->field_type === 'text') : ?>
                         <label for="<?php echo $df_html; ?>"><?php echo $df_label; ?></label>
+                        <?php echo $df_desc; ?>
                         <input type="text" id="<?php echo $df_html; ?>" name="<?php echo $df_name; ?>" value="<?php echo esc_attr($df_val); ?>" <?php echo $df_req ? 'required' : ''; ?> />
                     <?php elseif ($df->field_type === 'textarea') : ?>
                         <label for="<?php echo $df_html; ?>"><?php echo $df_label; ?></label>
+                        <?php echo $df_desc; ?>
                         <textarea id="<?php echo $df_html; ?>" name="<?php echo $df_name; ?>" rows="3" <?php echo $df_req ? 'required' : ''; ?>><?php echo esc_textarea($df_val); ?></textarea>
                     <?php elseif ($df->field_type === 'dropdown') : ?>
                         <label for="<?php echo $df_html; ?>"><?php echo $df_label; ?></label>
+                        <?php echo $df_desc; ?>
                         <select id="<?php echo $df_html; ?>" name="<?php echo $df_name; ?>" <?php echo $df_req ? 'required' : ''; ?> <?php echo $df_allow_other ? 'data-dynfield-other="1"' : ''; ?>>
                             <option value="">— Sélectionnez —</option>
                             <?php foreach ($df_opts as $opt) : ?>
                                 <option value="<?php echo esc_attr($opt); ?>" <?php selected(!$df_is_other ? $df_val : '', $opt); ?>><?php echo esc_html($opt); ?></option>
                             <?php endforeach; ?>
                             <?php if ($df_allow_other) : ?>
-                                <option value="__other" <?php selected($df_is_other); ?>>Autre…</option>
+                                <option value="__other" <?php selected($df_is_other); ?>><?php echo esc_html($df_other_label); ?>…</option>
                             <?php endif; ?>
                         </select>
                         <?php if ($df_allow_other) : ?>
@@ -905,6 +909,7 @@ if (!function_exists('mj_render_child_form_block')) {
                     <?php elseif ($df->field_type === 'radio') : ?>
                         <fieldset>
                             <legend><?php echo $df_label; ?></legend>
+                            <?php echo $df_desc; ?>
                             <?php foreach ($df_opts as $oi => $opt) : ?>
                                 <label class="mj-radio">
                                     <input type="radio" name="<?php echo $df_name; ?>" value="<?php echo esc_attr($opt); ?>" <?php checked(!$df_is_other ? $df_val : '', $opt); ?> <?php echo ($df_req && $oi === 0 && !$df_allow_other) ? 'required' : ''; ?> />
@@ -914,7 +919,7 @@ if (!function_exists('mj_render_child_form_block')) {
                             <?php if ($df_allow_other) : ?>
                                 <label class="mj-radio">
                                     <input type="radio" name="<?php echo $df_name; ?>" value="__other" <?php checked($df_is_other); ?> <?php echo ($df_req && empty($df_opts)) ? 'required' : ''; ?> />
-                                    <span>Autre</span>
+                                    <span><?php echo esc_html($df_other_label); ?></span>
                                 </label>
                                 <input type="text" class="mj-dynfield-other-input" name="<?php echo $df_name; ?>_other" value="<?php echo esc_attr($df_other_text); ?>" placeholder="Précisez…" style="<?php echo $df_is_other ? '' : 'display:none;'; ?> margin-top:4px;" />
                             <?php endif; ?>
@@ -922,6 +927,7 @@ if (!function_exists('mj_render_child_form_block')) {
                     <?php elseif ($df->field_type === 'checklist') : ?>
                         <fieldset>
                             <legend><?php echo $df_label; ?></legend>
+                            <?php echo $df_desc; ?>
                             <?php foreach ($df_opts as $opt) : ?>
                                 <label class="mj-checkbox">
                                     <input type="checkbox" name="<?php echo $df_name; ?>[]" value="<?php echo esc_attr($opt); ?>" <?php checked(in_array($opt, $df_checked_arr, true)); ?> />
@@ -931,7 +937,7 @@ if (!function_exists('mj_render_child_form_block')) {
                             <?php if ($df_allow_other) : ?>
                                 <label class="mj-checkbox">
                                     <input type="checkbox" name="<?php echo $df_name; ?>[]" value="__other" <?php checked($df_is_other); ?> />
-                                    <span>Autre</span>
+                                    <span><?php echo esc_html($df_other_label); ?></span>
                                 </label>
                                 <input type="text" class="mj-dynfield-other-input" name="<?php echo $df_name; ?>_other" value="<?php echo esc_attr($df_other_text); ?>" placeholder="Précisez…" style="<?php echo $df_is_other ? '' : 'display:none;'; ?> margin-top:4px;" />
                             <?php endif; ?>
@@ -941,8 +947,8 @@ if (!function_exists('mj_render_child_form_block')) {
                             <input type="checkbox" name="<?php echo $df_name; ?>" value="1" <?php checked($df_val, '1'); ?> <?php echo $df_req ? 'required' : ''; ?> />
                             <span><?php echo $df_label; ?></span>
                         </label>
+                        <?php echo $df_desc; ?>
                     <?php endif; ?>
-                    <?php echo $df_desc; ?>
                 </div>
                 <?php endforeach; ?>
             </div>
@@ -1836,6 +1842,69 @@ if (!function_exists('mj_member_render_registration_form')) {
                 margin-top: -4px;
             }
 
+            /* ── Dynamic-field group improvements ── */
+            .mj-child-card__dynfields {
+                gap: 16px 24px;
+            }
+
+            .mj-field-group--dyn {
+                margin-bottom: 10px;
+                background: rgba(248, 250, 252, 0.8);
+                border: 1px solid rgba(148, 163, 184, 0.2);
+                border-radius: 12px;
+                padding: 16px;
+                gap: 6px;
+                transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            }
+
+            .mj-field-group--dyn:hover {
+                border-color: rgba(148, 163, 184, 0.35);
+            }
+
+            .mj-field-group--dyn:focus-within {
+                border-color: var(--mj-accent);
+                box-shadow: 0 0 0 3px var(--mj-accent-soft);
+            }
+
+            .mj-field-group--dyn > label:first-child,
+            .mj-field-group--dyn > fieldset > legend {
+                font-weight: 600;
+                font-size: 13.5px;
+                color: #0f172a;
+                margin-bottom: 0;
+            }
+
+            .mj-field-group--dyn > .mj-field-hint,
+            .mj-field-group--dyn > fieldset > .mj-field-hint {
+                display: block;
+                font-size: 12.5px;
+                line-height: 1.4;
+                color: #64748b;
+                margin: 0 0 4px;
+            }
+
+            .mj-field-group--dyn > fieldset {
+                border: none;
+                padding: 0;
+                margin: 0;
+            }
+
+            .mj-field-group--dyn > fieldset > legend {
+                padding: 0;
+                margin-bottom: 2px;
+            }
+
+            .mj-field-group--dyn .mj-checkbox span,
+            .mj-field-group--dyn .mj-radio span {
+                font-size: 14px;
+                font-weight: 400;
+                color: #334155;
+            }
+
+            .mj-field-group--dyn .mj-checkbox {
+                font-size: 14px;
+            }
+
             .mj-field-group--remember-row {
                 display: flex;
                 align-items: center;
@@ -1921,13 +1990,20 @@ if (!function_exists('mj_member_render_registration_form')) {
             .mj-radio {
                 display: flex;
                 align-items: flex-start;
-                gap: 12px;
-                margin-bottom: 14px;
-                padding: 12px 16px;
+                gap: 10px;
+                margin-bottom: 6px;
+                padding: 8px 12px;
                 background: rgba(248, 250, 252, 0.8);
-                border-radius: 14px;
-                border: 1px solid rgba(148, 163, 184, 0.32);
+                border-radius: 10px;
+                border: 1px solid rgba(148, 163, 184, 0.25);
                 transition: border-color 0.2s ease, background 0.2s ease;
+                cursor: pointer;
+            }
+
+            .mj-radio span {
+                font-size: 14px;
+                font-weight: 400;
+                color: #334155;
             }
 
             .mj-radio input {
@@ -1936,7 +2012,30 @@ if (!function_exists('mj_member_render_registration_form')) {
 
             .mj-radio:hover {
                 border-color: var(--mj-accent);
-                background: rgba(37, 99, 235, 0.08);
+                background: rgba(37, 99, 235, 0.06);
+            }
+
+            /* Dropdown / select styling inside dynamic fields */
+            .mj-field-group--dyn select {
+                padding: 10px 14px;
+                border: 1px solid rgba(148, 163, 184, 0.55);
+                border-radius: 12px;
+                font-size: 14px;
+                font-family: inherit;
+                background: rgba(255, 255, 255, 0.95) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10z' fill='%2364748b'/%3E%3C/svg%3E") no-repeat right 14px center;
+                background-size: 12px;
+                appearance: none;
+                -webkit-appearance: none;
+                color: #0f172a;
+                cursor: pointer;
+                box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+                transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            }
+
+            .mj-field-group--dyn select:focus {
+                outline: none;
+                border-color: var(--mj-accent);
+                box-shadow: 0 0 0 4px var(--mj-accent-soft);
             }
 
             .mj-hidden {

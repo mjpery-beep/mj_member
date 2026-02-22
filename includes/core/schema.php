@@ -1790,6 +1790,9 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_59($wpdb);
     mj_member_upgrade_to_2_60($wpdb);
     mj_member_upgrade_to_2_61($wpdb);
+    mj_member_upgrade_to_2_62($wpdb);
+    mj_member_upgrade_to_2_63($wpdb);
+    mj_member_upgrade_to_2_64($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -5539,6 +5542,36 @@ function mj_member_upgrade_to_2_61($wpdb) {
     $fields_table = $wpdb->prefix . 'mj_dynamic_fields';
     if (mj_member_table_exists($fields_table) && !mj_member_column_exists($fields_table, 'allow_other')) {
         $wpdb->query("ALTER TABLE {$fields_table} ADD COLUMN allow_other tinyint(1) NOT NULL DEFAULT 0 AFTER is_required");
+    }
+}
+
+/**
+ * Migration 2.62: Add show_in_notes column to dynamic fields table.
+ */
+function mj_member_upgrade_to_2_62($wpdb) {
+    $fields_table = $wpdb->prefix . 'mj_dynamic_fields';
+    if (mj_member_table_exists($fields_table) && !mj_member_column_exists($fields_table, 'show_in_notes')) {
+        $wpdb->query("ALTER TABLE {$fields_table} ADD COLUMN show_in_notes tinyint(1) NOT NULL DEFAULT 0 AFTER allow_other");
+    }
+}
+
+/**
+ * Migration 2.63: Add other_label column to dynamic fields table.
+ */
+function mj_member_upgrade_to_2_63($wpdb) {
+    $fields_table = $wpdb->prefix . 'mj_dynamic_fields';
+    if (mj_member_table_exists($fields_table) && !mj_member_column_exists($fields_table, 'other_label')) {
+        $wpdb->query("ALTER TABLE {$fields_table} ADD COLUMN other_label varchar(255) NOT NULL DEFAULT '' AFTER allow_other");
+    }
+}
+
+/**
+ * Migration 2.64: Add youth_only column to dynamic fields table.
+ */
+function mj_member_upgrade_to_2_64($wpdb) {
+    $fields_table = $wpdb->prefix . 'mj_dynamic_fields';
+    if (mj_member_table_exists($fields_table) && !mj_member_column_exists($fields_table, 'youth_only')) {
+        $wpdb->query("ALTER TABLE {$fields_table} ADD COLUMN youth_only tinyint(1) NOT NULL DEFAULT 0 AFTER show_in_notes");
     }
 }
 

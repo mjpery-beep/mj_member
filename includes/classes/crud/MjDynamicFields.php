@@ -46,14 +46,15 @@ class MjDynamicFields extends MjTools
      */
     public static function getTypeLabels(): array
     {
+        /** Ajoute un emoji */
         return array(
-            self::TYPE_TEXT      => __('Texte', 'mj-member'),
-            self::TYPE_TEXTAREA  => __('Zone de texte', 'mj-member'),
-            self::TYPE_DROPDOWN  => __('Liste déroulante', 'mj-member'),
-            self::TYPE_RADIO     => __('Boutons radio', 'mj-member'),
-            self::TYPE_CHECKBOX  => __('Case à cocher', 'mj-member'),
-            self::TYPE_CHECKLIST => __('Liste de cases à cocher', 'mj-member'),
-            self::TYPE_TITLE     => __('Titre de section', 'mj-member'),
+            self::TYPE_TEXT      => __('📝 Texte', 'mj-member'),
+            self::TYPE_TEXTAREA  => __('📝 Zone de texte', 'mj-member'),
+            self::TYPE_DROPDOWN  => __('🔽 Liste déroulante', 'mj-member'),
+            self::TYPE_RADIO     => __('🔘 Boutons radio', 'mj-member'),
+            self::TYPE_CHECKBOX  => __('☑️ Case à cocher', 'mj-member'),
+            self::TYPE_CHECKLIST => __('📋 Liste de cases à cocher', 'mj-member'),
+            self::TYPE_TITLE     => __('🏷️ Titre de section', 'mj-member'),
         );
     }
 
@@ -181,9 +182,12 @@ class MjDynamicFields extends MjTools
             'show_in_account'      => !empty($data['show_in_account']) ? 1 : 0,
             'is_required'          => !empty($data['is_required']) ? 1 : 0,
             'allow_other'          => !empty($data['allow_other']) ? 1 : 0,
+            'other_label'          => sanitize_text_field($data['other_label'] ?? ''),
+            'show_in_notes'        => !empty($data['show_in_notes']) ? 1 : 0,
+            'youth_only'           => !empty($data['youth_only']) ? 1 : 0,
             'options_list'         => $options_json,
             'sort_order'           => isset($data['sort_order']) ? (int) $data['sort_order'] : $max_order + 1,
-        ), array('%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%s', '%d'));
+        ), array('%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%d', '%d', '%s', '%d'));
 
         return $inserted ? (int) $wpdb->insert_id : false;
     }
@@ -243,6 +247,21 @@ class MjDynamicFields extends MjTools
 
         if (isset($data['allow_other'])) {
             $fields['allow_other'] = !empty($data['allow_other']) ? 1 : 0;
+            $formats[] = '%d';
+        }
+
+        if (isset($data['other_label'])) {
+            $fields['other_label'] = sanitize_text_field($data['other_label']);
+            $formats[] = '%s';
+        }
+
+        if (isset($data['show_in_notes'])) {
+            $fields['show_in_notes'] = !empty($data['show_in_notes']) ? 1 : 0;
+            $formats[] = '%d';
+        }
+
+        if (isset($data['youth_only'])) {
+            $fields['youth_only'] = !empty($data['youth_only']) ? 1 : 0;
             $formats[] = '%d';
         }
 

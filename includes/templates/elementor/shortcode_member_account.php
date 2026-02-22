@@ -488,13 +488,7 @@ if (!function_exists('mj_member_render_account_component')) {
         if ($is_preview) {
             list($member, $membership_status, $children_statuses, $payment_history) = mj_member_account_fake_context($options);
 
-            $preview_role_raw = isset($member->role) ? (string) $member->role : '';
-            $preview_role = strtolower($preview_role_raw);
-            $guardian_role_key = strtolower((string) \Mj\Member\Classes\MjRoles::TUTEUR);
-            $is_preview_guardian = ($preview_role !== '' && $preview_role === $guardian_role_key);
-            $options['show_children'] = $options['show_children'] && $is_preview_guardian;
-
-            if (!$options['show_children']) {
+            if (empty($options['show_children'])) {
                 $children_statuses = array();
             }
         } else {
@@ -522,12 +516,6 @@ if (!function_exists('mj_member_render_account_component')) {
                 <?php
                 return ob_get_clean();
             }
-
-            $member_role_raw = isset($member->role) ? (string) $member->role : '';
-            $member_role_value = strtolower($member_role_raw);
-            $guardian_role_key = strtolower((string) \Mj\Member\Classes\MjRoles::TUTEUR);
-            $is_guardian_role = ($member_role_value !== '' && $member_role_value === $guardian_role_key);
-            $options['show_children'] = $options['show_children'] && $is_guardian_role;
 
             if ($display_membership && function_exists('mj_member_get_membership_status')) {
                 $membership_status = mj_member_get_membership_status($member);
@@ -925,11 +913,34 @@ if (!function_exists('mj_member_render_account_component')) {
         $child_photo_trigger_id = $child_photo_input_id . '-trigger';
         $child_photo_default_text = __('Aucun fichier sélectionné', 'mj-member');
 
+        $has_children_tabs = !empty($options['show_children']) && !empty($children_payload);
+
         ob_start();
         ?>
         <div class="mj-account-modern" data-mj-member-account>
             <div class="mj-account-shell">
-                <section class="mj-account-card mj-account-card--profile">
+                <?php if ($has_children_tabs) : ?>
+                <nav class="mj-account-tabs" role="tablist" data-mj-account-tabs>
+                    <button type="button" class="mj-account-tab mj-account-tab--active" role="tab" aria-selected="true" data-mj-tab="parent">
+                        📋 <?php esc_html_e('Mes données', 'mj-member'); ?>
+                    </button>
+                    <?php foreach ($children_payload as $tab_child) : ?>
+                    <button type="button" class="mj-account-tab" role="tab" aria-selected="false" data-mj-tab="child-<?php echo esc_attr((string) $tab_child['id']); ?>">
+                        👶 <?php echo esc_html($tab_child['full_name'] !== '' ? $tab_child['full_name'] : __('Jeune', 'mj-member')); ?>
+                    </button>
+                    <?php endforeach; ?>
+                    <button
+                        type="button"
+                        class="mj-account-tab mj-account-tab--add"
+                        data-mj-member-child-add
+                        <?php echo $is_preview ? 'disabled="disabled" aria-disabled="true"' : ''; ?>
+                        aria-controls="mj-member-child-modal">
+                        <span aria-hidden="true">＋</span>
+                        <span><?php esc_html_e('Ajouter', 'mj-member'); ?></span>
+                    </button>
+                </nav>
+                <?php endif; ?>
+                <section class="mj-account-card mj-account-card--profile"<?php echo $has_children_tabs ? ' data-mj-tab-panel="parent"' : ''; ?>>
                     <header class="mj-account-card__header">
                         <div class="mj-account-card__header-main">
                             <?php if ($title !== '') : ?>
@@ -1057,6 +1068,9 @@ if (!function_exists('mj_member_render_account_component')) {
                         <fieldset class="mj-fieldset">
                             <div class="mj-field-grid mj-field-grid--dynfields">
                                 <?php foreach ($dyn_account_fields as $df) :
+                                    // Skip youth-only fields for guardians (members who have children)
+                                    if (!empty($df->youth_only) && $has_children_tabs) continue;
+
                                     $df_id   = (int) $df->id;
                                     $df_name = 'dynfield_' . $df_id;
                                     $df_html = 'mj-account-dynfield-' . $df_id;
@@ -1078,6 +1092,7 @@ if (!function_exists('mj_member_render_account_component')) {
                                 <?php
                                     // Decode checklist/other value helpers
                                     $df_allow_other = (int) ($df->allow_other ?? 0);
+                                    $df_other_label = ($df->other_label ?? '') !== '' ? $df->other_label : 'Autre';
                                     $df_is_other    = false;
                                     $df_other_text  = '';
                                     $df_checked_arr = array();
@@ -1100,22 +1115,25 @@ if (!function_exists('mj_member_render_account_component')) {
                                         }
                                     }
                                 ?>
-                                <div class="mj-field-group<?php echo in_array($df->field_type, array('textarea', 'checklist'), true) ? ' mj-field-group--full' : ''; ?>">
+                                <div class="mj-field-group mj-field-group--dyn<?php echo in_array($df->field_type, array('textarea', 'checklist'), true) ? ' mj-field-group--full' : ''; ?>">
                                     <?php if ($df->field_type === 'text') : ?>
                                         <label for="<?php echo $df_html; ?>"><?php echo $df_label; ?></label>
+                                        <?php echo $df_desc; ?>
                                         <input type="text" id="<?php echo $df_html; ?>" name="<?php echo $df_name; ?>" value="<?php echo esc_attr($df_val); ?>" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> <?php echo $df_req ? 'required' : ''; ?> />
                                     <?php elseif ($df->field_type === 'textarea') : ?>
                                         <label for="<?php echo $df_html; ?>"><?php echo $df_label; ?></label>
+                                        <?php echo $df_desc; ?>
                                         <textarea id="<?php echo $df_html; ?>" name="<?php echo $df_name; ?>" rows="3" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> <?php echo $df_req ? 'required' : ''; ?>><?php echo esc_textarea($df_val); ?></textarea>
                                     <?php elseif ($df->field_type === 'dropdown') : ?>
                                         <label for="<?php echo $df_html; ?>"><?php echo $df_label; ?></label>
+                                        <?php echo $df_desc; ?>
                                         <select id="<?php echo $df_html; ?>" name="<?php echo $df_name; ?>" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> <?php echo $df_req ? 'required' : ''; ?> <?php echo $df_allow_other ? 'data-dynfield-other="1"' : ''; ?>>
                                             <option value="">&mdash; Sélectionnez &mdash;</option>
                                             <?php foreach ($df_opts as $opt) : ?>
                                                 <option value="<?php echo esc_attr($opt); ?>" <?php selected(!$df_is_other ? $df_val : '', $opt); ?>><?php echo esc_html($opt); ?></option>
                                             <?php endforeach; ?>
                                             <?php if ($df_allow_other) : ?>
-                                                <option value="__other" <?php selected($df_is_other); ?>>Autre…</option>
+                                                <option value="__other" <?php selected($df_is_other); ?>><?php echo esc_html($df_other_label); ?>…</option>
                                             <?php endif; ?>
                                         </select>
                                         <?php if ($df_allow_other) : ?>
@@ -1124,6 +1142,7 @@ if (!function_exists('mj_member_render_account_component')) {
                                     <?php elseif ($df->field_type === 'radio') : ?>
                                         <fieldset>
                                             <legend><?php echo $df_label; ?></legend>
+                                            <?php echo $df_desc; ?>
                                             <?php foreach ($df_opts as $oi => $opt) : ?>
                                                 <label class="mj-radio">
                                                     <input type="radio" name="<?php echo $df_name; ?>" value="<?php echo esc_attr($opt); ?>" <?php checked(!$df_is_other ? $df_val : '', $opt); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> <?php echo ($df_req && $oi === 0 && !$df_allow_other) ? 'required' : ''; ?> />
@@ -1133,7 +1152,7 @@ if (!function_exists('mj_member_render_account_component')) {
                                             <?php if ($df_allow_other) : ?>
                                                 <label class="mj-radio">
                                                     <input type="radio" name="<?php echo $df_name; ?>" value="__other" <?php checked($df_is_other); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
-                                                    <span>Autre</span>
+                                                    <span><?php echo esc_html($df_other_label); ?></span>
                                                 </label>
                                                 <input type="text" class="mj-dynfield-other-input" name="<?php echo $df_name; ?>_other" value="<?php echo esc_attr($df_other_text); ?>" placeholder="Précisez…" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> style="<?php echo $df_is_other ? '' : 'display:none;'; ?> margin-top:4px;" />
                                             <?php endif; ?>
@@ -1141,6 +1160,7 @@ if (!function_exists('mj_member_render_account_component')) {
                                     <?php elseif ($df->field_type === 'checklist') : ?>
                                         <fieldset>
                                             <legend><?php echo $df_label; ?></legend>
+                                            <?php echo $df_desc; ?>
                                             <?php foreach ($df_opts as $opt) : ?>
                                                 <label class="mj-checkbox">
                                                     <input type="checkbox" name="<?php echo $df_name; ?>[]" value="<?php echo esc_attr($opt); ?>" <?php checked(in_array($opt, $df_checked_arr, true)); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
@@ -1150,7 +1170,7 @@ if (!function_exists('mj_member_render_account_component')) {
                                             <?php if ($df_allow_other) : ?>
                                                 <label class="mj-checkbox">
                                                     <input type="checkbox" name="<?php echo $df_name; ?>[]" value="__other" <?php checked($df_is_other); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
-                                                    <span>Autre</span>
+                                                    <span><?php echo esc_html($df_other_label); ?></span>
                                                 </label>
                                                 <input type="text" class="mj-dynfield-other-input" name="<?php echo $df_name; ?>_other" value="<?php echo esc_attr($df_other_text); ?>" placeholder="Précisez…" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> style="<?php echo $df_is_other ? '' : 'display:none;'; ?> margin-top:4px;" />
                                             <?php endif; ?>
@@ -1160,8 +1180,8 @@ if (!function_exists('mj_member_render_account_component')) {
                                             <input type="checkbox" name="<?php echo $df_name; ?>" value="1" <?php checked($df_val, '1'); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> <?php echo $df_req ? 'required' : ''; ?> />
                                             <span><?php echo $df_label; ?></span>
                                         </label>
+                                        <?php echo $df_desc; ?>
                                     <?php endif; ?>
-                                    <?php echo $df_desc; ?>
                                 </div>
                                 <?php endforeach; ?>
                             </div>
@@ -1285,8 +1305,273 @@ if (!function_exists('mj_member_render_account_component')) {
                     </div>
                 </section>
 
+                <?php if ($has_children_tabs) : foreach ($children_payload as $tab_child) :
+                    $tc_status = $tab_child['status'];
+                    $tc_label = $tab_child['status_label'];
+                    $tc_desc = isset($tab_child['description']) ? $tab_child['description'] : '';
+                    $tc_profile = $tab_child['profile'];
+                    $tc_birth = !empty($tc_profile['birth_date']) ? $tc_profile['birth_date'] : '';
+                    $tc_email = !empty($tc_profile['email']) ? $tc_profile['email'] : '';
+                    $tc_phone = !empty($tc_profile['phone']) ? $tc_profile['phone'] : '';
+                    $tc_notes = !empty($tc_profile['notes']) ? $tc_profile['notes'] : '';
+                    $tc_autonomous = !empty($tc_profile['is_autonomous']);
+                    $tc_photo_consent = !empty($tc_profile['photo_usage_consent']);
+                    $tc_photo_url = !empty($tab_child['photo']['url']) ? $tab_child['photo']['url'] : '';
+                    $tc_photo_id = isset($tab_child['photo']['id']) ? (int) $tab_child['photo']['id'] : 0;
+                    $tc_full_name = $tab_child['full_name'] !== '' ? $tab_child['full_name'] : __('Jeune', 'mj-member');
+                    $tc_expires = isset($tab_child['expires_display']) ? $tab_child['expires_display'] : '';
+                    $tc_last_payment = isset($tab_child['last_payment_display']) ? $tab_child['last_payment_display'] : '';
+                    $tc_requires_payment = !empty($tab_child['requires_payment']);
+                    $tc_id = (int) $tab_child['id'];
+                    $tc_form_id = 'mj-child-form-' . $tc_id;
+                    $tc_prefix = 'mj-child-' . $tc_id;
+                    $tc_has_photo = ($tc_photo_url !== '');
+                    $tc_photo_input_id_tab = $tc_prefix . '-photo';
+                    $tc_photo_label_id_tab = $tc_photo_input_id_tab . '-label';
+                    $tc_photo_hint_id_tab = $tc_photo_input_id_tab . '-hint';
+                    $tc_photo_trigger_id_tab = $tc_photo_input_id_tab . '-trigger';
+                    $tc_upload_default = $tc_has_photo ? __('Photo actuelle enregistrée', 'mj-member') : __('Aucun fichier sélectionné', 'mj-member');
+                ?>
+                <section class="mj-account-card mj-account-card--child-detail" data-mj-tab-panel="child-<?php echo esc_attr((string) $tc_id); ?>" hidden>
+                    <header class="mj-account-card__header">
+                        <div class="mj-account-card__header-main">
+                            <h2 class="mj-account-card__title">👶 <?php echo esc_html($tc_full_name); ?></h2>
+                        </div>
+                        <?php if ($tc_label !== '') : ?>
+                            <span class="mj-account-chip mj-account-chip--<?php echo esc_attr($tc_status); ?>"><?php echo esc_html($tc_label); ?></span>
+                        <?php endif; ?>
+                    </header>
+
+                    <div class="mj-account-children__feedback" data-mj-child-tab-feedback="<?php echo esc_attr((string) $tc_id); ?>" role="status" aria-live="polite" hidden></div>
+
+                    <form method="post" enctype="multipart/form-data" class="mj-account-form" id="<?php echo esc_attr($tc_form_id); ?>" data-mj-child-tab-form="<?php echo esc_attr((string) $tc_id); ?>">
+                        <input type="hidden" name="child_id" value="<?php echo esc_attr((string) $tc_id); ?>" />
+
+                        <fieldset class="mj-fieldset">
+                            <legend><?php esc_html_e('Informations personnelles', 'mj-member'); ?></legend>
+                            <div class="mj-field-grid">
+                                <div class="mj-field-group">
+                                    <label for="<?php echo esc_attr($tc_prefix); ?>-first-name"><?php esc_html_e('Prénom', 'mj-member'); ?></label>
+                                    <input type="text" id="<?php echo esc_attr($tc_prefix); ?>-first-name" name="first_name" value="<?php echo esc_attr($tc_profile['first_name']); ?>" autocomplete="given-name" <?php echo $is_preview ? 'disabled="disabled"' : 'required'; ?> />
+                                </div>
+                                <div class="mj-field-group">
+                                    <label for="<?php echo esc_attr($tc_prefix); ?>-last-name"><?php esc_html_e('Nom', 'mj-member'); ?></label>
+                                    <input type="text" id="<?php echo esc_attr($tc_prefix); ?>-last-name" name="last_name" value="<?php echo esc_attr($tc_profile['last_name']); ?>" autocomplete="family-name" <?php echo $is_preview ? 'disabled="disabled"' : 'required'; ?> />
+                                </div>
+                                <div class="mj-field-group">
+                                    <label for="<?php echo esc_attr($tc_prefix); ?>-email"><?php esc_html_e('Email', 'mj-member'); ?></label>
+                                    <input type="email" id="<?php echo esc_attr($tc_prefix); ?>-email" name="email" value="<?php echo esc_attr($tc_email); ?>" autocomplete="email" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                </div>
+                                <div class="mj-field-group">
+                                    <label for="<?php echo esc_attr($tc_prefix); ?>-phone"><?php esc_html_e('Téléphone', 'mj-member'); ?></label>
+                                    <input type="tel" id="<?php echo esc_attr($tc_prefix); ?>-phone" name="phone" value="<?php echo esc_attr($tc_phone); ?>" autocomplete="tel" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                </div>
+                                <div class="mj-field-group">
+                                    <label for="<?php echo esc_attr($tc_prefix); ?>-birth-date"><?php esc_html_e('Date de naissance', 'mj-member'); ?></label>
+                                    <input type="date" id="<?php echo esc_attr($tc_prefix); ?>-birth-date" name="birth_date" value="<?php echo esc_attr($tc_birth); ?>" autocomplete="bday" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                </div>
+                                <div class="mj-field-group mj-field-group--full">
+                                    <label for="<?php echo esc_attr($tc_prefix); ?>-notes"><?php esc_html_e('Informations complémentaires à transmettre à nos animateurs', 'mj-member'); ?></label>
+                                    <textarea id="<?php echo esc_attr($tc_prefix); ?>-notes" name="notes" rows="3" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?>><?php echo esc_textarea($tc_notes); ?></textarea>
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <?php
+                        // Dynamic fields (youth-only) for this child
+                        $tc_dyn_fields = \Mj\Member\Classes\Crud\MjDynamicFields::getAccountFields();
+                        $tc_youth_fields = array();
+                        if (!empty($tc_dyn_fields)) {
+                            foreach ($tc_dyn_fields as $tdf) {
+                                if (!empty($tdf->youth_only)) {
+                                    $tc_youth_fields[] = $tdf;
+                                }
+                            }
+                        }
+                        if (!empty($tc_youth_fields)) :
+                            $tc_dyn_vals = $is_preview ? array() : \Mj\Member\Classes\Crud\MjDynamicFieldValues::getByMemberKeyed($tc_id);
+                        ?>
+                        <fieldset class="mj-fieldset">
+                            <div class="mj-field-grid mj-field-grid--dynfields">
+                                <?php foreach ($tc_youth_fields as $df) :
+                                    $df_id   = (int) $df->id;
+                                    $df_name = 'dynfield_' . $df_id;
+                                    $df_html = esc_attr($tc_prefix . '-dynfield-' . $df_id);
+                                    $df_req  = (int) $df->is_required;
+                                    $df_val  = $tc_dyn_vals[$df_id] ?? '';
+                                    $df_opts = \Mj\Member\Classes\Crud\MjDynamicFields::decodeOptions($df->options_list);
+                                    $df_label = esc_html($df->title) . ($df_req ? ' *' : '');
+                                    $df_desc  = $df->description ? '<small class="mj-field-hint">' . esc_html($df->description) . '</small>' : '';
+
+                                    // Section title
+                                    if ($df->field_type === 'title') : ?>
+                                        </div>
+                                        <h5 class="mj-dynfield-section-title"><?php echo esc_html($df->title); ?></h5>
+                                        <?php if ($df->description) : ?>
+                                            <p class="mj-dynfield-section-desc"><?php echo esc_html($df->description); ?></p>
+                                        <?php endif; ?>
+                                        <div class="mj-field-grid--dynfields">
+                                    <?php continue; endif; ?>
+                                <?php
+                                    $df_allow_other = (int) ($df->allow_other ?? 0);
+                                    $df_other_label = ($df->other_label ?? '') !== '' ? $df->other_label : 'Autre';
+                                    $df_is_other    = false;
+                                    $df_other_text  = '';
+                                    $df_checked_arr = array();
+
+                                    if ($df->field_type === 'checklist') {
+                                        $df_checked_arr = is_string($df_val) && $df_val !== '' ? json_decode($df_val, true) : array();
+                                        if (!is_array($df_checked_arr)) $df_checked_arr = array();
+                                        foreach ($df_checked_arr as $ck => $cv) {
+                                            if (strpos($cv, '__other:') === 0) {
+                                                $df_other_text = substr($cv, 8);
+                                                $df_is_other = true;
+                                                unset($df_checked_arr[$ck]);
+                                                break;
+                                            }
+                                        }
+                                    } elseif (in_array($df->field_type, array('dropdown', 'radio'), true) && $df_allow_other) {
+                                        if (strpos($df_val, '__other:') === 0) {
+                                            $df_other_text = substr($df_val, 8);
+                                            $df_is_other = true;
+                                        }
+                                    }
+                                ?>
+                                <div class="mj-field-group mj-field-group--dyn<?php echo in_array($df->field_type, array('textarea', 'checklist'), true) ? ' mj-field-group--full' : ''; ?>">
+                                    <?php if ($df->field_type === 'text') : ?>
+                                        <label for="<?php echo $df_html; ?>"><?php echo $df_label; ?></label>
+                                        <?php echo $df_desc; ?>
+                                        <input type="text" id="<?php echo $df_html; ?>" name="<?php echo $df_name; ?>" value="<?php echo esc_attr($df_val); ?>" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> <?php echo $df_req ? 'required' : ''; ?> />
+                                    <?php elseif ($df->field_type === 'textarea') : ?>
+                                        <label for="<?php echo $df_html; ?>"><?php echo $df_label; ?></label>
+                                        <?php echo $df_desc; ?>
+                                        <textarea id="<?php echo $df_html; ?>" name="<?php echo $df_name; ?>" rows="3" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> <?php echo $df_req ? 'required' : ''; ?>><?php echo esc_textarea($df_val); ?></textarea>
+                                    <?php elseif ($df->field_type === 'dropdown') : ?>
+                                        <label for="<?php echo $df_html; ?>"><?php echo $df_label; ?></label>
+                                        <?php echo $df_desc; ?>
+                                        <select id="<?php echo $df_html; ?>" name="<?php echo $df_name; ?>" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> <?php echo $df_req ? 'required' : ''; ?> <?php echo $df_allow_other ? 'data-dynfield-other="1"' : ''; ?>>
+                                            <option value="">&mdash; Sélectionnez &mdash;</option>
+                                            <?php foreach ($df_opts as $opt) : ?>
+                                                <option value="<?php echo esc_attr($opt); ?>" <?php selected(!$df_is_other ? $df_val : '', $opt); ?>><?php echo esc_html($opt); ?></option>
+                                            <?php endforeach; ?>
+                                            <?php if ($df_allow_other) : ?>
+                                                <option value="__other" <?php selected($df_is_other); ?>><?php echo esc_html($df_other_label); ?>…</option>
+                                            <?php endif; ?>
+                                        </select>
+                                        <?php if ($df_allow_other) : ?>
+                                            <input type="text" class="mj-dynfield-other-input" name="<?php echo $df_name; ?>_other" value="<?php echo esc_attr($df_other_text); ?>" placeholder="Précisez…" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> style="<?php echo $df_is_other ? '' : 'display:none;'; ?> margin-top:6px;" />
+                                        <?php endif; ?>
+                                    <?php elseif ($df->field_type === 'radio') : ?>
+                                        <fieldset>
+                                            <legend><?php echo $df_label; ?></legend>
+                                            <?php echo $df_desc; ?>
+                                            <?php foreach ($df_opts as $oi => $opt) : ?>
+                                                <label class="mj-radio">
+                                                    <input type="radio" name="<?php echo $df_name; ?>" value="<?php echo esc_attr($opt); ?>" <?php checked(!$df_is_other ? $df_val : '', $opt); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> <?php echo ($df_req && $oi === 0 && !$df_allow_other) ? 'required' : ''; ?> />
+                                                    <span><?php echo esc_html($opt); ?></span>
+                                                </label>
+                                            <?php endforeach; ?>
+                                            <?php if ($df_allow_other) : ?>
+                                                <label class="mj-radio">
+                                                    <input type="radio" name="<?php echo $df_name; ?>" value="__other" <?php checked($df_is_other); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                                    <span><?php echo esc_html($df_other_label); ?></span>
+                                                </label>
+                                                <input type="text" class="mj-dynfield-other-input" name="<?php echo $df_name; ?>_other" value="<?php echo esc_attr($df_other_text); ?>" placeholder="Précisez…" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> style="<?php echo $df_is_other ? '' : 'display:none;'; ?> margin-top:4px;" />
+                                            <?php endif; ?>
+                                        </fieldset>
+                                    <?php elseif ($df->field_type === 'checklist') : ?>
+                                        <fieldset>
+                                            <legend><?php echo $df_label; ?></legend>
+                                            <?php echo $df_desc; ?>
+                                            <?php foreach ($df_opts as $opt) : ?>
+                                                <label class="mj-checkbox">
+                                                    <input type="checkbox" name="<?php echo $df_name; ?>[]" value="<?php echo esc_attr($opt); ?>" <?php checked(in_array($opt, $df_checked_arr, true)); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                                    <span><?php echo esc_html($opt); ?></span>
+                                                </label>
+                                            <?php endforeach; ?>
+                                            <?php if ($df_allow_other) : ?>
+                                                <label class="mj-checkbox">
+                                                    <input type="checkbox" name="<?php echo $df_name; ?>[]" value="__other" <?php checked($df_is_other); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                                    <span><?php echo esc_html($df_other_label); ?></span>
+                                                </label>
+                                                <input type="text" class="mj-dynfield-other-input" name="<?php echo $df_name; ?>_other" value="<?php echo esc_attr($df_other_text); ?>" placeholder="Précisez…" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> style="<?php echo $df_is_other ? '' : 'display:none;'; ?> margin-top:4px;" />
+                                            <?php endif; ?>
+                                        </fieldset>
+                                    <?php elseif ($df->field_type === 'checkbox') : ?>
+                                        <label class="mj-checkbox">
+                                            <input type="checkbox" name="<?php echo $df_name; ?>" value="1" <?php checked($df_val, '1'); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> <?php echo $df_req ? 'required' : ''; ?> />
+                                            <span><?php echo $df_label; ?></span>
+                                        </label>
+                                        <?php echo $df_desc; ?>
+                                    <?php endif; ?>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </fieldset>
+                        <?php endif; ?>
+
+                        <div class="mj-account-photo-field">
+                            <div class="mj-account-photo-control">
+                                <div class="mj-account-photo-control__preview">
+                                    <?php if ($tc_has_photo) : ?>
+                                        <img src="<?php echo esc_url($tc_photo_url); ?>" alt="<?php echo esc_attr($tc_full_name); ?>" />
+                                    <?php else : ?>
+                                        <span class="mj-account-photo-control__placeholder">👤</span>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="mj-account-photo-control__fields">
+                                    <div class="mj-field-group mj-account-photo-control__upload">
+                                        <span id="<?php echo esc_attr($tc_photo_label_id_tab); ?>" class="mj-account-photo-control__label"><?php esc_html_e('Photo du jeune', 'mj-member'); ?></span>
+                                        <div class="mj-account-upload" data-mj-account-upload>
+                                            <input type="file" id="<?php echo esc_attr($tc_photo_input_id_tab); ?>" class="mj-account-upload__input" name="child_photo" accept="image/*" aria-labelledby="<?php echo esc_attr($tc_photo_label_id_tab . ' ' . $tc_photo_trigger_id_tab); ?>" aria-describedby="<?php echo esc_attr($tc_photo_hint_id_tab); ?>" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                            <label class="mj-account-upload__trigger" id="<?php echo esc_attr($tc_photo_trigger_id_tab); ?>" for="<?php echo esc_attr($tc_photo_input_id_tab); ?>"<?php echo $is_preview ? ' aria-disabled="true" tabindex="-1"' : ''; ?>>
+                                                <span class="mj-account-upload__icon" aria-hidden="true">📷</span>
+                                                <span class="mj-account-upload__text"><?php esc_html_e('Choisir une image', 'mj-member'); ?></span>
+                                            </label>
+                                            <div class="mj-account-upload__meta">
+                                                <span class="mj-account-upload__filename" data-default="<?php echo esc_attr($tc_upload_default); ?>"><?php echo esc_html($tc_upload_default); ?></span>
+                                                <span class="mj-account-upload__hint" id="<?php echo esc_attr($tc_photo_hint_id_tab); ?>"><?php esc_html_e('Formats acceptés : JPG ou PNG, 5 Mo max.', 'mj-member'); ?></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <?php if ($is_preview) : ?>
+                                        <p class="mj-account-photo-control__remove"><?php esc_html_e('Modification désactivée en aperçu.', 'mj-member'); ?></p>
+                                    <?php else : ?>
+                                        <label class="mj-account-photo-control__remove">
+                                            <input type="checkbox" name="photo_remove" value="1" />
+                                            <span><?php esc_html_e('Supprimer la photo actuelle', 'mj-member'); ?></span>
+                                        </label>
+                                    <?php endif; ?>
+                                    <input type="hidden" name="photo_id_existing" value="<?php echo esc_attr((string) $tc_photo_id); ?>" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <fieldset class="mj-fieldset">
+                            <legend><?php esc_html_e('Autorisations', 'mj-member'); ?></legend>
+                            <div class="mj-consent-list">
+                                <label class="mj-checkbox">
+                                    <input type="checkbox" name="is_autonomous" value="1" <?php checked($tc_autonomous); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                    <span><?php esc_html_e('Autorisation de sortie autonome', 'mj-member'); ?></span>
+                                </label>
+                                <label class="mj-checkbox">
+                                    <input type="checkbox" name="photo_usage_consent" value="1" <?php checked($tc_photo_consent); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                    <span><?php esc_html_e('J\'autorise l\'utilisation des photos sur les supports MJ.', 'mj-member'); ?></span>
+                                </label>
+                            </div>
+                        </fieldset>
+
+                        <div class="mj-form-actions">
+                            <button type="submit" class="mj-button" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?>>
+                                <?php esc_html_e('Enregistrer', 'mj-member'); ?>
+                            </button>
+                        </div>
+                    </form>
+                </section>
+                <?php endforeach; endif; ?>
+
                 <?php if (!empty($options['show_children'])) : ?>
-                    <section class="mj-account-card mj-account-card--children" data-mj-member-children-section>
+                    <section class="mj-account-card mj-account-card--children<?php echo $has_children_tabs ? ' mj-account-card--children-tabbed' : ''; ?>" data-mj-member-children-section>
                         <header class="mj-account-card__header">
                             <h3 class="mj-account-card__title"><?php esc_html_e('Mes jeunes rattachés', 'mj-member'); ?></h3>
                             <button
@@ -1696,13 +1981,20 @@ if (!function_exists('mj_member_render_account_component')) {
             .mj-radio {
                 display: flex;
                 align-items: flex-start;
-                gap: 12px;
-                margin-bottom: 14px;
-                padding: 12px 16px;
+                gap: 10px;
+                margin-bottom: 6px;
+                padding: 8px 12px;
                 background: rgba(248, 250, 252, 0.8);
-                border-radius: 14px;
-                border: 1px solid rgba(148, 163, 184, 0.32);
+                border-radius: 10px;
+                border: 1px solid rgba(148, 163, 184, 0.25);
                 transition: border-color 0.2s ease, background 0.2s ease;
+                cursor: pointer;
+            }
+
+            .mj-radio span {
+                font-size: 14px;
+                font-weight: 400;
+                color: #334155;
             }
 
             .mj-radio input {
@@ -1711,7 +2003,29 @@ if (!function_exists('mj_member_render_account_component')) {
 
             .mj-radio:hover {
                 border-color: var(--mj-accent);
-                background: rgba(37, 99, 235, 0.08);
+                background: rgba(37, 99, 235, 0.06);
+            }
+
+            /* Dropdown / select styling inside dynamic fields */
+            .mj-field-group--dyn select {
+                padding: 10px 14px;
+                border: 1px solid rgba(47, 82, 143, 0.16);
+                border-radius: var(--mj-account-radius-sm, 10px);
+                font-size: 14px;
+                font-family: inherit;
+                background: rgba(255, 255, 255, 0.92) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10z' fill='%2364748b'/%3E%3C/svg%3E") no-repeat right 14px center;
+                background-size: 12px;
+                appearance: none;
+                -webkit-appearance: none;
+                color: var(--mj-account-text, #0f172a);
+                cursor: pointer;
+                transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            }
+
+            .mj-field-group--dyn select:focus {
+                outline: none;
+                border-color: var(--mj-account-accent);
+                box-shadow: 0 0 0 3px rgba(47, 82, 143, 0.18);
             }
 
 
@@ -1979,7 +2293,67 @@ if (!function_exists('mj_member_render_account_component')) {
 }
 
 .mj-field-grid--dynfields {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px 24px;
+}
+
+/* ── Dynamic-field group card style ── */
+.mj-field-group--dyn {
+    margin-bottom: 10px;
+    background: rgba(248, 250, 252, 0.75);
+    border: 1px solid rgba(47, 82, 143, 0.1);
+    border-radius: var(--mj-account-radius-sm, 10px);
+    padding: 16px;
+    gap: 6px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.mj-field-group--dyn:hover {
+    border-color: rgba(47, 82, 143, 0.2);
+}
+
+.mj-field-group--dyn:focus-within {
+    border-color: var(--mj-account-accent);
+    box-shadow: 0 0 0 3px rgba(47, 82, 143, 0.12);
+}
+
+.mj-field-group--dyn > label:first-child,
+.mj-field-group--dyn > fieldset > legend {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--mj-account-text);
+    margin-bottom: 0;
+}
+
+.mj-field-group--dyn > .mj-field-hint,
+.mj-field-group--dyn > fieldset > .mj-field-hint {
+    display: block;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: #64748b;
+    margin: 0 0 4px;
+}
+
+.mj-field-group--dyn > fieldset {
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+.mj-field-group--dyn > fieldset > legend {
+    padding: 0;
+    margin-bottom: 2px;
+}
+
+.mj-field-group--dyn .mj-checkbox span,
+.mj-field-group--dyn .mj-radio span {
+    font-size: 14px;
+    font-weight: 400;
+    color: #334155;
+}
+
+.mj-field-group--dyn .mj-checkbox {
+    font-size: 14px;
 }
 
 .mj-dynfield-other-input {
@@ -2613,6 +2987,122 @@ if (!function_exists('mj_member_render_account_component')) {
         gap: 6px;
     }
 }
+
+/* ── Account Tabs ── */
+.mj-account-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px;
+    background: rgba(47, 82, 143, 0.06);
+    border-radius: var(--mj-account-radius-lg);
+    border: 1px solid var(--mj-account-border);
+}
+
+.mj-account-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    border: none;
+    border-radius: calc(var(--mj-account-radius-lg) - 4px);
+    background: transparent;
+    color: var(--mj-account-muted);
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+    white-space: nowrap;
+    font-family: inherit;
+}
+
+.mj-account-tab:hover {
+    background: rgba(47, 82, 143, 0.08);
+    color: var(--mj-account-text);
+}
+
+.mj-account-tab--active {
+    background: var(--mj-account-card-bg);
+    color: var(--mj-account-accent);
+    box-shadow: 0 2px 8px rgba(47, 82, 143, 0.12);
+}
+
+.mj-account-tab--add {
+    margin-left: auto;
+    color: var(--mj-account-accent);
+    font-size: 0.9rem;
+}
+
+.mj-account-tab--add:hover {
+    background: rgba(47, 82, 143, 0.12);
+}
+
+.mj-account-tab--add[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ── Child Detail Panel ── */
+.mj-account-card--child-detail[hidden] {
+    display: none !important;
+}
+
+.mj-account-children__feedback {
+    padding: 12px 16px;
+    border-radius: var(--mj-account-radius-sm);
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.mj-account-children__feedback[hidden] {
+    display: none !important;
+}
+
+.mj-account-children__feedback--success {
+    background: rgba(34, 197, 94, 0.1);
+    color: #166534;
+    border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.mj-account-children__feedback--error {
+    background: rgba(239, 68, 68, 0.1);
+    color: #991b1b;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* ── Hide children section card when using tabs ── */
+.mj-account-card--children-tabbed {
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    max-height: 0 !important;
+    margin: 0 !important;
+}
+
+.mj-account-card--children-tabbed > *:not(.mj-modal) {
+    display: none !important;
+}
+
+@media (max-width: 640px) {
+    .mj-account-tabs {
+        gap: 4px;
+        padding: 4px;
+    }
+
+    .mj-account-tab {
+        padding: 8px 12px;
+        font-size: 0.85rem;
+    }
+
+    .mj-account-tab--add {
+        margin-left: 0;
+        width: 100%;
+        justify-content: center;
+    }
+}
             </style><?php
         }
 
@@ -2717,6 +3207,158 @@ if (!function_exists('mj_member_render_account_component')) {
             document.addEventListener('DOMContentLoaded', function () { initDynfieldOtherToggles(document); });
         } else {
             initDynfieldOtherToggles(document);
+        }
+    }
+})();
+
+// ── Account tabs switching ──
+(function () {
+    function initTabs(shell) {
+        var nav = shell.querySelector('[data-mj-account-tabs]');
+        if (!nav) return;
+        var tabs = Array.prototype.slice.call(nav.querySelectorAll('[data-mj-tab]'));
+        var panels = Array.prototype.slice.call(shell.querySelectorAll('[data-mj-tab-panel]'));
+        if (!tabs.length || !panels.length) return;
+
+        function activate(key) {
+            tabs.forEach(function (t) {
+                var isActive = t.getAttribute('data-mj-tab') === key;
+                t.classList.toggle('mj-account-tab--active', isActive);
+                t.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            });
+            panels.forEach(function (p) {
+                var isActive = p.getAttribute('data-mj-tab-panel') === key;
+                if (isActive) {
+                    p.removeAttribute('hidden');
+                } else {
+                    p.setAttribute('hidden', '');
+                }
+            });
+        }
+
+        nav.addEventListener('click', function (e) {
+            var btn = e.target.closest('[data-mj-tab]');
+            if (!btn || !nav.contains(btn)) return;
+            e.preventDefault();
+            activate(btn.getAttribute('data-mj-tab'));
+        });
+    }
+
+    function setup() {
+        var shells = document.querySelectorAll('.mj-account-shell');
+        for (var i = 0; i < shells.length; i++) {
+            if (shells[i].dataset.mjTabsInit === '1') continue;
+            shells[i].dataset.mjTabsInit = '1';
+            initTabs(shells[i]);
+        }
+    }
+
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', setup);
+        } else {
+            setup();
+        }
+    }
+})();
+
+// ── Child tab form AJAX submission ──
+(function () {
+    function initChildForms() {
+        var forms = document.querySelectorAll('[data-mj-child-tab-form]');
+        if (!forms.length) return;
+        var data = typeof mjMemberAccountData !== 'undefined' ? mjMemberAccountData : null;
+        if (!data || !data.ajaxUrl) return;
+
+        forms.forEach(function (form) {
+            if (form.dataset.mjChildFormInit === '1') return;
+            form.dataset.mjChildFormInit = '1';
+            var childId = form.getAttribute('data-mj-child-tab-form');
+            var feedback = form.parentElement.querySelector('[data-mj-child-tab-feedback="' + childId + '"]');
+
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var btn = form.querySelector('button[type="submit"]');
+                if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
+                if (feedback) { feedback.setAttribute('hidden', ''); feedback.className = 'mj-account-children__feedback'; feedback.textContent = ''; }
+
+                var fd = new FormData(form);
+                fd.append('action', 'mj_member_update_child_profile');
+                fd.append('nonce', data.nonces && data.nonces.update ? data.nonces.update : '');
+
+                // checkboxes not sent when unchecked
+                if (!fd.has('is_autonomous')) fd.append('is_autonomous', '0');
+                if (!fd.has('photo_usage_consent')) fd.append('photo_usage_consent', '0');
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', data.ajaxUrl, true);
+                xhr.onload = function () {
+                    if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer'; }
+                    try {
+                        var resp = JSON.parse(xhr.responseText);
+                        if (resp.success) {
+                            if (feedback) {
+                                feedback.removeAttribute('hidden');
+                                feedback.className = 'mj-account-children__feedback mj-account-children__feedback--success';
+                                feedback.textContent = resp.data && resp.data.message ? resp.data.message : 'Modifications enregistrées.';
+                            }
+                            // update photo preview if returned
+                            if (resp.data && resp.data.child && resp.data.child.photo) {
+                                var preview = form.parentElement.querySelector('.mj-account-photo-control__preview');
+                                if (preview) {
+                                    var url = resp.data.child.photo.url || '';
+                                    if (url) {
+                                        preview.innerHTML = '<img src="' + url + '" alt="" />';
+                                    } else {
+                                        preview.innerHTML = '<span class="mj-account-photo-control__placeholder">👤</span>';
+                                    }
+                                }
+                            }
+                            // update tab label if name changed
+                            if (resp.data && resp.data.child) {
+                                var tabBtn = document.querySelector('[data-mj-tab="child-' + childId + '"]');
+                                if (tabBtn) {
+                                    var newName = (resp.data.child.first_name || '') + ' ' + (resp.data.child.last_name || '');
+                                    newName = newName.trim();
+                                    if (newName) tabBtn.textContent = '👶 ' + newName;
+                                }
+                                // update header title
+                                var header = form.parentElement.querySelector('.mj-account-card__title');
+                                if (header && newName) header.textContent = '👶 ' + newName;
+                            }
+                        } else {
+                            if (feedback) {
+                                feedback.removeAttribute('hidden');
+                                feedback.className = 'mj-account-children__feedback mj-account-children__feedback--error';
+                                feedback.textContent = resp.data && typeof resp.data === 'string' ? resp.data : (resp.data && resp.data.message ? resp.data.message : 'Erreur lors de la mise à jour.');
+                            }
+                        }
+                    } catch (ex) {
+                        if (feedback) {
+                            feedback.removeAttribute('hidden');
+                            feedback.className = 'mj-account-children__feedback mj-account-children__feedback--error';
+                            feedback.textContent = 'Erreur inattendue.';
+                        }
+                    }
+                };
+                xhr.onerror = function () {
+                    if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer'; }
+                    if (feedback) {
+                        feedback.removeAttribute('hidden');
+                        feedback.className = 'mj-account-children__feedback mj-account-children__feedback--error';
+                        feedback.textContent = 'Erreur réseau.';
+                    }
+                };
+                xhr.send(fd);
+            });
+        });
+    }
+
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initChildForms);
+        } else {
+            initChildForms();
         }
     }
 })();

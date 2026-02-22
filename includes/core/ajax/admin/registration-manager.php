@@ -36,7 +36,9 @@ use Mj\Member\Classes\Crud\MjLeaveQuotas;
 use Mj\Member\Classes\Forms\EventFormDataMapper;
 use Mj\Member\Classes\Forms\EventFormOptionsBuilder;
 use Mj\Member\Classes\MjEventSchedule;
+use Mj\Member\Classes\MjPayments;
 use Mj\Member\Classes\MjRoles;
+use Mj\Member\Classes\MjStripeConfig;
 use Mj\Member\Classes\MjTrophyService;
 use Mj\Member\Core\Config;
 use Mj\Member\Classes\Value\EventLocationData;
@@ -1962,6 +1964,27 @@ function mj_regmgr_get_registrations() {
     foreach ($registrations as $reg) {
         $member = null;
         $guardian = null;
+
+        // Count dynfields shown in notes that have a non-empty value
+        $dyn_fields_count = 0;
+        if (!empty($reg->member_id)) {
+            if (!isset($dyn_note_field_ids)) {
+                $dyn_note_field_ids = array();
+                foreach (\Mj\Member\Classes\Crud\MjDynamicFields::getAll() as $_df) {
+                    if (!empty($_df->show_in_notes) && $_df->field_type !== 'title') {
+                        $dyn_note_field_ids[] = (int) $_df->id;
+                    }
+                }
+            }
+            if (!empty($dyn_note_field_ids)) {
+                $dv = \Mj\Member\Classes\Crud\MjDynamicFieldValues::getByMemberKeyed((int) $reg->member_id);
+                foreach ($dyn_note_field_ids as $_fid) {
+                    if (!empty($dv[$_fid])) {
+                        $dyn_fields_count++;
+                    }
+                }
+            }
+        }
         
         if (!empty($reg->member_id)) {
             $member = MjMembers::getById($reg->member_id);
@@ -2042,6 +2065,7 @@ function mj_regmgr_get_registrations() {
             'occurrences' => $assigned_occurrences,
             'assignedOccurrences' => $assigned_occurrences,
             'notesCount' => $notes_count,
+            'dynFieldsCount' => $dyn_fields_count,
         );
     }
 
@@ -2857,7 +2881,27 @@ function mj_regmgr_get_member_notes() {
         $data[] = $note_data;
     }
 
-    wp_send_json_success(array('notes' => $data));
+    wp_send_json_success(array('notes' => $data, 'dynFields' => mj_regmgr_get_notes_dynfields($member_id)));
+}
+
+/**
+ * Build dynamic fields flagged "show in notes" for a member.
+ */
+function mj_regmgr_get_notes_dynfields($member_id) {
+    $fields = \Mj\Member\Classes\Crud\MjDynamicFields::getAll();
+    $vals   = \Mj\Member\Classes\Crud\MjDynamicFieldValues::getByMemberKeyed($member_id);
+    $out    = array();
+    foreach ($fields as $df) {
+        if (empty($df->show_in_notes)) continue;
+        if ($df->field_type === 'title') continue;
+        $out[] = array(
+            'id'    => (int) $df->id,
+            'title' => $df->title,
+            'type'  => $df->field_type,
+            'value' => isset($vals[(int) $df->id]) ? $vals[(int) $df->id] : '',
+        );
+    }
+    return $out;
 }
 
 /**
@@ -3443,7 +3487,7 @@ function mj_regmgr_get_payment_qr() {
     }
     
     // Create a new Stripe payment session
-    if (class_exists(MjPayments::class) && class_exists('MjStripeConfig') && \MjStripeConfig::is_configured()) {
+    if (class_exists(MjPayments::class) && class_exists(MjStripeConfig::class) && MjStripeConfig::is_configured()) {
         $payment_result = MjPayments::create_stripe_payment(
             $registration->member_id,
             $amount,
@@ -6000,7 +6044,10 @@ function mj_regmgr_get_member_details() {
             'value'       => isset($dyn_vals[(int) $df->id]) ? $dyn_vals[(int) $df->id] : '',
             'options'     => \Mj\Member\Classes\Crud\MjDynamicFields::decodeOptions($df->options_list),
             'allowOther'  => (bool) ($df->allow_other ?? 0),
+            'otherLabel'  => $df->other_label ?? '',
             'isRequired'  => (bool) ($df->is_required ?? 0),
+            'showInNotes' => (bool) ($df->show_in_notes ?? 0),
+            'youthOnly'   => (bool) ($df->youth_only ?? 0),
         );
     }
 
@@ -8160,7 +8207,10 @@ function mj_regmgr_save_member_dynfields() {
             'value'       => isset($dyn_vals[(int) $df->id]) ? $dyn_vals[(int) $df->id] : '',
             'options'     => \Mj\Member\Classes\Crud\MjDynamicFields::decodeOptions($df->options_list),
             'allowOther'  => (bool) ($df->allow_other ?? 0),
+            'otherLabel'  => $df->other_label ?? '',
             'isRequired'  => (bool) ($df->is_required ?? 0),
+            'showInNotes' => (bool) ($df->show_in_notes ?? 0),
+            'youthOnly'   => (bool) ($df->youth_only ?? 0),
         );
     }
 

@@ -226,6 +226,15 @@ function mj_dynfields_parse_input(): array
     if (isset($_POST['allow_other'])) {
         $data['allow_other'] = (int) $_POST['allow_other'];
     }
+    if (isset($_POST['other_label'])) {
+        $data['other_label'] = sanitize_text_field(wp_unslash($_POST['other_label']));
+    }
+    if (isset($_POST['show_in_notes'])) {
+        $data['show_in_notes'] = (int) $_POST['show_in_notes'];
+    }
+    if (isset($_POST['youth_only'])) {
+        $data['youth_only'] = (int) $_POST['youth_only'];
+    }
     if (isset($_POST['options_list'])) {
         $raw = wp_unslash($_POST['options_list']);
         if (is_string($raw)) {
@@ -260,6 +269,9 @@ function mj_dynfields_format_field(object $field): array
         'showInAccount'      => (bool) ($field->show_in_account ?? false),
         'isRequired'         => (bool) ($field->is_required ?? false),
         'allowOther'         => (bool) ($field->allow_other ?? false),
+        'otherLabel'         => $field->other_label ?? '',
+        'showInNotes'        => (bool) ($field->show_in_notes ?? false),
+        'youthOnly'          => (bool) ($field->youth_only ?? false),
         'optionsList'        => MjDynamicFields::decodeOptions($field),
         'sortOrder'          => (int) ($field->sort_order ?? 0),
     );

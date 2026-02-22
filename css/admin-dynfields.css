@@ -124,6 +124,16 @@
     color: #92400e;
 }
 
+.mj-dynfields__badge--notes {
+    background: #ede9fe;
+    color: #5b21b6;
+}
+
+.mj-dynfields__badge--youth {
+    background: #fce7f3;
+    color: #9d174d;
+}
+
 /* Actions */
 .mj-dynfields__item-actions {
     display: flex;

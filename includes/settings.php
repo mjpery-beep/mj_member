@@ -471,6 +471,7 @@ function mj_settings_page() {
                     <button type="button" class="mj-settings-tabs__nav-btn is-active" id="mj-tab-button-stripe" data-tab-target="stripe" role="tab" aria-controls="mj-tab-stripe" aria-selected="true">💳 Paiements Stripe</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-calendar" data-tab-target="calendar" role="tab" aria-controls="mj-tab-calendar" aria-selected="false">📅 Agenda & Google</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-account" data-tab-target="account" role="tab" aria-controls="mj-tab-account" aria-selected="false">👤 Espace membre</button>
+                    <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-account-links" data-tab-target="account-links" role="tab" aria-controls="mj-tab-account-links" aria-selected="false">🔗 Liens Mon compte</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-messaging" data-tab-target="messaging" role="tab" aria-controls="mj-tab-messaging" aria-selected="false">✉️ Notifications &amp; envois</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-ai" data-tab-target="ai" role="tab" aria-controls="mj-tab-ai" aria-selected="false">🧠 IA &amp; médias</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-regdoc" data-tab-target="regdoc" role="tab" aria-controls="mj-tab-regdoc" aria-selected="false">📄 Document d'inscription</button>
@@ -800,8 +801,11 @@ function mj_settings_page() {
                             <small style="color:#666; display:block; margin-top:4px;">Définissez une image spécifique pour le verso. Si aucun visuel n’est sélectionné, le verso restera uni.</small>
                         </div>
 
-                        <div style="margin:24px 0; padding:20px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px;">
-                            <h3 style="margin:0 0 12px 0;">🔗 Liens &laquo;&nbsp;Mon compte&nbsp;&raquo;</h3>
+                    </div>
+
+                    <div id="mj-tab-account-links" class="mj-settings-tabs__panel" data-tab="account-links" role="tabpanel" aria-labelledby="mj-tab-button-account-links" aria-hidden="true">
+                        <div style="padding:20px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px;">
+                            <h2 style="margin:0 0 12px 0;">🔗 Liens &laquo;&nbsp;Mon compte&nbsp;&raquo;</h2>
                             <p style="margin:0 0 16px 0; color:#4b5563; font-size:14px;">Configurez ici l'ordre, les libellés et les pages cibles des actions proposées dans l'espace membre. Les boutons mis en avant sur Elementor utilisent automatiquement ces paramètres.</p>
                             
                             <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:16px; padding:12px; background:#fff; border:1px solid #e5e7eb; border-radius:6px;">

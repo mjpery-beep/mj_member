@@ -198,19 +198,7 @@
                         : member.subscriptionStatus === 'expired'
                             ? getString(strings, 'subscriptionExpired', 'Cotisation expirée')
                             : getString(strings, 'subscriptionNone', 'Aucune cotisation'),
-                }, [
-                    h('svg', {
-                        width: 12,
-                        height: 12,
-                        viewBox: '0 0 24 24',
-                        fill: 'none',
-                        stroke: 'currentColor',
-                        'stroke-width': 2,
-                    }, member.subscriptionStatus === 'active' 
-                        ? [h('polyline', { points: '20 6 9 17 4 12' })]
-                        : [h('line', { x1: 18, y1: 6, x2: 6, y2: 18 }), h('line', { x1: 6, y1: 6, x2: 18, y2: 18 })]
-                    ),
-                ]),
+                }, member.subscriptionStatus === 'active' ? '🟢' : member.subscriptionStatus === 'expired' ? '🔴' : '⚪'),
             ]),
 
             // Actions - Boutons texte visibles en desktop
@@ -256,22 +244,6 @@
                             h('line', { x1: 4, y1: 7, x2: 20, y2: 17 }),
                         ]),
                         h('span', { class: 'mj-regmgr-action-btn__label' }, getString(strings, 'unpay', 'Annuler')),
-                    ]),
-
-                    // QR Code
-                    needsPayment && h('button', {
-                        type: 'button',
-                        class: 'mj-regmgr-action-btn',
-                        onClick: function () { onShowQR(registration); },
-                        title: getString(strings, 'showQRCode', 'QR Code'),
-                    }, [
-                        h('svg', { class: 'mj-regmgr-action-btn__icon', width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                            h('rect', { x: 3, y: 3, width: 7, height: 7 }),
-                            h('rect', { x: 14, y: 3, width: 7, height: 7 }),
-                            h('rect', { x: 3, y: 14, width: 7, height: 7 }),
-                            h('rect', { x: 14, y: 14, width: 7, height: 7 }),
-                        ]),
-                        h('span', { class: 'mj-regmgr-action-btn__label' }, 'QR'),
                     ]),
 
                     // WhatsApp
@@ -321,22 +293,9 @@
                         ]),
                         h('span', { class: 'mj-regmgr-action-btn__label' }, getString(strings, 'notes', 'Notes')),
                         registration.notesCount > 0 && h('span', { class: 'mj-regmgr-action-btn__badge' }, registration.notesCount),
+                        registration.dynFieldsCount > 0 && h('span', { class: 'mj-regmgr-action-btn__badge mj-regmgr-action-btn__badge--dyn' }, registration.dynFieldsCount),
                     ]),
 
-                    // Télécharger document
-                    onDownloadDoc && h('button', {
-                        type: 'button',
-                        class: 'mj-regmgr-action-btn',
-                        onClick: function () { onDownloadDoc(registration); },
-                        title: getString(strings, 'downloadDoc', 'Télécharger le document'),
-                    }, [
-                        h('svg', { class: 'mj-regmgr-action-btn__icon', width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                            h('path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }),
-                            h('polyline', { points: '7 10 12 15 17 10' }),
-                            h('line', { x1: 12, y1: 15, x2: 12, y2: 3 }),
-                        ]),
-                        h('span', { class: 'mj-regmgr-action-btn__label' }, getString(strings, 'doc', 'Doc')),
-                    ]),
                 ]),
 
                 // Actions secondaires (dropdown pour actions destructives)
@@ -361,6 +320,35 @@
                     ]),
 
                     menuOpen && h('div', { class: 'mj-regmgr-dropdown__menu' }, [
+                        // Paiement avec QR code
+                        needsPayment && h('button', {
+                            type: 'button',
+                            class: 'mj-regmgr-dropdown__item',
+                            onClick: function () { handleAction(function () { onShowQR(registration); }); },
+                        }, [
+                            h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                h('rect', { x: 3, y: 3, width: 7, height: 7 }),
+                                h('rect', { x: 14, y: 3, width: 7, height: 7 }),
+                                h('rect', { x: 3, y: 14, width: 7, height: 7 }),
+                                h('rect', { x: 14, y: 14, width: 7, height: 7 }),
+                            ]),
+                            getString(strings, 'paymentQRCode', 'Paiement avec QR code'),
+                        ]),
+
+                        // Document d'inscription
+                        onDownloadDoc && h('button', {
+                            type: 'button',
+                            class: 'mj-regmgr-dropdown__item',
+                            onClick: function () { handleAction(function () { onDownloadDoc(registration); }); },
+                        }, [
+                            h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                h('path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }),
+                                h('polyline', { points: '7 10 12 15 17 10' }),
+                                h('line', { x1: 12, y1: 15, x2: 12, y2: 3 }),
+                            ]),
+                            getString(strings, 'registrationDoc', "Document d'inscription"),
+                        ]),
+
                         // Annuler inscription
                         !isCancelled && h('button', {
                             type: 'button',

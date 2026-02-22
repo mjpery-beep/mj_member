@@ -1885,7 +1885,7 @@
                     }).concat(df.allowOther ? [
                         h('label', { class: 'mj-regmgr-dyndata-field__radio', key: '__other' }, [
                             h('input', { type: 'radio', name: 'dyndata_' + df.id, value: '__other', checked: isOther, onChange: function () { updateValue(df.id, '__other'); } }),
-                            h('span', null, ' Autre'),
+                            h('span', null, ' ' + (df.otherLabel || 'Autre')),
                         ]),
                     ] : [])),
                     df.allowOther && isOther ? h('input', { type: 'text', class: 'mj-regmgr-dyndata-field__input mj-regmgr-dyndata-field__other', placeholder: 'Précisez…', value: otherTexts[df.id] || '', onInput: function (e) { updateOtherText(df.id, e.target.value); } }) : null,
@@ -1907,7 +1907,7 @@
                     }).concat(df.allowOther ? [
                         h('label', { class: 'mj-regmgr-dyndata-field__checkbox', key: '__other' }, [
                             h('input', { type: 'checkbox', checked: hasOther, onChange: function () { toggleChecklistValue(df, '__other'); } }),
-                            h('span', null, ' Autre'),
+                            h('span', null, ' ' + (df.otherLabel || 'Autre')),
                         ]),
                     ] : [])),
                     df.allowOther && hasOther ? h('input', { type: 'text', class: 'mj-regmgr-dyndata-field__input mj-regmgr-dyndata-field__other', placeholder: 'Précisez…', value: otherTexts[df.id] || '', onInput: function (e) { updateOtherText(df.id, e.target.value); } }) : null,
@@ -2024,7 +2024,7 @@
         var memberId = member && member.id ? member.id : null;
 
         // Onglets valides pour les membres
-        var validMemberTabs = ['information', 'membership', 'badges', 'photos', 'ideas', 'messages', 'testimonials', 'notes', 'history', 'quotas', 'dyndata'];
+        var validMemberTabs = ['information', 'dyndata', 'membership', 'badges', 'photos', 'ideas', 'messages', 'testimonials', 'notes', 'history', 'quotas'];
         var resolvedInitialTab = initialTab && validMemberTabs.indexOf(initialTab) !== -1 ? initialTab : 'information';
         var initialTabAppliedRef = useRef(false);
 
@@ -3413,10 +3413,16 @@
             history: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>',
             testimonials: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><line x1="9" y1="9" x2="15" y2="9"></line><line x1="9" y1="13" x2="13" y2="13"></line></svg>',
             quotas: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M8 14h.01"></path><path d="M12 14h.01"></path><path d="M16 14h.01"></path><path d="M8 18h.01"></path><path d="M12 18h.01"></path></svg>',
+            dyndata: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"></ellipse><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6"></path><path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"></path></svg>',
         };
+
+        // Préparer l'onglet Données dynamiques (inséré après Informations)
+        var dynFields = member && Array.isArray(member.dynamicFields) ? member.dynamicFields : [];
+        var dynDataTab = dynFields.length > 0 ? [{ key: 'dyndata', label: 'Données', icon: tabIcons.dyndata }] : [];
 
         var memberTabs = [
             { key: 'information', label: tabInformationLabel, icon: tabIcons.information },
+        ].concat(dynDataTab, [
             { key: 'membership', label: tabMembershipLabel, icon: tabIcons.membership },
             { key: 'badges', label: tabBadgesLabel, badge: badgesCompletedCount > 0 ? badgesCompletedCount : undefined, icon: tabIcons.badges },
             { key: 'photos', label: tabPhotosLabel, badge: pendingPhotosCount > 0 ? pendingPhotosCount : undefined, badgeType: pendingPhotosCount > 0 ? 'warning' : undefined, icon: tabIcons.photos },
@@ -3425,7 +3431,7 @@
             { key: 'testimonials', label: tabTestimonialsLabel, badge: pendingTestimonialsCount > 0 ? pendingTestimonialsCount : undefined, badgeType: pendingTestimonialsCount > 0 ? 'warning' : undefined, icon: tabIcons.testimonials },
             { key: 'notes', label: tabNotesLabel, badge: notesCount > 0 ? notesCount : undefined, icon: tabIcons.notes },
             { key: 'history', label: tabHistoryLabel, badge: registrations.length > 0 ? registrations.length : undefined, icon: tabIcons.history },
-        ];
+        ]);
 
         // Ajouter l'onglet quotas uniquement pour les animateurs
         var tabQuotasLabel = getString(strings, 'tabLeaveQuotas', 'Employé');
@@ -3433,12 +3439,6 @@
         var canManageQuotas = config && (config.isCoordinateur || config.canDeleteMember);
         if (isAnimateur && canManageQuotas) {
             memberTabs.push({ key: 'quotas', label: tabQuotasLabel, icon: tabIcons.quotas });
-        }
-
-        // Ajouter l'onglet Données dynamiques s'il y a des champs configurés
-        var dynFields = member && Array.isArray(member.dynamicFields) ? member.dynamicFields : [];
-        if (dynFields.length > 0) {
-            memberTabs.push({ key: 'dyndata', label: 'Données', icon: '🧩' });
         }
 
         var newsletterLabel = getString(strings, 'chipNewsletter', 'Newsletter');

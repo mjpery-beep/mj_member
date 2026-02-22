@@ -6541,15 +6541,16 @@ textarea.mj-contact-form__textarea {
     font-size: 16px;
     font-weight: 700;
     color: #0f172a;
-    margin: 12px 0 4px;
-    padding-bottom: 4px;
+    margin: 18px 0 4px;
+    padding-bottom: 6px;
     border-bottom: 2px solid var(--mj-accent, #3b82f6);
 }
 
 .mj-dynfield-section-desc {
     font-size: 13px;
     color: #6b7280;
-    margin: 0 0 8px;
+    margin: 0 0 10px;
+    line-height: 1.4;
 }
 
 /* "Autre" free-text companion input for dropdown / radio / checklist */
