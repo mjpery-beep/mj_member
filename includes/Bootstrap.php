@@ -72,6 +72,7 @@ final class Bootstrap
         'includes/core/ajax/admin/leave-requests.php',
         'includes/core/ajax/front/testimonials_ajax.php',
         'includes/core/ajax/front/leave_requests_ajax.php',
+        'includes/core/ajax/admin/dynamic-fields.php',
     );
 
     /** @var bool */

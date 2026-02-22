@@ -474,6 +474,7 @@ function mj_settings_page() {
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-messaging" data-tab-target="messaging" role="tab" aria-controls="mj-tab-messaging" aria-selected="false">✉️ Notifications &amp; envois</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-ai" data-tab-target="ai" role="tab" aria-controls="mj-tab-ai" aria-selected="false">🧠 IA &amp; médias</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-regdoc" data-tab-target="regdoc" role="tab" aria-controls="mj-tab-regdoc" aria-selected="false">📄 Document d'inscription</button>
+                    <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-dynfields" data-tab-target="dynfields" role="tab" aria-controls="mj-tab-dynfields" aria-selected="false">🧩 Données dynamiques</button>
                 </div>
 
                 <div class="mj-settings-tabs__panels">
@@ -1255,6 +1256,35 @@ function mj_settings_page() {
                                 <?php esc_html_e('Note : Les variables membre génèrent une page par inscrit lors du téléchargement.', 'mj-member'); ?>
                             </p>
                         </div>
+                    </div>
+
+                    <!-- ====== ONGLET DONNÉES DYNAMIQUES ====== -->
+                    <div id="mj-tab-dynfields" class="mj-settings-tabs__panel" data-tab="dynfields" role="tabpanel" aria-labelledby="mj-tab-button-dynfields" aria-hidden="true">
+                        <div style="background: #f9f9f9; padding: 20px; margin: 20px 0; border-radius: 5px; border-left: 4px solid #7c3aed;">
+                            <h2 style="margin-top: 0;">🧩 Données dynamiques des membres</h2>
+                            <p style="color: #666; font-size: 14px;">
+                                Configurez des champs personnalisés qui seront automatiquement ajoutés au formulaire d'inscription et/ou à l'espace « Mes informations » du membre.
+                                Les données saisies sont consultables dans l'administration et le gestionnaire.
+                            </p>
+                        </div>
+                        <div id="mj-dynfields-app">
+                            <div style="text-align:center; padding:30px 0;">
+                                <span class="spinner is-active" style="float:none;"></span>
+                                <p>Chargement des champs…</p>
+                            </div>
+                        </div>
+                        <?php
+                        $dynCssFile = Config::path() . '/css/admin-dynfields.css';
+                        $dynJsFile  = Config::path() . '/js/admin-dynfields.js';
+                        $dynCssVer  = file_exists($dynCssFile) ? filemtime($dynCssFile) : Config::version();
+                        $dynJsVer   = file_exists($dynJsFile)  ? filemtime($dynJsFile)  : Config::version();
+                        wp_enqueue_style('mj-admin-dynfields', Config::url() . '/css/admin-dynfields.css', array(), $dynCssVer);
+                        wp_enqueue_script('mj-admin-dynfields', Config::url() . '/js/admin-dynfields.js', array('jquery'), $dynJsVer, true);
+                        wp_localize_script('mj-admin-dynfields', 'mjDynfieldsConfig', array(
+                            'ajaxurl' => admin_url('admin-ajax.php'),
+                            'nonce'   => wp_create_nonce('mj_dynfields_nonce'),
+                        ));
+                        ?>
                     </div>
                 </div>
             </div>

@@ -107,6 +107,7 @@ add_action('wp_ajax_mj_regmgr_update_social_link', 'mj_regmgr_update_social_link
 add_action('wp_ajax_mj_regmgr_update_member_leave_quotas', 'mj_regmgr_update_member_leave_quotas');
 add_action('wp_ajax_mj_regmgr_save_member_work_schedule', 'mj_regmgr_save_member_work_schedule');
 add_action('wp_ajax_mj_regmgr_delete_member_work_schedule', 'mj_regmgr_delete_member_work_schedule');
+add_action('wp_ajax_mj_regmgr_save_member_dynfields', 'mj_regmgr_save_member_dynfields');
 
 /**
  * Verify nonce and check user permissions
@@ -5986,6 +5987,23 @@ function mj_regmgr_get_member_details() {
         $member['workSchedules'] = \Mj\Member\Classes\Crud\MjMemberWorkSchedules::format_for_response($schedules);
     }
 
+    // Dynamic field values
+    $dyn_fields_all = \Mj\Member\Classes\Crud\MjDynamicFields::getAll();
+    $dyn_vals = \Mj\Member\Classes\Crud\MjDynamicFieldValues::getByMemberKeyed($member_id);
+    $member['dynamicFields'] = array();
+    foreach ($dyn_fields_all as $df) {
+        $member['dynamicFields'][] = array(
+            'id'          => (int) $df->id,
+            'title'       => $df->title,
+            'description' => $df->description ?? '',
+            'type'        => $df->field_type,
+            'value'       => isset($dyn_vals[(int) $df->id]) ? $dyn_vals[(int) $df->id] : '',
+            'options'     => \Mj\Member\Classes\Crud\MjDynamicFields::decodeOptions($df->options_list),
+            'allowOther'  => (bool) ($df->allow_other ?? 0),
+            'isRequired'  => (bool) ($df->is_required ?? 0),
+        );
+    }
+
     wp_send_json_success(array('member' => $member));
 }
 
@@ -8076,4 +8094,65 @@ function mj_regmgr_upload_event_photo() {
             'statusLabel' => $status_labels[MjEventPhotos::STATUS_APPROVED] ?? 'Validée',
         ),
     ));
+}
+
+/**
+ * Save dynamic field values for a member from the gestionnaire.
+ */
+function mj_regmgr_save_member_dynfields() {
+    $current_member = mj_regmgr_verify_request();
+    if (!$current_member) return;
+
+    $member_id = isset($_POST['member_id']) ? absint($_POST['member_id']) : 0;
+    if (!$member_id) {
+        wp_send_json_error(array('message' => __('ID du membre manquant.', 'mj-member')));
+    }
+
+    $raw_values = isset($_POST['values']) && is_array($_POST['values']) ? $_POST['values'] : array();
+    $fields_map = array();
+    foreach (\Mj\Member\Classes\Crud\MjDynamicFields::getAll() as $df) {
+        $fields_map[(int) $df->id] = $df;
+    }
+
+    $save = array();
+    foreach ($raw_values as $entry) {
+        $field_id = isset($entry['id']) ? absint($entry['id']) : 0;
+        if (!$field_id || !isset($fields_map[$field_id])) continue;
+
+        $df = $fields_map[$field_id];
+        $raw = isset($entry['value']) ? $entry['value'] : '';
+
+        if ($df->field_type === 'checklist') {
+            // value arrives as JSON string from JS
+            $arr = is_string($raw) ? json_decode($raw, true) : (is_array($raw) ? $raw : array());
+            if (!is_array($arr)) $arr = array();
+            $arr = array_map('sanitize_text_field', $arr);
+            $save[$field_id] = wp_json_encode(array_values($arr));
+        } else {
+            $save[$field_id] = sanitize_text_field(wp_unslash((string) $raw));
+        }
+    }
+
+    if (!empty($save)) {
+        \Mj\Member\Classes\Crud\MjDynamicFieldValues::saveBulk($member_id, $save);
+    }
+
+    // Return fresh values
+    $dyn_fields_all = \Mj\Member\Classes\Crud\MjDynamicFields::getAll();
+    $dyn_vals = \Mj\Member\Classes\Crud\MjDynamicFieldValues::getByMemberKeyed($member_id);
+    $dyndata = array();
+    foreach ($dyn_fields_all as $df) {
+        $dyndata[] = array(
+            'id'          => (int) $df->id,
+            'title'       => $df->title,
+            'description' => $df->description ?? '',
+            'type'        => $df->field_type,
+            'value'       => isset($dyn_vals[(int) $df->id]) ? $dyn_vals[(int) $df->id] : '',
+            'options'     => \Mj\Member\Classes\Crud\MjDynamicFields::decodeOptions($df->options_list),
+            'allowOther'  => (bool) ($df->allow_other ?? 0),
+            'isRequired'  => (bool) ($df->is_required ?? 0),
+        );
+    }
+
+    wp_send_json_success(array('dynamicFields' => $dyndata));
 }

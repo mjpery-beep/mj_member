@@ -1788,6 +1788,8 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_57($wpdb);
     mj_member_upgrade_to_2_58($wpdb);
     mj_member_upgrade_to_2_59($wpdb);
+    mj_member_upgrade_to_2_60($wpdb);
+    mj_member_upgrade_to_2_61($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -5482,6 +5484,61 @@ function mj_member_upgrade_to_2_59($wpdb) {
         if (!mj_member_column_exists($table, 'is_trusted_member')) {
             $wpdb->query("ALTER TABLE {$table} ADD COLUMN is_trusted_member tinyint(1) NOT NULL DEFAULT 0 AFTER role");
         }
+    }
+}
+
+/**
+ * Migration 2.60: Create dynamic fields tables.
+ */
+function mj_member_upgrade_to_2_60($wpdb) {
+    if ( ! function_exists('dbDelta') ) {
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $fields_table = $wpdb->prefix . 'mj_dynamic_fields';
+    $sql_fields = "CREATE TABLE IF NOT EXISTS {$fields_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        slug varchar(120) NOT NULL,
+        field_type varchar(30) NOT NULL DEFAULT 'text',
+        title varchar(255) NOT NULL DEFAULT '',
+        description text DEFAULT NULL,
+        show_in_registration tinyint(1) NOT NULL DEFAULT 0,
+        show_in_account tinyint(1) NOT NULL DEFAULT 0,
+        is_required tinyint(1) NOT NULL DEFAULT 0,
+        options_list longtext DEFAULT NULL,
+        sort_order int unsigned NOT NULL DEFAULT 0,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY slug (slug)
+    ) {$charset_collate};";
+    dbDelta($sql_fields);
+
+    $values_table = $wpdb->prefix . 'mj_dynamic_field_values';
+    $sql_values = "CREATE TABLE IF NOT EXISTS {$values_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        member_id bigint(20) unsigned NOT NULL,
+        field_id bigint(20) unsigned NOT NULL,
+        field_value longtext DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uniq_member_field (member_id, field_id),
+        KEY idx_member (member_id),
+        KEY idx_field (field_id)
+    ) {$charset_collate};";
+    dbDelta($sql_values);
+}
+
+/**
+ * Migration 2.61: Add allow_other column to dynamic fields table.
+ */
+function mj_member_upgrade_to_2_61($wpdb) {
+    $fields_table = $wpdb->prefix . 'mj_dynamic_fields';
+    if (mj_member_table_exists($fields_table) && !mj_member_column_exists($fields_table, 'allow_other')) {
+        $wpdb->query("ALTER TABLE {$fields_table} ADD COLUMN allow_other tinyint(1) NOT NULL DEFAULT 0 AFTER is_required");
     }
 }
 

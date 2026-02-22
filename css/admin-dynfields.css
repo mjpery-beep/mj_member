@@ -1,0 +1,261 @@
+/* ==========================================================================
+   Dynamic Fields — Settings tab
+   ========================================================================== */
+
+/* --- Toolbar ------------------------------------------------------------ */
+.mj-dynfields__toolbar {
+    margin-bottom: 16px;
+}
+
+/* --- List --------------------------------------------------------------- */
+.mj-dynfields__list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* --- Item --------------------------------------------------------------- */
+.mj-dynfields__item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    transition: box-shadow .15s, opacity .15s;
+}
+
+.mj-dynfields__item:hover {
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+
+.mj-dynfields__item--dragging {
+    opacity: .55;
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+
+/* Handle */
+.mj-dynfields__item-handle {
+    cursor: grab;
+    font-size: 18px;
+    color: #999;
+    user-select: none;
+    padding: 0 2px;
+    line-height: 1;
+}
+
+.mj-dynfields__item-handle:active {
+    cursor: grabbing;
+}
+
+/* Info block */
+.mj-dynfields__item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.mj-dynfields__item-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 2px;
+}
+
+.mj-dynfields__item-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.mj-dynfields__item-desc {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 300px;
+}
+
+/* Type badge */
+.mj-dynfields__type-badge {
+    display: inline-block;
+    background: #e5e7eb;
+    color: #374151;
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+/* Status badges */
+.mj-dynfields__item-badges {
+    margin-top: 4px;
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.mj-dynfields__badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-weight: 500;
+    line-height: 1.6;
+}
+
+.mj-dynfields__badge--registration {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.mj-dynfields__badge--account {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.mj-dynfields__badge--required {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.mj-dynfields__badge--other {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+/* Actions */
+.mj-dynfields__item-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* --- Empty state -------------------------------------------------------- */
+.mj-dynfields__empty {
+    text-align: center;
+    padding: 32px 16px;
+}
+
+/* --- Modal -------------------------------------------------------------- */
+.mj-dynfields-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mj-dynfields-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+}
+
+.mj-dynfields-modal__content {
+    position: relative;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.2);
+    width: 540px;
+    max-width: 96vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.mj-dynfields-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.mj-dynfields-modal__header h3 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.mj-dynfields-modal__close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #6b7280;
+    line-height: 1;
+    padding: 0 4px;
+}
+
+.mj-dynfields-modal__body {
+    padding: 20px;
+    flex: 1;
+}
+
+.mj-dynfields-modal__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 20px 16px;
+    border-top: 1px solid #e5e7eb;
+}
+
+/* --- Form --------------------------------------------------------------- */
+.mj-dynfields-form__row {
+    margin-bottom: 14px;
+}
+
+.mj-dynfields-form__row label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-size: 13px;
+}
+
+.mj-dynfields-form__row label small {
+    font-weight: 400;
+    color: #6b7280;
+}
+
+.mj-dynfields-form__row input[type="text"],
+.mj-dynfields-form__row select,
+.mj-dynfields-form__row textarea {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.mj-dynfields-form__row textarea {
+    resize: vertical;
+}
+
+.mj-dynfields-form__checkboxes {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mj-dynfields-form__checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.mj-dynfields-form__checkbox input[type="checkbox"] {
+    margin: 0;
+}
+
+/* --- Title / section-type item ------------------------------------------ */
+.mj-dynfields__item--title {
+    background: #f0f4ff;
+    border-left: 3px solid #3b82f6;
+}
+
+.mj-dynfields__type-badge--title {
+    background: #3b82f6;
+    color: #fff;
+}

@@ -1,5 +1,7 @@
 <?php
 use Mj\Member\Classes\MjRoles;
+use Mj\Member\Classes\Crud\MjDynamicFields;
+use Mj\Member\Classes\Crud\MjDynamicFieldValues;
 
 if (!function_exists('mj_member_get_registration_type')) {
     function mj_member_get_registration_type() {
@@ -210,6 +212,41 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 'notes'               => sanitize_textarea_field(wp_unslash($raw_child['notes'] ?? '')),
             );
 
+            // Collect dynamic field values
+            $child_dynfields = array();
+            foreach (array_keys($raw_child) as $raw_key) {
+                if (strpos($raw_key, 'dynfield_') === 0 && substr($raw_key, -6) !== '_other') {
+                    $field_id = (int) substr($raw_key, 9);
+                    if ($field_id > 0) {
+                        $raw_val = $raw_child[$raw_key];
+                        $other_key = $raw_key . '_other';
+                        if (is_array($raw_val)) {
+                            // checklist: array of values
+                            $sanitized = array_map('sanitize_text_field', array_map('wp_unslash', $raw_val));
+                            // replace __other placeholder with actual text
+                            if (in_array('__other', $sanitized, true) && isset($raw_child[$other_key]) && trim($raw_child[$other_key]) !== '') {
+                                $sanitized = array_map(function ($v) use ($raw_child, $other_key) {
+                                    return $v === '__other' ? '__other:' . sanitize_text_field(wp_unslash($raw_child[$other_key])) : $v;
+                                }, $sanitized);
+                            } else {
+                                $sanitized = array_filter($sanitized, function ($v) { return $v !== '__other'; });
+                            }
+                            $child_dynfields[$field_id] = wp_json_encode(array_values($sanitized));
+                        } else {
+                            $val = sanitize_text_field(wp_unslash($raw_val));
+                            // handle __other for dropdown/radio
+                            if ($val === '__other' && isset($raw_child[$other_key]) && trim($raw_child[$other_key]) !== '') {
+                                $val = '__other:' . sanitize_text_field(wp_unslash($raw_child[$other_key]));
+                            } elseif ($val === '__other') {
+                                $val = '';
+                            }
+                            $child_dynfields[$field_id] = $val;
+                        }
+                    }
+                }
+            }
+            $child['_dynfields'] = $child_dynfields;
+
             $is_empty = $child['first_name'] === '' && $child['last_name'] === '' && $child['birth_date'] === '' && $child['email'] === '';
             if ($is_empty) {
                 continue;
@@ -255,6 +292,30 @@ if (!function_exists('mj_process_frontend_inscription')) {
             }
 
             $child['user_login'] = $child_login_clean;
+
+            // Validate required dynamic fields
+            $dyn_reg_fields_for_validation = MjDynamicFields::getRegistrationFields();
+            foreach ($dyn_reg_fields_for_validation as $df_check) {
+                if ($df_check->field_type === 'title') continue; // section headers have no value
+                if ((int) $df_check->is_required) {
+                    $submitted_val = $child_dynfields[(int) $df_check->id] ?? '';
+                    // For checklist, check the JSON array is non-empty
+                    if ($df_check->field_type === 'checklist') {
+                        $arr = json_decode($submitted_val, true);
+                        $is_empty_val = !is_array($arr) || count($arr) === 0;
+                    } else {
+                        $is_empty_val = $submitted_val === '';
+                    }
+                    if ($is_empty_val) {
+                        return array('success' => false, 'message' => sprintf(
+                            'Le champ « %s » est obligatoire pour %s %s.',
+                            esc_html($df_check->title),
+                            esc_html($child['first_name']),
+                            esc_html($child['last_name'])
+                        ));
+                    }
+                }
+            }
 
             $children[] = $child;
         }
@@ -342,6 +403,12 @@ if (!function_exists('mj_process_frontend_inscription')) {
             }
 
             $created_member_ids[] = $member_id;
+
+            // Save dynamic field values for this member
+            if (!empty($child['_dynfields'])) {
+                MjDynamicFieldValues::saveBulk($member_id, $child['_dynfields']);
+            }
+
             $created_members[] = array(
                 'id' => $member_id,
                 'email' => $child['email'],
@@ -758,10 +825,128 @@ if (!function_exists('mj_render_child_form_block')) {
             </div>
             <div class="mj-child-card__grid">
                 <div class="mj-field-group mj-field-group--full">
-                    <label for="mj_child_<?php echo $index_attr; ?>_notes">Informations complémentaires (allergies, santé, etc.)</label>
+                    <label for="mj_child_<?php echo $index_attr; ?>_notes">Informations complémentaires à transmettre à nos animateurs</label>
                     <textarea id="mj_child_<?php echo $index_attr; ?>_notes" name="jeunes[<?php echo $index_attr; ?>][notes]" rows="3"><?php echo esc_textarea($values['notes']); ?></textarea>
                 </div>
             </div>
+            <?php
+            // Dynamic fields (registration)
+            $dyn_reg_fields = MjDynamicFields::getRegistrationFields();
+            if (!empty($dyn_reg_fields)) :
+            ?>
+            <div class="mj-child-card__grid mj-child-card__dynfields">
+                <?php foreach ($dyn_reg_fields as $df) :
+                    $df_id    = (int) $df->id;
+                    $df_slug  = esc_attr($df->slug);
+                    $df_name  = 'jeunes[' . $index_attr . '][dynfield_' . $df_id . ']';
+                    $df_html  = 'mj_child_' . $index_attr . '_dynfield_' . $df_id;
+                    $df_req   = (int) $df->is_required;
+                    $df_val   = isset($values['dynfield_' . $df_id]) ? $values['dynfield_' . $df_id] : '';
+                    $df_opts  = MjDynamicFields::decodeOptions($df->options_list);
+                    $df_label = esc_html($df->title) . ($df_req ? ' *' : '');
+                    $df_desc  = $df->description ? '<small class="mj-field-hint">' . esc_html($df->description) . '</small>' : '';
+
+                    // Section title — close grid, render heading, reopen grid
+                    if ($df->field_type === 'title') : ?>
+                        </div>
+                        <h5 class="mj-dynfield-section-title"><?php echo esc_html($df->title); ?></h5>
+                        <?php if ($df->description) : ?>
+                            <p class="mj-dynfield-section-desc"><?php echo esc_html($df->description); ?></p>
+                        <?php endif; ?>
+                        <div class="mj-child-card__grid mj-child-card__dynfields">
+                    <?php continue; endif; ?>
+                <?php
+                    // Decode checklist/other value helpers
+                    $df_allow_other = (int) ($df->allow_other ?? 0);
+                    $df_is_other    = false;
+                    $df_other_text  = '';
+                    $df_checked_arr = array();
+
+                    if ($df->field_type === 'checklist') {
+                        $df_checked_arr = is_string($df_val) && $df_val !== '' ? json_decode($df_val, true) : array();
+                        if (!is_array($df_checked_arr)) $df_checked_arr = array();
+                        // extract __other: entry
+                        foreach ($df_checked_arr as $ck => $cv) {
+                            if (strpos($cv, '__other:') === 0) {
+                                $df_other_text = substr($cv, 8);
+                                $df_is_other = true;
+                                unset($df_checked_arr[$ck]);
+                                break;
+                            }
+                        }
+                    } elseif (in_array($df->field_type, array('dropdown', 'radio'), true) && $df_allow_other) {
+                        if (strpos($df_val, '__other:') === 0) {
+                            $df_other_text = substr($df_val, 8);
+                            $df_is_other = true;
+                        }
+                    }
+                ?>
+                <div class="mj-field-group<?php echo in_array($df->field_type, array('textarea', 'checklist'), true) ? ' mj-field-group--full' : ''; ?>">
+                    <?php if ($df->field_type === 'text') : ?>
+                        <label for="<?php echo $df_html; ?>"><?php echo $df_label; ?></label>
+                        <input type="text" id="<?php echo $df_html; ?>" name="<?php echo $df_name; ?>" value="<?php echo esc_attr($df_val); ?>" <?php echo $df_req ? 'required' : ''; ?> />
+                    <?php elseif ($df->field_type === 'textarea') : ?>
+                        <label for="<?php echo $df_html; ?>"><?php echo $df_label; ?></label>
+                        <textarea id="<?php echo $df_html; ?>" name="<?php echo $df_name; ?>" rows="3" <?php echo $df_req ? 'required' : ''; ?>><?php echo esc_textarea($df_val); ?></textarea>
+                    <?php elseif ($df->field_type === 'dropdown') : ?>
+                        <label for="<?php echo $df_html; ?>"><?php echo $df_label; ?></label>
+                        <select id="<?php echo $df_html; ?>" name="<?php echo $df_name; ?>" <?php echo $df_req ? 'required' : ''; ?> <?php echo $df_allow_other ? 'data-dynfield-other="1"' : ''; ?>>
+                            <option value="">— Sélectionnez —</option>
+                            <?php foreach ($df_opts as $opt) : ?>
+                                <option value="<?php echo esc_attr($opt); ?>" <?php selected(!$df_is_other ? $df_val : '', $opt); ?>><?php echo esc_html($opt); ?></option>
+                            <?php endforeach; ?>
+                            <?php if ($df_allow_other) : ?>
+                                <option value="__other" <?php selected($df_is_other); ?>>Autre…</option>
+                            <?php endif; ?>
+                        </select>
+                        <?php if ($df_allow_other) : ?>
+                            <input type="text" class="mj-dynfield-other-input" name="<?php echo $df_name; ?>_other" value="<?php echo esc_attr($df_other_text); ?>" placeholder="Précisez…" style="<?php echo $df_is_other ? '' : 'display:none;'; ?> margin-top:6px;" />
+                        <?php endif; ?>
+                    <?php elseif ($df->field_type === 'radio') : ?>
+                        <fieldset>
+                            <legend><?php echo $df_label; ?></legend>
+                            <?php foreach ($df_opts as $oi => $opt) : ?>
+                                <label class="mj-radio">
+                                    <input type="radio" name="<?php echo $df_name; ?>" value="<?php echo esc_attr($opt); ?>" <?php checked(!$df_is_other ? $df_val : '', $opt); ?> <?php echo ($df_req && $oi === 0 && !$df_allow_other) ? 'required' : ''; ?> />
+                                    <span><?php echo esc_html($opt); ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                            <?php if ($df_allow_other) : ?>
+                                <label class="mj-radio">
+                                    <input type="radio" name="<?php echo $df_name; ?>" value="__other" <?php checked($df_is_other); ?> <?php echo ($df_req && empty($df_opts)) ? 'required' : ''; ?> />
+                                    <span>Autre</span>
+                                </label>
+                                <input type="text" class="mj-dynfield-other-input" name="<?php echo $df_name; ?>_other" value="<?php echo esc_attr($df_other_text); ?>" placeholder="Précisez…" style="<?php echo $df_is_other ? '' : 'display:none;'; ?> margin-top:4px;" />
+                            <?php endif; ?>
+                        </fieldset>
+                    <?php elseif ($df->field_type === 'checklist') : ?>
+                        <fieldset>
+                            <legend><?php echo $df_label; ?></legend>
+                            <?php foreach ($df_opts as $opt) : ?>
+                                <label class="mj-checkbox">
+                                    <input type="checkbox" name="<?php echo $df_name; ?>[]" value="<?php echo esc_attr($opt); ?>" <?php checked(in_array($opt, $df_checked_arr, true)); ?> />
+                                    <span><?php echo esc_html($opt); ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                            <?php if ($df_allow_other) : ?>
+                                <label class="mj-checkbox">
+                                    <input type="checkbox" name="<?php echo $df_name; ?>[]" value="__other" <?php checked($df_is_other); ?> />
+                                    <span>Autre</span>
+                                </label>
+                                <input type="text" class="mj-dynfield-other-input" name="<?php echo $df_name; ?>_other" value="<?php echo esc_attr($df_other_text); ?>" placeholder="Précisez…" style="<?php echo $df_is_other ? '' : 'display:none;'; ?> margin-top:4px;" />
+                            <?php endif; ?>
+                        </fieldset>
+                    <?php elseif ($df->field_type === 'checkbox') : ?>
+                        <label class="mj-checkbox">
+                            <input type="checkbox" name="<?php echo $df_name; ?>" value="1" <?php checked($df_val, '1'); ?> <?php echo $df_req ? 'required' : ''; ?> />
+                            <span><?php echo $df_label; ?></span>
+                        </label>
+                    <?php endif; ?>
+                    <?php echo $df_desc; ?>
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
             <div class="<?php echo esc_attr($account_classes); ?>" data-autonomous-section="1">
                 <h5>Accès du jeune</h5>
                 <div class="mj-field-group">
@@ -854,8 +1039,10 @@ if (!function_exists('mj_member_render_registration_form')) {
 
         $login_title_settings = is_array($args['login_title'] ?? null) ? $args['login_title'] : array();
         $login_title_settings = wp_parse_args($login_title_settings, $login_title_defaults);
-        // Force login tab image to always be inline-right
-        $login_title_image_position = 'inline-right';
+        $login_title_image_position = isset($login_title_settings['image_position']) ? (string) $login_title_settings['image_position'] : 'inline-right';
+        if (!in_array($login_title_image_position, $allowed_title_image_positions, true)) {
+            $login_title_image_position = 'inline-right';
+        }
         $args['login_title'] = array(
             'show' => !empty($login_title_settings['show']),
             'text' => isset($login_title_settings['text']) ? (string) $login_title_settings['text'] : $login_title_defaults['text'],
@@ -1220,7 +1407,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                         </label>
                         <label class="mj-radio">
                             <input type="radio" name="registration_type" value="<?php echo esc_attr(MjRoles::JEUNE); ?>" <?php checked($registration_type, MjRoles::JEUNE); ?> />
-                            <span>Je suis un jeune majeur et je m'inscris moi-même</span>
+                            <span>Je suis un jeune autonome et je m'inscris moi-même</span>
                         </label>
                         <p class="mj-field-hint">Choisissez cette option si vous avez 18 ans ou plus et que vous n'avez pas de tuteur.</p>
                     </fieldset>
@@ -1591,6 +1778,22 @@ if (!function_exists('mj_member_render_registration_form')) {
                 grid-column: 1 / -1;
             }
 
+            /* Dynamic-field section titles */
+            .mj-dynfield-section-title {
+                font-size: 16px;
+                font-weight: 700;
+                color: #0f172a;
+                margin: 8px 0 2px;
+                padding-bottom: 4px;
+                border-bottom: 2px solid var(--mj-accent, #3b82f6);
+            }
+
+            .mj-dynfield-section-desc {
+                font-size: 13px;
+                color: #6b7280;
+                margin: 0 0 6px;
+            }
+
             .mj-field-group label {
                 font-weight: 600;
                 color: #0f172a;
@@ -1786,6 +1989,22 @@ if (!function_exists('mj_member_render_registration_form')) {
                 grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
                 gap: 22px;
                 margin-bottom: 20px;
+            }
+
+            .mj-child-card__dynfields {
+                grid-template-columns: 1fr;
+            }
+
+            .mj-dynfield-other-input {
+                display: block;
+                width: 100%;
+                max-width: 400px;
+                padding: 6px 10px;
+                font-size: 14px;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                box-sizing: border-box;
+                margin-top: 6px;
             }
 
             .mj-child-card__options {
@@ -2517,6 +2736,56 @@ if (!function_exists('mj_member_render_registration_form')) {
                         }
                     });
                 });
+
+                // ── "Autre" toggle for dynamic fields (dropdown / radio / checklist) ──
+                function initDynfieldOtherToggles(scope) {
+                    // Dropdown: show/hide text input when __other is selected
+                    scope.querySelectorAll('select[data-dynfield-other="1"]').forEach(function (sel) {
+                        var otherInput = sel.parentElement.querySelector('.mj-dynfield-other-input');
+                        if (!otherInput) return;
+                        sel.addEventListener('change', function () {
+                            otherInput.style.display = sel.value === '__other' ? '' : 'none';
+                            if (sel.value !== '__other') otherInput.value = '';
+                        });
+                    });
+
+                    // Radio / Checklist: show/hide text input when __other option is toggled
+                    scope.querySelectorAll('input[value="__other"]').forEach(function (otherEl) {
+                        var container = otherEl.closest('fieldset') || otherEl.parentElement;
+                        var otherInput = container ? container.querySelector('.mj-dynfield-other-input') : null;
+                        if (!otherInput) return;
+
+                        if (otherEl.type === 'radio') {
+                            // Listen on all radios in the same name group
+                            var radios = scope.querySelectorAll('input[type="radio"][name="' + otherEl.name + '"]');
+                            radios.forEach(function (r) {
+                                r.addEventListener('change', function () {
+                                    var isOther = otherEl.checked;
+                                    otherInput.style.display = isOther ? '' : 'none';
+                                    if (!isOther) otherInput.value = '';
+                                });
+                            });
+                        } else if (otherEl.type === 'checkbox') {
+                            otherEl.addEventListener('change', function () {
+                                otherInput.style.display = otherEl.checked ? '' : 'none';
+                                if (!otherEl.checked) otherInput.value = '';
+                            });
+                        }
+                    });
+                }
+                initDynfieldOtherToggles(document);
+
+                // Re-init when a new child block is cloned
+                var childContainer = document.getElementById('mj-child-fields-container');
+                if (childContainer && typeof MutationObserver !== 'undefined') {
+                    new MutationObserver(function (mutations) {
+                        mutations.forEach(function (m) {
+                            m.addedNodes.forEach(function (node) {
+                                if (node.nodeType === 1) initDynfieldOtherToggles(node);
+                            });
+                        });
+                    }).observe(childContainer, { childList: true });
+                }
             })();
         </script>
         <?php

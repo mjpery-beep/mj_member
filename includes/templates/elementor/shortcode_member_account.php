@@ -664,6 +664,42 @@ if (!function_exists('mj_member_render_account_component')) {
                         if (is_wp_error($update_result)) {
                             $errors[] = $update_result->get_error_message();
                         } else {
+                            // Save dynamic field values
+                            $dyn_post_values = array();
+                            foreach ($_POST as $pk => $pv) {
+                                if (strpos($pk, 'dynfield_') !== 0) continue;
+                                // Skip the companion "_other" text inputs; they are merged below
+                                if (substr($pk, -6) === '_other') continue;
+
+                                $df_fid = (int) substr($pk, 9);
+                                if ($df_fid <= 0) continue;
+
+                                if (is_array($pv)) {
+                                    // Checklist: array of selected values
+                                    $sanitized = array_map(function ($v) { return sanitize_text_field(wp_unslash($v)); }, $pv);
+                                    // Replace __other placeholder with the real text
+                                    $other_key   = $pk . '_other';
+                                    $other_text  = isset($_POST[$other_key]) ? sanitize_text_field(wp_unslash($_POST[$other_key])) : '';
+                                    $sanitized   = array_map(function ($v) use ($other_text) {
+                                        return $v === '__other' && $other_text !== '' ? '__other:' . $other_text : $v;
+                                    }, $sanitized);
+                                    // Remove bare __other with no text
+                                    $sanitized = array_filter($sanitized, function ($v) { return $v !== '__other'; });
+                                    $dyn_post_values[$df_fid] = wp_json_encode(array_values($sanitized));
+                                } else {
+                                    $val = sanitize_text_field(wp_unslash($pv));
+                                    if ($val === '__other') {
+                                        $other_key  = $pk . '_other';
+                                        $other_text = isset($_POST[$other_key]) ? sanitize_text_field(wp_unslash($_POST[$other_key])) : '';
+                                        $val = $other_text !== '' ? '__other:' . $other_text : '';
+                                    }
+                                    $dyn_post_values[$df_fid] = $val;
+                                }
+                            }
+                            if (!empty($dyn_post_values)) {
+                                \Mj\Member\Classes\Crud\MjDynamicFieldValues::saveBulk((int) $member->id, $dyn_post_values);
+                            }
+
                             $sync_result = mj_member_sync_member_user_account($member->id, array(
                                 'return_error' => true,
                                 'send_notification' => false,
@@ -1005,11 +1041,132 @@ if (!function_exists('mj_member_render_account_component')) {
                                     <input type="date" id="mj-account-birth-date" name="member[birth_date]" value="<?php echo esc_attr($form_values['birth_date']); ?>" autocomplete="bday" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
                                 </div>
                                 <div class="mj-field-group mj-field-group--full">
-                                    <label for="mj-account-notes"><?php esc_html_e('Informations complémentaires (allergies, santé, etc.)', 'mj-member'); ?></label>
+                                    <label for="mj-account-notes"><?php esc_html_e('Informations complémentaires à transmettre à nos animateurs', 'mj-member'); ?></label>
                                     <textarea id="mj-account-notes" name="member[notes]" rows="3" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?>><?php echo esc_textarea($form_values['notes']); ?></textarea>
                                 </div>
                             </div>
                         </fieldset>
+
+                        <?php
+                        // Dynamic fields (account panel)
+                        $dyn_account_fields = \Mj\Member\Classes\Crud\MjDynamicFields::getAccountFields();
+                        if (!empty($dyn_account_fields)) :
+                            $dyn_member_id = $is_preview ? 0 : (int) ($member->id ?? 0);
+                            $dyn_values = $dyn_member_id ? \Mj\Member\Classes\Crud\MjDynamicFieldValues::getByMemberKeyed($dyn_member_id) : array();
+                        ?>
+                        <fieldset class="mj-fieldset">
+                            <div class="mj-field-grid mj-field-grid--dynfields">
+                                <?php foreach ($dyn_account_fields as $df) :
+                                    $df_id   = (int) $df->id;
+                                    $df_name = 'dynfield_' . $df_id;
+                                    $df_html = 'mj-account-dynfield-' . $df_id;
+                                    $df_req  = (int) $df->is_required;
+                                    $df_val  = $dyn_values[$df_id] ?? '';
+                                    $df_opts = \Mj\Member\Classes\Crud\MjDynamicFields::decodeOptions($df->options_list);
+                                    $df_label = esc_html($df->title) . ($df_req ? ' *' : '');
+                                    $df_desc  = $df->description ? '<small class="mj-field-hint">' . esc_html($df->description) . '</small>' : '';
+
+                                    // Section title — close grid, render heading, reopen grid
+                                    if ($df->field_type === 'title') : ?>
+                                        </div>
+                                        <h5 class="mj-dynfield-section-title"><?php echo esc_html($df->title); ?></h5>
+                                        <?php if ($df->description) : ?>
+                                            <p class="mj-dynfield-section-desc"><?php echo esc_html($df->description); ?></p>
+                                        <?php endif; ?>
+                                        <div class="mj-field-grid--dynfields">
+                                    <?php continue; endif; ?>
+                                <?php
+                                    // Decode checklist/other value helpers
+                                    $df_allow_other = (int) ($df->allow_other ?? 0);
+                                    $df_is_other    = false;
+                                    $df_other_text  = '';
+                                    $df_checked_arr = array();
+
+                                    if ($df->field_type === 'checklist') {
+                                        $df_checked_arr = is_string($df_val) && $df_val !== '' ? json_decode($df_val, true) : array();
+                                        if (!is_array($df_checked_arr)) $df_checked_arr = array();
+                                        foreach ($df_checked_arr as $ck => $cv) {
+                                            if (strpos($cv, '__other:') === 0) {
+                                                $df_other_text = substr($cv, 8);
+                                                $df_is_other = true;
+                                                unset($df_checked_arr[$ck]);
+                                                break;
+                                            }
+                                        }
+                                    } elseif (in_array($df->field_type, array('dropdown', 'radio'), true) && $df_allow_other) {
+                                        if (strpos($df_val, '__other:') === 0) {
+                                            $df_other_text = substr($df_val, 8);
+                                            $df_is_other = true;
+                                        }
+                                    }
+                                ?>
+                                <div class="mj-field-group<?php echo in_array($df->field_type, array('textarea', 'checklist'), true) ? ' mj-field-group--full' : ''; ?>">
+                                    <?php if ($df->field_type === 'text') : ?>
+                                        <label for="<?php echo $df_html; ?>"><?php echo $df_label; ?></label>
+                                        <input type="text" id="<?php echo $df_html; ?>" name="<?php echo $df_name; ?>" value="<?php echo esc_attr($df_val); ?>" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> <?php echo $df_req ? 'required' : ''; ?> />
+                                    <?php elseif ($df->field_type === 'textarea') : ?>
+                                        <label for="<?php echo $df_html; ?>"><?php echo $df_label; ?></label>
+                                        <textarea id="<?php echo $df_html; ?>" name="<?php echo $df_name; ?>" rows="3" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> <?php echo $df_req ? 'required' : ''; ?>><?php echo esc_textarea($df_val); ?></textarea>
+                                    <?php elseif ($df->field_type === 'dropdown') : ?>
+                                        <label for="<?php echo $df_html; ?>"><?php echo $df_label; ?></label>
+                                        <select id="<?php echo $df_html; ?>" name="<?php echo $df_name; ?>" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> <?php echo $df_req ? 'required' : ''; ?> <?php echo $df_allow_other ? 'data-dynfield-other="1"' : ''; ?>>
+                                            <option value="">&mdash; Sélectionnez &mdash;</option>
+                                            <?php foreach ($df_opts as $opt) : ?>
+                                                <option value="<?php echo esc_attr($opt); ?>" <?php selected(!$df_is_other ? $df_val : '', $opt); ?>><?php echo esc_html($opt); ?></option>
+                                            <?php endforeach; ?>
+                                            <?php if ($df_allow_other) : ?>
+                                                <option value="__other" <?php selected($df_is_other); ?>>Autre…</option>
+                                            <?php endif; ?>
+                                        </select>
+                                        <?php if ($df_allow_other) : ?>
+                                            <input type="text" class="mj-dynfield-other-input" name="<?php echo $df_name; ?>_other" value="<?php echo esc_attr($df_other_text); ?>" placeholder="Précisez…" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> style="<?php echo $df_is_other ? '' : 'display:none;'; ?> margin-top:6px;" />
+                                        <?php endif; ?>
+                                    <?php elseif ($df->field_type === 'radio') : ?>
+                                        <fieldset>
+                                            <legend><?php echo $df_label; ?></legend>
+                                            <?php foreach ($df_opts as $oi => $opt) : ?>
+                                                <label class="mj-radio">
+                                                    <input type="radio" name="<?php echo $df_name; ?>" value="<?php echo esc_attr($opt); ?>" <?php checked(!$df_is_other ? $df_val : '', $opt); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> <?php echo ($df_req && $oi === 0 && !$df_allow_other) ? 'required' : ''; ?> />
+                                                    <span><?php echo esc_html($opt); ?></span>
+                                                </label>
+                                            <?php endforeach; ?>
+                                            <?php if ($df_allow_other) : ?>
+                                                <label class="mj-radio">
+                                                    <input type="radio" name="<?php echo $df_name; ?>" value="__other" <?php checked($df_is_other); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                                    <span>Autre</span>
+                                                </label>
+                                                <input type="text" class="mj-dynfield-other-input" name="<?php echo $df_name; ?>_other" value="<?php echo esc_attr($df_other_text); ?>" placeholder="Précisez…" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> style="<?php echo $df_is_other ? '' : 'display:none;'; ?> margin-top:4px;" />
+                                            <?php endif; ?>
+                                        </fieldset>
+                                    <?php elseif ($df->field_type === 'checklist') : ?>
+                                        <fieldset>
+                                            <legend><?php echo $df_label; ?></legend>
+                                            <?php foreach ($df_opts as $opt) : ?>
+                                                <label class="mj-checkbox">
+                                                    <input type="checkbox" name="<?php echo $df_name; ?>[]" value="<?php echo esc_attr($opt); ?>" <?php checked(in_array($opt, $df_checked_arr, true)); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                                    <span><?php echo esc_html($opt); ?></span>
+                                                </label>
+                                            <?php endforeach; ?>
+                                            <?php if ($df_allow_other) : ?>
+                                                <label class="mj-checkbox">
+                                                    <input type="checkbox" name="<?php echo $df_name; ?>[]" value="__other" <?php checked($df_is_other); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                                    <span>Autre</span>
+                                                </label>
+                                                <input type="text" class="mj-dynfield-other-input" name="<?php echo $df_name; ?>_other" value="<?php echo esc_attr($df_other_text); ?>" placeholder="Précisez…" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> style="<?php echo $df_is_other ? '' : 'display:none;'; ?> margin-top:4px;" />
+                                            <?php endif; ?>
+                                        </fieldset>
+                                    <?php elseif ($df->field_type === 'checkbox') : ?>
+                                        <label class="mj-checkbox">
+                                            <input type="checkbox" name="<?php echo $df_name; ?>" value="1" <?php checked($df_val, '1'); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> <?php echo $df_req ? 'required' : ''; ?> />
+                                            <span><?php echo $df_label; ?></span>
+                                        </label>
+                                    <?php endif; ?>
+                                    <?php echo $df_desc; ?>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </fieldset>
+                        <?php endif; ?>
 
                         <div class="mj-account-photo-field">
                             <div class="mj-account-photo-control">
@@ -1433,6 +1590,133 @@ if (!function_exists('mj_member_render_account_component')) {
     padding: 48px 24px;
 }
 
+            .mj-hidden {
+                display: none !important;
+            }
+
+            #mj-children-wrapper {
+                display: grid;
+                gap: 24px;
+            }
+
+            .mj-child-card {
+                background: rgba(255, 255, 255, 0.96);
+                border: 1px solid rgba(148, 163, 184, 0.28);
+                border-radius: 16px;
+                padding: 24px;
+                box-shadow: 0 20px 40px rgba(15, 23, 42, 0.14);
+            }
+
+            .mj-child-card__header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 18px;
+            }
+
+            .mj-child-card__title {
+                margin: 0;
+                font-size: 20px;
+                font-weight: 700;
+                color: #0f172a;
+            }
+
+            .mj-child-card__remove {
+                border: none;
+                background: transparent;
+                color: #ef4444;
+                font-size: 22px;
+                cursor: pointer;
+                transition: transform 0.2s ease, color 0.2s ease;
+            }
+
+            .mj-child-card__remove:hover {
+                color: #b91c1c;
+                transform: scale(1.08);
+            }
+
+            .mj-child-card__grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 22px;
+                margin-bottom: 20px;
+            }
+
+            .mj-child-card__dynfields {
+                grid-template-columns: 1fr;
+            }
+
+            .mj-dynfield-other-input {
+                display: block;
+                width: 100%;
+                max-width: 400px;
+                padding: 6px 10px;
+                font-size: 14px;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                box-sizing: border-box;
+                margin-top: 6px;
+            }
+
+            .mj-child-card__options {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                margin-bottom: 20px;
+            }
+
+            .mj-button {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 10px;
+                padding: 14px 28px;
+                border-radius: 12px;
+                border: none;
+                background: var(--mj-accent);
+                color: #fff;
+                font-size: 16px;
+                font-weight: 700;
+                cursor: pointer;
+                transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+                box-shadow: 0 22px 40px rgba(37, 99, 235, 0.28);
+            }
+
+            .mj-button:hover {
+                background: var(--mj-accent-dark);
+                transform: translateY(-2px);
+                box-shadow: 0 26px 46px rgba(37, 99, 235, 0.34);
+            }
+
+            .mj-button:active {
+                transform: translateY(0);
+                box-shadow: 0 18px 34px rgba(37, 99, 235, 0.22);
+            }
+
+            .mj-radio {
+                display: flex;
+                align-items: flex-start;
+                gap: 12px;
+                margin-bottom: 14px;
+                padding: 12px 16px;
+                background: rgba(248, 250, 252, 0.8);
+                border-radius: 14px;
+                border: 1px solid rgba(148, 163, 184, 0.32);
+                transition: border-color 0.2s ease, background 0.2s ease;
+            }
+
+            .mj-radio input {
+                margin-top: 3px;
+            }
+
+            .mj-radio:hover {
+                border-color: var(--mj-accent);
+                background: rgba(37, 99, 235, 0.08);
+            }
+
+
+
+
 .mj-account-modern a.mj-account-link {
     color: var(--mj-account-accent);
     font-weight: 600;
@@ -1692,6 +1976,22 @@ if (!function_exists('mj_member_render_account_component')) {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     gap: 18px 24px;
+}
+
+.mj-field-grid--dynfields {
+    grid-template-columns: 1fr;
+}
+
+.mj-dynfield-other-input {
+    display: block;
+    width: 100%;
+    max-width: 400px;
+    padding: 6px 10px;
+    font-size: 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    box-sizing: border-box;
+    margin-top: 6px;
 }
 
 .mj-field-group {
@@ -2376,6 +2676,47 @@ if (!function_exists('mj_member_render_account_component')) {
                 setup();
             });
             observer.observe(document.documentElement, { childList: true, subtree: true });
+        }
+    }
+})();
+
+// ── "Autre" toggle for dynamic fields (dropdown / radio / checklist) ──
+(function () {
+    function initDynfieldOtherToggles(scope) {
+        scope.querySelectorAll('select[data-dynfield-other="1"]').forEach(function (sel) {
+            var otherInput = sel.parentElement.querySelector('.mj-dynfield-other-input');
+            if (!otherInput) return;
+            sel.addEventListener('change', function () {
+                otherInput.style.display = sel.value === '__other' ? '' : 'none';
+                if (sel.value !== '__other') otherInput.value = '';
+            });
+        });
+        scope.querySelectorAll('input[value="__other"]').forEach(function (otherEl) {
+            var container = otherEl.closest('fieldset') || otherEl.parentElement;
+            var otherInput = container ? container.querySelector('.mj-dynfield-other-input') : null;
+            if (!otherInput) return;
+            if (otherEl.type === 'radio') {
+                var radios = scope.querySelectorAll('input[type="radio"][name="' + otherEl.name + '"]');
+                radios.forEach(function (r) {
+                    r.addEventListener('change', function () {
+                        var isOther = otherEl.checked;
+                        otherInput.style.display = isOther ? '' : 'none';
+                        if (!isOther) otherInput.value = '';
+                    });
+                });
+            } else if (otherEl.type === 'checkbox') {
+                otherEl.addEventListener('change', function () {
+                    otherInput.style.display = otherEl.checked ? '' : 'none';
+                    if (!otherEl.checked) otherInput.value = '';
+                });
+            }
+        });
+    }
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function () { initDynfieldOtherToggles(document); });
+        } else {
+            initDynfieldOtherToggles(document);
         }
     }
 })();

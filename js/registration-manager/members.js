@@ -1676,6 +1676,286 @@
     }
 
     // ============================================
+    // DYNAMIC DATA EDITOR COMPONENT
+    // ============================================
+
+    function DynDataEditor(props) {
+        var member = props.member;
+        var dynFields = props.dynFields;
+        var config = props.config;
+        var onRefresh = props.onRefresh;
+
+        var _s1 = useState(false); var saving = _s1[0]; var setSaving = _s1[1];
+        var _s2 = useState(''); var statusMsg = _s2[0]; var setStatusMsg = _s2[1];
+
+        // Build local editable state from dynFields
+        var initValues = {};
+        dynFields.forEach(function (df) {
+            if (df.type === 'title') return;
+            initValues[df.id] = df.value || '';
+        });
+        var _s3 = useState(initValues); var values = _s3[0]; var setValues = _s3[1];
+
+        // Other text inputs state (for allow_other fields)
+        var initOther = {};
+        dynFields.forEach(function (df) {
+            if (df.type === 'title' || !df.allowOther) return;
+            var val = df.value || '';
+            if (df.type === 'checklist') {
+                try {
+                    var arr = JSON.parse(val || '[]');
+                    if (Array.isArray(arr)) {
+                        for (var i = 0; i < arr.length; i++) {
+                            if (typeof arr[i] === 'string' && arr[i].indexOf('__other:') === 0) {
+                                initOther[df.id] = arr[i].substring(8);
+                                break;
+                            }
+                        }
+                    }
+                } catch (e) {}
+            } else if (typeof val === 'string' && val.indexOf('__other:') === 0) {
+                initOther[df.id] = val.substring(8);
+            }
+            if (!initOther[df.id]) initOther[df.id] = '';
+        });
+        var _s4 = useState(initOther); var otherTexts = _s4[0]; var setOtherTexts = _s4[1];
+
+        function updateValue(id, val) {
+            var next = {}; Object.keys(values).forEach(function (k) { next[k] = values[k]; });
+            next[id] = val;
+            setValues(next);
+        }
+
+        function updateOtherText(id, text) {
+            var next = {}; Object.keys(otherTexts).forEach(function (k) { next[k] = otherTexts[k]; });
+            next[id] = text;
+            setOtherTexts(next);
+        }
+
+        function handleSave() {
+            setSaving(true);
+            setStatusMsg('');
+
+            // Build payload — merge __other text into values
+            var payload = [];
+            dynFields.forEach(function (df) {
+                if (df.type === 'title') return;
+                var val = values[df.id] !== undefined ? values[df.id] : '';
+
+                if (df.type === 'checklist' && df.allowOther) {
+                    // Replace __other placeholder with actual text
+                    try {
+                        var arr = JSON.parse(val || '[]');
+                        if (Array.isArray(arr)) {
+                            var otherText = otherTexts[df.id] || '';
+                            arr = arr.map(function (v) {
+                                return v === '__other' && otherText ? '__other:' + otherText : v;
+                            });
+                            arr = arr.filter(function (v) { return v !== '__other'; });
+                            val = JSON.stringify(arr);
+                        }
+                    } catch (e) {}
+                } else if (df.allowOther && val === '__other') {
+                    var ot = otherTexts[df.id] || '';
+                    val = ot ? '__other:' + ot : '';
+                }
+
+                payload.push({ id: df.id, value: val });
+            });
+
+            var formData = new FormData();
+            formData.append('action', 'mj_regmgr_save_member_dynfields');
+            formData.append('nonce', config.nonce || '');
+            formData.append('member_id', member.id);
+            formData.append('values', JSON.stringify(payload));
+
+            fetch(config.ajaxUrl || '', { method: 'POST', body: formData, credentials: 'same-origin' })
+                .then(function (res) { return res.json(); })
+                .then(function (response) {
+                    setSaving(false);
+                    if (response.success) {
+                        setStatusMsg('Enregistré ✓');
+                        setTimeout(function () { setStatusMsg(''); }, 3000);
+                        if (onRefresh) onRefresh();
+                    } else {
+                        setStatusMsg('Erreur : ' + (response.data && response.data.message ? response.data.message : 'inconnue'));
+                    }
+                })
+                .catch(function () {
+                    setSaving(false);
+                    setStatusMsg('Erreur réseau.');
+                });
+        }
+
+        // Helper: is __other selected for a field?
+        function isOtherSelected(df) {
+            var val = values[df.id] || '';
+            if (df.type === 'checklist') {
+                try {
+                    var arr = JSON.parse(val || '[]');
+                    return Array.isArray(arr) && arr.indexOf('__other') !== -1;
+                } catch (e) { return false; }
+            }
+            return val === '__other' || (typeof val === 'string' && val.indexOf('__other:') === 0);
+        }
+
+        // Helper: get checklist array from value
+        function getChecklistArr(df) {
+            var val = values[df.id] || '[]';
+            try {
+                var arr = JSON.parse(val);
+                if (!Array.isArray(arr)) return [];
+                // Convert __other:xxx entries back to __other for checkbox state
+                return arr.map(function (v) {
+                    return typeof v === 'string' && v.indexOf('__other:') === 0 ? '__other' : v;
+                });
+            } catch (e) { return []; }
+        }
+
+        function toggleChecklistValue(df, opt) {
+            var arr = getChecklistArr(df);
+            var idx = arr.indexOf(opt);
+            if (idx !== -1) {
+                arr.splice(idx, 1);
+            } else {
+                arr.push(opt);
+            }
+            updateValue(df.id, JSON.stringify(arr));
+        }
+
+        // Render a single field
+        function renderField(df) {
+            var val = values[df.id] !== undefined ? values[df.id] : '';
+            var label = df.title + (df.isRequired ? ' *' : '');
+            var desc = df.description ? h('small', { class: 'mj-regmgr-dyndata-hint' }, df.description) : null;
+
+            if (df.type === 'text') {
+                return h('div', { class: 'mj-regmgr-dyndata-field', key: df.id }, [
+                    h('label', { class: 'mj-regmgr-dyndata-field__label' }, label),
+                    h('input', { type: 'text', class: 'mj-regmgr-dyndata-field__input', value: val, onInput: function (e) { updateValue(df.id, e.target.value); } }),
+                    desc,
+                ]);
+            }
+
+            if (df.type === 'textarea') {
+                return h('div', { class: 'mj-regmgr-dyndata-field mj-regmgr-dyndata-field--full', key: df.id }, [
+                    h('label', { class: 'mj-regmgr-dyndata-field__label' }, label),
+                    h('textarea', { class: 'mj-regmgr-dyndata-field__input', rows: 3, value: val, onInput: function (e) { updateValue(df.id, e.target.value); } }),
+                    desc,
+                ]);
+            }
+
+            if (df.type === 'checkbox') {
+                return h('div', { class: 'mj-regmgr-dyndata-field', key: df.id }, [
+                    h('label', { class: 'mj-regmgr-dyndata-field__checkbox-label' }, [
+                        h('input', { type: 'checkbox', checked: val === '1', onChange: function (e) { updateValue(df.id, e.target.checked ? '1' : '0'); } }),
+                        h('span', null, ' ' + df.title),
+                    ]),
+                    desc,
+                ]);
+            }
+
+            if (df.type === 'dropdown') {
+                var options = df.options || [];
+                var isOther = isOtherSelected(df);
+                var selectVal = isOther ? '__other' : val;
+                return h('div', { class: 'mj-regmgr-dyndata-field', key: df.id }, [
+                    h('label', { class: 'mj-regmgr-dyndata-field__label' }, label),
+                    h('select', { class: 'mj-regmgr-dyndata-field__input', value: selectVal, onChange: function (e) { updateValue(df.id, e.target.value); } }, [
+                        h('option', { value: '' }, '— Sélectionnez —'),
+                    ].concat(options.map(function (opt) {
+                        return h('option', { value: opt, key: opt }, opt);
+                    })).concat(df.allowOther ? [h('option', { value: '__other', key: '__other' }, 'Autre…')] : [])),
+                    df.allowOther && isOther ? h('input', { type: 'text', class: 'mj-regmgr-dyndata-field__input mj-regmgr-dyndata-field__other', placeholder: 'Précisez…', value: otherTexts[df.id] || '', onInput: function (e) { updateOtherText(df.id, e.target.value); } }) : null,
+                    desc,
+                ]);
+            }
+
+            if (df.type === 'radio') {
+                var options = df.options || [];
+                var isOther = isOtherSelected(df);
+                var radioVal = isOther ? '__other' : val;
+                return h('div', { class: 'mj-regmgr-dyndata-field', key: df.id }, [
+                    h('label', { class: 'mj-regmgr-dyndata-field__label' }, label),
+                    h('div', { class: 'mj-regmgr-dyndata-field__options' }, options.map(function (opt) {
+                        return h('label', { class: 'mj-regmgr-dyndata-field__radio', key: opt }, [
+                            h('input', { type: 'radio', name: 'dyndata_' + df.id, value: opt, checked: radioVal === opt, onChange: function () { updateValue(df.id, opt); } }),
+                            h('span', null, ' ' + opt),
+                        ]);
+                    }).concat(df.allowOther ? [
+                        h('label', { class: 'mj-regmgr-dyndata-field__radio', key: '__other' }, [
+                            h('input', { type: 'radio', name: 'dyndata_' + df.id, value: '__other', checked: isOther, onChange: function () { updateValue(df.id, '__other'); } }),
+                            h('span', null, ' Autre'),
+                        ]),
+                    ] : [])),
+                    df.allowOther && isOther ? h('input', { type: 'text', class: 'mj-regmgr-dyndata-field__input mj-regmgr-dyndata-field__other', placeholder: 'Précisez…', value: otherTexts[df.id] || '', onInput: function (e) { updateOtherText(df.id, e.target.value); } }) : null,
+                    desc,
+                ]);
+            }
+
+            if (df.type === 'checklist') {
+                var options = df.options || [];
+                var checkedArr = getChecklistArr(df);
+                var hasOther = checkedArr.indexOf('__other') !== -1;
+                return h('div', { class: 'mj-regmgr-dyndata-field mj-regmgr-dyndata-field--full', key: df.id }, [
+                    h('label', { class: 'mj-regmgr-dyndata-field__label' }, label),
+                    h('div', { class: 'mj-regmgr-dyndata-field__options' }, options.map(function (opt) {
+                        return h('label', { class: 'mj-regmgr-dyndata-field__checkbox', key: opt }, [
+                            h('input', { type: 'checkbox', checked: checkedArr.indexOf(opt) !== -1, onChange: function () { toggleChecklistValue(df, opt); } }),
+                            h('span', null, ' ' + opt),
+                        ]);
+                    }).concat(df.allowOther ? [
+                        h('label', { class: 'mj-regmgr-dyndata-field__checkbox', key: '__other' }, [
+                            h('input', { type: 'checkbox', checked: hasOther, onChange: function () { toggleChecklistValue(df, '__other'); } }),
+                            h('span', null, ' Autre'),
+                        ]),
+                    ] : [])),
+                    df.allowOther && hasOther ? h('input', { type: 'text', class: 'mj-regmgr-dyndata-field__input mj-regmgr-dyndata-field__other', placeholder: 'Précisez…', value: otherTexts[df.id] || '', onInput: function (e) { updateOtherText(df.id, e.target.value); } }) : null,
+                    desc,
+                ]);
+            }
+
+            // Fallback: read-only
+            return h('div', { class: 'mj-regmgr-dyndata-field', key: df.id }, [
+                h('label', { class: 'mj-regmgr-dyndata-field__label' }, label),
+                h('div', { class: 'mj-regmgr-dyndata-field__value' }, val || '—'),
+            ]);
+        }
+
+        // Build layout with section title support
+        var groups = [];
+        var currentItems = [];
+        dynFields.forEach(function (df) {
+            if (df.type === 'title') {
+                if (currentItems.length) {
+                    groups.push(h('div', { class: 'mj-regmgr-dyndata-grid', key: 'grid-' + groups.length }, currentItems));
+                    currentItems = [];
+                }
+                groups.push(h('h4', { class: 'mj-regmgr-dyndata-section-title', key: 'title-' + df.id }, df.title));
+            } else {
+                currentItems.push(renderField(df));
+            }
+        });
+        if (currentItems.length) {
+            groups.push(h('div', { class: 'mj-regmgr-dyndata-grid', key: 'grid-' + groups.length }, currentItems));
+        }
+
+        return h('div', { class: 'mj-regmgr-member-detail__section' }, [
+            h('h2', { class: 'mj-regmgr-member-detail__section-title' }, 'Données dynamiques'),
+        ].concat(groups).concat([
+            h('div', { class: 'mj-regmgr-dyndata-actions' }, [
+                h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--primary mj-btn--small',
+                    disabled: saving,
+                    onClick: handleSave,
+                }, saving ? 'Enregistrement…' : 'Enregistrer'),
+                statusMsg ? h('span', { class: 'mj-regmgr-dyndata-status' }, statusMsg) : null,
+            ]),
+        ]));
+    }
+
+    // ============================================
     // MEMBER DETAIL PANEL
     // ============================================
 
@@ -1744,7 +2024,7 @@
         var memberId = member && member.id ? member.id : null;
 
         // Onglets valides pour les membres
-        var validMemberTabs = ['information', 'membership', 'badges', 'photos', 'ideas', 'messages', 'testimonials', 'notes', 'history', 'quotas'];
+        var validMemberTabs = ['information', 'membership', 'badges', 'photos', 'ideas', 'messages', 'testimonials', 'notes', 'history', 'quotas', 'dyndata'];
         var resolvedInitialTab = initialTab && validMemberTabs.indexOf(initialTab) !== -1 ? initialTab : 'information';
         var initialTabAppliedRef = useRef(false);
 
@@ -3153,6 +3433,12 @@
         var canManageQuotas = config && (config.isCoordinateur || config.canDeleteMember);
         if (isAnimateur && canManageQuotas) {
             memberTabs.push({ key: 'quotas', label: tabQuotasLabel, icon: tabIcons.quotas });
+        }
+
+        // Ajouter l'onglet Données dynamiques s'il y a des champs configurés
+        var dynFields = member && Array.isArray(member.dynamicFields) ? member.dynamicFields : [];
+        if (dynFields.length > 0) {
+            memberTabs.push({ key: 'dyndata', label: 'Données', icon: '🧩' });
         }
 
         var newsletterLabel = getString(strings, 'chipNewsletter', 'Newsletter');
@@ -5023,6 +5309,14 @@
                         member: member,
                         config: config,
                         strings: strings,
+                        onRefresh: onMemberUpdated,
+                    }),
+
+                    // Données dynamiques tab
+                    activeTab === 'dyndata' && dynFields.length > 0 && h(DynDataEditor, {
+                        member: member,
+                        dynFields: dynFields,
+                        config: config,
                         onRefresh: onMemberUpdated,
                     }),
                 ]),
