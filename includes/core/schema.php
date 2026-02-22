@@ -1793,6 +1793,8 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_62($wpdb);
     mj_member_upgrade_to_2_63($wpdb);
     mj_member_upgrade_to_2_64($wpdb);
+    mj_member_upgrade_to_2_65($wpdb);
+    mj_member_upgrade_to_2_66($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -3690,8 +3692,7 @@ function mj_member_upgrade_to_2_44($wpdb) {
         KEY idx_status (status),
         KEY idx_awarded_by_user (awarded_by_user_id),
         KEY idx_awarded_by_member (awarded_by_member_id),
-        KEY idx_awarded_at (awarded_at),
-        CONSTRAINT fk_mj_member_badges_badge FOREIGN KEY (badge_id) REFERENCES {$badges_table} (id) ON DELETE CASCADE
+        KEY idx_awarded_at (awarded_at)
     ) {$charset_collate};";
 
     dbDelta($sql_member_badges);
@@ -4119,8 +4120,7 @@ function mj_member_upgrade_to_2_49($wpdb) {
         KEY idx_trophy (trophy_id),
         KEY idx_member (member_id),
         KEY idx_status (status),
-        KEY idx_awarded_at (awarded_at),
-        CONSTRAINT fk_mj_member_trophies_trophy FOREIGN KEY (trophy_id) REFERENCES {$trophies_table} (id) ON DELETE CASCADE
+        KEY idx_awarded_at (awarded_at)
     ) {$charset_collate};";
 
     dbDelta($sql_member_trophies);
@@ -5572,6 +5572,28 @@ function mj_member_upgrade_to_2_64($wpdb) {
     $fields_table = $wpdb->prefix . 'mj_dynamic_fields';
     if (mj_member_table_exists($fields_table) && !mj_member_column_exists($fields_table, 'youth_only')) {
         $wpdb->query("ALTER TABLE {$fields_table} ADD COLUMN youth_only tinyint(1) NOT NULL DEFAULT 0 AFTER show_in_notes");
+    }
+}
+
+/**
+ * Migration 2.65: Add last_login_at column to mj_members table.
+ */
+function mj_member_upgrade_to_2_65($wpdb) {
+    $table = $wpdb->prefix . 'mj_members';
+
+    if (mj_member_table_exists($table) && !mj_member_column_exists($table, 'last_login_at')) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN last_login_at datetime DEFAULT NULL");
+    }
+}
+
+/**
+ * Migration 2.66: Add last_activity_at column to mj_members table.
+ */
+function mj_member_upgrade_to_2_66($wpdb) {
+    $table = $wpdb->prefix . 'mj_members';
+
+    if (mj_member_table_exists($table) && !mj_member_column_exists($table, 'last_activity_at')) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN last_activity_at datetime DEFAULT NULL");
     }
 }
 

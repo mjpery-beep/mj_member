@@ -635,6 +635,8 @@
                     h('option', { value: 'name' }, getString(strings, 'sortByName', 'Nom (A-Z)')),
                     h('option', { value: 'registration_date' }, getString(strings, 'sortByRegistration', 'Date d\'inscription')),
                     h('option', { value: 'membership_date' }, getString(strings, 'sortByMembership', 'Date de cotisation')),
+                    h('option', { value: 'last_login' }, getString(strings, 'sortByLastLogin', 'Dernière connexion')),
+                    h('option', { value: 'last_activity' }, getString(strings, 'sortByLastActivity', 'Dernière activité')),
                 ]),
             ]),
 

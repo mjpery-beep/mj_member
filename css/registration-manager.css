@@ -173,7 +173,7 @@ input.mj-regmgr-search-input__field {
 .mj-regmgr__layout {
     display: flex;
     height: calc(100vh - 200px);
-    min-height: 600px;
+    min-height: 1800px;
 }
 
 /* ============================================
@@ -4834,7 +4834,7 @@ input.mj-regmgr-search-input__field {
 .mj-regmgr-member-card__membership {
     padding: 2px 6px;
     border-radius: 4px;
-    font-size: 11px;
+    font-size: 15px;
     font-weight: 500;
 }
 
@@ -5178,6 +5178,48 @@ input.mj-regmgr-search-input__field {
     display: flex;
     flex-direction: column;
     gap: 16px;
+}
+
+/* Add Message Form */
+.mj-regmgr-member-detail__add-message {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    background: var(--regmgr-gray-50);
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius-lg);
+}
+
+.mj-regmgr-member-detail__add-message-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mj-regmgr-member-detail__add-message-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--regmgr-gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.mj-regmgr-member-detail__add-message-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--regmgr-gray-200);
+    margin-top: 4px;
+}
+
+.mj-regmgr-member-detail__section-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 .mj-regmgr-member-message {
@@ -6293,6 +6335,55 @@ input.mj-regmgr-search-input__field {
 
 .mj-regmgr-idea-card__date svg {
     opacity: 0.6;
+}
+
+/* Idea Voters */
+.mj-regmgr-idea-card__voters {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--regmgr-gray-600);
+    line-height: 1.5;
+    flex-wrap: wrap;
+}
+
+.mj-regmgr-idea-card__voters-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+    color: var(--regmgr-gray-500);
+    white-space: nowrap;
+}
+
+.mj-regmgr-idea-card__voters-icon {
+    color: #ef4444;
+    opacity: 0.7;
+    flex-shrink: 0;
+}
+
+.mj-regmgr-idea-card__voters-list {
+    display: inline;
+    color: var(--regmgr-gray-600);
+}
+
+.mj-regmgr-idea-card__voter-link {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: var(--regmgr-primary, #6366f1);
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.15s;
+}
+
+.mj-regmgr-idea-card__voter-link:hover {
+    color: var(--regmgr-primary-dark, #4f46e5);
+    text-decoration: underline;
 }
 
 /* Idea Edit Form */

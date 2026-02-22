@@ -154,4 +154,93 @@ class MjIdeaVotes extends MjTools
 
         return $count ? (int) $count : 0;
     }
+
+    /**
+     * Returns voter names for a given idea.
+     *
+     * @return list<array{id:int,first_name:string,last_name:string}>
+     */
+    public static function get_voters_for_idea(int $ideaId): array
+    {
+        $ideaId = (int) $ideaId;
+        if ($ideaId <= 0) {
+            return array();
+        }
+
+        global $wpdb;
+        $votes_table = self::table_name();
+        $members_table = MjMembers::getTableName(MjMembers::TABLE_NAME);
+
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT m.id, m.first_name, m.last_name
+             FROM {$votes_table} v
+             INNER JOIN {$members_table} m ON m.id = v.member_id
+             WHERE v.idea_id = %d
+             ORDER BY v.created_at DESC",
+            $ideaId
+        ), ARRAY_A);
+
+        if (!is_array($rows)) {
+            return array();
+        }
+
+        $voters = array();
+        foreach ($rows as $row) {
+            $voters[] = array(
+                'id'         => (int) $row['id'],
+                'first_name' => (string) $row['first_name'],
+                'last_name'  => (string) $row['last_name'],
+            );
+        }
+
+        return $voters;
+    }
+
+    /**
+     * Returns voter names for multiple ideas in a single query.
+     *
+     * @param  list<int> $ideaIds
+     * @return array<int, list<array{id:int,first_name:string,last_name:string}>>
+     */
+    public static function get_voters_for_ideas(array $ideaIds): array
+    {
+        $ideaIds = array_filter(array_map('intval', $ideaIds), function ($id) { return $id > 0; });
+        if (empty($ideaIds)) {
+            return array();
+        }
+
+        global $wpdb;
+        $votes_table = self::table_name();
+        $members_table = MjMembers::getTableName(MjMembers::TABLE_NAME);
+
+        $placeholders = implode(',', array_fill(0, count($ideaIds), '%d'));
+
+        // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT v.idea_id, m.id, m.first_name, m.last_name
+             FROM {$votes_table} v
+             INNER JOIN {$members_table} m ON m.id = v.member_id
+             WHERE v.idea_id IN ({$placeholders})
+             ORDER BY v.created_at DESC",
+            ...$ideaIds
+        ), ARRAY_A);
+
+        $result = array();
+        foreach ($ideaIds as $id) {
+            $result[$id] = array();
+        }
+
+        if (is_array($rows)) {
+            foreach ($rows as $row) {
+                $ideaId = (int) $row['idea_id'];
+                $result[$ideaId][] = array(
+                    'id'         => (int) $row['id'],
+                    'first_name' => (string) $row['first_name'],
+                    'last_name'  => (string) $row['last_name'],
+                );
+            }
+        }
+
+        return $result;
+    }
 }

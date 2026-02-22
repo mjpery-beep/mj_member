@@ -98,7 +98,7 @@
         var diffWeek = Math.floor(diffDay / 7);
         var diffMonth = Math.floor(diffDay / 30);
 
-        if (diffMin < 1) return 'à l\'instant';
+        if (diffMin < 1) return diffSec + 's';
         if (diffMin < 60) return diffMin + 'min';
         if (diffHour < 24) return diffHour + 'h';
         if (diffDay < 7) return diffDay + 'j';

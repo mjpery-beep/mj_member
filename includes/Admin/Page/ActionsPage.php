@@ -460,10 +460,10 @@ final class ActionsPage
                     <?php else: ?>
                         <?php foreach ($awards as $award): ?>
                             <?php
-                            $member = MjMembers::get((int) $award['memberId']);
-                            $memberName = $member ? trim(($member['firstname'] ?? '') . ' ' . ($member['lastname'] ?? '')) : __('Membre inconnu', 'mj-member');
+                            $member = MjMembers::getById((int) $award['memberId']);
+                            $memberName = $member ? trim(($member->first_name ?? '') . ' ' . ($member->last_name ?? '')) : __('Membre inconnu', 'mj-member');
                             if ($memberName === '') {
-                                $memberName = $member['nickname'] ?? __('Membre', 'mj-member');
+                                $memberName = $member->nickname ?? __('Membre', 'mj-member');
                             }
 
                             $awardedByName = '—';

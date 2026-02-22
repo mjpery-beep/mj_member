@@ -598,6 +598,17 @@
             },
 
             /**
+             * Crée un message associé au membre
+             */
+            createMemberMessage: function (memberId, subject, message) {
+                return post('mj_regmgr_create_member_message', {
+                    memberId: memberId,
+                    subject: subject,
+                    message: message,
+                });
+            },
+
+            /**
              * Supprime un message lié au membre
              */
             deleteMemberMessage: function (messageId, memberId) {

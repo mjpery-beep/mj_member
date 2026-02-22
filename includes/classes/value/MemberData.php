@@ -107,6 +107,7 @@ final class MemberData implements JsonSerializable {
         'wp_user_email',
         'wp_user',
         'last_login_at',
+        'last_activity_at',
         'notes',
         'extra_fields',
         'xp_total',

@@ -519,10 +519,16 @@
             'coordinateur': 'Coordinateur',
         };
 
+        /**
+         * use emojis
+         * paid: ✅
+         * expired: clock emoji + "expirée"
+         * unpaid: coin emoji + "due"
+         */
         var membershipLabels = {
-            'paid': 'Cotisation OK',
-            'expired': 'Cotisation expirée',
-            'unpaid': 'Cotisation due',
+            'paid': '✅',
+            'expired': '⏰',
+            'unpaid': '🪙',
             'not_required': '', // Ne pas afficher si pas de cotisation requise
         };
 
@@ -545,16 +551,18 @@
             h(MemberAvatar, { member: member, size: 'medium' }),
             h('div', { class: 'mj-regmgr-member-card__content' }, [
                 h('div', { class: 'mj-regmgr-member-card__name' }, 
-                    (member.firstName || '') + ' ' + (member.lastName || '')
+                    
+                    member.role && h('span', { class: 'mj-regmgr-member-card__role' }, 
+                        roleLabels[member.role] || member.role
+                    ),
+                    ' ' + (member.firstName || '') + ' ' + (member.lastName || '')
                 ),
                 h('div', { class: 'mj-regmgr-member-card__meta' }, [
                     member.wpUserId && h('span', {
                         class: 'mj-regmgr-member-card__wordpress-icon',
                         title: 'Compte WordPress associé',
                     }, '⚡'),
-                    member.role && h('span', { class: 'mj-regmgr-member-card__role' }, 
-                        roleLabels[member.role] || member.role
-                    ),
+                   
                     member.membershipStatus && member.membershipStatus !== 'not_required' && h('span', { 
                         class: classNames('mj-regmgr-member-card__membership', {
                             'mj-regmgr-member-card__membership--paid': member.membershipStatus === 'paid',
@@ -571,11 +579,19 @@
                         title: 'Date de naissance: ' + formatDate(member.birthDate, true),
                     }, calculateAge(member.birthDate) + ' ans'),
                     
-                    member.createdAt && h('span', {
-                        class: 'mj-regmgr-member-card__date',
-                        title: formatDate(member.createdAt, true),
-                    }, formatDate(member.createdAt)),
+                    member.lastActivityAt && h('span', {
+                        class: 'mj-regmgr-member-card__activity-date',
+                        title: 'Dernière activité: ' + formatDate(member.lastActivityAt, true),
+                    }, '🟢 ' + formatTimeAgo(member.lastActivityAt)),
+                    member.lastLoginAt && h('span', {
+                        class: 'mj-regmgr-member-card__login-date',
+                        title: 'Dernière connexion: ' + formatDate(member.lastLoginAt, true),
+                    }, '🔑 ' + formatTimeAgo(member.lastLoginAt)),
                 ]),
+                member.createdAt && h('div', {
+                    class: 'mj-regmgr-member-card__date',
+                    title: formatDate(member.createdAt, true),
+                }, '📅 ' + formatTimeAgo(member.createdAt)),
             ]),
         ]);
     }
@@ -1985,6 +2001,7 @@
         var onUpdateAvatar = typeof props.onUpdateAvatar === 'function' ? props.onUpdateAvatar : null;
         var onRemoveAvatar = typeof props.onRemoveAvatar === 'function' ? props.onRemoveAvatar : null;
         var onCaptureAvatar = typeof props.onCaptureAvatar === 'function' ? props.onCaptureAvatar : null;
+        var onCreateMessage = typeof props.onCreateMessage === 'function' ? props.onCreateMessage : null;
         var onDeleteMessage = typeof props.onDeleteMessage === 'function' ? props.onDeleteMessage : null;
         var onDeleteTestimonial = typeof props.onDeleteTestimonial === 'function' ? props.onDeleteTestimonial : null;
         var onUpdateTestimonialStatus = typeof props.onUpdateTestimonialStatus === 'function' ? props.onUpdateTestimonialStatus : null;
@@ -2112,6 +2129,22 @@
         var messageDeletingId = _useStateMessageDeletingId[0];
         var setMessageDeletingId = _useStateMessageDeletingId[1];
 
+        var _useStateNewMessageOpen = useState(false);
+        var newMessageOpen = _useStateNewMessageOpen[0];
+        var setNewMessageOpen = _useStateNewMessageOpen[1];
+
+        var _useStateNewMessageSubject = useState('');
+        var newMessageSubject = _useStateNewMessageSubject[0];
+        var setNewMessageSubject = _useStateNewMessageSubject[1];
+
+        var _useStateNewMessageBody = useState('');
+        var newMessageBody = _useStateNewMessageBody[0];
+        var setNewMessageBody = _useStateNewMessageBody[1];
+
+        var _useStateNewMessageSaving = useState(false);
+        var newMessageSaving = _useStateNewMessageSaving[0];
+        var setNewMessageSaving = _useStateNewMessageSaving[1];
+
         var _useStateAvatarSaving = useState(false);
         var avatarSaving = _useStateAvatarSaving[0];
         var setAvatarSaving = _useStateAvatarSaving[1];
@@ -2220,6 +2253,10 @@
             setPhotoSaving(false);
             setPhotoDeletingId(null);
             setMessageDeletingId(null);
+            setNewMessageOpen(false);
+            setNewMessageSubject('');
+            setNewMessageBody('');
+            setNewMessageSaving(false);
             setPaymentProcessing(false);
             setShowPaymentModal(false);
         }, [memberId]);
@@ -2996,6 +3033,30 @@
                 })
                 .finally(function () {
                     setMessageDeletingId(null);
+                });
+        };
+
+        var handleCreateMessage = function () {
+            if (!onCreateMessage || !member || !member.id) {
+                return;
+            }
+            var subject = (newMessageSubject || '').trim();
+            var body = (newMessageBody || '').trim();
+            if (!subject || !body) {
+                return;
+            }
+            setNewMessageSaving(true);
+            Promise.resolve(onCreateMessage(member.id, subject, body))
+                .then(function () {
+                    setNewMessageSubject('');
+                    setNewMessageBody('');
+                    setNewMessageOpen(false);
+                })
+                .catch(function () {
+                    // Gestion des erreurs dans le handler parent
+                })
+                .finally(function () {
+                    setNewMessageSaving(false);
                 });
         };
 
@@ -3930,6 +3991,20 @@
                             member.descriptionShort && h('p', { class: 'mj-regmgr-member-detail__bio-short' }, member.descriptionShort),
                             member.descriptionLong && h('div', { class: 'mj-regmgr-member-detail__bio-long', dangerouslySetInnerHTML: { __html: member.descriptionLong } }),
                         ]),
+                        config.adminMemberUrl && h('div', { class: 'mj-regmgr-member-detail__admin-link' }, [
+                            h('a', {
+                                href: config.adminMemberUrl + member.id,
+                                target: '_blank',
+                                class: 'mj-btn mj-btn--secondary',
+                            }, [
+                                h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                    h('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
+                                    h('polyline', { points: '15 3 21 3 21 9' }),
+                                    h('line', { x1: 10, y1: 14, x2: 21, y2: 3 }),
+                                ]),
+                                'Voir dans l\'admin',
+                            ]),
+                        ]),
                     ]),
                     activeTab === 'badges' && h(Fragment, null, [
                         // Level Display
@@ -4471,13 +4546,35 @@
                                         !isEditingIdea && h('div', { class: 'mj-regmgr-idea-card__body' }, [
                                             idea.content && h('p', { class: 'mj-regmgr-idea-card__content' }, idea.content),
                                         ]),
-                                        !isEditingIdea && idea.createdAt && h('footer', { class: 'mj-regmgr-idea-card__footer' }, [
-                                            h('span', { class: 'mj-regmgr-idea-card__date' }, [
+                                        !isEditingIdea && h('footer', { class: 'mj-regmgr-idea-card__footer' }, [
+                                            idea.createdAt && h('span', { class: 'mj-regmgr-idea-card__date' }, [
                                                 h('svg', { width: 12, height: 12, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
                                                     h('circle', { cx: 12, cy: 12, r: 10 }),
                                                     h('polyline', { points: '12 6 12 12 16 14' }),
                                                 ]),
                                                 formatDate(idea.createdAt),
+                                            ]),
+                                            Array.isArray(idea.voters) && idea.voters.length > 0 && h('div', { class: 'mj-regmgr-idea-card__voters' }, [
+                                                h('span', { class: 'mj-regmgr-idea-card__voters-label' }, [
+                                                    h('svg', { width: 12, height: 12, viewBox: '0 0 24 24', fill: 'currentColor', class: 'mj-regmgr-idea-card__voters-icon' }, [
+                                                        h('path', { d: 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z' }),
+                                                    ]),
+                                                    'Aimé par :',
+                                                ]),
+                                                h('span', { class: 'mj-regmgr-idea-card__voters-list' }, idea.voters.map(function (voter, idx) {
+                                                    var separator = idx < idea.voters.length - 1 ? ', ' : '';
+                                                    return h(Fragment, { key: voter.id }, [
+                                                        onOpenMember
+                                                            ? h('button', {
+                                                                type: 'button',
+                                                                class: 'mj-regmgr-idea-card__voter-link',
+                                                                onClick: function () { onOpenMember({ id: voter.id }); },
+                                                                title: voter.name,
+                                                            }, voter.name)
+                                                            : h('span', null, voter.name),
+                                                        separator,
+                                                    ]);
+                                                })),
                                             ]),
                                         ]),
                                         isEditingIdea && h('div', { class: 'mj-regmgr-idea-card__edit-form' }, [
@@ -4563,10 +4660,15 @@
                         ]),
                     ]),
                     activeTab === 'messages' && h(Fragment, null, [
-                        memberMessages.length > 0
-                            ? h('div', { class: 'mj-regmgr-member-detail__section' }, [
-                                h('div', { class: 'mj-regmgr-member-detail__section-header' }, [
-                                    h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberMessages', 'Messages reçus')),
+                        h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                            h('div', { class: 'mj-regmgr-member-detail__section-header' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberMessages', 'Messages reçus')),
+                                h('div', { class: 'mj-regmgr-member-detail__section-actions' }, [
+                                    onCreateMessage && h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                                        onClick: function () { setNewMessageOpen(!newMessageOpen); },
+                                    }, newMessageOpen ? 'Annuler' : '+ Nouveau message'),
                                     contactMessageListUrl && h('a', {
                                         href: contactMessageListUrl,
                                         target: '_blank',
@@ -4574,7 +4676,51 @@
                                         class: 'mj-btn mj-btn--ghost mj-btn--small',
                                     }, getString(strings, 'viewAllMessages', 'Voir tous les messages')),
                                 ]),
-                                h('div', { class: 'mj-regmgr-member-detail__messages' }, memberMessages.map(function (message) {
+                            ]),
+                            newMessageOpen && onCreateMessage && h('div', { class: 'mj-regmgr-member-detail__add-message' }, [
+                                h('div', { class: 'mj-regmgr-member-detail__add-message-field' }, [
+                                    h('label', { class: 'mj-regmgr-member-detail__add-message-label' }, 'Sujet'),
+                                    h('input', {
+                                        type: 'text',
+                                        class: 'mj-regmgr-input',
+                                        placeholder: 'Objet du message...',
+                                        value: newMessageSubject,
+                                        onInput: function (e) { setNewMessageSubject(e.target.value); },
+                                        disabled: newMessageSaving,
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-member-detail__add-message-field' }, [
+                                    h('label', { class: 'mj-regmgr-member-detail__add-message-label' }, 'Message'),
+                                    h('textarea', {
+                                        class: 'mj-regmgr-textarea',
+                                        placeholder: 'Rédigez votre message...',
+                                        value: newMessageBody,
+                                        onInput: function (e) { setNewMessageBody(e.target.value); },
+                                        rows: 4,
+                                        disabled: newMessageSaving,
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-member-detail__add-message-actions' }, [
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                        onClick: function () {
+                                            setNewMessageOpen(false);
+                                            setNewMessageSubject('');
+                                            setNewMessageBody('');
+                                        },
+                                        disabled: newMessageSaving,
+                                    }, 'Annuler'),
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                                        onClick: handleCreateMessage,
+                                        disabled: newMessageSaving || !newMessageSubject.trim() || !newMessageBody.trim(),
+                                    }, newMessageSaving ? 'Envoi...' : 'Envoyer'),
+                                ]),
+                            ]),
+                            memberMessages.length > 0
+                                ? h('div', { class: 'mj-regmgr-member-detail__messages' }, memberMessages.map(function (message) {
                                     var status = message.status || '';
                                     return h('article', { key: message.id, class: 'mj-regmgr-member-message' }, [
                                         h('header', { class: 'mj-regmgr-member-message__header' }, [
@@ -4600,14 +4746,8 @@
                                                 ]);
                                             })),
                                         ]),
-                                        (contactMessageViewUrl || onDeleteMessage) && h('div', { class: 'mj-regmgr-member-message__actions' }, [
-                                            contactMessageViewUrl && h('a', {
-                                                href: contactMessageViewUrl + message.id,
-                                                class: 'mj-btn mj-btn--secondary mj-btn--small',
-                                                target: '_blank',
-                                                rel: 'noreferrer',
-                                            }, getString(strings, 'viewMessage', 'Ouvrir le message')),
-                                            onDeleteMessage && h('button', {
+                                        onDeleteMessage && h('div', { class: 'mj-regmgr-member-message__actions' }, [
+                                            h('button', {
                                                 type: 'button',
                                                 class: 'mj-btn mj-btn--ghost mj-btn--danger mj-btn--small',
                                                 onClick: function () { handleDeleteMessage(message); },
@@ -4615,12 +4755,9 @@
                                             }, messageDeletingId === message.id ? 'Suppression...' : 'Supprimer'),
                                         ]),
                                     ]);
-                                })),
-                            ])
-                            : h('div', { class: 'mj-regmgr-member-detail__section' }, [
-                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberMessages', 'Messages reçus')),
-                                h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoMessages', 'Aucun échange trouvé pour ce membre.')),
-                            ]),
+                                }))
+                                : !newMessageOpen && h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoMessages', 'Aucun échange trouvé pour ce membre.')),
+                        ]),
                     ]),
                     activeTab === 'notes' && h(Fragment, null, [
                         h('div', { class: 'mj-regmgr-member-detail__section' }, [
@@ -5405,22 +5542,6 @@
                             })
                         )
                         : h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'guardianChildEmpty', 'Aucun enfant rattaché pour le moment.')),
-                ]),
-            ]),
-
-            // Bouton admin
-            config.adminMemberUrl && h('div', { class: 'mj-regmgr-member-detail__footer' }, [
-                h('a', {
-                    href: config.adminMemberUrl + member.id,
-                    target: '_blank',
-                    class: 'mj-btn mj-btn--secondary',
-                }, [
-                    h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                        h('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
-                        h('polyline', { points: '15 3 21 3 21 9' }),
-                        h('line', { x1: 10, y1: 14, x2: 21, y2: 3 }),
-                    ]),
-                    'Voir dans l\'admin',
                 ]),
             ]),
 

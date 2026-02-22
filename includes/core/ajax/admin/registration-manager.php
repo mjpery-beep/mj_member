@@ -16,6 +16,7 @@ use Mj\Member\Classes\Crud\MjEventLocationLinks;
 use Mj\Member\Classes\Crud\MjEventPhotos;
 use Mj\Member\Classes\Crud\MjContactMessages;
 use Mj\Member\Classes\Crud\MjIdeas;
+use Mj\Member\Classes\Crud\MjIdeaVotes;
 use Mj\Member\Classes\Crud\MjTestimonials;
 use Mj\Member\Classes\Crud\MjTestimonialComments;
 use Mj\Member\Classes\Crud\MjTestimonialReactions;
@@ -89,6 +90,7 @@ add_action('wp_ajax_mj_regmgr_delete_member_idea', 'mj_regmgr_delete_member_idea
 add_action('wp_ajax_mj_regmgr_update_member_photo', 'mj_regmgr_update_member_photo');
 add_action('wp_ajax_mj_regmgr_delete_member_photo', 'mj_regmgr_delete_member_photo');
 add_action('wp_ajax_mj_regmgr_capture_member_photo', 'mj_regmgr_capture_member_photo');
+add_action('wp_ajax_mj_regmgr_create_member_message', 'mj_regmgr_create_member_message');
 add_action('wp_ajax_mj_regmgr_delete_member_message', 'mj_regmgr_delete_member_message');
 add_action('wp_ajax_mj_regmgr_reset_member_password', 'mj_regmgr_reset_member_password');
 add_action('wp_ajax_mj_regmgr_delete_member', 'mj_regmgr_delete_member');
@@ -5213,11 +5215,19 @@ function mj_regmgr_get_members() {
     $order = 'ASC';
     switch ($sort) {
         case 'registration_date':
-            $orderby = 'created_at';
+            $orderby = 'date_inscription';
             $order = 'DESC';
             break;
         case 'membership_date':
             $orderby = 'date_last_payement';
+            $order = 'DESC';
+            break;
+        case 'last_login':
+            $orderby = 'last_login_at';
+            $order = 'DESC';
+            break;
+        case 'last_activity':
+            $orderby = 'last_activity_at';
             $order = 'DESC';
             break;
         case 'name':
@@ -5310,6 +5320,8 @@ function mj_regmgr_get_members() {
             'coinsTotal' => isset($member->coins_total) ? (int) $member->coins_total : 0,
             'createdAt' => isset($member->date_inscription) ? $member->date_inscription : null,
             'wpUserId' => !empty($member->wp_user_id) ? (int) $member->wp_user_id : null,
+            'lastLoginAt' => !empty($member->last_login_at) ? $member->last_login_at : null,
+            'lastActivityAt' => !empty($member->last_activity_at) ? $member->last_activity_at : null,
         );
     }
 
@@ -5866,15 +5878,35 @@ function mj_regmgr_get_member_details() {
     ));
 
     if (!empty($ideas)) {
+        // Collect idea IDs so we can batch-fetch voters
+        $idea_ids = array();
+        foreach ($ideas as $idea) {
+            if (!empty($idea['id'])) {
+                $idea_ids[] = (int) $idea['id'];
+            }
+        }
+        $voters_map = !empty($idea_ids) ? MjIdeaVotes::get_voters_for_ideas($idea_ids) : array();
+
         $member['ideas'] = array();
         foreach ($ideas as $idea) {
+            $idea_id = isset($idea['id']) ? (int) $idea['id'] : 0;
+            $voters_raw = isset($voters_map[$idea_id]) ? $voters_map[$idea_id] : array();
+            $voters = array();
+            foreach ($voters_raw as $voter) {
+                $voters[] = array(
+                    'id'   => (int) $voter['id'],
+                    'name' => trim($voter['first_name'] . ' ' . $voter['last_name']),
+                );
+            }
+
             $member['ideas'][] = array(
-                'id' => isset($idea['id']) ? (int) $idea['id'] : 0,
+                'id' => $idea_id,
                 'title' => isset($idea['title']) ? (string) $idea['title'] : '',
                 'content' => isset($idea['content']) ? (string) $idea['content'] : '',
                 'status' => isset($idea['status']) ? (string) $idea['status'] : '',
                 'voteCount' => isset($idea['vote_count']) ? (int) $idea['vote_count'] : 0,
                 'createdAt' => isset($idea['created_at']) ? (string) $idea['created_at'] : '',
+                'voters' => $voters,
             );
         }
     }
@@ -7189,6 +7221,67 @@ function mj_regmgr_delete_member_photo() {
 /**
  * Delete a member contact message
  */
+function mj_regmgr_create_member_message() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) {
+        return;
+    }
+
+    $member_id = isset($_POST['memberId']) ? (int) $_POST['memberId'] : 0;
+    $subject   = isset($_POST['subject']) ? sanitize_text_field(wp_unslash($_POST['subject'])) : '';
+    $message   = isset($_POST['message']) ? wp_kses_post(wp_unslash($_POST['message'])) : '';
+
+    if ($member_id <= 0) {
+        wp_send_json_error(array('message' => __('Identifiant de membre invalide.', 'mj-member')));
+        return;
+    }
+
+    if ($subject === '' || $message === '') {
+        wp_send_json_error(array('message' => __('Le sujet et le message sont requis.', 'mj-member')));
+        return;
+    }
+
+    $member = MjMembers::getById($member_id);
+    if (!$member) {
+        wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
+        return;
+    }
+
+    $current_user = wp_get_current_user();
+    $sender_name  = $current_user->display_name ?: $current_user->user_login;
+    $sender_email = $current_user->user_email;
+
+    $result = MjContactMessages::create(array(
+        'sender_name'  => $sender_name,
+        'sender_email' => $sender_email,
+        'subject'      => $subject,
+        'message'      => $message,
+        'target_type'  => MjContactMessages::TARGET_MEMBER,
+        'target_reference' => $member_id,
+        'target_label' => trim(($member->first_name ?? '') . ' ' . ($member->last_name ?? '')),
+        'status'       => MjContactMessages::STATUS_NEW,
+        'is_read'      => 0,
+        'assigned_to'  => 0,
+        'meta'         => array('member_id' => $member_id),
+        'user_id'      => $current_user->ID,
+    ));
+
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+        return;
+    }
+
+    MjContactMessages::record_activity((int) $result, 'created', array(
+        'note'    => __('Message créé depuis le gestionnaire.', 'mj-member'),
+        'user_id' => $current_user->ID,
+    ));
+
+    wp_send_json_success(array(
+        'message'   => __('Message créé avec succès.', 'mj-member'),
+        'messageId' => (int) $result,
+    ));
+}
+
 function mj_regmgr_delete_member_message() {
     $auth = mj_regmgr_verify_request();
     if (!$auth) {

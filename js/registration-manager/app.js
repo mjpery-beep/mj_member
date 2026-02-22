@@ -5479,6 +5479,19 @@
                 });
         }, [api, showSuccess, showError, loadMemberDetails]);
 
+        var handleCreateMemberMessage = useCallback(function (memberId, subject, message) {
+            return api.createMemberMessage(memberId, subject, message)
+                .then(function (result) {
+                    showSuccess(result.message || 'Message créé');
+                    loadMemberDetails(memberId);
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err.message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails]);
+
         var handleDeleteMemberMessage = useCallback(function (memberId, messageId) {
             return api.deleteMemberMessage(messageId, memberId)
                 .then(function (result) {
@@ -7310,6 +7323,7 @@
                             onOpenMember: handleViewMemberFromRegistration,
                             pendingEditRequest: pendingMemberEdit,
                             onPendingEditHandled: handleConsumePendingMemberEdit,
+                            onCreateMessage: handleCreateMemberMessage,
                             onDeleteMessage: handleDeleteMemberMessage,
                             onMemberUpdated: function (updatedMember) {
                                 // Recharger les détails du membre pour voir les mises à jour

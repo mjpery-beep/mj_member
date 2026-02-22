@@ -2225,3 +2225,83 @@ if (!function_exists('mj_member_maybe_override_card_template')) {
 
     add_filter('template_include', 'mj_member_maybe_override_card_template', 80);
 }
+
+/**
+ * Track the last login date of MJ members.
+ *
+ * Updates the `last_login_at` column in the mj_members table each time a
+ * WordPress user who is linked to a member record logs in.
+ */
+if (!function_exists('mj_member_track_last_login')) {
+    function mj_member_track_last_login($user_login, $user) {
+        if (!class_exists('Mj\\Member\\Classes\\Crud\\MjMembers')) {
+            return;
+        }
+
+        $member = \Mj\Member\Classes\Crud\MjMembers::getByWpUserId((int) $user->ID);
+        if (!$member || empty($member->id)) {
+            return;
+        }
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'mj_members';
+        $wpdb->update(
+            $table,
+            array('last_login_at' => current_time('mysql')),
+            array('id' => (int) $member->id),
+            array('%s'),
+            array('%d')
+        );
+    }
+
+    add_action('wp_login', 'mj_member_track_last_login', 10, 2);
+}
+
+/**
+ * Track the last activity date of MJ members.
+ *
+ * Updates the `last_activity_at` column in the mj_members table on every
+ * authenticated page load. Throttled to once per minute to avoid excessive
+ * database writes.
+ */
+if (!function_exists('mj_member_track_last_activity')) {
+    function mj_member_track_last_activity() {
+        if (!is_user_logged_in()) {
+            return;
+        }
+
+        if (!class_exists('Mj\\Member\\Classes\\Crud\\MjMembers')) {
+            return;
+        }
+
+        $user_id = get_current_user_id();
+        if ($user_id <= 0) {
+            return;
+        }
+
+        // Throttle: update at most once per minute per user.
+        $cache_key = 'mj_last_activity_' . $user_id;
+        if (wp_cache_get($cache_key, 'mj_member')) {
+            return;
+        }
+
+        $member = \Mj\Member\Classes\Crud\MjMembers::getByWpUserId($user_id);
+        if (!$member || empty($member->id)) {
+            return;
+        }
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'mj_members';
+        $wpdb->update(
+            $table,
+            array('last_activity_at' => current_time('mysql')),
+            array('id' => (int) $member->id),
+            array('%s'),
+            array('%d')
+        );
+
+        wp_cache_set($cache_key, true, 'mj_member', 60);
+    }
+
+    add_action('init', 'mj_member_track_last_activity', 99);
+}
