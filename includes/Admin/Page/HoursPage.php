@@ -165,6 +165,8 @@ final class HoursPage
                 'deleteAction' => 'mj_member_hour_encode_delete',
                 'renameProjectAction' => 'mj_member_hour_encode_rename_project',
                 'renameTaskAction' => 'mj_member_hour_encode_rename_task',
+                'toggleFavTaskAction' => 'mj_member_hour_encode_toggle_fav_task',
+                'updateProjectColorAction' => 'mj_member_hour_encode_update_project_color',
                 'nonce' => $nonce,
                 'renameNonce' => $nonce,
                 'staticParams' => array(),

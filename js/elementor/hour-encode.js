@@ -1497,6 +1497,7 @@
                         var taskSuggestions = Array.isArray(props.taskSuggestions) ? props.taskSuggestions : [];
                         var projectSuggestions = Array.isArray(props.projectSuggestions) ? props.projectSuggestions : [];
                         var allProjectOptions = Array.isArray(props.allProjectOptions) ? props.allProjectOptions : projectSuggestions;
+                        var projectColorMap = props.projectColorMap || Object.create(null);
                         var taskSuggestionsMessage = isString(props.taskSuggestionsMessage) ? props.taskSuggestionsMessage : '';
                         var projectQuery = normalizeSearchValue(selection.formProject);
                         var projectPool = projectQuery === '' ? projectSuggestions : allProjectOptions;
@@ -1536,6 +1537,7 @@
                                     }
                                 }),
                                 displayedProjectSuggestions.length > 0 ? h('div', { className: 'mj-hour-encode-app__selection-suggestions' }, displayedProjectSuggestions.map(function(project) {
+                                    var chipColor = projectColorMap[project] || '';
                                     return h('button', {
                                         key: project,
                                         type: 'button',
@@ -1543,7 +1545,13 @@
                                         onClick: function() {
                                             props.onChange('formProject', project);
                                         }
-                                    }, project);
+                                    }, [
+                                        chipColor ? h('span', {
+                                            className: 'mj-hour-encode-app__chip-color-dot',
+                                            style: { backgroundColor: chipColor }
+                                        }) : null,
+                                        project
+                                    ]);
                                 })) : null
                             ]),
                             h('div', { className: 'mj-hour-encode-app__field' }, [
@@ -3337,6 +3345,7 @@
                                 taskSuggestionsMessage: props.taskSuggestionsMessage,
                                 projectSuggestions: props.projectSuggestions,
                                 allProjectOptions: props.allProjectOptions,
+                                projectColorMap: props.projectColorMap,
                                 onChange: props.onSelectionChange,
                                 onSubmit: props.onSelectionSubmit,
                                 onCancel: props.onSelectionCancel,
@@ -4694,10 +4703,6 @@
                             return computeTopLabels(entries, 'task', knownTasks, 6);
                         }, [entries, knownTasks]);
 
-                        var projectSelectionSuggestions = hooks.useMemo(function() {
-                            return computeTopLabels(entries, 'project', projects, 4);
-                        }, [entries, projects]);
-
                         var projectSummaryMap = hooks.useMemo(function() {
                             return computeProjectSummaries(entries);
                         }, [entries]);
@@ -5037,6 +5042,42 @@
 
                             return ordered;
                         }, [combinedProjectSummaries, projects, config.labels, weekStart]);
+
+                        var projectColorMap = hooks.useMemo(function() {
+                            var map = Object.create(null);
+                            projectSummaryDetails.forEach(function(item) {
+                                if (item.value && item.color) {
+                                    map[item.value] = item.color;
+                                }
+                            });
+                            return map;
+                        }, [projectSummaryDetails]);
+
+                        var projectSelectionSuggestions = hooks.useMemo(function() {
+                            var withHours = projectSummaryDetails.filter(function(item) {
+                                return item.lifetimeMinutes > 0;
+                            });
+                            withHours.sort(function(a, b) {
+                                return b.lifetimeMinutes - a.lifetimeMinutes;
+                            });
+                            var result = [];
+                            withHours.forEach(function(item) {
+                                if (result.length < 4 && item.value) {
+                                    result.push(item.value);
+                                }
+                            });
+                            return result;
+                        }, [projectSummaryDetails]);
+
+                        var allProjectOptionsFromEntries = hooks.useMemo(function() {
+                            var result = [];
+                            projectSummaryDetails.forEach(function(item) {
+                                if (item.lifetimeMinutes > 0 && item.value) {
+                                    result.push(item.value);
+                                }
+                            });
+                            return result;
+                        }, [projectSummaryDetails]);
 
                         // Calculer le total des heures contractuelles de la semaine
                         var weekContractualMinutes = hooks.useMemo(function() {
@@ -5567,6 +5608,9 @@
                                     }
                                     return normalizedTotals;
                                 });
+                            }
+                            if (payload.favoriteTasks && typeof payload.favoriteTasks === 'object' && !Array.isArray(payload.favoriteTasks)) {
+                                setFavorites(payload.favoriteTasks);
                             }
                         }
 
@@ -7298,7 +7342,8 @@
                                     taskSuggestions: selectionTaskContext.suggestions,
                                     taskSuggestionsMessage: selectionTaskContext.message,
                                     projectSuggestions: projectSelectionSuggestions,
-                                    allProjectOptions: projects,
+                                    allProjectOptions: allProjectOptionsFromEntries,
+                                    projectColorMap: projectColorMap,
                                     calendarModel: null,
                                     onCalendarMonthNavigate: handleCalendarMonthNavigate,
                                     onCalendarWeekSelect: handleCalendarWeekSelect,

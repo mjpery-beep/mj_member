@@ -1718,8 +1718,19 @@
 }
 
 .mj-hour-encode-app__chip--inline {
+    display: inline-flex;
+    align-items: center;
     padding: 6px 10px;
     font-size: 12px;
+}
+
+.mj-hour-encode-app__chip-color-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    flex-shrink: 0;
 }
 
 .mj-hour-encode-app__selection-actions {

@@ -214,7 +214,7 @@ function mj_member_ajax_hour_encode_week() {
         )
     );
 
-    wp_send_json_success(mj_member_hour_encode_build_week_response($weekStart, $weekEnd, $occurrences, $entries, $projects, $projectCatalog, $projectTotals));
+    wp_send_json_success(mj_member_hour_encode_build_week_response($weekStart, $weekEnd, $occurrences, $entries, $projects, $projectCatalog, $projectTotals, $memberId));
 }
 
 function mj_member_ajax_hour_encode_create() {
@@ -592,6 +592,21 @@ function mj_member_ajax_hour_encode_toggle_fav_task() {
         wp_send_json_error(array('message' => __('Utilisateur non authentifié.', 'mj-member')), 401);
     }
 
+    // Résoudre le user ID cible : si un member_id est passé (contexte admin),
+    // on utilise le wp_user_id de ce membre au lieu de l'admin connecté.
+    $targetUserId = $userId;
+    $overrideMemberId = isset($_POST['member_id']) ? (int) sanitize_text_field(wp_unslash((string) $_POST['member_id'])) : 0;
+    if ($overrideMemberId > 0) {
+        if (!mj_member_hour_encode_user_can_manage_others()) {
+            wp_send_json_error(array('message' => __('Vous ne pouvez pas gérer les favoris de ce membre.', 'mj-member')), 403);
+        }
+        $overrideMember = MjMembers::getById($overrideMemberId);
+        if (!is_object($overrideMember) || empty($overrideMember->wp_user_id)) {
+            wp_send_json_error(array('message' => __('Membre cible introuvable.', 'mj-member')), 404);
+        }
+        $targetUserId = (int) $overrideMember->wp_user_id;
+    }
+
     $projectKey = isset($_POST['project_key']) ? sanitize_text_field(wp_unslash((string) $_POST['project_key'])) : '';
     $taskName   = isset($_POST['task_name']) ? sanitize_text_field(wp_unslash((string) $_POST['task_name'])) : '';
 
@@ -600,7 +615,7 @@ function mj_member_ajax_hour_encode_toggle_fav_task() {
     }
 
     $metaKey = 'mj_member_fav_tasks';
-    $favorites = get_user_meta($userId, $metaKey, true);
+    $favorites = get_user_meta($targetUserId, $metaKey, true);
     if (!is_array($favorites)) {
         $favorites = array();
     }
@@ -619,7 +634,7 @@ function mj_member_ajax_hour_encode_toggle_fav_task() {
         $isFavorite = true;
     }
 
-    update_user_meta($userId, $metaKey, $favorites);
+    update_user_meta($targetUserId, $metaKey, $favorites);
 
     wp_send_json_success(array(
         'favorites'  => $favorites,
@@ -1643,8 +1658,8 @@ function mj_member_hour_encode_collect_project_totals($memberId, DateTimeZone $t
     return array_values($projects);
 }
 
-function mj_member_hour_encode_build_week_response(DateTimeImmutable $weekStart, DateTimeImmutable $weekEnd, array $events, array $entries, array $projects, array $projectCatalog = array(), array $projectTotals = array()) {
-    return array(
+function mj_member_hour_encode_build_week_response(DateTimeImmutable $weekStart, DateTimeImmutable $weekEnd, array $events, array $entries, array $projects, array $projectCatalog = array(), array $projectTotals = array(), int $memberId = 0) {
+    $response = array(
         'week' => array(
             'start' => $weekStart->format('Y-m-d'),
             'end' => $weekEnd->format('Y-m-d'),
@@ -1655,6 +1670,18 @@ function mj_member_hour_encode_build_week_response(DateTimeImmutable $weekStart,
         'projectCatalog' => $projectCatalog,
         'projectTotals' => $projectTotals,
     );
+
+    // Include the target member's favorite tasks so the UI always syncs
+    if ($memberId > 0) {
+        $targetMember = MjMembers::getById($memberId);
+        $targetWpUserId = ($targetMember && !empty($targetMember->wp_user_id)) ? (int) $targetMember->wp_user_id : 0;
+        if ($targetWpUserId > 0) {
+            $favorites = get_user_meta($targetWpUserId, 'mj_member_fav_tasks', true);
+            $response['favoriteTasks'] = is_array($favorites) && !empty($favorites) ? $favorites : new stdClass();
+        }
+    }
+
+    return $response;
 }
 
 function mj_member_hour_encode_validate_day_iso($value) {
