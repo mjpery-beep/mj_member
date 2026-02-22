@@ -8108,7 +8108,17 @@ function mj_regmgr_save_member_dynfields() {
         wp_send_json_error(array('message' => __('ID du membre manquant.', 'mj-member')));
     }
 
-    $raw_values = isset($_POST['values']) && is_array($_POST['values']) ? $_POST['values'] : array();
+    $raw_values = array();
+    if (isset($_POST['values'])) {
+        if (is_array($_POST['values'])) {
+            $raw_values = $_POST['values'];
+        } elseif (is_string($_POST['values'])) {
+            $decoded = json_decode(wp_unslash($_POST['values']), true);
+            if (is_array($decoded)) {
+                $raw_values = $decoded;
+            }
+        }
+    }
     $fields_map = array();
     foreach (\Mj\Member\Classes\Crud\MjDynamicFields::getAll() as $df) {
         $fields_map[(int) $df->id] = $df;

@@ -9,6 +9,7 @@ use Mj\Member\Classes\Crud\MjEventLocations;
 use Mj\Member\Classes\Crud\MjEventLocationLinks;
 use Mj\Member\Classes\Crud\MjEventOccurrences;
 use Mj\Member\Classes\Crud\MjEventRegistrations;
+use Mj\Member\Classes\Crud\MjEventPhotos;
 use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\MjEventSchedule;
@@ -1869,14 +1870,74 @@ final class EventPageModel
     {
         $eventId = isset($eventArray['id']) ? (int) $eventArray['id'] : 0;
 
-        // Pour l'instant, la galerie de souvenirs n'est pas encore implémentée
-        // Désactivé pour éviter confusion utilisateur
+        if ($eventId <= 0) {
+            return array(
+                'has_photos' => false,
+                'can_upload' => false,
+                'items' => array(),
+                'total' => 0,
+                'pending_count' => 0,
+            );
+        }
+
+        // Récupérer les photos approuvées pour cet événement
+        $approvedPhotos = MjEventPhotos::get_for_event($eventId, array(
+            'status' => MjEventPhotos::STATUS_APPROVED,
+        ));
+
+        // Construire les items pour le template
+        $items = array();
+        foreach ($approvedPhotos as $photo) {
+            $attachmentId = isset($photo->attachment_id) ? (int) $photo->attachment_id : 0;
+            if ($attachmentId <= 0) {
+                continue;
+            }
+
+            $thumb = wp_get_attachment_image_url($attachmentId, 'medium');
+            $full = wp_get_attachment_image_url($attachmentId, 'full');
+            if (!$thumb && !$full) {
+                continue;
+            }
+
+            $items[] = array(
+                'id' => isset($photo->id) ? (int) $photo->id : 0,
+                'attachment_id' => $attachmentId,
+                'thumb' => $thumb ?: $full,
+                'full' => $full ?: $thumb,
+                'url' => $full ?: $thumb,
+                'caption' => isset($photo->caption) ? (string) $photo->caption : '',
+            );
+        }
+
+        $total = count($items);
+        $hasPhotos = $total > 0;
+
+        // Déterminer si l'utilisateur peut uploader et compter ses photos en attente
+        $canUpload = false;
+        $pendingCount = 0;
+
+        $currentMember = is_user_logged_in() && function_exists('mj_member_get_current_member')
+            ? mj_member_get_current_member()
+            : null;
+
+        if ($currentMember) {
+            $memberId = isset($currentMember->id) ? (int) $currentMember->id : 0;
+            if ($memberId > 0) {
+                $canUpload = true;
+                $pendingCount = MjEventPhotos::count_for_member(
+                    $eventId,
+                    $memberId,
+                    MjEventPhotos::STATUS_PENDING
+                );
+            }
+        }
+
         return array(
-            'has_photos' => false,
-            'can_upload' => false, // TODO: activer quand la fonctionnalité sera prête
-            'items' => array(),
-            'total' => 0,
-            'pending_count' => 0,
+            'has_photos' => $hasPhotos,
+            'can_upload' => $canUpload,
+            'items' => $items,
+            'total' => $total,
+            'pending_count' => $pendingCount,
         );
     }
 

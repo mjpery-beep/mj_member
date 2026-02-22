@@ -8,6 +8,10 @@ if (!defined('ABSPATH')) {
 
 AssetsManager::requirePackage('event-photos');
 
+if (!headers_sent()) {
+    nocache_headers();
+}
+
 $template_data = isset($template_data) && is_array($template_data) ? $template_data : array();
 
 $title = isset($template_data['title']) ? (string) $template_data['title'] : '';

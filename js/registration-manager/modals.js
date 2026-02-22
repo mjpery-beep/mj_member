@@ -1267,6 +1267,14 @@
         var copyFeedback = _copyFeedback[0];
         var setCopyFeedback = _copyFeedback[1];
 
+        var _roleChanging = useState(false);
+        var roleChanging = _roleChanging[0];
+        var setRoleChanging = _roleChanging[1];
+
+        var _roleChangeMessage = useState('');
+        var roleChangeMessage = _roleChangeMessage[0];
+        var setRoleChangeMessage = _roleChangeMessage[1];
+
         var _resetting = useState(false);
         var resetting = _resetting[0];
         var setResetting = _resetting[1];
@@ -1301,6 +1309,9 @@
         var resetEmailLabel = getString(strings, 'memberAccountResetEmail', 'Envoyer un email de réinitialisation');
         var resetEmailSuccess = getString(strings, 'memberAccountResetEmailSuccess', 'Email de réinitialisation envoyé.');
         var noRolesMessage = getString(strings, 'memberAccountNoRoles', 'Aucun rôle WordPress n\'est disponible pour votre compte.');
+        var changeRoleLabel = getString(strings, 'memberAccountChangeRole', 'Modifier le rôle');
+        var changeRoleSuccess = getString(strings, 'memberAccountChangeRoleSuccess', 'Le rôle WordPress a été modifié avec succès.');
+        var currentRolePrefix = getString(strings, 'memberAccountCurrentRole', 'Rôle actuel');
 
         var memberName = member ? [(member.firstName || ''), (member.lastName || '')].join(' ').trim() : '';
         var claimLink = member && typeof member.cardClaimUrl === 'string' ? member.cardClaimUrl : '';
@@ -1330,6 +1341,8 @@
             setCopyFeedback('');
             setResetting(false);
             setLinkCopyFeedback('');
+            setRoleChanging(false);
+            setRoleChangeMessage('');
         }, [isOpen, member ? member.id : null, roleKeysKey]);
 
         var generatePassword = useCallback(function () {
@@ -1410,6 +1423,35 @@
                 setLinkCopyFeedback(copyLinkSuccess);
             }
         }, [claimLink, copyLinkSuccess]);
+
+        var handleChangeRole = useCallback(function () {
+            if (roleChanging || !member || !member.id || typeof onSubmit !== 'function') {
+                return;
+            }
+
+            if (roleKeys.length > 0 && !role) {
+                setError(noRolesMessage);
+                return;
+            }
+
+            setRoleChanging(true);
+            setError('');
+            setRoleChangeMessage('');
+
+            onSubmit(member.id, {
+                role: role,
+                manualLogin: '',
+                manualPassword: '',
+            })
+                .then(function (result) {
+                    setRoleChangeMessage(result && result.message ? result.message : changeRoleSuccess);
+                    setRoleChanging(false);
+                })
+                .catch(function (err) {
+                    setRoleChanging(false);
+                    setError(err && err.message ? err.message : 'Erreur lors du changement de rôle.');
+                });
+        }, [roleChanging, member, onSubmit, role, noRolesMessage, changeRoleSuccess]);
 
         var handleSubmit = useCallback(function (event) {
             event.preventDefault();
@@ -1534,18 +1576,28 @@
 
                 roleKeys.length > 0 && h('div', { class: 'mj-regmgr-form__group' }, [
                     h('label', { for: 'member-account-role' }, roleLabel + ' *'),
+                    isLinked && member && member.accountRoleLabel && h('p', { class: 'mj-regmgr-modal__description' }, currentRolePrefix + ' : ' + member.accountRoleLabel),
                     h('select', {
                         id: 'member-account-role',
                         class: 'mj-regmgr-select',
                         value: role,
-                        onChange: function (e) { setRole(e.target.value); },
-                        disabled: submitting,
+                        onChange: function (e) { setRole(e.target.value); setRoleChangeMessage(''); },
+                        disabled: submitting || roleChanging,
                     }, [
                         role === '' && h('option', { value: '' }, rolePlaceholder),
                         roleKeys.map(function (key) {
                             return h('option', { key: key, value: key }, rolesMap[key]);
                         }),
                     ]),
+                    isLinked && h('div', { class: 'mj-regmgr-modal__actions' }, [
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--secondary mj-btn--small',
+                            onClick: handleChangeRole,
+                            disabled: submitting || roleChanging || (roleKeys.length > 0 && !role),
+                        }, roleChanging ? getString(strings, 'loading', 'Chargement...') : changeRoleLabel),
+                    ]),
+                    roleChangeMessage && h('p', { class: 'mj-regmgr-modal__description' }, roleChangeMessage),
                 ]),
 
                 h('div', { class: 'mj-regmgr-form__group' }, [
