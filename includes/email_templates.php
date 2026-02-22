@@ -100,7 +100,7 @@ function mj_email_templates_page() {
                     <td><?php echo esc_html($t->slug); ?></td>
                     <td><?php echo esc_html($t->subject); ?></td>
                     <td>
-                        <a class="button" href="<?php echo esc_url(add_query_arg(array('page'=>'mj_email_templates','action'=>'edit','id'=>$t->id))); ?>">�?diter</a>
+                        <a class="button" href="<?php echo esc_url(add_query_arg(array('page'=>'mj_email_templates','action'=>'edit','id'=>$t->id))); ?>">Editer</a>
                         <a class="button button-danger" href="<?php echo esc_url(wp_nonce_url(add_query_arg(array('page'=>'mj_email_templates','action'=>'delete','id'=>$t->id)), 'mj_delete_template')); ?>" onclick="return confirm('Supprimer ?')">Supprimer</a>
                     </td>
                 </tr>
@@ -110,7 +110,7 @@ function mj_email_templates_page() {
 
         <?php if ($editing || $adding): ?>
             <div style="margin-top:30px; max-width:900px;">
-                <h2><?php echo $editing ? '�?diter' : 'Nouveau'; ?> Template</h2>
+                <h2><?php echo $editing ? 'Editer' : 'Nouveau'; ?> Template</h2>
                 <form method="post">
                     <?php wp_nonce_field('mj_save_template_nonce'); ?>
                     <input type="hidden" name="template_id" value="<?php echo $editing ? esc_attr($template->id) : ''; ?>">
