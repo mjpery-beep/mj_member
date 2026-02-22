@@ -918,7 +918,7 @@ if (!function_exists('mj_member_notification_on_idea_voted')) {
         // Notification au propriétaire de l'idée
         $notification_data = array(
             'type' => MjNotificationTypes::IDEA_VOTED,
-            'title' => __('❤️ Quelqu\'un aime ton idée !', 'mj-member'),
+            'title' => __('Quelqu\'un aime ton idée !', 'mj-member'),
             'excerpt' => sprintf(__('%s a voté pour ton idée « %s ».', 'mj-member'), $voter_name, $idea_title),
             'url' => $ideas_url,
             'context' => 'idea_box',
@@ -1174,7 +1174,7 @@ if (!function_exists('mj_member_notification_on_avatar_applied')) {
         // Notification au membre
         $notification_data = array(
             'type' => MjNotificationTypes::AVATAR_APPLIED,
-            'title' => __('🎨 Nouvel avatar !', 'mj-member'),
+            'title' => __('Nouvel avatar !', 'mj-member'),
             'excerpt' => __('Ton nouveau avatar personnalisé a été appliqué à ton profil.', 'mj-member'),
             'url' => '',
             'context' => 'avatar',
@@ -1260,7 +1260,7 @@ if (!function_exists('mj_member_notification_on_todo_assigned')) {
         // Notification aux membres assignés
         $notification_data = array(
             'type' => MjNotificationTypes::TODO_ASSIGNED,
-            'title' => __('📋 Nouvelle tâche assignée', 'mj-member'),
+            'title' => __('Nouvelle tâche assignée', 'mj-member'),
             'excerpt' => $assigner_name !== ''
                 ? sprintf(__('%s t\'a assigné la tâche « %s ».', 'mj-member'), $assigner_name, $task_title)
                 : sprintf(__('Tu as été assigné à la tâche « %s ».', 'mj-member'), $task_title),
@@ -1355,7 +1355,7 @@ if (!function_exists('mj_member_notification_on_todo_note_added')) {
 
         $notification_data = array(
             'type' => MjNotificationTypes::TODO_NOTE_ADDED,
-            'title' => __('📝 Note ajoutée', 'mj-member'),
+            'title' => __('Note ajoutée', 'mj-member'),
             'excerpt' => sprintf(__('%s a ajouté une note sur la tâche « %s ».', 'mj-member'), $author_name, $task_title),
             'url' => $todo_url,
             'context' => 'todos',
@@ -1676,7 +1676,7 @@ if (!function_exists('mj_member_notification_on_testimonial_approved')) {
 
         $notification_data = array(
             'type' => MjNotificationTypes::TESTIMONIAL_APPROVED,
-            'title' => __('✔ Ton témoignage a été publié !', 'mj-member'),
+            'title' => __('Ton témoignage a été publié !', 'mj-member'),
             'excerpt' => __('Ton témoignage a été approuvé et est maintenant visible par tous les membres.', 'mj-member'),
             'url' => home_url('/mon-compte/temoignages/?section=testimonials&post=' . $testimonial_id),
             'context' => 'testimonials',
@@ -1826,7 +1826,7 @@ if (!function_exists('mj_member_notification_on_testimonial_comment')) {
 
         $notification_data = array(
             'type' => MjNotificationTypes::TESTIMONIAL_COMMENT,
-            'title' => sprintf(__('💬 %s a commenté ton témoignage', 'mj-member'), $commenter_name),
+            'title' => sprintf(__('%s a commenté ton témoignage', 'mj-member'), $commenter_name),
             'excerpt' => __('Clique pour voir le commentaire.', 'mj-member'),
             'url' => home_url('/mon-compte/temoignages/?section=testimonials&post=' . $testimonial_id),
             'context' => 'testimonials',

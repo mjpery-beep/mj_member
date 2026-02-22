@@ -236,7 +236,7 @@
                 // Gamification
                 'trophy_earned': '🏆',
                 'badge_earned': '🎖️',
-                'criterion_earned': '✓',
+                'criterion_earned': '✅',
                 'level_up': '🚀',
 
                 // Avatar

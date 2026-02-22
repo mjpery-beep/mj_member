@@ -163,6 +163,11 @@ class MjDynamicFields extends MjTools
             $slug = sanitize_title($data['title']);
             $slug = str_replace('-', '_', $slug);
         }
+        // Truncate slug to fit the varchar(120) column.
+        if (mb_strlen($slug) > 120) {
+            $slug = mb_substr($slug, 0, 120);
+            $slug = rtrim($slug, '_');
+        }
 
         $options_json = '';
         if (isset($data['options_list']) && is_array($data['options_list'])) {
@@ -187,7 +192,7 @@ class MjDynamicFields extends MjTools
             'youth_only'           => !empty($data['youth_only']) ? 1 : 0,
             'options_list'         => $options_json,
             'sort_order'           => isset($data['sort_order']) ? (int) $data['sort_order'] : $max_order + 1,
-        ), array('%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%d', '%d', '%s', '%d'));
+        ), array('%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%s', '%d', '%d', '%s', '%d'));
 
         return $inserted ? (int) $wpdb->insert_id : false;
     }

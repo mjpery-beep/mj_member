@@ -4087,7 +4087,7 @@ input.mj-regmgr-search-input__field {
     transition: all var(--regmgr-transition);
     white-space: nowrap;
 }
-
+	
 .mj-regmgr-action-btn:hover {
     background: var(--regmgr-gray-800);
     border-color: var(--regmgr-gray-400);

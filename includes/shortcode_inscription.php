@@ -823,12 +823,7 @@ if (!function_exists('mj_render_child_form_block')) {
                     <span>Autorisation de l'utilisation d'images</span>
                 </label>
             </div>
-            <div class="mj-child-card__grid">
-                <div class="mj-field-group mj-field-group--full">
-                    <label for="mj_child_<?php echo $index_attr; ?>_notes">Informations complémentaires à transmettre à nos animateurs</label>
-                    <textarea id="mj_child_<?php echo $index_attr; ?>_notes" name="jeunes[<?php echo $index_attr; ?>][notes]" rows="3"><?php echo esc_textarea($values['notes']); ?></textarea>
-                </div>
-            </div>
+            
             <?php
             // Dynamic fields (registration)
             $dyn_reg_fields = MjDynamicFields::getRegistrationFields();

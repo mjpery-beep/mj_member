@@ -926,7 +926,7 @@ if (!function_exists('mj_member_render_account_component')) {
                     </button>
                     <?php foreach ($children_payload as $tab_child) : ?>
                     <button type="button" class="mj-account-tab" role="tab" aria-selected="false" data-mj-tab="child-<?php echo esc_attr((string) $tab_child['id']); ?>">
-                        👶 <?php echo esc_html($tab_child['full_name'] !== '' ? $tab_child['full_name'] : __('Jeune', 'mj-member')); ?>
+                        🧒 <?php echo esc_html($tab_child['full_name'] !== '' ? $tab_child['full_name'] : __('Jeune', 'mj-member')); ?>
                     </button>
                     <?php endforeach; ?>
                     <button
@@ -1050,10 +1050,6 @@ if (!function_exists('mj_member_render_account_component')) {
                                 <div class="mj-field-group">
                                     <label for="mj-account-birth-date"><?php esc_html_e('Date de naissance', 'mj-member'); ?></label>
                                     <input type="date" id="mj-account-birth-date" name="member[birth_date]" value="<?php echo esc_attr($form_values['birth_date']); ?>" autocomplete="bday" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
-                                </div>
-                                <div class="mj-field-group mj-field-group--full">
-                                    <label for="mj-account-notes"><?php esc_html_e('Informations complémentaires à transmettre à nos animateurs', 'mj-member'); ?></label>
-                                    <textarea id="mj-account-notes" name="member[notes]" rows="3" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?>><?php echo esc_textarea($form_values['notes']); ?></textarea>
                                 </div>
                             </div>
                         </fieldset>
@@ -1335,7 +1331,7 @@ if (!function_exists('mj_member_render_account_component')) {
                 <section class="mj-account-card mj-account-card--child-detail" data-mj-tab-panel="child-<?php echo esc_attr((string) $tc_id); ?>" hidden>
                     <header class="mj-account-card__header">
                         <div class="mj-account-card__header-main">
-                            <h2 class="mj-account-card__title">👶 <?php echo esc_html($tc_full_name); ?></h2>
+                            <h2 class="mj-account-card__title">🧒 <?php echo esc_html($tc_full_name); ?></h2>
                         </div>
                         <?php if ($tc_label !== '') : ?>
                             <span class="mj-account-chip mj-account-chip--<?php echo esc_attr($tc_status); ?>"><?php echo esc_html($tc_label); ?></span>
@@ -1370,10 +1366,7 @@ if (!function_exists('mj_member_render_account_component')) {
                                     <label for="<?php echo esc_attr($tc_prefix); ?>-birth-date"><?php esc_html_e('Date de naissance', 'mj-member'); ?></label>
                                     <input type="date" id="<?php echo esc_attr($tc_prefix); ?>-birth-date" name="birth_date" value="<?php echo esc_attr($tc_birth); ?>" autocomplete="bday" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
                                 </div>
-                                <div class="mj-field-group mj-field-group--full">
-                                    <label for="<?php echo esc_attr($tc_prefix); ?>-notes"><?php esc_html_e('Informations complémentaires à transmettre à nos animateurs', 'mj-member'); ?></label>
-                                    <textarea id="<?php echo esc_attr($tc_prefix); ?>-notes" name="notes" rows="3" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?>><?php echo esc_textarea($tc_notes); ?></textarea>
-                                </div>
+                                
                             </div>
                         </fieldset>
 
@@ -1550,10 +1543,6 @@ if (!function_exists('mj_member_render_account_component')) {
                         <fieldset class="mj-fieldset">
                             <legend><?php esc_html_e('Autorisations', 'mj-member'); ?></legend>
                             <div class="mj-consent-list">
-                                <label class="mj-checkbox">
-                                    <input type="checkbox" name="is_autonomous" value="1" <?php checked($tc_autonomous); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
-                                    <span><?php esc_html_e('Autorisation de sortie autonome', 'mj-member'); ?></span>
-                                </label>
                                 <label class="mj-checkbox">
                                     <input type="checkbox" name="photo_usage_consent" value="1" <?php checked($tc_photo_consent); ?> <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
                                     <span><?php esc_html_e('J\'autorise l\'utilisation des photos sur les supports MJ.', 'mj-member'); ?></span>
@@ -1793,10 +1782,6 @@ if (!function_exists('mj_member_render_account_component')) {
                                         </div>
                                     </div>
                                     <div class="mj-modal__options">
-                                        <label class="mj-modal-checkbox">
-                                            <input type="checkbox" name="is_autonomous" value="1" data-mj-child-field="is_autonomous" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
-                                            <span><?php esc_html_e('Autorisation de sortie autonome', 'mj-member'); ?></span>
-                                        </label>
                                         <label class="mj-modal-checkbox">
                                             <input type="checkbox" name="photo_usage_consent" value="1" data-mj-child-field="photo_usage_consent" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
                                             <span><?php esc_html_e('Autorisation photo accordée', 'mj-member'); ?></span>
@@ -2988,6 +2973,18 @@ if (!function_exists('mj_member_render_account_component')) {
     }
 }
 
+img.wp-smiley, img.emoji {
+		display: inline !important;
+		border: none !important;
+		box-shadow: none !important;
+		height: 2em !important;
+		width: 2em !important;
+		margin: 0 0.07em !important;
+		vertical-align: -0.1em !important;
+		background: none !important;
+		padding: 0 !important;
+	}
+
 /* ── Account Tabs ── */
 .mj-account-tabs {
     display: flex;
@@ -3320,11 +3317,11 @@ if (!function_exists('mj_member_render_account_component')) {
                                 if (tabBtn) {
                                     var newName = (resp.data.child.first_name || '') + ' ' + (resp.data.child.last_name || '');
                                     newName = newName.trim();
-                                    if (newName) tabBtn.textContent = '👶 ' + newName;
+                                    if (newName) tabBtn.textContent = '🧒 ' + newName;
                                 }
                                 // update header title
                                 var header = form.parentElement.querySelector('.mj-account-card__title');
-                                if (header && newName) header.textContent = '👶 ' + newName;
+                                if (header && newName) header.textContent = '🧒 ' + newName;
                             }
                         } else {
                             if (feedback) {
