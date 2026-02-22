@@ -37,27 +37,43 @@
                 {% set full = photo.full|default(photo.url|default('')) %}
                 {% set caption = photo.caption|default('') %}
 
+                {% set author_name = photo.author_name|default('') %}
+                {% set author_initials = photo.author_initials|default('') %}
+                {% set author_avatar = photo.author_avatar_url|default('') %}
+
                 {% if thumb %}
                     <figure class="mj-event-page__photo">
-                        {% if full %}
-                            <a href="{{ full|esc_url }}" target="_blank" rel="noopener" class="mj-event-page__photo-link">
+                        <div class="mj-event-page__photo-img">
+                            {% if full %}
+                                <a href="{{ full|esc_url }}" target="_blank" rel="noopener" class="mj-event-page__photo-link">
+                                    <img 
+                                        src="{{ thumb|esc_url }}" 
+                                        alt="{{ caption|esc_attr }}" 
+                                        loading="lazy" 
+                                        decoding="async" 
+                                    />
+                                </a>
+                            {% else %}
                                 <img 
                                     src="{{ thumb|esc_url }}" 
                                     alt="{{ caption|esc_attr }}" 
                                     loading="lazy" 
                                     decoding="async" 
                                 />
-                            </a>
-                        {% else %}
-                            <img 
-                                src="{{ thumb|esc_url }}" 
-                                alt="{{ caption|esc_attr }}" 
-                                loading="lazy" 
-                                decoding="async" 
-                            />
-                        {% endif %}
-                        {% if caption %}
-                            <figcaption class="mj-event-page__photo-caption">{{ caption }}</figcaption>
+                            {% endif %}
+                            {% if caption %}
+                                <figcaption class="mj-event-page__photo-caption">{{ caption }}</figcaption>
+                            {% endif %}
+                        </div>
+                        {% if author_name %}
+                            <div class="mj-event-page__photo-author">
+                                {% if author_avatar %}
+                                    <img class="mj-event-page__photo-author-avatar" src="{{ author_avatar|esc_url }}" alt="" loading="lazy" decoding="async" />
+                                {% elseif author_initials %}
+                                    <span class="mj-event-page__photo-author-initials">{{ author_initials }}</span>
+                                {% endif %}
+                                <span class="mj-event-page__photo-author-name">{{ author_name }}</span>
+                            </div>
                         {% endif %}
                     </figure>
                 {% endif %}
@@ -69,14 +85,65 @@
         </p>
     {% endif %}
 
-    {# Bouton d'upload #}
+    {# Formulaire d'upload #}
     {% if can_upload %}
+        {% set upload_nonce = photos.upload_nonce|default('') %}
+        {% set event_id = photos.event_id|default(0) %}
+        {% set admin_post_url = photos.admin_post_url|default('') %}
+        {% set member_remaining = photos.member_remaining|default(0) %}
+        {% set is_unlimited = photos.is_unlimited|default(false) %}
+
         <div class="mj-event-page__photos-upload" data-mj-event-photo-upload>
-            <button type="button" class="mj-event-page__btn mj-event-page__btn--secondary">
-                <span class="mj-event-page__btn-icon" aria-hidden="true">📷</span>
-                {{ __('Partager une photo', 'mj-member') }}
-            </button>
+            <details class="mj-event-page__photos-upload-details">
+                <summary class="mj-event-page__btn mj-event-page__btn--secondary">
+                    <span class="mj-event-page__btn-icon" aria-hidden="true">📷</span>
+                    {{ __('Partager une photo', 'mj-member') }}
+                </summary>
+
+                <form class="mj-event-page__photos-upload-form" action="{{ admin_post_url|esc_url }}" method="post" enctype="multipart/form-data">
+                    <input type="hidden" name="mj_event_photo_nonce" value="{{ upload_nonce|esc_attr }}" />
+                    <input type="hidden" name="action" value="mj_member_submit_event_photo" />
+                    <input type="hidden" name="event_id" value="{{ event_id }}" />
+                    <input type="hidden" name="redirect_to" value="" id="mj-event-photo-redirect" />
+
+                    <div class="mj-event-page__photos-upload-field">
+                        <label for="mj-event-photo-file">{{ __('Ta photo', 'mj-member') }}</label>
+                        <input id="mj-event-photo-file" type="file" name="event_photo_file" accept="image/*" required />
+                    </div>
+
+                    <div class="mj-event-page__photos-upload-field">
+                        <label for="mj-event-photo-caption">{{ __('Décris ton souvenir (optionnel)', 'mj-member') }}</label>
+                        <textarea id="mj-event-photo-caption" name="photo_caption" maxlength="180" rows="2" placeholder="{{ __('Exemple : Soirée jeu du vendredi !', 'mj-member') }}"></textarea>
+                    </div>
+
+                    <label class="mj-event-page__photos-upload-consent">
+                        <input type="checkbox" name="mj_event_photo_consent" value="1" required />
+                        {{ __('Je garantis avoir l\'autorisation des personnes présentes et j\'accepte la diffusion conforme aux règles RGPD.', 'mj-member') }}
+                    </label>
+
+                    {% if is_unlimited %}
+                        <p class="mj-event-page__photos-upload-hint">
+                            {{ __('Tu peux partager un nombre illimité de photos.', 'mj-member') }}
+                        </p>
+                    {% elseif member_remaining > 0 %}
+                        <p class="mj-event-page__photos-upload-hint">
+                            {{ _n('Il te reste %d envoi.', 'Il te reste %d envois.', member_remaining, 'mj-member')|format(member_remaining) }}
+                        </p>
+                    {% endif %}
+
+                    <button type="submit" class="mj-event-page__btn mj-event-page__btn--primary">
+                        {{ __('Envoyer ma photo', 'mj-member') }}
+                    </button>
+                </form>
+            </details>
         </div>
+
+        <script>
+        (function(){
+            var r = document.getElementById('mj-event-photo-redirect');
+            if (r) r.value = window.location.href;
+        })();
+        </script>
     {% endif %}
 </section>
 {% endif %}

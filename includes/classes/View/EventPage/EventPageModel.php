@@ -1885,6 +1885,26 @@ final class EventPageModel
             'status' => MjEventPhotos::STATUS_APPROVED,
         ));
 
+        // Collecter les member_id uniques pour charger les membres en un seul batch
+        $memberIds = array();
+        foreach ($approvedPhotos as $photo) {
+            $mid = isset($photo->member_id) ? (int) $photo->member_id : 0;
+            if ($mid > 0) {
+                $memberIds[$mid] = true;
+            }
+        }
+
+        // Charger les membres en batch
+        $membersMap = array();
+        if (!empty($memberIds)) {
+            foreach (array_keys($memberIds) as $mid) {
+                $m = MjMembers::getById($mid);
+                if ($m) {
+                    $membersMap[$mid] = $m;
+                }
+            }
+        }
+
         // Construire les items pour le template
         $items = array();
         foreach ($approvedPhotos as $photo) {
@@ -1899,6 +1919,24 @@ final class EventPageModel
                 continue;
             }
 
+            // Données de l'auteur
+            $photoMemberId = isset($photo->member_id) ? (int) $photo->member_id : 0;
+            $authorName = '';
+            $authorInitials = '';
+            $authorAvatarUrl = '';
+
+            if ($photoMemberId > 0 && isset($membersMap[$photoMemberId])) {
+                $authorMember = $membersMap[$photoMemberId];
+                $firstName = isset($authorMember->first_name) ? (string) $authorMember->first_name : '';
+                $lastName = isset($authorMember->last_name) ? (string) $authorMember->last_name : '';
+                $authorName = trim($firstName . ' ' . mb_substr($lastName, 0, 1) . '.');
+                if ($firstName !== '' && $lastName !== '') {
+                    $authorInitials = mb_strtoupper(mb_substr($firstName, 0, 1) . mb_substr($lastName, 0, 1));
+                }
+                $avatarId = isset($authorMember->photo_id) ? (int) $authorMember->photo_id : 0;
+                $authorAvatarUrl = $avatarId > 0 ? (wp_get_attachment_image_url($avatarId, 'thumbnail') ?: '') : '';
+            }
+
             $items[] = array(
                 'id' => isset($photo->id) ? (int) $photo->id : 0,
                 'attachment_id' => $attachmentId,
@@ -1906,6 +1944,9 @@ final class EventPageModel
                 'full' => $full ?: $thumb,
                 'url' => $full ?: $thumb,
                 'caption' => isset($photo->caption) ? (string) $photo->caption : '',
+                'author_name' => $authorName,
+                'author_initials' => $authorInitials,
+                'author_avatar_url' => $authorAvatarUrl,
             );
         }
 
@@ -1920,15 +1961,36 @@ final class EventPageModel
             ? mj_member_get_current_member()
             : null;
 
+        $memberRemaining = 0;
+        $isUnlimited = false;
+        $uploadNonce = '';
+
         if ($currentMember) {
             $memberId = isset($currentMember->id) ? (int) $currentMember->id : 0;
             if ($memberId > 0) {
-                $canUpload = true;
+                $isStaff = function_exists('mj_member_event_photos_is_staff_member')
+                    ? mj_member_event_photos_is_staff_member($currentMember)
+                    : false;
+
+                $limit = $isStaff
+                    ? 0
+                    : (int) apply_filters('mj_member_event_photo_upload_limit', 3, $eventId, $currentMember);
+
+                $currentCount = MjEventPhotos::count_for_member($eventId, $memberId);
+
                 $pendingCount = MjEventPhotos::count_for_member(
                     $eventId,
                     $memberId,
                     MjEventPhotos::STATUS_PENDING
                 );
+
+                $isUnlimited = $isStaff || $limit <= 0;
+                $memberRemaining = $isUnlimited ? 999 : max(0, $limit - $currentCount);
+                $canUpload = $isUnlimited || $memberRemaining > 0;
+
+                if ($canUpload) {
+                    $uploadNonce = wp_create_nonce('mj-member-event-photo');
+                }
             }
         }
 
@@ -1938,6 +2000,11 @@ final class EventPageModel
             'items' => $items,
             'total' => $total,
             'pending_count' => $pendingCount,
+            'upload_nonce' => $uploadNonce,
+            'event_id' => $eventId,
+            'admin_post_url' => admin_url('admin-post.php'),
+            'member_remaining' => $memberRemaining,
+            'is_unlimited' => $isUnlimited,
         );
     }
 

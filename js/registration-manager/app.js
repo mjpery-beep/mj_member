@@ -7200,7 +7200,7 @@
                                                                             return;
                                                                         }
                                                                         setEventPhotoUpdating(photo.id);
-                                                                        api.deleteMemberPhoto(photo.id)
+                                                                        api.deleteMemberPhoto(photo.id, photo.memberId)
                                                                             .then(function () {
                                                                                 setEventPhotos(function (prev) {
                                                                                     return prev.filter(function (p) { return p.id !== photo.id; });

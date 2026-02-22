@@ -670,6 +670,11 @@ final class EventPageViewBuilder
                 : array(),
             'total' => isset($photos['total']) ? (int) $photos['total'] : 0,
             'pending_count' => isset($photos['pending_count']) ? (int) $photos['pending_count'] : 0,
+            'upload_nonce' => isset($photos['upload_nonce']) ? (string) $photos['upload_nonce'] : '',
+            'event_id' => isset($photos['event_id']) ? (int) $photos['event_id'] : 0,
+            'admin_post_url' => isset($photos['admin_post_url']) ? (string) $photos['admin_post_url'] : '',
+            'member_remaining' => isset($photos['member_remaining']) ? (int) $photos['member_remaining'] : 0,
+            'is_unlimited' => !empty($photos['is_unlimited']),
         );
     }
 
