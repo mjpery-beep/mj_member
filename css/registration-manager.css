@@ -459,6 +459,7 @@ input.mj-regmgr-search-input__field {
 
 .mj-regmgr-sort-select:hover {
     border-color: var(--regmgr-gray-400);
+
 }
 
 .mj-regmgr-sort-select:focus {
@@ -1530,6 +1531,7 @@ input.mj-regmgr-search-input__field {
 
 .mj-att__bulk-btn:hover {
     background: var(--regmgr-gray-50);
+    color: var(--regmgr-gray-900);
 }
 
 .mj-att__bulk-btn:disabled {
@@ -1544,6 +1546,7 @@ input.mj-regmgr-search-input__field {
 
 .mj-att__bulk-btn--present:hover {
     background: var(--regmgr-success-light);
+    color: var(--regmgr-success);
 }
 
 .mj-att__bulk-btn--absent {
@@ -1553,6 +1556,7 @@ input.mj-regmgr-search-input__field {
 
 .mj-att__bulk-btn--absent:hover {
     background: var(--regmgr-danger-light);
+    color: var(--regmgr-danger);
 }
 
 .mj-att__bulk-btn--reset {
