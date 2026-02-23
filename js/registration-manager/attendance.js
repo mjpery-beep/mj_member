@@ -493,23 +493,39 @@
         var selectedOccurrence = _selectedOccurrence[0];
         var setSelectedOccurrence = _selectedOccurrence[1];
 
-        // Sélectionner automatiquement la prochaine séance ou la première
+        // Sélectionner automatiquement : le jour courant > prochaine séance > dernière séance
         useEffect(function () {
             if (occurrences.length > 0 && !selectedOccurrence) {
                 var now = new Date();
-                var nextOcc = occurrences.find(function (occ) {
+                var todayStr = now.getFullYear() + '-' +
+                    String(now.getMonth() + 1).padStart(2, '0') + '-' +
+                    String(now.getDate()).padStart(2, '0');
+
+                // 1. Chercher une occurrence aujourd'hui
+                var todayOcc = occurrences.find(function (occ) {
                     var occDate = typeof occ === 'string' ? occ : (occ.start || occ.date || '');
-                    return new Date(occDate) >= now;
+                    return occDate.substring(0, 10) === todayStr;
                 });
-                
-                if (nextOcc) {
-                    var key = typeof nextOcc === 'string' ? nextOcc : (nextOcc.start || nextOcc.date || '');
+
+                if (todayOcc) {
+                    var key = typeof todayOcc === 'string' ? todayOcc : (todayOcc.start || todayOcc.date || '');
                     setSelectedOccurrence(key);
-                } else if (occurrences.length > 0) {
-                    // Si toutes passées, prendre la dernière
-                    var lastOcc = occurrences[occurrences.length - 1];
-                    var key = typeof lastOcc === 'string' ? lastOcc : (lastOcc.start || lastOcc.date || '');
-                    setSelectedOccurrence(key);
+                } else {
+                    // 2. Prochaine séance à venir
+                    var nextOcc = occurrences.find(function (occ) {
+                        var occDate = typeof occ === 'string' ? occ : (occ.start || occ.date || '');
+                        return new Date(occDate) >= now;
+                    });
+
+                    if (nextOcc) {
+                        var key = typeof nextOcc === 'string' ? nextOcc : (nextOcc.start || nextOcc.date || '');
+                        setSelectedOccurrence(key);
+                    } else if (occurrences.length > 0) {
+                        // 3. Si toutes passées, prendre la dernière
+                        var lastOcc = occurrences[occurrences.length - 1];
+                        var key = typeof lastOcc === 'string' ? lastOcc : (lastOcc.start || lastOcc.date || '');
+                        setSelectedOccurrence(key);
+                    }
                 }
             }
         }, [occurrences, selectedOccurrence]);
