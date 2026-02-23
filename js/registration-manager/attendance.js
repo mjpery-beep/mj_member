@@ -247,14 +247,30 @@
         var hideOccurrenceIrregular = props.hideOccurrenceIrregular === true;
 
         var member = registration.member;
+        var guardian = registration.guardian;
         var memberName = member 
             ? (member.firstName + ' ' + member.lastName).trim() 
             : 'Membre inconnu';
-        var memberPhone = member && typeof member.phone === 'string' ? member.phone : '';
-        var memberWhatsappOptIn = member ? (typeof member.whatsappOptIn === 'undefined' ? true : !!member.whatsappOptIn) : false;
+
+        // Phone priority: guardian from registration > guardian from member > member
+        var contactPhone = '';
+        var contactWhatsappOptIn = false;
+        var contactIsGuardian = false;
+        if (guardian && typeof guardian.phone === 'string' && guardian.phone !== '') {
+            contactPhone = guardian.phone;
+            contactWhatsappOptIn = typeof guardian.whatsappOptIn === 'undefined' ? true : !!guardian.whatsappOptIn;
+            contactIsGuardian = true;
+        } else if (member && typeof member.guardianPhone === 'string' && member.guardianPhone !== '') {
+            contactPhone = member.guardianPhone;
+            contactWhatsappOptIn = typeof member.guardianWhatsappOptIn === 'undefined' ? true : !!member.guardianWhatsappOptIn;
+            contactIsGuardian = true;
+        } else if (member && typeof member.phone === 'string' && member.phone !== '') {
+            contactPhone = member.phone;
+            contactWhatsappOptIn = typeof member.whatsappOptIn === 'undefined' ? true : !!member.whatsappOptIn;
+        }
         var whatsappLink = '';
-        if (memberWhatsappOptIn && memberPhone) {
-            whatsappLink = buildWhatsAppLink(memberPhone);
+        if (contactWhatsappOptIn && contactPhone) {
+            whatsappLink = buildWhatsAppLink(contactPhone);
         }
         var volunteerLabel = getString(strings, 'volunteerLabel', 'Bénévole');
         var isAttendanceOnly = registration && registration.attendanceOnly;
@@ -332,6 +348,28 @@
                             member.roleLabel,
                             member.age !== null && ' • ' + member.age + ' ans',
                         ]),
+                        contactPhone && h('a', {
+                            class: 'mj-att-member__phone',
+                            href: 'tel:' + contactPhone.replace(/\s+/g, ''),
+                            title: contactIsGuardian
+                                ? getString(strings, 'guardianPhone', 'Tél. tuteur')
+                                : getString(strings, 'memberPhone', 'Tél. membre'),
+                        }, [
+                            contactIsGuardian
+                                // Icône "users" (tuteur/parent)
+                                ? h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', style: 'vertical-align: middle; margin-right: 3px;' }, [
+                                    h('path', { d: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' }),
+                                    h('circle', { cx: 9, cy: 7, r: 4 }),
+                                    h('path', { d: 'M23 21v-2a4 4 0 0 0-3-3.87' }),
+                                    h('path', { d: 'M16 3.13a4 4 0 0 1 0 7.75' }),
+                                ])
+                                // Icône "user" (membre)
+                                : h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', style: 'vertical-align: middle; margin-right: 3px;' }, [
+                                    h('path', { d: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' }),
+                                    h('circle', { cx: 12, cy: 7, r: 4 }),
+                                ]),
+                            h('span', null, contactPhone),
+                        ]),
                         member && member.isVolunteer && h('span', {
                             class: classNames('mj-att-member__badge', 'mj-att-member__badge--volunteer'),
                         }, volunteerLabel),
@@ -340,28 +378,8 @@
                 ]),
             ]),
 
-            // Actions
+            // Actions (WhatsApp, notes, présence)
             h('div', { class: 'mj-att-member__actions' }, [
-                // Bouton de régularisation si nécessaire
-                irregular && onRegularize && !isAttendanceOnly && !(hideOccurrenceIrregular && irregular === 'not-registered') && h('button', {
-                    type: 'button',
-                    class: 'mj-att-member__regularize-btn',
-                    onClick: function () { onRegularize(registration, irregular); },
-                    disabled: loading,
-                    title: irregularAction,
-                }, [
-                    irregular === 'unpaid' && h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                        h('rect', { x: 1, y: 4, width: 22, height: 16, rx: 2, ry: 2 }),
-                        h('line', { x1: 1, y1: 10, x2: 23, y2: 10 }),
-                    ]),
-                    irregular === 'not-registered' && h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                        h('circle', { cx: 12, cy: 12, r: 10 }),
-                        h('line', { x1: 12, y1: 8, x2: 12, y2: 16 }),
-                        h('line', { x1: 8, y1: 12, x2: 16, y2: 12 }),
-                    ]),
-                    irregularAction,
-                ]),
-
                 whatsappLink && h('a', {
                     href: whatsappLink,
                     target: '_blank',
@@ -448,6 +466,26 @@
                         }),
                     ]),
                 ]),
+            ]),
+
+            // Bouton de régularisation séparé (hors du container actions)
+            irregular && onRegularize && !isAttendanceOnly && !(hideOccurrenceIrregular && irregular === 'not-registered') && h('button', {
+                type: 'button',
+                class: 'mj-att-member__regularize-btn',
+                onClick: function () { onRegularize(registration, irregular); },
+                disabled: loading,
+                title: irregularAction,
+            }, [
+                irregular === 'unpaid' && h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                    h('rect', { x: 1, y: 4, width: 22, height: 16, rx: 2, ry: 2 }),
+                    h('line', { x1: 1, y1: 10, x2: 23, y2: 10 }),
+                ]),
+                irregular === 'not-registered' && h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                    h('circle', { cx: 12, cy: 12, r: 10 }),
+                    h('line', { x1: 12, y1: 8, x2: 12, y2: 16 }),
+                    h('line', { x1: 8, y1: 12, x2: 16, y2: 12 }),
+                ]),
+                irregularAction,
             ]),
         ]);
     }

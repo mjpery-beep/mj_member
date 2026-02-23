@@ -77,6 +77,7 @@
     var CreateEventModal = Modals.CreateEventModal;
     var CreateMemberModal = Modals.CreateMemberModal;
     var AttachChildModal = Modals.AttachChildModal;
+    var AssignGuardianModal = Modals.AssignGuardianModal;
     var MemberNotesModal = Modals.MemberNotesModal;
     var MemberAccountModal = Modals.MemberAccountModal;
     var QRCodeModal = Modals.QRCodeModal;
@@ -3530,6 +3531,7 @@
         var addParticipantModal = useModal();
         var createMemberModal = useModal();
         var attachChildModal = useModal();
+        var assignGuardianModal = useModal();
         var notesModal = useModal();
         var qrModal = useModal();
         var occurrencesModal = useModal();
@@ -3561,8 +3563,17 @@
                 });
             };
 
+            baseConfig.onAssignGuardian = function (child) {
+                if (!child) {
+                    return;
+                }
+                assignGuardianModal.open({
+                    child: child,
+                });
+            };
+
             return baseConfig;
-        }, [config, createMemberModal, attachChildModal]);
+        }, [config, createMemberModal, attachChildModal, assignGuardianModal]);
 
         // State
         var _events = useState([]);
@@ -6498,6 +6509,15 @@
             var context = opts.context || null;
             var isChildFlow = !!(context && context.type === 'child' && guardianId);
 
+            var childId = null;
+            if (typeof opts.childId === 'number') {
+                childId = opts.childId;
+            } else if (typeof opts.childId === 'string' && opts.childId !== '') {
+                var parsedChild = parseInt(opts.childId, 10);
+                childId = isNaN(parsedChild) ? null : parsedChild;
+            }
+            var isGuardianFlow = !!(context && context.type === 'guardian' && childId);
+
             return api.createQuickMember(firstName, lastName, email, role, birthDate, {
                 guardianId: guardianId,
             })
@@ -6506,11 +6526,23 @@
                         ? data.message
                         : isChildFlow
                             ? getString(strings, 'guardianChildCreated', 'Enfant ajouté et rattaché avec succès.')
-                            : getString(strings, 'success', 'Opération réussie.');
+                            : isGuardianFlow
+                                ? getString(strings, 'guardianCreatedAndAssigned', 'Tuteur créé et assigné avec succès.')
+                                : getString(strings, 'success', 'Opération réussie.');
                     showSuccess(successMessage);
                     createMemberModal.close();
 
                     var createdMember = data.member || null;
+
+                    if (isGuardianFlow && createdMember && createdMember.id) {
+                        return api.updateMember(childId, {
+                            guardianId: createdMember.id,
+                        }).then(function () {
+                            loadMemberDetails(childId);
+                            loadMembers(membersPagination.page);
+                            return data;
+                        });
+                    }
 
                     if (isChildFlow) {
                         if (guardianId) {
@@ -6594,6 +6626,100 @@
                     loadMemberDetails(guardian.id);
                     loadMembers(membersPagination.page);
                     return result;
+                })
+                .catch(function (err) {
+                    showError(err && err.message ? err.message : getString(strings, 'error', 'Une erreur est survenue.'));
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails, loadMembers, membersPagination.page, strings]);
+
+        var handleCreateAndAttachChild = useCallback(function (guardian, childData) {
+            if (!guardian || !guardian.id || !childData || !childData.firstName || !childData.lastName) {
+                return Promise.reject(new Error(getString(strings, 'error', 'Une erreur est survenue.')));
+            }
+
+            return api.createQuickMember(
+                childData.firstName,
+                childData.lastName,
+                childData.email || '',
+                'jeune',
+                childData.birthDate || '',
+                {}
+            )
+                .then(function (data) {
+                    var createdMember = data && data.member ? data.member : null;
+                    if (!createdMember || !createdMember.id) {
+                        throw new Error(getString(strings, 'createChildError', 'Impossible de créer le jeune.'));
+                    }
+
+                    return api.updateMember(createdMember.id, { guardianId: guardian.id })
+                        .then(function () {
+                            showSuccess(getString(strings, 'childCreatedAndAttached', 'Jeune créé et rattaché avec succès.'));
+                            loadMemberDetails(guardian.id);
+                            loadMembers(membersPagination.page);
+                            return data;
+                        });
+                })
+                .catch(function (err) {
+                    showError(err && err.message ? err.message : getString(strings, 'error', 'Une erreur est survenue.'));
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails, loadMembers, membersPagination.page, strings]);
+
+        var handleAssignGuardian = useCallback(function (child, guardian) {
+            if (!child || !child.id || !guardian || !guardian.id) {
+                return Promise.reject(new Error(getString(strings, 'error', 'Une erreur est survenue.')));
+            }
+
+            return api.updateMember(child.id, {
+                guardianId: guardian.id,
+            })
+                .then(function (result) {
+                    var successMessage = result && result.message
+                        ? result.message
+                        : getString(strings, 'guardianAssigned', 'Tuteur assigné avec succès.');
+                    showSuccess(successMessage);
+                    loadMemberDetails(child.id);
+                    loadMembers(membersPagination.page);
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err && err.message ? err.message : getString(strings, 'error', 'Une erreur est survenue.'));
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails, loadMembers, membersPagination.page, strings]);
+
+        var handleCreateAndAssignGuardian = useCallback(function (child, guardianData) {
+            if (!child || !child.id || !guardianData || !guardianData.firstName || !guardianData.lastName) {
+                return Promise.reject(new Error(getString(strings, 'error', 'Une erreur est survenue.')));
+            }
+
+            return api.createQuickMember(
+                guardianData.firstName,
+                guardianData.lastName,
+                guardianData.email || '',
+                'tuteur',
+                '',
+                {}
+            )
+                .then(function (data) {
+                    var createdMember = data && data.member ? data.member : null;
+                    if (!createdMember || !createdMember.id) {
+                        throw new Error(getString(strings, 'createGuardianError', 'Impossible de créer le tuteur.'));
+                    }
+
+                    var updatePromise = guardianData.phone
+                        ? api.updateMember(createdMember.id, { phone: guardianData.phone })
+                        : Promise.resolve();
+
+                    return updatePromise.then(function () {
+                        return api.updateMember(child.id, { guardianId: createdMember.id });
+                    }).then(function () {
+                        showSuccess(getString(strings, 'guardianCreatedAndAssigned', 'Tuteur créé et assigné avec succès.'));
+                        loadMemberDetails(child.id);
+                        loadMembers(membersPagination.page);
+                        return data;
+                    });
                 })
                 .catch(function (err) {
                     showError(err && err.message ? err.message : getString(strings, 'error', 'Une erreur est survenue.'));
@@ -7384,6 +7510,18 @@
                 strings: strings,
                 searchMembers: handleSearchMembers,
                 onAttach: handleAttachChild,
+                onCreateAndAttach: handleCreateAndAttachChild,
+                config: config,
+            }),
+
+            h(AssignGuardianModal, {
+                isOpen: assignGuardianModal.isOpen,
+                onClose: assignGuardianModal.close,
+                child: assignGuardianModal.data ? assignGuardianModal.data.child : null,
+                strings: strings,
+                searchMembers: handleSearchMembers,
+                onAssign: handleAssignGuardian,
+                onCreateAndAssign: handleCreateAndAssignGuardian,
                 config: config,
             }),
 

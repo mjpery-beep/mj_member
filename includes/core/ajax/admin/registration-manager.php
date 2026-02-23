@@ -1941,6 +1941,18 @@ function mj_regmgr_get_registrations() {
         $photo_id = isset($member->photo_id) ? (int) $member->photo_id : 0;
         $photo_url = $photo_id > 0 ? wp_get_attachment_image_url($photo_id, 'thumbnail') : '';
 
+        // Guardian phone: fetch from the member's linked guardian
+        $guardian_phone = '';
+        $guardian_whatsapp_opt_in = true;
+        $guardian_id_val = isset($member->guardian_id) ? (int) $member->guardian_id : 0;
+        if ($guardian_id_val > 0) {
+            $member_guardian = MjMembers::getById($guardian_id_val);
+            if ($member_guardian) {
+                $guardian_phone = isset($member_guardian->phone) ? (string) $member_guardian->phone : '';
+                $guardian_whatsapp_opt_in = isset($member_guardian->whatsapp_opt_in) ? ((int) $member_guardian->whatsapp_opt_in !== 0) : true;
+            }
+        }
+
         return array(
             'id' => $member_id,
             'firstName' => isset($member->first_name) ? (string) $member->first_name : '',
@@ -1960,6 +1972,8 @@ function mj_regmgr_get_registrations() {
             'subscriptionStatus' => $subscription_status,
             'whatsappOptIn' => isset($member->whatsapp_opt_in) ? ((int) $member->whatsapp_opt_in !== 0) : true,
             'isVolunteer' => !empty($member->is_volunteer),
+            'guardianPhone' => $guardian_phone,
+            'guardianWhatsappOptIn' => $guardian_whatsapp_opt_in,
         );
     };
 
@@ -2114,6 +2128,7 @@ function mj_regmgr_search_members() {
     $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
     $age_range = isset($_POST['ageRange']) ? sanitize_text_field($_POST['ageRange']) : '';
     $subscription_filter = isset($_POST['subscriptionFilter']) ? sanitize_key($_POST['subscriptionFilter']) : '';
+    $role_filter = isset($_POST['role']) ? sanitize_key($_POST['role']) : '';
     $page = isset($_POST['page']) ? max(1, (int) $_POST['page']) : 1;
     $per_page = 50;
 
@@ -6371,7 +6386,8 @@ function mj_regmgr_update_member() {
         $raw_guardian_id = (int) $data['guardianId'];
         if ($raw_guardian_id > 0) {
             $guardian = MjMembers::getById($raw_guardian_id);
-            if (!$guardian || $guardian->role !== MjRoles::TUTEUR) {
+            $allowed_guardian_roles = array(MjRoles::TUTEUR, MjRoles::ANIMATEUR, MjRoles::COORDINATEUR);
+            if (!$guardian || !in_array($guardian->role, $allowed_guardian_roles, true)) {
                 wp_send_json_error(array('message' => __('Le tuteur spécifié est introuvable ou invalide.', 'mj-member')));
                 return;
             }

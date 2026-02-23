@@ -595,6 +595,17 @@
         }
         var isChildMode = contextType === 'child' && !!guardianId;
 
+        var childForGuardian = context && context.child ? context.child : null;
+        var childForGuardianId = childForGuardian && childForGuardian.id ? childForGuardian.id : null;
+        var childForGuardianName = '';
+        if (childForGuardian) {
+            childForGuardianName = ((childForGuardian.firstName || '') + ' ' + (childForGuardian.lastName || '')).trim();
+            if (!childForGuardianName && childForGuardian.displayName) {
+                childForGuardianName = childForGuardian.displayName;
+            }
+        }
+        var isGuardianMode = contextType === 'guardian' && !!childForGuardianId;
+
         var _firstName = useState('');
         var firstName = _firstName[0];
         var setFirstName = _firstName[1];
@@ -626,7 +637,9 @@
         var nameRequiredMessage = getString(strings, 'createMemberNameRequired', 'Prénom et nom sont requis.');
         var creationErrorMessage = isChildMode
             ? getString(strings, 'guardianChildCreationError', 'Impossible de créer l\'enfant.')
-            : getString(strings, 'createMemberError', 'Impossible de créer ce membre.');
+            : isGuardianMode
+                ? getString(strings, 'createGuardianError', 'Impossible de créer le tuteur.')
+                : getString(strings, 'createMemberError', 'Impossible de créer ce membre.');
 
         useEffect(function () {
             if (isOpen) {
@@ -635,9 +648,9 @@
                 setEmail('');
                 setBirthDate('');
                 setError('');
-                setRole('jeune');
+                setRole(isGuardianMode ? 'tuteur' : 'jeune');
             }
-        }, [isOpen, isChildMode, guardianId]);
+        }, [isOpen, isChildMode, isGuardianMode, guardianId, childForGuardianId]);
 
         var handleSubmit = useCallback(function (e) {
             if (e && typeof e.preventDefault === 'function') {
@@ -649,13 +662,14 @@
                 return;
             }
 
-            var selectedRole = isChildMode ? 'jeune' : role;
+            var selectedRole = isChildMode ? 'jeune' : isGuardianMode ? 'tuteur' : role;
 
             setLoading(true);
             setError('');
 
             onCreate(firstName.trim(), lastName.trim(), email.trim(), selectedRole, birthDate, {
                 guardianId: guardianId,
+                childId: childForGuardianId,
                 context: context,
             })
                 .then(function () {
@@ -675,7 +689,9 @@
             onCreate,
             onClose,
             isChildMode,
+            isGuardianMode,
             guardianId,
+            childForGuardianId,
             context,
             creationErrorMessage,
             nameRequiredMessage,
@@ -689,18 +705,26 @@
 
         var modalTitle = isChildMode
             ? getString(strings, 'guardianChildCreationTitle', 'Ajouter un enfant')
-            : getString(strings, 'createNewMember', 'Créer un nouveau membre');
+            : isGuardianMode
+                ? getString(strings, 'createGuardianTitle', 'Créer un tuteur')
+                : getString(strings, 'createNewMember', 'Créer un nouveau membre');
 
         var subtitle = null;
         if (isChildMode) {
             var subtitleTemplate = getString(strings, 'guardianChildCreationSubtitle', 'L\'enfant sera rattaché à %s.');
             var targetName = guardianName || getString(strings, 'guardianChildSectionTitle', 'ce tuteur');
             subtitle = subtitleTemplate.replace('%s', targetName);
+        } else if (isGuardianMode) {
+            var guardianSubtitleTemplate = getString(strings, 'createGuardianSubtitle', 'Le tuteur sera rattaché à %s.');
+            var childTargetName = childForGuardianName || 'ce membre';
+            subtitle = guardianSubtitleTemplate.replace('%s', childTargetName);
         }
 
         var roleLockedHint = isChildMode
             ? getString(strings, 'guardianChildRoleLocked', 'Le rôle est verrouillé sur « Jeune » pour les enfants.')
-            : null;
+            : isGuardianMode
+                ? getString(strings, 'guardianRoleLocked', 'Le rôle est verrouillé sur « Tuteur ».')
+                : null;
 
         var footer = h(Fragment, null, [
             h('button', {
@@ -788,9 +812,9 @@
                     h('select', {
                         id: 'create-role',
                         class: 'mj-regmgr-select',
-                        value: isChildMode ? 'jeune' : role,
-                        disabled: isChildMode || loading,
-                        onChange: isChildMode ? undefined : function (e) { setRole(e.target.value); },
+                        value: isChildMode ? 'jeune' : isGuardianMode ? 'tuteur' : role,
+                        disabled: isChildMode || isGuardianMode || loading,
+                        onChange: (isChildMode || isGuardianMode) ? undefined : function (e) { setRole(e.target.value); },
                     }, roleKeys.map(function (key) {
                         var optionLabel = roleLabels[key] || key;
                         return h('option', { key: key, value: key }, optionLabel);
@@ -808,6 +832,7 @@
         var strings = props.strings || {};
         var searchMembers = props.searchMembers;
         var onAttach = props.onAttach;
+        var onCreateAndAttach = props.onCreateAndAttach;
         var config = props.config || {};
 
         var guardianId = guardian && guardian.id ? guardian.id : null;
@@ -819,6 +844,14 @@
             }
         }
 
+        // --- Tab state ---
+        var TAB_SEARCH = 'search';
+        var TAB_CREATE = 'create';
+        var _tab = useState(TAB_SEARCH);
+        var tab = _tab[0];
+        var setTab = _tab[1];
+
+        // --- Search state ---
         var _search = useState('');
         var search = _search[0];
         var setSearch = _search[1];
@@ -843,18 +876,47 @@
         var hasSearched = _hasSearched[0];
         var setHasSearched = _hasSearched[1];
 
+        // --- Create form state ---
+        var _cfFirstName = useState('');
+        var cfFirstName = _cfFirstName[0];
+        var setCfFirstName = _cfFirstName[1];
+
+        var _cfLastName = useState('');
+        var cfLastName = _cfLastName[0];
+        var setCfLastName = _cfLastName[1];
+
+        var _cfBirthDate = useState('');
+        var cfBirthDate = _cfBirthDate[0];
+        var setCfBirthDate = _cfBirthDate[1];
+
+        var _cfEmail = useState('');
+        var cfEmail = _cfEmail[0];
+        var setCfEmail = _cfEmail[1];
+
+        var _creating = useState(false);
+        var creating = _creating[0];
+        var setCreating = _creating[1];
+
+        // --- Reset on open ---
         useEffect(function () {
             if (isOpen) {
+                setTab(TAB_SEARCH);
                 setSearch('');
                 setResults([]);
                 setError('');
                 setAttachingId(null);
                 setHasSearched(false);
+                setCfFirstName('');
+                setCfLastName('');
+                setCfBirthDate('');
+                setCfEmail('');
+                setCreating(false);
             }
         }, [isOpen, guardianId]);
 
         var minLength = 2;
 
+        // --- Search handler ---
         var handleSearch = useCallback(function (e) {
             if (e && typeof e.preventDefault === 'function') {
                 e.preventDefault();
@@ -893,6 +955,7 @@
                 });
         }, [searchMembers, search, strings, guardianId]);
 
+        // --- Attach existing handler ---
         var handleAttach = useCallback(function (member) {
             if (!member || !member.id || !guardianId || typeof onAttach !== 'function') {
                 return;
@@ -912,123 +975,761 @@
                 });
         }, [guardian, guardianId, onAttach, onClose, strings]);
 
-        var introText = getString(strings, 'guardianChildSearchIntro', 'Recherchez un membre à rattacher comme enfant.');
+        // --- Create & attach handler ---
+        var handleCreate = useCallback(function (e) {
+            if (e && typeof e.preventDefault === 'function') {
+                e.preventDefault();
+            }
+
+            if (!cfFirstName.trim() || !cfLastName.trim()) {
+                setError(getString(strings, 'createMemberNameRequired', 'Prénom et nom sont requis.'));
+                return;
+            }
+
+            if (typeof onCreateAndAttach !== 'function') {
+                return;
+            }
+
+            setCreating(true);
+            setError('');
+
+            Promise.resolve(onCreateAndAttach(guardian, {
+                firstName: cfFirstName.trim(),
+                lastName: cfLastName.trim(),
+                birthDate: cfBirthDate.trim(),
+                email: cfEmail.trim(),
+            }))
+                .then(function () {
+                    setCreating(false);
+                    onClose();
+                })
+                .catch(function (err) {
+                    setCreating(false);
+                    setError(err && err.message ? err.message : getString(strings, 'error', 'Une erreur est survenue.'));
+                });
+        }, [guardian, cfFirstName, cfLastName, cfBirthDate, cfEmail, onCreateAndAttach, onClose, strings]);
+
+        // --- Labels ---
         var placeholderText = getString(strings, 'guardianChildSearchPlaceholder', 'Rechercher un jeune...');
         var searchButtonLabel = getString(strings, 'guardianChildSearchAction', 'Rechercher');
         var noResultsLabel = getString(strings, 'guardianChildSearchNoResults', 'Aucun jeune trouvé.');
-
         var attachLabel = getString(strings, 'guardianChildAttachAction', 'Rattacher');
         var roleRestrictionLabel = getString(strings, 'guardianChildRoleRestriction', 'Seuls les membres avec le rôle « Jeune » peuvent être rattachés.');
         var alreadyLinkedLabel = getString(strings, 'guardianChildAlreadyLinked', 'Déjà rattaché à un autre tuteur');
         var alreadyAssignedLabel = getString(strings, 'guardianChildAlreadyAssigned', 'Déjà rattaché à ce tuteur');
 
         var guardianSummary = guardianName
-            ? getString(strings, 'guardianChildSectionTitle', 'Enfants') + ' · ' + guardianName
+            ? getString(strings, 'guardianChildSectionTitle', 'Enfants') + ' \u00b7 ' + guardianName
             : null;
+
+        // --- Tab bar (pill-switcher, same as AssignGuardianModal) ---
+        var tabBar = h('div', { class: 'mj-regmgr-assign-guardian__tabs' }, [
+            h('button', {
+                type: 'button',
+                class: classNames('mj-regmgr-assign-guardian__tab', {
+                    'mj-regmgr-assign-guardian__tab--active': tab === TAB_SEARCH,
+                }),
+                onClick: function () { setTab(TAB_SEARCH); setError(''); },
+            }, [
+                h('svg', {
+                    width: 15, height: 15, viewBox: '0 0 24 24',
+                    fill: 'none', stroke: 'currentColor',
+                    'stroke-width': 2.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                }, [
+                    h('circle', { cx: 11, cy: 11, r: 8 }),
+                    h('line', { x1: 21, y1: 21, x2: 16.65, y2: 16.65 }),
+                ]),
+                getString(strings, 'attachChildTabSearch', 'Jeune existant'),
+            ]),
+            h('button', {
+                type: 'button',
+                class: classNames('mj-regmgr-assign-guardian__tab', {
+                    'mj-regmgr-assign-guardian__tab--active': tab === TAB_CREATE,
+                }),
+                onClick: function () { setTab(TAB_CREATE); setError(''); },
+            }, [
+                h('svg', {
+                    width: 15, height: 15, viewBox: '0 0 24 24',
+                    fill: 'none', stroke: 'currentColor',
+                    'stroke-width': 2.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                }, [
+                    h('path', { d: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2' }),
+                    h('circle', { cx: 9, cy: 7, r: 4 }),
+                    h('line', { x1: 19, y1: 8, x2: 19, y2: 14 }),
+                    h('line', { x1: 22, y1: 11, x2: 16, y2: 11 }),
+                ]),
+                getString(strings, 'attachChildTabCreate', 'Nouveau jeune'),
+            ]),
+        ]);
+
+        // --- Search panel ---
+        var searchPanel = h('div', { class: 'mj-regmgr-assign-guardian__panel' }, [
+            h('form', {
+                class: 'mj-regmgr-attach-child__form',
+                onSubmit: handleSearch,
+            }, [
+                h('div', { class: 'mj-regmgr-search-input' }, [
+                    h('svg', {
+                        class: 'mj-regmgr-search-input__icon',
+                        width: 20,
+                        height: 20,
+                        viewBox: '0 0 24 24',
+                        fill: 'none',
+                        stroke: 'currentColor',
+                        'stroke-width': 2,
+                    }, [
+                        h('circle', { cx: 11, cy: 11, r: 8 }),
+                        h('line', { x1: 21, y1: 21, x2: 16.65, y2: 16.65 }),
+                    ]),
+                    h('input', {
+                        type: 'text',
+                        class: 'mj-regmgr-search-input__field',
+                        value: search,
+                        onInput: function (e) { setSearch(e.target.value); },
+                        placeholder: placeholderText,
+                        disabled: loading || attachingId !== null,
+                    }),
+                ]),
+                h('button', {
+                    type: 'submit',
+                    class: 'mj-btn mj-btn--primary mj-btn--small',
+                    disabled: loading || search.trim().length < minLength,
+                }, loading ? getString(strings, 'loading', 'Chargement...') : searchButtonLabel),
+            ]),
+
+            !loading && hasSearched && results.length === 0 && h('div', { class: 'mj-regmgr-attach-child__empty' }, [
+                h('svg', {
+                    width: 40, height: 40, viewBox: '0 0 24 24',
+                    fill: 'none', stroke: 'currentColor',
+                    'stroke-width': 1.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                    style: 'color: var(--regmgr-gray-300)',
+                }, [
+                    h('circle', { cx: 11, cy: 11, r: 8 }),
+                    h('line', { x1: 21, y1: 21, x2: 16.65, y2: 16.65 }),
+                    h('line', { x1: 8, y1: 11, x2: 14, y2: 11 }),
+                ]),
+                h('p', { style: 'margin: 0' }, noResultsLabel),
+                h('p', { style: 'margin: 0; font-size: 12px; color: var(--regmgr-gray-400)' },
+                    getString(strings, 'attachChildSwitchHint', 'Vous pouvez cr\u00e9er un nouveau jeune via l\u2019onglet \u00ab Nouveau jeune \u00bb.')
+                ),
+            ]),
+
+            loading && h('div', { class: 'mj-regmgr-add-member__loading' }, [
+                h('div', { class: 'mj-regmgr-spinner' }),
+            ]),
+
+            !loading && results.length > 0 && h('div', { class: 'mj-regmgr-attach-child__results' },
+                results.map(function (member) {
+                    if (!member || !member.id) {
+                        return null;
+                    }
+
+                    var memberGuardianId = member.guardianId || member.guardian_id || 0;
+                    var invalidRole = member.role && member.role !== 'jeune';
+                    var isCurrentGuardian = memberGuardianId && guardianId && memberGuardianId === guardianId;
+                    var isDifferentGuardian = memberGuardianId && guardianId && memberGuardianId !== guardianId;
+                    var restriction = '';
+                    if (invalidRole) {
+                        restriction = roleRestrictionLabel;
+                    } else if (isDifferentGuardian) {
+                        restriction = alreadyLinkedLabel;
+                    } else if (isCurrentGuardian) {
+                        restriction = alreadyAssignedLabel;
+                    }
+
+                    var disabled = invalidRole || isDifferentGuardian || isCurrentGuardian || attachingId === member.id;
+
+                    return h('div', {
+                        key: member.id,
+                        class: classNames('mj-regmgr-attach-child__card', {
+                            'mj-regmgr-attach-child__card--disabled': disabled,
+                        }),
+                    }, [
+                        h(MemberAvatar, { member: member, size: 'small' }),
+                        h('div', { class: 'mj-regmgr-attach-child__info' }, [
+                            h('div', { class: 'mj-regmgr-attach-child__name' },
+                                (member.firstName || '') + ' ' + (member.lastName || '')
+                            ),
+                            h('div', { class: 'mj-regmgr-attach-child__meta' }, [
+                                member.roleLabel && h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--sm' }, member.roleLabel),
+                                typeof member.age === 'number' && h('span', null, member.age + ' ans'),
+                            ]),
+                            restriction && h('p', { class: 'mj-regmgr-attach-child__restriction' }, restriction),
+                        ]),
+                        h('div', { class: 'mj-regmgr-attach-child__actions' }, [
+                            h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--primary mj-btn--small',
+                                onClick: function () { handleAttach(member); },
+                                disabled: disabled,
+                            }, attachingId === member.id ? getString(strings, 'loading', 'Chargement...') : attachLabel),
+                        ]),
+                    ]);
+                })
+            ),
+        ]);
+
+        // --- Create panel ---
+        var createPanel = h('form', {
+            class: 'mj-regmgr-assign-guardian__create-form',
+            onSubmit: handleCreate,
+        }, [
+            h('div', { class: 'mj-regmgr-assign-guardian__form-row' }, [
+                h('div', { class: 'mj-regmgr-assign-guardian__form-group' }, [
+                    h('label', { for: 'ac-firstName' }, getString(strings, 'firstName', 'Prénom') + ' *'),
+                    h('input', {
+                        type: 'text',
+                        id: 'ac-firstName',
+                        class: 'mj-regmgr-input',
+                        value: cfFirstName,
+                        onInput: function (e) { setCfFirstName(e.target.value); },
+                        placeholder: 'Marie',
+                        required: true,
+                        disabled: creating,
+                        autoFocus: true,
+                    }),
+                ]),
+                h('div', { class: 'mj-regmgr-assign-guardian__form-group' }, [
+                    h('label', { for: 'ac-lastName' }, getString(strings, 'lastName', 'Nom') + ' *'),
+                    h('input', {
+                        type: 'text',
+                        id: 'ac-lastName',
+                        class: 'mj-regmgr-input',
+                        value: cfLastName,
+                        onInput: function (e) { setCfLastName(e.target.value); },
+                        placeholder: 'Dupont',
+                        required: true,
+                        disabled: creating,
+                    }),
+                ]),
+            ]),
+            h('div', { class: 'mj-regmgr-assign-guardian__form-group' }, [
+                h('label', { for: 'ac-birthDate' }, getString(strings, 'birthDate', 'Date de naissance')),
+                h('input', {
+                    type: 'date',
+                    id: 'ac-birthDate',
+                    class: 'mj-regmgr-input',
+                    value: cfBirthDate,
+                    onInput: function (e) { setCfBirthDate(e.target.value); },
+                    disabled: creating,
+                }),
+            ]),
+            h('div', { class: 'mj-regmgr-assign-guardian__form-group' }, [
+                h('label', { for: 'ac-email' }, getString(strings, 'email', 'Email') + ' (' + getString(strings, 'optional', 'optionnel') + ')'),
+                h('input', {
+                    type: 'email',
+                    id: 'ac-email',
+                    class: 'mj-regmgr-input',
+                    value: cfEmail,
+                    onInput: function (e) { setCfEmail(e.target.value); },
+                    placeholder: 'marie.dupont@email.be',
+                    disabled: creating,
+                }),
+            ]),
+            h('div', { class: 'mj-regmgr-assign-guardian__form-actions' }, [
+                h('button', {
+                    type: 'submit',
+                    class: 'mj-btn mj-btn--primary',
+                    disabled: creating || !cfFirstName.trim() || !cfLastName.trim(),
+                }, creating
+                    ? getString(strings, 'loading', 'Chargement...')
+                    : [
+                        h('svg', {
+                            width: 16, height: 16, viewBox: '0 0 24 24',
+                            fill: 'none', stroke: 'currentColor',
+                            'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                        }, [
+                            h('path', { d: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2' }),
+                            h('circle', { cx: 9, cy: 7, r: 4 }),
+                            h('line', { x1: 19, y1: 8, x2: 19, y2: 14 }),
+                            h('line', { x1: 22, y1: 11, x2: 16, y2: 11 }),
+                        ]),
+                        getString(strings, 'createAndAttachChild', 'Cr\u00e9er et rattacher'),
+                    ]),
+            ]),
+        ]);
 
         return h(Modal, {
             isOpen: isOpen,
             onClose: onClose,
-            title: getString(strings, 'guardianChildAttachExisting', 'Rattacher un enfant existant'),
+            title: getString(strings, 'attachChildTitle', 'Ajouter un enfant'),
             size: 'medium',
         }, [
             !guardian && h('p', { class: 'mj-regmgr-form__hint' }, getString(strings, 'error', 'Une erreur est survenue.')),
 
-            guardian && h('div', { class: 'mj-regmgr-attach-child' }, [
-                guardianSummary && h('p', { class: 'mj-regmgr-form__intro' }, guardianSummary),
-                h('p', { class: 'mj-regmgr-form__intro' }, introText),
-                h('form', {
-                    class: 'mj-regmgr-attach-child__form',
-                    onSubmit: handleSearch,
-                }, [
-                    h('div', { class: 'mj-regmgr-search-input' }, [
-                        h('svg', {
-                            class: 'mj-regmgr-search-input__icon',
-                            width: 20,
-                            height: 20,
-                            viewBox: '0 0 24 24',
-                            fill: 'none',
-                            stroke: 'currentColor',
-                            'stroke-width': 2,
-                        }, [
-                            h('circle', { cx: 11, cy: 11, r: 8 }),
-                            h('line', { x1: 21, y1: 21, x2: 16.65, y2: 16.65 }),
-                        ]),
-                        h('input', {
-                            type: 'text',
-                            class: 'mj-regmgr-search-input__field',
-                            value: search,
-                            onInput: function (e) { setSearch(e.target.value); },
-                            placeholder: placeholderText,
-                            disabled: loading || attachingId !== null,
-                        }),
+            guardian && h('div', { class: 'mj-regmgr-assign-guardian' }, [
+                guardianSummary && h('p', { class: 'mj-regmgr-assign-guardian__subtitle' }, [
+                    h('svg', {
+                        width: 13, height: 13, viewBox: '0 0 24 24',
+                        fill: 'none', stroke: 'currentColor',
+                        'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                    }, [
+                        h('circle', { cx: 12, cy: 8, r: 5 }),
+                        h('path', { d: 'M20 21a8 8 0 0 0-16 0' }),
                     ]),
-                    h('button', {
-                        type: 'submit',
-                        class: 'mj-btn mj-btn--primary mj-btn--small',
-                        disabled: loading || search.trim().length < minLength,
-                    }, loading ? getString(strings, 'loading', 'Chargement...') : searchButtonLabel),
+                    guardianSummary,
                 ]),
+
+                tabBar,
 
                 error && h('div', { class: 'mj-regmgr-alert mj-regmgr-alert--error' }, error),
 
-                !loading && hasSearched && results.length === 0 && h('div', { class: 'mj-regmgr-attach-child__empty' }, [
-                    h('p', null, noResultsLabel),
+                tab === TAB_SEARCH && searchPanel,
+                tab === TAB_CREATE && createPanel,
+            ]),
+        ]);
+    }
+
+    // ============================================
+    // ASSIGN GUARDIAN MODAL
+    // ============================================
+
+    function AssignGuardianModal(props) {
+        var isOpen = props.isOpen;
+        var onClose = props.onClose;
+        var child = props.child;
+        var strings = props.strings || {};
+        var searchMembers = props.searchMembers;
+        var onAssign = props.onAssign;
+        var onCreateAndAssign = props.onCreateAndAssign;
+
+        var childId = child && child.id ? child.id : null;
+        var childName = '';
+        if (child) {
+            childName = ((child.firstName || '') + ' ' + (child.lastName || '')).trim();
+            if (!childName && child.displayName) {
+                childName = child.displayName;
+            }
+        }
+
+        // --- Tab state ---
+        var TAB_SEARCH = 'search';
+        var TAB_CREATE = 'create';
+        var _tab = useState(TAB_SEARCH);
+        var tab = _tab[0];
+        var setTab = _tab[1];
+
+        // --- Search state ---
+        var _search = useState('');
+        var search = _search[0];
+        var setSearch = _search[1];
+
+        var _results = useState([]);
+        var results = _results[0];
+        var setResults = _results[1];
+
+        var _loading = useState(false);
+        var loading = _loading[0];
+        var setLoading = _loading[1];
+
+        var _error = useState('');
+        var error = _error[0];
+        var setError = _error[1];
+
+        var _assigningId = useState(null);
+        var assigningId = _assigningId[0];
+        var setAssigningId = _assigningId[1];
+
+        var _hasSearched = useState(false);
+        var hasSearched = _hasSearched[0];
+        var setHasSearched = _hasSearched[1];
+
+        // --- Create form state ---
+        var _cfFirstName = useState('');
+        var cfFirstName = _cfFirstName[0];
+        var setCfFirstName = _cfFirstName[1];
+
+        var _cfLastName = useState('');
+        var cfLastName = _cfLastName[0];
+        var setCfLastName = _cfLastName[1];
+
+        var _cfPhone = useState('');
+        var cfPhone = _cfPhone[0];
+        var setCfPhone = _cfPhone[1];
+
+        var _cfEmail = useState('');
+        var cfEmail = _cfEmail[0];
+        var setCfEmail = _cfEmail[1];
+
+        var _creating = useState(false);
+        var creating = _creating[0];
+        var setCreating = _creating[1];
+
+        // --- Reset on open ---
+        useEffect(function () {
+            if (isOpen) {
+                setTab(TAB_SEARCH);
+                setSearch('');
+                setResults([]);
+                setError('');
+                setAssigningId(null);
+                setHasSearched(false);
+                setCfFirstName('');
+                setCfLastName('');
+                setCfPhone('');
+                setCfEmail('');
+                setCreating(false);
+            }
+        }, [isOpen, childId]);
+
+        var minLength = 2;
+
+        // --- Search handler ---
+        var handleSearch = useCallback(function (e) {
+            if (e && typeof e.preventDefault === 'function') {
+                e.preventDefault();
+            }
+
+            if (!searchMembers || !childId) {
+                return;
+            }
+
+            var term = search.trim();
+            if (term.length < minLength) {
+                setError(getString(strings, 'assignGuardianSearchHelp', 'Tapez au moins 2 caractères pour rechercher'));
+                setResults([]);
+                setHasSearched(false);
+                return;
+            }
+
+            setLoading(true);
+            setError('');
+            setHasSearched(true);
+
+            Promise.resolve(searchMembers({
+                search: term,
+                role: 'tuteur',
+                page: 1,
+            }))
+                .then(function (data) {
+                    var list = data && data.members ? data.members : [];
+                    setResults(Array.isArray(list) ? list : []);
+                    setLoading(false);
+                })
+                .catch(function (err) {
+                    setLoading(false);
+                    setResults([]);
+                    setError(err && err.message ? err.message : getString(strings, 'error', 'Une erreur est survenue.'));
+                });
+        }, [searchMembers, search, strings, childId]);
+
+        // --- Assign existing handler ---
+        var handleAssign = useCallback(function (guardian) {
+            if (!guardian || !guardian.id || !childId || typeof onAssign !== 'function') {
+                return;
+            }
+
+            setAssigningId(guardian.id);
+            setError('');
+
+            Promise.resolve(onAssign(child, guardian))
+                .then(function () {
+                    setAssigningId(null);
+                    onClose();
+                })
+                .catch(function (err) {
+                    setAssigningId(null);
+                    setError(err && err.message ? err.message : getString(strings, 'error', 'Une erreur est survenue.'));
+                });
+        }, [child, childId, onAssign, onClose, strings]);
+
+        // --- Create & assign handler ---
+        var handleCreate = useCallback(function (e) {
+            if (e && typeof e.preventDefault === 'function') {
+                e.preventDefault();
+            }
+
+            if (!cfFirstName.trim() || !cfLastName.trim()) {
+                setError(getString(strings, 'createMemberNameRequired', 'Prénom et nom sont requis.'));
+                return;
+            }
+
+            if (typeof onCreateAndAssign !== 'function') {
+                return;
+            }
+
+            setCreating(true);
+            setError('');
+
+            Promise.resolve(onCreateAndAssign(child, {
+                firstName: cfFirstName.trim(),
+                lastName: cfLastName.trim(),
+                phone: cfPhone.trim(),
+                email: cfEmail.trim(),
+            }))
+                .then(function () {
+                    setCreating(false);
+                    onClose();
+                })
+                .catch(function (err) {
+                    setCreating(false);
+                    setError(err && err.message ? err.message : getString(strings, 'error', 'Une erreur est survenue.'));
+                });
+        }, [child, cfFirstName, cfLastName, cfPhone, cfEmail, onCreateAndAssign, onClose, strings]);
+
+        // --- Labels ---
+        var placeholderText = getString(strings, 'assignGuardianSearchPlaceholder', 'Rechercher un tuteur...');
+        var searchButtonLabel = getString(strings, 'assignGuardianSearchAction', 'Rechercher');
+        var noResultsLabel = getString(strings, 'assignGuardianSearchNoResults', 'Aucun tuteur trouvé.');
+        var assignLabel = getString(strings, 'assignGuardianAction', 'Assigner');
+        var alreadyGuardianLabel = getString(strings, 'assignGuardianAlreadyAssigned', 'Déjà tuteur de ce membre');
+
+        var childSummary = childName
+            ? getString(strings, 'assignGuardianFor', 'Tuteur pour') + ' \u00b7 ' + childName
+            : null;
+
+        // --- Tab bar ---
+        var tabBar = h('div', { class: 'mj-regmgr-assign-guardian__tabs' }, [
+            h('button', {
+                type: 'button',
+                class: classNames('mj-regmgr-assign-guardian__tab', {
+                    'mj-regmgr-assign-guardian__tab--active': tab === TAB_SEARCH,
+                }),
+                onClick: function () { setTab(TAB_SEARCH); setError(''); },
+            }, [
+                h('svg', {
+                    width: 15, height: 15, viewBox: '0 0 24 24',
+                    fill: 'none', stroke: 'currentColor',
+                    'stroke-width': 2.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                }, [
+                    h('circle', { cx: 11, cy: 11, r: 8 }),
+                    h('line', { x1: 21, y1: 21, x2: 16.65, y2: 16.65 }),
                 ]),
-
-                loading && h('div', { class: 'mj-regmgr-add-member__loading' }, [
-                    h('div', { class: 'mj-regmgr-spinner' }),
+                getString(strings, 'assignGuardianTabSearch', 'Tuteur existant'),
+            ]),
+            h('button', {
+                type: 'button',
+                class: classNames('mj-regmgr-assign-guardian__tab', {
+                    'mj-regmgr-assign-guardian__tab--active': tab === TAB_CREATE,
+                }),
+                onClick: function () { setTab(TAB_CREATE); setError(''); },
+            }, [
+                h('svg', {
+                    width: 15, height: 15, viewBox: '0 0 24 24',
+                    fill: 'none', stroke: 'currentColor',
+                    'stroke-width': 2.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                }, [
+                    h('path', { d: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2' }),
+                    h('circle', { cx: 9, cy: 7, r: 4 }),
+                    h('line', { x1: 19, y1: 8, x2: 19, y2: 14 }),
+                    h('line', { x1: 22, y1: 11, x2: 16, y2: 11 }),
                 ]),
+                getString(strings, 'assignGuardianTabCreate', 'Nouveau tuteur'),
+            ]),
+        ]);
 
-                !loading && results.length > 0 && h('div', { class: 'mj-regmgr-attach-child__results' },
-                    results.map(function (member) {
-                        if (!member || !member.id) {
-                            return null;
-                        }
+        // --- Search panel ---
+        var searchPanel = h('div', { class: 'mj-regmgr-assign-guardian__panel' }, [
+            h('form', {
+                class: 'mj-regmgr-attach-child__form',
+                onSubmit: handleSearch,
+            }, [
+                h('div', { class: 'mj-regmgr-search-input' }, [
+                    h('svg', {
+                        class: 'mj-regmgr-search-input__icon',
+                        width: 20,
+                        height: 20,
+                        viewBox: '0 0 24 24',
+                        fill: 'none',
+                        stroke: 'currentColor',
+                        'stroke-width': 2,
+                    }, [
+                        h('circle', { cx: 11, cy: 11, r: 8 }),
+                        h('line', { x1: 21, y1: 21, x2: 16.65, y2: 16.65 }),
+                    ]),
+                    h('input', {
+                        type: 'text',
+                        class: 'mj-regmgr-search-input__field',
+                        value: search,
+                        onInput: function (e) { setSearch(e.target.value); },
+                        placeholder: placeholderText,
+                        disabled: loading || assigningId !== null,
+                    }),
+                ]),
+                h('button', {
+                    type: 'submit',
+                    class: 'mj-btn mj-btn--primary mj-btn--small',
+                    disabled: loading || search.trim().length < minLength,
+                }, loading ? getString(strings, 'loading', 'Chargement...') : searchButtonLabel),
+            ]),
 
-                        var memberGuardianId = member.guardianId || member.guardian_id || 0;
-                        var invalidRole = member.role && member.role !== 'jeune';
-                        var isCurrentGuardian = memberGuardianId && guardianId && memberGuardianId === guardianId;
-                        var isDifferentGuardian = memberGuardianId && guardianId && memberGuardianId !== guardianId;
-                        var restriction = '';
-                        if (invalidRole) {
-                            restriction = roleRestrictionLabel;
-                        } else if (isDifferentGuardian) {
-                            restriction = alreadyLinkedLabel;
-                        } else if (isCurrentGuardian) {
-                            restriction = alreadyAssignedLabel;
-                        }
-
-                        var disabled = invalidRole || isDifferentGuardian || isCurrentGuardian || attachingId === member.id;
-
-                        return h('div', {
-                            key: member.id,
-                            class: classNames('mj-regmgr-attach-child__card', {
-                                'mj-regmgr-attach-child__card--disabled': disabled,
-                            }),
-                        }, [
-                            h(MemberAvatar, { member: member, size: 'small' }),
-                            h('div', { class: 'mj-regmgr-attach-child__info' }, [
-                                h('div', { class: 'mj-regmgr-attach-child__name' },
-                                    (member.firstName || '') + ' ' + (member.lastName || '')
-                                ),
-                                h('div', { class: 'mj-regmgr-attach-child__meta' }, [
-                                    member.roleLabel && h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--sm' }, member.roleLabel),
-                                    typeof member.age === 'number' && h('span', null, member.age + ' ans'),
-                                ]),
-                                restriction && h('p', { class: 'mj-regmgr-attach-child__restriction' }, restriction),
-                            ]),
-                            h('div', { class: 'mj-regmgr-attach-child__actions' }, [
-                                h('button', {
-                                    type: 'button',
-                                    class: 'mj-btn mj-btn--primary mj-btn--small',
-                                    onClick: function () { handleAttach(member); },
-                                    disabled: disabled,
-                                }, attachingId === member.id ? getString(strings, 'loading', 'Chargement...') : attachLabel),
-                            ]),
-                        ]);
-                    })
+            !loading && hasSearched && results.length === 0 && h('div', { class: 'mj-regmgr-attach-child__empty' }, [
+                h('svg', {
+                    width: 40, height: 40, viewBox: '0 0 24 24',
+                    fill: 'none', stroke: 'currentColor',
+                    'stroke-width': 1.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                    style: 'color: var(--regmgr-gray-300)',
+                }, [
+                    h('circle', { cx: 11, cy: 11, r: 8 }),
+                    h('line', { x1: 21, y1: 21, x2: 16.65, y2: 16.65 }),
+                    h('line', { x1: 8, y1: 11, x2: 14, y2: 11 }),
+                ]),
+                h('p', { style: 'margin: 0' }, noResultsLabel),
+                h('p', { style: 'margin: 0; font-size: 12px; color: var(--regmgr-gray-400)' },
+                    getString(strings, 'assignGuardianSwitchHint', 'Vous pouvez cr\u00e9er un nouveau tuteur via l\u2019onglet \u00ab Nouveau tuteur \u00bb.')
                 ),
+            ]),
+
+            loading && h('div', { class: 'mj-regmgr-add-member__loading' }, [
+                h('div', { class: 'mj-regmgr-spinner' }),
+            ]),
+
+            !loading && results.length > 0 && h('div', { class: 'mj-regmgr-attach-child__results' },
+                results.map(function (member) {
+                    if (!member || !member.id) {
+                        return null;
+                    }
+
+                    var isAlreadyGuardian = false;
+                    if (child && child.guardianId) {
+                        isAlreadyGuardian = parseInt(child.guardianId, 10) === parseInt(member.id, 10);
+                    }
+
+                    var restriction = '';
+                    if (isAlreadyGuardian) {
+                        restriction = alreadyGuardianLabel;
+                    }
+
+                    var disabled = isAlreadyGuardian || assigningId === member.id;
+
+                    return h('div', {
+                        key: member.id,
+                        class: classNames('mj-regmgr-attach-child__card', {
+                            'mj-regmgr-attach-child__card--disabled': disabled,
+                        }),
+                    }, [
+                        h(MemberAvatar, { member: member, size: 'small' }),
+                        h('div', { class: 'mj-regmgr-attach-child__info' }, [
+                            h('div', { class: 'mj-regmgr-attach-child__name' },
+                                (member.firstName || '') + ' ' + (member.lastName || '')
+                            ),
+                            h('div', { class: 'mj-regmgr-attach-child__meta' }, [
+                                member.roleLabel && h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--sm' }, member.roleLabel),
+                                member.email && h('span', null, member.email),
+                            ]),
+                            restriction && h('p', { class: 'mj-regmgr-attach-child__restriction' }, restriction),
+                        ]),
+                        h('div', { class: 'mj-regmgr-attach-child__actions' }, [
+                            h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--primary mj-btn--small',
+                                onClick: function () { handleAssign(member); },
+                                disabled: disabled,
+                            }, assigningId === member.id ? getString(strings, 'loading', 'Chargement...') : assignLabel),
+                        ]),
+                    ]);
+                })
+            ),
+        ]);
+
+        // --- Create panel ---
+        var createPanel = h('form', {
+            class: 'mj-regmgr-assign-guardian__create-form',
+            onSubmit: handleCreate,
+        }, [
+            h('div', { class: 'mj-regmgr-assign-guardian__form-row' }, [
+                h('div', { class: 'mj-regmgr-assign-guardian__form-group' }, [
+                    h('label', { for: 'ag-firstName' }, getString(strings, 'firstName', 'Prénom') + ' *'),
+                    h('input', {
+                        type: 'text',
+                        id: 'ag-firstName',
+                        class: 'mj-regmgr-input',
+                        value: cfFirstName,
+                        onInput: function (e) { setCfFirstName(e.target.value); },
+                        placeholder: 'Jean',
+                        required: true,
+                        disabled: creating,
+                        autoFocus: true,
+                    }),
+                ]),
+                h('div', { class: 'mj-regmgr-assign-guardian__form-group' }, [
+                    h('label', { for: 'ag-lastName' }, getString(strings, 'lastName', 'Nom') + ' *'),
+                    h('input', {
+                        type: 'text',
+                        id: 'ag-lastName',
+                        class: 'mj-regmgr-input',
+                        value: cfLastName,
+                        onInput: function (e) { setCfLastName(e.target.value); },
+                        placeholder: 'Dupont',
+                        required: true,
+                        disabled: creating,
+                    }),
+                ]),
+            ]),
+            h('div', { class: 'mj-regmgr-assign-guardian__form-group' }, [
+                h('label', { for: 'ag-phone' }, getString(strings, 'phone', 'Téléphone')),
+                h('input', {
+                    type: 'tel',
+                    id: 'ag-phone',
+                    class: 'mj-regmgr-input',
+                    value: cfPhone,
+                    onInput: function (e) { setCfPhone(e.target.value); },
+                    placeholder: '0470 12 34 56',
+                    disabled: creating,
+                }),
+            ]),
+            h('div', { class: 'mj-regmgr-assign-guardian__form-group' }, [
+                h('label', { for: 'ag-email' }, getString(strings, 'email', 'Email') + ' (' + getString(strings, 'optional', 'optionnel') + ')'),
+                h('input', {
+                    type: 'email',
+                    id: 'ag-email',
+                    class: 'mj-regmgr-input',
+                    value: cfEmail,
+                    onInput: function (e) { setCfEmail(e.target.value); },
+                    placeholder: 'jean.dupont@email.be',
+                    disabled: creating,
+                }),
+            ]),
+            h('div', { class: 'mj-regmgr-assign-guardian__form-actions' }, [
+                h('button', {
+                    type: 'submit',
+                    class: 'mj-btn mj-btn--primary',
+                    disabled: creating || !cfFirstName.trim() || !cfLastName.trim(),
+                }, creating
+                    ? getString(strings, 'loading', 'Chargement...')
+                    : [
+                        h('svg', {
+                            width: 16, height: 16, viewBox: '0 0 24 24',
+                            fill: 'none', stroke: 'currentColor',
+                            'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                        }, [
+                            h('path', { d: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2' }),
+                            h('circle', { cx: 9, cy: 7, r: 4 }),
+                            h('line', { x1: 19, y1: 8, x2: 19, y2: 14 }),
+                            h('line', { x1: 22, y1: 11, x2: 16, y2: 11 }),
+                        ]),
+                        getString(strings, 'createAndAssign', 'Cr\u00e9er et assigner'),
+                    ]),
+            ]),
+        ]);
+
+        return h(Modal, {
+            isOpen: isOpen,
+            onClose: onClose,
+            title: getString(strings, 'assignGuardianTitle', 'Ajouter un tuteur'),
+            size: 'medium',
+        }, [
+            !child && h('p', { class: 'mj-regmgr-form__hint' }, getString(strings, 'error', 'Une erreur est survenue.')),
+
+            child && h('div', { class: 'mj-regmgr-assign-guardian' }, [
+                childSummary && h('p', { class: 'mj-regmgr-assign-guardian__subtitle' }, [
+                    h('svg', {
+                        width: 13, height: 13, viewBox: '0 0 24 24',
+                        fill: 'none', stroke: 'currentColor',
+                        'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                    }, [
+                        h('path', { d: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' }),
+                        h('circle', { cx: 12, cy: 7, r: 4 }),
+                    ]),
+                    childSummary,
+                ]),
+
+                tabBar,
+
+                error && h('div', { class: 'mj-regmgr-alert mj-regmgr-alert--error' }, error),
+
+                tab === TAB_SEARCH && searchPanel,
+                tab === TAB_CREATE && createPanel,
             ]),
         ]);
     }
@@ -2740,6 +3441,7 @@
         CreateEventModal: CreateEventModal,
         CreateMemberModal: CreateMemberModal,
         AttachChildModal: AttachChildModal,
+        AssignGuardianModal: AssignGuardianModal,
         MemberNotesModal: MemberNotesModal,
         MemberAccountModal: MemberAccountModal,
         QRCodeModal: QRCodeModal,

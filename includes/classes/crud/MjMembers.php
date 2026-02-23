@@ -1090,7 +1090,12 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         }
 
         $guardian = self::getById($guardian_id);
-        if (!$guardian || $guardian->role !== self::ROLE_TUTEUR) {
+        if (!$guardian) {
+            return null;
+        }
+
+        $allowed_guardian_roles = array(self::ROLE_TUTEUR, self::ROLE_ANIMATEUR, self::ROLE_COORDINATEUR);
+        if (!in_array($guardian->role, $allowed_guardian_roles, true)) {
             return null;
         }
 

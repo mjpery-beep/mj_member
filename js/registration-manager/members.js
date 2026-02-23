@@ -2358,11 +2358,12 @@
         var memberRoleRaw = member && typeof member.role === 'string' ? member.role : '';
         var memberRole = memberRoleRaw ? memberRoleRaw.toLowerCase() : '';
         var isGuardianRole = memberRole === 'tuteur';
-        var canManageChildren = !!(config && config.canManageChildren && isGuardianRole);
-        var allowCreateChild = !!(config && config.allowCreateChild && isGuardianRole);
-        var allowAttachChild = !!(config && config.allowAttachChild && isGuardianRole);
+        var isChildCapableRole = memberRole === 'tuteur' || memberRole === 'animateur' || memberRole === 'coordinateur';
+        var canManageChildren = !!(config && config.canManageChildren && isChildCapableRole);
+        var allowCreateChild = !!(config && config.allowCreateChild && isChildCapableRole);
+        var allowAttachChild = !!(config && config.allowAttachChild && isChildCapableRole);
         var hasChildren = !!(member && Array.isArray(member.children) && member.children.length > 0);
-        var showChildSection = isGuardianRole && (hasChildren || canManageChildren);
+        var showChildSection = isChildCapableRole && (hasChildren || canManageChildren);
 
         var handleCreateChild = useCallback(function () {
             if (!canManageChildren || !allowCreateChild) {
@@ -3807,6 +3808,131 @@
                     member.role && h('span', { 
                         class: 'mj-regmgr-badge mj-regmgr-badge--role-' + member.role 
                     }, roleLabels[member.role] || member.role),
+                    !guardianDisplayName && memberRole === 'jeune' && config && typeof config.onAssignGuardian === 'function' && h('button', {
+                        type: 'button',
+                        class: 'mj-regmgr-member-detail__add-guardian-btn',
+                        onClick: function () { config.onAssignGuardian(member); },
+                        title: getString(strings, 'addGuardian', 'Ajouter un tuteur'),
+                    }, [
+                        h('svg', {
+                            width: 14, height: 14, viewBox: '0 0 24 24',
+                            fill: 'none', stroke: 'currentColor',
+                            'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                        }, [
+                            h('path', { d: 'M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' }),
+                            h('circle', { cx: 8.5, cy: 7, r: 4 }),
+                            h('line', { x1: 20, y1: 8, x2: 20, y2: 14 }),
+                            h('line', { x1: 17, y1: 11, x2: 23, y2: 11 }),
+                        ]),
+                        h('span', null, getString(strings, 'addGuardian', 'Ajouter un tuteur')),
+                    ]),
+                    guardianDisplayName && h('div', { class: 'mj-regmgr-member-detail__guardian-chip' }, [
+                        h('svg', {
+                            class: 'mj-regmgr-member-detail__guardian-chip-icon',
+                            width: 18, height: 18, viewBox: '0 0 24 24',
+                            fill: 'none', stroke: 'currentColor',
+                            'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                        }, [
+                            h('path', { d: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' }),
+                            h('circle', { cx: 9, cy: 7, r: 4 }),
+                            h('path', { d: 'M23 21v-2a4 4 0 0 0-3-3.87' }),
+                            h('path', { d: 'M16 3.13a4 4 0 0 1 0 7.75' }),
+                        ]),
+                        onOpenMember && guardianReference
+                            ? h('button', {
+                                type: 'button',
+                                class: 'mj-regmgr-member-detail__guardian-chip-name',
+                                onClick: function () { onOpenMember(guardianReference); },
+                                title: getString(strings, 'viewMemberProfile', 'Ouvrir la fiche membre'),
+                            }, guardianDisplayName)
+                            : h('span', { class: 'mj-regmgr-member-detail__guardian-chip-name mj-regmgr-member-detail__guardian-chip-name--static' }, guardianDisplayName),
+                        (guardianReference && guardianReference.phone) && h('a', {
+                            href: 'tel:' + guardianReference.phone,
+                            class: 'mj-regmgr-member-detail__guardian-chip-phone',
+                            title: getString(strings, 'guardianPhone', 'Tél. tuteur'),
+                        }, [
+                            h('svg', {
+                                width: 12, height: 12, viewBox: '0 0 24 24',
+                                fill: 'none', stroke: 'currentColor',
+                                'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                            }, [
+                                h('path', { d: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z' }),
+                            ]),
+                            h('span', null, guardianReference.phone),
+                        ]),
+                        (guardianReference && guardianReference.email) && h('a', {
+                            href: 'mailto:' + guardianReference.email,
+                            class: 'mj-regmgr-member-detail__guardian-chip-action',
+                            title: guardianReference.email,
+                            'aria-label': getString(strings, 'guardianEmail', 'Email tuteur'),
+                        }, [
+                            h('svg', {
+                                width: 12, height: 12, viewBox: '0 0 24 24',
+                                fill: 'none', stroke: 'currentColor',
+                                'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                            }, [
+                                h('rect', { x: 2, y: 4, width: 20, height: 16, rx: 2 }),
+                                h('path', { d: 'M22 7l-10 7L2 7' }),
+                            ]),
+                        ]),
+                    ]),
+                    hasChildren && h('div', { class: 'mj-regmgr-member-detail__children-chips' },
+                        member.children.map(function (child) {
+                            var childName = ((child.firstName || '') + ' ' + (child.lastName || '')).trim();
+                            if (!childName && child.displayName) childName = child.displayName;
+                            return h('div', { key: child.id, class: 'mj-regmgr-member-detail__guardian-chip' }, [
+                                h('svg', {
+                                    class: 'mj-regmgr-member-detail__guardian-chip-icon',
+                                    width: 18, height: 18, viewBox: '0 0 24 24',
+                                    fill: 'none', stroke: 'currentColor',
+                                    'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                                }, [
+                                    h('circle', { cx: 12, cy: 8, r: 5 }),
+                                    h('path', { d: 'M20 21a8 8 0 0 0-16 0' }),
+                                ]),
+                                onOpenMember && child && child.id
+                                    ? h('button', {
+                                        type: 'button',
+                                        class: 'mj-regmgr-member-detail__guardian-chip-name',
+                                        onClick: function () { onOpenMember(child); },
+                                        title: getString(strings, 'viewMemberProfile', 'Ouvrir la fiche membre'),
+                                    }, childName || '?')
+                                    : h('span', { class: 'mj-regmgr-member-detail__guardian-chip-name mj-regmgr-member-detail__guardian-chip-name--static' }, childName || '?'),
+                                child.phone && h('a', {
+                                    href: 'tel:' + child.phone,
+                                    class: 'mj-regmgr-member-detail__guardian-chip-phone',
+                                    title: getString(strings, 'childPhone', 'Tél. enfant'),
+                                }, [
+                                    h('svg', {
+                                        width: 12, height: 12, viewBox: '0 0 24 24',
+                                        fill: 'none', stroke: 'currentColor',
+                                        'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                                    }, [
+                                        h('path', { d: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z' }),
+                                    ]),
+                                    h('span', null, child.phone),
+                                ]),
+                            ]);
+                        })
+                    ),
+                    isChildCapableRole && config && typeof config.onAttachChild === 'function' && h('button', {
+                        type: 'button',
+                        class: 'mj-regmgr-member-detail__add-guardian-btn',
+                        onClick: function () { config.onAttachChild(member); },
+                        title: getString(strings, 'addChild', 'Ajouter un enfant'),
+                    }, [
+                        h('svg', {
+                            width: 14, height: 14, viewBox: '0 0 24 24',
+                            fill: 'none', stroke: 'currentColor',
+                            'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                        }, [
+                            h('circle', { cx: 12, cy: 8, r: 5 }),
+                            h('path', { d: 'M20 21a8 8 0 0 0-16 0' }),
+                            h('line', { x1: 12, y1: 18, x2: 12, y2: 24 }),
+                            h('line', { x1: 9, y1: 21, x2: 15, y2: 21 }),
+                        ]),
+                        h('span', null, getString(strings, 'addChild', 'Ajouter un enfant')),
+                    ]),
                 ]),
                 h('div', { class: 'mj-regmgr-member-detail__header-actions' }, [
                     whatsappLink && h('a', {
