@@ -56,6 +56,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         'nickname' => 100,
         'email' => 150,
         'phone' => 30,
+        'phone_secondary' => 30,
         'address' => 250,
         'city' => 120,
         'postal_code' => 20,
@@ -146,7 +147,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         $table_name = self::getTableName(self::TABLE_NAME);
         $wpdb = self::getWpdb();
 
-        $allowed_orderby = array('last_name', 'first_name', 'role', 'status', 'date_inscription', 'date_last_payement', 'last_login_at', 'last_activity_at', 'id');
+        $allowed_orderby = array('last_name', 'first_name', 'role', 'status', 'date_inscription', 'date_last_payement', 'last_login_at', 'last_activity_at', 'xp_total', 'id');
         if (!in_array($orderby, $allowed_orderby, true)) {
             $orderby = 'date_inscription';
         }
@@ -291,6 +292,10 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         if (!empty($filters['date_end'])) {
             $builder->where_compare('date_inscription', '<=', sanitize_text_field($filters['date_end']), '%s');
         }
+
+        if (!empty($filters['has_login'])) {
+            $builder->where_raw('(wp_user_id IS NOT NULL AND wp_user_id > 0)');
+        }
     }
 
     /**
@@ -379,6 +384,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             'last_name' => $last_name,
             'email' => ($email !== null ? $email : ''),
             'phone' => self::sanitizeOptionalText($data['phone'] ?? ''),
+            'phone_secondary' => self::sanitizeOptionalText($data['phone_secondary'] ?? ''),
             'birth_date' => self::sanitizeDate($data['birth_date'] ?? ''),
             'role' => $role,
             'guardian_id' => $guardian_id,
@@ -468,6 +474,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             'last_name' => $placeholder_prefix,
             'email' => $placeholder_prefix . '@example.com',
             'phone' => null,
+            'phone_secondary' => null,
             'address' => null,
             'city' => null,
             'postal_code' => null,
@@ -521,7 +528,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         $updates = array();
 
         $allowed_fields = array(
-            'first_name','last_name','nickname','email','phone','birth_date','role','guardian_id','is_autonomous','is_volunteer', 'is_trusted_member','requires_payment','address','city','postal_code','school','birth_country','nationality','notes','description_courte','description_longue','why_mj','how_mj','work_schedule','leave_quota_paid','leave_quota_unpaid','leave_quota_exceptional','leave_quota_recovery','status','date_inscription','date_last_payement','photo_id','photo_usage_consent','newsletter_opt_in','sms_opt_in','whatsapp_opt_in','notification_preferences','wp_user_id','card_access_key','anonymized_at','last_login_at','last_activity_at'
+            'first_name','last_name','nickname','email','phone','phone_secondary','birth_date','role','guardian_id','is_autonomous','is_volunteer', 'is_trusted_member','requires_payment','address','city','postal_code','school','birth_country','nationality','notes','description_courte','description_longue','why_mj','how_mj','work_schedule','leave_quota_paid','leave_quota_unpaid','leave_quota_exceptional','leave_quota_recovery','status','date_inscription','date_last_payement','photo_id','photo_usage_consent','newsletter_opt_in','sms_opt_in','whatsapp_opt_in','notification_preferences','wp_user_id','card_access_key','anonymized_at','last_login_at','last_activity_at'
         );
 
         foreach ($data as $field => $value) {
@@ -544,6 +551,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
                     $updates[$field] = self::sanitizeOptionalText($value);
                     break;
                 case 'phone':
+                case 'phone_secondary':
                 case 'address':
                 case 'city':
                 case 'postal_code':
@@ -1105,7 +1113,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
     /**
      * Create or update a guardian (tuteur) record and return its ID.
      *
-     * @param array $data Basic guardian information (first_name, last_name, email, phone, address, city, postal_code, status).
+     * @param array $data Basic guardian information (first_name, last_name, email, phone, phone_secondary, address, city, postal_code, status).
      * @param int   $current_guardian_id Existing guardian id linked to the member (optional).
     * @return int|WP_Error|null Guardian id, erreur ou null si non resolu.
      */
@@ -1122,6 +1130,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             'first_name' => $first_name,
             'last_name' => $last_name,
             'phone' => self::sanitizeOptionalText($data['phone'] ?? ''),
+            'phone_secondary' => self::sanitizeOptionalText($data['phone_secondary'] ?? ''),
             'address' => self::sanitizeOptionalText($data['address'] ?? ''),
             'city' => self::sanitizeOptionalText($data['city'] ?? ''),
             'postal_code' => self::sanitizeOptionalText($data['postal_code'] ?? ''),

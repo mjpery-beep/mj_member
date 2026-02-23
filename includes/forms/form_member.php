@@ -52,6 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
         'member_nickname' => isset($_POST['member_nickname']) ? sanitize_text_field($_POST['member_nickname']) : '',
         'member_email' => isset($_POST['member_email']) ? sanitize_email($_POST['member_email']) : '',
         'member_phone' => isset($_POST['member_phone']) ? sanitize_text_field($_POST['member_phone']) : '',
+        'member_phone_secondary' => isset($_POST['member_phone_secondary']) ? sanitize_text_field($_POST['member_phone_secondary']) : '',
         'member_birth_date' => isset($_POST['member_birth_date']) ? sanitize_text_field($_POST['member_birth_date']) : '',
         'member_address' => isset($_POST['member_address']) ? sanitize_text_field($_POST['member_address']) : '',
         'member_city' => isset($_POST['member_city']) ? sanitize_text_field($_POST['member_city']) : '',
@@ -78,6 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
         'guardian_first_name' => isset($_POST['guardian_first_name']) ? sanitize_text_field($_POST['guardian_first_name']) : '',
         'guardian_email' => isset($_POST['guardian_email']) ? sanitize_email($_POST['guardian_email']) : '',
         'guardian_phone' => isset($_POST['guardian_phone']) ? sanitize_text_field($_POST['guardian_phone']) : '',
+        'guardian_phone_secondary' => isset($_POST['guardian_phone_secondary']) ? sanitize_text_field($_POST['guardian_phone_secondary']) : '',
         'guardian_address' => isset($_POST['guardian_address']) ? sanitize_text_field($_POST['guardian_address']) : '',
         'guardian_city' => isset($_POST['guardian_city']) ? sanitize_text_field($_POST['guardian_city']) : '',
         'guardian_postal' => isset($_POST['guardian_postal']) ? sanitize_text_field($_POST['guardian_postal']) : '',
@@ -155,6 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
             'last_name' => $input_data['member_last_name'],
             'email' => $member_email_value,
             'phone' => $input_data['member_phone'],
+            'phone_secondary' => $input_data['member_phone_secondary'],
             'birth_date' => $input_data['member_birth_date'],
             'role' => $current_role,
             'status' => $input_data['status'],
@@ -192,6 +195,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_nonce'])) {
                     'last_name' => $input_data['guardian_last_name'],
                     'email' => $input_data['guardian_email'],
                     'phone' => $input_data['guardian_phone'],
+                    'phone_secondary' => $input_data['guardian_phone_secondary'],
                     'address' => $input_data['guardian_address'],
                     'city' => $input_data['guardian_city'],
                     'postal_code' => $input_data['guardian_postal'],
@@ -292,6 +296,7 @@ $form_defaults = array(
     'member_nickname' => $extract_member_string($member, 'nickname'),
     'member_email' => $extract_member_string($member, 'email'),
     'member_phone' => $extract_member_string($member, 'phone'),
+    'member_phone_secondary' => $extract_member_string($member, 'phone_secondary'),
     'member_birth_date' => $birth_date_value,
     'member_address' => $extract_member_string($member, 'address'),
     'member_city' => $extract_member_string($member, 'city'),
@@ -318,6 +323,7 @@ $form_defaults = array(
     'guardian_first_name' => $extract_member_string($guardian, 'first_name'),
     'guardian_email' => $extract_member_string($guardian, 'email'),
     'guardian_phone' => $extract_member_string($guardian, 'phone'),
+    'guardian_phone_secondary' => $extract_member_string($guardian, 'phone_secondary'),
     'guardian_address' => $extract_member_string($guardian, 'address'),
     'guardian_city' => $extract_member_string($guardian, 'city'),
     'guardian_postal' => $extract_member_string($guardian, 'postal_code'),
@@ -432,6 +438,12 @@ $member_email_required = !MjRoles::isJeune($form_values['member_role']);
                     <th><label for="member_phone">Téléphone</label></th>
                     <td>
                         <input type="tel" id="member_phone" name="member_phone" value="<?php echo esc_attr($form_values['member_phone']); ?>" class="regular-text" />
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="member_phone_secondary">Téléphone 2</label></th>
+                    <td>
+                        <input type="tel" id="member_phone_secondary" name="member_phone_secondary" value="<?php echo esc_attr($form_values['member_phone_secondary']); ?>" class="regular-text" />
                     </td>
                 </tr>
                 <tr>
@@ -562,6 +574,12 @@ $member_email_required = !MjRoles::isJeune($form_values['member_role']);
                     <th><label for="guardian_phone">Téléphone du tuteur</label></th>
                     <td>
                         <input type="tel" id="guardian_phone" name="guardian_phone" value="<?php echo esc_attr($form_values['guardian_phone']); ?>" class="regular-text" />
+                    </td>
+                </tr>
+                <tr class="js-guardian-block js-guardian-new">
+                    <th><label for="guardian_phone_secondary">Téléphone 2 du tuteur</label></th>
+                    <td>
+                        <input type="tel" id="guardian_phone_secondary" name="guardian_phone_secondary" value="<?php echo esc_attr($form_values['guardian_phone_secondary']); ?>" class="regular-text" />
                     </td>
                 </tr>
                 <tr class="js-guardian-block js-guardian-new">

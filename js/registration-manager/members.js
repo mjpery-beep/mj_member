@@ -68,6 +68,7 @@
             nickname: '',
             email: '',
             phone: '',
+            phoneSecondary: '',
             birthDate: '',
             addressLine: '',
             postalCode: '',
@@ -92,6 +93,7 @@
         base.nickname = member.nickname || '';
         base.email = member.email || '';
         base.phone = member.phone || '';
+        base.phoneSecondary = member.phoneSecondary || '';
         base.birthDate = member.birthDate || '';
         base.addressLine = member.addressLine || '';
         base.postalCode = member.postalCode || '';
@@ -512,11 +514,11 @@
         var strings = props.strings;
         
         var roleLabels = {
-            'jeune': 'Jeune',
-            'animateur': 'Animateur',
-            'tuteur': 'Tuteur',
-            'benevole': 'Bénévole',
-            'coordinateur': 'Coordinateur',
+            'jeune': '🧒 Jeune',
+            'animateur': '🎭 Animateur',
+            'tuteur': '👨‍👩‍👧 Tuteur',
+            'benevole': '🤝 Bénévole',
+            'coordinateur': '👑 Coordinateur',
         };
 
         /**
@@ -588,10 +590,28 @@
                         title: 'Dernière connexion: ' + formatDate(member.lastLoginAt, true),
                     }, '🔑 ' + formatTimeAgo(member.lastLoginAt)),
                 ]),
-                member.createdAt && h('div', {
-                    class: 'mj-regmgr-member-card__date',
-                    title: formatDate(member.createdAt, true),
-                }, '📅 ' + formatTimeAgo(member.createdAt)),
+                h('div', { class: 'mj-regmgr-member-card__footer' }, [
+                    member.createdAt && h('div', {
+                        class: 'mj-regmgr-member-card__date',
+                        title: formatDate(member.createdAt, true),
+                    }, '📅 ' + formatTimeAgo(member.createdAt)),
+
+                    // Level / Coins / XP badges (only if > 0)
+                    (member.levelNumber > 0 || member.coinsTotal > 0 || member.xpTotal > 0) && h('div', { class: 'mj-regmgr-member-card__stats' }, [
+                        member.levelNumber > 0 && h('span', {
+                            class: 'mj-regmgr-member-card__level',
+                            title: 'Niveau ' + member.levelNumber,
+                        }, '⭐ ' + member.levelNumber),
+                        member.coinsTotal > 0 && h('span', {
+                            class: 'mj-regmgr-member-card__coins',
+                            title: member.coinsTotal.toLocaleString() + ' coins',
+                        }, '🪙 ' + member.coinsTotal.toLocaleString()),
+                        member.xpTotal > 0 && h('span', {
+                            class: 'mj-regmgr-member-card__xp',
+                            title: member.xpTotal.toLocaleString() + ' XP',
+                        }, '✨ ' + member.xpTotal.toLocaleString()),
+                    ]),
+                ]),
             ]),
         ]);
     }
@@ -609,6 +629,13 @@
         var onLoadMore = props.onLoadMore;
         var hasMore = props.hasMore;
         var loadingMore = props.loadingMore;
+        var pagination = props.pagination || {};
+        var onPageChange = props.onPageChange;
+
+        var currentPage = pagination.page || 1;
+        var totalPages = pagination.totalPages || 1;
+        var totalFiltered = typeof pagination.total === 'number' ? pagination.total : null;
+        var totalAll = typeof pagination.totalAll === 'number' ? pagination.totalAll : null;
 
         if (loading && members.length === 0) {
             return h('div', { class: 'mj-regmgr-members-list mj-regmgr-members-list--loading' }, [
@@ -639,6 +666,45 @@
         }
 
         return h('div', { class: 'mj-regmgr-members-list' }, [
+            // Pagination
+            (totalPages > 1 || totalFiltered !== null) && h('div', { class: 'mj-regmgr-members-list__pagination' }, [
+                // Compteur filtré / total
+                totalFiltered !== null && h('div', { class: 'mj-regmgr-members-list__pagination-info' },
+                    totalAll !== null && totalAll !== totalFiltered
+                        ? totalFiltered + ' / ' + totalAll + ' membres'
+                        : totalFiltered + ' membre' + (totalFiltered !== 1 ? 's' : '')
+                ),
+
+                // Contrôles de pagination
+                totalPages > 1 && h('div', { class: 'mj-regmgr-members-list__pagination-controls' }, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-regmgr-members-list__pagination-btn',
+                        disabled: currentPage <= 1 || loading,
+                        onClick: function () { onPageChange(currentPage - 1); },
+                        title: 'Page précédente',
+                    }, [
+                        h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.5 }, [
+                            h('polyline', { points: '15 18 9 12 15 6' }),
+                        ]),
+                    ]),
+                    h('span', { class: 'mj-regmgr-members-list__pagination-pages' },
+                        currentPage + ' / ' + totalPages
+                    ),
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-regmgr-members-list__pagination-btn',
+                        disabled: currentPage >= totalPages || loading,
+                        onClick: function () { onPageChange(currentPage + 1); },
+                        title: 'Page suivante',
+                    }, [
+                        h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.5 }, [
+                            h('polyline', { points: '9 18 15 12 9 6' }),
+                        ]),
+                    ]),
+                ]),
+            ]),
+
             members.map(function (member) {
                 return h(MemberCard, {
                     key: member.id,
@@ -648,19 +714,6 @@
                     strings: strings,
                 });
             }),
-
-            // Bouton "Charger plus"
-            hasMore && h('div', { class: 'mj-regmgr-members-list__load-more' }, [
-                h('button', {
-                    type: 'button',
-                    class: 'mj-btn mj-btn--secondary mj-btn--small',
-                    onClick: onLoadMore,
-                    disabled: loadingMore,
-                }, loadingMore 
-                    ? getString(strings, 'loading', 'Chargement...') 
-                    : 'Voir plus'
-                ),
-            ]),
         ]);
     }
 
@@ -2511,6 +2564,7 @@
                 avatarUrl: guardian && guardian.avatarUrl ? guardian.avatarUrl : '',
                 email: guardian && guardian.email ? guardian.email : '',
                 phone: guardian && guardian.phone ? guardian.phone : '',
+                phoneSecondary: guardian && guardian.phoneSecondary ? guardian.phoneSecondary : '',
             };
         }
         if (!guardianDisplayName && guardianReference) {
@@ -3648,6 +3702,16 @@
                             }),
                         ]),
                         h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', { htmlFor: fieldIdPrefix + 'phone-secondary' }, 'Téléphone secondaire'),
+                            h('input', {
+                                id: fieldIdPrefix + 'phone-secondary',
+                                type: 'tel',
+                                class: 'mj-regmgr-input',
+                                value: editData.phoneSecondary,
+                                onInput: handleFieldChange('phoneSecondary'),
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field' }, [
                             h('label', { htmlFor: fieldIdPrefix + 'birth-date' }, 'Date de naissance'),
                             h('input', {
                                 id: fieldIdPrefix + 'birth-date',
@@ -3829,7 +3893,7 @@
                     guardianDisplayName && h('div', { class: 'mj-regmgr-member-detail__guardian-chip' }, [
                         h('svg', {
                             class: 'mj-regmgr-member-detail__guardian-chip-icon',
-                            width: 18, height: 18, viewBox: '0 0 24 24',
+                            width: 25, height: 25, viewBox: '0 0 24 24',
                             fill: 'none', stroke: 'currentColor',
                             'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
                         }, [
@@ -3860,6 +3924,20 @@
                             ]),
                             h('span', null, guardianReference.phone),
                         ]),
+                        (guardianReference && guardianReference.phoneSecondary) && h('a', {
+                            href: 'tel:' + guardianReference.phoneSecondary,
+                            class: 'mj-regmgr-member-detail__guardian-chip-phone',
+                            title: getString(strings, 'guardianPhoneSecondary', 'Tél. 2 tuteur'),
+                        }, [
+                            h('svg', {
+                                width: 12, height: 12, viewBox: '0 0 24 24',
+                                fill: 'none', stroke: 'currentColor',
+                                'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                            }, [
+                                h('path', { d: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z' }),
+                            ]),
+                            h('span', null, guardianReference.phoneSecondary),
+                        ]),
                         (guardianReference && guardianReference.email) && h('a', {
                             href: 'mailto:' + guardianReference.email,
                             class: 'mj-regmgr-member-detail__guardian-chip-action',
@@ -3883,7 +3961,7 @@
                             return h('div', { key: child.id, class: 'mj-regmgr-member-detail__guardian-chip' }, [
                                 h('svg', {
                                     class: 'mj-regmgr-member-detail__guardian-chip-icon',
-                                    width: 18, height: 18, viewBox: '0 0 24 24',
+                                    width: 25, height: 25, viewBox: '0 0 24 24',
                                     fill: 'none', stroke: 'currentColor',
                                     'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
                                 }, [
@@ -3904,7 +3982,7 @@
                                     title: getString(strings, 'childPhone', 'Tél. enfant'),
                                 }, [
                                     h('svg', {
-                                        width: 12, height: 12, viewBox: '0 0 24 24',
+                                        width: 25, height: 25, viewBox: '0 0 24 24',
                                         fill: 'none', stroke: 'currentColor',
                                         'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
                                     }, [

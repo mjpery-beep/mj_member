@@ -1795,6 +1795,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_64($wpdb);
     mj_member_upgrade_to_2_65($wpdb);
     mj_member_upgrade_to_2_66($wpdb);
+    mj_member_upgrade_to_2_67($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -4788,6 +4789,7 @@ function mj_install()
         last_name varchar(100) NOT NULL,
         email varchar(150) NOT NULL,
         phone varchar(30) DEFAULT NULL,
+        phone_secondary varchar(30) DEFAULT NULL,
         birth_date date DEFAULT NULL,
         role varchar(20) NOT NULL DEFAULT 'jeune',
         guardian_id mediumint(9) DEFAULT NULL,
@@ -5594,6 +5596,17 @@ function mj_member_upgrade_to_2_66($wpdb) {
 
     if (mj_member_table_exists($table) && !mj_member_column_exists($table, 'last_activity_at')) {
         $wpdb->query("ALTER TABLE {$table} ADD COLUMN last_activity_at datetime DEFAULT NULL");
+    }
+}
+
+/**
+ * Migration 2.67: Add phone_secondary column to mj_members table.
+ */
+function mj_member_upgrade_to_2_67($wpdb) {
+    $table = $wpdb->prefix . 'mj_members';
+
+    if (mj_member_table_exists($table) && !mj_member_column_exists($table, 'phone_secondary')) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN phone_secondary varchar(30) DEFAULT NULL AFTER phone");
     }
 }
 

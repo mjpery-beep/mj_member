@@ -3879,7 +3879,7 @@
         var membersLoading = _membersLoading[0];
         var setMembersLoading = _membersLoading[1];
 
-        var _memberFilter = useState('all');
+        var _memberFilter = useState([]);
         var memberFilter = _memberFilter[0];
         var setMemberFilter = _memberFilter[1];
 
@@ -3890,6 +3890,10 @@
         var _memberSort = useState('name');
         var memberSort = _memberSort[0];
         var setMemberSort = _memberSort[1];
+
+        var _memberSortOrder = useState('');
+        var memberSortOrder = _memberSortOrder[0];
+        var setMemberSortOrder = _memberSortOrder[1];
 
         var _selectedMember = useState(null);
         var selectedMember = _selectedMember[0];
@@ -5171,6 +5175,7 @@
                 filter: memberFilter,
                 search: memberSearch,
                 sort: memberSort,
+                sortOrder: memberSortOrder,
                 page: page || 1,
                 perPage: config.perPage || 20,
             })
@@ -5196,14 +5201,14 @@
                     }
                     return null;
                 });
-        }, [api, memberFilter, memberSearch, memberSort, config.perPage, pendingMemberSelection, showError, strings]);
+        }, [api, memberFilter, memberSearch, memberSort, memberSortOrder, config.perPage, pendingMemberSelection, showError, strings]);
 
         // Charger les membres quand on bascule en mode membres ou quand les filtres changent
         useEffect(function () {
             if (sidebarMode === 'members') {
                 loadMembers(1);
             }
-        }, [sidebarMode, memberFilter, memberSearch, memberSort]);
+        }, [sidebarMode, memberFilter, memberSearch, memberSort, memberSortOrder]);
 
         // Charger les détails d'un membre
         var loadMemberDetails = useCallback(function (memberId) {
@@ -6927,9 +6932,13 @@
                     onMemberSearchChange: setMemberSearch,
                     memberSort: memberSort,
                     onMemberSortChange: setMemberSort,
+                    memberSortOrder: memberSortOrder,
+                    onMemberSortOrderChange: setMemberSortOrder,
                     onLoadMoreMembers: function () { loadMembers(membersPagination.page + 1); },
                     hasMoreMembers: membersPagination.page < membersPagination.totalPages,
                     membersLoadingMore: false,
+                    membersPagination: membersPagination,
+                    onMembersPageChange: function (newPage) { loadMembers(newPage); },
                     canCreateMember: !!config.allowCreateMember,
                     onCreateMember: config.allowCreateMember ? createMemberModal.open : null,
 

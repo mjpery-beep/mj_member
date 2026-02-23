@@ -388,12 +388,14 @@
         var membersLoading = props.membersLoading;
         var selectedMemberId = props.selectedMemberId;
         var onSelectMember = props.onSelectMember;
-        var memberFilter = props.memberFilter || 'all';
+        var memberFilter = props.memberFilter || [];
         var onMemberFilterChange = props.onMemberFilterChange;
         var memberSearch = props.memberSearch || '';
         var onMemberSearchChange = props.onMemberSearchChange;
         var memberSort = props.memberSort || 'name';
         var onMemberSortChange = props.onMemberSortChange;
+        var memberSortOrder = props.memberSortOrder || '';
+        var onMemberSortOrderChange = props.onMemberSortOrderChange;
         var onLoadMoreMembers = props.onLoadMoreMembers;
         var hasMoreMembers = props.hasMoreMembers;
         var membersLoadingMore = props.membersLoadingMore;
@@ -419,16 +421,18 @@
         );
 
         var memberFilters = [
-            { key: 'all', label: getString(strings, 'filterAll', 'Tous') },
-            { key: 'jeune', label: getString(strings, 'filterJeune', 'Jeunes') },
-            { key: 'animateur', label: getString(strings, 'filterAnimateur', 'Animateurs') },
-            { key: 'parent', label: getString(strings, 'filterParent', 'Parents') },
-            { key: 'membership_due', label: getString(strings, 'filterMembershipDue', 'Cotisation à régulariser') },
+            { key: 'jeune', label: getString(strings, 'filterJeune', 'Jeunes'), emoji: '🧒' },
+            { key: 'animateur', label: getString(strings, 'filterAnimateur', 'Animateurs'), emoji: '🎭' },
+            { key: 'parent', label: getString(strings, 'filterParent', 'Tuteurs'), emoji: '👨‍👩‍👧' },
+            { key: 'benevole', label: getString(strings, 'filterBenevole', 'Bénévoles'), emoji: '🤝' },
+            { key: 'coordinateur', label: getString(strings, 'filterCoordinateur', 'Coordinateurs'), emoji: '👑' },
+            { key: 'membership_due', label: getString(strings, 'filterMembershipDue', 'Cotisation due'), emoji: '💳' },
+            { key: 'has_login', label: getString(strings, 'filterHasLogin', 'Avec login'), emoji: '🔑' },
         ];
 
         var currentFilters = sidebarMode === 'events' ? eventFilters : memberFilters;
         var currentFilter = sidebarMode === 'events' ? filter : memberFilter;
-        var currentFilterChange = sidebarMode === 'events' ? onFilterChange : onMemberFilterChange;
+        var currentFilterChange = sidebarMode === 'events' ? onFilterChange : null;
         var currentSearch = sidebarMode === 'events' ? search : memberSearch;
         var currentSearchChange = sidebarMode === 'events' ? onSearchChange : onMemberSearchChange;
 
@@ -594,49 +598,102 @@
 
             // Filtres
             h('div', { class: 'mj-regmgr-sidebar__filters' }, [
-                h('div', { class: 'mj-regmgr-filter-tabs', role: 'tablist' }, 
-                    currentFilters.map(function (f) {
-                        return h('button', {
-                            key: f.key,
-                            type: 'button',
-                            class: classNames('mj-regmgr-filter-tab', {
-                                'mj-regmgr-filter-tab--active': currentFilter === f.key,
-                            }),
-                            role: 'tab',
-                            'aria-selected': currentFilter === f.key ? 'true' : 'false',
-                            onClick: function () { currentFilterChange(f.key); },
-                        }, f.label);
-                    })
-                ),
+                sidebarMode === 'events'
+                    ? h('div', { class: 'mj-regmgr-filter-tabs', role: 'tablist' }, 
+                        currentFilters.map(function (f) {
+                            return h('button', {
+                                key: f.key,
+                                type: 'button',
+                                class: classNames('mj-regmgr-filter-tab', {
+                                    'mj-regmgr-filter-tab--active': currentFilter === f.key,
+                                }),
+                                role: 'tab',
+                                'aria-selected': currentFilter === f.key ? 'true' : 'false',
+                                onClick: function () { currentFilterChange(f.key); },
+                            }, f.label);
+                        })
+                    )
+                    : h('div', { class: 'mj-regmgr-filter-checkboxes' },
+                        memberFilters.map(function (f) {
+                            var isChecked = Array.isArray(memberFilter) && memberFilter.indexOf(f.key) !== -1;
+                            return h('label', {
+                                key: f.key,
+                                class: classNames('mj-regmgr-filter-checkbox', {
+                                    'mj-regmgr-filter-checkbox--checked': isChecked,
+                                }),
+                            }, [
+                                h('input', {
+                                    type: 'checkbox',
+                                    checked: isChecked,
+                                    onChange: function () {
+                                        var current = Array.isArray(memberFilter) ? memberFilter.slice() : [];
+                                        var idx = current.indexOf(f.key);
+                                        if (idx !== -1) {
+                                            current.splice(idx, 1);
+                                        } else {
+                                            current.push(f.key);
+                                        }
+                                        onMemberFilterChange && onMemberFilterChange(current);
+                                    },
+                                }),
+                                h('span', { class: 'mj-regmgr-filter-checkbox__emoji' }, f.emoji),
+                                h('span', { class: 'mj-regmgr-filter-checkbox__label' }, f.label),
+                            ]);
+                        })
+                    ),
             ]),
 
             // Tri (seulement en mode membres)
             sidebarMode === 'members' && h('div', { class: 'mj-regmgr-sidebar__sort' }, [
                 h('label', { class: 'mj-regmgr-sort-label' }, [
-                    h('svg', {
-                        width: 14,
-                        height: 14,
-                        viewBox: '0 0 24 24',
-                        fill: 'none',
-                        stroke: 'currentColor',
-                        'stroke-width': 2,
+                    h('button', {
+                        type: 'button',
+                        class: classNames('mj-regmgr-sort-order-toggle', {
+                            'mj-regmgr-sort-order-toggle--desc': memberSortOrder === 'DESC',
+                            'mj-regmgr-sort-order-toggle--asc': memberSortOrder === 'ASC',
+                        }),
+                        title: memberSortOrder === 'ASC' ? 'Tri croissant (cliquer pour inverser)' : memberSortOrder === 'DESC' ? 'Tri décroissant (cliquer pour inverser)' : 'Inverser le sens du tri',
+                        onClick: function (e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!memberSortOrder || memberSortOrder === '') {
+                                // Determine current default then flip
+                                var defaultDesc = memberSort !== 'name';
+                                onMemberSortOrderChange && onMemberSortOrderChange(defaultDesc ? 'ASC' : 'DESC');
+                            } else {
+                                onMemberSortOrderChange && onMemberSortOrderChange(memberSortOrder === 'ASC' ? 'DESC' : 'ASC');
+                            }
+                        },
                     }, [
-                        h('line', { x1: 4, y1: 6, x2: 11, y2: 6 }),
-                        h('line', { x1: 4, y1: 12, x2: 15, y2: 12 }),
-                        h('line', { x1: 4, y1: 18, x2: 20, y2: 18 }),
+                        h('svg', {
+                            width: 14,
+                            height: 14,
+                            viewBox: '0 0 24 24',
+                            fill: 'none',
+                            stroke: 'currentColor',
+                            'stroke-width': 2,
+                        }, [
+                            h('line', { x1: 4, y1: 6, x2: 11, y2: 6 }),
+                            h('line', { x1: 4, y1: 12, x2: 15, y2: 12 }),
+                            h('line', { x1: 4, y1: 18, x2: 20, y2: 18 }),
+                        ]),
                     ]),
                     h('span', null, getString(strings, 'sortBy', 'Trier par')),
                 ]),
                 h('select', {
                     class: 'mj-regmgr-sort-select',
                     value: memberSort,
-                    onChange: function (e) { onMemberSortChange && onMemberSortChange(e.target.value); },
+                    onChange: function (e) {
+                        onMemberSortOrderChange && onMemberSortOrderChange('');
+                        onMemberSortChange && onMemberSortChange(e.target.value);
+                    },
                 }, [
                     h('option', { value: 'name' }, getString(strings, 'sortByName', 'Nom (A-Z)')),
                     h('option', { value: 'registration_date' }, getString(strings, 'sortByRegistration', 'Date d\'inscription')),
                     h('option', { value: 'membership_date' }, getString(strings, 'sortByMembership', 'Date de cotisation')),
                     h('option', { value: 'last_login' }, getString(strings, 'sortByLastLogin', 'Dernière connexion')),
                     h('option', { value: 'last_activity' }, getString(strings, 'sortByLastActivity', 'Dernière activité')),
+                    h('option', { value: 'level' }, getString(strings, 'sortByLevel', 'Niveau')),
                 ]),
             ]),
 
@@ -660,6 +717,8 @@
                     onLoadMore: onLoadMoreMembers,
                     hasMore: hasMoreMembers,
                     loadingMore: membersLoadingMore,
+                    pagination: props.membersPagination,
+                    onPageChange: props.onMembersPageChange,
                 }) : h('div', { class: 'mj-regmgr-members-list--loading' }, [
                     h('div', { class: 'mj-regmgr-spinner' }),
                 ])),

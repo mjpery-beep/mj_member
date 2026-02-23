@@ -71,8 +71,11 @@
             if (state.wrapper.matches(':hover') || state.panel.matches(':hover')) {
                 return;
             }
+            if(document.activeElement && state.panel.contains(document.activeElement)) {
+                return;
+            }
             closeState(state, false);
-        }, 200);
+        }, 900);
     }
 
     function initAccountMenuAccordions(container) {

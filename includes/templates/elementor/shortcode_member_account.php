@@ -105,6 +105,7 @@ if (!function_exists('mj_member_account_fake_context')) {
             'last_name' => 'Dupont',
             'email' => 'camille.dupont@example.com',
             'phone' => '0470 12 34 56',
+            'phone_secondary' => '0479 88 77 66',
             'address' => "12 rue des Artistes",
             'city' => 'Péry',
             'postal_code' => '2600',
@@ -535,6 +536,7 @@ if (!function_exists('mj_member_render_account_component')) {
             'last_name' => isset($member->last_name) ? sanitize_text_field((string) $member->last_name) : '',
             'email' => isset($member->email) ? sanitize_email((string) $member->email) : '',
             'phone' => isset($member->phone) ? sanitize_text_field((string) $member->phone) : '',
+            'phone_secondary' => isset($member->phone_secondary) ? sanitize_text_field((string) $member->phone_secondary) : '',
             'address' => isset($member->address) ? sanitize_textarea_field((string) $member->address) : '',
             'postal_code' => isset($member->postal_code) ? sanitize_text_field((string) $member->postal_code) : '',
             'city' => isset($member->city) ? sanitize_text_field((string) $member->city) : '',
@@ -563,6 +565,7 @@ if (!function_exists('mj_member_render_account_component')) {
                 $last_name = isset($posted['last_name']) ? sanitize_text_field((string) $posted['last_name']) : '';
                 $email = isset($posted['email']) ? sanitize_email((string) $posted['email']) : '';
                 $phone = isset($posted['phone']) ? sanitize_text_field((string) $posted['phone']) : '';
+                $phone_secondary = isset($posted['phone_secondary']) ? sanitize_text_field((string) $posted['phone_secondary']) : '';
                 $address = isset($posted['address']) ? sanitize_textarea_field((string) $posted['address']) : '';
                 $postal_code = isset($posted['postal_code']) ? sanitize_text_field((string) $posted['postal_code']) : '';
                 $city = isset($posted['city']) ? sanitize_text_field((string) $posted['city']) : '';
@@ -627,6 +630,7 @@ if (!function_exists('mj_member_render_account_component')) {
                             'last_name' => $last_name,
                             'email' => $email,
                             'phone' => $phone,
+                            'phone_secondary' => $phone_secondary,
                             'address' => $address,
                             'postal_code' => $postal_code,
                             'city' => $city,
@@ -708,6 +712,7 @@ if (!function_exists('mj_member_render_account_component')) {
                             'last_name' => isset($member->last_name) ? sanitize_text_field((string) $member->last_name) : '',
                             'email' => isset($member->email) ? sanitize_email((string) $member->email) : '',
                             'phone' => isset($member->phone) ? sanitize_text_field((string) $member->phone) : '',
+                            'phone_secondary' => isset($member->phone_secondary) ? sanitize_text_field((string) $member->phone_secondary) : '',
                             'address' => isset($member->address) ? sanitize_textarea_field((string) $member->address) : '',
                             'postal_code' => isset($member->postal_code) ? sanitize_text_field((string) $member->postal_code) : '',
                             'city' => isset($member->city) ? sanitize_text_field((string) $member->city) : '',
@@ -746,6 +751,7 @@ if (!function_exists('mj_member_render_account_component')) {
                         'last_name' => $last_name,
                         'email' => $email,
                         'phone' => $phone,
+                        'phone_secondary' => $phone_secondary,
                         'address' => $address,
                         'postal_code' => $postal_code,
                         'city' => $city,
@@ -1034,6 +1040,10 @@ if (!function_exists('mj_member_render_account_component')) {
                                 <div class="mj-field-group">
                                     <label for="mj-account-phone"><?php esc_html_e('Téléphone', 'mj-member'); ?></label>
                                     <input type="tel" id="mj-account-phone" name="member[phone]" value="<?php echo esc_attr($form_values['phone']); ?>" autocomplete="tel" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
+                                </div>
+                                <div class="mj-field-group">
+                                    <label for="mj-account-phone-secondary"><?php esc_html_e('Téléphone secondaire', 'mj-member'); ?></label>
+                                    <input type="tel" id="mj-account-phone-secondary" name="member[phone_secondary]" value="<?php echo esc_attr($form_values['phone_secondary']); ?>" autocomplete="tel" <?php echo $is_preview ? 'disabled="disabled"' : ''; ?> />
                                 </div>
                                 <div class="mj-field-group mj-field-group--full">
                                     <label for="mj-account-address"><?php esc_html_e('Adresse postale', 'mj-member'); ?></label>

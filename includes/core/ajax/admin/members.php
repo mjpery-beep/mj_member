@@ -280,6 +280,7 @@ function mj_inline_edit_member_callback() {
             'last_name',
             'email',
             'phone',
+            'phone_secondary',
             'birth_date',
             'role',
             'status',
@@ -327,6 +328,7 @@ function mj_inline_edit_member_callback() {
                 }
                 break;
             case 'phone':
+            case 'phone_secondary':
                 $field_value = sanitize_text_field($field_value);
                 break;
             case 'birth_date':

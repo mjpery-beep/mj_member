@@ -143,6 +143,7 @@ if (!function_exists('mj_process_frontend_inscription')) {
             'last_name'   => sanitize_text_field(wp_unslash($_POST['guardian_last_name'] ?? '')),
             'email'       => sanitize_email(wp_unslash($_POST['guardian_email'] ?? '')),
             'phone'       => sanitize_text_field(wp_unslash($_POST['guardian_phone'] ?? '')),
+            'phone_secondary' => sanitize_text_field(wp_unslash($_POST['guardian_phone_secondary'] ?? '')),
             'address'     => sanitize_text_field(wp_unslash($_POST['guardian_address'] ?? '')),
             'city'        => sanitize_text_field(wp_unslash($_POST['guardian_city'] ?? '')),
             'postal_code' => sanitize_text_field(wp_unslash($_POST['guardian_postal_code'] ?? '')),
@@ -498,6 +499,9 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 if ($guardian['phone'] !== '') {
                     $body .= sprintf("Téléphone: %s\n", $guardian['phone']);
                 }
+                if (!empty($guardian['phone_secondary'])) {
+                    $body .= sprintf("Téléphone secondaire: %s\n", $guardian['phone_secondary']);
+                }
                 if ($guardian['address'] !== '' || $guardian['city'] !== '' || $guardian['postal_code'] !== '') {
                     $body .= sprintf("Adresse: %s %s %s\n", $guardian['address'], $guardian['postal_code'], $guardian['city']);
                 }
@@ -531,6 +535,9 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 if ($guardian['phone'] !== '') {
                     $plain_parts[] = $guardian['phone'];
                 }
+                if (!empty($guardian['phone_secondary'])) {
+                    $plain_parts[] = $guardian['phone_secondary'];
+                }
                 $guardian_address_full = trim($guardian['address'] . ' ' . $guardian['postal_code'] . ' ' . $guardian['city']);
                 if ($guardian_address_full !== '') {
                     $plain_parts[] = $guardian_address_full;
@@ -548,6 +555,9 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 }
                 if ($guardian['phone'] !== '') {
                     $html_rows[] = '<strong>Téléphone :</strong> ' . esc_html($guardian['phone']);
+                }
+                if (!empty($guardian['phone_secondary'])) {
+                    $html_rows[] = '<strong>Téléphone secondaire :</strong> ' . esc_html($guardian['phone_secondary']);
                 }
                 if ($guardian_address_full !== '') {
                     $html_rows[] = '<strong>Adresse :</strong> ' . esc_html($guardian_address_full);
@@ -598,6 +608,7 @@ if (!function_exists('mj_process_frontend_inscription')) {
                 '{{guardian_full_name}}' => $requires_guardian ? trim($guardian['first_name'] . ' ' . $guardian['last_name']) : '',
                 '{{guardian_email}}' => $requires_guardian ? $guardian['email'] : '',
                 '{{guardian_phone}}' => $requires_guardian ? $guardian['phone'] : '',
+                '{{guardian_phone_secondary}}' => $requires_guardian ? ($guardian['phone_secondary'] ?? '') : '',
                 '{{guardian_address}}' => $requires_guardian ? trim($guardian['address'] . ' ' . $guardian['postal_code'] . ' ' . $guardian['city']) : '',
                 '{{guardian_summary_plain}}' => $guardian_summary_plain,
                 '{{guardian_summary_html}}' => $guardian_summary_html,
@@ -672,6 +683,7 @@ if (!function_exists('mj_collect_guardian_form_values')) {
             'last_name'   => '',
             'email'       => '',
             'phone'       => '',
+            'phone_secondary' => '',
             'address'     => '',
             'city'        => '',
             'postal_code' => '',
@@ -687,6 +699,7 @@ if (!function_exists('mj_collect_guardian_form_values')) {
             'last_name'   => sanitize_text_field(wp_unslash($_POST['guardian_last_name'] ?? '')),
             'email'       => sanitize_email(wp_unslash($_POST['guardian_email'] ?? '')),
             'phone'       => sanitize_text_field(wp_unslash($_POST['guardian_phone'] ?? '')),
+            'phone_secondary' => sanitize_text_field(wp_unslash($_POST['guardian_phone_secondary'] ?? '')),
             'address'     => sanitize_text_field(wp_unslash($_POST['guardian_address'] ?? '')),
             'city'        => sanitize_text_field(wp_unslash($_POST['guardian_city'] ?? '')),
             'postal_code' => sanitize_text_field(wp_unslash($_POST['guardian_postal_code'] ?? '')),
@@ -1431,6 +1444,10 @@ if (!function_exists('mj_member_render_registration_form')) {
                             <div class="mj-field-group">
                                 <label for="guardian_phone">Téléphone</label>
                                 <input type="tel" id="guardian_phone" name="guardian_phone" value="<?php echo esc_attr($guardian_values['phone']); ?>" />
+                            </div>
+                            <div class="mj-field-group">
+                                <label for="guardian_phone_secondary">Téléphone secondaire</label>
+                                <input type="tel" id="guardian_phone_secondary" name="guardian_phone_secondary" value="<?php echo esc_attr($guardian_values['phone_secondary']); ?>" />
                             </div>
                             <div class="mj-field-group mj-field-group--full">
                                 <label for="guardian_address">Adresse</label>

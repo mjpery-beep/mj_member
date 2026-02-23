@@ -419,6 +419,60 @@ input.mj-regmgr-search-input__field {
     color: var(--regmgr-primary);
 }
 
+/* Checkbox filters (members mode) */
+.mj-regmgr-filter-checkboxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px;
+    background: var(--regmgr-gray-100);
+    border-radius: 8px;
+}
+
+.mj-regmgr-filter-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--regmgr-gray-600);
+    cursor: pointer;
+    transition: all var(--regmgr-transition);
+    white-space: nowrap;
+    user-select: none;
+}
+
+.mj-regmgr-filter-checkbox input[type="checkbox"] {
+    display: none;
+}
+
+.mj-regmgr-filter-checkbox:hover {
+    color: var(--regmgr-gray-900);
+    background: var(--regmgr-gray-200);
+}
+
+.mj-regmgr-filter-checkbox--checked {
+    background: #fff;
+    color: var(--regmgr-primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.mj-regmgr-filter-checkbox--checked:hover {
+    background: #fff;
+    color: var(--regmgr-primary);
+}
+
+.mj-regmgr-filter-checkbox__emoji {
+    font-size: 18px;
+    line-height: 1;
+}
+
+.mj-regmgr-filter-checkbox__label {
+    line-height: 1.2;
+}
+
 /* Sort - Sidebar (mode membres) */
 .mj-regmgr-sidebar__sort {
     display: flex;
@@ -442,6 +496,37 @@ input.mj-regmgr-search-input__field {
 .mj-regmgr-sort-label svg {
     flex-shrink: 0;
     color: var(--regmgr-gray-500);
+}
+
+/* Sort order toggle button */
+.mj-regmgr-sort-order-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+    color: var(--regmgr-gray-500);
+    transition: all var(--regmgr-transition);
+    line-height: 1;
+}
+
+.mj-regmgr-sort-order-toggle:hover {
+    background: var(--regmgr-gray-200);
+    color: var(--regmgr-gray-700);
+}
+
+.mj-regmgr-sort-order-toggle--asc svg {
+    transform: scaleY(-1);
+}
+
+.mj-regmgr-sort-order-toggle--asc,
+.mj-regmgr-sort-order-toggle--desc {
+    color: var(--regmgr-primary);
+    border-color: var(--regmgr-primary-light);
+    background: var(--regmgr-primary-light);
 }
 
 .mj-regmgr-sort-select {
@@ -495,6 +580,20 @@ input.mj-regmgr-search-input__field {
     .mj-regmgr-filter-tab {
         padding: 5px 6px;
         font-size: 10px;
+    }
+
+    .mj-regmgr-filter-checkboxes {
+        padding: 3px;
+        gap: 2px;
+    }
+
+    .mj-regmgr-filter-checkbox {
+        padding: 4px 6px;
+        font-size: 10px;
+    }
+
+    .mj-regmgr-filter-checkbox__emoji {
+        font-size: 16px;
     }
 
     .mj-regmgr-sidebar__sort {
@@ -5193,6 +5292,62 @@ a.mj-att-member__phone:hover {
     text-align: center;
 }
 
+/* Members Pagination */
+.mj-regmgr-members-list__pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 5px 12px;
+    border-bottom: 1px solid var(--regmgr-gray-100);
+}
+
+.mj-regmgr-members-list__pagination-info {
+    font-size: 11px;
+    color: var(--regmgr-gray-500);
+    font-weight: 500;
+}
+
+.mj-regmgr-members-list__pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mj-regmgr-members-list__pagination-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius);
+    background: var(--regmgr-white);
+    color: var(--regmgr-gray-600);
+    cursor: pointer;
+    transition: all var(--regmgr-transition);
+    padding: 0;
+}
+
+.mj-regmgr-members-list__pagination-btn:hover:not(:disabled) {
+    background: var(--regmgr-gray-50);
+    border-color: var(--regmgr-gray-300);
+    color: var(--regmgr-gray-800);
+}
+
+.mj-regmgr-members-list__pagination-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.mj-regmgr-members-list__pagination-pages {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--regmgr-gray-600);
+    min-width: 32px;
+    text-align: center;
+}
+
 /* Member Card */
 .mj-regmgr-member-card {
     display: flex;
@@ -5309,11 +5464,54 @@ a.mj-att-member__phone:hover {
     white-space: nowrap;
 }
 
+.mj-regmgr-member-card__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.mj-regmgr-member-card__stats {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .mj-regmgr-member-card__age {
     color: var(--regmgr-gray-500);
     font-size: 12px;
     white-space: nowrap;
     font-weight: 500;
+}
+
+.mj-regmgr-member-card__level,
+.mj-regmgr-member-card__coins,
+.mj-regmgr-member-card__xp {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.mj-regmgr-member-card__level {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.mj-regmgr-member-card__coins {
+    background: #ecfdf5;
+    color: #065f46;
+}
+
+.mj-regmgr-member-card__xp {
+    background: #ede9fe;
+    color: #5b21b6;
 }
 
 /* ============================================

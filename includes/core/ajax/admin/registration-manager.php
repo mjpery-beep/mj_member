@@ -2006,8 +2006,19 @@ function mj_regmgr_get_registrations() {
             $member = MjMembers::getById($reg->member_id);
         }
         
-        if (!empty($reg->guardian_id)) {
-            $guardian = MjMembers::getById($reg->guardian_id);
+        // Always prefer the member's CURRENT guardian_id (source of truth,
+        // may have been updated after the registration was created).
+        // Fall back to the registration's guardian_id only when the member
+        // record does not reference a guardian.
+        $resolved_guardian_id = 0;
+        if ($member && !empty($member->guardian_id)) {
+            $resolved_guardian_id = (int) $member->guardian_id;
+        }
+        if ($resolved_guardian_id <= 0 && !empty($reg->guardian_id)) {
+            $resolved_guardian_id = (int) $reg->guardian_id;
+        }
+        if ($resolved_guardian_id > 0) {
+            $guardian = MjMembers::getById($resolved_guardian_id);
         }
 
         $member_payload = $build_member_payload($member);
@@ -2066,7 +2077,7 @@ function mj_regmgr_get_registrations() {
             'id' => $reg->id,
             'eventId' => $reg->event_id,
             'memberId' => $reg->member_id,
-            'guardianId' => $reg->guardian_id,
+            'guardianId' => $resolved_guardian_id ?: ($reg->guardian_id ?? 0),
             'status' => $reg->statut,
             'statusLabel' => MjEventRegistrations::META_STATUS_LABELS[$reg->statut] ?? $reg->statut,
             'paymentStatus' => $reg->payment_status ?? 'unpaid',
@@ -5219,9 +5230,19 @@ function mj_regmgr_get_members() {
     $current_member = mj_regmgr_verify_request();
     if (!$current_member) return;
 
-    $filter = isset($_POST['filter']) ? sanitize_text_field($_POST['filter']) : 'all';
+    $raw_filter = isset($_POST['filter']) ? $_POST['filter'] : 'all';
+    // Support both legacy string filter and new array of active filters
+    if (is_array($raw_filter)) {
+        $active_filters = array_map('sanitize_text_field', $raw_filter);
+    } else {
+        $filter_str = sanitize_text_field($raw_filter);
+        $active_filters = ($filter_str === 'all' || $filter_str === '') ? array() : array($filter_str);
+    }
     $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
     $sort = isset($_POST['sort']) ? sanitize_text_field($_POST['sort']) : 'name';
+    $sort_order_override = isset($_POST['sortOrder']) && in_array(strtoupper($_POST['sortOrder']), array('ASC', 'DESC'), true)
+        ? strtoupper($_POST['sortOrder'])
+        : '';
     $page = isset($_POST['page']) ? absint($_POST['page']) : 1;
     $per_page = isset($_POST['perPage']) ? absint($_POST['perPage']) : 20;
 
@@ -5245,6 +5266,10 @@ function mj_regmgr_get_members() {
             $orderby = 'last_activity_at';
             $order = 'DESC';
             break;
+        case 'level':
+            $orderby = 'xp_total';
+            $order = 'DESC';
+            break;
         case 'name':
         default:
             $orderby = 'last_name';
@@ -5252,25 +5277,44 @@ function mj_regmgr_get_members() {
             break;
     }
 
+    // Allow client-side override of sort direction
+    if ($sort_order_override !== '') {
+        $order = $sort_order_override;
+    }
+
     // Build filters array
     $filters = array();
 
-    if ($filter === 'membership_due') {
+    if (in_array('membership_due', $active_filters, true)) {
         $filters['payment'] = 'due';
     }
 
-    if ($filter !== 'all') {
-        $normalized_filter = MjRoles::normalize($filter);
-        if (in_array($normalized_filter, array('jeune', 'animateur', 'tuteur', 'benevole', 'coordinateur'), true)) {
-            $filters['role'] = $normalized_filter;
+    // Role filters (multiple allowed, normalize aliases like 'parent' -> 'tuteur')
+    $valid_roles = array('jeune', 'animateur', 'tuteur', 'benevole', 'coordinateur');
+    $role_filters = array();
+    foreach ($active_filters as $af) {
+        $normalized = MjRoles::normalize($af);
+        if (in_array($normalized, $valid_roles, true)) {
+            $role_filters[] = $normalized;
         }
     }
+    if (!empty($role_filters)) {
+        $filters['roles'] = array_values(array_unique($role_filters));
+    }
 
-    // Get total count
+    // Has login filter
+    if (in_array('has_login', $active_filters, true)) {
+        $filters['has_login'] = true;
+    }
+
+    // Get total count (filtered)
     $total = MjMembers::count(array(
         'search' => $search,
         'filters' => $filters,
     ));
+
+    // Get grand total (unfiltered)
+    $total_all = MjMembers::countAll();
 
     // Get members
     $offset = ($page - 1) * $per_page;
@@ -5282,6 +5326,9 @@ function mj_regmgr_get_members() {
         'search' => $search,
         'filters' => $filters,
     ));
+
+    // Pre-load all active levels once to compute levelNumber without N+1 queries
+    $all_levels = MjLevels::get_all(array('status' => 'active', 'orderby' => 'xp_threshold', 'order' => 'DESC'));
 
     $current_year = (int) date('Y');
     $members = array();
@@ -5324,6 +5371,7 @@ function mj_regmgr_get_members() {
             'lastName' => $member->last_name ?? '',
             'email' => $member->email ?? '',
             'phone' => $member->phone ?? '',
+            'phoneSecondary' => $member->phone_secondary ?? '',
             'role' => $member->role ?? 'jeune',
             'birthDate' => $member->birth_date ?? null,
             'avatarUrl' => mj_regmgr_get_member_avatar_url((int) $member->id),
@@ -5333,6 +5381,15 @@ function mj_regmgr_get_members() {
             'isVolunteer' => !empty($member->is_volunteer),
             'xpTotal' => isset($member->xp_total) ? (int) $member->xp_total : 0,
             'coinsTotal' => isset($member->coins_total) ? (int) $member->coins_total : 0,
+            'levelNumber' => (function () use ($member, $all_levels) {
+                $xp = isset($member->xp_total) ? (int) $member->xp_total : 0;
+                foreach ($all_levels as $level) {
+                    if ((int) $level['xp_threshold'] <= $xp) {
+                        return (int) $level['level_number'];
+                    }
+                }
+                return 0;
+            })(),
             'createdAt' => isset($member->date_inscription) ? $member->date_inscription : null,
             'wpUserId' => !empty($member->wp_user_id) ? (int) $member->wp_user_id : null,
             'lastLoginAt' => !empty($member->last_login_at) ? $member->last_login_at : null,
@@ -5346,6 +5403,7 @@ function mj_regmgr_get_members() {
             'page' => $page,
             'totalPages' => $total > 0 ? ceil($total / $per_page) : 1,
             'total' => $total,
+            'totalAll' => $total_all,
         ),
     ));
 }
@@ -5681,6 +5739,7 @@ function mj_regmgr_get_member_details() {
         'nickname' => $memberData->nickname ?? '',
         'email' => $memberData->email ?? '',
         'phone' => $memberData->phone ?? '',
+        'phoneSecondary' => $memberData->phone_secondary ?? '',
         'role' => $role,
         'roleLabel' => $role_labels[$role] ?? ucfirst($role),
         'birthDate' => $memberData->birth_date ?? null,
@@ -5774,6 +5833,7 @@ function mj_regmgr_get_member_details() {
                 'roleLabel' => $guardian_role_label,
                 'email' => $guardian->email ?? '',
                 'phone' => $guardian->phone ?? '',
+                'phoneSecondary' => $guardian->phone_secondary ?? '',
             );
         }
     }
@@ -6339,6 +6399,9 @@ function mj_regmgr_update_member() {
     }
     if (isset($data['phone'])) {
         $update_data['phone'] = sanitize_text_field($data['phone']);
+    }
+    if (isset($data['phoneSecondary'])) {
+        $update_data['phone_secondary'] = sanitize_text_field($data['phoneSecondary']);
     }
     if (isset($data['birthDate'])) {
         $update_data['birth_date'] = sanitize_text_field($data['birthDate']);
