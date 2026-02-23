@@ -50,7 +50,7 @@
     background: var(--regmgr-gray-50);
     border-radius: var(--regmgr-radius-lg);
     overflow: hidden;
-    padding: 1.5rem;
+    padding: 0.5rem;
 }
 
 @media (max-width: 640px) {
@@ -165,6 +165,7 @@
 input.mj-regmgr-search-input__field {
     padding-left: 33px;
     border-radius: 7px;
+        line-height: 14px;
 }
 
 /* ============================================
@@ -569,7 +570,7 @@ input.mj-regmgr-search-input__field {
     }
 
     .mj-regmgr-sidebar__filters {
-        padding: 0 8px 8px;
+        padding: 0 8px 1px;
     }
 
     .mj-regmgr-filter-tabs {
@@ -583,7 +584,7 @@ input.mj-regmgr-search-input__field {
     }
 
     .mj-regmgr-filter-checkboxes {
-        padding: 3px;
+        padding: 3px 4px;
         gap: 2px;
     }
 
@@ -5137,6 +5138,62 @@ a.mj-att-member__phone:hover {
 
 .mj-regmgr-events-list__load-more {
     padding: 12px;
+    text-align: center;
+}
+
+/* Events Pagination */
+.mj-regmgr-events-list__pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 5px 12px;
+    border-bottom: 1px solid var(--regmgr-gray-100);
+}
+
+.mj-regmgr-events-list__pagination-info {
+    font-size: 11px;
+    color: var(--regmgr-gray-500);
+    font-weight: 500;
+}
+
+.mj-regmgr-events-list__pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mj-regmgr-events-list__pagination-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--regmgr-gray-200);
+    border-radius: var(--regmgr-radius);
+    background: var(--regmgr-white);
+    color: var(--regmgr-gray-600);
+    cursor: pointer;
+    transition: all var(--regmgr-transition);
+    padding: 0;
+}
+
+.mj-regmgr-events-list__pagination-btn:hover:not(:disabled) {
+    background: var(--regmgr-gray-50);
+    border-color: var(--regmgr-gray-300);
+    color: var(--regmgr-gray-800);
+}
+
+.mj-regmgr-events-list__pagination-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.mj-regmgr-events-list__pagination-pages {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--regmgr-gray-600);
+    min-width: 32px;
     text-align: center;
 }
 

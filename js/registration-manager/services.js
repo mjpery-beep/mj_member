@@ -104,6 +104,9 @@
                     if (value.length > 0 && typeof value[0] === 'object') {
                         // Send as JSON string for arrays of objects
                         formData.append(key, JSON.stringify(value));
+                    } else if (value.length === 0) {
+                        // Empty array: send marker so server knows it was intentionally empty
+                        formData.append(key + '[]', '');
                     } else {
                         // Simple array of primitives
                         value.forEach(function (item, index) {

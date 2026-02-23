@@ -1268,72 +1268,133 @@ function mj_regmgr_get_events() {
     $auth = mj_regmgr_verify_request();
     if (!$auth) return;
 
-    $filter = isset($_POST['filter']) ? sanitize_key($_POST['filter']) : 'assigned';
+    // Support multi-filter (array) or legacy single filter (string)
+    // Empty array or missing = show all (no filter)
+    $raw_filter = isset($_POST['filter']) ? $_POST['filter'] : null;
+    if (is_array($raw_filter)) {
+        $active_filters = array_filter(array_map('sanitize_key', $raw_filter), function($v) { return $v !== ''; });
+    } elseif (is_string($raw_filter) && $raw_filter !== '') {
+        $single = sanitize_key($raw_filter);
+        $active_filters = ($single !== '' && $single !== 'all') ? array($single) : array();
+    } else {
+        // No filter sent at all: default to assigned for backward compatibility
+        $active_filters = array('assigned');
+    }
+
     $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
     $page = isset($_POST['page']) ? max(1, (int) $_POST['page']) : 1;
-    $role_filter = isset($_POST['role']) ? sanitize_key($_POST['role']) : '';
-    $per_page = isset($_POST['perPage']) ? max(5, min(100, (int) $_POST['perPage'])) : 20;
+    $per_page = isset($_POST['perPage']) ? max(5, min(100, (int) $_POST['perPage'])) : 10;
+
+    // Sort parameters
+    $sort = isset($_POST['sort']) ? sanitize_key($_POST['sort']) : 'date';
+    $sort_order_param = isset($_POST['sortOrder']) ? strtoupper(sanitize_key($_POST['sortOrder'])) : '';
+
+    $sort_map = array(
+        'date'  => 'date_debut',
+        'title' => 'title',
+        'type'  => 'type',
+        'status' => 'status',
+        'created' => 'created_at',
+    );
+    $orderby = isset($sort_map[$sort]) ? $sort_map[$sort] : 'date_debut';
+
+    // Default order depends on sort
+    $default_order = ($sort === 'title') ? 'ASC' : 'DESC';
+    $order = in_array($sort_order_param, array('ASC', 'DESC'), true) ? $sort_order_param : $default_order;
 
     $now = current_time('mysql');
     $events = array();
     $total = 0;
 
-    // Pour le filtre "assigned", utiliser MjEventAnimateurs
-    if ($filter === 'assigned') {
+    // Determine if 'assigned' filter is active
+    $use_assigned = in_array('assigned', $active_filters, true);
+
+    // Build status/type constraints from active filters
+    $status_constraints = array();
+    $type_constraints = array();
+    $use_after = false;
+
+    foreach ($active_filters as $f) {
+        switch ($f) {
+            case 'upcoming':
+                $status_constraints[] = MjEvents::STATUS_ACTIVE;
+                $use_after = true;
+                break;
+            case 'past':
+                $status_constraints[] = MjEvents::STATUS_PAST;
+                break;
+            case 'draft':
+                $status_constraints[] = MjEvents::STATUS_DRAFT;
+                break;
+            case 'internal':
+                $type_constraints[] = MjEvents::TYPE_INTERNE;
+                break;
+        }
+    }
+
+    if ($use_assigned) {
+        // Use assigned events for this member
         $assigned_args = array(
-            'statuses' => array(MjEvents::STATUS_ACTIVE),
-            'orderby' => 'date_debut',
-            'order' => 'DESC',
+            'orderby' => $orderby,
+            'order' => $order,
         );
+        if (!empty($status_constraints)) {
+            $assigned_args['statuses'] = array_unique($status_constraints);
+        } else {
+            $assigned_args['statuses'] = array(MjEvents::STATUS_ACTIVE);
+        }
         $all_assigned = MjEventAnimateurs::get_events_for_member($auth['member_id'], $assigned_args);
         
-        // Filtrer par recherche si nécessaire
+        // Apply search
         if ($search !== '') {
             $search_lower = mb_strtolower($search);
             $all_assigned = array_filter($all_assigned, function($event) use ($search_lower) {
                 return mb_strpos(mb_strtolower($event->title), $search_lower) !== false;
             });
         }
+
+        // Apply type filter
+        if (!empty($type_constraints)) {
+            $all_assigned = array_filter($all_assigned, function($event) use ($type_constraints) {
+                return isset($event->type) && in_array($event->type, $type_constraints, true);
+            });
+        }
+
+        // Apply after filter
+        if ($use_after) {
+            $all_assigned = array_filter($all_assigned, function($event) use ($now) {
+                return isset($event->date_debut) && $event->date_debut >= $now;
+            });
+        }
         
         $total = count($all_assigned);
         $events = array_slice(array_values($all_assigned), ($page - 1) * $per_page, $per_page);
     } else {
-        // Pour les autres filtres, utiliser MjEvents::get_all
+        // Use MjEvents::get_all
         $args = array(
             'search' => $search,
-            'orderby' => 'date_debut',
-            'order' => 'DESC',
+            'orderby' => $orderby,
+            'order' => $order,
             'limit' => $per_page,
             'offset' => ($page - 1) * $per_page,
         );
 
-        switch ($filter) {
-            case 'upcoming':
-                $args['statuses'] = array(MjEvents::STATUS_ACTIVE);
-                $args['after'] = $now;
-                $args['order'] = 'ASC';
-                break;
-
-            case 'past':
-                $args['statuses'] = array(MjEvents::STATUS_PAST);
-                break;
-
-            case 'draft':
-                $args['statuses'] = array(MjEvents::STATUS_DRAFT);
-                break;
-
-            case 'internal':
-                $args['types'] = array(MjEvents::TYPE_INTERNE);
-                break;
-
-            default: // all
-                // No specific filters
-                break;
+        if (!empty($status_constraints)) {
+            $args['statuses'] = array_unique($status_constraints);
+        }
+        if (!empty($type_constraints)) {
+            $args['types'] = array_unique($type_constraints);
+        }
+        if ($use_after) {
+            $args['after'] = $now;
         }
 
         $events = MjEvents::get_all($args);
         $total = MjEvents::count($args);
     }
+
+    // Grand total (unfiltered)
+    $total_all = MjEvents::count(array());
 
     $type_labels = MjEvents::get_type_labels();
     $status_labels = MjEvents::get_status_labels();
@@ -1350,9 +1411,10 @@ function mj_regmgr_get_events() {
         'events' => $events_data,
         'pagination' => array(
             'total' => $total,
+            'totalAll' => $total_all,
             'page' => $page,
             'perPage' => $per_page,
-            'totalPages' => ceil($total / $per_page),
+            'totalPages' => $total > 0 ? ceil($total / $per_page) : 1,
         ),
     ));
 }
@@ -5244,7 +5306,7 @@ function mj_regmgr_get_members() {
         ? strtoupper($_POST['sortOrder'])
         : '';
     $page = isset($_POST['page']) ? absint($_POST['page']) : 1;
-    $per_page = isset($_POST['perPage']) ? absint($_POST['perPage']) : 20;
+    $per_page = isset($_POST['perPage']) ? absint($_POST['perPage']) : 10;
 
     // Déterminer le tri
     $orderby = 'last_name';

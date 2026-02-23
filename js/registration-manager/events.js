@@ -295,9 +295,13 @@
         var selectedEventId = props.selectedEventId;
         var onSelectEvent = props.onSelectEvent;
         var strings = props.strings;
-        var onLoadMore = props.onLoadMore;
-        var hasMore = props.hasMore;
-        var loadingMore = props.loadingMore;
+        var pagination = props.pagination || {};
+        var onPageChange = props.onPageChange;
+
+        var currentPage = pagination.page || 1;
+        var totalPages = pagination.totalPages || 1;
+        var totalFiltered = typeof pagination.total === 'number' ? pagination.total : null;
+        var totalAll = typeof pagination.totalAll === 'number' ? pagination.totalAll : null;
 
         if (loading && events.length === 0) {
             return h('div', { class: 'mj-regmgr-events-list mj-regmgr-events-list--loading' }, [
@@ -328,6 +332,42 @@
         }
 
         return h('div', { class: 'mj-regmgr-events-list' }, [
+            // Pagination en haut
+            (totalPages > 1 || totalFiltered !== null) && h('div', { class: 'mj-regmgr-events-list__pagination' }, [
+                totalFiltered !== null && h('div', { class: 'mj-regmgr-events-list__pagination-info' },
+                    totalAll !== null && totalAll !== totalFiltered
+                        ? totalFiltered + ' / ' + totalAll + ' événements'
+                        : totalFiltered + ' événement' + (totalFiltered !== 1 ? 's' : '')
+                ),
+                totalPages > 1 && h('div', { class: 'mj-regmgr-events-list__pagination-controls' }, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-regmgr-events-list__pagination-btn',
+                        disabled: currentPage <= 1 || loading,
+                        onClick: function () { onPageChange(currentPage - 1); },
+                        title: 'Page précédente',
+                    }, [
+                        h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.5 }, [
+                            h('polyline', { points: '15 18 9 12 15 6' }),
+                        ]),
+                    ]),
+                    h('span', { class: 'mj-regmgr-events-list__pagination-pages' },
+                        currentPage + ' / ' + totalPages
+                    ),
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-regmgr-events-list__pagination-btn',
+                        disabled: currentPage >= totalPages || loading,
+                        onClick: function () { onPageChange(currentPage + 1); },
+                        title: 'Page suivante',
+                    }, [
+                        h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.5 }, [
+                            h('polyline', { points: '9 18 15 12 9 6' }),
+                        ]),
+                    ]),
+                ]),
+            ]),
+
             events.map(function (event) {
                 return h(EventCard, {
                     key: event.id,
@@ -337,19 +377,6 @@
                     strings: strings,
                 });
             }),
-
-            // Bouton "Charger plus"
-            hasMore && h('div', { class: 'mj-regmgr-events-list__load-more' }, [
-                h('button', {
-                    type: 'button',
-                    class: 'mj-btn mj-btn--secondary mj-btn--small',
-                    onClick: onLoadMore,
-                    disabled: loadingMore,
-                }, loadingMore 
-                    ? getString(strings, 'loading', 'Chargement...') 
-                    : 'Voir plus'
-                ),
-            ]),
         ]);
     }
 
@@ -365,7 +392,7 @@
         var loading = props.loading;
         var selectedEventId = props.selectedEventId;
         var onSelectEvent = props.onSelectEvent;
-        var filter = props.filter;
+        var filter = props.filter || [];
         var onFilterChange = props.onFilterChange;
         var search = props.search;
         var onSearchChange = props.onSearchChange;
@@ -380,6 +407,12 @@
         var canCreateEvent = !!props.canCreateEvent && (onCreateEvent || (typeof createEventUrl === 'string' && createEventUrl !== ''));
         var onCreateMember = typeof props.onCreateMember === 'function' ? props.onCreateMember : null;
         var canCreateMember = !!props.canCreateMember && !!onCreateMember;
+
+        // Events sort props
+        var eventSort = props.eventSort || 'date';
+        var onEventSortChange = props.onEventSortChange;
+        var eventSortOrder = props.eventSortOrder || '';
+        var onEventSortOrderChange = props.onEventSortOrderChange;
 
         // Props for members mode
         var sidebarMode = props.sidebarMode || 'events';
@@ -399,26 +432,17 @@
         var onLoadMoreMembers = props.onLoadMoreMembers;
         var hasMoreMembers = props.hasMoreMembers;
         var membersLoadingMore = props.membersLoadingMore;
-        var showAllEvents = !!props.showAllEvents;
-
         // Get MembersList component
         var MembersComps = window.MjRegMgrMembers;
         var MembersList = MembersComps ? MembersComps.MembersList : null;
 
         var eventFilters = [
-            { key: 'assigned', label: getString(strings, 'filterAssigned', 'Mes événements') },
+            { key: 'assigned', label: getString(strings, 'filterAssigned', 'Mes événements'), emoji: '⭐' },
+            { key: 'upcoming', label: getString(strings, 'filterUpcoming', 'À venir'), emoji: '📅' },
+            { key: 'past', label: getString(strings, 'filterPast', 'Passés'), emoji: '⏪' },
+            { key: 'draft', label: getString(strings, 'filterDraft', 'Brouillons'), emoji: '📝' },
+            { key: 'internal', label: getString(strings, 'filterInternal', 'Internes'), emoji: '🔒' },
         ];
-
-        if (showAllEvents) {
-            eventFilters.push({ key: 'all', label: getString(strings, 'filterShowAllEvents', 'Afficher tout') });
-        }
-
-        eventFilters.push(
-            { key: 'upcoming', label: getString(strings, 'filterUpcoming', 'À venir') },
-            { key: 'past', label: getString(strings, 'filterPast', 'Passés') },
-            { key: 'draft', label: getString(strings, 'filterDraft', 'Brouillons') },
-            { key: 'internal', label: getString(strings, 'filterInternal', 'Internes') }
-        );
 
         var memberFilters = [
             { key: 'jeune', label: getString(strings, 'filterJeune', 'Jeunes'), emoji: '🧒' },
@@ -432,7 +456,6 @@
 
         var currentFilters = sidebarMode === 'events' ? eventFilters : memberFilters;
         var currentFilter = sidebarMode === 'events' ? filter : memberFilter;
-        var currentFilterChange = sidebarMode === 'events' ? onFilterChange : null;
         var currentSearch = sidebarMode === 'events' ? search : memberSearch;
         var currentSearchChange = sidebarMode === 'events' ? onSearchChange : onMemberSearchChange;
 
@@ -596,105 +619,136 @@
                 ]),
             ]),
 
-            // Filtres
+            // Filtres (checkboxes pour les deux modes)
             h('div', { class: 'mj-regmgr-sidebar__filters' }, [
-                sidebarMode === 'events'
-                    ? h('div', { class: 'mj-regmgr-filter-tabs', role: 'tablist' }, 
-                        currentFilters.map(function (f) {
-                            return h('button', {
-                                key: f.key,
-                                type: 'button',
-                                class: classNames('mj-regmgr-filter-tab', {
-                                    'mj-regmgr-filter-tab--active': currentFilter === f.key,
-                                }),
-                                role: 'tab',
-                                'aria-selected': currentFilter === f.key ? 'true' : 'false',
-                                onClick: function () { currentFilterChange(f.key); },
-                            }, f.label);
-                        })
-                    )
-                    : h('div', { class: 'mj-regmgr-filter-checkboxes' },
-                        memberFilters.map(function (f) {
-                            var isChecked = Array.isArray(memberFilter) && memberFilter.indexOf(f.key) !== -1;
-                            return h('label', {
-                                key: f.key,
-                                class: classNames('mj-regmgr-filter-checkbox', {
-                                    'mj-regmgr-filter-checkbox--checked': isChecked,
-                                }),
-                            }, [
-                                h('input', {
-                                    type: 'checkbox',
-                                    checked: isChecked,
-                                    onChange: function () {
-                                        var current = Array.isArray(memberFilter) ? memberFilter.slice() : [];
-                                        var idx = current.indexOf(f.key);
-                                        if (idx !== -1) {
-                                            current.splice(idx, 1);
-                                        } else {
-                                            current.push(f.key);
-                                        }
-                                        onMemberFilterChange && onMemberFilterChange(current);
-                                    },
-                                }),
-                                h('span', { class: 'mj-regmgr-filter-checkbox__emoji' }, f.emoji),
-                                h('span', { class: 'mj-regmgr-filter-checkbox__label' }, f.label),
-                            ]);
-                        })
-                    ),
+                h('div', { class: 'mj-regmgr-filter-checkboxes' },
+                    currentFilters.map(function (f) {
+                        var filterArr = Array.isArray(currentFilter) ? currentFilter : [];
+                        var isChecked = filterArr.indexOf(f.key) !== -1;
+                        var changeHandler = sidebarMode === 'events' ? onFilterChange : onMemberFilterChange;
+                        return h('label', {
+                            key: f.key,
+                            class: classNames('mj-regmgr-filter-checkbox', {
+                                'mj-regmgr-filter-checkbox--checked': isChecked,
+                            }),
+                        }, [
+                            h('input', {
+                                type: 'checkbox',
+                                checked: isChecked,
+                                onChange: function () {
+                                    var current = filterArr.slice();
+                                    var idx = current.indexOf(f.key);
+                                    if (idx !== -1) {
+                                        current.splice(idx, 1);
+                                    } else {
+                                        current.push(f.key);
+                                    }
+                                    changeHandler && changeHandler(current);
+                                },
+                            }),
+                            h('span', { class: 'mj-regmgr-filter-checkbox__emoji' }, f.emoji),
+                            h('span', { class: 'mj-regmgr-filter-checkbox__label' }, f.label),
+                        ]);
+                    })
+                ),
             ]),
 
-            // Tri (seulement en mode membres)
-            sidebarMode === 'members' && h('div', { class: 'mj-regmgr-sidebar__sort' }, [
-                h('label', { class: 'mj-regmgr-sort-label' }, [
-                    h('button', {
-                        type: 'button',
-                        class: classNames('mj-regmgr-sort-order-toggle', {
-                            'mj-regmgr-sort-order-toggle--desc': memberSortOrder === 'DESC',
-                            'mj-regmgr-sort-order-toggle--asc': memberSortOrder === 'ASC',
-                        }),
-                        title: memberSortOrder === 'ASC' ? 'Tri croissant (cliquer pour inverser)' : memberSortOrder === 'DESC' ? 'Tri décroissant (cliquer pour inverser)' : 'Inverser le sens du tri',
-                        onClick: function (e) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (!memberSortOrder || memberSortOrder === '') {
-                                // Determine current default then flip
-                                var defaultDesc = memberSort !== 'name';
-                                onMemberSortOrderChange && onMemberSortOrderChange(defaultDesc ? 'ASC' : 'DESC');
-                            } else {
-                                onMemberSortOrderChange && onMemberSortOrderChange(memberSortOrder === 'ASC' ? 'DESC' : 'ASC');
-                            }
-                        },
-                    }, [
-                        h('svg', {
-                            width: 14,
-                            height: 14,
-                            viewBox: '0 0 24 24',
-                            fill: 'none',
-                            stroke: 'currentColor',
-                            'stroke-width': 2,
-                        }, [
-                            h('line', { x1: 4, y1: 6, x2: 11, y2: 6 }),
-                            h('line', { x1: 4, y1: 12, x2: 15, y2: 12 }),
-                            h('line', { x1: 4, y1: 18, x2: 20, y2: 18 }),
+            // Tri
+            h('div', { class: 'mj-regmgr-sidebar__sort' }, [
+                sidebarMode === 'events'
+                    ? [
+                        h('label', { class: 'mj-regmgr-sort-label' }, [
+                            h('button', {
+                                type: 'button',
+                                class: classNames('mj-regmgr-sort-order-toggle', {
+                                    'mj-regmgr-sort-order-toggle--desc': eventSortOrder === 'DESC',
+                                    'mj-regmgr-sort-order-toggle--asc': eventSortOrder === 'ASC',
+                                }),
+                                title: eventSortOrder === 'ASC' ? 'Tri croissant (cliquer pour inverser)' : eventSortOrder === 'DESC' ? 'Tri décroissant (cliquer pour inverser)' : 'Inverser le sens du tri',
+                                onClick: function (e) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (!eventSortOrder || eventSortOrder === '') {
+                                        var defaultDesc = eventSort !== 'title';
+                                        onEventSortOrderChange && onEventSortOrderChange(defaultDesc ? 'ASC' : 'DESC');
+                                    } else {
+                                        onEventSortOrderChange && onEventSortOrderChange(eventSortOrder === 'ASC' ? 'DESC' : 'ASC');
+                                    }
+                                },
+                            }, [
+                                h('svg', {
+                                    width: 14, height: 14, viewBox: '0 0 24 24',
+                                    fill: 'none', stroke: 'currentColor', 'stroke-width': 2,
+                                }, [
+                                    h('line', { x1: 4, y1: 6, x2: 11, y2: 6 }),
+                                    h('line', { x1: 4, y1: 12, x2: 15, y2: 12 }),
+                                    h('line', { x1: 4, y1: 18, x2: 20, y2: 18 }),
+                                ]),
+                            ]),
+                            h('span', null, getString(strings, 'sortBy', 'Trier par')),
                         ]),
-                    ]),
-                    h('span', null, getString(strings, 'sortBy', 'Trier par')),
-                ]),
-                h('select', {
-                    class: 'mj-regmgr-sort-select',
-                    value: memberSort,
-                    onChange: function (e) {
-                        onMemberSortOrderChange && onMemberSortOrderChange('');
-                        onMemberSortChange && onMemberSortChange(e.target.value);
-                    },
-                }, [
-                    h('option', { value: 'name' }, getString(strings, 'sortByName', 'Nom (A-Z)')),
-                    h('option', { value: 'registration_date' }, getString(strings, 'sortByRegistration', 'Date d\'inscription')),
-                    h('option', { value: 'membership_date' }, getString(strings, 'sortByMembership', 'Date de cotisation')),
-                    h('option', { value: 'last_login' }, getString(strings, 'sortByLastLogin', 'Dernière connexion')),
-                    h('option', { value: 'last_activity' }, getString(strings, 'sortByLastActivity', 'Dernière activité')),
-                    h('option', { value: 'level' }, getString(strings, 'sortByLevel', 'Niveau')),
-                ]),
+                        h('select', {
+                            class: 'mj-regmgr-sort-select',
+                            value: eventSort,
+                            onChange: function (e) {
+                                onEventSortOrderChange && onEventSortOrderChange('');
+                                onEventSortChange && onEventSortChange(e.target.value);
+                            },
+                        }, [
+                            h('option', { value: 'date' }, getString(strings, 'sortByDate', 'Date')),
+                            h('option', { value: 'title' }, getString(strings, 'sortByTitle', 'Titre (A-Z)')),
+                            h('option', { value: 'type' }, getString(strings, 'sortByType', 'Type')),
+                            h('option', { value: 'status' }, getString(strings, 'sortByStatus', 'Statut')),
+                            h('option', { value: 'created' }, getString(strings, 'sortByCreated', 'Date de création')),
+                        ]),
+                    ]
+                    : [
+                        h('label', { class: 'mj-regmgr-sort-label' }, [
+                            h('button', {
+                                type: 'button',
+                                class: classNames('mj-regmgr-sort-order-toggle', {
+                                    'mj-regmgr-sort-order-toggle--desc': memberSortOrder === 'DESC',
+                                    'mj-regmgr-sort-order-toggle--asc': memberSortOrder === 'ASC',
+                                }),
+                                title: memberSortOrder === 'ASC' ? 'Tri croissant (cliquer pour inverser)' : memberSortOrder === 'DESC' ? 'Tri décroissant (cliquer pour inverser)' : 'Inverser le sens du tri',
+                                onClick: function (e) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (!memberSortOrder || memberSortOrder === '') {
+                                        var defaultDesc = memberSort !== 'name';
+                                        onMemberSortOrderChange && onMemberSortOrderChange(defaultDesc ? 'ASC' : 'DESC');
+                                    } else {
+                                        onMemberSortOrderChange && onMemberSortOrderChange(memberSortOrder === 'ASC' ? 'DESC' : 'ASC');
+                                    }
+                                },
+                            }, [
+                                h('svg', {
+                                    width: 14, height: 14, viewBox: '0 0 24 24',
+                                    fill: 'none', stroke: 'currentColor', 'stroke-width': 2,
+                                }, [
+                                    h('line', { x1: 4, y1: 6, x2: 11, y2: 6 }),
+                                    h('line', { x1: 4, y1: 12, x2: 15, y2: 12 }),
+                                    h('line', { x1: 4, y1: 18, x2: 20, y2: 18 }),
+                                ]),
+                            ]),
+                            h('span', null, getString(strings, 'sortBy', 'Trier par')),
+                        ]),
+                        h('select', {
+                            class: 'mj-regmgr-sort-select',
+                            value: memberSort,
+                            onChange: function (e) {
+                                onMemberSortOrderChange && onMemberSortOrderChange('');
+                                onMemberSortChange && onMemberSortChange(e.target.value);
+                            },
+                        }, [
+                            h('option', { value: 'name' }, getString(strings, 'sortByName', 'Nom (A-Z)')),
+                            h('option', { value: 'registration_date' }, getString(strings, 'sortByRegistration', 'Date d\'inscription')),
+                            h('option', { value: 'membership_date' }, getString(strings, 'sortByMembership', 'Date de cotisation')),
+                            h('option', { value: 'last_login' }, getString(strings, 'sortByLastLogin', 'Dernière connexion')),
+                            h('option', { value: 'last_activity' }, getString(strings, 'sortByLastActivity', 'Dernière activité')),
+                            h('option', { value: 'level' }, getString(strings, 'sortByLevel', 'Niveau')),
+                        ]),
+                    ],
             ]),
 
             // Liste (événements ou membres)
@@ -705,9 +759,8 @@
                     selectedEventId: selectedEventId,
                     onSelectEvent: onSelectEvent,
                     strings: strings,
-                    onLoadMore: onLoadMore,
-                    hasMore: hasMore,
-                    loadingMore: loadingMore,
+                    pagination: props.eventsPagination,
+                    onPageChange: props.onEventsPageChange,
                 }) : (MembersList ? h(MembersList, {
                     members: members,
                     loading: membersLoading,

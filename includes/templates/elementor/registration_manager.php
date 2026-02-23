@@ -36,7 +36,7 @@ AssetsManager::requirePackage('registration-manager');
 $title = !empty($settings['title']) ? $settings['title'] : __('Gestion des inscriptions', 'mj-member');
 $show_all_events = !empty($settings['show_all_events']) && $settings['show_all_events'] === 'yes';
 $show_past = !empty($settings['show_past_events']) && $settings['show_past_events'] === 'yes';
-$per_page = !empty($settings['events_per_page']) ? (int) $settings['events_per_page'] : 20;
+$per_page = !empty($settings['events_per_page']) ? (int) $settings['events_per_page'] : 10;
 $default_filter = !empty($settings['default_filter']) ? $settings['default_filter'] : 'upcoming';
 $allow_manual_payment = !empty($settings['allow_manual_payment']) && $settings['allow_manual_payment'] === 'yes';
 $allow_delete_registration = !empty($settings['allow_delete_registration']) && $settings['allow_delete_registration'] === 'yes';

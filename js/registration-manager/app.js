@@ -3327,21 +3327,11 @@
         }, [config.prefillEventId, urlEventId]);
 
         var initialFilterValue = useMemo(function () {
-            var allowAllFilter = !!config.showAllEvents;
-            var fallback = typeof config.defaultFilter === 'string' && config.defaultFilter !== ''
+            var fallback = typeof config.defaultFilter === 'string' && config.defaultFilter !== '' && config.defaultFilter !== 'all'
                 ? config.defaultFilter
                 : 'assigned';
-
-            if (fallback === 'all' && !allowAllFilter) {
-                fallback = 'assigned';
-            }
-
-            if (prefillEventId && allowAllFilter && fallback !== 'all') {
-                return 'all';
-            }
-
             return fallback;
-        }, [config.defaultFilter, config.showAllEvents, prefillEventId]);
+        }, [config.defaultFilter]);
 
         // API Service
         var api = useMemo(function () {
@@ -3592,26 +3582,21 @@
         var eventsLoading = _eventsLoading[0];
         var setEventsLoading = _eventsLoading[1];
 
-        var _filter = useState(initialFilterValue);
+        var _filter = useState(initialFilterValue ? [initialFilterValue] : ['assigned']);
         var filter = _filter[0];
         var setFilter = _filter[1];
-        var allowAllFilter = useMemo(function () {
-            return !!config.showAllEvents;
-        }, [config.showAllEvents]);
-
         var setFilterSafe = useCallback(function (nextFilter) {
-            if (nextFilter === 'all' && !allowAllFilter) {
-                setFilter('assigned');
-                return;
-            }
-            setFilter(nextFilter);
-        }, [allowAllFilter, setFilter]);
+            var arr = Array.isArray(nextFilter) ? nextFilter : [nextFilter];
+            setFilter(arr.filter(function (f) { return f !== 'all'; }));
+        }, [setFilter]);
 
-        useEffect(function () {
-            if (!allowAllFilter && filter === 'all') {
-                setFilter('assigned');
-            }
-        }, [allowAllFilter, filter]);
+        var _eventSort = useState('date');
+        var eventSort = _eventSort[0];
+        var setEventSort = _eventSort[1];
+
+        var _eventSortOrder = useState('');
+        var eventSortOrder = _eventSortOrder[0];
+        var setEventSortOrder = _eventSortOrder[1];
 
         var _search = useState('');
         var search = _search[0];
@@ -3945,8 +3930,10 @@
             api.getEvents({
                 filter: filter,
                 search: search,
+                sort: eventSort,
+                sortOrder: eventSortOrder,
                 page: page || 1,
-                perPage: config.perPage || 20,
+                perPage: 10,
             })
                 .then(function (data) {
                     var loadedEvents = data.events || [];
@@ -3997,12 +3984,12 @@
                         setEventsLoading(false);
                     }
                 });
-        }, [api, filter, search, config.perPage, showError, strings, initialEventLoaded, storageKey, prefillEventId]);
+        }, [api, filter, search, eventSort, eventSortOrder, showError, strings, initialEventLoaded, storageKey, prefillEventId]);
 
         // Charger au démarrage et quand les filtres changent
         useEffect(function () {
             loadEvents(1);
-        }, [filter, search]);
+        }, [filter, search, eventSort, eventSortOrder]);
 
         // Charger les détails de l'événement sélectionné
         var loadEventDetails = useCallback(function (eventId) {
@@ -4784,13 +4771,14 @@
                             return without;
                         });
 
-                        var shouldReload = filter === 'draft' && search === '';
+                        var isDraftFilter = Array.isArray(filter) && filter.length === 1 && filter[0] === 'draft';
+                        var shouldReload = isDraftFilter && search === '';
                         if (search !== '') {
                             setSearch('');
                             shouldReload = false;
                         }
-                        if (filter !== 'draft') {
-                            setFilter('draft');
+                        if (!isDraftFilter) {
+                            setFilter(['draft']);
                             shouldReload = false;
                         }
                         if (shouldReload) {
@@ -5177,7 +5165,7 @@
                 sort: memberSort,
                 sortOrder: memberSortOrder,
                 page: page || 1,
-                perPage: config.perPage || 20,
+                perPage: 10,
             })
                 .then(function (data) {
                     var fetchedMembers = Array.isArray(data.members) ? data.members.slice() : [];
@@ -5201,7 +5189,7 @@
                     }
                     return null;
                 });
-        }, [api, memberFilter, memberSearch, memberSort, memberSortOrder, config.perPage, pendingMemberSelection, showError, strings]);
+        }, [api, memberFilter, memberSearch, memberSort, memberSortOrder, pendingMemberSelection, showError, strings]);
 
         // Charger les membres quand on bascule en mode membres ou quand les filtres changent
         useEffect(function () {
@@ -6913,9 +6901,15 @@
                     onFilterChange: setFilterSafe,
                     search: search,
                     onSearchChange: setSearch,
+                    eventSort: eventSort,
+                    onEventSortChange: setEventSort,
+                    eventSortOrder: eventSortOrder,
+                    onEventSortOrderChange: setEventSortOrder,
                     onLoadMore: function () { loadEvents(pagination.page + 1); },
                     hasMore: pagination.page < pagination.totalPages,
                     loadingMore: false,
+                    eventsPagination: pagination,
+                    onEventsPageChange: function (newPage) { loadEvents(newPage); },
                     createEventUrl: config.adminAddEventUrl || '',
                     canCreateEvent: !!config.canCreateEvent,
                     onCreateEvent: openCreateEventModal,
@@ -6943,7 +6937,6 @@
                     onCreateMember: config.allowCreateMember ? createMemberModal.open : null,
 
                     strings: strings,
-                    showAllEvents: allowAllFilter,
                     title: config.title || 'Événements',
                 }),
 
