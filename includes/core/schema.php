@@ -372,6 +372,42 @@ function mj_member_get_leave_types_table_name() {
     return $cached;
 }
 
+function mj_member_get_expenses_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_expenses';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
+function mj_member_get_expense_events_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_expense_events';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
 function mj_member_get_leave_requests_table_name() {
     static $cached = null;
     if ($cached !== null) {
@@ -1796,6 +1832,8 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_65($wpdb);
     mj_member_upgrade_to_2_66($wpdb);
     mj_member_upgrade_to_2_67($wpdb);
+    mj_member_upgrade_to_2_68($wpdb);
+    mj_member_upgrade_to_2_69($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -5608,6 +5646,86 @@ function mj_member_upgrade_to_2_67($wpdb) {
     if (mj_member_table_exists($table) && !mj_member_column_exists($table, 'phone_secondary')) {
         $wpdb->query("ALTER TABLE {$table} ADD COLUMN phone_secondary varchar(30) DEFAULT NULL AFTER phone");
     }
+}
+
+/**
+ * Migration 2.68: Create expense reports tables.
+ */
+function mj_member_upgrade_to_2_68($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    // Create mj_expenses table
+    $expenses_table = mj_member_get_expenses_table_name();
+    if (!mj_member_table_exists($expenses_table)) {
+        $sql = "CREATE TABLE {$expenses_table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            member_id bigint(20) unsigned NOT NULL,
+            amount decimal(10,2) NOT NULL DEFAULT 0.00,
+            description text DEFAULT NULL,
+            project_id bigint(20) unsigned DEFAULT NULL,
+            receipt_file varchar(255) DEFAULT NULL,
+            status varchar(20) NOT NULL DEFAULT 'pending',
+            reviewed_by bigint(20) unsigned DEFAULT NULL,
+            reviewed_at datetime DEFAULT NULL,
+            reviewer_comment text DEFAULT NULL,
+            created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_member (member_id),
+            KEY idx_project (project_id),
+            KEY idx_status (status),
+            KEY idx_created (created_at)
+        ) {$charset_collate};";
+
+        dbDelta($sql);
+    }
+
+    // Create mj_expense_events link table (many-to-many)
+    $expense_events_table = mj_member_get_expense_events_table_name();
+    if (!mj_member_table_exists($expense_events_table)) {
+        $sql = "CREATE TABLE {$expense_events_table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            expense_id bigint(20) unsigned NOT NULL,
+            event_id bigint(20) unsigned NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY idx_expense_event (expense_id, event_id),
+            KEY idx_expense (expense_id),
+            KEY idx_event (event_id)
+        ) {$charset_collate};";
+
+        dbDelta($sql);
+    }
+}
+
+/**
+ * Migration 2.69: Change receipt_file to TEXT for multi-document JSON storage
+ * and migrate existing single-filename values to JSON arrays.
+ */
+function mj_member_upgrade_to_2_69($wpdb) {
+    $table = mj_member_get_expenses_table_name();
+    if (!mj_member_table_exists($table)) {
+        return;
+    }
+
+    // Widen column from varchar(255) to TEXT to hold JSON arrays
+    $col = $wpdb->get_row("SHOW COLUMNS FROM {$table} LIKE 'receipt_file'");
+    if ($col && stripos($col->Type, 'text') === false) {
+        $wpdb->query("ALTER TABLE {$table} MODIFY receipt_file TEXT DEFAULT NULL");
+    }
+
+    // Wrap existing single-filename values in a JSON array
+    // Only rows that have a value AND do not already start with '['
+    $wpdb->query(
+        "UPDATE {$table}
+         SET receipt_file = CONCAT('[\"', receipt_file, '\"]')
+         WHERE receipt_file IS NOT NULL
+           AND receipt_file != ''
+           AND receipt_file NOT LIKE '[%'"
+    );
 }
 
 add_action('init', 'mj_member_run_schema_upgrade', 5);

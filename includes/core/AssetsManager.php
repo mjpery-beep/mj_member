@@ -384,6 +384,10 @@ final class AssetsManager
         // Leave Requests Widget
         self::registerStyle('mj-member-leave-requests', 'css/leave-requests.css', array('mj-member-components'));
         self::registerScript('mj-member-leave-requests', 'js/elementor/leave-requests.js', array('mj-member-utils', 'mj-member-preact-hooks'));
+
+        // Expenses Widget
+        self::registerStyle('mj-member-expenses', 'css/expenses.css', array('mj-member-components'));
+        self::registerScript('mj-member-expenses', 'js/elementor/expenses.js', array('mj-member-utils'));
     }
 
     /**
@@ -593,6 +597,15 @@ final class AssetsManager
                 wp_enqueue_script('mj-member-leave-requests');
                 if (function_exists('mj_member_leave_requests_localize')) {
                     mj_member_leave_requests_localize();
+                }
+                break;
+
+            case 'expenses':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-expenses');
+                wp_enqueue_script('mj-member-expenses');
+                if (function_exists('mj_member_expenses_localize')) {
+                    mj_member_expenses_localize();
                 }
                 break;
 

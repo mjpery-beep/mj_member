@@ -20,7 +20,7 @@ final class Config
         self::$pluginFile = $pluginFile;
 
         self::defineIfMissing('MJ_MEMBER_VERSION', '2.22.0');
-        self::defineIfMissing('MJ_MEMBER_SCHEMA_VERSION', '2.68.0');
+        self::defineIfMissing('MJ_MEMBER_SCHEMA_VERSION', '2.70.0');
         self::defineIfMissing('MJ_MEMBER_PATH', plugin_dir_path($pluginFile));
         self::defineIfMissing('MJ_MEMBER_URL', plugin_dir_url($pluginFile));
         self::defineIfMissing('MJ_MEMBER_CAPABILITY', 'mj_manage_members');
@@ -31,6 +31,10 @@ final class Config
         self::defineIfMissing('MJ_MEMBER_GOOGLE_DRIVE_ROOT_FOLDER_ID', '');
         self::defineIfMissing('MJ_MEMBER_GOOGLE_SERVICE_ACCOUNT_JSON', '');
         self::defineIfMissing('MJ_MEMBER_GOOGLE_IMPERSONATE_USER', '');
+        self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_URL', '');
+        self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_USER', '');
+        self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_PASSWORD', '');
+        self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_ROOT_FOLDER', '');
         self::defineIfMissing('MJ_MEMBER_PAYMENT_EXPIRATION_DAYS', self::DEFAULT_PAYMENT_EXPIRATION);
         self::defineIfMissing('MJ_MEMBER_DATA_RETENTION_DAYS', 1095);
         self::defineIfMissing('MJ_MEMBER_OPENAI_API_KEY', '');
@@ -195,6 +199,61 @@ final class Config
         $sanitized = \sanitize_text_field($value);
 
         return $sanitized !== '' ? $sanitized : '';
+    }
+
+    /* ------------------------------------------------------------------
+     * Nextcloud configuration helpers
+     * ----------------------------------------------------------------*/
+
+    public static function nextcloudUrl(): string
+    {
+        $defined = (string) constant('MJ_MEMBER_NEXTCLOUD_URL');
+        if ($defined !== '') {
+            return rtrim(\sanitize_text_field($defined), '/');
+        }
+
+        $option = \get_option('mj_member_nextcloud_url', '');
+        return is_string($option) && $option !== '' ? rtrim(\sanitize_text_field($option), '/') : '';
+    }
+
+    public static function nextcloudUser(): string
+    {
+        $defined = (string) constant('MJ_MEMBER_NEXTCLOUD_USER');
+        if ($defined !== '') {
+            return \sanitize_text_field($defined);
+        }
+
+        $option = \get_option('mj_member_nextcloud_user', '');
+        return is_string($option) && $option !== '' ? \sanitize_text_field($option) : '';
+    }
+
+    public static function nextcloudPassword(): string
+    {
+        $defined = (string) constant('MJ_MEMBER_NEXTCLOUD_PASSWORD');
+        if ($defined !== '') {
+            return $defined;
+        }
+
+        $option = \get_option('mj_member_nextcloud_password', '');
+        return is_string($option) ? $option : '';
+    }
+
+    public static function nextcloudRootFolder(): string
+    {
+        $defined = (string) constant('MJ_MEMBER_NEXTCLOUD_ROOT_FOLDER');
+        if ($defined !== '') {
+            return trim(\sanitize_text_field($defined), '/');
+        }
+
+        $option = \get_option('mj_member_nextcloud_root_folder', '');
+        return is_string($option) && $option !== '' ? trim(\sanitize_text_field($option), '/') : '';
+    }
+
+    public static function nextcloudIsReady(): bool
+    {
+        return self::nextcloudUrl() !== ''
+            && self::nextcloudUser() !== ''
+            && self::nextcloudPassword() !== '';
     }
 
     private static function defineIfMissing(string $name, $value): void

@@ -163,6 +163,27 @@ function mj_settings_page() {
             update_option('mj_documents_google_service_account_json', $drive_service_account_json);
         }
 
+        // --- Nextcloud settings ---
+        $nc_url = isset($_POST['mj_member_nextcloud_url'])
+            ? sanitize_text_field(wp_unslash($_POST['mj_member_nextcloud_url']))
+            : '';
+        $nc_user = isset($_POST['mj_member_nextcloud_user'])
+            ? sanitize_text_field(wp_unslash($_POST['mj_member_nextcloud_user']))
+            : '';
+        $nc_password = isset($_POST['mj_member_nextcloud_password'])
+            ? trim((string) wp_unslash($_POST['mj_member_nextcloud_password']))
+            : '';
+        $nc_root_folder = isset($_POST['mj_member_nextcloud_root_folder'])
+            ? sanitize_text_field(wp_unslash($_POST['mj_member_nextcloud_root_folder']))
+            : '';
+
+        update_option('mj_member_nextcloud_url', $nc_url);
+        update_option('mj_member_nextcloud_user', $nc_user);
+        if ($nc_password !== '') {
+            update_option('mj_member_nextcloud_password', $nc_password);
+        }
+        update_option('mj_member_nextcloud_root_folder', $nc_root_folder);
+
         $google_sync_enabled = isset($_POST['mj_events_google_sync_enabled']) ? '1' : '0';
         update_option('mj_events_google_sync_enabled', $google_sync_enabled);
 
@@ -411,6 +432,13 @@ function mj_settings_page() {
     $drive_impersonated_user_option = get_option('mj_documents_google_impersonate_user', '');
     $drive_sdk_available = MjGoogleDrive::isAvailable();
     $drive_configuration_ready = Config::googleDriveIsReady() && $drive_root_folder_option !== '' && $drive_sdk_available;
+
+    // Nextcloud options
+    $nc_url_option = get_option('mj_member_nextcloud_url', '');
+    $nc_user_option = get_option('mj_member_nextcloud_user', '');
+    $nc_password_option = get_option('mj_member_nextcloud_password', '');
+    $nc_root_folder_option = get_option('mj_member_nextcloud_root_folder', '');
+    $nc_is_ready = Config::nextcloudIsReady();
 
     $google_sync_enabled_flag = get_option('mj_events_google_sync_enabled', '0') === '1';
     $google_sync_token_display = '';
@@ -707,6 +735,48 @@ function mj_settings_page() {
                                     <label for="mj-documents-google-json" style="font-weight:600; display:block; margin-bottom:4px;">JSON du compte de service</label>
                                     <textarea id="mj-documents-google-json" name="mj_documents_google_service_account_json" rows="8" class="large-text code" placeholder="{&#10;  &quot;type&quot;: &quot;service_account&quot;,&#10;  ...&#10;}"><?php echo esc_textarea($drive_service_account_option); ?></textarea>
                                     <small style="color:#64748b; display:block; margin-top:4px;">Collez le contenu complet du fichier <code>*.json</code> téléchargé depuis Google Cloud. Enregistré tel quel (sécurisé en base de données).</small>
+                                </div>
+                            </div>
+
+                            <div style="margin-top:20px; padding:16px; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px;">
+                                <h3 style="margin-top:0; margin-bottom:10px; color:#0f172a;">☁️ Nextcloud – Drive de documents</h3>
+                                <p style="margin-top:0; color:#475569; font-size:13px;">Ces paramètres connectent le widget «&nbsp;Documents&nbsp;» à votre instance Nextcloud auto-hébergée. Si Nextcloud est configuré, il remplace Google Drive comme backend de stockage. L'édition de documents fonctionne via Collabora Online ou OnlyOffice (à installer sur Nextcloud).</p>
+
+                                <?php if ($nc_is_ready) : ?>
+                                    <p style="margin:0 0 12px 0; color:#15803d; font-weight:600;">✅ Connexion Nextcloud opérationnelle.</p>
+                                <?php elseif ($nc_url_option !== '') : ?>
+                                    <p style="margin:0 0 12px 0; color:#b91c1c; font-weight:600;">Configuration Nextcloud incomplète. Complétez les champs ci-dessous.</p>
+                                <?php else : ?>
+                                    <p style="margin:0 0 12px 0; color:#64748b;">Nextcloud n'est pas configuré. Remplissez les champs ci-dessous pour activer le drive.</p>
+                                <?php endif; ?>
+
+                                <ol style="margin:0 0 16px 18px; color:#475569; font-size:13px;">
+                                    <li>Installez <a href="https://nextcloud.com/install/" target="_blank" rel="noopener">Nextcloud</a> sur votre serveur (ou utilisez un hébergeur Nextcloud).</li>
+                                    <li>Installez <strong>Nextcloud Office (Collabora)</strong> ou <strong>OnlyOffice</strong> depuis les apps Nextcloud pour l'édition de documents en ligne.</li>
+                                    <li>Créez un <strong>mot de passe d'application</strong> dans Nextcloud&nbsp;→ Paramètres&nbsp;→ Sécurité&nbsp;→ «&nbsp;Mots de passe d'application&nbsp;».</li>
+                                    <li>Remplissez les champs ci-dessous avec l'URL de votre Nextcloud, l'identifiant et le mot de passe d'app.</li>
+                                </ol>
+
+                                <div style="display:flex; flex-wrap:wrap; gap:16px;">
+                                    <div style="flex:1 1 260px;">
+                                        <label for="mj-nc-url" style="font-weight:600; display:block; margin-bottom:4px;">URL Nextcloud</label>
+                                        <input type="url" id="mj-nc-url" name="mj_member_nextcloud_url" value="<?php echo esc_attr($nc_url_option); ?>" class="regular-text" placeholder="https://cloud.votre-domaine.be" />
+                                        <small style="color:#64748b; display:block; margin-top:4px;">L'adresse complète de votre instance Nextcloud (sans le <code>/</code> final).</small>
+                                    </div>
+                                    <div style="flex:1 1 200px;">
+                                        <label for="mj-nc-user" style="font-weight:600; display:block; margin-bottom:4px;">Utilisateur</label>
+                                        <input type="text" id="mj-nc-user" name="mj_member_nextcloud_user" value="<?php echo esc_attr($nc_user_option); ?>" class="regular-text" placeholder="admin" />
+                                    </div>
+                                    <div style="flex:1 1 200px;">
+                                        <label for="mj-nc-password" style="font-weight:600; display:block; margin-bottom:4px;">Mot de passe d'application</label>
+                                        <input type="password" id="mj-nc-password" name="mj_member_nextcloud_password" value="" class="regular-text" placeholder="<?php echo $nc_password_option !== '' ? '••••••••' : ''; ?>" />
+                                        <small style="color:#64748b; display:block; margin-top:4px;">Laissez vide pour conserver le mot de passe existant.</small>
+                                    </div>
+                                </div>
+                                <div style="margin-top:12px;">
+                                    <label for="mj-nc-root" style="font-weight:600; display:block; margin-bottom:4px;">Dossier racine (facultatif)</label>
+                                    <input type="text" id="mj-nc-root" name="mj_member_nextcloud_root_folder" value="<?php echo esc_attr($nc_root_folder_option); ?>" class="regular-text" placeholder="Documents/MJ" />
+                                    <small style="color:#64748b; display:block; margin-top:4px;">Chemin relatif dans Nextcloud depuis la racine de l'utilisateur. Laissez vide pour utiliser le dossier racine complet.</small>
                                 </div>
                             </div>
                         </div>

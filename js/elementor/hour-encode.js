@@ -2862,6 +2862,13 @@
 
                                 var entrySource = isEntry && eventItem.source && typeof eventItem.source === 'object' ? eventItem.source : null;
 
+                                if (isEntry && props.editingEntryKey) {
+                                    var thisEntryKey = getEntryKey(entrySource, eventItem.id);
+                                    if (thisEntryKey && thisEntryKey === props.editingEntryKey) {
+                                        eventClass += ' is-selected';
+                                    }
+                                }
+
                                 var eventChildren = [];
                                 if (isEntry) {
                                     var durationMinutes = 0;
@@ -2926,6 +2933,11 @@
                                         'aria-hidden': 'true',
                                         onPointerDown: function(ev) {
                                             handleEntryPointerDown(ev, day, eventItem, 'resize-start');
+                                        },
+                                        onTouchStart: function(ev) {
+                                            if (ev && typeof ev.stopPropagation === 'function') {
+                                                ev.stopPropagation();
+                                            }
                                         }
                                     }));
                                     eventChildren.push(h('span', {
@@ -2935,6 +2947,11 @@
                                         'aria-hidden': 'true',
                                         onPointerDown: function(ev) {
                                             handleEntryPointerDown(ev, day, eventItem, 'resize-end');
+                                        },
+                                        onTouchStart: function(ev) {
+                                            if (ev && typeof ev.stopPropagation === 'function') {
+                                                ev.stopPropagation();
+                                            }
                                         }
                                     }));
                                 }
@@ -2971,8 +2988,18 @@
                                     eventProps.onPointerUp = handleEntryPointerUp;
                                     eventProps.onPointerCancel = handleEntryPointerCancel;
                                     eventProps.onLostPointerCapture = handleEntryPointerCancel;
+                                    eventProps.onTouchStart = function(ev) {
+                                        if (ev && typeof ev.stopPropagation === 'function') {
+                                            ev.stopPropagation();
+                                        }
+                                    };
                                 } else {
                                     eventProps.onPointerDown = function(ev) {
+                                        if (ev && typeof ev.stopPropagation === 'function') {
+                                            ev.stopPropagation();
+                                        }
+                                    };
+                                    eventProps.onTouchStart = function(ev) {
                                         if (ev && typeof ev.stopPropagation === 'function') {
                                             ev.stopPropagation();
                                         }
@@ -3007,21 +3034,32 @@
                                     if (!isEntry || typeof props.onEntrySelect !== 'function') {
                                         return;
                                     }
-                                    if (entryDragRef.current || lastEntryClickBlockedRef.current) {
-                                        if (ev && typeof ev.preventDefault === 'function') {
-                                            ev.preventDefault();
-                                        }
-                                        if (ev && typeof ev.stopPropagation === 'function') {
-                                            ev.stopPropagation();
-                                        }
-                                        lastEntryClickBlockedRef.current = false;
-                                        return;
-                                    }
                                     if (ev && typeof ev.preventDefault === 'function') {
                                         ev.preventDefault();
                                     }
                                     if (ev && typeof ev.stopPropagation === 'function') {
                                         ev.stopPropagation();
+                                    }
+                                    // Entry drag started by synthesised pointerdown but finger never moved → treat as tap
+                                    var drag = entryDragRef.current;
+                                    if (drag && !drag.hasMoved) {
+                                        // Cancel the drag that pointerdown started
+                                        entryDragRef.current = null;
+                                        lastEntryClickBlockedRef.current = false;
+                                        if (drag.captureTarget && typeof drag.captureTarget.releasePointerCapture === 'function') {
+                                            try { drag.captureTarget.releasePointerCapture(drag.pointerId); } catch (ignore) {}
+                                        }
+                                        setEntryPreview(null);
+                                        props.onEntrySelect(entrySource || eventItem.source, {
+                                            dayIso: day.iso,
+                                            event: eventItem,
+                                            trigger: 'touch'
+                                        });
+                                        return;
+                                    }
+                                    if (drag || lastEntryClickBlockedRef.current) {
+                                        lastEntryClickBlockedRef.current = false;
+                                        return;
                                     }
                                     props.onEntrySelect(entrySource || eventItem.source, {
                                         dayIso: day.iso,
@@ -7329,10 +7367,13 @@
                                         onEntryDrag: handleEntryDragUpdate,
                                         onEntryDragEnd: handleEntryDragEnd,
                                         selectedSlot: selectionHighlight,
+                                        editingEntryKey: selectedSlot && selectedSlot.isEditing
+                                            ? (selectedSlot.hourId ? 'hour:' + selectedSlot.hourId : (selectedSlot.entryId ? 'entry:' + selectedSlot.entryId : null))
+                                            : null,
                                         favoriteItems: favoriteItems,
                                         onFavoriteQuickSubmit: handleFavoriteQuickSubmit
                                     }),
-                                    aggregateSummary
+                                    isMobileLayout ? null : aggregateSummary
                                 ]),
                                 h(SidePanel, {
                                     labels: config.labels,
@@ -7351,7 +7392,8 @@
                                     onSelectionSubmit: handleSelectionSubmit,
                                     onSelectionCancel: handleSelectionCancel,
                                     onSelectionDelete: handleSelectionDelete
-                                })
+                                }),
+                                isMobileLayout ? aggregateSummary : null
                             ]),
                             h(ResourceSection, {
                                 miniCalendarModel: miniCalendarModel,

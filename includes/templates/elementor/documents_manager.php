@@ -44,7 +44,7 @@ $sampleFolder = array(
             'id' => 'preview-folder-1',
             'name' => __('Comptes rendus', 'mj-member'),
             'type' => 'folder',
-            'mimeType' => 'application/vnd.google-apps.folder',
+            'mimeType' => 'httpd/unix-directory',
             'modifiedTime' => current_time('mysql'),
             'size' => 0,
             'webViewLink' => '',
@@ -58,6 +58,17 @@ $sampleFolder = array(
             'mimeType' => 'application/pdf',
             'modifiedTime' => current_time('mysql'),
             'size' => 1024 * 256,
+            'webViewLink' => '#',
+            'iconLink' => '',
+            'parents' => array('preview-root'),
+        ),
+        array(
+            'id' => 'preview-file-2',
+            'name' => __('Budget 2026.xlsx', 'mj-member'),
+            'type' => 'file',
+            'mimeType' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'modifiedTime' => current_time('mysql'),
+            'size' => 1024 * 48,
             'webViewLink' => '#',
             'iconLink' => '',
             'parents' => array('preview-root'),
@@ -78,7 +89,13 @@ $config = array(
     'previewData' => $isPreview ? $sampleFolder : array(),
 );
 
-$defaultRoot = Config::googleDriveRootFolderId();
+// Determine root folder per active backend
+$backend = function_exists('mj_member_documents_backend') ? mj_member_documents_backend() : '';
+if ($backend === 'nextcloud') {
+    $defaultRoot = Config::nextcloudRootFolder();
+} else {
+    $defaultRoot = Config::googleDriveRootFolderId();
+}
 if ($config['defaultFolderId'] === '' && $defaultRoot !== '') {
     $config['defaultFolderId'] = $defaultRoot;
 }
@@ -97,7 +114,7 @@ $fallbackNotice = (!$isPreview && (!$hasAccess || !$isConfigured));
             if (!$hasAccess) {
                 esc_html_e('Vous n’avez pas accès à cette section.', 'mj-member');
             } elseif (!$isConfigured) {
-                esc_html_e('La connexion Google Drive n’est pas encore configurée.', 'mj-member');
+                esc_html_e('Le stockage de documents (Nextcloud ou Google Drive) n\u2019est pas encore configuré.', 'mj-member');
             }
             ?>
         </p>

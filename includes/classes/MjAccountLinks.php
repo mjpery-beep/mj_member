@@ -180,6 +180,17 @@ class MjAccountLinks {
                 'type' => 'standard',
                 'icon_id' => 0,
             ),
+            'expenses' => array(
+                'label' => __('Notes de Frais', 'mj-member'),
+                'slug' => 'notes-de-frais',
+                'query' => array('section' => 'expenses'),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'hours_team',
+                'editable_label' => true,
+                'type' => 'standard',
+                'icon_id' => 0,
+            ),
             'logout' => array(
                 'label' => __('Déconnexion', 'mj-member'),
                 'slug' => '',

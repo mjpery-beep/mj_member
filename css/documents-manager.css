@@ -205,3 +205,94 @@
         justify-content: flex-end;
     }
 }
+
+/* ------------------------------------------------------------------ *
+ * Editor overlay (Nextcloud / Collabora / OnlyOffice iframe)          *
+ * ------------------------------------------------------------------ */
+
+.mj-documents-widget__editor-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+}
+
+.mj-documents-widget__editor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    background: #1e293b;
+    color: #fff;
+    flex-shrink: 0;
+}
+
+.mj-documents-widget__editor-title {
+    font-weight: 600;
+    font-size: 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mj-documents-widget__editor-close {
+    background: #dc2626;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    flex-shrink: 0;
+}
+
+.mj-documents-widget__editor-close:hover,
+.mj-documents-widget__editor-close:focus {
+    background: #b91c1c;
+}
+
+.mj-documents-widget__editor-frame {
+    flex: 1;
+    border: none;
+    width: 100%;
+    height: 100%;
+}
+
+/* ------------------------------------------------------------------ *
+ * Action buttons – variants                                           *
+ * ------------------------------------------------------------------ */
+
+.mj-documents-widget__action--new-doc {
+    background: #059669;
+}
+
+.mj-documents-widget__action--new-doc:hover,
+.mj-documents-widget__action--new-doc:focus {
+    background: #047857;
+}
+
+.mj-documents-widget__item-action--edit {
+    color: #059669;
+}
+
+.mj-documents-widget__item-action--delete {
+    color: #dc2626;
+}
+
+.mj-documents-widget__item-action--delete:hover,
+.mj-documents-widget__item-action--delete:focus {
+    color: #b91c1c;
+}
+
+@media (max-width: 640px) {
+    .mj-documents-widget__editor-header {
+        padding: 8px 12px;
+    }
+
+    .mj-documents-widget__editor-title {
+        font-size: 0.85rem;
+    }
+}

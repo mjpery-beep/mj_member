@@ -84,6 +84,10 @@ final class MjNotificationTypes
     const LEAVE_REQUEST_APPROVED = 'leave_request_approved';
     const LEAVE_REQUEST_REJECTED = 'leave_request_rejected';
 
+    // Notes de frais
+    const EXPENSE_CREATED = 'expense_created';
+    const EXPENSE_REIMBURSED = 'expense_reimbursed';
+
 
     /**
      * Retourne les labels pour chaque type de notification.
@@ -125,7 +129,9 @@ final class MjNotificationTypes
             self::TESTIMONIAL_REACTION => __('Réaction à un témoignage', 'mj-member'),
             self::LEAVE_REQUEST_CREATED => __('Nouvelle demande de congé', 'mj-member'),
             self::LEAVE_REQUEST_APPROVED => __('Demande de congé approuvée', 'mj-member'),
-            self::LEAVE_REQUEST_REJECTED => __('Demande de congé refusée', 'mj-member')
+            self::LEAVE_REQUEST_REJECTED => __('Demande de congé refusée', 'mj-member'),
+            self::EXPENSE_CREATED => __('Nouvelle note de frais', 'mj-member'),
+            self::EXPENSE_REIMBURSED => __('Note de frais remboursée', 'mj-member')
         );
     }
 }
@@ -1957,4 +1963,117 @@ if (!function_exists('mj_member_notification_on_testimonial_new_pending')) {
     }
 
     add_action('mj_member_testimonial_created', 'mj_member_notification_on_testimonial_new_pending', 10, 2);
+}
+
+// ============================================================================
+// LISTENER: Nouvelle note de frais créée → Notifier les coordinateurs
+// ============================================================================
+
+if (!function_exists('mj_member_notification_on_expense_created')) {
+    /**
+     * @param int   $expense_id
+     * @param int   $member_id  Auteur de la note
+     * @param float $amount
+     * @return void
+     */
+    function mj_member_notification_on_expense_created(int $expense_id, int $member_id, float $amount): void
+    {
+        if (!function_exists('mj_member_record_notification') || !class_exists(MjMembers::class) || !class_exists(MjRoles::class)) {
+            return;
+        }
+
+        $author = MjMembers::getById($member_id);
+        $author_name = mj_member_notification_get_member_name($author);
+        $formatted = number_format($amount, 2, ',', ' ') . ' €';
+
+        // Récupérer les coordinateurs
+        $coordinateurs = MjMembers::getByRole(MjRoles::COORDINATEUR);
+        if (empty($coordinateurs)) {
+            return;
+        }
+
+        $recipient_ids = array();
+        foreach ($coordinateurs as $c) {
+            $cid = isset($c->id) ? (int) $c->id : 0;
+            if ($cid > 0 && $cid !== $member_id) {
+                $recipient_ids[] = $cid;
+            }
+        }
+
+        if (empty($recipient_ids)) {
+            return;
+        }
+
+        $notification_data = array(
+            'type'    => MjNotificationTypes::EXPENSE_CREATED,
+            'title'   => __('Nouvelle note de frais', 'mj-member'),
+            'excerpt' => sprintf(__('%s a soumis une note de frais de %s.', 'mj-member'), $author_name, $formatted),
+            'url'     => home_url('/mon-compte/notes-de-frais/?section=expenses'),
+            'context' => 'expenses',
+            'source'  => 'system',
+            'payload' => array(
+                'expense_id'  => $expense_id,
+                'member_id'   => $member_id,
+                'amount'      => $amount,
+                'author_name' => $author_name,
+            ),
+        );
+
+        mj_member_record_notification($notification_data, $recipient_ids);
+
+        mj_member_notification_log('expense_created', array(
+            'expense_id'       => $expense_id,
+            'member_id'        => $member_id,
+            'recipients_count' => count($recipient_ids),
+        ));
+    }
+
+    add_action('mj_member_expense_created', 'mj_member_notification_on_expense_created', 10, 3);
+}
+
+// ============================================================================
+// LISTENER: Note de frais remboursée → Notifier le membre
+// ============================================================================
+
+if (!function_exists('mj_member_notification_on_expense_reimbursed')) {
+    /**
+     * @param int   $expense_id
+     * @param int   $member_id  Propriétaire de la note
+     * @param float $amount
+     * @return void
+     */
+    function mj_member_notification_on_expense_reimbursed(int $expense_id, int $member_id, float $amount): void
+    {
+        if (!function_exists('mj_member_record_notification') || !class_exists(MjMembers::class)) {
+            return;
+        }
+
+        if ($member_id <= 0) {
+            return;
+        }
+
+        $formatted = number_format($amount, 2, ',', ' ') . ' €';
+
+        $notification_data = array(
+            'type'    => MjNotificationTypes::EXPENSE_REIMBURSED,
+            'title'   => __('Note de frais remboursée', 'mj-member'),
+            'excerpt' => sprintf(__('Ta note de frais de %s a été remboursée.', 'mj-member'), $formatted),
+            'url'     => home_url('/mon-compte/notes-de-frais/?section=expenses'),
+            'context' => 'expenses',
+            'source'  => 'system',
+            'payload' => array(
+                'expense_id' => $expense_id,
+                'amount'     => $amount,
+            ),
+        );
+
+        mj_member_record_notification($notification_data, array($member_id));
+
+        mj_member_notification_log('expense_reimbursed', array(
+            'expense_id' => $expense_id,
+            'member_id'  => $member_id,
+        ));
+    }
+
+    add_action('mj_member_expense_reimbursed', 'mj_member_notification_on_expense_reimbursed', 10, 3);
 }
