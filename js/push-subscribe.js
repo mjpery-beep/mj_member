@@ -64,6 +64,11 @@
             body: body,
             credentials: 'same-origin'
         }).then(function (response) {
+            if (!response.ok) {
+                // 403 = nonce expiré, 0 = pas connecté, etc.
+                if (window.console) console.warn('[MJ Push] HTTP ' + response.status + ' on subscribe AJAX');
+                return { success: false, data: { error: 'HTTP ' + response.status } };
+            }
             return response.json();
         });
     }
@@ -116,16 +121,24 @@
                 // (l'endpoint peut avoir changé sans que le serveur le sache)
                 sendSubscriptionToServer(subscription).then(function (response) {
                     if (response && response.success) {
-                        // Stocker l'endpoint pour détecter les changements
                         try { localStorage.setItem('mj_push_endpoint', subscription.endpoint); } catch (e) { /* noop */ }
+                        if (window.console) console.debug('[MJ Push] Sync OK, id=' + (response.data && response.data.id));
+                    } else {
+                        if (window.console) console.warn('[MJ Push] Sync refused:', response);
                     }
-                }).catch(function () { /* silencieux */ });
+                }).catch(function (err) {
+                    if (window.console) console.warn('[MJ Push] Sync error:', err);
+                });
                 return;
             }
 
             // Pas encore souscrit – vérifier la permission
             if (Notification.permission === 'granted') {
-                subscribePush(registration);
+                subscribePush(registration).then(function (response) {
+                    if (window.console) console.debug('[MJ Push] Subscribe result:', response);
+                }).catch(function (err) {
+                    if (window.console) console.warn('[MJ Push] Subscribe error:', err);
+                });
             }
             // Si 'default', l'UI soft-prompt demandera au clic
         });

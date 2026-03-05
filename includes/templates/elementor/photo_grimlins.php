@@ -51,9 +51,18 @@ $mosaic_transition = isset($template_data['mosaic_transition']) && in_array($tem
     ? $template_data['mosaic_transition']
     : 'flip';
 $has_mosaic = $mosaic_enabled && !empty($mosaic_sessions);
+$fullscreen = !empty($template_data['fullscreen']);
+
+$root_classes = 'mj-photo-grimlins';
+if ($has_mosaic) {
+    $root_classes .= ' mj-photo-grimlins--has-mosaic';
+}
+if ($fullscreen) {
+    $root_classes .= ' mj-photo-grimlins--fullscreen';
+}
 ?>
 
-<div class="mj-photo-grimlins<?php echo $has_mosaic ? ' mj-photo-grimlins--has-mosaic' : ''; ?>" id="<?php echo esc_attr($component_id); ?>" data-mj-photo-grimlins data-config='<?php echo esc_attr($config_json); ?>'>
+<div class="<?php echo esc_attr($root_classes); ?>" id="<?php echo esc_attr($component_id); ?>" data-mj-photo-grimlins data-config='<?php echo esc_attr($config_json); ?>'>
 
     <?php if ($has_mosaic) : ?>
         <div class="mj-photo-grimlins__mosaic" aria-hidden="true">
@@ -70,10 +79,10 @@ $has_mosaic = $mosaic_enabled && !empty($mosaic_sessions);
                 <div class="mj-photo-grimlins__tile <?php echo esc_attr($transition_class); ?>"
                      style="--tile-delay: <?php echo esc_attr($tile_delay); ?>s; --tile-duration: <?php echo esc_attr($tile_duration); ?>s;">
                     <?php if ($m_before !== '') : ?>
-                        <img class="mj-photo-grimlins__tile-before" src="<?php echo $m_before; ?>" alt="" loading="lazy" width="200" height="200">
+                        <img class="mj-photo-grimlins__tile-before" src="<?php echo $m_before; ?>" alt="" loading="lazy" width="400" height="400">
                     <?php endif; ?>
                     <?php if ($m_after !== '') : ?>
-                        <img class="mj-photo-grimlins__tile-after" src="<?php echo $m_after; ?>" alt="" loading="lazy" width="200" height="200">
+                        <img class="mj-photo-grimlins__tile-after" src="<?php echo $m_after; ?>" alt="" loading="lazy" width="400" height="400">
                     <?php endif; ?>
                 </div>
             <?php endforeach; ?>

@@ -85,6 +85,8 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
 
         $this->end_controls_section();
 
+        /* ── Mosaïque ── */
+
         $this->start_controls_section(
             'section_mosaic',
             array(
@@ -113,9 +115,7 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
                 'max' => 24,
                 'step' => 1,
                 'default' => 12,
-                'condition' => array(
-                    'mosaic_enabled' => 'yes',
-                ),
+                'condition' => array('mosaic_enabled' => 'yes'),
             )
         );
 
@@ -129,15 +129,37 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
                     'flip' => __('Rotation 3D', 'mj-member'),
                     'fade' => __('Fondu enchaîné', 'mj-member'),
                 ),
-                'condition' => array(
-                    'mosaic_enabled' => 'yes',
-                ),
+                'condition' => array('mosaic_enabled' => 'yes'),
             )
         );
 
         $this->end_controls_section();
 
-        /* ── Style tab: Container contenu ── */
+        /* ── Affichage ── */
+
+        $this->start_controls_section(
+            'section_display',
+            array(
+                'label' => __('Affichage', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
+            'fullscreen',
+            array(
+                'label' => __('Plein écran', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'no',
+                'description' => __('Le widget occupe toute la fenêtre navigateur.', 'mj-member'),
+            )
+        );
+
+        $this->end_controls_section();
+
+        /* ── Style : Container contenu ── */
 
         $this->start_controls_section(
             'section_style_content',
@@ -155,7 +177,7 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
                 'size_units' => array('px', '%'),
                 'range' => array(
                     'px' => array('min' => 200, 'max' => 900),
-                    '%' => array('min' => 40, 'max' => 100),
+                    '%'  => array('min' => 40, 'max' => 100),
                 ),
                 'selectors' => array(
                     '{{WRAPPER}} .mj-photo-grimlins__content' => 'max-width: {{SIZE}}{{UNIT}};',
@@ -243,6 +265,7 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
         $mosaic_transition = isset($settings['mosaic_transition']) && in_array($settings['mosaic_transition'], array('flip', 'fade'), true)
             ? $settings['mosaic_transition']
             : 'flip';
+        $fullscreen = !empty($settings['fullscreen']) && $settings['fullscreen'] === 'yes';
 
         $mosaic_sessions = array();
         if ($mosaic_enabled) {
@@ -271,6 +294,7 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
             'mosaic_enabled' => $mosaic_enabled,
             'mosaic_sessions' => $mosaic_sessions,
             'mosaic_transition' => $mosaic_transition,
+            'fullscreen' => $fullscreen,
         );
 
         /**

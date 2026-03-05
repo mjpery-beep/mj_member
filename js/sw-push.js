@@ -20,34 +20,37 @@ self.addEventListener('activate', function (event) {
 
 /**
  * Réception d'une notification push.
+ *
+ * Chrome exige qu'un showNotification() soit appelé pour chaque push reçu.
+ * Si les données sont absentes ou invalides (ex: échec de décryptage),
+ * on affiche quand même une notification générique.
  */
 self.addEventListener('push', function (event) {
-    if (!event.data) {
-        return;
+    var payload = {};
+
+    if (event.data) {
+        try {
+            payload = event.data.json();
+        } catch (e) {
+            try {
+                payload = { title: 'MJ Péry', body: event.data.text() };
+            } catch (e2) {
+                payload = { title: 'MJ Péry', body: 'Vous avez une nouvelle notification.' };
+            }
+        }
     }
 
-    var payload;
-    try {
-        payload = event.data.json();
-    } catch (e) {
-        payload = {
-            title: 'Notification',
-            body: event.data.text()
-        };
-    }
-
-    var title = payload.title || 'Notification';
+    // Toujours afficher, même si pas de données (Chrome l'exige)
+    var title = payload.title || 'MJ Péry';
     var options = {
-        body: payload.body || '',
+        body: payload.body || 'Vous avez une nouvelle notification.',
         icon: payload.icon || '',
         badge: payload.badge || '',
         tag: payload.tag || 'mj-member-notification',
         data: {
             url: payload.url || '/'
         },
-        // Vibration pour mobile
         vibrate: [200, 100, 200],
-        // Afficher même si l'onglet est actif
         requireInteraction: false
     };
 
