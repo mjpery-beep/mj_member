@@ -357,6 +357,9 @@ final class AssetsManager
         self::registerStyle('mj-member-notification-bell', 'css/notification-bell.css');
         self::registerScript('mj-member-notification-bell', 'js/notification-bell.js', array('jquery'));
 
+        // Push Subscribe (Web Push)
+        self::registerScript('mj-member-push-subscribe', 'js/push-subscribe.js', array());
+
         // Registration Manager Widget
         self::registerStyle('mj-member-registration-manager', 'css/registration-manager.css', array('mj-member-components'));
         self::registerScript('mj-member-regmgr-services', 'js/registration-manager/services.js', array('mj-member-utils'));
@@ -559,6 +562,29 @@ final class AssetsManager
                     'ajaxUrl' => admin_url('admin-ajax.php'),
                     'nonce' => wp_create_nonce('mj-notification-bell'),
                 ));
+                // Charger aussi le push subscribe si VAPID est configuré
+                if (\Mj\Member\Core\Config::webPushIsReady() && is_user_logged_in()) {
+                    wp_enqueue_script('mj-member-push-subscribe');
+                    wp_localize_script('mj-member-push-subscribe', 'mjPushSubscribe', array(
+                        'ajaxUrl'        => admin_url('admin-ajax.php'),
+                        'nonce'          => wp_create_nonce('mj-push-subscribe'),
+                        'vapidPublicKey' => \Mj\Member\Core\Config::vapidPublicKey(),
+                        'swUrl'          => home_url('/mj-sw.js'),
+                    ));
+                }
+                break;
+
+            case 'push-subscribe':
+                if (\Mj\Member\Core\Config::webPushIsReady() && is_user_logged_in()) {
+                    wp_enqueue_style('mj-member-notification-bell');
+                    wp_enqueue_script('mj-member-push-subscribe');
+                    wp_localize_script('mj-member-push-subscribe', 'mjPushSubscribe', array(
+                        'ajaxUrl'        => admin_url('admin-ajax.php'),
+                        'nonce'          => wp_create_nonce('mj-push-subscribe'),
+                        'vapidPublicKey' => \Mj\Member\Core\Config::vapidPublicKey(),
+                        'swUrl'          => home_url('/mj-sw.js'),
+                    ));
+                }
                 break;
 
             case 'registration-manager':

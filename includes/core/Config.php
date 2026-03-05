@@ -20,7 +20,7 @@ final class Config
         self::$pluginFile = $pluginFile;
 
         self::defineIfMissing('MJ_MEMBER_VERSION', '2.22.0');
-        self::defineIfMissing('MJ_MEMBER_SCHEMA_VERSION', '2.70.0');
+        self::defineIfMissing('MJ_MEMBER_SCHEMA_VERSION', '2.71.0');
         self::defineIfMissing('MJ_MEMBER_PATH', plugin_dir_path($pluginFile));
         self::defineIfMissing('MJ_MEMBER_URL', plugin_dir_url($pluginFile));
         self::defineIfMissing('MJ_MEMBER_CAPABILITY', 'mj_manage_members');
@@ -38,6 +38,8 @@ final class Config
         self::defineIfMissing('MJ_MEMBER_PAYMENT_EXPIRATION_DAYS', self::DEFAULT_PAYMENT_EXPIRATION);
         self::defineIfMissing('MJ_MEMBER_DATA_RETENTION_DAYS', 1095);
         self::defineIfMissing('MJ_MEMBER_OPENAI_API_KEY', '');
+        self::defineIfMissing('MJ_MEMBER_VAPID_PUBLIC_KEY', '');
+        self::defineIfMissing('MJ_MEMBER_VAPID_PRIVATE_KEY', '');
     }
 
     public static function version(): string
@@ -254,6 +256,47 @@ final class Config
         return self::nextcloudUrl() !== ''
             && self::nextcloudUser() !== ''
             && self::nextcloudPassword() !== '';
+    }
+
+    /* ------------------------------------------------------------------
+     * VAPID / Web Push configuration helpers
+     * ----------------------------------------------------------------*/
+
+    public static function vapidPublicKey(): string
+    {
+        $defined = (string) constant('MJ_MEMBER_VAPID_PUBLIC_KEY');
+        if ($defined !== '') {
+            return \sanitize_text_field($defined);
+        }
+
+        $option = \get_option('mj_member_vapid_public_key', '');
+        return is_string($option) && $option !== '' ? \sanitize_text_field($option) : '';
+    }
+
+    public static function vapidPrivateKey(): string
+    {
+        $defined = (string) constant('MJ_MEMBER_VAPID_PRIVATE_KEY');
+        if ($defined !== '') {
+            return $defined;
+        }
+
+        $option = \get_option('mj_member_vapid_private_key', '');
+        return is_string($option) ? $option : '';
+    }
+
+    public static function vapidSubject(): string
+    {
+        $option = \get_option('mj_member_vapid_subject', '');
+        if (is_string($option) && $option !== '') {
+            return $option;
+        }
+
+        return 'mailto:' . \get_option('admin_email', '');
+    }
+
+    public static function webPushIsReady(): bool
+    {
+        return self::vapidPublicKey() !== '' && self::vapidPrivateKey() !== '';
     }
 
     private static function defineIfMissing(string $name, $value): void

@@ -74,6 +74,7 @@ final class Bootstrap
         'includes/core/ajax/front/leave_requests_ajax.php',
         'includes/core/ajax/front/expenses_ajax.php',
         'includes/core/ajax/admin/dynamic-fields.php',
+        'includes/web_push.php',
     );
 
     /** @var bool */

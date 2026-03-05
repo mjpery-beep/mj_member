@@ -103,7 +103,12 @@ function mj_settings_page() {
         $registration_page = isset($_POST['mj_login_registration_page']) ? intval($_POST['mj_login_registration_page']) : 0;
         $openai_api_key = isset($_POST['mj_openai_api_key']) ? sanitize_text_field(wp_unslash($_POST['mj_openai_api_key'])) : '';
         $photo_grimlins_prompt = isset($_POST['mj_photo_grimlins_prompt']) ? sanitize_textarea_field(wp_unslash($_POST['mj_photo_grimlins_prompt'])) : '';
-        
+
+        // --- Web Push VAPID settings ---
+        $vapid_public_key = isset($_POST['mj_member_vapid_public_key']) ? sanitize_text_field(wp_unslash($_POST['mj_member_vapid_public_key'])) : '';
+        $vapid_private_key = isset($_POST['mj_member_vapid_private_key']) ? sanitize_text_field(wp_unslash($_POST['mj_member_vapid_private_key'])) : '';
+        $vapid_subject = isset($_POST['mj_member_vapid_subject']) ? sanitize_text_field(wp_unslash($_POST['mj_member_vapid_subject'])) : '';
+
         update_option('mj_notify_email', $notify_email);
         update_option('mj_smtp_settings', $smtp);
         update_option('mj_stripe_publishable_key', $stripe_publishable);
@@ -128,6 +133,11 @@ function mj_settings_page() {
         update_option('mj_login_registration_page', $registration_page > 0 ? $registration_page : 0);
         update_option('mj_member_openai_api_key', $openai_api_key);
         update_option('mj_member_photo_grimlins_prompt', $photo_grimlins_prompt);
+
+        // Web Push VAPID
+        update_option('mj_member_vapid_public_key', $vapid_public_key);
+        update_option('mj_member_vapid_private_key', $vapid_private_key);
+        update_option('mj_member_vapid_subject', $vapid_subject);
 
         // Document d'inscription header/footer
         $regdoc_header = isset($_POST['mj_regdoc_header']) ? wp_kses_post(wp_unslash($_POST['mj_regdoc_header'])) : '';
@@ -423,6 +433,9 @@ function mj_settings_page() {
 
     $openai_api_key_option = get_option('mj_member_openai_api_key', '');
     $photo_grimlins_prompt_option = get_option('mj_member_photo_grimlins_prompt', '');
+    $vapid_public_key_option = get_option('mj_member_vapid_public_key', '');
+    $vapid_private_key_option = get_option('mj_member_vapid_private_key', '');
+    $vapid_subject_option = get_option('mj_member_vapid_subject', '');
     if (!is_string($photo_grimlins_prompt_option) || $photo_grimlins_prompt_option === '') {
         $photo_grimlins_prompt_option = __('Transforme cette personne en version "Grimlins" fun et stylisée, avec un rendu illustratif détaillé, sans éléments effrayants.', 'mj-member');
     }
@@ -504,6 +517,7 @@ function mj_settings_page() {
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-ai" data-tab-target="ai" role="tab" aria-controls="mj-tab-ai" aria-selected="false">🧠 IA &amp; médias</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-regdoc" data-tab-target="regdoc" role="tab" aria-controls="mj-tab-regdoc" aria-selected="false">📄 Document d'inscription</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-dynfields" data-tab-target="dynfields" role="tab" aria-controls="mj-tab-dynfields" aria-selected="false">🧩 Données dynamiques</button>
+                    <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-webpush" data-tab-target="webpush" role="tab" aria-controls="mj-tab-webpush" aria-selected="false">🔔 Web Push</button>
                 </div>
 
                 <div class="mj-settings-tabs__panels">
@@ -1359,6 +1373,128 @@ function mj_settings_page() {
                             'nonce'   => wp_create_nonce('mj_dynfields_nonce'),
                         ));
                         ?>
+                    </div>
+
+                    <!-- ====== ONGLET WEB PUSH ====== -->
+                    <div id="mj-tab-webpush" class="mj-settings-tabs__panel" data-tab="webpush" role="tabpanel" aria-labelledby="mj-tab-button-webpush" aria-hidden="true">
+                        <div style="background:#eff6ff; border-left:4px solid #3b82f6; padding:18px 20px; border-radius:10px; margin-bottom:24px;">
+                            <h2 style="margin:0 0 8px 0;">🔔 Notifications Web Push</h2>
+                            <p style="margin:0; color:#475569;">
+                                <?php esc_html_e('Activez les notifications push pour que vos membres reçoivent les alertes directement dans leur navigateur (Chrome, Firefox, Edge) ou sur leur smartphone.', 'mj-member'); ?><br>
+                                <?php esc_html_e('Vous devez générer une paire de clés VAPID. Ces clés identifient votre serveur auprès du service push du navigateur.', 'mj-member'); ?>
+                            </p>
+                        </div>
+
+                        <div style="margin-bottom:24px;">
+                            <p>
+                                <button type="button" id="mj-generate-vapid-btn" class="button button-secondary" style="margin-bottom:12px;">
+                                    🔑 <?php esc_html_e('Générer de nouvelles clés VAPID', 'mj-member'); ?>
+                                </button>
+                                <span id="mj-vapid-status" style="margin-left:10px; color:#059669; display:none;">✓ Clés générées</span>
+                            </p>
+                            <p style="color:#dc2626; font-size:13px; display:none;" id="mj-vapid-warning">
+                                <?php esc_html_e('⚠️ Si vous régénérez les clés, tous les abonnements push existants seront invalidés. Les utilisateurs devront se réabonner.', 'mj-member'); ?>
+                            </p>
+                        </div>
+
+                        <p style="margin-bottom:18px;">
+                            <label for="mj-vapid-public-key"><strong><?php esc_html_e('Clé publique VAPID', 'mj-member'); ?></strong></label><br>
+                            <input type="text" name="mj_member_vapid_public_key" id="mj-vapid-public-key" value="<?php echo esc_attr($vapid_public_key_option); ?>" class="large-text" autocomplete="off" placeholder="BN...">
+                            <small style="color:#6b7280; display:block; margin-top:4px;">
+                                <?php esc_html_e('Clé publique utilisée côté client pour l\'abonnement push. Vous pouvez aussi définir MJ_MEMBER_VAPID_PUBLIC_KEY dans wp-config.php.', 'mj-member'); ?>
+                            </small>
+                        </p>
+
+                        <p style="margin-bottom:18px;">
+                            <label for="mj-vapid-private-key"><strong><?php esc_html_e('Clé privée VAPID', 'mj-member'); ?></strong></label><br>
+                            <input type="password" name="mj_member_vapid_private_key" id="mj-vapid-private-key" value="<?php echo esc_attr($vapid_private_key_option); ?>" class="regular-text" autocomplete="off">
+                            <small style="color:#6b7280; display:block; margin-top:4px;">
+                                <?php esc_html_e('Clé privée utilisée côté serveur pour signer les envois. Ne la partagez jamais publiquement.', 'mj-member'); ?>
+                            </small>
+                        </p>
+
+                        <p style="margin-bottom:18px;">
+                            <label for="mj-vapid-subject"><strong><?php esc_html_e('Sujet VAPID (contact)', 'mj-member'); ?></strong></label><br>
+                            <input type="text" name="mj_member_vapid_subject" id="mj-vapid-subject" value="<?php echo esc_attr($vapid_subject_option); ?>" class="regular-text" autocomplete="off" placeholder="mailto:admin@example.com">
+                            <small style="color:#6b7280; display:block; margin-top:4px;">
+                                <?php esc_html_e('URL mailto: ou https: identifiant l\'expéditeur des notifications. Laissez vide pour utiliser l\'email admin du site.', 'mj-member'); ?>
+                            </small>
+                        </p>
+
+                        <?php
+                        $push_sub_count = 0;
+                        if (class_exists('Mj\Member\Classes\Crud\MjPushSubscriptions')) {
+                            $push_table = \Mj\Member\Classes\Crud\MjPushSubscriptions::get_table_name();
+                            if ($push_table !== '' && function_exists('mj_member_table_exists') && mj_member_table_exists($push_table)) {
+                                $push_sub_count = \Mj\Member\Classes\Crud\MjPushSubscriptions::count();
+                            }
+                        }
+                        ?>
+                        <div style="margin-top:24px; padding:16px; border:1px dashed #cbd5f5; border-radius:8px; background:#fff; color:#334155;">
+                            <p style="margin:0 0 6px 0;"><strong><?php esc_html_e('Statistiques', 'mj-member'); ?></strong></p>
+                            <p style="margin:0; color:#475569;">
+                                <?php printf(esc_html__('Abonnements push actifs : %d', 'mj-member'), $push_sub_count); ?>
+                            </p>
+                        </div>
+
+                        <div style="margin-top:24px; padding:16px; border:1px dashed #cbd5f5; border-radius:8px; background:#fff; color:#334155;">
+                            <p style="margin:0 0 6px 0;"><strong><?php esc_html_e('Comment ça marche', 'mj-member'); ?></strong></p>
+                            <ul style="margin:0 0 0 18px; padding:0; list-style:disc; color:#475569;">
+                                <li><?php esc_html_e('Quand un membre connecté visite le site, le navigateur lui propose d\'activer les notifications.', 'mj-member'); ?></li>
+                                <li><?php esc_html_e('S\'il accepte, chaque notification in-app (inscription, paiement, trophée…) déclenche aussi un push.', 'mj-member'); ?></li>
+                                <li><?php esc_html_e('La notification apparaît dans le centre de notifications de l\'OS (Windows, macOS, Android, iOS 16.4+).', 'mj-member'); ?></li>
+                                <li><?php esc_html_e('Les abonnements invalides (navigateur désinstallé, permissions révoquées) sont nettoyés automatiquement.', 'mj-member'); ?></li>
+                            </ul>
+                        </div>
+
+                        <script>
+                        (function(){
+                            var btn = document.getElementById('mj-generate-vapid-btn');
+                            var warning = document.getElementById('mj-vapid-warning');
+                            var status = document.getElementById('mj-vapid-status');
+                            if (!btn) return;
+
+                            // Afficher l'avertissement si des clés existent déjà
+                            var pubField = document.getElementById('mj-vapid-public-key');
+                            if (pubField && pubField.value) {
+                                warning.style.display = 'block';
+                            }
+
+                            btn.addEventListener('click', function() {
+                                btn.disabled = true;
+                                btn.textContent = '⏳ Génération…';
+                                status.style.display = 'none';
+
+                                var formData = new FormData();
+                                formData.append('action', 'mj_generate_vapid_keys');
+                                formData.append('nonce', '<?php echo esc_js(wp_create_nonce('mj-member-settings')); ?>');
+
+                                fetch('<?php echo esc_js(admin_url('admin-ajax.php')); ?>', {
+                                    method: 'POST',
+                                    body: formData,
+                                    credentials: 'same-origin'
+                                })
+                                .then(function(r) { return r.json(); })
+                                .then(function(resp) {
+                                    btn.disabled = false;
+                                    btn.textContent = '🔑 <?php echo esc_js(__('Générer de nouvelles clés VAPID', 'mj-member')); ?>';
+                                    if (resp.success && resp.data) {
+                                        document.getElementById('mj-vapid-public-key').value = resp.data.publicKey;
+                                        document.getElementById('mj-vapid-private-key').value = resp.data.privateKey;
+                                        status.style.display = 'inline';
+                                        warning.style.display = 'block';
+                                    } else {
+                                        alert(resp.data && resp.data.message ? resp.data.message : 'Erreur lors de la génération.');
+                                    }
+                                })
+                                .catch(function() {
+                                    btn.disabled = false;
+                                    btn.textContent = '🔑 <?php echo esc_js(__('Générer de nouvelles clés VAPID', 'mj-member')); ?>';
+                                    alert('Erreur réseau.');
+                                });
+                            });
+                        })();
+                        </script>
                     </div>
                 </div>
             </div>

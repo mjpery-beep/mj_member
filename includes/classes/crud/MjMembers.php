@@ -296,6 +296,11 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         if (!empty($filters['has_login'])) {
             $builder->where_raw('(wp_user_id IS NOT NULL AND wp_user_id > 0)');
         }
+
+        if (!empty($filters['status'])) {
+            $status = self::normalizeStatus($filters['status']);
+            $builder->where_equals('status', $status, 'sanitize_text_field');
+        }
     }
 
     /**

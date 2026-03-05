@@ -40,10 +40,22 @@ class MjNotificationManager {
             return $result;
         }
 
-        return array(
+        $output = array(
             'notification_id' => (int) $notification_id,
             'recipient_ids' => $result,
         );
+
+        /**
+         * Filtre déclenché après l'enregistrement réussi d'une notification.
+         * Utilisé par le module Web Push pour envoyer les push en arrière-plan.
+         *
+         * @param array               $output            {notification_id, recipient_ids}
+         * @param array<string,mixed> $notification_data  Données de la notification
+         * @param array<int,mixed>    $recipients         Destinataires originaux
+         */
+        $output = apply_filters('mj_member_notification_recorded', $output, $notification_data, $recipients);
+
+        return $output;
     }
 
     /**

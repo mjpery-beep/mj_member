@@ -1016,4 +1016,182 @@
     .mj-notification-bell__list-container::-webkit-scrollbar-thumb:hover {
         background-color: #64748b;
     }
+
+    .mj-push-bell-prompt {
+        background-color: #1e293b;
+        border-bottom-color: #334155;
+    }
+    .mj-push-bell-prompt__text {
+        color: #e2e8f0;
+    }
+    .mj-push-bell-prompt__chevron {
+        color: #94a3b8;
+    }
+    .mj-push-bell-prompt:hover {
+        background-color: #334155;
+    }
+
+    .mj-push-prompt__inner {
+        background-color: #1e293b;
+        color: #e2e8f0;
+        box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4);
+    }
+}
+
+/* ===================================================================
+   Push Notification Prompt – Floating toast (bas de page)
+   =================================================================== */
+
+.mj-push-prompt {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 999999;
+    padding: 0 16px 16px;
+    pointer-events: none;
+    transform: translateY(100%);
+    opacity: 0;
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.4s ease;
+}
+
+.mj-push-prompt--visible {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.mj-push-prompt__inner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 14px 18px;
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.06);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+    color: #1e293b;
+}
+
+.mj-push-prompt__icon {
+    flex-shrink: 0;
+    font-size: 22px;
+    line-height: 1;
+}
+
+.mj-push-prompt__text {
+    flex: 1;
+    min-width: 0;
+}
+
+.mj-push-prompt__btn {
+    flex-shrink: 0;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+    line-height: 1;
+    transition: background-color 0.2s ease, transform 0.15s ease;
+}
+
+.mj-push-prompt__btn:active {
+    transform: scale(0.95);
+}
+
+.mj-push-prompt__btn--accept {
+    padding: 8px 18px;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    color: #ffffff;
+    font-size: 13px;
+    border-radius: 8px;
+}
+
+.mj-push-prompt__btn--accept:hover {
+    background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+}
+
+.mj-push-prompt__btn--dismiss {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 20px;
+    border-radius: 50%;
+}
+
+.mj-push-prompt__btn--dismiss:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: #64748b;
+}
+
+/* ===================================================================
+   Push Notification Prompt – Inside bell panel
+   =================================================================== */
+
+.mj-push-bell-prompt {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #eff6ff 0%, #f0f4ff 100%);
+    border-bottom: 1px solid #e0e7ff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #3730a3;
+    transition: background-color 0.2s ease;
+}
+
+.mj-push-bell-prompt:hover {
+    background: linear-gradient(135deg, #e0ecff 0%, #e4e9ff 100%);
+}
+
+.mj-push-bell-prompt:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: -2px;
+}
+
+.mj-push-bell-prompt__icon {
+    flex-shrink: 0;
+    font-size: 18px;
+    line-height: 1;
+}
+
+.mj-push-bell-prompt__text {
+    flex: 1;
+    font-weight: 500;
+    color: #4338ca;
+}
+
+.mj-push-bell-prompt__chevron {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    color: #6366f1;
+}
+
+/* Mobile : toast pleine largeur */
+@media (max-width: 480px) {
+    .mj-push-prompt {
+        padding: 0 8px 8px;
+    }
+    .mj-push-prompt__inner {
+        border-radius: 12px;
+        padding: 12px 14px;
+        gap: 10px;
+        font-size: 13px;
+    }
+    .mj-push-prompt__btn--accept {
+        padding: 8px 14px;
+        font-size: 12px;
+    }
 }

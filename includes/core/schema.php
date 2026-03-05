@@ -567,6 +567,30 @@ function mj_member_get_notification_recipients_table_name() {
     return $cached;
 }
 
+function mj_member_get_push_subscriptions_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_push_subscriptions',
+        $wpdb->prefix . 'push_subscriptions',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    // Préférer le nom sans double préfixe pour les nouvelles installations
+    $cached = $wpdb->prefix . 'push_subscriptions';
+    return $cached;
+}
+
 function mj_member_get_badges_table_name() {
     static $cached = null;
     if ($cached !== null) {
@@ -1745,6 +1769,10 @@ function mj_member_run_schema_upgrade() {
     $comments_table = mj_member_get_testimonial_comments_table_name();
     $missing_testimonial_social_tables = !mj_member_table_exists($reactions_table) || !mj_member_table_exists($comments_table);
 
+    // Push subscriptions table (Web Push)
+    $push_table = mj_member_get_push_subscriptions_table_name();
+    $missing_push_table = !mj_member_table_exists($push_table);
+
     $schema_needs_upgrade = version_compare($stored_version, Config::schemaVersion(), '<')
         || !empty($missing_columns)
         || !empty($missing_event_columns)
@@ -1752,7 +1780,8 @@ function mj_member_run_schema_upgrade() {
         || !empty($missing_idea_tables)
         || !empty($missing_badge_tables)
         || $missing_testimonials_table
-        || $missing_testimonial_social_tables;
+        || $missing_testimonial_social_tables
+        || $missing_push_table;
     
  
     
@@ -1834,6 +1863,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_67($wpdb);
     mj_member_upgrade_to_2_68($wpdb);
     mj_member_upgrade_to_2_69($wpdb);
+    mj_member_upgrade_to_2_70($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -5726,6 +5756,37 @@ function mj_member_upgrade_to_2_69($wpdb) {
            AND receipt_file != ''
            AND receipt_file NOT LIKE '[%'"
     );
+}
+
+/**
+ * Migration 2.70: Create push_subscriptions table for Web Push notifications.
+ */
+function mj_member_upgrade_to_2_70($wpdb) {
+    $table = mj_member_get_push_subscriptions_table_name();
+    if (mj_member_table_exists($table)) {
+        return;
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql = "CREATE TABLE {$table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        member_id bigint(20) unsigned DEFAULT NULL,
+        user_id bigint(20) unsigned DEFAULT NULL,
+        endpoint text NOT NULL,
+        public_key varchar(255) NOT NULL DEFAULT '',
+        auth_token varchar(255) NOT NULL DEFAULT '',
+        content_encoding varchar(50) NOT NULL DEFAULT 'aesgcm',
+        user_agent varchar(255) DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        expires_at datetime DEFAULT NULL,
+        PRIMARY KEY (id),
+        KEY idx_member_id (member_id),
+        KEY idx_user_id (user_id)
+    ) {$charset_collate};";
+
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    dbDelta($sql);
 }
 
 add_action('init', 'mj_member_run_schema_upgrade', 5);
