@@ -2,6 +2,7 @@
 
 namespace Mj\Member\Classes;
 
+use Mj\Member\Core\Config;
 use Mj\Member\Classes\Crud\MjNotifications;
 use Mj\Member\Classes\Crud\MjNotificationRecipients;
 use Mj\Member\Classes\Crud\MjMembers;
@@ -49,11 +50,6 @@ class MjNotificationManager {
             'recipient_ids' => $result,
         );
 
-        /**
-         * @todo Ajoute un push notification au navigateur des membres concernés après l'enregistrement de la notification.
-         */
-
-        
 
 
         /**
@@ -65,6 +61,9 @@ class MjNotificationManager {
          * @param array<int,mixed>    $recipients         Destinataires originaux
          */
         $output = apply_filters('mj_member_notification_recorded', $output, $notification_data, $recipients);
+
+        // --- Web Push direct ---
+        self::dispatch_push($notification_data, $recipients);
 
         return $output;
     }
@@ -580,6 +579,75 @@ class MjNotificationManager {
 
         if ($notifications_table !== '') {
             $wpdb->delete($notifications_table, array('id' => (int) $notification_id), array('%d'));
+        }
+    }
+
+    /**
+     * Envoie un push Web Push à tous les destinataires d'une notification.
+     *
+     * Résout les member_ids / user_ids depuis $recipients, construit le payload
+     * depuis $notification_data, puis appelle MjWebPush::send_to_members/users.
+     *
+     * @param array<string,mixed> $notification_data
+     * @param array<int,mixed>    $recipients
+     */
+    private static function dispatch_push(array $notification_data, array $recipients): void
+    {
+        if (!Config::webPushIsReady()) {
+            Logger::info('[MJ Push] dispatch_push skipped: Web Push not ready');
+            return;
+        }
+
+        $title = isset($notification_data['title']) ? (string) $notification_data['title'] : '';
+        $body  = isset($notification_data['excerpt']) ? (string) $notification_data['excerpt'] : '';
+
+        if ($title === '' && $body === '') {
+            Logger::info('[MJ Push] dispatch_push skipped: empty title and body');
+            return;
+        }
+
+        $url  = isset($notification_data['url']) ? (string) $notification_data['url'] : '';
+        $type = isset($notification_data['type']) ? (string) $notification_data['type'] : '';
+
+        $member_ids = array();
+        $user_ids   = array();
+
+        foreach ($recipients as $spec) {
+            if (is_numeric($spec)) {
+                $member_ids[] = (int) $spec;
+            } elseif (is_array($spec)) {
+                if (isset($spec['member_id']) && (int) $spec['member_id'] > 0) {
+                    $member_ids[] = (int) $spec['member_id'];
+                }
+                if (isset($spec['user_id']) && (int) $spec['user_id'] > 0) {
+                    $user_ids[] = (int) $spec['user_id'];
+                }
+            }
+        }
+
+        if (empty($member_ids) && empty($user_ids)) {
+            Logger::info('[MJ Push] dispatch_push skipped: no recipients');
+            return;
+        }
+
+        $payload = array(
+            'title' => $title,
+            'body'  => $body,
+            'url'   => $url,
+            'tag'   => $type,
+        );
+
+        try {
+            if (!empty($member_ids)) {
+                $stats = MjWebPush::send_to_members(array_unique($member_ids), $payload);
+                error_log('[MJ Push] dispatch_push send_to_members: ' . wp_json_encode($stats));
+            }
+            if (!empty($user_ids)) {
+                $stats = MjWebPush::send_to_users(array_unique($user_ids), $payload);
+                error_log('[MJ Push] dispatch_push send_to_users: ' . wp_json_encode($stats));
+            }
+        } catch (\Throwable $e) {
+            error_log('[MJ Push] dispatch_push error: ' . $e->getMessage());
         }
     }
 }

@@ -118,13 +118,13 @@ class MjWebPush
             $encoding = isset($sub->content_encoding) ? (string) $sub->content_encoding : 'aesgcm';
 
             self::log(sprintf(
-                'Queuing sub id=%d: endpoint=%s... encoding=%s p256dh=%d chars auth=%d chars',
+                'Queuing sub id=%d: encoding=%s p256dh=%d chars auth=%d chars',
                 (int) ($sub->id ?? 0),
-                substr($endpoint, 0, 80),
                 $encoding,
                 strlen($pub_key),
                 strlen($auth_tok)
             ));
+            self::log('  FULL endpoint: ' . $endpoint);
 
             $subscription = Subscription::create(array(
                 'endpoint'        => $endpoint,

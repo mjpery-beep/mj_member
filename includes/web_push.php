@@ -90,7 +90,15 @@ if (!function_exists('mj_member_ajax_push_subscribe')) {
             $data = $_POST;
         }
 
-        $endpoint = isset($data['endpoint']) ? esc_url_raw($data['endpoint']) : '';
+        // L'endpoint FCM doit être conservé tel quel — esc_url_raw() peut
+        // corrompre les tokens qui contiennent des caractères que WP re-encode.
+        // On valide simplement que c'est bien une URL https.
+        $raw_endpoint = isset($data['endpoint']) ? trim((string) $data['endpoint']) : '';
+        $endpoint = '';
+        if ($raw_endpoint !== '' && preg_match('#^https://#i', $raw_endpoint)) {
+            $endpoint = $raw_endpoint;
+        }
+
         $public_key = isset($data['public_key']) ? sanitize_text_field($data['public_key']) : '';
         $auth_token = isset($data['auth_token']) ? sanitize_text_field($data['auth_token']) : '';
         $content_encoding = isset($data['content_encoding']) ? sanitize_key($data['content_encoding']) : 'aesgcm';
@@ -108,6 +116,16 @@ if (!function_exists('mj_member_ajax_push_subscribe')) {
                 $member_id = (int) $member->id;
             }
         }
+
+        error_log(sprintf(
+            '[MJ Push] AJAX subscribe: user_id=%d member_id=%s endpoint=%s... pk=%dc auth=%dc encoding=%s',
+            $user_id,
+            $member_id ?? 'null',
+            substr($endpoint, 0, 90),
+            strlen($public_key),
+            strlen($auth_token),
+            $content_encoding
+        ));
 
         $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_USER_AGENT'])) : '';
 
@@ -127,6 +145,7 @@ if (!function_exists('mj_member_ajax_push_subscribe')) {
             // Supprimer les anciens endpoints périmés de ce même user
             MjPushSubscriptions::delete_stale_for_user($user_id, (int) $existing->id);
 
+            error_log('[MJ Push] AJAX subscribe: updated existing id=' . $existing->id);
             wp_send_json_success(array('message' => __('Abonnement mis à jour.', 'mj-member'), 'id' => (int) $existing->id));
         }
 
@@ -144,9 +163,11 @@ if (!function_exists('mj_member_ajax_push_subscribe')) {
         ));
 
         if (is_wp_error($result)) {
+            error_log('[MJ Push] AJAX subscribe: create FAILED – ' . $result->get_error_message());
             wp_send_json_error(array('message' => $result->get_error_message()), 500);
         }
 
+        error_log('[MJ Push] AJAX subscribe: created new id=' . $result);
         wp_send_json_success(array('message' => __('Abonnement enregistré.', 'mj-member'), 'id' => $result));
     }
 
@@ -175,7 +196,11 @@ if (!function_exists('mj_member_ajax_push_unsubscribe')) {
             $data = $_POST;
         }
 
-        $endpoint = isset($data['endpoint']) ? esc_url_raw($data['endpoint']) : '';
+        $raw_endpoint = isset($data['endpoint']) ? trim((string) $data['endpoint']) : '';
+        $endpoint = '';
+        if ($raw_endpoint !== '' && preg_match('#^https://#i', $raw_endpoint)) {
+            $endpoint = $raw_endpoint;
+        }
         if ($endpoint === '') {
             wp_send_json_error(array('message' => __('Endpoint manquant.', 'mj-member')), 400);
         }
@@ -194,77 +219,15 @@ if (!function_exists('mj_member_ajax_push_unsubscribe')) {
 
 if (!function_exists('mj_member_web_push_on_notification_recorded')) {
     /**
-     * Se branche après mj_member_record_notification pour envoyer les push.
-     * 
-     * Le filtre est appliqué dans MjNotificationManager::record() via do_action.
-     * Nous nous branchons sur un hook personnalisé déclenché après persist.
+     * Filtre conservé pour rétro-compatibilité uniquement.
+     *
+     * L'envoi push est désormais géré directement dans
+     * MjNotificationManager::dispatch_push() pour plus de fiabilité.
+     * Ce filtre ne fait plus qu'un pass-through.
      */
     function mj_member_web_push_on_notification_recorded(array $result, array $notification_data, array $recipients): array
     {
-        if (!Config::webPushIsReady()) {
-            error_log('[MJ WebPush] webPushIsReady() = false, skipping.');
-            return $result;
-        }
-
-        if (is_wp_error($result) || empty($result['recipient_ids'])) {
-            error_log('[MJ WebPush] result is WP_Error or empty recipient_ids, skipping.');
-            return $result;
-        }
-
-        $title = isset($notification_data['title']) ? (string) $notification_data['title'] : '';
-        $body = isset($notification_data['excerpt']) ? (string) $notification_data['excerpt'] : '';
-        $url = isset($notification_data['url']) ? (string) $notification_data['url'] : '';
-        $type = isset($notification_data['type']) ? (string) $notification_data['type'] : '';
-
-        if ($title === '' && $body === '') {
-            error_log('[MJ WebPush] title and body are both empty, skipping.');
-            return $result;
-        }
-
-        // Résoudre les member_ids depuis les recipients
-        $member_ids = array();
-        $user_ids = array();
-
-        foreach ($recipients as $spec) {
-            if (is_numeric($spec)) {
-                $member_ids[] = (int) $spec;
-            } elseif (is_array($spec)) {
-                if (isset($spec['member_id']) && (int) $spec['member_id'] > 0) {
-                    $member_ids[] = (int) $spec['member_id'];
-                }
-                if (isset($spec['user_id']) && (int) $spec['user_id'] > 0) {
-                    $user_ids[] = (int) $spec['user_id'];
-                }
-            }
-        }
-
-        error_log('[MJ WebPush] Notification recorded: title="' . $title . '" member_ids=[' . implode(',', $member_ids) . '] user_ids=[' . implode(',', $user_ids) . '] recipients=' . wp_json_encode($recipients));
-
-        $payload = array(
-            'title' => $title,
-            'body'  => $body,
-            'url'   => $url,
-            'tag'   => $type,
-        );
-
-        // Envoi direct (synchrone) : rapide pour un petit nombre d'abonnements.
-        // Pas besoin de cron, l'envoi HTTP vers FCM/Push services prend < 500ms.
-        try {
-            if (!empty($member_ids)) {
-                $stats = MjWebPush::send_to_members(array_unique($member_ids), $payload);
-                error_log('[MJ WebPush] send_to_members result: ' . wp_json_encode($stats));
-            }
-            if (!empty($user_ids)) {
-                $stats = MjWebPush::send_to_users(array_unique($user_ids), $payload);
-                error_log('[MJ WebPush] send_to_users result: ' . wp_json_encode($stats));
-            }
-            if (empty($member_ids) && empty($user_ids)) {
-                error_log('[MJ WebPush] No member_ids and no user_ids resolved from recipients.');
-            }
-        } catch (\Exception $e) {
-            error_log('[MJ WebPush] Erreur envoi push: ' . $e->getMessage());
-        }
-
+        // Push désormais envoyé depuis MjNotificationManager::dispatch_push()
         return $result;
     }
 
