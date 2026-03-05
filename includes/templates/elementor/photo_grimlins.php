@@ -44,9 +44,44 @@ $config_json = wp_json_encode($config);
 $component_id = 'mj-photo-grimlins-' . wp_generate_uuid4();
 $dropzone_label_id = $component_id . '-label';
 $status_id = $component_id . '-status';
+
+$mosaic_enabled = !empty($template_data['mosaic_enabled']);
+$mosaic_sessions = isset($template_data['mosaic_sessions']) && is_array($template_data['mosaic_sessions']) ? $template_data['mosaic_sessions'] : array();
+$mosaic_transition = isset($template_data['mosaic_transition']) && in_array($template_data['mosaic_transition'], array('flip', 'fade'), true)
+    ? $template_data['mosaic_transition']
+    : 'flip';
+$has_mosaic = $mosaic_enabled && !empty($mosaic_sessions);
 ?>
 
-<div class="mj-photo-grimlins" id="<?php echo esc_attr($component_id); ?>" data-mj-photo-grimlins data-config='<?php echo esc_attr($config_json); ?>'>
+<div class="mj-photo-grimlins<?php echo $has_mosaic ? ' mj-photo-grimlins--has-mosaic' : ''; ?>" id="<?php echo esc_attr($component_id); ?>" data-mj-photo-grimlins data-config='<?php echo esc_attr($config_json); ?>'>
+
+    <?php if ($has_mosaic) : ?>
+        <div class="mj-photo-grimlins__mosaic" aria-hidden="true">
+            <?php foreach ($mosaic_sessions as $mi => $msession) :
+                $m_before = isset($msession['original_url']) ? esc_url($msession['original_url']) : '';
+                $m_after = isset($msession['result_url']) ? esc_url($msession['result_url']) : '';
+                if ($m_before === '' && $m_after === '') {
+                    continue;
+                }
+                $tile_delay = round(($mi % 6) * 0.8 + (intdiv($mi, 6) * 0.5), 2);
+                $tile_duration = round(4 + ($mi % 3) * 1.5, 2);
+                $transition_class = 'mj-photo-grimlins__tile--' . $mosaic_transition;
+                ?>
+                <div class="mj-photo-grimlins__tile <?php echo esc_attr($transition_class); ?>"
+                     style="--tile-delay: <?php echo esc_attr($tile_delay); ?>s; --tile-duration: <?php echo esc_attr($tile_duration); ?>s;">
+                    <?php if ($m_before !== '') : ?>
+                        <img class="mj-photo-grimlins__tile-before" src="<?php echo $m_before; ?>" alt="" loading="lazy" width="200" height="200">
+                    <?php endif; ?>
+                    <?php if ($m_after !== '') : ?>
+                        <img class="mj-photo-grimlins__tile-after" src="<?php echo $m_after; ?>" alt="" loading="lazy" width="200" height="200">
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
+
+    <div class="mj-photo-grimlins__content">
+
     <header class="mj-photo-grimlins__header">
         <h2 class="mj-photo-grimlins__title"><?php echo esc_html($title); ?></h2>
         <?php if ($description !== '') : ?>
@@ -159,4 +194,6 @@ $status_id = $component_id . '-status';
             </div>
         </section>
     <?php endif; ?>
+
+    </div><!-- /.mj-photo-grimlins__content -->
 </div>

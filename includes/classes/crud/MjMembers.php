@@ -202,6 +202,11 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
      * @return void
      */
     private static function apply_member_filters(CrudQueryBuilder $builder, $search, array $filters) {
+        // Filter by specific IDs (for favorites, etc.)
+        if (!empty($filters['ids']) && is_array($filters['ids'])) {
+            $builder->where_in_int('id', array_map('intval', $filters['ids']));
+        }
+
         $builder->where_tokenized_search(
             array('first_name', 'last_name', 'nickname', 'email', 'phone', 'city', 'postal_code'),
             $search

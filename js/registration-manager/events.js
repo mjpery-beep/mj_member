@@ -136,6 +136,8 @@
         var isSelected = props.isSelected;
         var onClick = props.onClick;
         var strings = props.strings;
+        var isFavorite = props.isFavorite;
+        var onToggleFavorite = props.onToggleFavorite;
 
         var statusClass = 'mj-regmgr-event-card__status--' + event.status;
         var typeClass = 'mj-regmgr-event-card__type--' + event.type;
@@ -198,6 +200,31 @@
                     h('span', { class: classNames('mj-regmgr-event-card__status', statusClass) },
                         event.statusLabel
                     ),
+                    onToggleFavorite && h('button', {
+                        type: 'button',
+                        class: classNames('mj-regmgr-favorite-btn', {
+                            'mj-regmgr-favorite-btn--active': isFavorite,
+                        }),
+                        onClick: function (e) {
+                            e.stopPropagation();
+                            onToggleFavorite('event', event.id);
+                        },
+                        title: isFavorite
+                            ? getString(strings, 'removeFavorite', 'Retirer des favoris')
+                            : getString(strings, 'addFavorite', 'Ajouter aux favoris'),
+                        'aria-label': isFavorite
+                            ? getString(strings, 'removeFavorite', 'Retirer des favoris')
+                            : getString(strings, 'addFavorite', 'Ajouter aux favoris'),
+                        'aria-pressed': isFavorite ? 'true' : 'false',
+                    }, [
+                        h('svg', {
+                            width: 16, height: 16, viewBox: '0 0 24 24',
+                            fill: isFavorite ? 'currentColor' : 'none',
+                            stroke: 'currentColor', 'stroke-width': 2,
+                        }, [
+                            h('path', { d: 'M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z' }),
+                        ]),
+                    ]),
                 ]),
 
                 // Titre avec emoji
@@ -297,6 +324,8 @@
         var strings = props.strings;
         var pagination = props.pagination || {};
         var onPageChange = props.onPageChange;
+        var favoriteEventIds = props.favoriteEventIds || [];
+        var onToggleFavorite = props.onToggleFavorite;
 
         var currentPage = pagination.page || 1;
         var totalPages = pagination.totalPages || 1;
@@ -375,6 +404,8 @@
                     isSelected: event.id === selectedEventId,
                     onClick: onSelectEvent,
                     strings: strings,
+                    isFavorite: favoriteEventIds.indexOf(event.id) !== -1,
+                    onToggleFavorite: onToggleFavorite,
                 });
             }),
         ]);
@@ -436,8 +467,14 @@
         var MembersComps = window.MjRegMgrMembers;
         var MembersList = MembersComps ? MembersComps.MembersList : null;
 
+        // Favorites props
+        var favoriteEventIds = props.favoriteEventIds || [];
+        var favoriteMemberIds = props.favoriteMemberIds || [];
+        var onToggleFavorite = props.onToggleFavorite;
+
         var eventFilters = [
             { key: 'assigned', label: getString(strings, 'filterAssigned', 'Mes événements'), emoji: '⭐' },
+            { key: 'favorites', label: getString(strings, 'filterFavorites', 'Mes favoris'), emoji: '❤️' },
             { key: 'upcoming', label: getString(strings, 'filterUpcoming', 'À venir'), emoji: '📅' },
             { key: 'past', label: getString(strings, 'filterPast', 'Passés'), emoji: '⏪' },
             { key: 'draft', label: getString(strings, 'filterDraft', 'Brouillons'), emoji: '📝' },
@@ -445,6 +482,7 @@
         ];
 
         var memberFilters = [
+            { key: 'favorites', label: getString(strings, 'filterFavorites', 'Mes favoris'), emoji: '❤️' },
             { key: 'jeune', label: getString(strings, 'filterJeune', 'Jeunes'), emoji: '🧒' },
             { key: 'animateur', label: getString(strings, 'filterAnimateur', 'Animateurs'), emoji: '🎭' },
             { key: 'parent', label: getString(strings, 'filterParent', 'Tuteurs'), emoji: '👨‍👩‍👧' },
@@ -761,6 +799,8 @@
                     strings: strings,
                     pagination: props.eventsPagination,
                     onPageChange: props.onEventsPageChange,
+                    favoriteEventIds: favoriteEventIds,
+                    onToggleFavorite: onToggleFavorite,
                 }) : (MembersList ? h(MembersList, {
                     members: members,
                     loading: membersLoading,
@@ -772,6 +812,8 @@
                     loadingMore: membersLoadingMore,
                     pagination: props.membersPagination,
                     onPageChange: props.onMembersPageChange,
+                    favoriteMemberIds: favoriteMemberIds,
+                    onToggleFavorite: onToggleFavorite,
                 }) : h('div', { class: 'mj-regmgr-members-list--loading' }, [
                     h('div', { class: 'mj-regmgr-spinner' }),
                 ])),

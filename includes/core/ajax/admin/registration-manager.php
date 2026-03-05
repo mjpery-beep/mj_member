@@ -113,6 +113,10 @@ add_action('wp_ajax_mj_regmgr_save_member_work_schedule', 'mj_regmgr_save_member
 add_action('wp_ajax_mj_regmgr_delete_member_work_schedule', 'mj_regmgr_delete_member_work_schedule');
 add_action('wp_ajax_mj_regmgr_save_member_dynfields', 'mj_regmgr_save_member_dynfields');
 
+// Favorites actions
+add_action('wp_ajax_mj_regmgr_get_favorites', 'mj_regmgr_get_favorites');
+add_action('wp_ajax_mj_regmgr_toggle_favorite', 'mj_regmgr_toggle_favorite');
+
 /**
  * Verify nonce and check user permissions
  * 
@@ -1309,6 +1313,14 @@ function mj_regmgr_get_events() {
     // Determine if 'assigned' filter is active
     $use_assigned = in_array('assigned', $active_filters, true);
 
+    // Determine if 'favorites' filter is active
+    $use_favorites = in_array('favorites', $active_filters, true);
+    $favorite_event_ids = array();
+    if ($use_favorites) {
+        $fav_events = get_user_meta(get_current_user_id(), '_mj_regmgr_fav_events', true);
+        $favorite_event_ids = is_array($fav_events) ? array_map('intval', $fav_events) : array();
+    }
+
     // Build status/type constraints from active filters
     $status_constraints = array();
     $type_constraints = array();
@@ -1366,6 +1378,17 @@ function mj_regmgr_get_events() {
                 return isset($event->date_debut) && $event->date_debut >= $now;
             });
         }
+
+        // Apply favorites filter
+        if ($use_favorites) {
+            if (empty($favorite_event_ids)) {
+                $all_assigned = array();
+            } else {
+                $all_assigned = array_filter($all_assigned, function($event) use ($favorite_event_ids) {
+                    return isset($event->id) && in_array((int) $event->id, $favorite_event_ids, true);
+                });
+            }
+        }
         
         $total = count($all_assigned);
         $events = array_slice(array_values($all_assigned), ($page - 1) * $per_page, $per_page);
@@ -1387,6 +1410,15 @@ function mj_regmgr_get_events() {
         }
         if ($use_after) {
             $args['after'] = $now;
+        }
+
+        // Apply favorites filter
+        if ($use_favorites) {
+            if (empty($favorite_event_ids)) {
+                $args['ids'] = array(0); // No favorites → return nothing
+            } else {
+                $args['ids'] = $favorite_event_ids;
+            }
         }
 
         $events = MjEvents::get_all($args);
@@ -5369,6 +5401,17 @@ function mj_regmgr_get_members() {
         $filters['has_login'] = true;
     }
 
+    // Favorites filter
+    if (in_array('favorites', $active_filters, true)) {
+        $fav_members = get_user_meta(get_current_user_id(), '_mj_regmgr_fav_members', true);
+        $fav_member_ids = is_array($fav_members) ? array_map('intval', $fav_members) : array();
+        if (empty($fav_member_ids)) {
+            $filters['ids'] = array(0); // No favorites → return nothing
+        } else {
+            $filters['ids'] = $fav_member_ids;
+        }
+    }
+
     // Get total count (filtered)
     $total = MjMembers::count(array(
         'search' => $search,
@@ -8449,4 +8492,72 @@ function mj_regmgr_save_member_dynfields() {
     }
 
     wp_send_json_success(array('dynamicFields' => $dyndata));
+}
+
+// ============================================
+// FAVORITES
+// ============================================
+
+/**
+ * Get all favorites (member IDs and event IDs) for the current user.
+ */
+function mj_regmgr_get_favorites() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) return;
+
+    $user_id = get_current_user_id();
+
+    $fav_members = get_user_meta($user_id, '_mj_regmgr_fav_members', true);
+    $fav_events  = get_user_meta($user_id, '_mj_regmgr_fav_events', true);
+
+    wp_send_json_success(array(
+        'favoriteMembers' => is_array($fav_members) ? array_values(array_map('intval', $fav_members)) : array(),
+        'favoriteEvents'  => is_array($fav_events)  ? array_values(array_map('intval', $fav_events))  : array(),
+    ));
+}
+
+/**
+ * Toggle a favorite (add or remove).
+ *
+ * POST params:
+ *  - type: 'member' | 'event'
+ *  - targetId: int
+ */
+function mj_regmgr_toggle_favorite() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) return;
+
+    $type      = isset($_POST['type']) ? sanitize_key($_POST['type']) : '';
+    $target_id = isset($_POST['target_id']) ? absint($_POST['target_id']) : 0;
+
+    if (!in_array($type, array('member', 'event'), true) || $target_id <= 0) {
+        wp_send_json_error(array('message' => __('Paramètres invalides.', 'mj-member')), 400);
+        return;
+    }
+
+    $user_id  = get_current_user_id();
+    $meta_key = $type === 'member' ? '_mj_regmgr_fav_members' : '_mj_regmgr_fav_events';
+
+    $favorites = get_user_meta($user_id, $meta_key, true);
+    if (!is_array($favorites)) {
+        $favorites = array();
+    }
+    $favorites = array_map('intval', $favorites);
+
+    $is_favorite = in_array($target_id, $favorites, true);
+
+    if ($is_favorite) {
+        $favorites = array_values(array_diff($favorites, array($target_id)));
+    } else {
+        $favorites[] = $target_id;
+    }
+
+    update_user_meta($user_id, $meta_key, array_values(array_unique($favorites)));
+
+    wp_send_json_success(array(
+        'type'       => $type,
+        'targetId'   => $target_id,
+        'isFavorite' => !$is_favorite,
+        'favorites'  => array_values(array_unique(array_map('intval', $favorites))),
+    ));
 }

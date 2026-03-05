@@ -757,6 +757,25 @@
                     abort(key);
                 });
             },
+
+            /**
+             * Récupère les favoris de l'utilisateur courant
+             */
+            getFavorites: function () {
+                return post('mj_regmgr_get_favorites', {});
+            },
+
+            /**
+             * Ajoute ou retire un favori
+             * @param {string} type - 'member' ou 'event'
+             * @param {number} targetId - ID du membre ou de l'événement
+             */
+            toggleFavorite: function (type, targetId) {
+                return post('mj_regmgr_toggle_favorite', {
+                    type: type,
+                    target_id: targetId,
+                });
+            },
         };
     }
 

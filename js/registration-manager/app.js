@@ -3485,6 +3485,65 @@
         var showError = toastsHook.error;
         var removeToast = toastsHook.removeToast;
 
+        // ============================================
+        // FAVORITES
+        // ============================================
+
+        var loadFavorites = useCallback(function () {
+            api.getFavorites()
+                .then(function (data) {
+                    setFavoriteEventIds(Array.isArray(data.favoriteEvents) ? data.favoriteEvents : []);
+                    setFavoriteMemberIds(Array.isArray(data.favoriteMembers) ? data.favoriteMembers : []);
+                })
+                .catch(function () {
+                    // Silently fail – favorites are non-critical
+                });
+        }, [api]);
+
+        // Load favorites on mount
+        useEffect(function () {
+            loadFavorites();
+        }, []);
+
+        var handleToggleFavorite = useCallback(function (type, targetId) {
+            // Optimistic update
+            if (type === 'event') {
+                setFavoriteEventIds(function (prev) {
+                    var idx = prev.indexOf(targetId);
+                    if (idx !== -1) {
+                        var next = prev.slice();
+                        next.splice(idx, 1);
+                        return next;
+                    }
+                    return prev.concat([targetId]);
+                });
+            } else {
+                setFavoriteMemberIds(function (prev) {
+                    var idx = prev.indexOf(targetId);
+                    if (idx !== -1) {
+                        var next = prev.slice();
+                        next.splice(idx, 1);
+                        return next;
+                    }
+                    return prev.concat([targetId]);
+                });
+            }
+
+            api.toggleFavorite(type, targetId)
+                .then(function (data) {
+                    // Sync with server response
+                    if (type === 'event') {
+                        setFavoriteEventIds(Array.isArray(data.favorites) ? data.favorites : []);
+                    } else {
+                        setFavoriteMemberIds(Array.isArray(data.favorites) ? data.favorites : []);
+                    }
+                })
+                .catch(function () {
+                    // Revert on error by reloading
+                    loadFavorites();
+                });
+        }, [api, loadFavorites]);
+
         function collectErrorMessages(error, fallbackMessage) {
             var messages = [];
             if (!error) {
@@ -3854,6 +3913,15 @@
         var _sidebarMode = useState(initialSidebarMode);
         var sidebarMode = _sidebarMode[0];
         var setSidebarMode = _sidebarMode[1];
+
+        // Favorites state
+        var _favoriteEventIds = useState([]);
+        var favoriteEventIds = _favoriteEventIds[0];
+        var setFavoriteEventIds = _favoriteEventIds[1];
+
+        var _favoriteMemberIds = useState([]);
+        var favoriteMemberIds = _favoriteMemberIds[0];
+        var setFavoriteMemberIds = _favoriteMemberIds[1];
 
         // Members state
         var _membersList = useState([]);
@@ -6935,6 +7003,11 @@
                     onMembersPageChange: function (newPage) { loadMembers(newPage); },
                     canCreateMember: !!config.allowCreateMember,
                     onCreateMember: config.allowCreateMember ? createMemberModal.open : null,
+
+                    // Favorites props
+                    favoriteEventIds: favoriteEventIds,
+                    favoriteMemberIds: favoriteMemberIds,
+                    onToggleFavorite: handleToggleFavorite,
 
                     strings: strings,
                     title: config.title || 'Événements',

@@ -512,6 +512,8 @@
         var isSelected = props.isSelected;
         var onClick = props.onClick;
         var strings = props.strings;
+        var isFavorite = props.isFavorite;
+        var onToggleFavorite = props.onToggleFavorite;
         
         var roleLabels = {
             'jeune': '🧒 Jeune',
@@ -551,6 +553,31 @@
             },
         }, [
             h(MemberAvatar, { member: member, size: 'medium' }),
+            onToggleFavorite && h('button', {
+                type: 'button',
+                class: classNames('mj-regmgr-favorite-btn', {
+                    'mj-regmgr-favorite-btn--active': isFavorite,
+                }),
+                onClick: function (e) {
+                    e.stopPropagation();
+                    onToggleFavorite('member', member.id);
+                },
+                title: isFavorite
+                    ? getString(strings, 'removeFavorite', 'Retirer des favoris')
+                    : getString(strings, 'addFavorite', 'Ajouter aux favoris'),
+                'aria-label': isFavorite
+                    ? getString(strings, 'removeFavorite', 'Retirer des favoris')
+                    : getString(strings, 'addFavorite', 'Ajouter aux favoris'),
+                'aria-pressed': isFavorite ? 'true' : 'false',
+            }, [
+                h('svg', {
+                    width: 14, height: 14, viewBox: '0 0 24 24',
+                    fill: isFavorite ? 'currentColor' : 'none',
+                    stroke: 'currentColor', 'stroke-width': 2,
+                }, [
+                    h('path', { d: 'M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z' }),
+                ]),
+            ]),
             h('div', { class: 'mj-regmgr-member-card__content' }, [
                 h('div', { class: 'mj-regmgr-member-card__name' }, 
                     
@@ -631,6 +658,8 @@
         var loadingMore = props.loadingMore;
         var pagination = props.pagination || {};
         var onPageChange = props.onPageChange;
+        var favoriteMemberIds = props.favoriteMemberIds || [];
+        var onToggleFavorite = props.onToggleFavorite;
 
         var currentPage = pagination.page || 1;
         var totalPages = pagination.totalPages || 1;
@@ -712,6 +741,8 @@
                     isSelected: member.id === selectedMemberId,
                     onClick: onSelectMember,
                     strings: strings,
+                    isFavorite: favoriteMemberIds.indexOf(member.id) !== -1,
+                    onToggleFavorite: onToggleFavorite,
                 });
             }),
         ]);

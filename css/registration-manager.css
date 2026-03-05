@@ -760,6 +760,73 @@ input.mj-regmgr-search-input__field {
     flex-wrap: wrap;
 }
 
+/* Favorite button — shared between event cards and member cards */
+.mj-regmgr-favorite-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--regmgr-gray-400);
+    cursor: pointer;
+    transition: color 0.22s ease, transform 0.3s cubic-bezier(.34,1.56,.64,1), filter 0.22s ease;
+    flex-shrink: 0;
+    filter: drop-shadow(0 0 0 transparent);
+}
+
+.mj-regmgr-favorite-btn:hover {
+    color: #f87171;
+    transform: scale(1.25);
+    filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.35));
+}
+
+.mj-regmgr-favorite-btn:active {
+    transform: scale(0.85);
+    transition-duration: 0.08s;
+}
+
+.mj-regmgr-favorite-btn--active {
+    color: #ef4444;
+    animation: regmgr-heart-pop 0.4s cubic-bezier(.34,1.56,.64,1);
+}
+
+.mj-regmgr-favorite-btn--active:hover {
+    color: #dc2626;
+    filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.45));
+}
+
+@keyframes regmgr-heart-pop {
+    0%   { transform: scale(1); }
+    30%  { transform: scale(1.4); }
+    60%  { transform: scale(0.9); }
+    100% { transform: scale(1); }
+}
+
+/* Push favorite to al-right inside event card header */
+.mj-regmgr-event-card__header .mj-regmgr-favorite-btn {
+    margin-left: auto;
+}
+
+/* Position favorite button inside member card */
+.mj-regmgr-member-card .mj-regmgr-favorite-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 22px;
+    height: 22px;
+    z-index: 2;
+}
+
+.mj-regmgr-member-card .mj-regmgr-favorite-btn svg {
+    width: 12px;
+    height: 12px;
+}
+
 .mj-regmgr-event-card__type,
 .mj-regmgr-event-card__status {
     display: inline-block;
@@ -5416,6 +5483,7 @@ a.mj-att-member__phone:hover {
     cursor: pointer;
     transition: all var(--regmgr-transition);
     border: 2px solid transparent;
+    position: relative;
 }
 
 .mj-regmgr-member-card:hover {
