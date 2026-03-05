@@ -567,9 +567,11 @@ function mj_member_expense_update_status_handler(): void
         wp_send_json_error(array('message' => __('Erreur lors de la mise à jour.', 'mj-member')), 500);
     }
 
-    // Fire notification hook on reimbursement
+    // Fire notification hooks
     if ($newStatus === MjExpenses::STATUS_REIMBURSED) {
         do_action('mj_member_expense_reimbursed', $expenseId, (int) $expense->member_id, (float) $expense->amount);
+    } elseif ($newStatus === MjExpenses::STATUS_REJECTED) {
+        do_action('mj_member_expense_rejected', $expenseId, (int) $expense->member_id, (float) $expense->amount, $comment);
     }
 
     wp_send_json_success(array(

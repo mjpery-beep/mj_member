@@ -13,6 +13,7 @@ if (!function_exists('mj_member_record_notification')) {
      * @return array{notification_id:int,recipient_ids:array<int,int>}|WP_Error
      */
     function mj_member_record_notification(array $notification_data, array $recipients) {
+
         return MjNotificationManager::record($notification_data, $recipients);
     }
 }

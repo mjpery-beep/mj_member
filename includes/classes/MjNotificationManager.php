@@ -27,6 +27,10 @@ class MjNotificationManager {
             return $notification_id;
         }
 
+        /**
+         * Filtre déclenché après la création d'une notification mais avant l'enregistrement des destinataires.
+         * Utilisé par le module Web Push pour ajouter des destinataires basés sur les données de la notification (ex: tous les membres d'un certain groupe).
+         */
         $normalized = self::normalize_recipient_specs((int) $notification_id, $recipients);
         if (is_wp_error($normalized)) {
             MjNotifications::delete((int) $notification_id);
@@ -44,6 +48,13 @@ class MjNotificationManager {
             'notification_id' => (int) $notification_id,
             'recipient_ids' => $result,
         );
+
+        /**
+         * @todo Ajoute un push notification au navigateur des membres concernés après l'enregistrement de la notification.
+         */
+
+        
+
 
         /**
          * Filtre déclenché après l'enregistrement réussi d'une notification.

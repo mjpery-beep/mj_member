@@ -309,8 +309,12 @@
     /**
      * Point d'entrée : enregistrer le SW puis vérifier/souscrire.
      */
-    navigator.serviceWorker.register(config.swUrl, { scope: '/' })
+    navigator.serviceWorker.register(config.swUrl, { scope: '/', updateViaCache: 'none' })
         .then(function (registration) {
+            // Forcer la vérification d'une nouvelle version du SW à chaque page
+            if (registration.update) {
+                registration.update().catch(function () { /* ignore update check errors */ });
+            }
             // Attendre que le SW soit actif
             if (registration.active) {
                 checkAndSubscribe(registration);

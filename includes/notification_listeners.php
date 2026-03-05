@@ -87,6 +87,7 @@ final class MjNotificationTypes
     // Notes de frais
     const EXPENSE_CREATED = 'expense_created';
     const EXPENSE_REIMBURSED = 'expense_reimbursed';
+    const EXPENSE_REJECTED = 'expense_rejected';
 
 
     /**
@@ -131,7 +132,8 @@ final class MjNotificationTypes
             self::LEAVE_REQUEST_APPROVED => __('Demande de congé approuvée', 'mj-member'),
             self::LEAVE_REQUEST_REJECTED => __('Demande de congé refusée', 'mj-member'),
             self::EXPENSE_CREATED => __('Nouvelle note de frais', 'mj-member'),
-            self::EXPENSE_REIMBURSED => __('Note de frais remboursée', 'mj-member')
+            self::EXPENSE_REIMBURSED => __('Note de frais remboursée', 'mj-member'),
+            self::EXPENSE_REJECTED => __('Note de frais refusée', 'mj-member')
         );
     }
 }
@@ -2076,4 +2078,57 @@ if (!function_exists('mj_member_notification_on_expense_reimbursed')) {
     }
 
     add_action('mj_member_expense_reimbursed', 'mj_member_notification_on_expense_reimbursed', 10, 3);
+}
+// ============================================================================
+// LISTENER: Note de frais refusée → Notifier le membre
+// ============================================================================
+
+if (!function_exists('mj_member_notification_on_expense_rejected')) {
+    /**
+     * @param int    $expense_id
+     * @param int    $member_id  Propriétaire de la note
+     * @param float  $amount
+     * @param string $reason     Motif du refus
+     * @return void
+     */
+    function mj_member_notification_on_expense_rejected(int $expense_id, int $member_id, float $amount, string $reason = ''): void
+    {
+        if (!function_exists('mj_member_record_notification') || !class_exists(MjMembers::class)) {
+            return;
+        }
+
+        if ($member_id <= 0) {
+            return;
+        }
+
+        $formatted = number_format($amount, 2, ',', ' ') . ' €';
+
+        $excerpt = sprintf(__('Ta note de frais de %s a été refusée.', 'mj-member'), $formatted);
+        if ($reason !== '') {
+            $excerpt .= ' ' . sprintf(__('Motif : %s', 'mj-member'), $reason);
+        }
+
+        $notification_data = array(
+            'type'    => MjNotificationTypes::EXPENSE_REJECTED,
+            'title'   => __('Note de frais refusée', 'mj-member'),
+            'excerpt' => $excerpt,
+            'url'     => home_url('/mon-compte/notes-de-frais/?section=expenses'),
+            'context' => 'expenses',
+            'source'  => 'system',
+            'payload' => array(
+                'expense_id' => $expense_id,
+                'amount'     => $amount,
+                'reason'     => $reason,
+            ),
+        );
+
+        mj_member_record_notification($notification_data, array($member_id));
+
+        mj_member_notification_log('expense_rejected', array(
+            'expense_id' => $expense_id,
+            'member_id'  => $member_id,
+        ));
+    }
+
+    add_action('mj_member_expense_rejected', 'mj_member_notification_on_expense_rejected', 10, 4);
 }

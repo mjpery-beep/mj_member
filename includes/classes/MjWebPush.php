@@ -90,60 +90,99 @@ class MjWebPush
             return $stats;
         }
 
-        $json_payload = wp_json_encode(self::normalize_payload($payload));
+        $normalized = self::normalize_payload($payload);
+        $json_payload = wp_json_encode($normalized);
+
+        self::log('dispatch() payload: ' . $json_payload);
+        self::log('dispatch() subscriptions count: ' . count($db_subscriptions));
 
         $endpoint_map = array(); // endpoint → db row id
+        $queued = 0;
 
         foreach ($db_subscriptions as $sub) {
             $endpoint = isset($sub->endpoint) ? (string) $sub->endpoint : '';
             if ($endpoint === '') {
+                self::log('Skipping sub id=' . ($sub->id ?? '?') . ' – empty endpoint');
                 continue;
             }
 
             // éviter les doublons d'endpoint dans le même batch
             if (isset($endpoint_map[$endpoint])) {
+                self::log('Skipping duplicate endpoint for sub id=' . ($sub->id ?? '?'));
                 continue;
             }
             $endpoint_map[$endpoint] = (int) $sub->id;
 
+            $pub_key = isset($sub->public_key) ? (string) $sub->public_key : '';
+            $auth_tok = isset($sub->auth_token) ? (string) $sub->auth_token : '';
+            $encoding = isset($sub->content_encoding) ? (string) $sub->content_encoding : 'aesgcm';
+
+            self::log(sprintf(
+                'Queuing sub id=%d: endpoint=%s... encoding=%s p256dh=%d chars auth=%d chars',
+                (int) ($sub->id ?? 0),
+                substr($endpoint, 0, 80),
+                $encoding,
+                strlen($pub_key),
+                strlen($auth_tok)
+            ));
+
             $subscription = Subscription::create(array(
                 'endpoint'        => $endpoint,
-                'publicKey'       => isset($sub->public_key) ? (string) $sub->public_key : '',
-                'authToken'       => isset($sub->auth_token) ? (string) $sub->auth_token : '',
-                'contentEncoding' => isset($sub->content_encoding) ? (string) $sub->content_encoding : 'aesgcm',
+                'publicKey'       => $pub_key,
+                'authToken'       => $auth_tok,
+                'contentEncoding' => $encoding,
             ));
 
             $webPush->queueNotification($subscription, $json_payload);
+            $queued++;
+        }
+
+        self::log('dispatch() queued: ' . $queued);
+
+        if ($queued === 0) {
+            self::log('Nothing queued, returning early.');
+            return $stats;
         }
 
         // Flush et traiter les résultats
         foreach ($webPush->flush() as $report) {
             $ep = $report->getEndpoint();
+            $statusCode = 0;
+            $responseBody = '';
+
+            if (method_exists($report, 'getResponse') && $report->getResponse()) {
+                $statusCode = $report->getResponse()->getStatusCode();
+                $responseBody = substr((string) $report->getResponse()->getBody(), 0, 500);
+            }
 
             if ($report->isSuccess()) {
                 $stats['sent']++;
+                self::log(sprintf(
+                    'Push OK [%d]: endpoint=%s... body=%s',
+                    $statusCode,
+                    substr($ep, 0, 80),
+                    $responseBody
+                ));
             } else {
                 $stats['failed']++;
 
                 // Si 410 Gone ou 404, l'abonnement n'est plus valide → supprimer
-                $statusCode = 0;
-                if (method_exists($report, 'getResponse') && $report->getResponse()) {
-                    $statusCode = $report->getResponse()->getStatusCode();
-                }
                 if ($report->isSubscriptionExpired() || in_array($statusCode, array(404, 410), true)) {
                     MjPushSubscriptions::delete_by_endpoint($ep);
                     $stats['removed']++;
                 }
 
                 self::log(sprintf(
-                    'Push failed [%d]: %s – endpoint: %s',
+                    'Push FAILED [%d]: %s – endpoint=%s... body=%s',
                     $statusCode,
                     $report->getReason(),
-                    $ep
+                    substr($ep, 0, 80),
+                    $responseBody
                 ));
             }
         }
 
+        self::log('dispatch() stats: ' . wp_json_encode($stats));
         return $stats;
     }
 
@@ -179,10 +218,12 @@ class MjWebPush
             return;
         }
 
+        // Always write to error_log (debug.log) for visibility
+        error_log('[MJ WebPush] ' . $message);
+
+        // Also write to structured Logger if available
         if (class_exists('Mj\Member\Core\Logger')) {
             \Mj\Member\Core\Logger::info('[WebPush] ' . $message, array(), 'web-push');
-        } else {
-            error_log('[MJ WebPush] ' . $message);
         }
     }
 }

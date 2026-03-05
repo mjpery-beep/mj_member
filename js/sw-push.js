@@ -3,6 +3,8 @@
  *
  * Ce fichier est servi via la rewrite rule /mj-sw.js
  * afin d'avoir le scope "/" nécessaire pour recevoir les push.
+ *
+ * @version 2 – 2026-03-05 – Toujours afficher la notification (Chrome l'exige)
  */
 
 /* eslint-env serviceworker */

@@ -42,10 +42,9 @@
     position: absolute;
     inset: 0;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    grid-auto-rows: 1fr;
+    grid-template-columns: repeat(5, 1fr);
+    grid-auto-rows: auto;
     gap: 0;
-    pointer-events: none;
     z-index: 0;
     overflow: hidden;
 }
@@ -83,7 +82,7 @@
 .mj-photo-grimlins__tile {
     position: relative;
     width: 100%;
-    height: 100%;
+    aspect-ratio: 1 / 1;
     overflow: hidden;
     border-radius: 0;
     margin: 0;
@@ -204,11 +203,54 @@
     }
 }
 
+/* ── Transition variant: hover (avatar only, original on hover) ── */
+
+.mj-photo-grimlins__tile--hover {
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.mj-photo-grimlins__tile--hover .mj-photo-grimlins__tile-before {
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    z-index: 2;
+}
+
+.mj-photo-grimlins__tile--hover .mj-photo-grimlins__tile-after {
+    opacity: 1;
+    transition: opacity 0.35s ease;
+    z-index: 1;
+}
+
+.mj-photo-grimlins__tile--hover:hover .mj-photo-grimlins__tile-before {
+    opacity: 1;
+}
+
+.mj-photo-grimlins__tile--hover:hover .mj-photo-grimlins__tile-after {
+    opacity: 0;
+}
+
+/* On touch devices, allow tap-and-hold to reveal the original */
+@media (hover: none) {
+    .mj-photo-grimlins__tile--hover:active .mj-photo-grimlins__tile-before {
+        opacity: 1;
+    }
+    .mj-photo-grimlins__tile--hover:active .mj-photo-grimlins__tile-after {
+        opacity: 0;
+    }
+}
+
 /* ── Mosaic responsive ── */
+
+@media (max-width: 1024px) {
+    .mj-photo-grimlins__mosaic {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
 
 @media (max-width: 640px) {
     .mj-photo-grimlins__mosaic {
-        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        grid-template-columns: repeat(3, 1fr);
     }
 }
 

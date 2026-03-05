@@ -47,9 +47,9 @@ $status_id = $component_id . '-status';
 
 $mosaic_enabled = !empty($template_data['mosaic_enabled']);
 $mosaic_sessions = isset($template_data['mosaic_sessions']) && is_array($template_data['mosaic_sessions']) ? $template_data['mosaic_sessions'] : array();
-$mosaic_transition = isset($template_data['mosaic_transition']) && in_array($template_data['mosaic_transition'], array('flip', 'fade'), true)
+$mosaic_transition = isset($template_data['mosaic_transition']) && in_array($template_data['mosaic_transition'], array('flip', 'fade', 'hover'), true)
     ? $template_data['mosaic_transition']
-    : 'flip';
+    : 'hover';
 $has_mosaic = $mosaic_enabled && !empty($mosaic_sessions);
 $fullscreen = !empty($template_data['fullscreen']);
 

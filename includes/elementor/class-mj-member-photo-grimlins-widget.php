@@ -124,8 +124,9 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
             array(
                 'label' => __('Effet de transition', 'mj-member'),
                 'type' => Controls_Manager::SELECT,
-                'default' => 'flip',
+                'default' => 'hover',
                 'options' => array(
+                    'hover' => __('Avatar seul (original au survol)', 'mj-member'),
                     'flip' => __('Rotation 3D', 'mj-member'),
                     'fade' => __('Fondu enchaîné', 'mj-member'),
                 ),
@@ -262,9 +263,9 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
 
         $mosaic_enabled = !empty($settings['mosaic_enabled']) && $settings['mosaic_enabled'] === 'yes';
         $mosaic_limit = isset($settings['mosaic_limit']) ? max(4, min(24, (int) $settings['mosaic_limit'])) : 12;
-        $mosaic_transition = isset($settings['mosaic_transition']) && in_array($settings['mosaic_transition'], array('flip', 'fade'), true)
+        $mosaic_transition = isset($settings['mosaic_transition']) && in_array($settings['mosaic_transition'], array('flip', 'fade', 'hover'), true)
             ? $settings['mosaic_transition']
-            : 'flip';
+            : 'hover';
         $fullscreen = !empty($settings['fullscreen']) && $settings['fullscreen'] === 'yes';
 
         $mosaic_sessions = array();
