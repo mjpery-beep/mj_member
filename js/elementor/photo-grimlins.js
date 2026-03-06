@@ -1058,6 +1058,12 @@
         this.dom.cameraModal.hidden = false;
         this.dom.cameraModal.setAttribute('aria-hidden', 'false');
         this.dom.cameraModal.classList.add('is-visible');
+        if (this.dom.dropzone) {
+            this.dom.dropzone.classList.add('is-hidden');
+        }
+        if (this.dom.cameraBtn) {
+            this.dom.cameraBtn.classList.add('is-hidden');
+        }
         this.boundEscHandler = this.boundEscHandler || this.handleEscape.bind(this);
         document.addEventListener('keydown', this.boundEscHandler);
     };
@@ -1073,6 +1079,12 @@
         this.dom.cameraModal.classList.remove('is-visible');
         this.dom.cameraModal.setAttribute('aria-hidden', 'true');
         this.dom.cameraModal.hidden = true;
+        if (this.dom.dropzone) {
+            this.dom.dropzone.classList.remove('is-hidden');
+        }
+        if (this.dom.cameraBtn) {
+            this.dom.cameraBtn.classList.remove('is-hidden');
+        }
         if (!silent) {
             this.stopCameraPreview();
         }

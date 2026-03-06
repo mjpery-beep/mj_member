@@ -5,6 +5,7 @@ use Elementor\Group_Control_Background;
 use Elementor\Group_Control_Border;
 use Elementor\Group_Control_Box_Shadow;
 use Elementor\Group_Control_Typography;
+use Elementor\Group_Control_Text_Shadow;
 use Elementor\Widget_Base;
 use Mj\Member\Core\Config;
 
@@ -341,6 +342,88 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
 
         $this->end_controls_section();
 
+        /* ── Style : Titre ── */
+
+        $this->start_controls_section(
+            'section_style_title',
+            array(
+                'label' => __('Titre', 'mj-member'),
+                'tab' => Controls_Manager::TAB_STYLE,
+            )
+        );
+
+        $this->add_group_control(
+            Group_Control_Typography::get_type(),
+            array(
+                'name' => 'title_typography',
+                'label' => __('Typographie', 'mj-member'),
+                'selector' => '{{WRAPPER}} .mj-photo-grimlins__title',
+            )
+        );
+
+        $this->add_control(
+            'title_color',
+            array(
+                'label' => __('Couleur', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-photo-grimlins__title' => 'color: {{VALUE}} !important;',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'title_align',
+            array(
+                'label' => __('Alignement', 'mj-member'),
+                'type' => Controls_Manager::CHOOSE,
+                'options' => array(
+                    'left' => array(
+                        'title' => __('Gauche', 'mj-member'),
+                        'icon' => 'eicon-text-align-left',
+                    ),
+                    'center' => array(
+                        'title' => __('Centre', 'mj-member'),
+                        'icon' => 'eicon-text-align-center',
+                    ),
+                    'right' => array(
+                        'title' => __('Droite', 'mj-member'),
+                        'icon' => 'eicon-text-align-right',
+                    ),
+                ),
+                'default' => 'center',
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-photo-grimlins__title' => 'text-align: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'title_spacing',
+            array(
+                'label' => __('Espacement bas', 'mj-member'),
+                'type' => Controls_Manager::SLIDER,
+                'range' => array(
+                    'px' => array('min' => 0, 'max' => 60, 'step' => 1),
+                ),
+                'default' => array('size' => 8, 'unit' => 'px'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-photo-grimlins__title' => 'margin-bottom: {{SIZE}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_group_control(
+            Group_Control_Text_Shadow::get_type(),
+            array(
+                'name' => 'title_text_shadow',
+                'label' => __('Ombre du texte', 'mj-member'),
+                'selector' => '{{WRAPPER}} .mj-photo-grimlins__title',
+            )
+        );
+
+        $this->end_controls_section();
+
         /* ── Style : Couleurs du texte ── */
 
         $this->start_controls_section(
@@ -348,17 +431,6 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
             array(
                 'label' => __('Couleurs du texte', 'mj-member'),
                 'tab' => Controls_Manager::TAB_STYLE,
-            )
-        );
-
-        $this->add_control(
-            'title_color',
-            array(
-                'label' => __('Couleur du titre', 'mj-member'),
-                'type' => Controls_Manager::COLOR,
-                'selectors' => array(
-                    '{{WRAPPER}} .mj-photo-grimlins__title' => 'color: {{VALUE}} !important;',
-                ),
             )
         );
 

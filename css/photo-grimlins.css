@@ -859,15 +859,15 @@
 }
 
 .mj-photo-grimlins__status[data-status-type="success"] {
-    color: #047857;
+    color: #b8efdf;
 }
 
 .mj-photo-grimlins__status[data-status-type="error"] {
-    color: #dc2626;
+    color: #ffbaba;
 }
 
 .mj-photo-grimlins__status[data-status-type="info"] {
-    color: #2563eb;
+    color: #fff;
 }
 
 .mj-photo-grimlins__download {

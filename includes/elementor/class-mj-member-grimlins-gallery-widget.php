@@ -65,7 +65,7 @@ class Mj_Member_Elementor_Grimlins_Gallery_Widget extends Widget_Base {
                 'label' => __('Nombre maximum d’entrées', 'mj-member'),
                 'type' => Controls_Manager::NUMBER,
                 'min' => 0,
-                'max' => 30,
+                'max' => 200,
                 'default' => 10,
             )
         );
