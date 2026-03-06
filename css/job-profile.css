@@ -1,0 +1,264 @@
+/**
+ * Job Profile Widget – Front-end styles
+ * BEM prefix: .mj-jp
+ *
+ * @package MJ_Member
+ */
+
+/* ================================================================== */
+/*  Container                                                         */
+/* ================================================================== */
+
+.mj-jp {
+    --jp-border: #e2e8f0;
+    --jp-bg: #ffffff;
+    --jp-bg-alt: #f8fafc;
+    --jp-text: #1e293b;
+    --jp-text-muted: #64748b;
+    --jp-radius: 12px;
+    --jp-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+
+    font-family: inherit;
+    color: var(--jp-text);
+    max-width: 640px;
+}
+
+/* ================================================================== */
+/*  Heading                                                           */
+/* ================================================================== */
+
+.mj-jp__heading {
+    margin: 0 0 1rem;
+    font-size: 1.3rem;
+    font-weight: 700;
+    line-height: 1.3;
+    color: #0f172a;
+}
+
+/* ================================================================== */
+/*  Empty state                                                       */
+/* ================================================================== */
+
+.mj-jp__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 2.5rem 1.5rem;
+    background: var(--jp-bg-alt);
+    border: 1px dashed var(--jp-border);
+    border-radius: var(--jp-radius);
+    text-align: center;
+}
+
+.mj-jp__empty-icon {
+    color: #cbd5e1;
+}
+
+.mj-jp__empty-text {
+    margin: 0;
+    color: var(--jp-text-muted);
+    font-size: 0.9rem;
+    font-style: italic;
+}
+
+/* ================================================================== */
+/*  Card                                                              */
+/* ================================================================== */
+
+.mj-jp__card {
+    background: var(--jp-bg);
+    border: 1px solid var(--jp-border);
+    border-radius: var(--jp-radius);
+    box-shadow: var(--jp-shadow);
+    overflow: hidden;
+}
+
+/* ================================================================== */
+/*  Header: badge + regime                                            */
+/* ================================================================== */
+
+.mj-jp__header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    padding: 1.25rem 1.5rem;
+    background: var(--jp-bg-alt);
+    border-bottom: 1px solid var(--jp-border);
+}
+
+/* Job title badge */
+.mj-jp__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.85rem;
+    border-radius: 50px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.mj-jp__badge svg {
+    flex-shrink: 0;
+}
+
+.mj-jp__badge--coordination {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.mj-jp__badge--animateur {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.mj-jp__badge--communication {
+    background: #ede9fe;
+    color: #5b21b6;
+}
+
+.mj-jp__badge--autre {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+/* Work regime chip */
+.mj-jp__regime {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.35rem 0.75rem;
+    background: var(--jp-bg);
+    border: 1px solid var(--jp-border);
+    border-radius: 50px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--jp-text-muted);
+    white-space: nowrap;
+}
+
+.mj-jp__regime svg {
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
+/* ================================================================== */
+/*  Meta fields (financement, etc.)                                   */
+/* ================================================================== */
+
+.mj-jp__meta {
+    padding: 1rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.mj-jp__meta-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.mj-jp__meta-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: #f0fdf4;
+    color: #16a34a;
+    flex-shrink: 0;
+}
+
+.mj-jp__meta-label {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--jp-text-muted);
+    white-space: nowrap;
+}
+
+.mj-jp__meta-label::after {
+    content: ':';
+}
+
+.mj-jp__meta-value {
+    font-weight: 500;
+    color: var(--jp-text);
+}
+
+/* ================================================================== */
+/*  Description                                                       */
+/* ================================================================== */
+
+.mj-jp__desc {
+    border-top: 1px solid var(--jp-border);
+    padding: 1.25rem 1.5rem;
+}
+
+.mj-jp__desc-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--jp-text-muted);
+    margin-bottom: 0.65rem;
+}
+
+.mj-jp__desc-label svg {
+    opacity: 0.65;
+}
+
+.mj-jp__desc-body {
+    font-size: 0.92rem;
+    line-height: 1.7;
+    color: #334155;
+}
+
+.mj-jp__desc-body p {
+    margin: 0 0 0.6em;
+}
+
+.mj-jp__desc-body p:last-child {
+    margin-bottom: 0;
+}
+
+.mj-jp__desc-body ul,
+.mj-jp__desc-body ol {
+    margin: 0.25em 0 0.75em 1.25em;
+    padding: 0;
+}
+
+.mj-jp__desc-body li {
+    margin-bottom: 0.25em;
+}
+
+/* ================================================================== */
+/*  Responsive                                                        */
+/* ================================================================== */
+
+@media (max-width: 480px) {
+    .mj-jp__header {
+        padding: 1rem;
+        gap: 0.5rem;
+    }
+
+    .mj-jp__meta {
+        padding: 0.85rem 1rem;
+    }
+
+    .mj-jp__desc {
+        padding: 1rem;
+    }
+
+    .mj-jp__meta-item {
+        flex-wrap: wrap;
+    }
+}

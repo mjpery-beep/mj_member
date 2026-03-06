@@ -1,0 +1,279 @@
+/* ================================================================ *
+ *  Payslip Upload Widget – Styles                                    *
+ *  BEM prefix: .mj-payslip                                          *
+ * ================================================================ */
+
+/* ---- Layout ---- */
+.mj-payslip {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+    color: #1e293b;
+    line-height: 1.5;
+}
+
+.mj-payslip__notice {
+    padding: 1rem;
+    background: #fef3c7;
+    border-radius: 8px;
+    color: #92400e;
+    font-size: 0.9rem;
+}
+
+/* ---- Panel ---- */
+.mj-payslip__panel {
+    padding: 1.25rem;
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 10px;
+}
+
+.mj-payslip__title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #0369a1;
+    margin: 0 0 1rem;
+}
+
+.mj-payslip__title i {
+    margin-right: 0.3rem;
+}
+
+/* ---- Selectors row ---- */
+.mj-payslip__selectors {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.mj-payslip__selector {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.mj-payslip__selector-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.mj-payslip__select {
+    padding: 0.45rem 0.75rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 0.88rem;
+    background: #fff;
+    color: #1e293b;
+    cursor: pointer;
+    min-width: 120px;
+}
+
+.mj-payslip__select:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* ---- Drop zones grid ---- */
+.mj-payslip__dropzones {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 0.75rem;
+}
+
+/* ---- Individual drop zone ---- */
+.mj-payslip__dropzone {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    border: 2px dashed #93c5fd;
+    border-radius: 10px;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    position: relative;
+    overflow: hidden;
+}
+
+.mj-payslip__dropzone:hover {
+    border-color: #60a5fa;
+    background: #f0f9ff;
+}
+
+.mj-payslip__dropzone--active {
+    border-color: #2563eb;
+    background: #dbeafe;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.mj-payslip__dropzone--uploading {
+    border-color: #93c5fd;
+    background: #f0f9ff;
+    pointer-events: none;
+    opacity: 0.85;
+}
+
+.mj-payslip__dropzone--done {
+    border-color: #22c55e;
+    background: #f0fdf4;
+    border-style: solid;
+}
+
+.mj-payslip__dropzone--error {
+    border-color: #f87171;
+    background: #fef2f2;
+    border-style: solid;
+}
+
+.mj-payslip__dropzone-input {
+    display: none;
+}
+
+/* ---- Avatar ---- */
+.mj-payslip__dropzone-avatar {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #e2e8f0;
+}
+
+.mj-payslip__avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.mj-payslip__avatar-initials {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #475569;
+}
+
+/* ---- Zone info ---- */
+.mj-payslip__dropzone-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.mj-payslip__dropzone-name {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mj-payslip__dropzone-hint {
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+
+.mj-payslip__dropzone-hint--active {
+    color: #2563eb;
+    font-weight: 600;
+}
+
+.mj-payslip__dropzone-status {
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.mj-payslip__dropzone-status--uploading {
+    color: #2563eb;
+}
+
+.mj-payslip__dropzone-status--done {
+    color: #16a34a;
+}
+
+.mj-payslip__dropzone-status--error {
+    color: #dc2626;
+}
+
+/* ---- Spinner & check ---- */
+.mj-payslip__dropzone-spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #bae6fd;
+    border-top-color: #2563eb;
+    border-radius: 50%;
+    animation: mj-payslip-spin 0.6s linear infinite;
+    flex-shrink: 0;
+}
+
+.mj-payslip__dropzone-check {
+    color: #22c55e;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+@keyframes mj-payslip-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ---- Recent uploads list ---- */
+.mj-payslip__recent {
+    margin-top: 1.25rem;
+    padding: 1rem;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+}
+
+.mj-payslip__recent-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #16a34a;
+    margin: 0 0 0.5rem;
+}
+
+.mj-payslip__recent-title i {
+    margin-right: 0.25rem;
+}
+
+.mj-payslip__recent-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.mj-payslip__recent-item {
+    font-size: 0.82rem;
+    color: #1e293b;
+    padding: 0.25rem 0;
+}
+
+.mj-payslip__recent-item i {
+    color: #dc2626;
+    margin-right: 0.3rem;
+    font-size: 0.78rem;
+}
+
+/* ================================================================ *
+ *  Responsive                                                        *
+ * ================================================================ */
+
+@media (max-width: 600px) {
+    .mj-payslip__dropzones {
+        grid-template-columns: 1fr;
+    }
+    .mj-payslip__selectors {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+}

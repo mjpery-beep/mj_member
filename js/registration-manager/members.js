@@ -1808,6 +1808,710 @@
     }
 
     // ============================================
+    // EMPLOYEE DOCUMENTS SECTION
+    // ============================================
+
+    /**
+     * Employee documents manager (payslips, contracts, misc)
+     * Stored securely on server with coordinator-only access.
+     */
+    function MemberEmployeeDocumentsSection(props) {
+        var member = props.member;
+        var config = props.config || {};
+        var strings = props.strings || {};
+        var onRefresh = props.onRefresh;
+
+        // State
+        var _stDocs = useState(null);
+        var documents = _stDocs[0];
+        var setDocuments = _stDocs[1];
+
+        var _stLoading = useState(false);
+        var isLoading = _stLoading[0];
+        var setIsLoading = _stLoading[1];
+
+        var _stUploading = useState(false);
+        var isUploading = _stUploading[0];
+        var setIsUploading = _stUploading[1];
+
+        var _stShowForm = useState(false);
+        var showForm = _stShowForm[0];
+        var setShowForm = _stShowForm[1];
+
+        var _stFormDocType = useState('payslip');
+        var formDocType = _stFormDocType[0];
+        var setFormDocType = _stFormDocType[1];
+
+        var _stFormLabel = useState('');
+        var formLabel = _stFormLabel[0];
+        var setFormLabel = _stFormLabel[1];
+
+        var _stFormDate = useState('');
+        var formDate = _stFormDate[0];
+        var setFormDate = _stFormDate[1];
+
+        var _stFormMonth = useState('');
+        var formMonth = _stFormMonth[0];
+        var setFormMonth = _stFormMonth[1];
+
+        var _stFormYear = useState('');
+        var formYear = _stFormYear[0];
+        var setFormYear = _stFormYear[1];
+
+        var _stFormFile = useState(null);
+        var formFile = _stFormFile[0];
+        var setFormFile = _stFormFile[1];
+
+        var _stDragOver = useState(false);
+        var dragOver = _stDragOver[0];
+        var setDragOver = _stDragOver[1];
+
+        var _stMsg = useState('');
+        var statusMsg = _stMsg[0];
+        var setStatusMsg = _stMsg[1];
+
+        var _stMsgType = useState('');
+        var msgType = _stMsgType[0];
+        var setMsgType = _stMsgType[1];
+
+        // String helpers
+        var sectionTitle      = getString(strings, 'employeeDocsTitle', 'Documents employé');
+        var emptyLabel        = getString(strings, 'employeeDocsEmpty', 'Aucun document pour ce membre.');
+        var uploadLabel       = getString(strings, 'employeeDocsUpload', 'Téléverser un document');
+        var uploadingLabel    = getString(strings, 'employeeDocsUploading', 'Téléversement…');
+        var deleteLabel       = getString(strings, 'employeeDocsDelete', 'Supprimer');
+        var confirmDeleteMsg  = getString(strings, 'employeeDocsConfirmDelete', 'Êtes-vous sûr de vouloir supprimer ce document ?');
+        var downloadLabel     = getString(strings, 'employeeDocsDownload', 'Télécharger');
+        var labelLabel        = getString(strings, 'employeeDocsLabel', 'Libellé');
+        var typeLabel         = getString(strings, 'employeeDocsType', 'Type');
+        var dateLabel         = getString(strings, 'employeeDocsDate', 'Date du document');
+        var fileLabel         = getString(strings, 'employeeDocsFile', 'Fichier');
+        var monthLabel        = getString(strings, 'employeeDocsPayslipMonth', 'Mois');
+        var yearLabel         = getString(strings, 'employeeDocsPayslipYear', 'Année');
+        var dropHint          = getString(strings, 'employeeDocsDropHint', 'Glissez un fichier ou cliquez pour parcourir');
+        var maxSizeHint       = getString(strings, 'employeeDocsMaxSize', 'PDF, JPG, PNG ou GIF – 10 Mo max.');
+
+        var monthNames = strings.employeeDocsMonths || {
+            1: 'Janvier', 2: 'Février', 3: 'Mars', 4: 'Avril',
+            5: 'Mai', 6: 'Juin', 7: 'Juillet', 8: 'Août',
+            9: 'Septembre', 10: 'Octobre', 11: 'Novembre', 12: 'Décembre',
+        };
+
+        var docTypes = {
+            payslip:  getString(strings, 'employeeDocsTypePayslip', 'Fiche de paie'),
+            contract: getString(strings, 'employeeDocsTypeContract', 'Emploi'),
+            misc:     getString(strings, 'employeeDocsTypeMisc', 'Divers'),
+        };
+
+        // Load documents on mount / member change
+        useEffect(function () {
+            if (!member || !member.id) return;
+            loadDocuments();
+        }, [member && member.id]);
+
+        function loadDocuments() {
+            if (!member || !member.id) return;
+            setIsLoading(true);
+            var fd = new FormData();
+            fd.append('action', 'mj_regmgr_get_employee_documents');
+            fd.append('nonce', config.nonce || '');
+            fd.append('memberId', member.id);
+            fetch(config.ajaxUrl || '', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (resp) {
+                    setIsLoading(false);
+                    if (resp.success && resp.data && resp.data.documents) {
+                        setDocuments(resp.data.documents);
+                    } else {
+                        setDocuments([]);
+                    }
+                })
+                .catch(function () {
+                    setIsLoading(false);
+                    setDocuments([]);
+                });
+        }
+
+        // Reset form
+        function resetForm() {
+            setFormDocType('payslip');
+            setFormLabel('');
+            setFormDate(new Date().toISOString().substring(0, 10));
+            setFormMonth(String(new Date().getMonth() + 1));
+            setFormYear(String(new Date().getFullYear()));
+            setFormFile(null);
+            setShowForm(false);
+        }
+
+        // Upload
+        function handleUpload() {
+            if (!formFile || !member || !member.id) return;
+            setIsUploading(true);
+            setStatusMsg('');
+
+            var fd = new FormData();
+            fd.append('action', 'mj_regmgr_upload_employee_document');
+            fd.append('nonce', config.nonce || '');
+            fd.append('memberId', member.id);
+            fd.append('docType', formDocType);
+            fd.append('label', formLabel);
+            fd.append('documentDate', formDate);
+            fd.append('file', formFile);
+            if (formDocType === 'payslip') {
+                fd.append('payslipMonth', formMonth);
+                fd.append('payslipYear', formYear);
+            }
+
+            fetch(config.ajaxUrl || '', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (resp) {
+                    setIsUploading(false);
+                    if (resp.success && resp.data && resp.data.document) {
+                        setDocuments(function (prev) {
+                            return [resp.data.document].concat(prev || []);
+                        });
+                        resetForm();
+                        setStatusMsg(resp.data.message || 'OK');
+                        setMsgType('success');
+                    } else {
+                        setStatusMsg(resp.data && resp.data.message ? resp.data.message : 'Erreur');
+                        setMsgType('error');
+                    }
+                })
+                .catch(function () {
+                    setIsUploading(false);
+                    setStatusMsg('Erreur de connexion');
+                    setMsgType('error');
+                });
+        }
+
+        // Delete
+        function handleDelete(docId) {
+            if (!confirm(confirmDeleteMsg)) return;
+            var fd = new FormData();
+            fd.append('action', 'mj_regmgr_delete_employee_document');
+            fd.append('nonce', config.nonce || '');
+            fd.append('docId', docId);
+            fetch(config.ajaxUrl || '', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (resp) {
+                    if (resp.success) {
+                        setDocuments(function (prev) {
+                            return (prev || []).filter(function (d) { return d.id !== docId; });
+                        });
+                        setStatusMsg(resp.data.message || 'OK');
+                        setMsgType('success');
+                    } else {
+                        setStatusMsg(resp.data && resp.data.message ? resp.data.message : 'Erreur');
+                        setMsgType('error');
+                    }
+                })
+                .catch(function () {
+                    setStatusMsg('Erreur de connexion');
+                    setMsgType('error');
+                });
+        }
+
+        // Download URL builder
+        function downloadUrl(docId) {
+            return (config.ajaxUrl || '') + '?action=mj_regmgr_download_employee_document&doc_id=' + docId + '&nonce=' + encodeURIComponent(config.nonce || '');
+        }
+
+        // Format file size
+        function fmtSize(bytes) {
+            if (!bytes || bytes <= 0) return '';
+            if (bytes < 1024) return bytes + ' o';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' Ko';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' Mo';
+        }
+
+        // Format date
+        function fmtDate(raw) {
+            if (!raw) return '';
+            try {
+                var d = new Date(raw);
+                return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            } catch (_e) {
+                return raw;
+            }
+        }
+
+        // File icon
+        function fileIcon(mime) {
+            if (!mime) return '\uD83D\uDCC4';
+            if (mime.indexOf('pdf') !== -1) return '\uD83D\uDCC4';
+            if (mime.indexOf('image') !== -1) return '\uD83D\uDDBC\uFE0F';
+            return '\uD83D\uDCC3';
+        }
+
+        // Build payslip period label
+        function payslipPeriod(doc) {
+            if (doc.payslipMonth && doc.payslipYear) {
+                return (monthNames[doc.payslipMonth] || '') + ' ' + doc.payslipYear;
+            }
+            return '';
+        }
+
+        // --- File drop handlers ---
+        function onDragOver(e) { e.preventDefault(); setDragOver(true); }
+        function onDragLeave(e) { e.preventDefault(); setDragOver(false); }
+        function onDrop(e) {
+            e.preventDefault();
+            setDragOver(false);
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                setFormFile(e.dataTransfer.files[0]);
+            }
+        }
+
+        // File input ref  
+        var fileInputRef = preact.createRef ? preact.createRef() : { current: null };
+
+        // Generate year options
+        var curYear = new Date().getFullYear();
+        var yearOptions = [];
+        for (var y = curYear; y >= curYear - 5; y--) {
+            yearOptions.push(y);
+        }
+
+        // Docs list
+        var docs = documents || [];
+
+        // ---------- Render ----------
+        return h('div', { class: 'mj-regmgr-member-detail__section mj-regmgr-employee-docs' }, [
+
+            // Title + add button
+            h('div', { class: 'mj-regmgr-employee-docs__header' }, [
+                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, sectionTitle),
+                !showForm && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--primary mj-btn--small',
+                    onClick: function () {
+                        setFormDate(new Date().toISOString().substring(0, 10));
+                        setFormMonth(String(new Date().getMonth() + 1));
+                        setFormYear(String(curYear));
+                        setShowForm(true);
+                    },
+                }, [
+                    h('span', { class: 'mj-btn__icon', dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' } }),
+                    uploadLabel,
+                ]),
+            ]),
+
+            // Status message
+            statusMsg && h('div', { class: 'mj-regmgr-employee-docs__status mj-regmgr-employee-docs__status--' + msgType }, statusMsg),
+
+            // Upload form
+            showForm && h('div', { class: 'mj-regmgr-employee-docs__form' }, [
+                // Doc type
+                h('div', { class: 'mj-regmgr-employee-docs__field' }, [
+                    h('label', null, typeLabel),
+                    h('select', {
+                        value: formDocType,
+                        onChange: function (e) { setFormDocType(e.target.value); },
+                        class: 'mj-input',
+                    }, Object.keys(docTypes).map(function (k) {
+                        return h('option', { key: k, value: k }, docTypes[k]);
+                    })),
+                ]),
+
+                // Payslip month/year
+                formDocType === 'payslip' && h('div', { class: 'mj-regmgr-employee-docs__field-row' }, [
+                    h('div', { class: 'mj-regmgr-employee-docs__field mj-regmgr-employee-docs__field--half' }, [
+                        h('label', null, monthLabel),
+                        h('select', {
+                            value: formMonth,
+                            onChange: function (e) { setFormMonth(e.target.value); },
+                            class: 'mj-input',
+                        }, Object.keys(monthNames).map(function (k) {
+                            return h('option', { key: k, value: k }, monthNames[k]);
+                        })),
+                    ]),
+                    h('div', { class: 'mj-regmgr-employee-docs__field mj-regmgr-employee-docs__field--half' }, [
+                        h('label', null, yearLabel),
+                        h('select', {
+                            value: formYear,
+                            onChange: function (e) { setFormYear(e.target.value); },
+                            class: 'mj-input',
+                        }, yearOptions.map(function (yr) {
+                            return h('option', { key: yr, value: String(yr) }, String(yr));
+                        })),
+                    ]),
+                ]),
+
+                // Label
+                h('div', { class: 'mj-regmgr-employee-docs__field' }, [
+                    h('label', null, labelLabel),
+                    h('input', {
+                        type: 'text',
+                        class: 'mj-input',
+                        value: formLabel,
+                        placeholder: formDocType === 'payslip' ? 'Auto-généré si vide' : '',
+                        onInput: function (e) { setFormLabel(e.target.value); },
+                    }),
+                ]),
+
+                // Date
+                h('div', { class: 'mj-regmgr-employee-docs__field' }, [
+                    h('label', null, dateLabel),
+                    h('input', {
+                        type: 'date',
+                        class: 'mj-input',
+                        value: formDate,
+                        onInput: function (e) { setFormDate(e.target.value); },
+                    }),
+                ]),
+
+                // File drop zone
+                h('div', {
+                    class: 'mj-regmgr-employee-docs__dropzone' + (dragOver ? ' mj-regmgr-employee-docs__dropzone--active' : ''),
+                    onDragOver: onDragOver,
+                    onDragLeave: onDragLeave,
+                    onDrop: onDrop,
+                    onClick: function () { if (fileInputRef.current) fileInputRef.current.click(); },
+                }, [
+                    h('input', {
+                        ref: fileInputRef,
+                        type: 'file',
+                        accept: '.pdf,.jpg,.jpeg,.png,.gif',
+                        style: 'display:none',
+                        onChange: function (e) {
+                            if (e.target.files && e.target.files.length > 0) {
+                                setFormFile(e.target.files[0]);
+                            }
+                        },
+                    }),
+                    formFile
+                        ? h('div', { class: 'mj-regmgr-employee-docs__file-selected' }, [
+                            h('span', null, '\uD83D\uDCC4 '),
+                            h('span', null, formFile.name),
+                            h('span', { class: 'mj-regmgr-employee-docs__file-size' }, ' (' + fmtSize(formFile.size) + ')'),
+                        ])
+                        : h('div', { class: 'mj-regmgr-employee-docs__drop-hint' }, [
+                            h('span', { class: 'mj-regmgr-employee-docs__drop-icon', dangerouslySetInnerHTML: { __html: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' } }),
+                            h('p', null, dropHint),
+                            h('p', { class: 'mj-regmgr-employee-docs__drop-sub' }, maxSizeHint),
+                        ]),
+                ]),
+
+                // Action buttons
+                h('div', { class: 'mj-regmgr-employee-docs__form-actions' }, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                        disabled: isUploading || !formFile,
+                        onClick: handleUpload,
+                    }, isUploading ? uploadingLabel : uploadLabel),
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--ghost mj-btn--small',
+                        onClick: resetForm,
+                    }, getString(strings, 'cancel', 'Annuler')),
+                ]),
+            ]),
+
+            // Loading
+            isLoading && h('p', { class: 'mj-regmgr-member-detail__empty' }, '…'),
+
+            // Empty state
+            !isLoading && docs.length === 0 && !showForm && h('p', { class: 'mj-regmgr-member-detail__empty' }, emptyLabel),
+
+            // Documents list  
+            !isLoading && docs.length > 0 && h('div', { class: 'mj-regmgr-employee-docs__list' },
+                docs.map(function (doc) {
+                    var period = payslipPeriod(doc);
+                    var typeStr = docTypes[doc.docType] || doc.docType;
+                    return h('div', { key: doc.id, class: 'mj-regmgr-employee-docs__card' }, [
+                        h('div', { class: 'mj-regmgr-employee-docs__card-icon' }, fileIcon(doc.mimeType)),
+                        h('div', { class: 'mj-regmgr-employee-docs__card-body' }, [
+                            h('div', { class: 'mj-regmgr-employee-docs__card-title' }, doc.label || doc.originalName),
+                            h('div', { class: 'mj-regmgr-employee-docs__card-meta' }, [
+                                h('span', { class: 'mj-regmgr-employee-docs__card-type' }, typeStr),
+                                period && h('span', { class: 'mj-regmgr-employee-docs__card-period' }, period),
+                                doc.documentDate && h('span', { class: 'mj-regmgr-employee-docs__card-date' }, fmtDate(doc.documentDate)),
+                                h('span', { class: 'mj-regmgr-employee-docs__card-size' }, fmtSize(doc.fileSize)),
+                            ]),
+                        ]),
+                        h('div', { class: 'mj-regmgr-employee-docs__card-actions' }, [
+                            h('a', {
+                                href: downloadUrl(doc.id),
+                                target: '_blank',
+                                rel: 'noopener noreferrer',
+                                class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                title: downloadLabel,
+                            }, [
+                                h('span', { class: 'mj-btn__icon', dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' } }),
+                                downloadLabel,
+                            ]),
+                            h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--ghost mj-btn--danger mj-btn--small',
+                                onClick: function () { handleDelete(doc.id); },
+                                title: deleteLabel,
+                            }, [
+                                h('span', { class: 'mj-btn__icon', dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>' } }),
+                                deleteLabel,
+                            ]),
+                        ]),
+                    ]);
+                })
+            ),
+        ]);
+    }
+
+    // ============================================
+    // JOB PROFILE SECTION COMPONENT
+    // ============================================
+
+    function MemberJobProfileSection(props) {
+        var member = props.member;
+        var config = props.config || {};
+        var strings = props.strings || {};
+        var onRefresh = props.onRefresh;
+
+        // State
+        var _stTitle = useState(member && member.jobTitle || '');
+        var jobTitle = _stTitle[0];
+        var setJobTitle = _stTitle[1];
+
+        var _stRegime = useState(member && member.workRegime || '');
+        var workRegime = _stRegime[0];
+        var setWorkRegime = _stRegime[1];
+
+        var _stFunding = useState(member && member.fundingSource || '');
+        var fundingSource = _stFunding[0];
+        var setFundingSource = _stFunding[1];
+
+        var _stDesc = useState(member && member.jobDescription || '');
+        var jobDescription = _stDesc[0];
+        var setJobDescription = _stDesc[1];
+
+        var _stSaving = useState(false);
+        var isSaving = _stSaving[0];
+        var setIsSaving = _stSaving[1];
+
+        var _stMsg = useState('');
+        var statusMsg = _stMsg[0];
+        var setStatusMsg = _stMsg[1];
+
+        var _stMsgType = useState('');
+        var msgType = _stMsgType[0];
+        var setMsgType = _stMsgType[1];
+
+        var _stDirty = useState(false);
+        var isDirty = _stDirty[0];
+        var setIsDirty = _stDirty[1];
+
+        // WYSIWYG ref – managed outside Preact VDOM to avoid cursor resets.
+        var editorRef = preact.createRef ? preact.createRef() : { current: null };
+        // Keep a snapshot so we can repopulate the editor after re-renders.
+        var _stServerDesc = useState(member && member.jobDescription || '');
+        var serverDesc = _stServerDesc[0];
+        var setServerDesc = _stServerDesc[1];
+
+        // Sync from member when it changes
+        useEffect(function () {
+            if (!member) return;
+            setJobTitle(member.jobTitle || '');
+            setWorkRegime(member.workRegime || '');
+            setFundingSource(member.fundingSource || '');
+            var desc = member.jobDescription || '';
+            setJobDescription(desc);
+            setServerDesc(desc);
+            setIsDirty(false);
+            // Re-inject into the editor DOM node
+            if (editorRef.current) {
+                editorRef.current.innerHTML = desc;
+            }
+        }, [member && member.id]);
+
+        // Labels
+        var sectionTitle = getString(strings, 'jobProfileTitle', 'Profil de fonction');
+        var titleLabel = getString(strings, 'jobProfileJobTitle', 'Titre de fonction');
+        var regimeLabel = getString(strings, 'jobProfileWorkRegime', 'Régime de travail');
+        var fundingLabel = getString(strings, 'jobProfileFundingSource', 'Origine du financement');
+        var descLabel = getString(strings, 'jobProfileDescription', 'Description du poste');
+        var saveLabel = getString(strings, 'jobProfileSave', 'Enregistrer');
+        var savedLabel = getString(strings, 'jobProfileSaved', 'Profil de fonction enregistré.');
+        var savingLabel = getString(strings, 'jobProfileSaving', 'Enregistrement…');
+
+        var titleOptions = strings.jobProfileTitles || {
+            coordination: 'Coordination',
+            animateur: 'Animateur',
+            communication: 'Communication',
+            autre: 'Autre',
+        };
+
+        var regimeOptions = strings.jobProfileRegimes || {
+            'mi-temps': 'Mi-temps (19h)',
+            'temps-plein': 'Temps plein (38h)',
+            'quatre-cinquieme': 'Quatre cinquième temps (30h30)',
+        };
+
+        function markDirty() { setIsDirty(true); setStatusMsg(''); }
+
+        function handleTitleChange(e) { setJobTitle(e.target.value); markDirty(); }
+        function handleRegimeChange(e) { setWorkRegime(e.target.value); markDirty(); }
+        function handleFundingChange(e) { setFundingSource(e.target.value); markDirty(); }
+
+        // Re-populate editor whenever the DOM node is (re-)created by Preact.
+        useEffect(function () {
+            if (editorRef.current) {
+                var current = editorRef.current.innerHTML;
+                if (!current || current === '<br>') {
+                    editorRef.current.innerHTML = jobDescription || serverDesc || '';
+                }
+            }
+        });
+
+        function onEditorInput() {
+            if (editorRef.current) {
+                setJobDescription(editorRef.current.innerHTML);
+                markDirty();
+            }
+        }
+
+        function execCmd(cmd, val) {
+            editorRef.current && editorRef.current.focus();
+            document.execCommand(cmd, false, val || null);
+            onEditorInput();
+        }
+
+        function handleSave() {
+            if (!member || !member.id) return;
+            setIsSaving(true);
+            setStatusMsg('');
+
+            var fd = new FormData();
+            fd.append('action', 'mj_regmgr_save_job_profile');
+            fd.append('nonce', config.nonce || '');
+            fd.append('memberId', member.id);
+            fd.append('jobTitle', jobTitle);
+            fd.append('workRegime', workRegime);
+            fd.append('fundingSource', fundingSource);
+            fd.append('jobDescription', jobDescription);
+
+            fetch(config.ajaxUrl || '', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (resp) {
+                    setIsSaving(false);
+                    if (resp.success) {
+                        setStatusMsg(resp.data.message || savedLabel);
+                        setMsgType('success');
+                        setIsDirty(false);
+                        // Update snapshot so editor keeps content after re-render
+                        setServerDesc(jobDescription);
+                        if (editorRef.current && !editorRef.current.innerHTML) {
+                            editorRef.current.innerHTML = jobDescription || '';
+                        }
+                        if (onRefresh) onRefresh();
+                    } else {
+                        setStatusMsg(resp.data && resp.data.message ? resp.data.message : 'Erreur');
+                        setMsgType('error');
+                    }
+                })
+                .catch(function () {
+                    setIsSaving(false);
+                    setStatusMsg('Erreur de connexion');
+                    setMsgType('error');
+                });
+        }
+
+        // ---------- Render ----------
+        return h('div', { class: 'mj-regmgr-member-detail__section mj-regmgr-job-profile' }, [
+            h('h2', { class: 'mj-regmgr-member-detail__section-title' }, sectionTitle),
+
+            // Status message
+            statusMsg && h('div', { class: 'mj-regmgr-job-profile__status mj-regmgr-job-profile__status--' + msgType }, statusMsg),
+
+            h('div', { class: 'mj-regmgr-job-profile__form' }, [
+
+                // Row: Titre de fonction + Régime de travail
+                h('div', { class: 'mj-regmgr-job-profile__field-row' }, [
+                    h('div', { class: 'mj-regmgr-job-profile__field mj-regmgr-job-profile__field--half' }, [
+                        h('label', null, titleLabel),
+                        h('select', {
+                            class: 'mj-regmgr-select',
+                            value: jobTitle,
+                            onChange: handleTitleChange,
+                        }, [
+                            h('option', { value: '' }, '— ' + titleLabel + ' —'),
+                        ].concat(
+                            Object.keys(titleOptions).map(function (key) {
+                                return h('option', { value: key }, titleOptions[key]);
+                            })
+                        )),
+                    ]),
+                    h('div', { class: 'mj-regmgr-job-profile__field mj-regmgr-job-profile__field--half' }, [
+                        h('label', null, regimeLabel),
+                        h('select', {
+                            class: 'mj-regmgr-select',
+                            value: workRegime,
+                            onChange: handleRegimeChange,
+                        }, [
+                            h('option', { value: '' }, '— ' + regimeLabel + ' —'),
+                        ].concat(
+                            Object.keys(regimeOptions).map(function (key) {
+                                return h('option', { value: key }, regimeOptions[key]);
+                            })
+                        )),
+                    ]),
+                ]),
+
+                // Row: Origine du financement
+                h('div', { class: 'mj-regmgr-job-profile__field' }, [
+                    h('label', null, fundingLabel),
+                    h('input', {
+                        type: 'text',
+                        class: 'mj-regmgr-input',
+                        value: fundingSource,
+                        onInput: handleFundingChange,
+                        placeholder: fundingLabel,
+                    }),
+                ]),
+
+                // Row: Description du poste (WYSIWYG – rich textarea)
+                h('div', { class: 'mj-regmgr-job-profile__field' }, [
+                    h('label', null, descLabel),
+                    h('div', { class: 'mj-regmgr-job-profile__editor-wrap' }, [
+                        // Toolbar
+                        h('div', { class: 'mj-regmgr-job-profile__toolbar' }, [
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Gras', onClick: function () { execCmd('bold'); } },
+                                h('strong', null, 'B')),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Italique', onClick: function () { execCmd('italic'); } },
+                                h('em', null, 'I')),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Souligné', onClick: function () { execCmd('underline'); } },
+                                h('u', null, 'U')),
+                            h('span', { class: 'mj-regmgr-job-profile__toolbar-sep' }),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Liste à puces', onClick: function () { execCmd('insertUnorderedList'); } },
+                                h('span', { dangerouslySetInnerHTML: { __html: '&#8226;' } })),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Liste numérotée', onClick: function () { execCmd('insertOrderedList'); } },
+                                h('span', null, '1.')),
+                        ]),
+                        // Editable area
+                        h('div', {
+                            ref: editorRef,
+                            class: 'mj-regmgr-job-profile__wysiwyg',
+                            contentEditable: 'true',
+                            onInput: onEditorInput,
+                            onBlur: onEditorInput,
+                        }),
+                    ]),
+                ]),
+
+                // Save button
+                h('div', { class: 'mj-regmgr-job-profile__actions' }, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                        disabled: isSaving || !isDirty,
+                        onClick: handleSave,
+                    }, isSaving ? savingLabel : saveLabel),
+                ]),
+            ]),
+        ]);
+    }
+
+    // ============================================
     // DYNAMIC DATA EDITOR COMPONENT
     // ============================================
 
@@ -4546,6 +5250,7 @@
                             : h('div', { class: 'mj-regmgr-member-detail__section' }, [
                                 h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberTrophiesTitle', 'Trophées')),
                                 h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoTrophies', 'Aucun trophée disponible.')),
+
                             ]),
                         // Actions Section
                         actionData.length > 0
@@ -4599,6 +5304,7 @@
                             : h('div', { class: 'mj-regmgr-member-detail__section' }, [
                                 h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberActionsTitle', 'Actions')),
                                 h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoActions', 'Aucune action disponible.')),
+
                             ]),
                     ]),
                     activeTab === 'photos' && h(Fragment, null, [
@@ -4737,6 +5443,7 @@
                             : h('div', { class: 'mj-regmgr-member-detail__section' }, [
                                 h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberPhotos', 'Photos partagées')),
                                 h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoPhotos', 'Aucune photo pour ce membre.')),
+
                             ]),
                     ]),
                     activeTab === 'ideas' && h(Fragment, null, [
@@ -5029,6 +5736,7 @@
                     activeTab === 'notes' && h(Fragment, null, [
                         h('div', { class: 'mj-regmgr-member-detail__section' }, [
                             h('h2', { class: 'mj-regmgr-member-detail__section-title' }, 'Notes (' + notes.length + ')'),
+
                             h('div', { class: 'mj-regmgr-member-detail__add-note' }, [
                                 h('textarea', {
                                     class: 'mj-regmgr-textarea',
@@ -5684,6 +6392,7 @@
                         registrations.length > 0
                             ? h('div', { class: 'mj-regmgr-member-detail__section' }, [
                                 h('h2', { class: 'mj-regmgr-member-detail__section-title' }, registrationsTitle + ' (' + registrations.length + ')'),
+
                                 h('div', { class: 'mj-regmgr-history-list' },
                                     registrations.map(function (reg) {
                                         return h(RegistrationHistoryItem, {
@@ -5715,6 +6424,18 @@
                         strings: strings,
                         onRefresh: onMemberUpdated,
                     }),
+                    activeTab === 'quotas' && isAnimateur && canManageQuotas && h(MemberEmployeeDocumentsSection, {
+                        member: member,
+                        config: config,
+                        strings: strings,
+                        onRefresh: onMemberUpdated,
+                    }),
+                    activeTab === 'quotas' && isAnimateur && canManageQuotas && h(MemberJobProfileSection, {
+                        member: member,
+                        config: config,
+                        strings: strings,
+                        onRefresh: onMemberUpdated,
+                    }),
 
                     // Données dynamiques tab
                     activeTab === 'dyndata' && dynFields.length > 0 && h(DynDataEditor, {
@@ -5726,90 +6447,7 @@
                 ]),
 
                 // Section enfants (si le membre est tuteur)
-                showChildSection && h('div', { class: 'mj-regmgr-member-detail__section' }, [
-                    h('div', { class: 'mj-regmgr-member-detail__section-header' }, [
-                        h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'guardianChildSectionTitle', 'Enfants') + (
-                            hasChildren
-                                ? ' (' + member.children.length + ')'
-                                : ''
-                        )),
-                        canManageChildren && h('div', { class: 'mj-regmgr-member-detail__section-actions' }, [
-                            allowAttachChild && h('button', {
-                                type: 'button',
-                                class: 'mj-btn mj-btn--secondary mj-btn--small',
-                                onClick: handleAttachChild,
-                            }, getString(strings, 'guardianChildAttachExisting', 'Rattacher un enfant')), 
-                            allowCreateChild && h('button', {
-                                type: 'button',
-                                class: 'mj-btn mj-btn--primary mj-btn--small',
-                                onClick: handleCreateChild,
-                            }, getString(strings, 'guardianChildAddNew', 'Ajouter un enfant')), 
-                        ].filter(Boolean)),
-                    ]),
-                    hasChildren
-                        ? h('div', { class: 'mj-regmgr-member-detail__children' },
-                            member.children.map(function (child) {
-                                var childAge = child.birthDate ? calculateAge(child.birthDate) : null;
-                                return h('div', { key: child.id, class: 'mj-regmgr-child-card' }, [
-                                    h('div', { class: 'mj-regmgr-child-card__avatar' }, [
-                                        child.avatarUrl
-                                            ? h('img', { src: child.avatarUrl, alt: '', class: 'mj-regmgr-child-card__img' })
-                                            : h('div', { class: 'mj-regmgr-child-card__initials' },
-                                                ((child.firstName || '')[0] || '') + ((child.lastName || '')[0] || '')
-                                            ),
-                                    ]),
-                                    h('div', { class: 'mj-regmgr-child-card__info' }, [
-                                        h('div', { class: 'mj-regmgr-child-card__name' },
-                                            (child.firstName || '') + ' ' + (child.lastName || '')
-                                        ),
-                                        h('div', { class: 'mj-regmgr-child-card__meta' }, [
-                                            child.roleLabel && h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--sm' }, child.roleLabel),
-                                            childAge !== null && h('span', null, childAge + ' ans'),
-                                        ]),
-                                    ]),
-                                    h('div', { class: 'mj-regmgr-child-card__status' }, [
-                                        h('span', {
-                                            class: classNames('mj-regmgr-badge mj-regmgr-badge--sm', {
-                                                'mj-regmgr-badge--success': child.membershipStatus === 'paid',
-                                                'mj-regmgr-badge--warning': child.membershipStatus === 'expired',
-                                                'mj-regmgr-badge--danger': child.membershipStatus === 'unpaid',
-                                                'mj-regmgr-badge--secondary': child.membershipStatus === 'not_required',
-                                            }),
-                                        }, membershipLabels[child.membershipStatus] || 'N/A'),
-                                        child.membershipYear && h('span', { class: 'mj-regmgr-child-card__year' }, child.membershipYear),
-                                    ]),
-                                    h('div', { class: 'mj-regmgr-child-card__actions' }, [
-                                        onOpenMember && child && child.id && h('button', {
-                                            type: 'button',
-                                            class: 'mj-btn mj-btn--ghost mj-btn--small',
-                                            onClick: function () {
-                                                onOpenMember(child, { edit: true });
-                                            },
-                                            title: 'Éditer le jeune',
-                                        }, [
-                                            h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                                                h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
-                                                h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
-                                            ]),
-                                            h('span', { class: 'mj-regmgr-child-card__action-label' }, 'Éditer le jeune'),
-                                        ]),
-                                        config && config.adminMemberUrl && h('a', {
-                                            href: config.adminMemberUrl + child.id,
-                        target: '_blank',
-                                            class: 'mj-btn mj-btn--icon mj-btn--ghost',
-                                            title: 'Modifier dans l\'admin',
-                                        }, [
-                                            h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                                                h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
-                                                h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
-                                            ]),
-                                        ]),
-                                    ]),
-                                ]);
-                            })
-                        )
-                        : h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'guardianChildEmpty', 'Aucun enfant rattaché pour le moment.')),
-                ]),
+              
             ]),
 
             // Modal de paiement cotisation

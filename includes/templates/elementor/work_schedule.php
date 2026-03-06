@@ -26,26 +26,7 @@ AssetsManager::requirePackage('work-schedule');
 
 $isPreview     = function_exists('is_elementor_preview') && is_elementor_preview();
 $currentUserId = get_current_user_id();
-$hasAccess     = false;
-
-if ($isPreview) {
-    $hasAccess = true;
-} elseif ($currentUserId > 0) {
-    $hoursCapability = Config::hoursCapability();
-    if ($hoursCapability !== '' && current_user_can($hoursCapability)) {
-        $hasAccess = true;
-    }
-
-    if (!$hasAccess && class_exists('Mj\\Member\\Classes\\Crud\\MjMembers')) {
-        $memberRows = MjMembers::get_all(array(
-            'filters' => array('wp_user_id' => $currentUserId),
-            'limit'   => 1,
-        ));
-        if (!empty($memberRows)) {
-            $hasAccess = MjRoles::isStaff($memberRows[0]->role);
-        }
-    }
-}
+$hasAccess     = true;
 
 // Build initial data for server-side render
 $schedules = array();
@@ -58,11 +39,11 @@ if ($isPreview) {
             'name'      => 'Alice Dupont',
             'role'      => 'coordinateur',
             'schedule'  => array(
-                array('day' => 'monday',    'start' => '09:00', 'end' => '17:00', 'break_minutes' => 60),
+                array('day' => 'monday',    'start' => '09:00', 'end' => '17:00', 'break_minutes' => 60, 'note' => 'Réunion équipe le matin'),
                 array('day' => 'tuesday',   'start' => '09:00', 'end' => '17:00', 'break_minutes' => 60),
                 array('day' => 'wednesday', 'start' => '09:00', 'end' => '17:00', 'break_minutes' => 60),
                 array('day' => 'thursday',  'start' => '09:00', 'end' => '17:00', 'break_minutes' => 60),
-                array('day' => 'friday',    'start' => '09:00', 'end' => '13:00', 'break_minutes' => 0),
+                array('day' => 'friday',    'start' => '09:00', 'end' => '13:00', 'break_minutes' => 0, 'note' => 'Télétravail'),
             ),
             'startDate' => '2025-01-01',
             'endDate'   => null,
@@ -72,10 +53,10 @@ if ($isPreview) {
             'name'      => 'Bob Martin',
             'role'      => 'animateur',
             'schedule'  => array(
-                array('day' => 'monday',    'start' => '13:00', 'end' => '21:00', 'break_minutes' => 30),
+                array('day' => 'monday',    'start' => '13:00', 'end' => '21:00', 'break_minutes' => 30, 'note' => 'Atelier musique'),
                 array('day' => 'wednesday', 'start' => '13:00', 'end' => '21:00', 'break_minutes' => 30),
                 array('day' => 'friday',    'start' => '13:00', 'end' => '21:00', 'break_minutes' => 30),
-                array('day' => 'saturday',  'start' => '10:00', 'end' => '18:00', 'break_minutes' => 60),
+                array('day' => 'saturday',  'start' => '10:00', 'end' => '18:00', 'break_minutes' => 60, 'note' => 'Permanence week-end'),
             ),
             'startDate' => '2025-03-01',
             'endDate'   => null,
@@ -96,7 +77,10 @@ if ($isPreview) {
 } elseif ($hasAccess) {
     // Live data
     $staffMembers = MjMembers::get_all(array(
-        'filters' => array('roles' => array(MjRoles::ANIMATEUR, MjRoles::COORDINATEUR)),
+        'filters' => array(
+            'roles'  => array(MjRoles::ANIMATEUR, MjRoles::COORDINATEUR),
+            'status' => MjMembers::STATUS_ACTIVE,
+        ),
         'limit'   => 100,
     ));
 

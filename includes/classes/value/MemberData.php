@@ -111,6 +111,10 @@ final class MemberData implements JsonSerializable {
         'notes',
         'extra_fields',
         'xp_total',
+        'job_title',
+        'work_regime',
+        'funding_source',
+        'job_description',
     );
 
     /**

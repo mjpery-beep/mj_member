@@ -104,6 +104,9 @@
                                 `${i18n.break} ${breakMin}${i18n.minutesShort}`)
                             : null,
                         h('span', { class: 'mj-ws__slot-net' }, minutesToLabel(net, i18n)),
+                        slot.note
+                            ? h('span', { class: 'mj-ws__slot-note' }, slot.note)
+                            : null,
                     ),
                 );
             }),
@@ -186,6 +189,9 @@
                                     `${i18n.break} ${breakMin}${i18n.minutesShort}`)
                                 : null,
                             h('span', { class: 'mj-ws__card-net' }, minutesToLabel(net, i18n)),
+                            slot.note
+                                ? h('span', { class: 'mj-ws__card-note' }, slot.note)
+                                : null,
                         );
                     }),
                 ),
@@ -290,12 +296,16 @@
                                     key: member.memberId,
                                 }),
                             ),
-                            h(TotalsRow, {
-                                schedules,
-                                showTotals: config.showTotals,
-                                i18n,
-                            }),
                         ),
+                        config.showTotals
+                            ? h('tfoot', null,
+                                h(TotalsRow, {
+                                    schedules,
+                                    showTotals: config.showTotals,
+                                    i18n,
+                                }),
+                            )
+                            : null,
                     ),
                 )
                 : null,
@@ -321,6 +331,24 @@
     /*  Init                                                              */
     /* ------------------------------------------------------------------ */
 
+    /**
+     * Detect horizontal overflow on table wrappers and add scroll-hint classes.
+     */
+    function attachScrollHints(container) {
+        const wraps = container.querySelectorAll('.mj-ws__table-wrap');
+        wraps.forEach((wrap) => {
+            const update = () => {
+                const scrollable = wrap.scrollWidth > wrap.clientWidth + 1;
+                wrap.classList.toggle('is-scrollable', scrollable);
+                wrap.classList.toggle('is-scrolled-end', wrap.scrollLeft + wrap.clientWidth >= wrap.scrollWidth - 1);
+            };
+            wrap.addEventListener('scroll', update, { passive: true });
+            window.addEventListener('resize', update, { passive: true });
+            // Initial check (after render)
+            requestAnimationFrame(update);
+        });
+    }
+
     function initWorkScheduleWidgets() {
         document.querySelectorAll('[data-mj-work-schedule-widget]').forEach((el) => {
             if (el.dataset.mjWsInitialized) return;
@@ -335,6 +363,8 @@
             }
 
             render(h(WorkScheduleApp, { config }), el);
+            // Attach scroll detection after Preact has rendered
+            requestAnimationFrame(() => attachScrollHints(el));
         });
     }
 

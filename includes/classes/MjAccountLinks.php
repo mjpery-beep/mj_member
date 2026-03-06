@@ -191,6 +191,28 @@ class MjAccountLinks {
                 'type' => 'standard',
                 'icon_id' => 0,
             ),
+            'employee_data' => array(
+                'label' => __('Données Employé', 'mj-member'),
+                'slug' => 'donnees-employe',
+                'query' => array('section' => 'employee_data'),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'staff',
+                'editable_label' => true,
+                'type' => 'standard',
+                'icon_id' => 0,
+            ),
+            'coordinator_dashboard' => array(
+                'label' => __('Coordinateur', 'mj-member'),
+                'slug' => 'coordinateur',
+                'query' => array('section' => 'coordinator_dashboard'),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => MjRoles::COORDINATEUR,
+                'editable_label' => true,
+                'type' => 'standard',
+                'icon_id' => 0,
+            ),
             'logout' => array(
                 'label' => __('Déconnexion', 'mj-member'),
                 'slug' => '',
@@ -447,6 +469,10 @@ class MjAccountLinks {
             $visibility = isset($config['visibility']) ? $config['visibility'] : 'all';
             // Vérifier la visibilité basée sur les rôles
             if ($visibility === MjRoles::ANIMATEUR && !$isAnimateur) {
+                continue;
+            }
+
+            if ($visibility === MjRoles::COORDINATEUR && !$isCoordinateur) {
                 continue;
             }
 

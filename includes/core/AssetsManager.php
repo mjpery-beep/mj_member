@@ -425,6 +425,17 @@ final class AssetsManager
         // Work Schedule Widget
         self::registerStyle('mj-member-work-schedule', 'css/work-schedule.css', array('mj-member-components'));
         self::registerScript('mj-member-work-schedule', 'js/elementor/work-schedule.js', array('mj-member-utils', 'mj-member-preact-hooks'));
+
+        // Employee Documents Widget
+        self::registerStyle('mj-member-employee-documents', 'css/employee-documents.css', array('mj-member-components'));
+        self::registerScript('mj-member-employee-documents', 'js/elementor/employee-documents.js', array('mj-member-utils', 'mj-member-preact-hooks'));
+
+        // Payslip Upload Widget
+        self::registerStyle('mj-member-payslip-upload', 'css/payslip-upload.css', array('mj-member-components'));
+        self::registerScript('mj-member-payslip-upload', 'js/elementor/payslip-upload.js', array('mj-member-utils', 'mj-member-preact-hooks'));
+
+        // Job Profile Widget
+        self::registerStyle('mj-member-job-profile', 'css/job-profile.css', array('mj-member-components'));
     }
 
     /**
@@ -675,6 +686,27 @@ final class AssetsManager
                 wp_enqueue_script('mj-member-preact');
                 wp_enqueue_script('mj-member-preact-hooks');
                 wp_enqueue_script('mj-member-work-schedule');
+                break;
+
+            case 'employee-documents':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-employee-documents');
+                wp_enqueue_script('mj-member-preact');
+                wp_enqueue_script('mj-member-preact-hooks');
+                wp_enqueue_script('mj-member-employee-documents');
+                break;
+
+            case 'payslip-upload':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-payslip-upload');
+                wp_enqueue_script('mj-member-preact');
+                wp_enqueue_script('mj-member-preact-hooks');
+                wp_enqueue_script('mj-member-payslip-upload');
+                break;
+
+            case 'job-profile':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-job-profile');
                 break;
 
             default:

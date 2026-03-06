@@ -16,39 +16,14 @@ if (!defined('ABSPATH')) {
 
 /**
  * Return work schedules for all staff members.
- * Access: logged-in users with hoursCapability OR staff role.
+ * Access: any visitor (logged-in or not).
  */
 add_action('wp_ajax_mj_work_schedules_get_all', 'mj_work_schedules_get_all_handler');
+add_action('wp_ajax_nopriv_mj_work_schedules_get_all', 'mj_work_schedules_get_all_handler');
 
 function mj_work_schedules_get_all_handler(): void
 {
     check_ajax_referer('mj_work_schedules', 'nonce');
-
-    $currentUserId = get_current_user_id();
-    if ($currentUserId <= 0) {
-        wp_send_json_error(array('message' => __('Non connecté.', 'mj-member')));
-    }
-
-    // Check access: hoursCapability OR staff member
-    $hasAccess = false;
-    $hoursCapability = Config::hoursCapability();
-    if ($hoursCapability !== '' && current_user_can($hoursCapability)) {
-        $hasAccess = true;
-    }
-
-    if (!$hasAccess) {
-        $members = MjMembers::get_all(array(
-            'filters' => array('wp_user_id' => $currentUserId),
-            'limit'   => 1,
-        ));
-        if (!empty($members)) {
-            $hasAccess = MjRoles::isStaff($members[0]->role);
-        }
-    }
-
-    if (!$hasAccess) {
-        wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')));
-    }
 
     // Reference date for "active" schedules (defaults to today)
     $referenceDate = isset($_POST['reference_date']) ? sanitize_text_field(wp_unslash($_POST['reference_date'])) : null;
@@ -56,9 +31,12 @@ function mj_work_schedules_get_all_handler(): void
         $referenceDate = null;
     }
 
-    // Get all staff members
+    // Get all active staff members
     $staffMembers = MjMembers::get_all(array(
-        'filters' => array('roles' => array(MjRoles::ANIMATEUR, MjRoles::COORDINATEUR)),
+        'filters' => array(
+            'roles'  => array(MjRoles::ANIMATEUR, MjRoles::COORDINATEUR),
+            'status' => MjMembers::STATUS_ACTIVE,
+        ),
         'limit'   => 100,
     ));
 

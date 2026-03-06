@@ -34,6 +34,7 @@ use Mj\Member\Classes\Crud\MjMemberActions;
 use Mj\Member\Classes\Crud\MjLevels;
 use Mj\Member\Classes\Crud\MjLeaveTypes;
 use Mj\Member\Classes\Crud\MjLeaveQuotas;
+use Mj\Member\Classes\Crud\MjEmployeeDocuments;
 use Mj\Member\Classes\Forms\EventFormDataMapper;
 use Mj\Member\Classes\Forms\EventFormOptionsBuilder;
 use Mj\Member\Classes\MjEventSchedule;
@@ -112,6 +113,16 @@ add_action('wp_ajax_mj_regmgr_update_member_leave_quotas', 'mj_regmgr_update_mem
 add_action('wp_ajax_mj_regmgr_save_member_work_schedule', 'mj_regmgr_save_member_work_schedule');
 add_action('wp_ajax_mj_regmgr_delete_member_work_schedule', 'mj_regmgr_delete_member_work_schedule');
 add_action('wp_ajax_mj_regmgr_save_member_dynfields', 'mj_regmgr_save_member_dynfields');
+
+// Employee documents actions
+add_action('wp_ajax_mj_regmgr_get_employee_documents', 'mj_regmgr_get_employee_documents');
+add_action('wp_ajax_mj_regmgr_upload_employee_document', 'mj_regmgr_upload_employee_document');
+add_action('wp_ajax_mj_regmgr_update_employee_document', 'mj_regmgr_update_employee_document');
+add_action('wp_ajax_mj_regmgr_delete_employee_document', 'mj_regmgr_delete_employee_document');
+add_action('wp_ajax_mj_regmgr_download_employee_document', 'mj_regmgr_download_employee_document');
+
+// Job profile
+add_action('wp_ajax_mj_regmgr_save_job_profile', 'mj_regmgr_save_job_profile');
 
 // Favorites actions
 add_action('wp_ajax_mj_regmgr_get_favorites', 'mj_regmgr_get_favorites');
@@ -5918,6 +5929,11 @@ function mj_regmgr_get_member_details() {
         'xpTotal' => isset($memberData->xp_total) ? (int) $memberData->xp_total : 0,
         'coinsTotal' => isset($memberData->coins_total) ? (int) $memberData->coins_total : 0,
         'guardian' => null,
+        // Job profile
+        'jobTitle' => $memberData->get('job_title', ''),
+        'workRegime' => $memberData->get('work_regime', ''),
+        'fundingSource' => $memberData->get('funding_source', ''),
+        'jobDescription' => $memberData->get('job_description', ''),
     );
 
     if ($member['hasLinkedAccount']) {
@@ -8593,5 +8609,399 @@ function mj_regmgr_toggle_favorite() {
         'targetId'   => $target_id,
         'isFavorite' => !$is_favorite,
         'favorites'  => array_values(array_unique(array_map('intval', $favorites))),
+    ));
+}
+
+/* ================================================================== *
+ * Employee Documents – AJAX handlers                                  *
+ * ================================================================== */
+
+/**
+ * Get all employee documents for a member.
+ */
+function mj_regmgr_get_employee_documents() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) return;
+
+    // Only coordinators or admins
+    if (!$auth['is_coordinateur']) {
+        wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+        return;
+    }
+
+    $memberId = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+    if ($memberId <= 0) {
+        wp_send_json_error(array('message' => __('Identifiant membre manquant.', 'mj-member')), 400);
+        return;
+    }
+
+    $docs = MjEmployeeDocuments::get_all(array('member_id' => $memberId));
+    $result = array_map(function ($doc) {
+        return array(
+            'id'           => (int) $doc->id,
+            'memberId'     => (int) $doc->member_id,
+            'docType'      => $doc->doc_type,
+            'label'        => $doc->label,
+            'originalName' => $doc->original_name,
+            'mimeType'     => $doc->mime_type,
+            'fileSize'     => (int) $doc->file_size,
+            'documentDate' => $doc->document_date,
+            'payslipMonth' => $doc->payslip_month !== null ? (int) $doc->payslip_month : null,
+            'payslipYear'  => $doc->payslip_year !== null ? (int) $doc->payslip_year : null,
+            'createdAt'    => $doc->created_at,
+        );
+    }, $docs);
+
+    wp_send_json_success(array('documents' => array_values($result)));
+}
+
+/**
+ * Upload a new employee document.
+ */
+function mj_regmgr_upload_employee_document() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) return;
+
+    if (!$auth['is_coordinateur']) {
+        wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+        return;
+    }
+
+    $memberId = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+    if ($memberId <= 0) {
+        wp_send_json_error(array('message' => __('Identifiant membre manquant.', 'mj-member')), 400);
+        return;
+    }
+
+    // Validate file
+    if (empty($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+        wp_send_json_error(array('message' => __('Aucun fichier reçu.', 'mj-member')), 400);
+        return;
+    }
+
+    $fileType  = wp_check_filetype($_FILES['file']['name']);
+    $mimeType  = $fileType['type'];
+    $extension = strtolower($fileType['ext']);
+
+    if (!in_array($mimeType, MjEmployeeDocuments::ALLOWED_MIME_TYPES, true) || !in_array($extension, MjEmployeeDocuments::ALLOWED_EXTENSIONS, true)) {
+        wp_send_json_error(array('message' => __('Format de fichier non supporté. Utilisez PDF, JPG, PNG ou GIF.', 'mj-member')), 400);
+        return;
+    }
+
+    if ($_FILES['file']['size'] > MjEmployeeDocuments::MAX_FILE_SIZE) {
+        wp_send_json_error(array('message' => __('Le fichier est trop volumineux. Maximum 10 Mo.', 'mj-member')), 400);
+        return;
+    }
+
+    // Ensure upload directory
+    MjEmployeeDocuments::ensureUploadDir();
+
+    // Generate secure filename
+    $storedName = MjEmployeeDocuments::generateStoredName($memberId, $extension);
+    $targetPath = MjEmployeeDocuments::uploadDir() . $storedName;
+
+    if (!move_uploaded_file($_FILES['file']['tmp_name'], $targetPath)) {
+        wp_send_json_error(array('message' => __('Erreur lors de l\'enregistrement du fichier.', 'mj-member')), 500);
+        return;
+    }
+
+    // Parse metadata
+    $docType      = isset($_POST['docType']) ? sanitize_key($_POST['docType']) : MjEmployeeDocuments::TYPE_MISC;
+    $label        = isset($_POST['label']) ? sanitize_text_field(wp_unslash($_POST['label'])) : '';
+    $documentDate = isset($_POST['documentDate']) ? sanitize_text_field($_POST['documentDate']) : current_time('Y-m-d');
+    $payslipMonth = isset($_POST['payslipMonth']) && $_POST['payslipMonth'] !== '' ? absint($_POST['payslipMonth']) : null;
+    $payslipYear  = isset($_POST['payslipYear']) && $_POST['payslipYear'] !== '' ? absint($_POST['payslipYear']) : null;
+
+    if (!array_key_exists($docType, MjEmployeeDocuments::TYPES)) {
+        $docType = MjEmployeeDocuments::TYPE_MISC;
+    }
+
+    // Auto-generate label for payslips
+    if ($docType === MjEmployeeDocuments::TYPE_PAYSLIP && $label === '' && $payslipMonth && $payslipYear) {
+        $months = array(
+            1 => 'Janvier', 2 => 'Février', 3 => 'Mars', 4 => 'Avril',
+            5 => 'Mai', 6 => 'Juin', 7 => 'Juillet', 8 => 'Août',
+            9 => 'Septembre', 10 => 'Octobre', 11 => 'Novembre', 12 => 'Décembre',
+        );
+        $label = 'Fiche de paie – ' . ($months[$payslipMonth] ?? '') . ' ' . $payslipYear;
+    }
+
+    $insertId = MjEmployeeDocuments::create(array(
+        'member_id'     => $memberId,
+        'doc_type'      => $docType,
+        'label'         => $label,
+        'original_name' => sanitize_file_name($_FILES['file']['name']),
+        'stored_name'   => $storedName,
+        'mime_type'     => $mimeType,
+        'file_size'     => (int) $_FILES['file']['size'],
+        'document_date' => $documentDate,
+        'payslip_month' => $payslipMonth,
+        'payslip_year'  => $payslipYear,
+        'uploaded_by'   => $auth['member_id'],
+    ));
+
+    if (!$insertId) {
+        // Clean up file
+        @unlink($targetPath);
+        wp_send_json_error(array('message' => __('Erreur lors de l\'enregistrement en base de données.', 'mj-member')), 500);
+        return;
+    }
+
+    $doc = MjEmployeeDocuments::get_by_id($insertId);
+    wp_send_json_success(array(
+        'message'  => __('Document téléversé avec succès.', 'mj-member'),
+        'document' => array(
+            'id'           => (int) $doc->id,
+            'memberId'     => (int) $doc->member_id,
+            'docType'      => $doc->doc_type,
+            'label'        => $doc->label,
+            'originalName' => $doc->original_name,
+            'mimeType'     => $doc->mime_type,
+            'fileSize'     => (int) $doc->file_size,
+            'documentDate' => $doc->document_date,
+            'payslipMonth' => $doc->payslip_month !== null ? (int) $doc->payslip_month : null,
+            'payslipYear'  => $doc->payslip_year !== null ? (int) $doc->payslip_year : null,
+            'createdAt'    => $doc->created_at,
+        ),
+    ));
+}
+
+/**
+ * Update metadata of an existing employee document.
+ */
+function mj_regmgr_update_employee_document() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) return;
+
+    if (!$auth['is_coordinateur']) {
+        wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+        return;
+    }
+
+    $docId = isset($_POST['docId']) ? absint($_POST['docId']) : 0;
+    if ($docId <= 0) {
+        wp_send_json_error(array('message' => __('Identifiant document manquant.', 'mj-member')), 400);
+        return;
+    }
+
+    $doc = MjEmployeeDocuments::get_by_id($docId);
+    if (!$doc) {
+        wp_send_json_error(array('message' => __('Document introuvable.', 'mj-member')), 404);
+        return;
+    }
+
+    $data = array();
+    if (isset($_POST['docType'])) {
+        $dtype = sanitize_key($_POST['docType']);
+        if (array_key_exists($dtype, MjEmployeeDocuments::TYPES)) {
+            $data['doc_type'] = $dtype;
+        }
+    }
+    if (isset($_POST['label'])) {
+        $data['label'] = sanitize_text_field(wp_unslash($_POST['label']));
+    }
+    if (isset($_POST['documentDate'])) {
+        $data['document_date'] = sanitize_text_field($_POST['documentDate']);
+    }
+    if (array_key_exists('payslipMonth', $_POST)) {
+        $data['payslip_month'] = $_POST['payslipMonth'] !== '' && $_POST['payslipMonth'] !== null ? absint($_POST['payslipMonth']) : null;
+    }
+    if (array_key_exists('payslipYear', $_POST)) {
+        $data['payslip_year'] = $_POST['payslipYear'] !== '' && $_POST['payslipYear'] !== null ? absint($_POST['payslipYear']) : null;
+    }
+
+    $success = MjEmployeeDocuments::update($docId, $data);
+    if (!$success) {
+        wp_send_json_error(array('message' => __('Erreur lors de la mise à jour.', 'mj-member')), 500);
+        return;
+    }
+
+    $updated = MjEmployeeDocuments::get_by_id($docId);
+    wp_send_json_success(array(
+        'message'  => __('Document mis à jour.', 'mj-member'),
+        'document' => array(
+            'id'           => (int) $updated->id,
+            'memberId'     => (int) $updated->member_id,
+            'docType'      => $updated->doc_type,
+            'label'        => $updated->label,
+            'originalName' => $updated->original_name,
+            'mimeType'     => $updated->mime_type,
+            'fileSize'     => (int) $updated->file_size,
+            'documentDate' => $updated->document_date,
+            'payslipMonth' => $updated->payslip_month !== null ? (int) $updated->payslip_month : null,
+            'payslipYear'  => $updated->payslip_year !== null ? (int) $updated->payslip_year : null,
+            'createdAt'    => $updated->created_at,
+        ),
+    ));
+}
+
+/**
+ * Delete an employee document (file + DB row).
+ */
+function mj_regmgr_delete_employee_document() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) return;
+
+    if (!$auth['is_coordinateur']) {
+        wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+        return;
+    }
+
+    $docId = isset($_POST['docId']) ? absint($_POST['docId']) : 0;
+    if ($docId <= 0) {
+        wp_send_json_error(array('message' => __('Identifiant document manquant.', 'mj-member')), 400);
+        return;
+    }
+
+    $deleted = MjEmployeeDocuments::delete($docId);
+    if (!$deleted) {
+        wp_send_json_error(array('message' => __('Impossible de supprimer le document.', 'mj-member')), 500);
+        return;
+    }
+
+    wp_send_json_success(array('message' => __('Document supprimé.', 'mj-member')));
+}
+
+/**
+ * Securely serve an employee document file (coordinator only).
+ * Uses GET parameters (nonce via POST nonce already verified at handler level).
+ */
+function mj_regmgr_download_employee_document() {
+    // Clean output buffers
+    while (ob_get_level()) {
+        ob_end_clean();
+    }
+
+    // Verify nonce + permissions via the standard mechanism
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'mj-registration-manager')) {
+        // Also support GET nonce for direct link downloads
+        if (!isset($_GET['nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['nonce'])), 'mj-registration-manager')) {
+            header('Content-Type: text/plain; charset=utf-8');
+            echo 'Erreur: Nonce invalide ou expiré. Rechargez la page et réessayez.';
+            exit;
+        }
+    }
+
+    $userId = get_current_user_id();
+    if (!$userId) {
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'Erreur: Vous devez être connecté.';
+        exit;
+    }
+
+    // Check coordinator role
+    $memberObj = MjMembers::getByWpUserId($userId);
+    $member = $memberObj ? (is_array($memberObj) ? $memberObj : (method_exists($memberObj, 'toArray') ? $memberObj->toArray() : (array) $memberObj)) : null;
+    if (!$member) {
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'Erreur: Membre non trouvé.';
+        exit;
+    }
+
+    $role = is_array($member) ? ($member['role'] ?? '') : ($member->role ?? '');
+    $isCoordinator = $role === MjRoles::COORDINATEUR || current_user_can('manage_options');
+    if (!$isCoordinator) {
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'Erreur: Accès refusé.';
+        exit;
+    }
+
+    $docId = isset($_GET['doc_id']) ? absint($_GET['doc_id']) : (isset($_POST['docId']) ? absint($_POST['docId']) : 0);
+    if ($docId <= 0) {
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'Erreur: Identifiant document invalide.';
+        exit;
+    }
+
+    $doc = MjEmployeeDocuments::get_by_id($docId);
+    if (!$doc || empty($doc->stored_name)) {
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'Erreur: Document non trouvé.';
+        exit;
+    }
+
+    $filePath = MjEmployeeDocuments::filePath($doc->stored_name);
+    if (!file_exists($filePath)) {
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'Erreur: Fichier non trouvé sur le serveur.';
+        exit;
+    }
+
+    // Verify MIME type
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $detectedMime = finfo_file($finfo, $filePath);
+    finfo_close($finfo);
+
+    if (!in_array($detectedMime, MjEmployeeDocuments::ALLOWED_MIME_TYPES, true)) {
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'Erreur: Type de fichier non autorisé.';
+        exit;
+    }
+
+    // Serve file
+    $displayName = !empty($doc->original_name) ? $doc->original_name : ('document_' . $docId . '.' . pathinfo($filePath, PATHINFO_EXTENSION));
+    header('Content-Type: ' . $detectedMime);
+    header('Content-Disposition: inline; filename="' . sanitize_file_name($displayName) . '"');
+    header('Content-Length: ' . filesize($filePath));
+    header('Cache-Control: private, max-age=3600');
+    header('X-Content-Type-Options: nosniff');
+
+    readfile($filePath);
+    exit;
+}
+
+/**
+ * Save job profile fields for a member (employee tab).
+ */
+function mj_regmgr_save_job_profile() {
+    $current_member = mj_regmgr_verify_request();
+    if (!$current_member) return;
+
+    // Only coordinators or admins
+    if (!current_user_can(Config::capability()) && empty($current_member['is_coordinateur'])) {
+        wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+        return;
+    }
+
+    $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+    if (!$member_id) {
+        wp_send_json_error(array('message' => __('ID du membre manquant.', 'mj-member')));
+        return;
+    }
+
+    $allowed_titles = array('coordination', 'animateur', 'communication', 'autre');
+    $allowed_regimes = array('mi-temps', 'temps-plein', 'quatre-cinquieme');
+
+    $job_title = isset($_POST['jobTitle']) ? sanitize_text_field($_POST['jobTitle']) : '';
+    if ($job_title !== '' && !in_array($job_title, $allowed_titles, true)) {
+        $job_title = 'autre';
+    }
+
+    $work_regime = isset($_POST['workRegime']) ? sanitize_text_field($_POST['workRegime']) : '';
+    if ($work_regime !== '' && !in_array($work_regime, $allowed_regimes, true)) {
+        $work_regime = '';
+    }
+
+    $funding_source = isset($_POST['fundingSource']) ? sanitize_text_field($_POST['fundingSource']) : '';
+    $job_description = isset($_POST['jobDescription']) ? wp_kses_post(wp_unslash($_POST['jobDescription'])) : '';
+
+    $result = MjMembers::update($member_id, array(
+        'job_title'       => $job_title,
+        'work_regime'     => $work_regime,
+        'funding_source'  => $funding_source,
+        'job_description' => $job_description,
+    ));
+
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()));
+        return;
+    }
+
+    wp_send_json_success(array(
+        'message'       => __('Profil de fonction enregistré.', 'mj-member'),
+        'jobTitle'      => $job_title,
+        'workRegime'    => $work_regime,
+        'fundingSource' => $funding_source,
+        'jobDescription'=> $job_description,
     ));
 }

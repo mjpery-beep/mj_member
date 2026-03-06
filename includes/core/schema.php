@@ -591,6 +591,29 @@ function mj_member_get_push_subscriptions_table_name() {
     return $cached;
 }
 
+function mj_member_get_employee_documents_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_employee_documents',
+        $wpdb->prefix . 'employee_documents',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $wpdb->prefix . 'mj_employee_documents';
+    return $cached;
+}
+
 function mj_member_get_badges_table_name() {
     static $cached = null;
     if ($cached !== null) {
@@ -1864,6 +1887,8 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_68($wpdb);
     mj_member_upgrade_to_2_69($wpdb);
     mj_member_upgrade_to_2_70($wpdb);
+    mj_member_upgrade_to_2_71($wpdb);
+    mj_member_upgrade_to_2_73($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -5787,6 +5812,66 @@ function mj_member_upgrade_to_2_70($wpdb) {
 
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
     dbDelta($sql);
+}
+
+/**
+ * Migration 2.71: Create employee_documents table for secure payslips & HR documents.
+ */
+function mj_member_upgrade_to_2_71($wpdb) {
+    $table = mj_member_get_employee_documents_table_name();
+    if (mj_member_table_exists($table)) {
+        return;
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql = "CREATE TABLE {$table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        member_id bigint(20) unsigned NOT NULL,
+        doc_type varchar(50) NOT NULL DEFAULT 'misc',
+        label varchar(255) NOT NULL DEFAULT '',
+        original_name varchar(255) NOT NULL DEFAULT '',
+        stored_name varchar(255) NOT NULL DEFAULT '',
+        mime_type varchar(100) NOT NULL DEFAULT '',
+        file_size bigint(20) unsigned NOT NULL DEFAULT 0,
+        document_date date DEFAULT NULL,
+        payslip_month tinyint unsigned DEFAULT NULL,
+        payslip_year smallint unsigned DEFAULT NULL,
+        uploaded_by bigint(20) unsigned DEFAULT NULL,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_member_id (member_id),
+        KEY idx_doc_type (doc_type),
+        KEY idx_document_date (document_date),
+        KEY idx_payslip_period (payslip_year, payslip_month)
+    ) {$charset_collate};";
+
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    dbDelta($sql);
+}
+
+/**
+ * Migration 2.73: Add job-profile columns to mj_members.
+ */
+function mj_member_upgrade_to_2_73($wpdb) {
+    $table = $wpdb->prefix . 'mj_members';
+    if (!mj_member_table_exists($table)) {
+        return;
+    }
+
+    $columns = [
+        'job_title'        => "VARCHAR(100) DEFAULT NULL",
+        'work_regime'      => "VARCHAR(50) DEFAULT NULL",
+        'funding_source'   => "VARCHAR(255) DEFAULT NULL",
+        'job_description'  => "LONGTEXT DEFAULT NULL",
+    ];
+
+    foreach ($columns as $col => $def) {
+        if (!mj_member_column_exists($table, $col)) {
+            $wpdb->query("ALTER TABLE {$table} ADD COLUMN {$col} {$def}");
+        }
+    }
 }
 
 add_action('init', 'mj_member_run_schema_upgrade', 5);

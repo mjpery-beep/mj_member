@@ -112,13 +112,33 @@
     border-radius: var(--ws-radius);
     box-shadow: var(--ws-shadow);
     background: var(--ws-bg);
+    position: relative;
+}
+
+/* Scroll hint gradient on right edge when table overflows */
+.mj-ws__table-wrap.is-scrollable::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 32px;
+    background: linear-gradient(to right, transparent, rgba(0,0,0,0.04));
+    pointer-events: none;
+    border-radius: 0 var(--ws-radius) var(--ws-radius) 0;
+    transition: opacity 0.2s;
+}
+
+.mj-ws__table-wrap.is-scrolled-end::after {
+    opacity: 0;
 }
 
 .mj-ws__table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.85rem;
-    table-layout: fixed;
+    table-layout: auto;
+    min-width: 720px;
 }
 
 .mj-ws__th {
@@ -136,13 +156,13 @@
 
 .mj-ws__th--name {
     text-align: left;
-    width: 160px;
-    min-width: 140px;
+    width: 150px;
+    min-width: 120px;
 }
 
 .mj-ws__th--total {
-    width: 80px;
-    min-width: 70px;
+    width: 72px;
+    min-width: 60px;
 }
 
 .mj-ws__cell {
@@ -217,6 +237,16 @@
     color: var(--ws-text-muted);
 }
 
+.mj-ws__slot-note {
+    font-size: 0.7rem;
+    color: #6366f1;
+    font-style: italic;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .mj-ws__off {
     color: #cbd5e1;
     font-size: 1rem;
@@ -238,6 +268,51 @@
 }
 
 /* ================================================================== */
+/*  Tablet (960–1100px) – smaller text, tighter padding               */
+/* ================================================================== */
+
+@media (max-width: 1100px) {
+    .mj-ws__table {
+        font-size: 0.78rem;
+    }
+
+    .mj-ws__th {
+        padding: 0.5rem 0.35rem;
+        font-size: 0.72rem;
+    }
+
+    .mj-ws__th--name {
+        width: 120px;
+        min-width: 100px;
+    }
+
+    .mj-ws__cell {
+        padding: 0.4rem 0.3rem;
+    }
+
+    .mj-ws__cell--name {
+        padding-left: 0.5rem;
+    }
+
+    .mj-ws__member-name {
+        font-size: 0.78rem;
+    }
+
+    .mj-ws__member-role {
+        font-size: 0.65rem;
+    }
+
+    .mj-ws__slot-time {
+        font-size: 0.75rem;
+    }
+
+    .mj-ws__slot-note {
+        max-width: 80px;
+        font-size: 0.65rem;
+    }
+}
+
+/* ================================================================== */
 /*  Mobile Cards (hidden on desktop)                                  */
 /* ================================================================== */
 
@@ -245,7 +320,7 @@
     display: none;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 960px) {
     .mj-ws__table-wrap {
         display: none;
     }
@@ -255,89 +330,136 @@
         flex-direction: column;
         gap: 0.75rem;
     }
+}
 
-    .mj-ws__card {
-        background: var(--ws-bg);
-        border: 1px solid var(--ws-border);
-        border-radius: var(--ws-radius);
-        box-shadow: var(--ws-shadow);
-        overflow: hidden;
-    }
+/* Card styles (always defined, only visible via .mj-ws__cards display toggle) */
+.mj-ws__card {
+    background: var(--ws-bg);
+    border: 1px solid var(--ws-border);
+    border-radius: var(--ws-radius);
+    box-shadow: var(--ws-shadow);
+    overflow: hidden;
+}
 
-    .mj-ws__card-header {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.65rem 0.75rem;
-        background: var(--ws-bg-alt);
-        border-bottom: 1px solid var(--ws-border);
-    }
+.mj-ws__card-header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.5rem;
+    padding: 0.65rem 0.75rem;
+    background: var(--ws-bg-alt);
+    border-bottom: 1px solid var(--ws-border);
+}
 
-    .mj-ws__card-name {
-        font-weight: 600;
-        font-size: 0.9rem;
-        flex: 1;
-    }
+.mj-ws__card-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 
-    .mj-ws__card-role {
-        font-size: 0.7rem;
-        font-weight: 500;
-        text-transform: uppercase;
-    }
+.mj-ws__card-role {
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: uppercase;
+}
 
-    .mj-ws__card-total {
-        font-weight: 700;
-        font-size: 0.82rem;
-        color: var(--ws-accent);
-    }
+.mj-ws__card-total {
+    font-weight: 700;
+    font-size: 0.82rem;
+    color: var(--ws-accent);
+    white-space: nowrap;
+}
 
-    .mj-ws__card-empty {
-        padding: 0.75rem;
-        text-align: center;
-        color: var(--ws-text-muted);
-        font-size: 0.85rem;
-        margin: 0;
-    }
+.mj-ws__card-empty {
+    padding: 0.75rem;
+    text-align: center;
+    color: var(--ws-text-muted);
+    font-size: 0.85rem;
+    margin: 0;
+}
 
-    .mj-ws__card-slots {
-        display: flex;
-        flex-direction: column;
-    }
+.mj-ws__card-slots {
+    display: flex;
+    flex-direction: column;
+}
 
+.mj-ws__card-slot {
+    display: grid;
+    grid-template-columns: 42px 1fr auto auto;
+    gap: 0.25rem 0.4rem;
+    align-items: center;
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--ws-border);
+    font-size: 0.82rem;
+}
+
+.mj-ws__card-slot:last-child {
+    border-bottom: none;
+}
+
+.mj-ws__card-day {
+    font-weight: 600;
+    color: var(--ws-text-muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+}
+
+.mj-ws__card-time {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.mj-ws__card-break {
+    font-size: 0.7rem;
+    color: #f59e0b;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.mj-ws__card-net {
+    font-size: 0.75rem;
+    color: var(--ws-text-muted);
+    text-align: right;
+    white-space: nowrap;
+}
+
+.mj-ws__card-note {
+    grid-column: 2 / -1;
+    font-size: 0.7rem;
+    color: #6366f1;
+    font-style: italic;
+}
+
+/* ================================================================== */
+/*  Very small screens (< 480px)                                      */
+/* ================================================================== */
+
+@media (max-width: 480px) {
     .mj-ws__card-slot {
-        display: grid;
-        grid-template-columns: 40px 1fr auto auto;
-        gap: 0.35rem;
-        align-items: center;
-        padding: 0.45rem 0.75rem;
-        border-bottom: 1px solid var(--ws-border);
-        font-size: 0.82rem;
-    }
-
-    .mj-ws__card-slot:last-child {
-        border-bottom: none;
-    }
-
-    .mj-ws__card-day {
-        font-weight: 600;
-        color: var(--ws-text-muted);
+        grid-template-columns: 36px 1fr auto;
+        gap: 0.2rem 0.3rem;
+        padding: 0.4rem 0.5rem;
         font-size: 0.78rem;
-        text-transform: uppercase;
-    }
-
-    .mj-ws__card-time {
-        font-weight: 500;
     }
 
     .mj-ws__card-break {
-        font-size: 0.7rem;
-        color: #f59e0b;
-        font-weight: 500;
+        grid-column: 2 / -1;
+        font-size: 0.68rem;
     }
 
-    .mj-ws__card-net {
-        font-size: 0.75rem;
-        color: var(--ws-text-muted);
-        text-align: right;
+    .mj-ws__card-header {
+        padding: 0.5rem 0.6rem;
+    }
+
+    .mj-ws__card-name {
+        font-size: 0.84rem;
+    }
+
+    .mj-ws__title {
+        font-size: 1.1rem;
     }
 }
