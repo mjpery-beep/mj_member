@@ -112,35 +112,32 @@
 
     /**
      * Vérifie l'état de la souscription et souscrit si nécessaire.
-     * Envoie systématiquement l'endpoint actuel au serveur pour garder la DB synchronisée.
+     *
+     * Appelle toujours pushManager.subscribe() au lieu de getSubscription()
+     * pour obtenir un endpoint garanti valide.  Si l'abonnement existant est
+     * encore bon, subscribe() le retourne tel quel ; sinon le push service
+     * (FCM/WNS) génère un nouvel endpoint.  Cela corrige le cas où
+     * getSubscription() renvoie un objet dont l'endpoint est périmé côté
+     * serveur (le push service répond 201 mais ne délivre plus).
      */
     function checkAndSubscribe(registration) {
-        registration.pushManager.getSubscription().then(function (subscription) {
-            if (subscription) {
-                // Toujours synchroniser l'endpoint actuel avec le serveur
-                // (l'endpoint peut avoir changé sans que le serveur le sache)
-                sendSubscriptionToServer(subscription).then(function (response) {
-                    if (response && response.success) {
-                        try { localStorage.setItem('mj_push_endpoint', subscription.endpoint); } catch (e) { /* noop */ }
-                        if (window.console) console.debug('[MJ Push] Sync OK, id=' + (response.data && response.data.id));
-                    } else {
-                        if (window.console) console.warn('[MJ Push] Sync refused:', response);
-                    }
-                }).catch(function (err) {
-                    if (window.console) console.warn('[MJ Push] Sync error:', err);
-                });
-                return;
-            }
+        if (Notification.permission !== 'granted') {
+            // Permission pas encore accordée – laisser le soft-prompt gérer
+            if (window.console) console.debug('[MJ Push] Permission=' + Notification.permission + ', skipping auto-subscribe');
+            return;
+        }
 
-            // Pas encore souscrit – vérifier la permission
-            if (Notification.permission === 'granted') {
-                subscribePush(registration).then(function (response) {
-                    if (window.console) console.debug('[MJ Push] Subscribe result:', response);
-                }).catch(function (err) {
-                    if (window.console) console.warn('[MJ Push] Subscribe error:', err);
-                });
+        // subscribe() avec la même applicationServerKey retourne
+        // l'abonnement actif ou en crée un nouveau si l'ancien est expiré.
+        subscribePush(registration).then(function (response) {
+            if (response && response.success) {
+                try { localStorage.setItem('mj_push_endpoint', response.data && response.data.id ? String(response.data.id) : ''); } catch (e) { /* noop */ }
+                if (window.console) console.debug('[MJ Push] Subscribe/sync OK, id=' + (response.data && response.data.id));
+            } else {
+                if (window.console) console.warn('[MJ Push] Subscribe/sync refused:', response);
             }
-            // Si 'default', l'UI soft-prompt demandera au clic
+        }).catch(function (err) {
+            if (window.console) console.warn('[MJ Push] Subscribe/sync error:', err);
         });
     }
 
@@ -309,8 +306,11 @@
     /**
      * Point d'entrée : enregistrer le SW puis vérifier/souscrire.
      */
+    if (window.console) console.debug('[MJ Push] Init: swUrl=' + config.swUrl + ' permission=' + Notification.permission);
+
     navigator.serviceWorker.register(config.swUrl, { scope: '/', updateViaCache: 'none' })
         .then(function (registration) {
+            if (window.console) console.debug('[MJ Push] SW registered OK, active=' + !!registration.active + ' installing=' + !!registration.installing + ' waiting=' + !!registration.waiting);
             // Forcer la vérification d'une nouvelle version du SW à chaque page
             if (registration.update) {
                 registration.update().catch(function () { /* ignore update check errors */ });
@@ -320,6 +320,7 @@
                 checkAndSubscribe(registration);
             } else {
                 navigator.serviceWorker.ready.then(function (reg) {
+                    if (window.console) console.debug('[MJ Push] SW ready (waited), active=' + !!reg.active);
                     checkAndSubscribe(reg);
                 });
             }

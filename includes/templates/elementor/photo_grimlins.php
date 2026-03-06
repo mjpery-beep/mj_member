@@ -18,6 +18,9 @@ $feature_enabled = function_exists('mj_member_photo_grimlins_is_enabled') ? mj_m
 $members_only = !empty($template_data['members_only']);
 $can_apply_avatar = false;
 $show_history = $members_only && !$is_preview && is_user_logged_in();
+$cta_register_enabled = !empty($template_data['cta_register_enabled']);
+$cta_register_label = isset($template_data['cta_register_label']) ? (string) $template_data['cta_register_label'] : __('Utiliser cet avatar pour devenir membre', 'mj-member');
+$cta_register_url = isset($template_data['cta_register_url']) ? (string) $template_data['cta_register_url'] : '/mon-compte/inscription';
 
 $access_scope = $members_only ? 'members' : 'public';
 $access_nonce = wp_create_nonce('mj_member_photo_grimlins_scope_' . $access_scope);
@@ -38,6 +41,8 @@ $config = array(
     'accessScope' => $access_scope,
     'accessNonce' => $access_nonce,
     'canApplyAvatar' => $can_apply_avatar,
+    'ctaRegister' => $cta_register_enabled,
+    'ctaRegisterUrl' => $cta_register_url,
 );
 
 $config_json = wp_json_encode($config);
@@ -51,6 +56,10 @@ $mosaic_transition = isset($template_data['mosaic_transition']) && in_array($tem
     ? $template_data['mosaic_transition']
     : 'hover';
 $has_mosaic = $mosaic_enabled && !empty($mosaic_sessions);
+if ($has_mosaic) {
+    shuffle($mosaic_sessions);
+}
+$mosaic_speed = isset($template_data['mosaic_speed']) ? (float) $template_data['mosaic_speed'] : 5;
 $fullscreen = !empty($template_data['fullscreen']);
 
 $root_classes = 'mj-photo-grimlins';
@@ -73,16 +82,16 @@ if ($fullscreen) {
                     continue;
                 }
                 $tile_delay = round(($mi % 6) * 0.8 + (intdiv($mi, 6) * 0.5), 2);
-                $tile_duration = round(4 + ($mi % 3) * 1.5, 2);
+                $tile_duration = round($mosaic_speed + ($mi % 3) * ($mosaic_speed * 0.3), 2);
                 $transition_class = 'mj-photo-grimlins__tile--' . $mosaic_transition;
                 ?>
                 <div class="mj-photo-grimlins__tile <?php echo esc_attr($transition_class); ?>"
                      style="--tile-delay: <?php echo esc_attr($tile_delay); ?>s; --tile-duration: <?php echo esc_attr($tile_duration); ?>s;">
                     <?php if ($m_before !== '') : ?>
-                        <img class="mj-photo-grimlins__tile-before" src="<?php echo $m_before; ?>" alt="" loading="lazy" width="400" height="400">
+                        <div class="mj-photo-grimlins__tile-before" style="background-image:url('<?php echo $m_before; ?>');"></div>
                     <?php endif; ?>
                     <?php if ($m_after !== '') : ?>
-                        <img class="mj-photo-grimlins__tile-after" src="<?php echo $m_after; ?>" alt="" loading="lazy" width="400" height="400">
+                        <div class="mj-photo-grimlins__tile-after" style="background-image:url('<?php echo $m_after; ?>');"></div>
                     <?php endif; ?>
                 </div>
             <?php endforeach; ?>
@@ -120,8 +129,8 @@ if ($fullscreen) {
 
         <div class="mj-photo-grimlins__actions">
             <button type="button" class="mj-photo-grimlins__camera" data-photo-grimlins="camera"><?php esc_html_e('Prendre une photo', 'mj-member'); ?></button>
-            <button type="submit" class="mj-photo-grimlins__submit" data-photo-grimlins="submit"><?php echo esc_html($button_label); ?></button>
-            <button type="button" class="mj-photo-grimlins__reset" data-photo-grimlins="reset"><?php esc_html_e('Réinitialiser', 'mj-member'); ?></button>
+            <button type="submit" class="mj-photo-grimlins__submit" data-photo-grimlins="submit" hidden><?php echo esc_html($button_label); ?></button>
+            <button type="button" class="mj-photo-grimlins__reset" data-photo-grimlins="reset" hidden><?php esc_html_e('Réinitialiser', 'mj-member'); ?></button>
         </div>
     </form>
 
@@ -160,6 +169,11 @@ if ($fullscreen) {
         <button type="button" class="mj-photo-grimlins__apply-avatar is-hidden" data-photo-grimlins="apply-avatar">
             <?php esc_html_e('Utiliser comme avatar', 'mj-member'); ?>
         </button>
+        <?php if ($cta_register_enabled) : ?>
+            <a href="<?php echo esc_url($cta_register_url); ?>" class="mj-photo-grimlins__cta-register is-hidden" data-photo-grimlins="cta-register">
+                <?php echo esc_html($cta_register_label); ?>
+            </a>
+        <?php endif; ?>
     </div>
 
     <div class="mj-photo-grimlins__status" id="<?php echo esc_attr($status_id); ?>" data-photo-grimlins="status" aria-live="polite"></div>

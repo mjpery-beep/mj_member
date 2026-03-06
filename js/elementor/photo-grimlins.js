@@ -86,6 +86,7 @@
             resultBox: root.querySelector('[data-photo-grimlins="result-box"]'),
             downloadLink: root.querySelector('[data-photo-grimlins="download"]'),
             applyAvatarBtn: root.querySelector('[data-photo-grimlins="apply-avatar"]'),
+            ctaRegisterBtn: root.querySelector('[data-photo-grimlins="cta-register"]'),
             status: root.querySelector('[data-photo-grimlins="status"]'),
             resetBtn: root.querySelector('[data-photo-grimlins="reset"]'),
             submitBtn: root.querySelector('[data-photo-grimlins="submit"]'),
@@ -97,7 +98,8 @@
             historySection: root.querySelector('[data-photo-grimlins="history"]'),
             historyList: root.querySelector('[data-photo-grimlins="history-list"]'),
             historyEmpty: root.querySelector('[data-photo-grimlins="history-empty"]'),
-            historyLimit: root.querySelector('[data-photo-grimlins="history-limit"]')
+            historyLimit: root.querySelector('[data-photo-grimlins="history-limit"]'),
+            mosaic: root.querySelector('.mj-photo-grimlins__mosaic')
         };
 
         this.cameraStream = null;
@@ -348,6 +350,20 @@
             });
         }
 
+        if (this.dom.ctaRegisterBtn) {
+            this.dom.ctaRegisterBtn.addEventListener('click', function(event) {
+                event.preventDefault();
+                self.redirectToRegistration();
+            });
+        }
+
+        if (this.dom.mosaic) {
+            this.dom.mosaic.addEventListener('dblclick', function(event) {
+                event.preventDefault();
+                self.toggleFullscreen();
+            });
+        }
+
         if (this.dom.historyList) {
             this.dom.historyList.addEventListener('click', function(event) {
                 var target = event.target;
@@ -365,6 +381,24 @@
                 }
                 self.applyAvatar(attachmentId);
             });
+        }
+    };
+
+    PhotoGrimlins.prototype.toggleFullscreen = function() {
+        var el = this.root;
+        var isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+        if (isFullscreen) {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            }
+        } else {
+            if (el.requestFullscreen) {
+                el.requestFullscreen();
+            } else if (el.webkitRequestFullscreen) {
+                el.webkitRequestFullscreen();
+            }
         }
     };
 
@@ -426,6 +460,7 @@
         }
         this.renderPreview();
         this.updateStatus(formatBytes(this.file.size), 'info');
+        this.refreshUi();
     };
 
     PhotoGrimlins.prototype.renderPreview = function() {
@@ -495,6 +530,54 @@
         var shouldShow = allowedGlobal && allowedInstance && hasAttachment;
         button.classList.toggle('is-hidden', !shouldShow);
         button.disabled = !shouldShow || this.isSubmitting || this.isApplyingAvatar;
+    };
+
+    PhotoGrimlins.prototype.updateCtaRegisterButton = function() {
+        var button = this.dom.ctaRegisterBtn;
+        if (!button) {
+            return;
+        }
+        var enabled = !!(this.config && this.config.ctaRegister);
+        var hasResult = !!(this.lastResult && (this.lastResult.attachmentId || this.lastResult.resultUrl));
+        var shouldShow = enabled && hasResult && !this.isSubmitting;
+        button.classList.toggle('is-hidden', !shouldShow);
+    };
+
+    PhotoGrimlins.prototype.redirectToRegistration = function() {
+        if (!this.config || !this.config.ctaRegister || !this.config.ctaRegisterUrl) {
+            return;
+        }
+        var avatarData = {};
+        if (this.lastResult) {
+            if (this.lastResult.attachmentId) {
+                avatarData.attachmentId = this.lastResult.attachmentId;
+            }
+            if (this.lastResult.resultUrl) {
+                avatarData.url = this.lastResult.resultUrl;
+            }
+        }
+        if (this.dom.resultImg) {
+            var src = this.dom.resultImg.getAttribute('src');
+            if (src && !avatarData.url) {
+                avatarData.url = src;
+            }
+        }
+        if (!avatarData.attachmentId && !avatarData.url) {
+            return;
+        }
+        try {
+            sessionStorage.setItem('mj_grimlins_avatar', JSON.stringify(avatarData));
+        } catch (e) {
+            // sessionStorage unavailable – fall through to URL param
+        }
+        var targetUrl = this.config.ctaRegisterUrl;
+        var separator = targetUrl.indexOf('?') !== -1 ? '&' : '?';
+        if (avatarData.attachmentId) {
+            targetUrl += separator + 'grimlins_avatar=' + encodeURIComponent(avatarData.attachmentId);
+        } else if (avatarData.url) {
+            targetUrl += separator + 'grimlins_avatar_url=' + encodeURIComponent(avatarData.url);
+        }
+        window.location.href = targetUrl;
     };
 
     PhotoGrimlins.prototype.normalizeHistoryItem = function(item) {
@@ -878,16 +961,31 @@
         var globalEnabled = !!(globalConfig && globalConfig.enabled);
         var busy = this.isSubmitting || this.isApplyingAvatar;
         var limitReached = this.limitReached && !this.config.isPreview;
+        var hasFile = !!this.file;
         if (this.dom.submitBtn) {
             this.dom.submitBtn.disabled = !globalEnabled || busy || limitReached;
             this.dom.submitBtn.classList.toggle('is-disabled-by-limit', limitReached);
+            if (hasFile) {
+                this.dom.submitBtn.removeAttribute('hidden');
+                this.dom.submitBtn.style.display = '';
+            } else {
+                this.dom.submitBtn.setAttribute('hidden', '');
+                this.dom.submitBtn.style.display = 'none';
+            }
         }
         if (this.dom.resetBtn) {
             this.dom.resetBtn.disabled = busy;
+            if (hasFile) {
+                this.dom.resetBtn.removeAttribute('hidden');
+                this.dom.resetBtn.style.display = '';
+            } else {
+                this.dom.resetBtn.setAttribute('hidden', '');
+                this.dom.resetBtn.style.display = 'none';
+            }
         }
         if (this.dom.cameraBtn) {
             this.dom.cameraBtn.disabled = busy || !this.cameraSupported || limitReached;
-            this.dom.cameraBtn.classList.toggle('is-hidden', !this.cameraSupported || limitReached);
+            this.dom.cameraBtn.classList.toggle('is-hidden', !this.cameraSupported || limitReached || hasFile);
         }
         if (this.dom.fileInput) {
             this.dom.fileInput.disabled = busy || limitReached;
@@ -896,8 +994,10 @@
             this.dom.cameraInput.disabled = busy || limitReached;
         }
         if (this.dom.dropzone) {
+            var hideDropzone = hasFile || limitReached;
             this.dom.dropzone.classList.toggle('is-disabled', limitReached);
-            if (limitReached) {
+            this.dom.dropzone.classList.toggle('is-hidden', hideDropzone);
+            if (hideDropzone) {
                 this.dom.dropzone.setAttribute('aria-disabled', 'true');
             } else {
                 this.dom.dropzone.removeAttribute('aria-disabled');
@@ -911,6 +1011,7 @@
             this.root.classList.toggle('is-generating', this.isSubmitting || this.isPreviewLoading);
         }
         this.updateApplyAvatarButton();
+        this.updateCtaRegisterButton();
         if (typeof this.updateHistoryButtonsState === 'function') {
             this.updateHistoryButtonsState();
         }
@@ -945,9 +1046,9 @@
         this.lastResult = null;
         this.isApplyingAvatar = false;
         this.setPreviewLoading(false);
-        this.updateApplyAvatarButton();
         this.hideCameraModal();
         this.updateStatus('', '');
+        this.refreshUi();
     };
 
     PhotoGrimlins.prototype.showCameraModal = function() {
@@ -1417,6 +1518,7 @@
                 this.dom.downloadLink.removeAttribute('href');
             }
             this.updateApplyAvatarButton();
+            this.updateCtaRegisterButton();
             return;
         }
 
@@ -1441,6 +1543,7 @@
         }
         this.root.classList.add('has-result');
         this.updateApplyAvatarButton();
+        this.updateCtaRegisterButton();
     };
 
     function mount(root) {

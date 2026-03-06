@@ -27,6 +27,7 @@ final class AssetsManager
 
         add_action('admin_enqueue_scripts', array(__CLASS__, 'enqueueAdminAssets'));
         add_action('init', array(__CLASS__, 'registerFrontAssets'), 8);
+        add_action('wp_enqueue_scripts', array(__CLASS__, 'enqueuePushSubscribe'), 20);
 
         self::$booted = true;
     }
@@ -249,6 +250,35 @@ final class AssetsManager
                 ),
             ));
         }
+    }
+
+    /**
+     * Charge push-subscribe.js sur toutes les pages front pour les utilisateurs connectés
+     * dont les clés VAPID sont configurées.  Cela garantit que l'endpoint push
+     * est resynchronisé à chaque visite, même sur les pages sans la cloche.
+     */
+    public static function enqueuePushSubscribe(): void
+    {
+        if (is_admin()) {
+            return;
+        }
+
+        if (!is_user_logged_in() || !Config::webPushIsReady()) {
+            return;
+        }
+
+        // Ne pas doubler si déjà enqueué par le package notification-bell
+        if (wp_script_is('mj-member-push-subscribe', 'enqueued')) {
+            return;
+        }
+
+        wp_enqueue_script('mj-member-push-subscribe');
+        wp_localize_script('mj-member-push-subscribe', 'mjPushSubscribe', array(
+            'ajaxUrl'        => admin_url('admin-ajax.php'),
+            'nonce'          => wp_create_nonce('mj-push-subscribe'),
+            'vapidPublicKey' => Config::vapidPublicKey(),
+            'swUrl'          => home_url('/mj-sw.js'),
+        ));
     }
 
     /**

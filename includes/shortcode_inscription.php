@@ -672,6 +672,20 @@ if (!function_exists('mj_process_frontend_inscription')) {
             mj_member_send_guardian_registration_email($guardian_object, $child_notifications);
         }
 
+        // ── Link Grimlins avatar to newly created members ──
+        $grimlins_avatar_id = isset($_POST['grimlins_avatar_id']) ? absint($_POST['grimlins_avatar_id']) : 0;
+        if ($grimlins_avatar_id > 0 && !empty($created_member_ids)) {
+            $attachment = get_post($grimlins_avatar_id);
+            $has_grimlins_flag = $attachment && (bool) get_post_meta($grimlins_avatar_id, '_mj_member_photo_grimlins', true);
+            if ($has_grimlins_flag && class_exists(MjMembers::class)) {
+                // Assign to the first created member (primary child or autonomous user)
+                $target_member_id = (int) $created_member_ids[0];
+                MjMembers::update($target_member_id, array('photo_id' => $grimlins_avatar_id));
+                update_post_meta($grimlins_avatar_id, '_mj_member_photo_grimlins_member', $target_member_id);
+                do_action('mj_member_grimlins_avatar_applied_on_registration', $target_member_id, $grimlins_avatar_id);
+            }
+        }
+
         return array('success' => true, 'message' => "Merci ! Votre demande a bien été enregistrée. Nous reviendrons vers vous très prochainement.");
     }
 }
@@ -986,6 +1000,23 @@ if (!function_exists('mj_render_child_form_block')) {
 if (!function_exists('mj_member_render_registration_form')) {
     function mj_member_render_registration_form($args = array()) {
         $args = is_array($args) ? $args : array();
+
+        // ── Grimlins avatar passed via query param or sessionStorage ──
+        $grimlins_avatar_id = 0;
+        $grimlins_avatar_url = '';
+        if (!empty($_GET['grimlins_avatar'])) {
+            $grimlins_avatar_id = absint($_GET['grimlins_avatar']);
+            if ($grimlins_avatar_id > 0) {
+                $src = wp_get_attachment_image_url($grimlins_avatar_id, 'medium');
+                $grimlins_avatar_url = $src ? $src : '';
+                if ($grimlins_avatar_url === '') {
+                    $grimlins_avatar_id = 0;
+                }
+            }
+        } elseif (!empty($_GET['grimlins_avatar_url'])) {
+            $grimlins_avatar_url = esc_url_raw(wp_unslash($_GET['grimlins_avatar_url']));
+        }
+
         $default_regulation_page_id = (int) get_option('mj_registration_regulation_page', 0);
         $default_regulation_url = $default_regulation_page_id > 0 ? get_permalink($default_regulation_page_id) : '';
 
@@ -1410,8 +1441,20 @@ if (!function_exists('mj_member_render_registration_form')) {
                         <?php endif; ?>
                     </div>
                 <?php endif; ?>
+                <?php if ($grimlins_avatar_url !== '') : ?>
+                    <div class="mj-inscription-grimlins-avatar">
+                        <img src="<?php echo esc_url($grimlins_avatar_url); ?>" alt="<?php esc_attr_e('Ton avatar Grimlins', 'mj-member'); ?>" class="mj-inscription-grimlins-avatar__img" />
+                        <p class="mj-inscription-grimlins-avatar__label"><?php esc_html_e('Ton avatar Grimlins sera lié à ton compte après l\'inscription.', 'mj-member'); ?></p>
+                    </div>
+                <?php endif; ?>
                 <form method="post" class="mj-inscription-form" novalidate>
                     <?php wp_nonce_field('mj_frontend_form', 'mj_frontend_nonce'); ?>
+                    <?php if ($grimlins_avatar_id > 0) : ?>
+                        <input type="hidden" name="grimlins_avatar_id" value="<?php echo esc_attr($grimlins_avatar_id); ?>" />
+                    <?php endif; ?>
+                    <?php if ($grimlins_avatar_url !== '') : ?>
+                        <input type="hidden" name="grimlins_avatar_url" value="<?php echo esc_url($grimlins_avatar_url); ?>" />
+                    <?php endif; ?>
 
                     <fieldset class="mj-fieldset" data-section="registration-type">
                         <legend>Type d'inscription</legend>
@@ -1653,6 +1696,35 @@ if (!function_exists('mj_member_render_registration_form')) {
                 padding: 30px;
                 border: 1px solid rgba(208, 218, 240, 0.75);
                 box-shadow: 0 22px 48px rgba(15, 23, 42, 0.08);
+            }
+
+            .mj-inscription-grimlins-avatar {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 24px;
+                padding: 20px;
+                border-radius: 16px;
+                background: linear-gradient(135deg, rgba(124, 58, 237, 0.08), rgba(167, 139, 250, 0.12));
+                border: 1px solid rgba(124, 58, 237, 0.18);
+            }
+
+            .mj-inscription-grimlins-avatar__img {
+                width: 120px;
+                height: 120px;
+                border-radius: 50%;
+                object-fit: cover;
+                border: 3px solid rgba(124, 58, 237, 0.3);
+                box-shadow: 0 4px 16px rgba(124, 58, 237, 0.15);
+            }
+
+            .mj-inscription-grimlins-avatar__label {
+                margin: 0;
+                font-size: 14px;
+                font-weight: 500;
+                color: #6d28d9;
+                text-align: center;
             }
 
             .mj-inscription-tab-content .mj-inscription-form {
@@ -2897,6 +2969,54 @@ if (!function_exists('mj_member_render_registration_form')) {
                         });
                     }).observe(childContainer, { childList: true });
                 }
+
+                // ── Grimlins avatar: sessionStorage fallback ──
+                (function () {
+                    try {
+                        var stored = sessionStorage.getItem('mj_grimlins_avatar');
+                        if (!stored) return;
+                        // Clear immediately so subsequent page loads don't reuse it
+                        sessionStorage.removeItem('mj_grimlins_avatar');
+
+                        // If PHP already rendered the avatar via query params, nothing to do
+                        var existingBanner = document.querySelector('.mj-inscription-grimlins-avatar');
+                        if (existingBanner) return;
+
+                        var data = JSON.parse(stored);
+                        if (!data || (!data.attachmentId && !data.url)) return;
+
+                        // Build avatar banner from JS
+                        var banner = document.createElement('div');
+                        banner.className = 'mj-inscription-grimlins-avatar';
+
+                        var img = document.createElement('img');
+                        img.className = 'mj-inscription-grimlins-avatar__img';
+                        img.alt = 'Ton avatar Grimlins';
+                        img.src = data.url || '';
+                        banner.appendChild(img);
+
+                        var label = document.createElement('p');
+                        label.className = 'mj-inscription-grimlins-avatar__label';
+                        label.textContent = 'Ton avatar Grimlins sera lié à ton compte après l\'inscription.';
+                        banner.appendChild(label);
+
+                        var form = document.querySelector('.mj-inscription-form');
+                        if (form && form.parentNode) {
+                            form.parentNode.insertBefore(banner, form);
+                        }
+
+                        // Inject hidden field inside form
+                        if (data.attachmentId && form) {
+                            var hidden = document.createElement('input');
+                            hidden.type = 'hidden';
+                            hidden.name = 'grimlins_avatar_id';
+                            hidden.value = String(data.attachmentId);
+                            form.insertBefore(hidden, form.firstChild);
+                        }
+                    } catch (e) {
+                        // Ignore sessionStorage errors
+                    }
+                })();
             })();
         </script>
         <?php

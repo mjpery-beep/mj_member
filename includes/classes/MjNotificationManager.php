@@ -593,16 +593,21 @@ class MjNotificationManager {
      */
     private static function dispatch_push(array $notification_data, array $recipients): void
     {
+        error_log('[MJ Push] dispatch_push CALLED – notification_data keys: ' . implode(',', array_keys($notification_data)));
+        error_log('[MJ Push] dispatch_push recipients count=' . count($recipients) . ' raw=' . wp_json_encode($recipients));
+
         if (!Config::webPushIsReady()) {
-            Logger::info('[MJ Push] dispatch_push skipped: Web Push not ready');
+            error_log('[MJ Push] dispatch_push SKIP: Web Push not ready');
             return;
         }
 
         $title = isset($notification_data['title']) ? (string) $notification_data['title'] : '';
         $body  = isset($notification_data['excerpt']) ? (string) $notification_data['excerpt'] : '';
 
+        error_log('[MJ Push] dispatch_push title="' . substr($title, 0, 80) . '" body="' . substr($body, 0, 80) . '"');
+
         if ($title === '' && $body === '') {
-            Logger::info('[MJ Push] dispatch_push skipped: empty title and body');
+            error_log('[MJ Push] dispatch_push SKIP: empty title and body');
             return;
         }
 
@@ -625,8 +630,10 @@ class MjNotificationManager {
             }
         }
 
+        error_log('[MJ Push] dispatch_push member_ids=' . wp_json_encode($member_ids) . ' user_ids=' . wp_json_encode($user_ids));
+
         if (empty($member_ids) && empty($user_ids)) {
-            Logger::info('[MJ Push] dispatch_push skipped: no recipients');
+            error_log('[MJ Push] dispatch_push SKIP: no member_ids or user_ids extracted');
             return;
         }
 
@@ -639,15 +646,17 @@ class MjNotificationManager {
 
         try {
             if (!empty($member_ids)) {
+                error_log('[MJ Push] dispatch_push → send_to_members(' . wp_json_encode(array_unique($member_ids)) . ')');
                 $stats = MjWebPush::send_to_members(array_unique($member_ids), $payload);
-                error_log('[MJ Push] dispatch_push send_to_members: ' . wp_json_encode($stats));
+                error_log('[MJ Push] dispatch_push send_to_members result: ' . wp_json_encode($stats));
             }
             if (!empty($user_ids)) {
+                error_log('[MJ Push] dispatch_push → send_to_users(' . wp_json_encode(array_unique($user_ids)) . ')');
                 $stats = MjWebPush::send_to_users(array_unique($user_ids), $payload);
-                error_log('[MJ Push] dispatch_push send_to_users: ' . wp_json_encode($stats));
+                error_log('[MJ Push] dispatch_push send_to_users result: ' . wp_json_encode($stats));
             }
         } catch (\Throwable $e) {
-            error_log('[MJ Push] dispatch_push error: ' . $e->getMessage());
+            error_log('[MJ Push] dispatch_push EXCEPTION: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
         }
     }
 }
