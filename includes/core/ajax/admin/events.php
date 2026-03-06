@@ -1,6 +1,7 @@
 <?php
 
 use Mj\Member\Classes\Crud\MjEvents;
+use Mj\Member\Classes\Crud\MjEventOccurrences;
 use Mj\Member\Classes\Table\MjEvents_List_Table;
 use Mj\Member\Core\Config;
 
@@ -10,6 +11,7 @@ if (!defined('ABSPATH')) {
 
 add_action('wp_ajax_mj_fetch_events_table', 'mj_member_ajax_fetch_events_table');
 add_action('wp_ajax_mj_inline_edit_event', 'mj_inline_edit_event_callback');
+add_action('wp_ajax_mj_calendar_delete_occurrence', 'mj_calendar_delete_occurrence');
 
 function mj_member_ajax_fetch_events_table() {
     if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'mj_events_list')) {
@@ -179,5 +181,96 @@ function mj_inline_edit_event_callback() {
     wp_send_json_success(array(
         'message' => __('Mise à jour réussie', 'mj-member'),
         'value' => $field_value
+    ));
+}
+
+/**
+ * Delete (or soft-delete) a single event occurrence from the calendar.
+ *
+ * Expects:
+ *  - nonce  : mj_calendar_delete_occurrence
+ *  - event_id : int
+ *  - start_ts : int (Unix timestamp of the occurrence start)
+ */
+function mj_calendar_delete_occurrence() {
+    if (!check_ajax_referer('mj_calendar_delete_occurrence', 'nonce', false)) {
+        wp_send_json_error(array('message' => __('Nonce invalide.', 'mj-member')));
+        return;
+    }
+
+    // Only animateurs / coordinateurs / admins can delete occurrences
+    if (!current_user_can(Config::capability())) {
+        // Check if user is animateur or coordinateur via member role
+        $member = null;
+        if (class_exists(\Mj\Member\Classes\Crud\MjMembers::class)) {
+            $member = \Mj\Member\Classes\Crud\MjMembers::getByWpUserId(get_current_user_id());
+        }
+        $role = is_array($member) && isset($member['role']) ? (string) $member['role'] : '';
+        if (!in_array($role, array(
+            \Mj\Member\Classes\Crud\MjRoles::COORDINATEUR,
+            \Mj\Member\Classes\Crud\MjRoles::ANIMATEUR,
+        ), true)) {
+            wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')));
+            return;
+        }
+    }
+
+    $event_id = isset($_POST['event_id']) ? absint($_POST['event_id']) : 0;
+    $start_ts = isset($_POST['start_ts']) ? absint($_POST['start_ts']) : 0;
+
+    if ($event_id <= 0 || $start_ts <= 0) {
+        wp_send_json_error(array('message' => __('Paramètres manquants.', 'mj-member')));
+        return;
+    }
+
+    // Verify event exists
+    $event = MjEvents::find($event_id);
+    if (!$event) {
+        wp_send_json_error(array('message' => __('Événement introuvable.', 'mj-member')));
+        return;
+    }
+
+    // Try to find and delete the occurrence row by matching event_id + start_at
+    $timezone = function_exists('wp_timezone') ? wp_timezone() : new \DateTimeZone('UTC');
+    $start_dt = (new \DateTimeImmutable('@' . $start_ts))->setTimezone($timezone);
+    $start_at = $start_dt->format('Y-m-d H:i:s');
+
+    global $wpdb;
+    $table = $wpdb->prefix . 'mj_event_date_occurrences';
+
+    // Check if the table exists
+    $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+
+    if ($table_exists) {
+        // Try exact match first
+        $deleted = $wpdb->delete($table, array(
+            'event_id' => $event_id,
+            'start_at' => $start_at,
+        ), array('%d', '%s'));
+
+        // If no exact match, try within a 60-second window (timezone rounding)
+        if ($deleted === 0) {
+            $start_min = (new \DateTimeImmutable('@' . ($start_ts - 60)))->setTimezone($timezone)->format('Y-m-d H:i:s');
+            $start_max = (new \DateTimeImmutable('@' . ($start_ts + 60)))->setTimezone($timezone)->format('Y-m-d H:i:s');
+            $deleted = $wpdb->query($wpdb->prepare(
+                "DELETE FROM {$table} WHERE event_id = %d AND start_at BETWEEN %s AND %s LIMIT 1",
+                $event_id,
+                $start_min,
+                $start_max
+            ));
+        }
+
+        if ($deleted > 0) {
+            wp_send_json_success(array(
+                'message' => __('Occurrence supprimée.', 'mj-member'),
+            ));
+            return;
+        }
+    }
+
+    // If no occurrence row was found (single-date event or table missing),
+    // report that the occurrence could not be found
+    wp_send_json_error(array(
+        'message' => __('Occurrence introuvable dans la base de données. S\'il s\'agit d\'un événement non-récurrent, supprimez-le via le gestionnaire.', 'mj-member'),
     ));
 }

@@ -2157,6 +2157,14 @@ function mj_regmgr_get_registrations() {
             }
         }
 
+        // Fallback: read from attendance_payload assignments when selected_occurrences is empty
+        if (empty($assigned_occurrences)) {
+            $att_assignments = MjEventAttendance::get_registration_assignments($reg);
+            if (isset($att_assignments['mode']) && $att_assignments['mode'] === 'custom' && !empty($att_assignments['occurrences'])) {
+                $assigned_occurrences = $att_assignments['occurrences'];
+            }
+        }
+
         // Count notes for this member
         $notes_count = 0;
         if (!empty($reg->member_id)) {
@@ -5254,6 +5262,13 @@ function mj_regmgr_update_occurrences() {
         wp_send_json_error(array('message' => $result->get_error_message()));
         return;
     }
+
+    // Also sync to attendance_payload assignments so public and admin sides stay aligned
+    $assignments_mode = empty($sanitized) ? 'all' : 'custom';
+    MjEventAttendance::set_registration_assignments($registration_id, array(
+        'mode' => $assignments_mode,
+        'occurrences' => $sanitized,
+    ));
 
     wp_send_json_success(array(
         'message' => __('Séances mises à jour.', 'mj-member'),

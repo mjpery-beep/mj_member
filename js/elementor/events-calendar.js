@@ -47,6 +47,78 @@
             return;
         }
 
+        // ---- Delete occurrence handler ----
+        if (config && config.ajaxUrl && config.deleteNonce) {
+            root.addEventListener('click', function(e) {
+                var btn = e.target.closest('.mj-member-events-calendar__event-delete');
+                if (!btn) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+
+                var eventId = parseInt(btn.getAttribute('data-delete-event'), 10);
+                var startTs = parseInt(btn.getAttribute('data-delete-ts'), 10);
+                if (!eventId || !startTs) {
+                    return;
+                }
+
+                if (!confirm('Supprimer cette occurrence ? Cette action est irréversible.')) {
+                    return;
+                }
+
+                btn.classList.add('is-loading');
+                btn.disabled = true;
+
+                var formData = new FormData();
+                formData.append('action', 'mj_calendar_delete_occurrence');
+                formData.append('nonce', config.deleteNonce);
+                formData.append('event_id', String(eventId));
+                formData.append('start_ts', String(startTs));
+
+                fetch(config.ajaxUrl, {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin',
+                })
+                .then(function(response) { return response.json(); })
+                .then(function(result) {
+                    if (result.success) {
+                        // Remove the event item from DOM
+                        var li = btn.closest('.mj-member-events-calendar__event') || btn.closest('li');
+                        if (li) {
+                            li.style.transition = 'opacity 0.3s ease';
+                            li.style.opacity = '0';
+                            setTimeout(function() {
+                                li.remove();
+                                updateDayStates();
+                            }, 300);
+                        }
+                        // Also remove the mobile counterpart if exists
+                        var mobileItem = root.querySelector('.mj-member-events-calendar__event-delete[data-delete-event="' + eventId + '"][data-delete-ts="' + startTs + '"]');
+                        if (mobileItem && mobileItem !== btn) {
+                            var mobileLi = mobileItem.closest('li');
+                            if (mobileLi) {
+                                mobileLi.style.transition = 'opacity 0.3s ease';
+                                mobileLi.style.opacity = '0';
+                                setTimeout(function() { mobileLi.remove(); }, 300);
+                            }
+                        }
+                    } else {
+                        var msg = result.data && result.data.message ? result.data.message : 'Erreur lors de la suppression.';
+                        alert(msg);
+                        btn.classList.remove('is-loading');
+                        btn.disabled = false;
+                    }
+                })
+                .catch(function() {
+                    alert('Erreur réseau. Veuillez réessayer.');
+                    btn.classList.remove('is-loading');
+                    btn.disabled = false;
+                });
+            });
+        }
+
         var months = toArray(root.querySelectorAll('[data-calendar-month]'));
         if (!months.length) {
             return;

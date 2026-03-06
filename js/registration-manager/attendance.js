@@ -505,6 +505,7 @@
         var onValidatePayment = props.onValidatePayment;
         var onValidateRegistration = props.onValidateRegistration;
         var onChangeOccurrences = props.onChangeOccurrences;
+        var onAddOccurrence = props.onAddOccurrence;
         var onViewMember = props.onViewMember;
         var onShowNotes = props.onShowNotes;
         var strings = props.strings;
@@ -751,10 +752,14 @@
                 } else if (typeof onValidatePayment === 'function') {
                     onValidatePayment(registration);
                 }
-            } else if (irregularType === 'not-registered' && onChangeOccurrences) {
-                onChangeOccurrences(registration);
+            } else if (irregularType === 'not-registered') {
+                if (onAddOccurrence && selectedOccurrence) {
+                    onAddOccurrence(registration, selectedOccurrence);
+                } else if (onChangeOccurrences) {
+                    onChangeOccurrences(registration);
+                }
             }
-        }, [onValidatePayment, onValidateRegistration, onChangeOccurrences, requiresPayment, requiresValidation]);
+        }, [onValidatePayment, onValidateRegistration, onChangeOccurrences, onAddOccurrence, selectedOccurrence, requiresPayment, requiresValidation]);
 
         var totalValid = categorizedRegistrations.valid.length;
         var totalIrregular = categorizedRegistrations.unpaid.length + categorizedRegistrations.notRegistered.length;

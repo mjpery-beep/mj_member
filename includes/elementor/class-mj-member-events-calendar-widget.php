@@ -2211,11 +2211,20 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             } else {
                                 echo '</a>';
                             }
-                            if ($can_edit_events && !$event_is_closure && !empty($event_entry['id'])) {
-                                $edit_url = home_url('/mon-compte/gestionnaire/?event=' . (int) $event_entry['id']);
+                            if ($can_edit_events && !$event_is_closure && empty($event_entry['is_leave_request']) && !empty($event_entry['id'])) {
+                                // Parse event_id from occurrence key (format: "eventId:timestamp")
+                                $occ_parts = explode(':', (string) $event_entry['id'], 2);
+                                $occ_event_id = isset($occ_parts[0]) ? (int) $occ_parts[0] : 0;
+                                $occ_start_ts = isset($occ_parts[1]) ? (int) $occ_parts[1] : 0;
+                                $edit_url = home_url('/mon-compte/gestionnaire/?event=' . $occ_event_id);
+                                echo '<div class="mj-member-events-calendar__event-actions">';
                                 echo '<a class="mj-member-events-calendar__event-edit" href="' . esc_url($edit_url) . '" title="' . esc_attr__('Modifier l\'événement', 'mj-member') . '" aria-label="' . esc_attr__('Modifier l\'événement', 'mj-member') . '">';
                                 echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
                                 echo '</a>';
+                                echo '<button type="button" class="mj-member-events-calendar__event-delete" data-delete-event="' . esc_attr($occ_event_id) . '" data-delete-ts="' . esc_attr($occ_start_ts) . '" title="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '" aria-label="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '">';
+                                echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+                                echo '</button>';
+                                echo '</div>';
                             }
                             echo '</li>';
                         }
@@ -2376,11 +2385,19 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         }
                         echo '</div>';
                         echo '</' . $mobile_tag . '>';
-                        if ($can_edit_events && !$mobile_is_closure && !empty($mobile_event['id'])) {
-                            $edit_url = home_url('/mon-compte/gestionnaire/?event=' . (int) $mobile_event['id']);
+                        if ($can_edit_events && !$mobile_is_closure && empty($mobile_event['is_leave_request']) && !empty($mobile_event['id'])) {
+                            $mobile_occ_parts = explode(':', (string) $mobile_event['id'], 2);
+                            $mobile_occ_event_id = isset($mobile_occ_parts[0]) ? (int) $mobile_occ_parts[0] : 0;
+                            $mobile_occ_start_ts = isset($mobile_occ_parts[1]) ? (int) $mobile_occ_parts[1] : 0;
+                            $edit_url = home_url('/mon-compte/gestionnaire/?event=' . $mobile_occ_event_id);
+                            echo '<div class="mj-member-events-calendar__event-actions mj-member-events-calendar__event-actions--mobile">';
                             echo '<a class="mj-member-events-calendar__event-edit mj-member-events-calendar__event-edit--mobile" href="' . esc_url($edit_url) . '" title="' . esc_attr__('Modifier l\'événement', 'mj-member') . '" aria-label="' . esc_attr__('Modifier l\'événement', 'mj-member') . '">';
                             echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
                             echo '</a>';
+                            echo '<button type="button" class="mj-member-events-calendar__event-delete mj-member-events-calendar__event-delete--mobile" data-delete-event="' . esc_attr($mobile_occ_event_id) . '" data-delete-ts="' . esc_attr($mobile_occ_start_ts) . '" title="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '" aria-label="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '">';
+                            echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+                            echo '</button>';
+                            echo '</div>';
                         }
                         echo '</li>';
                     }
@@ -2410,6 +2427,11 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             'preferredIndex' => $preferred_index,
             'todayMonth' => $today_month_key,
         );
+
+        if ($can_edit_events) {
+            $instance_config['ajaxUrl'] = admin_url('admin-ajax.php');
+            $instance_config['deleteNonce'] = wp_create_nonce('mj_calendar_delete_occurrence');
+        }
 
 
         echo '<script>window.mjMemberEventsCalendarQueue = window.mjMemberEventsCalendarQueue || [];window.mjMemberEventsCalendarQueue.push({id:' . wp_json_encode($instance_id) . ',config:' . wp_json_encode($instance_config) . '});</script>';

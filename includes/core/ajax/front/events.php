@@ -464,7 +464,6 @@ if (!function_exists('mj_member_ajax_register_event')) {
 
         $now = current_time('timestamp');
         $deadline_passed = false;
-        $closed_by_start = false;
         $has_future_occurrence = false;
         $raw_deadline = isset($event->date_fin_inscription) ? trim((string) $event->date_fin_inscription) : '';
         $has_custom_deadline = ($raw_deadline !== '' && $raw_deadline !== '0000-00-00 00:00:00');
@@ -476,15 +475,8 @@ if (!function_exists('mj_member_ajax_register_event')) {
             }
         }
 
-        if (!$deadline_passed && !empty($event->date_debut) && $event->date_debut !== '0000-00-00 00:00:00') {
-            $start_ts = strtotime($event->date_debut);
-            if ($start_ts && $now > $start_ts) {
-                $deadline_passed = true;
-                $closed_by_start = true;
-            }
-        }
-
-        if ($deadline_passed && $closed_by_start && !$has_custom_deadline && class_exists('MjEventSchedule')) {
+        // Vérifier les occurrences futures via le gestionnaire d'occurrences
+        if (class_exists('MjEventSchedule')) {
             $upcoming_occurrences = MjEventSchedule::get_occurrences(
                 $event,
                 array(
@@ -494,8 +486,12 @@ if (!function_exists('mj_member_ajax_register_event')) {
             );
 
             if (!empty($upcoming_occurrences)) {
+                // Des occurrences futures existent : les inscriptions restent ouvertes
                 $deadline_passed = false;
                 $has_future_occurrence = true;
+            } elseif (!$has_custom_deadline) {
+                // Aucune occurrence future et pas de deadline manuelle : clôturer
+                $deadline_passed = true;
             }
         }
 

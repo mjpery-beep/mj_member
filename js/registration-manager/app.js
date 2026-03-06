@@ -6393,6 +6393,32 @@
                 });
         }, [api, selectedEvent, occurrencesModal, showSuccess, showError, loadRegistrations]);
 
+        // Ajouter automatiquement une occurrence à l'inscription d'un participant
+        var handleAddOccurrenceToRegistration = useCallback(function (registration, occurrence) {
+            if (!registration || !occurrence || !selectedEvent) return;
+
+            var currentOccs = Array.isArray(registration.occurrences) ? registration.occurrences : [];
+            // Vérifier si déjà présent
+            var alreadyHas = currentOccs.some(function (occ) {
+                var key = typeof occ === 'string' ? occ : (occ.start || occ.date || '');
+                var target = typeof occurrence === 'string' ? occurrence : (occurrence.start || occurrence.date || '');
+                return key === target;
+            });
+            if (alreadyHas) return;
+
+            var occKey = typeof occurrence === 'string' ? occurrence : (occurrence.start || occurrence.date || '');
+            var newOccs = currentOccs.concat([occKey]);
+
+            api.updateOccurrences(registration.id, newOccs)
+                .then(function (data) {
+                    showSuccess(data.message || 'Séance ajoutée');
+                    loadRegistrations(selectedEvent.id);
+                })
+                .catch(function (err) {
+                    showError(err.message);
+                });
+        }, [api, selectedEvent, showSuccess, showError, loadRegistrations]);
+
         var handlePersistEventOccurrences = useCallback(function (nextOccurrences, scheduleSummary, generatorPlan) {
             var eventIdSource = null;
             if (eventDetails && eventDetails.id !== undefined && eventDetails.id !== null) {
@@ -7135,6 +7161,7 @@
                                 onValidatePayment: handleValidatePayment,
                                 onValidateRegistration: eventRequiresValidation ? handleValidateRegistration : null,
                                 onChangeOccurrences: allowOccurrenceSelection ? handleChangeOccurrences : null,
+                                onAddOccurrence: handleAddOccurrenceToRegistration,
                                 onViewMember: handleViewMemberFromRegistration,
                                 onShowNotes: handleShowNotes,
                                 strings: strings,

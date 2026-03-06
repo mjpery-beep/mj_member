@@ -1405,39 +1405,72 @@
 }
 
 /* ==========================================================================
-   Edit Icon (animateur / coordinateur only)
+   Actions container (edit + delete – animateur / coordinateur only)
    ========================================================================== */
 
-.mj-member-events-calendar__event-edit {
+.mj-member-events-calendar__event-actions {
     position: absolute;
-    top: 6px;
-    right: 6px;
+    top: 4px;
+    right: 4px;
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 5;
+    overflow: hidden;
+}
+
+.mj-member-events-calendar__event:hover .mj-member-events-calendar__event-actions,
+.mj-member-events-calendar__event:focus-within .mj-member-events-calendar__event-actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Shared base for edit & delete buttons – override theme [type=button] */
+.mj-member-events-calendar__event-edit,
+button.mj-member-events-calendar__event-delete {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.85);
+    width: 26px;
+    height: 26px;
+    background: transparent;
+    background-color: transparent;
     color: #64748b;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.18s ease, background 0.18s ease, color 0.18s ease;
-    z-index: 5;
+    transition: background 0.15s ease, color 0.15s ease;
     text-decoration: none !important;
     line-height: 1;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+    font-size: inherit;
+    font-weight: inherit;
+    white-space: normal;
+    text-align: center;
+    cursor: pointer;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
 }
 
-.mj-member-events-calendar__event-edit svg {
+.mj-member-events-calendar__event-edit svg,
+.mj-member-events-calendar__event-delete svg {
     display: block;
     flex-shrink: 0;
+    width: 13px;
+    height: 13px;
 }
 
-.mj-member-events-calendar__event:hover .mj-member-events-calendar__event-edit,
-.mj-member-events-calendar__event:focus-within .mj-member-events-calendar__event-edit {
-    opacity: 1;
-    pointer-events: auto;
+/* Visual divider between the two buttons */
+.mj-member-events-calendar__event-edit {
+    border-right: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .mj-member-events-calendar__event-edit:hover {
@@ -1446,18 +1479,33 @@
     text-decoration: none !important;
 }
 
-.mj-member-events-calendar__event-edit:focus-visible {
-    opacity: 1;
-    pointer-events: auto;
-    outline: 2px solid var(--mj-events-calendar-accent, #6366f1);
-    outline-offset: 2px;
+.mj-member-events-calendar button.mj-member-events-calendar__event-delete:hover {
+    background: #ef4444;
+    color: #ffffff;
 }
 
-/* Mobile variant – always visible, positioned inline */
-.mj-member-events-calendar__event-edit--mobile {
+.mj-member-events-calendar__event-edit:focus-visible,
+.mj-member-events-calendar__event-delete:focus-visible {
+    outline: 2px solid var(--mj-events-calendar-accent, #6366f1);
+    outline-offset: -2px;
+}
+
+.mj-member-events-calendar__event-delete.is-loading {
+    opacity: 0.4;
+    pointer-events: none;
+    animation: mj-calendar-btn-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes mj-calendar-btn-pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.7; }
+}
+
+/* Mobile variant – always visible */
+.mj-member-events-calendar__event-actions--mobile {
     position: absolute;
-    top: 8px;
-    right: 8px;
+    top: 6px;
+    right: 6px;
     opacity: 1;
     pointer-events: auto;
 }

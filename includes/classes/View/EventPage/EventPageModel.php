@@ -1593,13 +1593,35 @@ final class EventPageModel
             return false;
         }
 
-        // Vérifier la date limite
+        $deadlinePassed = false;
+
+        // Vérifier la date limite d'inscription manuelle
         $deadlineRaw = $this->resolveRegistrationDeadline($eventArray);
         if ($deadlineRaw !== '') {
             $deadlineTs = strtotime($deadlineRaw);
             if ($deadlineTs && $deadlineTs < current_time('timestamp')) {
-                return false;
+                $deadlinePassed = true;
             }
+        }
+
+        // Vérifier les occurrences futures via le gestionnaire d'occurrences
+        if (class_exists('MjEventSchedule')) {
+            $upcoming = MjEventSchedule::get_occurrences(
+                $eventArray,
+                array('max' => 1, 'include_past' => false)
+            );
+
+            if (!empty($upcoming)) {
+                // Des occurrences futures existent : les inscriptions restent ouvertes
+                $deadlinePassed = false;
+            } elseif ($deadlineRaw === '') {
+                // Aucune occurrence future et pas de deadline manuelle : clôturer
+                $deadlinePassed = true;
+            }
+        }
+
+        if ($deadlinePassed) {
+            return false;
         }
 
         // Vérifier la capacité
