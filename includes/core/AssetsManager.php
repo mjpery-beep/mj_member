@@ -421,6 +421,10 @@ final class AssetsManager
         // Expenses Widget
         self::registerStyle('mj-member-expenses', 'css/expenses.css', array('mj-member-components'));
         self::registerScript('mj-member-expenses', 'js/elementor/expenses.js', array('mj-member-utils'));
+
+        // Work Schedule Widget
+        self::registerStyle('mj-member-work-schedule', 'css/work-schedule.css', array('mj-member-components'));
+        self::registerScript('mj-member-work-schedule', 'js/elementor/work-schedule.js', array('mj-member-utils', 'mj-member-preact-hooks'));
     }
 
     /**
@@ -663,6 +667,14 @@ final class AssetsManager
                 if (function_exists('mj_member_expenses_localize')) {
                     mj_member_expenses_localize();
                 }
+                break;
+
+            case 'work-schedule':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-work-schedule');
+                wp_enqueue_script('mj-member-preact');
+                wp_enqueue_script('mj-member-preact-hooks');
+                wp_enqueue_script('mj-member-work-schedule');
                 break;
 
             default:

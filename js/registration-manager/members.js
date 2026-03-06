@@ -1376,6 +1376,7 @@
         var endLabel = getString(strings, 'workScheduleEnd', 'Fin');
         var breakLabel = getString(strings, 'workScheduleBreak', 'Pause (min)');
         var addSlotLabel = getString(strings, 'workScheduleAddSlot', 'Ajouter un créneau');
+        var noteLabel = getString(strings, 'workScheduleNote', 'Note');
 
         // Helper to format date for display
         function formatDate(dateStr) {
@@ -1405,6 +1406,21 @@
             var hours = Math.floor(totalMinutes / 60);
             var mins = totalMinutes % 60;
             return hours + 'h' + (mins > 0 ? mins.toString().padStart(2, '0') : '');
+        }
+
+        // Helper to calculate net hours for a single slot
+        function calculateSlotHours(slot) {
+            if (!slot.start || !slot.end) return '';
+            var startParts = slot.start.split(':');
+            var endParts = slot.end.split(':');
+            if (startParts.length < 2 || endParts.length < 2) return '';
+            var startMins = parseInt(startParts[0], 10) * 60 + parseInt(startParts[1], 10);
+            var endMins = parseInt(endParts[0], 10) * 60 + parseInt(endParts[1], 10);
+            var breakMins = slot.break_minutes ? parseInt(slot.break_minutes, 10) : 0;
+            var net = Math.max(0, endMins - startMins - breakMins);
+            var h = Math.floor(net / 60);
+            var m = net % 60;
+            return h + 'h' + (m > 0 ? m.toString().padStart(2, '0') : '');
         }
 
         // Start adding a new schedule
@@ -1462,7 +1478,7 @@
                 if (!prev) return prev;
                 var next = Object.assign({}, prev);
                 next.schedule = next.schedule.slice();
-                next.schedule.push({ day: 'monday', start: '09:00', end: '17:00', break_minutes: 60 });
+                next.schedule.push({ day: 'monday', start: '09:00', end: '17:00', break_minutes: 60, note: '' });
                 return next;
             });
         }, []);
@@ -1578,6 +1594,7 @@
                             h('th', null, startLabel),
                             h('th', null, endLabel),
                             h('th', null, breakLabel),
+                            h('th', null, noteLabel),
                             h('th', null, ''),
                         ]),
                     ]),
@@ -1618,6 +1635,15 @@
                                         step: 5,
                                         value: slot.break_minutes || 0,
                                         onInput: function (e) { handleSlotChange(index, 'break_minutes', parseInt(e.target.value, 10) || 0); },
+                                    }),
+                                ]),
+                                h('td', null, [
+                                    h('input', {
+                                        type: 'text',
+                                        class: 'mj-regmgr-input mj-regmgr-input--small',
+                                        placeholder: noteLabel,
+                                        value: slot.note || '',
+                                        onInput: function (e) { handleSlotChange(index, 'note', e.target.value); },
                                     }),
                                 ]),
                                 h('td', null, [
@@ -1726,9 +1752,15 @@
                         ? h('ul', { class: 'mj-regmgr-work-schedules__slot-list' },
                             sched.schedule.map(function (slot, idx) {
                                 var breakInfo = slot.break_minutes ? ' (pause ' + slot.break_minutes + ' min)' : '';
-                                return h('li', { key: idx, class: 'mj-regmgr-work-schedules__slot-item' },
-                                    (dayLabels[slot.day] || slot.day) + ' : ' + slot.start + ' - ' + slot.end + breakInfo
-                                );
+                                var slotHours = calculateSlotHours(slot);
+                                return h('li', { key: idx, class: 'mj-regmgr-work-schedules__slot-item' }, [
+                                    h('div', { class: 'mj-regmgr-work-schedules__slot-main' }, [
+                                        h('span', { class: 'mj-regmgr-work-schedules__slot-day' }, dayLabels[slot.day] || slot.day),
+                                        h('span', { class: 'mj-regmgr-work-schedules__slot-time' }, slot.start + ' - ' + slot.end + breakInfo),
+                                        slotHours && h('span', { class: 'mj-regmgr-work-schedules__slot-hours' }, slotHours),
+                                    ]),
+                                    slot.note && h('div', { class: 'mj-regmgr-work-schedules__slot-note' }, slot.note),
+                                ]);
                             })
                         )
                         : h('p', { class: 'mj-regmgr-work-schedules__empty-slots' }, 'Aucun créneau défini'),

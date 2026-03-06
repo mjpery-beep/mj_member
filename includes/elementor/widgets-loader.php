@@ -47,6 +47,7 @@ if (!function_exists('mj_member_get_elementor_widgets_map')) {
             'Mj_Member_Elementor_Testimonials_Widget' => 'includes/elementor/class-mj-member-testimonials-widget.php',
             'Mj_Member_Elementor_Leave_Requests_Widget' => 'includes/elementor/class-mj-member-leave-requests-widget.php',
             'Mj_Member_Elementor_Expenses_Widget' => 'includes/elementor/class-mj-member-expenses-widget.php',
+            'Mj_Member_Elementor_Work_Schedule_Widget' => 'includes/elementor/class-mj-member-work-schedule-widget.php',
         );
     }
 }
