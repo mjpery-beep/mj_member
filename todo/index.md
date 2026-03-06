@@ -34,3 +34,18 @@
  [33. Widget Hour Encode](widget/33-%5B%20%5D-widget-hour-encode.md)
 [34. Refonte page admin heures](34-refonte-admin-heures.md)
 [35. Widget photo grimlins](widget/35-%5B%20%5D-widget-photo-grimlins.md)
+
+---
+
+## 💡 Idées futures
+
+[36. Widget profil gamification](36-widget-profil-gamification.md)
+[37. Tableau de bord statistiques événements](37-dashboard-stats-evenements.md)
+[38. Système de rappels automatiques](38-rappels-automatiques.md)
+[39. Export CSV / PDF des données](39-export-csv-pdf.md)
+[40. Mode hors-ligne & PWA](40-mode-hors-ligne-pwa.md)
+[41. Widget calendrier unifié](41-widget-calendrier-unifie.md)
+[42. Module parrainage entre membres](42-module-parrainage.md)
+[43. Intégration WhatsApp pour notifications](43-integration-whatsapp-notifications.md)
+[44. Widget boîte à idées améliorée](44-widget-boite-idees-v2.md)
+[45. Audit trail & historique des actions admin](45-audit-trail.md)

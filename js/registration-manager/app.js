@@ -3327,11 +3327,16 @@
         }, [config.prefillEventId, urlEventId]);
 
         var initialFilterValue = useMemo(function () {
+            // When an event is specified via URL, bypass the default "assigned" filter
+            // so the target event is always present in the initial list.
+            if (prefillEventId) {
+                return null;
+            }
             var fallback = typeof config.defaultFilter === 'string' && config.defaultFilter !== '' && config.defaultFilter !== 'all'
                 ? config.defaultFilter
                 : 'assigned';
             return fallback;
-        }, [config.defaultFilter]);
+        }, [config.defaultFilter, prefillEventId]);
 
         // API Service
         var api = useMemo(function () {
@@ -3641,7 +3646,7 @@
         var eventsLoading = _eventsLoading[0];
         var setEventsLoading = _eventsLoading[1];
 
-        var _filter = useState(initialFilterValue ? [initialFilterValue] : ['assigned']);
+        var _filter = useState(initialFilterValue ? [initialFilterValue] : []);
         var filter = _filter[0];
         var setFilter = _filter[1];
         var setFilterSafe = useCallback(function (nextFilter) {
@@ -3995,14 +4000,20 @@
         // Charger les événements
         var loadEvents = useCallback(function (page) {
             setEventsLoading(true);
-            api.getEvents({
+            var params = {
                 filter: filter,
                 search: search,
                 sort: eventSort,
                 sortOrder: eventSortOrder,
                 page: page || 1,
                 perPage: 10,
-            })
+            };
+            // Pass targetEventId so the backend includes this event in results
+            // even if it's not on the current page
+            if (!prefillHandledRef.current && prefillEventId) {
+                params.targetEventId = prefillEventId;
+            }
+            api.getEvents(params)
                 .then(function (data) {
                     var loadedEvents = data.events || [];
                     setEvents(loadedEvents);
@@ -5126,6 +5137,10 @@
             if (selectedEvent && selectedEvent.id) {
                 return;
             }
+            // Don't restore from localStorage when a URL event is still pending
+            if (!prefillHandledRef.current && prefillEventId) {
+                return;
+            }
 
             try {
                 var parsedId = lastSelectedEventIdRef.current;
@@ -5148,7 +5163,7 @@
             } catch (e) {
                 // localStorage non disponible
             }
-        }, [sidebarMode, eventsLoading, selectedEvent, events, handleSelectEvent, storageKey]);
+        }, [sidebarMode, eventsLoading, selectedEvent, events, handleSelectEvent, storageKey, prefillEventId]);
 
         useEffect(function () {
             if (sidebarMode !== 'events') {

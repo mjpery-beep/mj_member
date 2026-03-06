@@ -1428,14 +1428,33 @@ function mj_regmgr_get_events() {
     // Grand total (unfiltered)
     $total_all = MjEvents::count(array());
 
+    // Support targetEventId: ensure a specific event is always included in results
+    // (used when navigating from calendar edit icon with ?event=ID)
+    $target_event_id = isset($_POST['targetEventId']) ? absint($_POST['targetEventId']) : 0;
+
     $type_labels = MjEvents::get_type_labels();
     $status_labels = MjEvents::get_status_labels();
 
     $events_data = array();
+    $target_found = false;
     foreach ($events as $event) {
         $formatted = mj_regmgr_build_event_sidebar_item($event, $type_labels, $status_labels);
         if ($formatted !== null) {
             $events_data[] = $formatted;
+            if ($target_event_id > 0 && isset($event->id) && (int) $event->id === $target_event_id) {
+                $target_found = true;
+            }
+        }
+    }
+
+    // If the target event was not in the paginated results, fetch and prepend it
+    if ($target_event_id > 0 && !$target_found) {
+        $target_event = MjEvents::find($target_event_id);
+        if ($target_event) {
+            $target_formatted = mj_regmgr_build_event_sidebar_item($target_event, $type_labels, $status_labels);
+            if ($target_formatted !== null) {
+                array_unshift($events_data, $target_formatted);
+            }
         }
     }
 

@@ -1403,3 +1403,65 @@
         display: flex;
     }
 }
+
+/* ==========================================================================
+   Edit Icon (animateur / coordinateur only)
+   ========================================================================== */
+
+.mj-member-events-calendar__event-edit {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.85);
+    color: #64748b;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease, background 0.18s ease, color 0.18s ease;
+    z-index: 5;
+    text-decoration: none !important;
+    line-height: 1;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.mj-member-events-calendar__event-edit svg {
+    display: block;
+    flex-shrink: 0;
+}
+
+.mj-member-events-calendar__event:hover .mj-member-events-calendar__event-edit,
+.mj-member-events-calendar__event:focus-within .mj-member-events-calendar__event-edit {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.mj-member-events-calendar__event-edit:hover {
+    background: var(--mj-events-calendar-accent, #6366f1);
+    color: #ffffff;
+    text-decoration: none !important;
+}
+
+.mj-member-events-calendar__event-edit:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+    outline: 2px solid var(--mj-events-calendar-accent, #6366f1);
+    outline-offset: 2px;
+}
+
+/* Mobile variant – always visible, positioned inline */
+.mj-member-events-calendar__event-edit--mobile {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.mj-member-events-calendar__mobile-event {
+    position: relative;
+}

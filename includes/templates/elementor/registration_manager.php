@@ -384,9 +384,14 @@ $ajax_url = admin_url('admin-ajax.php');
 $ajax_nonce = wp_create_nonce('mj-registration-manager');
 
 $prefill_event_id = 0;
-if (isset($_GET['event_id'])) {
+if (isset($_GET['event'])) {
+    $prefill_event_id = absint(wp_unslash($_GET['event']));
+} elseif (isset($_GET['event_id'])) {
     $prefill_event_id = absint(wp_unslash($_GET['event_id']));
 }
+$url_event_id = $prefill_event_id > 0 ? $prefill_event_id : null;
+$url_tab = isset($_GET['tab']) ? sanitize_key(wp_unslash($_GET['tab'])) : null;
+$url_member_id = isset($_GET['member']) ? absint(wp_unslash($_GET['member'])) : null;
 
 $config_json = wp_json_encode(array(
     'widgetId' => $widget_id,
@@ -430,6 +435,9 @@ $config_json = wp_json_encode(array(
     'leaveTypes' => $leave_types,
     'locale' => function_exists('determine_locale') ? determine_locale() : get_locale(),
     'prefillEventId' => $prefill_event_id > 0 ? $prefill_event_id : null,
+    'urlEventId' => $url_event_id,
+    'urlMemberId' => $url_member_id > 0 ? $url_member_id : null,
+    'urlTab' => $url_tab !== '' ? $url_tab : null,
     'regDocHeader' => wpautop(get_option('mj_regdoc_header', '')),
     'regDocFooter' => wpautop(get_option('mj_regdoc_footer', '')),
     'strings' => array(
