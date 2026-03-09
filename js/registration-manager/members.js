@@ -4962,6 +4962,67 @@
                             member.descriptionShort && h('p', { class: 'mj-regmgr-member-detail__bio-short' }, member.descriptionShort),
                             member.descriptionLong && h('div', { class: 'mj-regmgr-member-detail__bio-long', dangerouslySetInnerHTML: { __html: member.descriptionLong } }),
                         ]),
+                        h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                            h('h2', { class: 'mj-regmgr-member-detail__section-title' }, 'Activité du membre'),
+                            h('div', { class: 'mj-regmgr-member-activity' }, [
+                                h('div', { class: 'mj-regmgr-member-activity__grid' }, [
+                                    member.dateInscription && h('div', { class: 'mj-regmgr-member-activity__item' }, [
+                                        h('span', { class: 'mj-regmgr-member-activity__label' }, 'Inscrit depuis'),
+                                        h('span', { class: 'mj-regmgr-member-activity__value' }, formatDate(member.dateInscription)),
+                                    ]),
+                                    member.lastLoginAt && h('div', { class: 'mj-regmgr-member-activity__item' }, [
+                                        h('span', { class: 'mj-regmgr-member-activity__label' }, 'Dernière connexion'),
+                                        h('span', { class: 'mj-regmgr-member-activity__value' }, formatTimeAgo(member.lastLoginAt)),
+                                        h('span', { class: 'mj-regmgr-member-activity__timestamp' }, formatDate(member.lastLoginAt)),
+                                    ]),
+                                    member.lastActivityAt && h('div', { class: 'mj-regmgr-member-activity__item' }, [
+                                        h('span', { class: 'mj-regmgr-member-activity__label' }, 'Dernière activité'),
+                                        h('span', { class: 'mj-regmgr-member-activity__value' }, formatTimeAgo(member.lastActivityAt)),
+                                        h('span', { class: 'mj-regmgr-member-activity__timestamp' }, formatDate(member.lastActivityAt)),
+                                    ]),
+                                ]),
+                                member.activityStats && h('div', { class: 'mj-regmgr-member-activity__stats' }, [
+                                    h('h3', { class: 'mj-regmgr-member-activity__stats-title' }, 'Statistiques'),
+                                    h('div', { class: 'mj-regmgr-member-activity__stats-grid' }, [
+                                        h('div', { class: 'mj-regmgr-member-activity__stat' }, [
+                                            h('span', { class: 'mj-regmgr-member-activity__stat-icon' }, '📅'),
+                                            h('div', { class: 'mj-regmgr-member-activity__stat-content' }, [
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-value' }, member.activityStats.eventRegistrations || 0),
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-label' }, 'Inscriptions'),
+                                            ]),
+                                        ]),
+                                        h('div', { class: 'mj-regmgr-member-activity__stat' }, [
+                                            h('span', { class: 'mj-regmgr-member-activity__stat-icon' }, '✅'),
+                                            h('div', { class: 'mj-regmgr-member-activity__stat-content' }, [
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-value' }, member.activityStats.eventAttendances || 0),
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-label' }, 'Présences'),
+                                            ]),
+                                        ]),
+                                        h('div', { class: 'mj-regmgr-member-activity__stat' }, [
+                                            h('span', { class: 'mj-regmgr-member-activity__stat-icon' }, '🎨'),
+                                            h('div', { class: 'mj-regmgr-member-activity__stat-content' }, [
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-value' }, member.activityStats.eventContributions || 0),
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-label' }, 'Contributions'),
+                                            ]),
+                                        ]),
+                                        h('div', { class: 'mj-regmgr-member-activity__stat' }, [
+                                            h('span', { class: 'mj-regmgr-member-activity__stat-icon' }, '💡'),
+                                            h('div', { class: 'mj-regmgr-member-activity__stat-content' }, [
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-value' }, member.activityStats.ideas || 0),
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-label' }, 'Idées'),
+                                            ]),
+                                        ]),
+                                        h('div', { class: 'mj-regmgr-member-activity__stat' }, [
+                                            h('span', { class: 'mj-regmgr-member-activity__stat-icon' }, '🎖️'),
+                                            h('div', { class: 'mj-regmgr-member-activity__stat-content' }, [
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-value' }, member.activityStats.badges || 0),
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-label' }, 'Badges'),
+                                            ]),
+                                        ]),
+                                    ]),
+                                ]),
+                            ]),
+                        ]),
                         config.adminMemberUrl && h('div', { class: 'mj-regmgr-member-detail__admin-link' }, [
                             h('a', {
                                 href: config.adminMemberUrl + member.id,

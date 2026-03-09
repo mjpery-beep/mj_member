@@ -1,0 +1,124 @@
+/* Registration Manager - Member Activity Section */
+
+.mj-regmgr-member-activity {
+    padding: 0;
+}
+
+.mj-regmgr-member-activity__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.mj-regmgr-member-activity__item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 1rem;
+    background: #f5f5f5;
+    border-radius: 6px;
+    border-left: 3px solid #2563eb;
+}
+
+.mj-regmgr-member-activity__label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.mj-regmgr-member-activity__value {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #333;
+}
+
+.mj-regmgr-member-activity__timestamp {
+    font-size: 0.875rem;
+    color: #999;
+    margin-top: 0.5rem;
+}
+
+.mj-regmgr-member-activity__stats {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #eee;
+}
+
+.mj-regmgr-member-activity__stats-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #666;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.mj-regmgr-member-activity__stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem;
+}
+
+.mj-regmgr-member-activity__stat {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f9f9f9;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+}
+
+.mj-regmgr-member-activity__stat-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+.mj-regmgr-member-activity__stat-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.mj-regmgr-member-activity__stat-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #2563eb;
+}
+
+.mj-regmgr-member-activity__stat-label {
+    font-size: 0.75rem;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .mj-regmgr-member-activity__grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .mj-regmgr-member-activity__stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .mj-regmgr-member-activity__item {
+        padding: 0.75rem;
+    }
+
+    .mj-regmgr-member-activity__stat {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .mj-regmgr-member-activity__stats-grid {
+        grid-template-columns: 1fr;
+    }
+}
