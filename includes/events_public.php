@@ -3211,6 +3211,44 @@ if (!function_exists('mj_member_event_admin_bar_edit_link')) {
     add_action('admin_bar_menu', 'mj_member_event_admin_bar_edit_link', 90);
 }
 
+/* ── Push Debug link in admin bar ────────────────────────────────────── */
+if (!function_exists('mj_member_admin_bar_push_debug')) {
+    function mj_member_admin_bar_push_debug($wp_admin_bar) {
+        if (!is_user_logged_in() || !current_user_can(Config::capability())) {
+            return;
+        }
+
+        $wp_admin_bar->add_node(array(
+            'id'    => 'mj-push-debug',
+            'title' => '🔔 Push Debug',
+            'href'  => esc_url(site_url('/tmp/debug_push.php')),
+            'meta'  => array(
+                'title'  => 'Diagnostic Web Push',
+                'target' => '_blank',
+                'class'  => 'mj-push-debug-bar',
+            ),
+        ));
+    }
+
+    /** Force visibility on mobile admin bar */
+    function mj_member_admin_bar_push_debug_css() {
+        if (!is_user_logged_in() || !is_admin_bar_showing() || !current_user_can(Config::capability())) {
+            return;
+        }
+        echo '<style>
+#wpadminbar .mj-push-debug-bar { display: list-item !important; }
+@media screen and (max-width: 782px) {
+    #wpadminbar li#wp-admin-bar-mj-push-debug { display: list-item !important; position: static !important; }
+    #wpadminbar li#wp-admin-bar-mj-push-debug .ab-item { font-size: 14px !important; }
+}
+</style>' . "\n";
+    }
+
+    add_action('admin_bar_menu', 'mj_member_admin_bar_push_debug', 999);
+    add_action('wp_head', 'mj_member_admin_bar_push_debug_css');
+    add_action('admin_head', 'mj_member_admin_bar_push_debug_css');
+}
+
 if (!function_exists('mj_member_ajax_get_event_reservations')) {
     function mj_member_ajax_get_event_reservations() {
         if (!wp_doing_ajax()) {

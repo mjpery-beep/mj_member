@@ -39,6 +39,19 @@
         return array;
     }
 
+    /**
+     * Encode un ArrayBuffer en base64url (sans padding) pour le serveur.
+     * La bibliothèque PHP minishlink/web-push attend du base64url.
+     */
+    function arrayBufferToBase64Url(buffer) {
+        var bytes = new Uint8Array(buffer);
+        var binary = '';
+        for (var i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
     /* ------------------------------------------------------------------ */
     /*  AJAX – souscription / désinscription                              */
     /* ------------------------------------------------------------------ */
@@ -50,10 +63,15 @@
         var key = subscription.getKey('p256dh');
         var auth = subscription.getKey('auth');
 
+        var pubKeyB64 = key ? arrayBufferToBase64Url(key) : '';
+        var authB64   = auth ? arrayBufferToBase64Url(auth) : '';
+
+        if (window.console) console.debug('[MJ Push] sendSubscription: endpoint=' + subscription.endpoint.substring(0, 80) + '... p256dh=' + pubKeyB64.length + 'c auth=' + authB64.length + 'c');
+
         var body = JSON.stringify({
             endpoint: subscription.endpoint,
-            public_key: key ? btoa(String.fromCharCode.apply(null, new Uint8Array(key))) : '',
-            auth_token: auth ? btoa(String.fromCharCode.apply(null, new Uint8Array(auth))) : '',
+            public_key: pubKeyB64,
+            auth_token: authB64,
             content_encoding: (PushManager.supportedContentEncodings || ['aesgcm'])[0],
             nonce: config.nonce
         });
@@ -308,6 +326,27 @@
      */
     if (window.console) console.debug('[MJ Push] Init: swUrl=' + config.swUrl + ' permission=' + Notification.permission);
 
+    /**
+     * Stocke NOTRE registration SW spécifique.
+     * Toutes les fonctions de ce module utilisent cette variable
+     * au lieu de navigator.serviceWorker.ready qui peut renvoyer
+     * un SW parasite (ex: pwa-sw.js).
+     */
+    var mjRegistration = null;
+
+    function waitForActive(registration) {
+        return new Promise(function (resolve) {
+            if (registration.active) { resolve(registration); return; }
+            var sw = registration.installing || registration.waiting;
+            if (!sw) { resolve(registration); return; }
+            sw.addEventListener('statechange', function () {
+                if (sw.state === 'activated') resolve(registration);
+            });
+            // Safety timeout
+            setTimeout(function () { resolve(registration); }, 5000);
+        });
+    }
+
     navigator.serviceWorker.register(config.swUrl, { scope: '/', updateViaCache: 'none' })
         .then(function (registration) {
             if (window.console) console.debug('[MJ Push] SW registered OK, active=' + !!registration.active + ' installing=' + !!registration.installing + ' waiting=' + !!registration.waiting);
@@ -315,15 +354,12 @@
             if (registration.update) {
                 registration.update().catch(function () { /* ignore update check errors */ });
             }
-            // Attendre que le SW soit actif
-            if (registration.active) {
-                checkAndSubscribe(registration);
-            } else {
-                navigator.serviceWorker.ready.then(function (reg) {
-                    if (window.console) console.debug('[MJ Push] SW ready (waited), active=' + !!reg.active);
-                    checkAndSubscribe(reg);
-                });
-            }
+            return waitForActive(registration);
+        })
+        .then(function (registration) {
+            mjRegistration = registration;
+            if (window.console) console.debug('[MJ Push] SW active, using scriptURL=' + (registration.active ? registration.active.scriptURL : 'none'));
+            checkAndSubscribe(registration);
         })
         .catch(function (err) {
             if (window.console) {
@@ -361,11 +397,9 @@
          */
         requestPermission: function () {
             return Notification.requestPermission().then(function (permission) {
-                if (permission === 'granted') {
-                    return navigator.serviceWorker.ready.then(function (registration) {
-                        return subscribePush(registration).then(function () {
-                            return 'granted';
-                        });
+                if (permission === 'granted' && mjRegistration) {
+                    return subscribePush(mjRegistration).then(function () {
+                        return 'granted';
                     });
                 }
                 return permission;
@@ -377,18 +411,17 @@
          * @returns {Promise<boolean>}
          */
         unsubscribe: function () {
-            return navigator.serviceWorker.ready.then(function (registration) {
-                return registration.pushManager.getSubscription().then(function (subscription) {
-                    if (!subscription) {
-                        return false;
+            if (!mjRegistration) return Promise.resolve(false);
+            return mjRegistration.pushManager.getSubscription().then(function (subscription) {
+                if (!subscription) {
+                    return false;
+                }
+                var endpoint = subscription.endpoint;
+                return subscription.unsubscribe().then(function (success) {
+                    if (success) {
+                        sendUnsubscribeToServer(endpoint);
                     }
-                    var endpoint = subscription.endpoint;
-                    return subscription.unsubscribe().then(function (success) {
-                        if (success) {
-                            sendUnsubscribeToServer(endpoint);
-                        }
-                        return success;
-                    });
+                    return success;
                 });
             });
         },
@@ -398,10 +431,9 @@
          * @returns {Promise<boolean>}
          */
         isSubscribed: function () {
-            return navigator.serviceWorker.ready.then(function (registration) {
-                return registration.pushManager.getSubscription().then(function (subscription) {
-                    return subscription !== null;
-                });
+            if (!mjRegistration) return Promise.resolve(false);
+            return mjRegistration.pushManager.getSubscription().then(function (subscription) {
+                return subscription !== null;
             });
         },
 

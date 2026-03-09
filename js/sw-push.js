@@ -4,19 +4,19 @@
  * Ce fichier est servi via la rewrite rule /mj-sw.js
  * afin d'avoir le scope "/" nécessaire pour recevoir les push.
  *
- * @version 2 – 2026-03-05 – Toujours afficher la notification (Chrome l'exige)
+ * @version 3 – 2026-03-09 – Logging détaillé pour diagnostiquer les push silencieux
  */
 
 /* eslint-env serviceworker */
 /* global self, clients */
 
 self.addEventListener('install', function (event) {
-    // Activer immédiatement sans attendre les anciens clients
+    console.log('[MJ SW] install – skipWaiting');
     event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', function (event) {
-    // Prendre le contrôle de tous les onglets ouverts
+    console.log('[MJ SW] activate – clients.claim');
     event.waitUntil(self.clients.claim());
 });
 
@@ -28,18 +28,28 @@ self.addEventListener('activate', function (event) {
  * on affiche quand même une notification générique.
  */
 self.addEventListener('push', function (event) {
+    console.log('[MJ SW] push event received, has data:', !!event.data);
+
     var payload = {};
 
     if (event.data) {
         try {
             payload = event.data.json();
+            console.log('[MJ SW] push payload parsed OK:', JSON.stringify(payload).substring(0, 200));
         } catch (e) {
+            console.warn('[MJ SW] push JSON parse failed:', e.message);
             try {
-                payload = { title: 'MJ Péry', body: event.data.text() };
+                var rawText = event.data.text();
+                console.log('[MJ SW] push raw text:', rawText.substring(0, 200));
+                payload = { title: 'MJ Péry', body: rawText };
             } catch (e2) {
+                console.warn('[MJ SW] push text() also failed:', e2.message);
                 payload = { title: 'MJ Péry', body: 'Vous avez une nouvelle notification.' };
             }
         }
+    } else {
+        console.warn('[MJ SW] push event has NO data');
+        payload = { title: 'MJ Péry', body: 'Nouvelle notification.' };
     }
 
     // Toujours afficher, même si pas de données (Chrome l'exige)
@@ -56,8 +66,14 @@ self.addEventListener('push', function (event) {
         requireInteraction: false
     };
 
+    console.log('[MJ SW] showNotification: title="' + title + '" body="' + (options.body || '').substring(0, 80) + '"');
+
     event.waitUntil(
-        self.registration.showNotification(title, options)
+        self.registration.showNotification(title, options).then(function () {
+            console.log('[MJ SW] showNotification resolved OK');
+        }).catch(function (err) {
+            console.error('[MJ SW] showNotification FAILED:', err);
+        })
     );
 });
 
