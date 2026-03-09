@@ -4154,22 +4154,56 @@
                     h('span', { className: 'mj-todo-widget__priority-value' }, priorityValue + '/5'),
                 ]);
 
-                var summarySegments = [];
-                summarySegments.push(getString(i18n, 'priorityLabel', 'Priorité') + ' ' + priorityValue + '/5');
+                var mediaEntriesCount = Array.isArray(todo && todo.media) ? todo.media.length : 0;
+                var notesCount = Array.isArray(todo && todo.notes) ? todo.notes.length : 0;
+                var priorityTone = 'Faible';
+                if (priorityValue >= 4) {
+                    priorityTone = 'Haute';
+                } else if (priorityValue === 3) {
+                    priorityTone = 'Moyenne';
+                }
+                var priorityStarsCollapsed = '';
+                for (var collapsedStar = 1; collapsedStar <= 5; collapsedStar += 1) {
+                    priorityStarsCollapsed += collapsedStar <= priorityValue ? '★' : '☆';
+                }
+
+                var collapsedSummaryItems = [];
+                collapsedSummaryItems.push(
+                    h('span', { className: 'mj-todo-widget__collapsed-chip mj-todo-widget__collapsed-chip--priority' }, [
+                        h('span', { className: 'mj-todo-widget__collapsed-chip-icon', 'aria-hidden': 'true' }, '⭐'),
+                        h('span', { className: 'mj-todo-widget__collapsed-chip-text' }, priorityTone + ' ' + priorityStarsCollapsed),
+                    ])
+                );
                 if (projectLabel) {
-                    summarySegments.push(projectLabel);
+                    collapsedSummaryItems.push(
+                        h('span', { className: 'mj-todo-widget__collapsed-chip' }, [
+                            h('span', { className: 'mj-todo-widget__collapsed-chip-icon', 'aria-hidden': 'true' }, '📁'),
+                            h('span', { className: 'mj-todo-widget__collapsed-chip-text' }, projectLabel),
+                        ])
+                    );
                 }
+                collapsedSummaryItems.push(
+                    h('span', { className: 'mj-todo-widget__collapsed-chip' }, [
+                        h('span', { className: 'mj-todo-widget__collapsed-chip-icon', 'aria-hidden': 'true' }, '📎'),
+                        h('span', { className: 'mj-todo-widget__collapsed-chip-text' }, mediaEntriesCount + ' fichier' + (mediaEntriesCount > 1 ? 's' : '')),
+                    ])
+                );
+                collapsedSummaryItems.push(
+                    h('span', { className: 'mj-todo-widget__collapsed-chip' }, [
+                        h('span', { className: 'mj-todo-widget__collapsed-chip-icon', 'aria-hidden': 'true' }, '📝'),
+                        h('span', { className: 'mj-todo-widget__collapsed-chip-text' }, notesCount + ' note' + (notesCount > 1 ? 's' : '')),
+                    ])
+                );
                 if (dueDisplay) {
-                    summarySegments.push(getString(i18n, 'dueLabel', 'Échéance') + ' ' + dueDisplay);
+                    collapsedSummaryItems.push(
+                        h('span', { className: 'mj-todo-widget__collapsed-chip' }, [
+                            h('span', { className: 'mj-todo-widget__collapsed-chip-icon', 'aria-hidden': 'true' }, '📅'),
+                            h('span', { className: 'mj-todo-widget__collapsed-chip-text' }, dueDisplay),
+                        ])
+                    );
                 }
-                if (assigneeNames.length > 0) {
-                    summarySegments.push(assigneeNames.join(', '));
-                }
-                if (isArchived && completedDisplay) {
-                    summarySegments.push(completedDisplay);
-                }
-                var collapsedSummaryNode = isCollapsed && summarySegments.length
-                    ? h('div', { className: 'mj-todo-widget__collapsed-summary' }, summarySegments.join(' • '))
+                var collapsedSummaryNode = isCollapsed && collapsedSummaryItems.length
+                    ? h('div', { className: 'mj-todo-widget__collapsed-summary' }, collapsedSummaryItems)
                     : null;
 
                 var archiveButton = effectiveAccess && !isArchived && !isEditing
@@ -4209,18 +4243,24 @@
                     : null;
 
                 var collapseButtonLabel = isCollapsed
-                    ? getString(i18n, 'expandLabel', 'Afficher les détails')
-                    : getString(i18n, 'collapseLabel', 'Réduire');
+                    ? getString(i18n, 'expandLabel', 'Déplier la tâche')
+                    : getString(i18n, 'collapseLabel', 'Réduire la tâche');
                 var collapseButton = h('button', {
                     type: 'button',
-                    className: 'mj-todo-widget__collapse-button',
+                    className: 'mj-todo-widget__collapse-button' + (isCollapsed ? ' is-collapsed' : ''),
                     onClick: function () { return handleToggleCollapse(todoId); },
                     disabled: isEditing || archivePending || restorePending,
                     'aria-pressed': isCollapsed ? 'true' : 'false',
-                }, collapseButtonLabel);
+                    'aria-label': collapseButtonLabel,
+                    title: collapseButtonLabel,
+                }, [
+                    h('svg', { className: 'mj-todo-widget__collapse-icon', viewBox: '0 0 20 20', 'aria-hidden': 'true' }, [
+                        h('path', { d: 'M7 4l6 6-6 6', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }),
+                    ]),
+                    h('span', { className: 'screen-reader-text' }, collapseButtonLabel),
+                ]);
 
                 var actionButtons = [];
-                actionButtons.push(collapseButton);
                 if (!isEditing && archiveButton) {
                     actionButtons.push(archiveButton);
                 }
@@ -4233,6 +4273,7 @@
                 if (!isEditing && deleteButton) {
                     actionButtons.push(deleteButton);
                 }
+                actionButtons.push(collapseButton);
                 var actionsNode = actionButtons.length > 0
                     ? h('div', { className: 'mj-todo-widget__item-actions' }, actionButtons)
                     : null;
@@ -4608,6 +4649,11 @@
                                     handleToggle(todoId, !!event.target.checked);
                                 },
                             }),
+                            h('span', { className: 'mj-todo-widget__checkbox-visual', 'aria-hidden': 'true' }, [
+                                h('svg', { className: 'mj-todo-widget__checkbox-icon', viewBox: '0 0 20 20' }, [
+                                    h('path', { d: 'M5 10.5l3.1 3.1L15 6.8', fill: 'none', stroke: 'currentColor', 'stroke-width': '2.2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }),
+                                ]),
+                            ]),
                             h('span', { className: 'mj-todo-widget__label' }, [
                                 draftEmoji ? h(Fragment, { key: 'emoji' }, [
                                     h('span', { className: 'mj-todo-widget__label-emoji', 'aria-hidden': 'true' }, draftEmoji),
@@ -4646,7 +4692,20 @@
                     itemChildren.push(notesSection);
                 }
 
-                return h('li', { key: todoKey, className: itemClasses }, itemChildren);
+                return h('li', {
+                    key: todoKey,
+                    className: itemClasses,
+                    onClick: function (event) {
+                        if (!isCollapsed || isEditing || archivePending || restorePending) {
+                            return;
+                        }
+                        var target = event && event.target && typeof event.target.closest === 'function' ? event.target : null;
+                        if (target && target.closest('button, input, textarea, select, a')) {
+                            return;
+                        }
+                        handleToggleCollapse(todoId);
+                    },
+                }, itemChildren);
             }).filter(Boolean);
         };
 

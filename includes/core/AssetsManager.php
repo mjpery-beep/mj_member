@@ -447,6 +447,8 @@ final class AssetsManager
      */
     public static function requirePackage(string $package, array $context = array()): void
     {
+        self::ensureElementorFrontendStyleRegistered();
+
         $package = strtolower($package);
 
         switch ($package) {
@@ -715,6 +717,33 @@ final class AssetsManager
                  */
                 do_action('mj_member_assets_require_package', $package, $context);
         }
+    }
+
+    /**
+     * Garantit que le style de base Elementor est enregistré avant tout enqueue
+     * de styles dépendants (ex: elementor-post-<id>) dans certains contextes
+     * d'édition/preview où l'ordre de chargement peut être perturbé.
+     *
+     * @return void
+     */
+    private static function ensureElementorFrontendStyleRegistered(): void
+    {
+        if (!did_action('elementor/loaded')) {
+            return;
+        }
+
+        if (wp_style_is('elementor-frontend', 'registered')) {
+            return;
+        }
+
+        $src = false;
+        if (defined('ELEMENTOR_ASSETS_URL')) {
+            $suffix = (defined('SCRIPT_DEBUG') && SCRIPT_DEBUG) ? '' : '.min';
+            $src = trailingslashit(ELEMENTOR_ASSETS_URL) . 'css/frontend' . $suffix . '.css';
+        }
+
+        $version = defined('ELEMENTOR_VERSION') ? ELEMENTOR_VERSION : null;
+        wp_register_style('elementor-frontend', $src, array(), $version);
     }
 
     /**
