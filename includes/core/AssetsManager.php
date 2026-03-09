@@ -28,6 +28,11 @@ final class AssetsManager
         add_action('admin_enqueue_scripts', array(__CLASS__, 'enqueueAdminAssets'));
         add_action('init', array(__CLASS__, 'registerFrontAssets'), 8);
         add_action('wp_enqueue_scripts', array(__CLASS__, 'enqueuePushSubscribe'), 20);
+        
+        if (defined('ELEMENTOR_PLUGIN_BASE')) {
+            add_action('elementor/frontend/after_register_styles', array(__CLASS__, 'ensureElementorFrontendStyleRegistered'), 5);
+            add_action('elementor/editor/after_enqueue_styles', array(__CLASS__, 'ensureElementorFrontendStyleRegistered'), 5);
+        }
 
         self::$booted = true;
     }
@@ -726,7 +731,7 @@ final class AssetsManager
      *
      * @return void
      */
-    private static function ensureElementorFrontendStyleRegistered(): void
+    public static function ensureElementorFrontendStyleRegistered(): void
     {
         if (!did_action('elementor/loaded')) {
             return;
