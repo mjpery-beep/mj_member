@@ -239,7 +239,7 @@
         return h(Fragment, null,
             // Header
             config.title
-                ? h('h3', { class: 'mj-ws__title' }, config.title)
+                ? h('h2', { class: 'mj-ws__title' }, config.title)
                 : null,
             config.intro
                 ? h('div', {

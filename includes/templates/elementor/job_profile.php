@@ -129,20 +129,14 @@ $titleColorClass = !empty($jobTitle) && isset($titleColors[$jobTitle])
                         <?php echo esc_html($regimeLabels[$workRegime] ?? ucfirst($workRegime)); ?>
                     </span>
                 <?php endif; ?>
-            </div>
 
-            <!-- Meta fields -->
-            <?php if ($showFunding && !empty($fundingSource)) : ?>
-                <div class="mj-jp__meta">
-                    <div class="mj-jp__meta-item">
-                        <span class="mj-jp__meta-icon">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                        </span>
-                        <span class="mj-jp__meta-label"><?php esc_html_e('Financement', 'mj-member'); ?></span>
-                        <span class="mj-jp__meta-value"><?php echo esc_html($fundingSource); ?></span>
-                    </div>
-                </div>
-            <?php endif; ?>
+                <?php if ($showFunding && !empty($fundingSource)) : ?>
+                    <span class="mj-jp__regime mj-jp__regime--funding">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                        <?php echo esc_html($fundingSource); ?>
+                    </span>
+                <?php endif; ?>
+            </div>
 
             <!-- Description block -->
             <?php if ($showDescription && !empty($jobDescription)) : ?>
