@@ -60,7 +60,16 @@
     
     var method = methodLabels[exp.payment_method] || exp.payment_method || '-';
     var date = exp.payment_date ? '<br><small>(' + formatDate(exp.payment_date) + ')</small>' : '';
-    return '<span class="mj-expenses__payment-status mj-expenses__payment-status--paid">' + esc(method) + date + '</span>';
+    var colorClass = '';
+    
+    // Determine color class based on payment method
+    if (exp.payment_method === 'cash_mj' || exp.payment_method === 'cb_mj') {
+      colorClass = ' mj-expenses__payment-status--mj';
+    } else if (exp.payment_method === 'cash_perso' || exp.payment_method === 'cb_perso') {
+      colorClass = ' mj-expenses__payment-status--perso';
+    }
+    
+    return '<span class="mj-expenses__payment-status mj-expenses__payment-status--paid' + colorClass + '">' + esc(method) + date + '</span>';
   }
 
   /* ── AJAX helper ─────────────────────────────────────── */
@@ -378,25 +387,38 @@
     h += '<div class="mj-expenses__table-wrap">';
     h += '<table class="mj-expenses__table">';
     h += '<thead><tr>';
-    h += '<th>' + esc(i18n.date) + '</th>';
     if (showMember) h += '<th>' + esc(i18n.member) + '</th>';
-    h += '<th>' + esc(i18n.description) + '</th>';
-    h += '<th>' + esc(i18n.amount) + '</th>';
-    h += '<th>' + esc(i18n.project) + '</th>';
+    h += '<th>' + esc('Détail') + '</th>';
     h += '<th>' + esc(i18n.status) + '</th>';
     h += '<th>' + esc(i18n.paymentMethod) + '</th>';
     h += '<th>' + esc(i18n.receipt) + '</th>';
     h += '<th>' + esc(i18n.bankStatement) + '</th>';
     h += '<th>' + esc(i18n.actions) + '</th>';
-    h += '</tr></thead><tbody>';
+    h += '</tr></thead><tbody>';;
 
     list.forEach(function (exp) {
       h += '<tr data-id="' + exp.id + '">';
-      h += '<td>' + esc(formatDate(exp.created_at)) + '</td>';
-      if (showMember) h += '<td>' + esc(exp.member_name) + '</td>';
-      h += '<td>' + esc(exp.description || '-') + '</td>';
-      h += '<td class="mj-expenses__amount">' + formatAmount(exp.amount) + '</td>';
-      h += '<td>' + esc(exp.project_name || '-') + '</td>';
+      
+      // Member column with avatar
+      if (showMember) {
+        var memberAvatar = '';
+        // Find member in membersList to get avatar
+        var memberObj = members.find(function (m) { return m.id === exp.member_id; });
+        if (memberObj && memberObj.avatar) {
+          memberAvatar = '<img src="' + memberObj.avatar + '" alt="' + esc(memberObj.name) + '" class="mj-expenses__member-avatar" loading="lazy" />';
+        }
+        h += '<td class="mj-expenses__member-cell">' + memberAvatar + ' ' + esc(exp.member_name) + '</td>';
+      }
+      
+      // Detail column (combines date, description, amount, project)
+      h += '<td class="mj-expenses__detail-cell">';
+      h += '<div class="mj-expenses__detail-date">' + esc(formatDate(exp.created_at)) + '</div>';
+      h += '<div class="mj-expenses__detail-desc"><strong>' + esc(exp.description || '-') + '</strong></div>';
+      h += '<div class="mj-expenses__detail-amount">' + formatAmount(exp.amount) + '</div>';
+      if (exp.project_name) {
+        h += '<div class="mj-expenses__detail-project"><small>Projet: ' + esc(exp.project_name) + '</small></div>';
+      }
+      h += '</td>';
       h += '<td><span class="mj-expenses__badge ' + statusClass(exp.status) + '">' + esc(statusLabel(exp.status)) + '</span>';
       if (exp.reviewer_comment) {
         h += '<br><small class="mj-expenses__comment">' + esc(exp.reviewer_comment) + '</small>';

@@ -92,6 +92,7 @@ function mj_member_expenses_localize(): void
                 'id' => (int) $m->id,
                 'name' => trim($m->first_name . ' ' . $m->last_name),
                 'role' => $m->role,
+                'avatar' => get_avatar_url($m->wp_user_id ?? 0, array('size' => 48)) ?? '',
             );
         }
     }

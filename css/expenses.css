@@ -329,6 +329,53 @@
   font-size: 0.9rem;
 }
 
+/* ── Member Column with Avatar ──────────────────────── */
+.mj-expenses__member-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  font-weight: 500;
+}
+
+.mj-expenses__member-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #e2e8f0;
+}
+
+/* ── Detail Column ──────────────────────────────────── */
+.mj-expenses__detail-cell {
+  padding: 0.6rem 0.8rem;
+}
+
+.mj-expenses__detail-date {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-bottom: 0.25rem;
+}
+
+.mj-expenses__detail-desc {
+  font-size: 0.9rem;
+  color: #1e293b;
+  margin-bottom: 0.35rem;
+  font-weight: 600;
+}
+
+.mj-expenses__detail-amount {
+  font-weight: 700;
+  color: #059669;
+  font-size: 0.95rem;
+  margin-bottom: 0.25rem;
+}
+
+.mj-expenses__detail-project {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
 /* ── Actions column ──────────────────────────────────── */
 .mj-expenses__actions {
   white-space: nowrap;
@@ -661,6 +708,18 @@
   background-color: #d1fae5;
   color: #065f46;
   border: 1px solid #a7f3d0;
+}
+
+.mj-expenses__payment-status--mj {
+  background-color: #dbeafe;
+  color: #0c4a6e;
+  border: 1px solid #93c5fd;
+}
+
+.mj-expenses__payment-status--perso {
+  background-color: #fed7aa;
+  color: #7c2d12;
+  border: 1px solid #fdba74;
 }
 
 /* ── Viewer Modal ────────────────────────────────────── */
