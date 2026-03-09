@@ -107,6 +107,11 @@
     filterProject: 0,
     filterEvent: 0,
     filterStatus: '',
+    filterPaymentMethod: '',
+    toggleApproved: false,
+    toggleRejected: false,
+    toggleReimbursed: false,
+    toggleAccountingized: false,
     showForm: false,
     editExpense: null, // expense object when editing, null for create
   };
@@ -312,6 +317,9 @@
   function renderFilters() {
     var h = '<div class="mj-expenses__filters">';
 
+    // Row 1: Dropdowns
+    h += '<div class="mj-expenses__filters-row">';
+
     // Member filter
     h += '<select class="mj-expenses__filter" data-filter="member">';
     h += '<option value="0">' + esc(i18n.allMembers) + '</option>';
@@ -339,20 +347,46 @@
     });
     h += '</select>';
 
-    // Status filter
-    h += '<select class="mj-expenses__filter" data-filter="status">';
-    h += '<option value="">' + esc(i18n.allStatuses) + '</option>';
-    Object.keys(statusLabels).forEach(function (k) {
-      var sel = state.filterStatus === k ? ' selected' : '';
-      h += '<option value="' + k + '"' + sel + '>' + esc(statusLabels[k]) + '</option>';
-    });
+    // Payment method filter
+    h += '<select class="mj-expenses__filter" data-filter="paymentMethod">';
+    h += '<option value="">' + esc('Tous les paiements') + '</option>';
+    h += '<option value="unpaid"' + (state.filterPaymentMethod === 'unpaid' ? ' selected' : '') + '>' + esc('Non payé') + '</option>';
+    h += '<option value="cash_mj"' + (state.filterPaymentMethod === 'cash_mj' ? ' selected' : '') + '>' + esc(i18n.cashMj || 'Cash MJ') + '</option>';
+    h += '<option value="cb_mj"' + (state.filterPaymentMethod === 'cb_mj' ? ' selected' : '') + '>' + esc(i18n.cbMj || 'CB MJ') + '</option>';
+    h += '<option value="cash_perso"' + (state.filterPaymentMethod === 'cash_perso' ? ' selected' : '') + '>' + esc(i18n.cashPerso || 'Cash personnel') + '</option>';
+    h += '<option value="cb_perso"' + (state.filterPaymentMethod === 'cb_perso' ? ' selected' : '') + '>' + esc(i18n.cbPerso || 'CB personnel') + '</option>';
     h += '</select>';
+
+    h += '</div>';
+
+    // Row 2: Status toggle buttons
+    h += '<div class="mj-expenses__filters-row mj-expenses__status-toggles">';
+    var toggles = [
+      { key: 'toggleApproved',       status: 'approved',       label: 'Approuvé',     color: 'info' },
+      { key: 'toggleRejected',       status: 'rejected',       label: 'Rejeté',       color: 'danger' },
+      { key: 'toggleReimbursed',     status: 'reimbursed',     label: 'Remboursé',    color: 'success' },
+      { key: 'toggleAccountingized', status: 'accountingized', label: 'Comptabilisé', color: 'neutral' }
+    ];
+    toggles.forEach(function (t) {
+      var active = state[t.key];
+      h += '<button type="button" class="mj-expenses__toggle mj-expenses__toggle--' + t.color + (active ? ' mj-expenses__toggle--active' : '') + '" data-toggle="' + t.key + '">';
+      h += esc(t.label);
+      h += '</button>';
+    });
+    h += '</div>';
 
     h += '</div>';
     return h;
   }
 
   function filterExpenses(list) {
+    // Collect active status toggles
+    var activeToggles = [];
+    if (state.toggleApproved) activeToggles.push('approved');
+    if (state.toggleRejected) activeToggles.push('rejected');
+    if (state.toggleReimbursed) activeToggles.push('reimbursed');
+    if (state.toggleAccountingized) activeToggles.push('accountingized');
+
     return list.filter(function (exp) {
       if (state.filterMember > 0 && exp.member_id !== state.filterMember) return false;
       if (state.filterProject > 0 && exp.project_id !== state.filterProject) return false;
@@ -360,6 +394,21 @@
         if (!exp.event_ids || exp.event_ids.indexOf(state.filterEvent) === -1) return false;
       }
       if (state.filterStatus !== '' && exp.status !== state.filterStatus) return false;
+
+      // Payment method filter
+      if (state.filterPaymentMethod !== '') {
+        if (state.filterPaymentMethod === 'unpaid') {
+          if (exp.is_paid) return false;
+        } else {
+          if (exp.payment_method !== state.filterPaymentMethod) return false;
+        }
+      }
+
+      // Status toggle filters (OR logic: show if matches any active toggle)
+      if (activeToggles.length > 0) {
+        if (activeToggles.indexOf(exp.status) === -1) return false;
+      }
+
       return true;
     });
   }
@@ -391,8 +440,7 @@
     h += '<th>' + esc('Détail') + '</th>';
     h += '<th>' + esc(i18n.status) + '</th>';
     h += '<th>' + esc(i18n.paymentMethod) + '</th>';
-    h += '<th>' + esc(i18n.receipt) + '</th>';
-    h += '<th>' + esc(i18n.bankStatement) + '</th>';
+    h += '<th>' + esc('Justificatifs') + '</th>';
     h += '<th>' + esc(i18n.actions) + '</th>';
     h += '</tr></thead><tbody>';;
 
@@ -401,13 +449,15 @@
       
       // Member column with avatar
       if (showMember) {
-        var memberAvatar = '';
+        var memberContent = '<div class="mj-expenses__member-inner">';
         // Find member in membersList to get avatar
         var memberObj = members.find(function (m) { return m.id === exp.member_id; });
         if (memberObj && memberObj.avatar) {
-          memberAvatar = '<img src="' + memberObj.avatar + '" alt="' + esc(memberObj.name) + '" class="mj-expenses__member-avatar" loading="lazy" />';
+          memberContent += '<img src="' + memberObj.avatar + '" alt="' + esc(memberObj.name) + '" class="mj-expenses__member-avatar" loading="lazy" />';
         }
-        h += '<td class="mj-expenses__member-cell">' + memberAvatar + ' ' + esc(exp.member_name) + '</td>';
+        memberContent += '<span class="mj-expenses__member-name">' + esc(exp.member_name) + '</span>';
+        memberContent += '</div>';
+        h += '<td class="mj-expenses__member-cell">' + memberContent + '</td>';
       }
       
       // Detail column (combines date, description, amount, project)
@@ -428,85 +478,94 @@
       // Payment method column
       h += '<td class="mj-expenses__payment-method-cell">' + formatPaymentSummary(exp) + '</td>';
 
-      h += '<td class="mj-expenses__receipt-cell">';
-      if (exp.receipts && exp.receipts.length) {
-        h += '<div class="mj-expenses__receipt-gallery">';
-        exp.receipts.forEach(function (r) {
-          var receiptUrl = ajaxUrl + '?action=mj_expense_receipt&expense_id=' + exp.id + '&file_index=' + r.index + '&nonce=' + encodeURIComponent(nonce);
-          var ext = (r.ext || '').toLowerCase();
-          if (ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'gif' || ext === 'webp') {
-            h += '<a href="#" class="mj-expenses__thumb-link mj-expenses__viewer-trigger" data-url="' + receiptUrl + '" data-type="image" data-title="' + esc(i18n.receipt || 'Reçu') + '" title="' + esc(i18n.viewReceipt || 'Voir') + '">';
-            h += '<img src="' + receiptUrl + '" alt="' + esc(i18n.receipt || 'Reçu') + '" class="mj-expenses__thumb" loading="lazy" />';
+      // Combined Justificatifs column (receipts + bank statement)
+      h += '<td class="mj-expenses__justificatifs-cell">';
+      var hasJustificatifs = (exp.receipts && exp.receipts.length) || exp.bank_statement;
+      
+      if (hasJustificatifs) {
+        h += '<div class="mj-expenses__justificatifs-list">';
+        
+        // Receipts
+        if (exp.receipts && exp.receipts.length) {
+          exp.receipts.forEach(function (r, idx) {
+            var receiptUrl = ajaxUrl + '?action=mj_expense_receipt&expense_id=' + exp.id + '&file_index=' + r.index + '&nonce=' + encodeURIComponent(nonce);
+            var ext = (r.ext || '').toLowerCase();
+            var isPdf = ext === 'pdf';
+            
+            h += '<div class="mj-expenses__justificatif-item">';
+            h += '<span class="mj-expenses__justificatif-label">📎 Reçu</span>';
+            
+            if (isPdf) {
+              h += '<a href="#" class="mj-expenses__justificatif-link mj-expenses__justificatif-pdf mj-expenses__viewer-trigger" data-url="' + receiptUrl + '" data-type="pdf" data-title="Reçu PDF" title="Voir reçu">';
+              h += '<span class="mj-expenses__pdf-icon">📄</span>';
+              h += '</a>';
+            } else {
+              h += '<a href="#" class="mj-expenses__justificatif-link mj-expenses__viewer-trigger" data-url="' + receiptUrl + '" data-type="image" data-title="Reçu" title="Voir reçu">';
+              h += '<span class="mj-expenses__pdf-icon">🖼️</span>';
+              h += '</a>';
+            }
+            h += '</div>';
+          });
+        }
+        
+        // Bank statement
+        if (exp.bank_statement) {
+          var bankUrl = ajaxUrl + '?action=mj_expense_bank_statement&expense_id=' + exp.id + '&nonce=' + encodeURIComponent(nonce);
+          var bankExt = (exp.bank_statement.split('.').pop() || '').toLowerCase();
+          var isBankPdf = bankExt === 'pdf';
+          
+          h += '<div class="mj-expenses__justificatif-item">';
+          h += '<span class="mj-expenses__justificatif-label">🏦 Extrait CB</span>';
+          
+          if (isBankPdf) {
+            h += '<a href="#" class="mj-expenses__justificatif-link mj-expenses__justificatif-pdf mj-expenses__viewer-trigger" data-url="' + bankUrl + '" data-type="pdf" data-title="Extrait CB PDF" title="Voir extrait">';
+            h += '<span class="mj-expenses__pdf-icon">📄</span>';
+            h += '</a>';
+          } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].indexOf(bankExt) !== -1) {
+            h += '<a href="#" class="mj-expenses__justificatif-link mj-expenses__viewer-trigger" data-url="' + bankUrl + '" data-type="image" data-title="Extrait CB" title="Voir extrait">';
+            h += '<span class="mj-expenses__pdf-icon">🖼️</span>';
             h += '</a>';
           } else {
-            h += '<a href="#" class="mj-expenses__thumb-link mj-expenses__thumb-link--pdf mj-expenses__viewer-trigger" data-url="' + receiptUrl + '" data-type="pdf" data-title="' + esc(i18n.receipt || 'Reçu') + ' PDF" title="' + esc(i18n.viewReceipt || 'Voir') + '">';
-            h += '<span class="mj-expenses__thumb-pdf">PDF</span>';
-            h += '</a>';
+            h += '<a href="' + bankUrl + '" target="_blank" class="mj-expenses__justificatif-link">Fichier</a>';
           }
-        });
+          h += '</div>';
+        }
+        
         h += '</div>';
       } else {
-        h += '-';
-      }
-      h += '</td>';
-      
-      // Bank statement column
-      h += '<td class="mj-expenses__bank-statement-cell">';
-      if (exp.bank_statement) {
-        var bankUrl = ajaxUrl + '?action=mj_expense_bank_statement&expense_id=' + exp.id + '&nonce=' + encodeURIComponent(nonce);
-        var bankExt = (exp.bank_statement.split('.').pop() || '').toLowerCase();
-        if (bankExt === 'pdf') {
-          h += '<a href="#" class="mj-expenses__thumb-link mj-expenses__thumb-link--pdf mj-expenses__viewer-trigger" data-url="' + bankUrl + '" data-type="pdf" data-title="' + esc(i18n.bankStatement || 'Extrait') + '" title="' + esc(i18n.bankStatement || 'Extrait') + '">';
-          h += '<span class="mj-expenses__thumb-pdf">PDF</span>';
-          h += '</a>';
-        } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].indexOf(bankExt) !== -1) {
-          h += '<a href="#" class="mj-expenses__thumb-link mj-expenses__viewer-trigger" data-url="' + bankUrl + '" data-type="image" data-title="' + esc(i18n.bankStatement || 'Extrait') + '" title="' + esc(i18n.bankStatement || 'Extrait') + '">';
-          h += '<img src="' + bankUrl + '" alt="' + esc(i18n.bankStatement || 'Extrait') + '" class="mj-expenses__thumb" loading="lazy" />';
-          h += '</a>';
-        } else {
-          h += '<a href="' + bankUrl + '" target="_blank" class="mj-expenses__bank-link">Fichier</a>';
-        }
-      } else {
-        h += '-';
+        h += '–';
       }
       h += '</td>';
 
-      h += '<td class="mj-expenses__actions">';
+      h += '<td class="mj-expenses__actions-cell">';
+      h += '<div class="mj-expenses__actions">';
       var canOwnerEdit = (exp.member_id === currentMemberId && exp.status === 'pending');
       if (isCoordinator) {
         // Step 1: Approve/Reject
         if (exp.status === 'pending') {
-          h += '<div class="mj-expenses__action-group">';
-          h += '<small class="mj-expenses__action-step">Étape 1 : Validation</small>';
-          h += '<button class="mj-expenses__btn mj-expenses__btn--sm mj-expenses__btn--success" data-action="approve" data-id="' + exp.id + '">' + esc(i18n.approve) + '</button> ';
-          h += '<button class="mj-expenses__btn mj-expenses__btn--sm mj-expenses__btn--danger" data-action="reject" data-id="' + exp.id + '">' + esc(i18n.reject) + '</button>';
-          h += '</div>';
+          h += '<button class="mj-expenses__btn mj-expenses__btn--xs mj-expenses__btn--success" data-action="approve" data-id="' + exp.id + '" title="Valider">' + esc(i18n.approve) + '</button>';
+          h += '<button class="mj-expenses__btn mj-expenses__btn--xs mj-expenses__btn--danger" data-action="reject" data-id="' + exp.id + '" title="Refuser">' + esc(i18n.reject) + '</button>';
         }
         
         // Step 2: Mark as reimbursed (only for cash_perso, cb_perso)
         if (exp.status === 'approved' && (exp.payment_method === 'cash_perso' || exp.payment_method === 'cb_perso')) {
-          h += '<div class="mj-expenses__action-group">';
-          h += '<small class="mj-expenses__action-step">Étape 2 : Remboursement</small>';
-          h += '<button class="mj-expenses__btn mj-expenses__btn--sm mj-expenses__btn--success" data-action="mark-reimbursed" data-id="' + exp.id + '">' + esc(i18n.markAsReimbursed) + '</button>';
-          h += '</div>';
+          h += '<button class="mj-expenses__btn mj-expenses__btn--xs mj-expenses__btn--success" data-action="mark-reimbursed" data-id="' + exp.id + '" title="Marquer remboursé">' + esc(i18n.markAsReimbursed) + '</button>';
         }
         
         // Step 3: Accountingized (archive)
         if (exp.status === 'reimbursed' || (exp.payment_method && ['cash_mj', 'cb_mj'].indexOf(exp.payment_method) !== -1 && exp.status === 'approved')) {
-          h += '<div class="mj-expenses__action-group">';
-          h += '<small class="mj-expenses__action-step">Étape 3 : Comptabilisation</small>';
-          h += '<button class="mj-expenses__btn mj-expenses__btn--sm mj-expenses__btn--info" data-action="accountingize" data-id="' + exp.id + '">' + esc(i18n.accountingized) + '</button>';
-          h += '</div>';
+          h += '<button class="mj-expenses__btn mj-expenses__btn--xs mj-expenses__btn--info" data-action="accountingize" data-id="' + exp.id + '" title="Comptabiliser">' + esc(i18n.accountingized) + '</button>';
         }
         
-        h += '<button class="mj-expenses__btn mj-expenses__btn--sm mj-expenses__btn--danger-outline" data-action="delete" data-id="' + exp.id + '">' + esc(i18n.delete) + '</button>';
+        h += '<button class="mj-expenses__btn mj-expenses__btn--xs mj-expenses__btn--danger-outline" data-action="delete" data-id="' + exp.id + '" title="Supprimer">' + esc(i18n.delete) + '</button>';
       }
       if (canOwnerEdit) {
-        h += ' <button class="mj-expenses__btn mj-expenses__btn--sm mj-expenses__btn--primary" data-action="edit" data-id="' + exp.id + '">' + esc(i18n.edit || 'Modifier') + '</button>';
+        h += '<button class="mj-expenses__btn mj-expenses__btn--xs mj-expenses__btn--primary" data-action="edit" data-id="' + exp.id + '" title="Modifier">' + esc(i18n.edit || 'Modifier') + '</button>';
         if (!isCoordinator) {
-          h += ' <button class="mj-expenses__btn mj-expenses__btn--sm mj-expenses__btn--danger-outline" data-action="delete" data-id="' + exp.id + '">' + esc(i18n.delete) + '</button>';
+          h += '<button class="mj-expenses__btn mj-expenses__btn--xs mj-expenses__btn--danger-outline" data-action="delete" data-id="' + exp.id + '" title="Supprimer">' + esc(i18n.delete) + '</button>';
         }
       }
+      h += '</div>';
       h += '</td>';
       h += '</tr>';
     });
@@ -651,7 +710,19 @@
         if (key === 'project') state.filterProject = parseInt(val, 10) || 0;
         if (key === 'event') state.filterEvent = parseInt(val, 10) || 0;
         if (key === 'status') state.filterStatus = val;
+        if (key === 'paymentMethod') state.filterPaymentMethod = val;
         render();
+      });
+    });
+
+    // Status toggle buttons
+    $$('.mj-expenses__toggle', ctx).forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var key = btn.dataset.toggle;
+        if (key && state.hasOwnProperty(key)) {
+          state[key] = !state[key];
+          render();
+        }
       });
     });
 

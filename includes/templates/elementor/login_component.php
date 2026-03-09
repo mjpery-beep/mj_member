@@ -379,6 +379,163 @@ if (!function_exists('mj_member_login_component_get_account_links')) {
     }
 }
 
+if (!function_exists('mj_member_login_component_get_account_links_with_sections')) {
+    /**
+     * Retourne les liens du compte avec les sections intégrées
+     */
+    function mj_member_login_component_get_account_links_with_sections($account_base, $args) {
+        $links = MjAccountLinks::getLinks((string) $account_base, is_array($args) ? $args : array());
+
+        $links_by_key = array();
+        foreach ($links as $link) {
+            if (!is_array($link)) {
+                continue;
+            }
+            $link_key = isset($link['key']) ? sanitize_key((string) $link['key']) : '';
+            if ($link_key === '') {
+                continue;
+            }
+            $links_by_key[$link_key] = $link;
+        }
+
+        $preview_mode = !empty($args['preview_mode']);
+        $member_role = '';
+        $is_animateur = false;
+        $is_coordinateur = false;
+        $is_benevole = false;
+
+        if (!$preview_mode && is_user_logged_in()) {
+            $current_user = wp_get_current_user();
+            $current_member = null;
+
+            if ($current_user instanceof \WP_User && function_exists('mj_member_get_member_for_user')) {
+                $current_member = mj_member_get_member_for_user($current_user->ID);
+            }
+
+            if (!$current_member && function_exists('mj_member_get_current_member')) {
+                $current_member = mj_member_get_current_member();
+            }
+
+            if ($current_member && isset($current_member->role) && class_exists('Mj\\Member\\Classes\\MjRoles')) {
+                $member_role = sanitize_key((string) $current_member->role);
+                $is_animateur = \Mj\Member\Classes\MjRoles::isAnimateur($member_role);
+                $is_coordinateur = \Mj\Member\Classes\MjRoles::isCoordinateur($member_role);
+                $is_benevole = \Mj\Member\Classes\MjRoles::isBenevole($member_role);
+            }
+        }
+
+        try {
+            $all_settings = class_exists('Mj\\Member\\Classes\\MjAccountLinks')
+                ? \Mj\Member\Classes\MjAccountLinks::getSettings()
+                : array();
+
+            if (empty($all_settings) || !is_array($all_settings)) {
+                return array(
+                    array(
+                        'key' => 'default',
+                        'label' => '',
+                        'links' => array_values($links_by_key),
+                    ),
+                );
+            }
+
+            $sections = array();
+            $current_section = array(
+                'key' => 'default',
+                'label' => '',
+                'links' => array(),
+            );
+            $used_link_keys = array();
+
+            foreach ($all_settings as $item_key => $config) {
+                $item_key = sanitize_key((string) $item_key);
+                $item_type = isset($config['type']) ? (string) $config['type'] : 'standard';
+
+                if ($item_type === 'section_header') {
+                    $current_label = isset($current_section['label']) ? trim((string) $current_section['label']) : '';
+                    if (!empty($current_section['links']) || $current_label !== '') {
+                        $sections[] = $current_section;
+                    }
+
+                    $section_enabled = isset($config['enabled']) ? (bool) $config['enabled'] : true;
+                    $section_label = isset($config['label']) ? (string) $config['label'] : '';
+                    $section_visibility = isset($config['visibility']) ? sanitize_key((string) $config['visibility']) : 'all';
+                    $section_visible = $section_enabled;
+
+                    if ($section_visible && !$preview_mode) {
+                        if ($section_visibility === 'animateur' && !$is_animateur) {
+                            $section_visible = false;
+                        }
+                        if ($section_visibility === 'coordinateur' && !$is_coordinateur) {
+                            $section_visible = false;
+                        }
+                        if ($section_visibility === 'benevole' && !$is_benevole) {
+                            $section_visible = false;
+                        }
+                        if ($section_visibility === 'staff' && !$is_animateur && !$is_coordinateur) {
+                            $section_visible = false;
+                        }
+                        if ($section_visibility === 'hours_team' && !$is_animateur && !$is_coordinateur && !$is_benevole) {
+                            $section_visible = false;
+                        }
+                    }
+
+                    $current_section = array(
+                        'key' => $item_key,
+                        'label' => $section_visible ? $section_label : '',
+                        'links' => array(),
+                    );
+
+                    continue;
+                }
+
+                if (!isset($links_by_key[$item_key])) {
+                    continue;
+                }
+
+                $current_section['links'][] = $links_by_key[$item_key];
+                $used_link_keys[$item_key] = true;
+            }
+
+            $current_label = isset($current_section['label']) ? trim((string) $current_section['label']) : '';
+            if (!empty($current_section['links']) || $current_label !== '') {
+                $sections[] = $current_section;
+            }
+
+            foreach ($links_by_key as $item_key => $link) {
+                if (isset($used_link_keys[$item_key])) {
+                    continue;
+                }
+                if (empty($sections)) {
+                    $sections[] = array(
+                        'key' => 'default',
+                        'label' => '',
+                        'links' => array(),
+                    );
+                }
+                $sections[0]['links'][] = $link;
+            }
+
+            return array_values(array_filter($sections, static function ($section) {
+                if (!is_array($section)) {
+                    return false;
+                }
+                $label = isset($section['label']) ? trim((string) $section['label']) : '';
+                $links = isset($section['links']) && is_array($section['links']) ? $section['links'] : array();
+                return $label !== '' || !empty($links);
+            }));
+        } catch (\Throwable $e) {
+            return array(
+                array(
+                    'key' => 'default',
+                    'label' => '',
+                    'links' => array_values($links_by_key),
+                ),
+            );
+        }
+    }
+}
+
 if (!function_exists('mj_member_login_component_get_member_display_name')) {
     function mj_member_login_component_get_member_display_name($user = null, $member = null) {
         if (!$user && is_user_logged_in()) {
@@ -628,7 +785,7 @@ if (!function_exists('mj_member_render_login_modal_component')) {
         $errors = array();
         $submitted_login = '';
         $remember_checked = false;
-        $account_links = array();
+        $account_link_sections = array();
 
         if (!$is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mj_member_login_component_form'])) {
             $target_form = sanitize_text_field(wp_unslash($_POST['mj_member_login_component_form']));
@@ -672,19 +829,28 @@ if (!function_exists('mj_member_render_login_modal_component')) {
             $link_args['unread_contact_count'] = isset($unread_counts['total']) ? (int) $unread_counts['total'] : 0;
             $link_args['unread_breakdown'] = $unread_counts;
             $link_args['preview_mode'] = $preview_mode;
-            $account_links = mj_member_login_component_get_account_links($redirect_url, $link_args);
+            $account_link_sections = mj_member_login_component_get_account_links_with_sections($redirect_url, $link_args);
 
-            if (is_array($account_links)) {
+            if (is_array($account_link_sections)) {
                 $badge_override = null;
-                foreach ($account_links as $link_entry) {
-                    if (!is_array($link_entry)) {
+                foreach ($account_link_sections as $section) {
+                    if (!is_array($section) || empty($section['links']) || !is_array($section['links'])) {
                         continue;
                     }
-                    $link_key = isset($link_entry['key']) ? $link_entry['key'] : '';
-                    if ($link_key === 'contact_messages') {
+                    foreach ($section['links'] as $link_entry) {
+                        if (!is_array($link_entry)) {
+                            continue;
+                        }
+                        $link_key = isset($link_entry['key']) ? $link_entry['key'] : '';
+                        if ($link_key !== 'contact_messages') {
+                            continue;
+                        }
                         if (isset($link_entry['badge'])) {
                             $badge_override = max(0, (int) $link_entry['badge']);
                         }
+                        break;
+                    }
+                    if ($badge_override !== null) {
                         break;
                     }
                 }
@@ -904,42 +1070,65 @@ if (!function_exists('mj_member_render_login_modal_component')) {
                                 </span>
                             </div>
                         <?php endif; ?>
-                        <?php if (!empty($account_links)) : ?>
+                        <?php if (!empty($account_link_sections)) : ?>
                             <ul class="mj-member-login-component__account-list">
-                                <?php foreach ($account_links as $link_entry) : ?>
+                                <?php foreach ($account_link_sections as $section_entry) : ?>
                                     <?php
-                                    $link_label = isset($link_entry['label']) ? $link_entry['label'] : '';
-                                    $link_url = isset($link_entry['url']) ? $link_entry['url'] : '';
-                                    if ($link_label === '' || $link_url === '') {
+                                    if (!is_array($section_entry)) {
                                         continue;
                                     }
-                                    $link_badge = isset($link_entry['badge']) ? (int) $link_entry['badge'] : 0;
-                                    $link_icon_html = '';
-                                    if (!empty($link_entry['icon']) && is_array($link_entry['icon']) && !empty($link_entry['icon']['html'])) {
-                                        $link_icon_html = $link_entry['icon']['html'];
-                                    }
-                                    $link_classes = array('mj-member-login-component__account-link');
-                                    if (!empty($link_entry['is_logout'])) {
-                                        $link_classes[] = 'mj-member-login-component__account-link--logout';
+                                    $section_label = isset($section_entry['label']) ? trim((string) $section_entry['label']) : '';
+                                    $section_links = isset($section_entry['links']) && is_array($section_entry['links']) ? $section_entry['links'] : array();
+                                    if ($section_label === '' && empty($section_links)) {
+                                        continue;
                                     }
                                     ?>
-                                    <li class="mj-member-login-component__account-item">
-                                        <a class="<?php echo esc_attr(implode(' ', $link_classes)); ?>" href="<?php echo esc_url($link_url); ?>"<?php echo !empty($link_entry['is_logout']) ? ' rel="nofollow"' : ''; ?>>
-                                            <span class="mj-member-login-component__account-main">
-                                                <?php if ($link_icon_html !== '') : ?>
-                                                    <span class="mj-member-account-menu__item-icon"><?php echo $link_icon_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
-                                                <?php endif; ?>
-                                                <span class="mj-member-login-component__account-label"><?php echo esc_html($link_label); ?></span>
-                                                <?php if ($link_badge > 0) : ?>
-                                                    <?php
-                                                    $badge_display = $link_badge > 99 ? '99+' : number_format_i18n($link_badge);
-                                                    $badge_label = sprintf(_n('%d notification', '%d notifications', $link_badge, 'mj-member'), $link_badge);
-                                                    ?>
-                                                    <span class="mj-member-login-component__account-badge" aria-label="<?php echo esc_attr($badge_label); ?>"><?php echo esc_html($badge_display); ?></span>
-                                                <?php endif; ?>
-                                            </span>
-                                            <span class="mj-member-login-component__account-icon" aria-hidden="true">&rsaquo;</span>
-                                        </a>
+                                    <li class="mj-member-login-component__section-card">
+                                        <?php if ($section_label !== '') : ?>
+                                            <div class="mj-member-login-component__section-header">
+                                                <span class="mj-member-login-component__section-label"><?php echo esc_html($section_label); ?></span>
+                                            </div>
+                                        <?php endif; ?>
+                                        <?php if (!empty($section_links)) : ?>
+                                        <ul class="mj-member-login-component__section-links">
+                                            <?php foreach ($section_links as $link_entry) : ?>
+                                                <?php
+                                                $link_label = isset($link_entry['label']) ? $link_entry['label'] : '';
+                                                $link_url = isset($link_entry['url']) ? $link_entry['url'] : '';
+                                                if ($link_label === '' || $link_url === '') {
+                                                    continue;
+                                                }
+                                                $link_badge = isset($link_entry['badge']) ? (int) $link_entry['badge'] : 0;
+                                                $link_icon_html = '';
+                                                if (!empty($link_entry['icon']) && is_array($link_entry['icon']) && !empty($link_entry['icon']['html'])) {
+                                                    $link_icon_html = $link_entry['icon']['html'];
+                                                }
+                                                $link_classes = array('mj-member-login-component__account-link');
+                                                if (!empty($link_entry['is_logout'])) {
+                                                    $link_classes[] = 'mj-member-login-component__account-link--logout';
+                                                }
+                                                ?>
+                                                <li class="mj-member-login-component__account-item">
+                                                    <a class="<?php echo esc_attr(implode(' ', $link_classes)); ?>" href="<?php echo esc_url($link_url); ?>"<?php echo !empty($link_entry['is_logout']) ? ' rel="nofollow"' : ''; ?>>
+                                                        <span class="mj-member-login-component__account-main">
+                                                            <?php if ($link_icon_html !== '') : ?>
+                                                                <span class="mj-member-account-menu__item-icon"><?php echo $link_icon_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+                                                            <?php endif; ?>
+                                                            <span class="mj-member-login-component__account-label"><?php echo esc_html($link_label); ?></span>
+                                                            <?php if ($link_badge > 0) : ?>
+                                                                <?php
+                                                                $badge_display = $link_badge > 99 ? '99+' : number_format_i18n($link_badge);
+                                                                $badge_label = sprintf(_n('%d notification', '%d notifications', $link_badge, 'mj-member'), $link_badge);
+                                                                ?>
+                                                                <span class="mj-member-login-component__account-badge" aria-label="<?php echo esc_attr($badge_label); ?>"><?php echo esc_html($badge_display); ?></span>
+                                                            <?php endif; ?>
+                                                        </span>
+                                                        <span class="mj-member-login-component__account-icon" aria-hidden="true">&rsaquo;</span>
+                                                    </a>
+                                                </li>
+                                            <?php endforeach; ?>
+                                        </ul>
+                                        <?php endif; ?>
                                     </li>
                                 <?php endforeach; ?>
                             </ul>

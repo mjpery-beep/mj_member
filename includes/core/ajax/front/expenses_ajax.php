@@ -88,11 +88,15 @@ function mj_member_expenses_localize(): void
             return $m->status === 'active';
         });
         foreach ($allMembers as $m) {
+            $avatarUrl = '';
+            if (!empty($m->photo_id)) {
+                $avatarUrl = wp_get_attachment_image_url((int) $m->photo_id, 'thumbnail') ?? '';
+            }
             $membersList[] = array(
                 'id' => (int) $m->id,
                 'name' => trim($m->first_name . ' ' . $m->last_name),
                 'role' => $m->role,
-                'avatar' => get_avatar_url($m->wp_user_id ?? 0, array('size' => 48)) ?? '',
+                'avatar' => $avatarUrl,
             );
         }
     }
@@ -223,6 +227,7 @@ function mj_member_register_expenses_ajax(): void
     add_action('wp_ajax_mj_expense_update_status', 'mj_member_expense_update_status_handler');
     add_action('wp_ajax_mj_expense_delete', 'mj_member_expense_delete_handler');
     add_action('wp_ajax_mj_expense_receipt', 'mj_member_expense_receipt_handler');
+    add_action('wp_ajax_mj_expense_bank_statement', 'mj_member_expense_bank_statement_handler');
 }
 add_action('init', 'mj_member_register_expenses_ajax');
 
@@ -609,6 +614,7 @@ function mj_member_expense_update_status_handler(): void
         MjExpenses::STATUS_APPROVED,
         MjExpenses::STATUS_REJECTED,
         MjExpenses::STATUS_REIMBURSED,
+            MjExpenses::STATUS_ACCOUNTINGIZED,
     );
 
     if (!in_array($newStatus, $allowedStatuses, true)) {
@@ -753,6 +759,78 @@ function mj_member_expense_receipt_handler(): void
 
     $ext = pathinfo($filePath, PATHINFO_EXTENSION);
     $filename = 'justificatif_' . $expenseId . '_' . ($fileIndex + 1) . '.' . $ext;
+
+    header('Content-Type: ' . $mimeType);
+    header('Content-Disposition: inline; filename="' . $filename . '"');
+    header('Content-Length: ' . filesize($filePath));
+    header('Cache-Control: private, max-age=3600');
+    header('X-Content-Type-Options: nosniff');
+    readfile($filePath);
+    exit;
+}
+
+/**
+ * Handle secure bank statement file delivery.
+ *
+ * @return void
+ */
+function mj_member_expense_bank_statement_handler(): void
+{
+    while (ob_get_level()) {
+        ob_end_clean();
+    }
+
+    if (!isset($_GET['nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['nonce'])), 'mj-expenses')) {
+        wp_die(__('Accès refusé.', 'mj-member'), '', array('response' => 403));
+    }
+
+    $expenseId = isset($_GET['expense_id']) ? (int) $_GET['expense_id'] : 0;
+    if ($expenseId <= 0) {
+        wp_die(__('Note de frais introuvable.', 'mj-member'), '', array('response' => 404));
+    }
+
+    $userId = get_current_user_id();
+    if (!$userId) {
+        wp_die(__('Accès refusé.', 'mj-member'), '', array('response' => 403));
+    }
+
+    $memberObj = MjMembers::getByWpUserId($userId);
+    $member = $memberObj ? $memberObj->toArray() : null;
+    if (!$member) {
+        wp_die(__('Accès refusé.', 'mj-member'), '', array('response' => 403));
+    }
+
+    $expense = MjExpenses::get_by_id($expenseId);
+    if (!$expense || empty($expense->bank_statement)) {
+        wp_die(__('Fichier introuvable.', 'mj-member'), '', array('response' => 404));
+    }
+
+    // Check access: owner or coordinator
+    $isOwner = (int) $member['id'] === (int) $expense->member_id;
+    $isCoordinator = MjRoles::isCoordinateur($member['role'] ?? '');
+    if (!$isOwner && !$isCoordinator) {
+        wp_die(__('Accès refusé.', 'mj-member'), '', array('response' => 403));
+    }
+
+    $filePath = MJ_MEMBER_PATH . 'data/expenses/' . sanitize_file_name($expense->bank_statement);
+    if (!file_exists($filePath)) {
+        wp_die(__('Fichier introuvable.', 'mj-member'), '', array('response' => 404));
+    }
+
+    // MIME type whitelist
+    $allowedTypes = array('image/jpeg', 'image/png', 'image/gif', 'application/pdf');
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mimeType = $finfo ? finfo_file($finfo, $filePath) : 'application/octet-stream';
+    if ($finfo) {
+        finfo_close($finfo);
+    }
+
+    if (!in_array($mimeType, $allowedTypes, true)) {
+        wp_die(__('Type de fichier non autorisé.', 'mj-member'), '', array('response' => 403));
+    }
+
+    $ext = pathinfo($filePath, PATHINFO_EXTENSION);
+    $filename = 'extrait_cb_' . $expenseId . '.' . $ext;
 
     header('Content-Type: ' . $mimeType);
     header('Content-Disposition: inline; filename="' . $filename . '"');

@@ -232,6 +232,7 @@ function mj_settings_page() {
 
         $normalized_account_links = array();
 
+        // Traiter les liens par défaut
         foreach ($default_account_links as $link_key => $link_defaults) {
             $raw_row = isset($submitted_account_links[$link_key]) && is_array($submitted_account_links[$link_key])
                 ? $submitted_account_links[$link_key]
@@ -242,6 +243,7 @@ function mj_settings_page() {
             $page_id = isset($raw_row['page_id']) ? (int) $raw_row['page_id'] : 0;
             $icon_id = isset($raw_row['icon_id']) ? (int) $raw_row['icon_id'] : 0;
             $position = isset($raw_row['position']) ? (int) $raw_row['position'] : 999;
+            $visibility = isset($raw_row['visibility']) ? sanitize_key($raw_row['visibility']) : 'all';
 
             // Sauvegarder le slug de la page pour permettre la portabilité entre sites
             $page_slug = '';
@@ -259,6 +261,44 @@ function mj_settings_page() {
                 'page_slug' => $page_slug,
                 'icon_id' => $icon_id > 0 ? $icon_id : 0,
                 'position' => $position,
+                'visibility' => $visibility,
+            );
+        }
+
+        // Traiter les sections personnalisées (custom_section_*)
+        foreach ($submitted_account_links as $link_key => $raw_row) {
+            // Ignorer les clés qui ont déjà été traitées
+            if (isset($normalized_account_links[$link_key])) {
+                continue;
+            }
+
+            // Traiter uniquement les sections personnalisées
+            if (strpos($link_key, 'custom_section_') !== 0) {
+                continue;
+            }
+
+            if (!is_array($raw_row)) {
+                continue;
+            }
+
+            $enabled = isset($raw_row['enabled']) && (string) $raw_row['enabled'] === '1';
+            $label = isset($raw_row['label']) ? sanitize_text_field($raw_row['label']) : '';
+            $position = isset($raw_row['position']) ? (int) $raw_row['position'] : 999;
+            $visibility = isset($raw_row['visibility']) ? sanitize_key($raw_row['visibility']) : 'all';
+
+            if ($label === '') {
+                continue;
+            }
+
+            $normalized_account_links[$link_key] = array(
+                'enabled' => $enabled ? 1 : 0,
+                'label' => $label,
+                'page_id' => 0,
+                'page_slug' => '',
+                'icon_id' => 0,
+                'position' => $position,
+                'type' => 'section_header',
+                'visibility' => $visibility,
             );
         }
 
@@ -908,6 +948,27 @@ function mj_settings_page() {
                                 <span class="dashicons dashicons-move" style="font-size:16px;"></span>
                                 Glissez-déposez les liens pour modifier leur ordre d'affichage.
                             </p>
+
+                            <div style="margin-bottom:20px; padding:16px; background:#fffbf0; border:1px solid #fcd34d; border-radius:6px;">
+                                <h4 style="margin:0 0 12px 0; display:flex; align-items:center; gap:8px;">
+                                    <span class="dashicons dashicons-plus-alt2" style="font-size:20px; color:#f59e0b;"></span>
+                                    Créer une nouvelle section
+                                </h4>
+                                <div style="display:flex; gap:8px; align-items:flex-end;">
+                                    <div style="flex:1;">
+                                        <label for="mj-new-section-label" style="display:block; font-weight:600; margin-bottom:6px;">Titre de la section</label>
+                                        <input type="text" id="mj-new-section-label" placeholder="Ex : 📚 Mes ressources" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:4px; font-size:14px;">
+                                    </div>
+                                    <button type="button" id="mj-add-section-btn" class="button button-primary" style="display:inline-flex; align-items:center; gap:6px;">
+                                        <span class="dashicons dashicons-plus-alt" style="font-size:16px;"></span>
+                                        Ajouter
+                                    </button>
+                                </div>
+                                <small style="color:#666; display:block; margin-top:8px;">
+                                    💡 Une nouvelle section sera ajoutée à la fin de la liste. Vous pourrez la réorganiser avec les autres en glissant.
+                                </small>
+                            </div>
+
                             <div id="mj-account-links-sortable" class="mj-account-links-sortable">
                             <?php
                             $link_position = 0;
@@ -916,6 +977,7 @@ function mj_settings_page() {
                                     ? $account_link_defaults[$link_key]['label']
                                     : (isset($link_config['label']) ? $link_config['label'] : ucfirst(str_replace('_', ' ', $link_key)));
                                 $is_logout = isset($link_config['type']) && $link_config['type'] === 'logout';
+                                $is_section_header = isset($link_config['type']) && $link_config['type'] === 'section_header';
                                 $animateur_role = class_exists('Mj\\Member\\Classes\\MjRoles') ? \Mj\Member\Classes\MjRoles::ANIMATEUR : 'animateur';
                                 $is_for_animateur = isset($link_config['visibility']) && $link_config['visibility'] === $animateur_role;
                                 $is_for_hours_team = isset($link_config['visibility']) && $link_config['visibility'] === 'hours_team';
@@ -923,6 +985,7 @@ function mj_settings_page() {
                                 $requires_capability = isset($link_config['requires_capability']) ? (string) $link_config['requires_capability'] : '';
                                 $editable_label = !empty($link_config['editable_label']);
                                 $current_label = isset($link_config['label']) ? $link_config['label'] : $default_label;
+                                $current_visibility = isset($link_config['visibility']) ? (string) $link_config['visibility'] : 'all';
                                 $page_id_value = isset($link_config['page_id']) ? (int) $link_config['page_id'] : 0;
                                 $section_value = isset($link_config['query']['section']) ? sanitize_key($link_config['query']['section']) : sanitize_key($link_key);
                                 $slug_value = isset($link_config['slug']) ? (string) $link_config['slug'] : '';
@@ -962,7 +1025,7 @@ function mj_settings_page() {
                                 $is_enabled = !empty($link_config['enabled']);
                                 $current_position = isset($link_config['position']) ? (int) $link_config['position'] : $link_position;
                             ?>
-                            <div class="mj-account-link-item" data-link-key="<?php echo esc_attr($link_key); ?>">
+                            <div class="mj-account-link-item<?php echo $is_section_header ? ' mj-account-link-item--section' : ''; ?>" data-link-key="<?php echo esc_attr($link_key); ?>">
                                 <input type="hidden" class="mj-account-link-position" name="mj_account_links[<?php echo esc_attr($link_key); ?>][position]" value="<?php echo esc_attr($current_position); ?>" />
                                 <div class="mj-account-link-header">
                                     <span class="mj-account-link-handle dashicons dashicons-menu" title="Glisser pour réordonner"></span>
@@ -971,55 +1034,80 @@ function mj_settings_page() {
                                         <input type="checkbox" id="<?php echo esc_attr($field_prefix . '-enabled'); ?>" name="mj_account_links[<?php echo esc_attr($link_key); ?>][enabled]" value="1" <?php checked($is_enabled); ?> />
                                     </label>
                                     <span class="mj-account-link-label<?php echo !$is_enabled ? ' is-disabled' : ''; ?>"><?php echo esc_html($current_label); ?></span>
-                                    <?php if ($is_for_animateur) : ?>
-                                        <span class="mj-account-link-badge mj-account-link-badge--animateur" title="Visible uniquement pour les animateurs">Anim.</span>
-                                    <?php elseif ($is_for_staff) : ?>
-                                        <span class="mj-account-link-badge mj-account-link-badge--staff" title="Visible pour les animateurs et coordinateurs">Staff</span>
-                                    <?php elseif ($is_for_hours_team) : ?>
-                                        <span class="mj-account-link-badge mj-account-link-badge--hours" title="Visible pour l'équipe heures">Équipe</span>
-                                    <?php endif; ?>
-                                    <?php if ($requires_capability) : ?>
-                                        <span class="mj-account-link-badge mj-account-link-badge--cap" title="Requiert une capacité spécifique">🔒</span>
+                                    <?php if ($is_section_header) : ?>
+                                        <span class="mj-account-link-badge mj-account-link-badge--section" title="Titre de section">📌</span>
+                                    <?php else : ?>
+                                        <?php if ($is_for_animateur) : ?>
+                                            <span class="mj-account-link-badge mj-account-link-badge--animateur" title="Visible uniquement pour les animateurs">Anim.</span>
+                                        <?php elseif ($is_for_staff) : ?>
+                                            <span class="mj-account-link-badge mj-account-link-badge--staff" title="Visible pour les animateurs et coordinateurs">Staff</span>
+                                        <?php elseif ($is_for_hours_team) : ?>
+                                            <span class="mj-account-link-badge mj-account-link-badge--hours" title="Visible pour l'équipe heures">Équipe</span>
+                                        <?php endif; ?>
+                                        <?php if ($requires_capability) : ?>
+                                            <span class="mj-account-link-badge mj-account-link-badge--cap" title="Requiert une capacité spécifique">🔒</span>
+                                        <?php endif; ?>
                                     <?php endif; ?>
                                     <span class="mj-account-link-position-badge">#<?php echo esc_html($current_position + 1); ?></span>
-                                    <button type="button" class="mj-account-link-expand" aria-expanded="false" title="Modifier les options">
-                                        <span class="dashicons dashicons-arrow-down-alt2"></span>
-                                    </button>
+                                    <?php if (!$is_section_header) : ?>
+                                        <button type="button" class="mj-account-link-expand" aria-expanded="false" title="Modifier les options">
+                                            <span class="dashicons dashicons-arrow-down-alt2"></span>
+                                        </button>
+                                    <?php else : ?>
+                                        <button type="button" class="mj-account-link-delete-btn" title="Supprimer cette section" data-is-custom="<?php echo strpos($link_key, 'custom_section_') === 0 ? '1' : '0'; ?>" style="background:none; border:none; color:#ef4444; cursor:pointer; padding:4px; font-size:18px; display:inline-flex; align-items:center; margin-left:8px;">
+                                            <span class="dashicons dashicons-trash" style="font-size:18px;"></span>
+                                        </button>
+                                    <?php endif; ?>
                                 </div>
-                                <div class="mj-account-link-details" hidden>
+                                <div class="mj-account-link-details"<?php echo !$is_section_header ? ' hidden' : ''; ?>>
                                     <div class="mj-account-link-details-grid">
                                         <div class="mj-account-link-field">
                                             <label for="<?php echo esc_attr($field_prefix . '-label'); ?>">Libellé</label>
                                             <input type="text" id="<?php echo esc_attr($field_prefix . '-label'); ?>" name="mj_account_links[<?php echo esc_attr($link_key); ?>][label]" value="<?php echo esc_attr($current_label); ?>" <?php echo $editable_label ? '' : 'readonly'; ?> />
                                         </div>
                                         <div class="mj-account-link-field">
-                                            <label for="<?php echo esc_attr($field_prefix . '-page'); ?>">Page cible</label>
-                                            <?php
-                                            wp_dropdown_pages(array(
-                                                'name' => 'mj_account_links[' . $link_key . '][page_id]',
-                                                'id' => $field_prefix . '-page',
-                                                'show_option_none' => '— Dynamique —',
-                                                'option_none_value' => '0',
-                                                'selected' => $page_id_value,
-                                            ));
-                                            ?>
+                                            <label for="<?php echo esc_attr($field_prefix . '-visibility'); ?>">Visibilité</label>
+                                            <select id="<?php echo esc_attr($field_prefix . '-visibility'); ?>" name="mj_account_links[<?php echo esc_attr($link_key); ?>][visibility]">
+                                                <option value="all" <?php selected($current_visibility, 'all'); ?>>👥 Tous les utilisateurs</option>
+                                                <option value="animateur" <?php selected($current_visibility, 'animateur'); ?>>🩸 Animateurs</option>
+                                                <option value="coordinateur" <?php selected($current_visibility, 'coordinateur'); ?>>📋 Coordinateurs</option>
+                                                <option value="benevole" <?php selected($current_visibility, 'benevole'); ?>>❤️ Bénévoles</option>
+                                                <option value="hours_team" <?php selected($current_visibility, 'hours_team'); ?>>⏰ Équipe heures</option>
+                                                <option value="staff" <?php selected($current_visibility, 'staff'); ?>>👔 Staff</option>
+                                            </select>
                                         </div>
-                                        <div class="mj-account-link-field mj-account-link-field--icon">
-                                            <label>Icône</label>
-                                            <div class="mj-member-menu-icon-control mj-member-menu-icon-control--compact" data-mj-member-menu-icon>
-                                                <div class="mj-member-menu-icon-preview" data-image-url="<?php echo esc_attr($icon_preview_url); ?>">
-                                                    <?php echo $icon_preview_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-                                                </div>
-                                                <div class="mj-member-menu-icon-actions">
-                                                    <input type="hidden" class="mj-member-menu-icon-input" name="mj_account_links[<?php echo esc_attr($link_key); ?>][icon_id]" value="<?php echo esc_attr((string) $icon_id_value); ?>" />
-                                                    <button type="button" class="button button-small mj-member-menu-icon-select"><?php esc_html_e('Choisir', 'mj-member'); ?></button>
-                                                    <button type="button" class="button-link-delete mj-member-menu-icon-remove"<?php echo $icon_id_value > 0 ? '' : ' style="display:none;"'; ?>>×</button>
+                                        <?php if (!$is_section_header) : ?>
+                                            <div class="mj-account-link-field">
+                                                <label for="<?php echo esc_attr($field_prefix . '-page'); ?>">Page cible</label>
+                                                <?php
+                                                wp_dropdown_pages(array(
+                                                    'name' => 'mj_account_links[' . $link_key . '][page_id]',
+                                                    'id' => $field_prefix . '-page',
+                                                    'show_option_none' => '— Dynamique —',
+                                                    'option_none_value' => '0',
+                                                    'selected' => $page_id_value,
+                                                ));
+                                                ?>
+                                            </div>
+                                            <div class="mj-account-link-field mj-account-link-field--icon">
+                                                <label>Icône</label>
+                                                <div class="mj-member-menu-icon-control mj-member-menu-icon-control--compact" data-mj-member-menu-icon>
+                                                    <div class="mj-member-menu-icon-preview" data-image-url="<?php echo esc_attr($icon_preview_url); ?>">
+                                                        <?php echo $icon_preview_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                                                    </div>
+                                                    <div class="mj-member-menu-icon-actions">
+                                                        <input type="hidden" class="mj-member-menu-icon-input" name="mj_account_links[<?php echo esc_attr($link_key); ?>][icon_id]" value="<?php echo esc_attr((string) $icon_id_value); ?>" />
+                                                        <button type="button" class="button button-small mj-member-menu-icon-select"><?php esc_html_e('Choisir', 'mj-member'); ?></button>
+                                                        <button type="button" class="button-link-delete mj-member-menu-icon-remove"<?php echo $icon_id_value > 0 ? '' : ' style="display:none;"'; ?>>×</button>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
+                                        <?php endif; ?>
                                     </div>
                                     <?php if ($is_logout) : ?>
                                         <p class="mj-account-link-note">La déconnexion redirige vers l'accueil.</p>
+                                    <?php elseif ($is_section_header) : ?>
+                                        <p class="mj-account-link-note">Ceci est un titre de section. Il apparaît dans la liste du menu Mon compte pour organiser les liens.</p>
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -1028,6 +1116,48 @@ function mj_settings_page() {
                             endforeach;
                             ?>
                             </div>
+                            <style>
+                                .mj-account-link-item--section {
+                                    background-color: #f0f4ff;
+                                    border: 1px solid #d0dcff;
+                                    border-radius: 6px;
+                                    margin-top: 16px;
+                                    margin-bottom: 8px;
+                                }
+                                
+                                .mj-account-link-item--section .mj-account-link-header {
+                                    padding: 12px;
+                                    font-weight: 600;
+                                    background: linear-gradient(135deg, #f0f4ff 0%, #e8f0ff 100%);
+                                }
+                                
+                                .mj-account-link-item--section .mj-account-link-label {
+                                    color: #3f51b5;
+                                    font-weight: 600;
+                                    font-size: 14px;
+                                }
+                                
+                                .mj-account-link-badge--section {
+                                    background-color: #3f51b5;
+                                    color: white;
+                                    padding: 2px 6px;
+                                    border-radius: 3px;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                }
+                                
+                                .mj-account-link-item--section .mj-account-link-details {
+                                    display: block !important;
+                                    background-color: white;
+                                    border-top: 1px solid #d0dcff;
+                                    padding: 12px;
+                                }
+                                
+                                .mj-account-link-item--section .mj-account-link-details-grid {
+                                    display: grid;
+                                    grid-template-columns: 1fr;
+                                }
+                            </style>
                         </div>
                     </div>
 
@@ -1794,6 +1924,20 @@ function mj_settings_page() {
             font-size: 11px;
             color: #6b7280;
         }
+        .mj-account-link-delete-btn {
+            transition: all 0.2s ease;
+            opacity: 0.6;
+            hover-color: #dc2626;
+        }
+        .mj-account-link-delete-btn:hover {
+            opacity: 1;
+            background-color: #fee2e2 !important;
+            border-radius: 4px;
+            transform: scale(1.1);
+        }
+        .mj-account-link-delete-btn:active {
+            transform: scale(0.95);
+        }
         </style>
         <script>
         (function () {
@@ -2127,6 +2271,12 @@ function mj_settings_page() {
             }
 
             function handleDragStart(e) {
+                // Ignorer si on clique sur le bouton delete
+                if (e.target.closest('.mj-account-link-delete-btn')) {
+                    e.preventDefault();
+                    return false;
+                }
+                
                 draggedItem = this;
                 this.classList.add('is-dragging');
                 sortableContainer.classList.add('is-dragging-active');
@@ -2193,6 +2343,35 @@ function mj_settings_page() {
                 return false;
             }
 
+            function attachDragHandlers() {
+                var allItems = sortableContainer.querySelectorAll('.mj-account-link-item');
+                
+                allItems.forEach(function (item) {
+                    var header = item.querySelector('.mj-account-link-header');
+                    if (header) {
+                        header.setAttribute('draggable', 'true');
+                        
+                        // Retirer les anciens écouteurs en clonant l'élément
+                        var newHeader = header.cloneNode(true);
+                        header.parentNode.replaceChild(newHeader, header);
+                        header = item.querySelector('.mj-account-link-header');
+                        
+                        header.addEventListener('dragstart', handleDragStart.bind(item), false);
+                        header.addEventListener('dragend', handleDragEnd.bind(item), false);
+                    }
+                    
+                    // Retirer les anciens écouteurs
+                    item.removeEventListener('dragover', handleDragOver);
+                    item.removeEventListener('dragleave', handleDragLeave);
+                    item.removeEventListener('drop', handleDrop);
+                    
+                    // Ajouter les nouveaux
+                    item.addEventListener('dragover', handleDragOver, false);
+                    item.addEventListener('dragleave', handleDragLeave, false);
+                    item.addEventListener('drop', handleDrop, false);
+                });
+            }
+
             items.forEach(function (item) {
                 var header = item.querySelector('.mj-account-link-header');
                 if (header) {
@@ -2244,6 +2423,135 @@ function mj_settings_page() {
                     if (labelSpan) {
                         labelSpan.classList.toggle('is-disabled', !e.target.checked);
                     }
+                }
+            });
+
+            // Ajouter une nouvelle section
+            var addSectionBtn = document.getElementById('mj-add-section-btn');
+            var newSectionInput = document.getElementById('mj-new-section-label');
+            
+            if (addSectionBtn && newSectionInput) {
+                addSectionBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    var label = newSectionInput.value.trim();
+                    
+                    if (!label) {
+                        alert('Veuillez entrer un titre de section');
+                        return;
+                    }
+                    
+                    // Générer une clé unique pour la section
+                    var timestamp = Date.now();
+                    var randomStr = Math.random().toString(36).substr(2, 9);
+                    var linkKey = 'custom_section_' + timestamp + '_' + randomStr;
+                    
+                    // Trouver la prochaine position
+                    var items = sortableContainer.querySelectorAll('.mj-account-link-item');
+                    var maxPosition = 0;
+                    items.forEach(function (item) {
+                        var posInput = item.querySelector('.mj-account-link-position');
+                        if (posInput) {
+                            var pos = parseInt(posInput.value) || 0;
+                            maxPosition = Math.max(maxPosition, pos);
+                        }
+                    });
+                    var newPosition = maxPosition + 1;
+                    
+                    // Créer le nouvel élément de section
+                    var newItem = document.createElement('div');
+                    newItem.className = 'mj-account-link-item mj-account-link-item--section';
+                    newItem.setAttribute('data-link-key', linkKey);
+                    newItem.innerHTML = `
+                        <input type="hidden" class="mj-account-link-position" name="mj_account_links[${linkKey}][position]" value="${newPosition}" />
+                        <div class="mj-account-link-header">
+                            <span class="mj-account-link-handle dashicons dashicons-menu" title="Glisser pour réordonner"></span>
+                            <label class="mj-account-link-toggle">
+                                <input type="hidden" name="mj_account_links[${linkKey}][enabled]" value="0" />
+                                <input type="checkbox" id="mj-account-link-${linkKey}-enabled" name="mj_account_links[${linkKey}][enabled]" value="1" checked />
+                            </label>
+                            <span class="mj-account-link-label">${escapeHtml(label)}</span>
+                            <span class="mj-account-link-badge mj-account-link-badge--section" title="Titre de section">📌</span>
+                            <span class="mj-account-link-position-badge">#${newPosition + 1}</span>
+                        </div>
+                        <div class="mj-account-link-details">
+                            <div class="mj-account-link-details-grid">
+                                <div class="mj-account-link-field">
+                                    <label for="mj-account-link-${linkKey}-label">Libellé</label>
+                                    <input type="text" id="mj-account-link-${linkKey}-label" name="mj_account_links[${linkKey}][label]" value="${escapeHtml(label)}" />
+                                </div>
+                            </div>
+                            <p class="mj-account-link-note">Ceci est un titre de section. Il apparaît dans la liste du menu Mon compte pour organiser les liens.</p>
+                        </div>
+                    `;
+                    
+                    sortableContainer.appendChild(newItem);
+                    
+                    // Réinitialiser les écouteurs drag pour tous les éléments
+                    attachDragHandlers();
+                    
+                    updatePositions();
+                    
+                    // Vider le champ d'entrée et afficher un message
+                    newSectionInput.value = '';
+                    newSectionInput.focus();
+                    
+                    // Feedback visuel
+                    addSectionBtn.textContent = '✓ Section créée';
+                    addSectionBtn.style.background = '#10b981';
+                    setTimeout(function () {
+                        addSectionBtn.innerHTML = '<span class="dashicons dashicons-plus-alt" style="font-size:16px;"></span> Ajouter';
+                        addSectionBtn.style.background = '';
+                    }, 2000);
+                });
+            }
+
+            // Fonction utilitaire pour échapper HTML
+            function escapeHtml(text) {
+                var div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            // Supprimer une section (personnalisée ou par défaut)
+            sortableContainer.addEventListener('click', function (e) {
+                var deleteBtn = e.target.closest('.mj-account-link-delete-btn');
+                if (!deleteBtn) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+
+                var item = deleteBtn.closest('.mj-account-link-item');
+                var linkKey = item.getAttribute('data-link-key');
+                var label = item.querySelector('.mj-account-link-label').textContent;
+                var isCustom = deleteBtn.getAttribute('data-is-custom') === '1';
+
+                var confirmMsg = 'Êtes-vous sûr de vouloir supprimer la section "' + label + '" ?\n\nLes liens dans cette section restent actifs.';
+
+                if (confirm(confirmMsg)) {
+                    // Supprimer complètement la section du DOM
+                    item.remove();
+                    
+                    // Réinitialiser les écouteurs drag
+                    attachDragHandlers();
+                    updatePositions();
+
+                    // Afficher un feedback
+                    var msg = document.createElement('div');
+                    msg.style.position = 'fixed';
+                    msg.style.top = '20px';
+                    msg.style.right = '20px';
+                    msg.style.background = '#ef4444';
+                    msg.style.color = 'white';
+                    msg.style.padding = '12px 16px';
+                    msg.style.borderRadius = '4px';
+                    msg.style.zIndex = '9999';
+                    msg.style.fontWeight = '600';
+                    msg.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                    msg.textContent = '✓ Section supprimée';
+                    document.body.appendChild(msg);
+                    setTimeout(function () {
+                        msg.remove();
+                    }, 3000);
                 }
             });
 

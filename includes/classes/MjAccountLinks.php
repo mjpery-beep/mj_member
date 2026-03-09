@@ -23,6 +23,17 @@ class MjAccountLinks {
         $contact_capability = Config::contactCapability() ?: 'mj_manage_contact_messages';
 
         $default_links = array(
+            'section_profile' => array(
+                'label' => __('📋 Profil personnel', 'mj-member'),
+                'slug' => '',
+                'query' => array(),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'all',
+                'editable_label' => true,
+                'type' => 'section_header',
+                'icon_id' => 0,
+            ),
             'profile' => array(
                 'label' => __('Mes données personnelles', 'mj-member'),
                 'slug' => 'mon-compte',
@@ -67,79 +78,21 @@ class MjAccountLinks {
                 'type' => 'standard',
                 'icon_id' => 0,
             ),
+            'section_activities' => array(
+                'label' => __('📅 Mes activités', 'mj-member'),
+                'slug' => '',
+                'query' => array(),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'all',
+                'editable_label' => true,
+                'type' => 'section_header',
+                'icon_id' => 0,
+            ),
             'registrations' => array(
                 'label' => __('Mes inscriptions', 'mj-member'),
                 'slug' => 'inscriptions',
                 'query' => array('section' => 'registrations'),
-                'enabled' => true,
-                'page_id' => 0,
-                'visibility' => 'all',
-                'editable_label' => true,
-                'type' => 'standard',
-                'icon_id' => 0,
-            ),
-            'animateur_events' => array(
-                'label' => __('Gestion des événements', 'mj-member'),
-                'slug' => 'animateurs',
-                'query' => array('section' => 'animateur_events'),
-                'enabled' => true,
-                'page_id' => 0,
-                'visibility' => MjRoles::ANIMATEUR,
-                'editable_label' => true,
-                'type' => 'standard',
-                'icon_id' => 0,
-            ),
-            'human_resources' => array(
-                'label' => __('Ressources humaines', 'mj-member'),
-                'slug' => 'ressources-humaines',
-                'query' => array('section' => 'human_resources'),
-                'enabled' => true,
-                'page_id' => 0,
-                'visibility' => 'staff',
-                'editable_label' => true,
-                'type' => 'standard',
-                'icon_id' => 0,
-            ),
-            'contact_messages' => array(
-                'label' => __('Messages', 'mj-member'),
-                'slug' => 'messages',
-                'query' => array('section' => 'contact_messages'),
-                'enabled' => true,
-                'page_id' => 0,
-                'visibility' => 'all',
-                'editable_label' => true,
-                'type' => 'standard',
-                'requires_capability' => $contact_capability,
-                'icon_id' => 0,
-            ),
-            'hours_encode' => array(
-                'label' => __('Encodage des Heures de Travail', 'mj-member'),
-                'slug' => 'encodage-des-heures-de-travail',
-                'query' => array(),
-                'enabled' => true,
-                'page_id' => 0,
-                'visibility' => 'hours_team',
-                'editable_label' => true,
-                'type' => 'standard',
-                'requires_capability' => Config::hoursCapability(),
-                'icon_id' => 0,
-            ),
-            'todos' => array(
-                'label' => __('Mes tâches', 'mj-member'),
-                'slug' => 'mes-taches',
-                'query' => array('section' => 'todos'),
-                'enabled' => true,
-                'page_id' => 0,
-                'visibility' => 'hours_team',
-                'editable_label' => true,
-                'type' => 'standard',
-                'requires_capability' => Config::todosCapability(),
-                'icon_id' => 0,
-            ),
-            'idea_box' => array(
-                'label' => __('Boîte à idées', 'mj-member'),
-                'slug' => 'boite-a-idees',
-                'query' => array('section' => 'idea_box'),
                 'enabled' => true,
                 'page_id' => 0,
                 'visibility' => 'all',
@@ -180,6 +133,86 @@ class MjAccountLinks {
                 'type' => 'standard',
                 'icon_id' => 0,
             ),
+            'section_messages' => array(
+                'label' => __('💬 Messages & Tâches', 'mj-member'),
+                'slug' => '',
+                'query' => array(),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'all',
+                'editable_label' => true,
+                'type' => 'section_header',
+                'icon_id' => 0,
+            ),
+            'contact_messages' => array(
+                'label' => __('Messages', 'mj-member'),
+                'slug' => 'messages',
+                'query' => array('section' => 'contact_messages'),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'all',
+                'editable_label' => true,
+                'type' => 'standard',
+                'requires_capability' => $contact_capability,
+                'icon_id' => 0,
+            ),
+            'todos' => array(
+                'label' => __('Mes tâches', 'mj-member'),
+                'slug' => 'mes-taches',
+                'query' => array('section' => 'todos'),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'hours_team',
+                'editable_label' => true,
+                'type' => 'standard',
+                'requires_capability' => Config::todosCapability(),
+                'icon_id' => 0,
+            ),
+            'idea_box' => array(
+                'label' => __('Boîte à idées', 'mj-member'),
+                'slug' => 'boite-a-idees',
+                'query' => array('section' => 'idea_box'),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'all',
+                'editable_label' => true,
+                'type' => 'standard',
+                'icon_id' => 0,
+            ),
+            'section_team' => array(
+                'label' => __('👥 Équipe & Animateurs', 'mj-member'),
+                'slug' => '',
+                'query' => array(),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'hours_team',
+                'editable_label' => true,
+                'type' => 'section_header',
+                'icon_id' => 0,
+            ),
+            'animateur_events' => array(
+                'label' => __('Gestion des événements', 'mj-member'),
+                'slug' => 'animateurs',
+                'query' => array('section' => 'animateur_events'),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => MjRoles::ANIMATEUR,
+                'editable_label' => true,
+                'type' => 'standard',
+                'icon_id' => 0,
+            ),
+            'hours_encode' => array(
+                'label' => __('Encodage des Heures de Travail', 'mj-member'),
+                'slug' => 'encodage-des-heures-de-travail',
+                'query' => array(),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'hours_team',
+                'editable_label' => true,
+                'type' => 'standard',
+                'requires_capability' => Config::hoursCapability(),
+                'icon_id' => 0,
+            ),
             'expenses' => array(
                 'label' => __('Notes de Frais', 'mj-member'),
                 'slug' => 'notes-de-frais',
@@ -191,17 +224,6 @@ class MjAccountLinks {
                 'type' => 'standard',
                 'icon_id' => 0,
             ),
-            'employee_data' => array(
-                'label' => __('Données Employé', 'mj-member'),
-                'slug' => 'donnees-employe',
-                'query' => array('section' => 'employee_data'),
-                'enabled' => true,
-                'page_id' => 0,
-                'visibility' => 'staff',
-                'editable_label' => true,
-                'type' => 'standard',
-                'icon_id' => 0,
-            ),
             'coordinator_dashboard' => array(
                 'label' => __('Coordinateur', 'mj-member'),
                 'slug' => 'coordinateur',
@@ -209,6 +231,28 @@ class MjAccountLinks {
                 'enabled' => true,
                 'page_id' => 0,
                 'visibility' => MjRoles::COORDINATEUR,
+                'editable_label' => true,
+                'type' => 'standard',
+                'icon_id' => 0,
+            ),
+            'human_resources' => array(
+                'label' => __('Ressources humaines', 'mj-member'),
+                'slug' => 'ressources-humaines',
+                'query' => array('section' => 'human_resources'),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'staff',
+                'editable_label' => true,
+                'type' => 'standard',
+                'icon_id' => 0,
+            ),
+            'employee_data' => array(
+                'label' => __('Données Employé', 'mj-member'),
+                'slug' => 'donnees-employe',
+                'query' => array('section' => 'employee_data'),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'staff',
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
@@ -238,6 +282,24 @@ class MjAccountLinks {
 
         if (!is_array($saved)) {
             $saved = array();
+        }
+
+        // Charger les sections personnalisées depuis la configuration sauvegardée
+        foreach ($saved as $key => $config) {
+            if (strpos($key, 'custom_section_') === 0 && !isset($defaults[$key])) {
+                // Ajouter la section personnalisée aux valeurs par défaut
+                $defaults[$key] = array(
+                    'label' => isset($config['label']) ? $config['label'] : '',
+                    'slug' => '',
+                    'query' => array(),
+                    'enabled' => true,
+                    'page_id' => 0,
+                    'visibility' => 'all',
+                    'editable_label' => true,
+                    'type' => 'section_header',
+                    'icon_id' => 0,
+                );
+            }
         }
 
         $position = 0;
@@ -476,6 +538,10 @@ class MjAccountLinks {
                 continue;
             }
 
+            if ($visibility === MjRoles::BENEVOLE && !$isBenevole) {
+                continue;
+            }
+
             if ($visibility === 'staff' && !$isAnimateur && !$isCoordinateur) {
                 continue;
             }
@@ -494,6 +560,12 @@ class MjAccountLinks {
             }
 
             $type = isset($config['type']) ? $config['type'] : 'standard';
+            
+            // Les titres de section ne sont pas ajoutés aux liens cliquables
+            if ($type === 'section_header') {
+                continue;
+            }
+
             $icon_id = isset($config['icon_id']) ? (int) $config['icon_id'] : 0;
             $icon_payload = array();
             if ($icon_id > 0 && function_exists('mj_member_account_menu_build_icon_payload_from_attachment')) {

@@ -804,9 +804,9 @@
 .mj-member-login-component__panel {
     position: absolute;
     top: calc(100% + 0.75rem);
-    left: -50px;
-    min-width: 300px;
-    max-width: min(380px, calc(100vw - 2rem));
+    left: -300px;
+    min-width: 520px;
+    max-width: min(860px, calc(100vw - 2rem));
     padding-top: 12px;
     opacity: 0;
     visibility: hidden;
@@ -830,7 +830,7 @@
     color: var(--mj-member-login-modal-text);
     border-radius: 14px;
     box-shadow: 0 18px 38px rgba(15, 23, 42, 0.16);
-    padding: 22px 22px 20px;
+    padding: 28px 28px 24px;
     max-height: calc(100vh - 120px);
     overflow-y: auto;
 }
@@ -838,7 +838,7 @@
 .mj-member-login-component__panel-arrow {
     position: absolute;
     top: 14px;
-    left: 42px;
+    left: 336px;
     width: 16px;
     height: 16px;
     background: var(--mj-member-login-modal-bg);
@@ -1085,14 +1085,56 @@ body .mj-member-login-component__actions button.mj-member-login-component__submi
     list-style: none;
     padding: 0;
     margin: 0;
-    display: grid;
+    display: flex;
+    flex-wrap: wrap;
     gap: 0.3rem;
     width: 100%;
-    max-width: clamp(260px, 100%, 360px);
+    max-width: min(100%, 760px);
     margin-left: auto;
     margin-right: auto;
     font-size: 0.95em;
     line-height: 1.25;
+}
+
+.mj-member-login-component__section-card {
+    flex: 1 1 calc(50% - 0.15rem);
+    min-width: 0;
+    list-style: none;
+    margin: 0;
+    padding: 0.5rem;
+    background: #ffffff;
+    border-radius: 8px;
+}
+
+.mj-member-login-component__section-header {
+    list-style: none;
+    padding: 0.25rem 0;
+    margin: 0 0 0.25rem;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.mj-member-login-component__section-label {
+    font-weight: 700;
+    color: #1e3a8a;
+    font-size: 0.82rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mj-member-login-component__section-links {
+    list-style: none;
+    margin: 0.45rem 0 0;
+    padding: 0;
+    display: grid;
+    gap: 0.3rem;
 }
 
 .mj-member-login-component__account-main {
@@ -1180,6 +1222,13 @@ body .mj-member-login-component__actions button.mj-member-login-component__submi
 
 .mj-member-login-component__account-item {
     margin: 0;
+    min-width: 0;
+}
+
+@media (max-width: 767px) {
+    .mj-member-login-component__section-card {
+        flex-basis: 100%;
+    }
 }
 
 .mj-member-login-component__account-link {
@@ -1302,6 +1351,31 @@ body .mj-member-login-component__actions button.mj-member-login-component__submi
 .mj-member-account-links .mj-member-login-component__account-list {
     margin: 0 auto;
     width: 100%;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 0.45rem;
+    max-width: 100%;
+}
+
+.mj-member-account-links .mj-member-login-component__section-card {
+    flex: 0 0 auto;
+    width: 100%;
+}
+
+.mj-member-account-links ul.mj-member-login-component__account-list {
+    display: block !important;
+}
+
+.mj-member-account-links ul.mj-member-login-component__account-list > li.mj-member-login-component__section-card {
+    display: block !important;
+    flex: none !important;
+    width: 100% !important;
+    margin-bottom: 0.45rem;
+}
+
+.mj-member-account-links ul.mj-member-login-component__account-list > li.mj-member-login-component__section-card:last-child {
+    margin-bottom: 0;
 }
 
 .mj-member-account-links .mj-member-login-component__account-link {
@@ -1387,7 +1461,7 @@ body .mj-member-login-component__actions button.mj-member-login-component__submi
         top: calc(100% + 0.75rem);
         left: auto;
         right: 0;
-        width: min(440px, calc(100vw - 36px));
+        width: min(760px, calc(100vw - 36px));
         max-width: 100%;
         transform: translateY(-12px);
         margin-top: 0;
@@ -1473,7 +1547,7 @@ body .mj-member-login-component__actions button.mj-member-login-component__submi
 
     .mj-member-login-component__panel-inner {
         max-height: calc(100vh - 120px);
-        padding: 24px 22px 20px;
+        padding: 26px 24px 22px;
     }
 
     .mj-member-login-component__actions {
