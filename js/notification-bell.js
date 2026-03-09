@@ -28,6 +28,7 @@
             this.loader = container.querySelector('.mj-notification-bell__loader');
             this.markAllBtn = container.querySelector('.mj-notification-bell__mark-all');
             this.closeBtn = container.querySelector('.mj-notification-bell__close');
+            this.deleteAllBtn = container.querySelector('.mj-notification-bell__delete-all');
 
             // État
             this.isOpen = false;
@@ -46,6 +47,7 @@
             this.overlay?.addEventListener('click', () => this.close());
             this.closeBtn?.addEventListener('click', () => this.close());
             this.markAllBtn?.addEventListener('click', () => this.markAllAsRead());
+            this.deleteAllBtn?.addEventListener('click', () => this.deleteAll());
 
             // Délégation pour les boutons de lecture individuelle
             this.list?.addEventListener('click', (e) => this.handleItemClick(e));
@@ -129,10 +131,18 @@
 
             if (notifications.length === 0) {
                 this.list.innerHTML = this.getEmptyHtml();
+                // Cacher le footer si pas de notifications
+                if (this.deleteAllBtn && this.deleteAllBtn.closest('.mj-notification-bell__footer')) {
+                    this.deleteAllBtn.closest('.mj-notification-bell__footer').style.display = 'none';
+                }
                 return;
             }
 
             this.list.innerHTML = notifications.map(item => this.getNotificationItemHtml(item)).join('');
+            // Afficher le footer s'il y a des notifications
+            if (this.deleteAllBtn && this.deleteAllBtn.closest('.mj-notification-bell__footer')) {
+                this.deleteAllBtn.closest('.mj-notification-bell__footer').style.display = 'block';
+            }
         }
 
         getNotificationItemHtml(item) {
@@ -409,6 +419,54 @@
                 console.error('NotificationBell: Erreur mark all read', error);
             } finally {
                 this.markAllBtn.disabled = this.unreadCount === 0;
+            }
+        }
+
+        async deleteAll() {
+            if (this.config.preview) return;
+
+            // Confirmation avant suppression
+            if (!confirm('Êtes-vous sûr de vouloir supprimer toutes les notifications ?')) {
+                return;
+            }
+
+            this.deleteAllBtn.disabled = true;
+
+            try {
+                const response = await this.ajaxRequest('mj_member_notification_bell_archive_all', {
+                    member_id: this.config.memberId
+                });
+
+                if (response.success) {
+                    // Récupérer toutes les notifications avec animation
+                    const items = this.list?.querySelectorAll('.mj-notification-bell__item');
+                    if (items) {
+                        items.forEach((item, index) => {
+                            item.style.transition = 'all 0.3s ease';
+                            item.style.transitionDelay = `${index * 0.05}s`;
+                            item.style.opacity = '0';
+                            item.style.transform = 'translateX(20px)';
+                        });
+
+                        // Attendre la fin des animations
+                        setTimeout(() => {
+                            if (this.list) {
+                                this.list.innerHTML = this.getEmptyHtml();
+                            }
+                            // Cacher le bouton supprimer tout
+                            if (this.deleteAllBtn && this.deleteAllBtn.closest('.mj-notification-bell__footer')) {
+                                this.deleteAllBtn.closest('.mj-notification-bell__footer').style.display = 'none';
+                            }
+                        }, 300 + (items.length * 50));
+                    }
+
+                    this.unreadCount = 0;
+                    this.updateBadge();
+                }
+            } catch (error) {
+                console.error('NotificationBell: Erreur delete all', error);
+            } finally {
+                this.deleteAllBtn.disabled = false;
             }
         }
 

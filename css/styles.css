@@ -923,6 +923,521 @@
     }
 }
 
+/* Gmail-like refresh: contact messages inbox */
+.mj-contact-messages {
+    --mj-contact-messages-badge-bg: #1a73e8;
+    --mj-contact-messages-link: #1a73e8;
+    --mj-contact-messages-border: rgba(218, 220, 224, 0.9);
+    --mj-contact-messages-shadow: 0 1px 2px rgba(60, 64, 67, 0.16), 0 1px 3px 1px rgba(60, 64, 67, 0.08);
+    --mj-contact-messages-radius: 14px;
+    --mj-contact-messages-btn-bg: #ffffff;
+    --mj-contact-messages-btn-border: rgba(218, 220, 224, 0.95);
+    --mj-contact-messages-btn-text: #3c4043;
+    --mj-contact-messages-btn-hover-bg: #f1f3f4;
+    --mj-contact-messages-btn-hover-border: rgba(189, 193, 198, 0.95);
+    --mj-contact-messages-btn-primary-bg: #1a73e8;
+    --mj-contact-messages-btn-primary-text: #ffffff;
+    --mj-contact-messages-btn-primary-hover: #1765cc;
+    --mj-contact-messages-btn-danger-bg: #d93025;
+    --mj-contact-messages-btn-danger-hover: #c5221f;
+    --mj-contact-messages-btn-filter-bg: #eef3fd;
+    --mj-contact-messages-btn-filter-hover-bg: #dde7fb;
+    --mj-contact-messages-btn-toggle-bg: #eef3fd;
+    --mj-contact-messages-btn-toggle-hover-bg: #e2ebfc;
+    --mj-contact-messages-btn-archive-bg: #fff6e7;
+    --mj-contact-messages-btn-archive-hover-bg: #ffe8c2;
+    --mj-contact-messages-btn-pagination-bg: #f1f3f4;
+    --mj-contact-messages-btn-pagination-hover-bg: #e8eaed;
+}
+
+.mj-contact-messages__surface {
+    gap: 0.85rem;
+    padding: 1rem;
+}
+
+.mj-contact-messages__toolbar {
+    padding: 0.6rem;
+    border: 1px solid rgba(218, 220, 224, 0.85);
+    border-radius: 12px;
+    background: #f8f9fa;
+}
+
+.mj-contact-messages__filter-button {
+    border: 1px solid var(--mj-contact-messages-btn-border);
+    background: var(--mj-contact-messages-btn-filter-bg);
+    border-radius: 10px;
+    padding: 0.45rem 0.8rem;
+    color: var(--mj-contact-messages-btn-text);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.mj-contact-messages__filter-button:hover,
+.mj-contact-messages__filter-button:focus-visible {
+    border-color: var(--mj-contact-messages-btn-hover-border);
+    background: var(--mj-contact-messages-btn-filter-hover-bg);
+    color: #1a73e8;
+    box-shadow: 0 1px 2px rgba(60, 64, 67, 0.2);
+}
+
+.mj-contact-messages__filter-button.is-active {
+    background: var(--mj-contact-messages-btn-primary-bg);
+    border-color: var(--mj-contact-messages-btn-primary-bg);
+    color: var(--mj-contact-messages-btn-primary-text);
+    box-shadow: 0 1px 2px rgba(26, 115, 232, 0.28);
+}
+
+.mj-contact-messages__search-input {
+    max-width: 360px;
+    border-radius: 999px;
+    border-color: transparent;
+    background: #eaf1fb;
+    padding: 0.55rem 1rem;
+}
+
+.mj-contact-messages__search-input:focus {
+    border-color: rgba(26, 115, 232, 0.35);
+    box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.16);
+    background: #ffffff;
+}
+
+.mj-contact-messages__list {
+    gap: 0;
+    border: 1px solid rgba(218, 220, 224, 0.9);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.mj-contact-messages__item {
+    border: 0;
+    border-bottom: 1px solid rgba(232, 234, 237, 0.95);
+    border-radius: 0;
+    background: #ffffff;
+    box-shadow: none;
+}
+
+.mj-contact-messages__item:last-child {
+    border-bottom: 0;
+}
+
+.mj-contact-messages__item:hover,
+.mj-contact-messages__item:focus-within {
+    transform: none;
+    border-color: transparent;
+    box-shadow: none;
+    background: #f5f7f7;
+}
+
+.mj-contact-messages__item.is-unread {
+    background: #ffffff;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.mj-contact-messages__item.is-unread::before {
+    left: 0.85rem;
+    top: 1.3rem;
+    width: 0.55rem;
+    height: 0.55rem;
+    box-shadow: none;
+}
+
+.mj-contact-messages__panel > summary {
+    gap: 0.8rem;
+    padding: 0.85rem 0.95rem 0.8rem 1.8rem;
+}
+
+.mj-contact-messages__summary-main {
+    gap: 0.3rem;
+}
+
+.mj-contact-messages__summary-heading {
+    gap: 0.45rem;
+    flex-wrap: nowrap;
+    min-width: 0;
+}
+
+.mj-contact-messages__sender {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #202124;
+    min-width: 0;
+    max-width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mj-contact-messages__subject {
+    font-size: 0.92rem;
+    font-weight: 500;
+    color: #202124;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mj-contact-messages__preview {
+    font-size: 0.88rem;
+    color: #5f6368;
+    min-width: 0;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mj-contact-messages__item.is-unread .mj-contact-messages__sender,
+.mj-contact-messages__item.is-unread .mj-contact-messages__subject {
+    font-weight: 700;
+}
+
+.mj-contact-messages__status {
+    margin-left: auto;
+    padding: 0.18rem 0.45rem;
+    font-size: 0.64rem;
+    border-radius: 6px;
+    box-shadow: none;
+}
+
+.mj-contact-messages__summary-meta {
+    gap: 0.45rem;
+    font-size: 0.74rem;
+    color: #5f6368;
+}
+
+.mj-contact-messages__summary-chip {
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #5f6368;
+    font-weight: 500;
+}
+
+.mj-contact-messages__summary-actions {
+    gap: 0.55rem;
+}
+
+.mj-contact-messages__toggle-button {
+    padding: 0.34rem 0.62rem;
+    border-radius: 10px;
+    border: 1px solid var(--mj-contact-messages-btn-border);
+    background: var(--mj-contact-messages-btn-toggle-bg);
+    color: var(--mj-contact-messages-btn-text);
+    font-size: 0.76rem;
+    font-weight: 600;
+}
+
+.mj-contact-messages__toggle-button:hover,
+.mj-contact-messages__toggle-button:focus-visible {
+    transform: none;
+    border-color: var(--mj-contact-messages-btn-hover-border);
+    background: var(--mj-contact-messages-btn-toggle-hover-bg);
+    color: #174ea6;
+}
+
+.mj-contact-messages__summary-toggle {
+    width: 24px;
+    height: 24px;
+    background: transparent;
+}
+
+.mj-contact-messages__summary-toggle::before,
+.mj-contact-messages__summary-toggle::after {
+    width: 9px;
+    background: #5f6368;
+}
+
+.mj-contact-messages__panel-body {
+    padding: 0.7rem 0.95rem 1rem 1.8rem;
+    background: #fcfcfd;
+}
+
+.mj-contact-messages__content,
+.mj-contact-messages__excerpt {
+    color: #202124;
+}
+
+.mj-contact-messages__actions {
+    gap: 0.5rem;
+}
+
+.mj-contact-messages__action-btn {
+    border-radius: 10px;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    border: 1px solid var(--mj-contact-messages-btn-border);
+    background: #f8f9fa;
+    color: var(--mj-contact-messages-btn-text);
+    box-shadow: 0 1px 1px rgba(60, 64, 67, 0.08);
+}
+
+.mj-contact-messages__action-btn:hover,
+.mj-contact-messages__action-btn:focus-visible {
+    background: #eceff1;
+    border-color: var(--mj-contact-messages-btn-hover-border);
+    color: #1f1f1f;
+    box-shadow: 0 1px 2px rgba(60, 64, 67, 0.16);
+}
+
+.mj-contact-messages__action-btn--reply {
+    background: var(--mj-contact-messages-btn-primary-bg);
+    border-color: var(--mj-contact-messages-btn-primary-bg);
+    color: var(--mj-contact-messages-btn-primary-text);
+}
+
+.mj-contact-messages__action-btn--reply:hover,
+.mj-contact-messages__action-btn--reply:focus-visible,
+.mj-contact-messages__action-btn--archive:hover,
+.mj-contact-messages__action-btn--archive:focus-visible,
+.mj-contact-messages__action-btn--delete:hover,
+.mj-contact-messages__action-btn--delete:focus-visible {
+    color: #ffffff;
+}
+
+.mj-contact-messages__action-btn--reply:hover,
+.mj-contact-messages__action-btn--reply:focus-visible {
+    background: var(--mj-contact-messages-btn-primary-hover);
+    border-color: var(--mj-contact-messages-btn-primary-hover);
+}
+
+.mj-contact-messages__action-btn--archive {
+    background: var(--mj-contact-messages-btn-archive-bg);
+    border-color: var(--mj-contact-messages-btn-border);
+    color: #3c4043;
+}
+
+.mj-contact-messages__action-btn--archive:hover,
+.mj-contact-messages__action-btn--archive:focus-visible {
+    background: var(--mj-contact-messages-btn-archive-hover-bg);
+    border-color: rgba(26, 115, 232, 0.45);
+    color: #174ea6;
+}
+
+.mj-contact-messages__action-btn--delete {
+    background: var(--mj-contact-messages-btn-danger-bg);
+    border-color: var(--mj-contact-messages-btn-danger-bg);
+    color: #ffffff;
+}
+
+.mj-contact-messages__action-btn--delete:hover,
+.mj-contact-messages__action-btn--delete:focus-visible {
+    background: var(--mj-contact-messages-btn-danger-hover);
+    border-color: var(--mj-contact-messages-btn-danger-hover);
+}
+
+.mj-contact-messages__pagination-link {
+    border-radius: 10px !important;
+    border: 1px solid var(--mj-contact-messages-btn-border) !important;
+    background: var(--mj-contact-messages-btn-pagination-bg) !important;
+    color: var(--mj-contact-messages-btn-text) !important;
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+    box-shadow: 0 1px 1px rgba(60, 64, 67, 0.08) !important;
+}
+
+.mj-contact-messages__pagination-link:hover,
+.mj-contact-messages__pagination-link:focus-visible {
+    border-color: var(--mj-contact-messages-btn-hover-border) !important;
+    background: var(--mj-contact-messages-btn-pagination-hover-bg) !important;
+    color: #1f1f1f !important;
+    box-shadow: 0 1px 2px rgba(60, 64, 67, 0.16) !important;
+}
+
+.mj-contact-messages__pagination-link--number.is-current,
+.mj-contact-messages__pagination-link--number.is-current:hover,
+.mj-contact-messages__pagination-link--number.is-current:focus-visible {
+    background: var(--mj-contact-messages-btn-primary-bg) !important;
+    border-color: var(--mj-contact-messages-btn-primary-bg) !important;
+    color: #ffffff !important;
+    box-shadow: 0 1px 2px rgba(26, 115, 232, 0.28) !important;
+}
+
+.mj-contact-messages__pagination-link.is-disabled,
+.mj-contact-messages__pagination-link[aria-disabled="true"] {
+    background: #f8f9fa !important;
+    border-color: rgba(218, 220, 224, 0.9) !important;
+    color: #9aa0a6 !important;
+    box-shadow: none !important;
+}
+
+@media (max-width: 640px) {
+    .mj-contact-messages__summary-heading {
+        flex-wrap: wrap;
+    }
+
+    .mj-contact-messages__sender,
+    .mj-contact-messages__subject,
+    .mj-contact-messages__preview {
+        max-width: 100%;
+        white-space: normal;
+    }
+
+    .mj-contact-messages__panel > summary {
+        padding-left: 1.7rem;
+    }
+
+    .mj-contact-messages__panel-body {
+        padding-left: 1.7rem;
+    }
+}
+
+/* Contact messages buttons: unified redesign */
+.mj-contact-messages {
+    --mj-contact-btn-height: 34px;
+    --mj-contact-btn-radius: 9px;
+    --mj-contact-btn-border: #d2d7de;
+    --mj-contact-btn-text: #1f2937;
+    --mj-contact-btn-bg: #ffffff;
+    --mj-contact-btn-bg-hover: #f3f5f7;
+    --mj-contact-btn-primary-bg: #2563eb;
+    --mj-contact-btn-primary-bg-hover: #1d4ed8;
+    --mj-contact-btn-primary-text: #ffffff;
+    --mj-contact-btn-danger-bg: #dc2626;
+    --mj-contact-btn-danger-bg-hover: #b91c1c;
+    --mj-contact-btn-focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.22);
+}
+
+.mj-contact-messages__filter-button,
+.mj-contact-messages__toggle-button,
+.mj-contact-messages__action-btn,
+.mj-contact-messages__pagination-link {
+    min-height: var(--mj-contact-btn-height) !important;
+    border-radius: var(--mj-contact-btn-radius) !important;
+    border: 1px solid var(--mj-contact-btn-border) !important;
+    background: var(--mj-contact-btn-bg) !important;
+    color: var(--mj-contact-btn-text) !important;
+    font-weight: 600 !important;
+    line-height: 1 !important;
+    box-shadow: none !important;
+    transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.1s ease !important;
+}
+
+.mj-contact-messages__filter-button:hover,
+.mj-contact-messages__toggle-button:hover,
+.mj-contact-messages__action-btn:hover,
+.mj-contact-messages__pagination-link:hover {
+    background: var(--mj-contact-btn-bg-hover) !important;
+    border-color: #bcc3cc !important;
+    color: #111827 !important;
+    transform: translateY(-1px);
+}
+
+.mj-contact-messages__filter-button:focus-visible,
+.mj-contact-messages__toggle-button:focus-visible,
+.mj-contact-messages__action-btn:focus-visible,
+.mj-contact-messages__pagination-link:focus-visible {
+    outline: none !important;
+    box-shadow: var(--mj-contact-btn-focus-ring) !important;
+}
+
+.mj-contact-messages__filter-button {
+    padding: 0 0.9rem !important;
+    font-size: 0.82rem !important;
+}
+
+.mj-contact-messages__filter-button.is-active {
+    background: var(--mj-contact-btn-primary-bg) !important;
+    border-color: var(--mj-contact-btn-primary-bg) !important;
+    color: var(--mj-contact-btn-primary-text) !important;
+}
+
+.mj-contact-messages__filter-button.is-active:hover,
+.mj-contact-messages__filter-button.is-active:focus-visible {
+    background: var(--mj-contact-btn-primary-bg-hover) !important;
+    border-color: var(--mj-contact-btn-primary-bg-hover) !important;
+    color: var(--mj-contact-btn-primary-text) !important;
+}
+
+.mj-contact-messages__toggle-button {
+    padding: 0 0.65rem !important;
+    font-size: 0.75rem !important;
+}
+
+.mj-contact-messages__action-btn {
+    padding: 0 0.95rem !important;
+    font-size: 0.82rem !important;
+}
+
+.mj-contact-messages__action-btn--reply {
+    background: var(--mj-contact-btn-primary-bg) !important;
+    border-color: var(--mj-contact-btn-primary-bg) !important;
+    color: var(--mj-contact-btn-primary-text) !important;
+}
+
+.mj-contact-messages__action-btn--reply:hover,
+.mj-contact-messages__action-btn--reply:focus-visible {
+    background: var(--mj-contact-btn-primary-bg-hover) !important;
+    border-color: var(--mj-contact-btn-primary-bg-hover) !important;
+    color: var(--mj-contact-btn-primary-text) !important;
+}
+
+.mj-contact-messages__action-btn--archive {
+    background: #f8fafc !important;
+    border-color: #cdd5df !important;
+    color: #334155 !important;
+}
+
+.mj-contact-messages__action-btn--archive:hover,
+.mj-contact-messages__action-btn--archive:focus-visible {
+    background: #eef2f7 !important;
+    border-color: #b9c3d1 !important;
+    color: #1f2937 !important;
+}
+
+.mj-contact-messages__action-btn--delete {
+    background: var(--mj-contact-btn-danger-bg) !important;
+    border-color: var(--mj-contact-btn-danger-bg) !important;
+    color: #ffffff !important;
+}
+
+.mj-contact-messages__action-btn--delete:hover,
+.mj-contact-messages__action-btn--delete:focus-visible {
+    background: var(--mj-contact-btn-danger-bg-hover) !important;
+    border-color: var(--mj-contact-btn-danger-bg-hover) !important;
+    color: #ffffff !important;
+}
+
+.mj-contact-messages__pagination-link {
+    padding: 0 0.8rem !important;
+    font-size: 0.8rem !important;
+}
+
+.mj-contact-messages__pagination-link--number {
+    min-width: var(--mj-contact-btn-height) !important;
+    justify-content: center !important;
+}
+
+.mj-contact-messages__pagination-link--number.is-current,
+.mj-contact-messages__pagination-link--number.is-current:hover,
+.mj-contact-messages__pagination-link--number.is-current:focus-visible {
+    background: var(--mj-contact-btn-primary-bg) !important;
+    border-color: var(--mj-contact-btn-primary-bg) !important;
+    color: #ffffff !important;
+}
+
+.mj-contact-messages__pagination-link.is-disabled,
+.mj-contact-messages__pagination-link[aria-disabled="true"] {
+    background: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+    color: #9ca3af !important;
+    opacity: 1 !important;
+}
+
+.mj-contact-messages__summary-toggle {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    border: 1px solid #d2d7de;
+    background: #ffffff;
+}
+
+.mj-contact-messages__summary-toggle::before,
+.mj-contact-messages__summary-toggle::after {
+    background: #6b7280;
+}
+
 .mj-animateur-dashboard__quick-member {
     position: fixed;
     inset: 0;

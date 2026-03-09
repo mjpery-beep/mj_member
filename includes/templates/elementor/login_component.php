@@ -826,7 +826,7 @@ if (!function_exists('mj_member_render_login_modal_component')) {
 
         if ($is_logged_in) {
             $link_args = $args;
-            $link_args['unread_contact_count'] = isset($unread_counts['total']) ? (int) $unread_counts['total'] : 0;
+            $link_args['unread_contact_count'] = isset($unread_counts['contact']) ? (int) $unread_counts['contact'] : 0;
             $link_args['unread_breakdown'] = $unread_counts;
             $link_args['preview_mode'] = $preview_mode;
             $account_link_sections = mj_member_login_component_get_account_links_with_sections($redirect_url, $link_args);

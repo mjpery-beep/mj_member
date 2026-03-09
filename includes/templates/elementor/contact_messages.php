@@ -347,6 +347,7 @@ if ($notice_message !== '' && $notice_detail !== '') {
                         $sender_parts[] = $sender_email;
                     }
                     $sender_display = implode(' | ', $sender_parts);
+                    $sender_primary = $sender_name !== '' ? $sender_name : $sender_email;
 
                     $datetime_parts = array();
                     if ($date_human !== '') {
@@ -380,7 +381,13 @@ if ($notice_message !== '' && $notice_detail !== '') {
                             <summary class="mj-contact-messages__summary">
                                 <div class="mj-contact-messages__summary-main">
                                     <div class="mj-contact-messages__summary-heading">
+                                        <?php if ($sender_primary !== '') : ?>
+                                            <span class="mj-contact-messages__sender"><?php echo esc_html($sender_primary); ?></span>
+                                        <?php endif; ?>
                                         <span class="mj-contact-messages__subject"><?php echo esc_html($subject); ?></span>
+                                        <?php if ($excerpt !== '') : ?>
+                                            <span class="mj-contact-messages__preview"><?php echo esc_html($excerpt); ?></span>
+                                        <?php endif; ?>
                                         <?php if ($status_label !== '') : ?>
                                             <span class="mj-contact-messages__status<?php echo $status_key !== '' ? ' mj-contact-messages__status--' . esc_attr($status_key) : ''; ?>"><?php echo esc_html($status_label); ?></span>
                                         <?php endif; ?>
@@ -573,9 +580,7 @@ if ($notice_message !== '' && $notice_detail !== '') {
                                             </form>
                                         <?php endif; ?>
 
-                                        <?php if ($message_can_moderate && $view_url !== '' && $view_url !== '#') : ?>
-                                            <a class="mj-contact-messages__link mj-contact-messages__link--admin" href="<?php echo esc_url($view_url); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e('Admin', 'mj-member'); ?></a>
-                                        <?php elseif ($is_preview && $view_url === '#') : ?>
+                                        <?php if ($is_preview && $view_url === '#') : ?>
                                             <span class="mj-contact-messages__link mj-contact-messages__link--preview"><?php esc_html_e('Prévisualisation', 'mj-member'); ?></span>
                                         <?php endif; ?>
                                     </div>
@@ -678,12 +683,5 @@ if ($notice_message !== '' && $notice_detail !== '') {
             <?php endif; ?>
         <?php endif; ?>
 
-        <?php if ($can_moderate && $view_all_url !== '') : ?>
-            <div class="mj-contact-messages__footer">
-                <a class="mj-contact-messages__view-all" href="<?php echo esc_url($view_all_url); ?>" target="_blank" rel="noopener noreferrer">
-                    <?php esc_html_e('Voir tous les messages dans l\'admin', 'mj-member'); ?>
-                </a>
-            </div>
-        <?php endif; ?>
     </div>
 </div>

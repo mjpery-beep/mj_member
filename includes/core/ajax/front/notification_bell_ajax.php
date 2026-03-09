@@ -147,6 +147,43 @@ function mj_member_notification_bell_archive_handler() {
 }
 
 /**
+ * Archive toutes les notifications d'un membre
+ */
+add_action('wp_ajax_mj_member_notification_bell_archive_all', 'mj_member_notification_bell_archive_all_handler');
+function mj_member_notification_bell_archive_all_handler() {
+    check_ajax_referer('mj-notification-bell', 'nonce');
+
+    $member_id = isset($_POST['member_id']) ? absint($_POST['member_id']) : 0;
+
+    if ($member_id <= 0 || !mj_member_notification_bell_user_owns_member($member_id)) {
+        wp_send_json_error(array('message' => __('Accès non autorisé.', 'mj-member')));
+    }
+
+    global $wpdb;
+    $recipients_table = mj_member_get_notification_recipients_table_name();
+
+    // Récupérer tous les recipient_ids du membre qui ne sont pas déjà archivés
+    $recipient_ids = $wpdb->get_col($wpdb->prepare(
+        "SELECT id FROM {$recipients_table} 
+         WHERE member_id = %d AND status != 'archived'",
+        $member_id
+    ));
+
+    if (empty($recipient_ids)) {
+        wp_send_json_success(array('archived' => 0));
+    }
+
+    // Archiver toutes les notifications
+    $result = MjNotificationManager::mark_recipient_status($recipient_ids, 'archived');
+
+    if ($result !== false && !is_wp_error($result)) {
+        wp_send_json_success(array('archived' => count($recipient_ids)));
+    } else {
+        wp_send_json_error(array('message' => __('Impossible d\'archiver les notifications.', 'mj-member')));
+    }
+}
+
+/**
  * Vérifie si l'utilisateur connecté possède le membre spécifié
  */
 function mj_member_notification_bell_user_owns_member($member_id) {

@@ -494,22 +494,25 @@ class MjAccountLinks {
         }
 
         $contactCapability = Config::contactCapability();
-        $unreadContactCount = array_key_exists('unread_contact_count', $args) ? (int) $args['unread_contact_count'] : null;
-
-        if ($unreadContactCount === null) {
-            $unreadContactCount = self::computeUnreadCount(
-                $currentUser,
-                $contactCapability,
-                $allowContactOwnerView,
-                $previewMode,
-                $currentMemberId,
-                $currentUserEmail,
-                $unreadExtraTargets,
-                $args
-            );
-        }
-
-        $unreadContactCount = max(0, (int) $unreadContactCount);
+        
+        // Calculer les compteurs séparés (contact et notifications)
+        $unreadCounts = self::computeUnreadCounts(
+            $currentUser,
+            $contactCapability,
+            $allowContactOwnerView,
+            $previewMode,
+            $currentMemberId,
+            $currentUserEmail,
+            $unreadExtraTargets,
+            $args
+        );
+        
+        // Permettre de surcharger le compte des messages de contact via les args
+        $unreadContactCount = array_key_exists('unread_contact_count', $args) 
+            ? (int) $args['unread_contact_count'] 
+            : $unreadCounts['contact'];
+        
+        $unreadNotificationCount = $unreadCounts['notifications'];
 
         $links = array();
         foreach ($configuredLinks as $key => $config) {
@@ -678,7 +681,12 @@ class MjAccountLinks {
         return $sanitized;
     }
 
-    private static function computeUnreadCount(
+    /**
+     * Calcule les compteurs de messages non lus (contact et notifications séparément).
+     * 
+     * @return array{contact: int, notifications: int, total: int}
+     */
+    private static function computeUnreadCounts(
         ?WP_User $currentUser,
         string $contactCapability,
         bool $allowContactOwnerView,
@@ -687,7 +695,7 @@ class MjAccountLinks {
         string $currentUserEmail,
         array $extraTargets,
         array $args
-    ): int {
+    ): array {
         $contactUnread = 0;
         $notificationUnread = 0;
         $canComputeContact = false;
@@ -746,17 +754,25 @@ class MjAccountLinks {
                 $notificationUnread = (int) \mj_member_get_user_unread_notifications_count($currentUser->ID, $notificationArgs);
             }
 
-            return max(0, $contactUnread + $notificationUnread);
+            return array(
+                'contact' => max(0, $contactUnread),
+                'notifications' => max(0, $notificationUnread),
+                'total' => max(0, $contactUnread + $notificationUnread),
+            );
         }
 
         if ($previewMode) {
             $contactPreview = (int) apply_filters('mj_member_contact_messages_preview_unread_total', 2, $args);
             $notificationPreview = (int) apply_filters('mj_member_notifications_preview_unread_total', 0, $args);
 
-            return max(0, $contactPreview + $notificationPreview);
+            return array(
+                'contact' => max(0, $contactPreview),
+                'notifications' => max(0, $notificationPreview),
+                'total' => max(0, $contactPreview + $notificationPreview),
+            );
         }
 
-        return 0;
+        return array('contact' => 0, 'notifications' => 0, 'total' => 0);
     }
 
     private static function resolveAccountLink(string $path, string $fallback, array $query = array()): string {
