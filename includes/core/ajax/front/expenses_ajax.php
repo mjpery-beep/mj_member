@@ -122,6 +122,10 @@ function mj_member_expenses_localize(): void
             'reviewer_comment' => $exp->reviewer_comment ?? '',
             'created_at'      => $exp->created_at ?? '',
             'updated_at'      => $exp->updated_at ?? '',
+            'is_paid'         => !empty($exp->is_paid),
+            'payment_method'  => $exp->payment_method ?? '',
+            'payment_date'    => $exp->payment_date ?? '',
+            'bank_statement'  => $exp->bank_statement ?? '',
         );
     };
 
@@ -139,7 +143,7 @@ function mj_member_expenses_localize(): void
         'statusLabels'  => MjExpenses::get_status_labels(),
         'i18n'          => array(
             'title'               => __('Notes de Frais', 'mj-member'),
-            'newExpense'          => __('Nouvelle note de frais', 'mj-member'),
+            'newExpense'          => __('Nouveau document', 'mj-member'),
             'amount'              => __('Montant (€)', 'mj-member'),
             'description'         => __('Description', 'mj-member'),
             'project'             => __('Projet', 'mj-member'),
@@ -191,6 +195,17 @@ function mj_member_expenses_localize(): void
             'reimbursedAmount'    => __('Remboursé', 'mj-member'),
             'selectEvents'        => __('Sélectionner les événements', 'mj-member'),
             'selectProject'       => __('Sélectionner un projet', 'mj-member'),
+            'isPaid'              => __('La facture est payée', 'mj-member'),
+            'paymentMethod'       => __('Mode de paiement', 'mj-member'),
+            'unpaid'              => __('À payer', 'mj-member'),
+            'paymentDate'         => __('Date du paiement', 'mj-member'),
+            'bankStatement'       => __('Extrait CB', 'mj-member'),
+            'cashMj'              => __('Cash MJ', 'mj-member'),
+            'cbMj'                => __('CB MJ', 'mj-member'),
+            'cashPerso'           => __('Cash personnel', 'mj-member'),
+            'cbPerso'             => __('CB personnel', 'mj-member'),
+            'markAsReimbursed'    => __('Marquer comme remboursé', 'mj-member'),
+            'accountingized'      => __('Comptabilisé', 'mj-member'),
         ),
     ));
 }
@@ -260,6 +275,11 @@ function mj_member_expense_create_handler(): void
     $projectId = isset($_POST['project_id']) && $_POST['project_id'] !== '' ? (int) $_POST['project_id'] : null;
     $eventIds = isset($_POST['event_ids']) ? array_map('intval', (array) $_POST['event_ids']) : array();
 
+    // Payment fields
+    $isPaid = !empty($_POST['is_paid']);
+    $paymentMethod = $isPaid && isset($_POST['payment_method']) ? sanitize_text_field(wp_unslash($_POST['payment_method'])) : null;
+    $paymentDate = $isPaid && isset($_POST['payment_date']) ? sanitize_text_field(wp_unslash($_POST['payment_date'])) : null;
+
     if ($amount <= 0) {
         wp_send_json_error(array('message' => __('Le montant doit être supérieur à 0.', 'mj-member')), 400);
     }
@@ -311,13 +331,28 @@ function mj_member_expense_create_handler(): void
         $receiptFiles[] = $uploaded;
     }
 
+    // Handle bank statement upload (CB Perso only)
+    $bankStatement = null;
+    if ($paymentMethod === 'cb_perso' && !empty($_FILES['bank_statement']) && $_FILES['bank_statement']['error'] === UPLOAD_ERR_OK) {
+        $bankFile = $_FILES['bank_statement'];
+        $uploaded = mj_member_expenses_handle_upload($bankFile, $memberId, 'bank_statement');
+        if (is_wp_error($uploaded)) {
+            wp_send_json_error(array('message' => $uploaded->get_error_message()), 400);
+        }
+        $bankStatement = $uploaded;
+    }
+
     $result = MjExpenses::create(array(
-        'member_id'     => $memberId,
-        'amount'        => $amount,
-        'description'   => $description,
-        'project_id'    => $projectId,
-        'receipt_files' => $receiptFiles,
-        'status'        => MjExpenses::STATUS_PENDING,
+        'member_id'       => $memberId,
+        'amount'          => $amount,
+        'description'     => $description,
+        'project_id'      => $projectId,
+        'receipt_files'   => $receiptFiles,
+        'status'          => MjExpenses::STATUS_PENDING,
+        'is_paid'         => $isPaid,
+        'payment_method'  => $paymentMethod,
+        'payment_date'    => $paymentDate,
+        'bank_statement'  => $bankStatement,
     ));
 
     if (is_wp_error($result)) {
@@ -361,6 +396,10 @@ function mj_member_expense_create_handler(): void
             'status'       => $exp->status,
             'event_ids'    => $exp->event_ids ?? array(),
             'created_at'   => $exp->created_at ?? '',
+            'is_paid'      => (bool) ($exp->is_paid ?? false),
+            'payment_method' => $exp->payment_method ?? null,
+            'payment_date' => $exp->payment_date ?? null,
+            'bank_statement' => $exp->bank_statement ?? null,
         ),
     ));
 }
@@ -401,6 +440,11 @@ function mj_member_expense_update_handler(): void
     $description = isset($_POST['description']) ? sanitize_textarea_field(wp_unslash($_POST['description'])) : '';
     $projectId = isset($_POST['project_id']) && $_POST['project_id'] !== '' ? (int) $_POST['project_id'] : null;
     $eventIds = isset($_POST['event_ids']) ? array_map('intval', (array) $_POST['event_ids']) : array();
+
+    // Payment fields
+    $isPaid = !empty($_POST['is_paid']);
+    $paymentMethod = $isPaid && isset($_POST['payment_method']) ? sanitize_text_field(wp_unslash($_POST['payment_method'])) : null;
+    $paymentDate = $isPaid && isset($_POST['payment_date']) ? sanitize_text_field(wp_unslash($_POST['payment_date'])) : null;
 
     if ($amount <= 0) {
         wp_send_json_error(array('message' => __('Le montant doit être supérieur à 0.', 'mj-member')), 400);
@@ -461,11 +505,26 @@ function mj_member_expense_update_handler(): void
 
     $allFiles = array_merge($existingFiles, $newFiles);
 
+    // Handle bank statement upload (CB Perso only)
+    $bankStatement = $expense->bank_statement ?? null; // Keep existing if not changed
+    if ($paymentMethod === 'cb_perso' && !empty($_FILES['bank_statement']) && $_FILES['bank_statement']['error'] === UPLOAD_ERR_OK) {
+        $bankFile = $_FILES['bank_statement'];
+        $uploaded = mj_member_expenses_handle_upload($bankFile, $memberId, 'bank_statement');
+        if (is_wp_error($uploaded)) {
+            wp_send_json_error(array('message' => $uploaded->get_error_message()), 400);
+        }
+        $bankStatement = $uploaded;
+    }
+
     $updateData = array(
-        'amount'        => $amount,
-        'description'   => $description,
-        'project_id'    => $projectId,
-        'receipt_files' => $allFiles,
+        'amount'          => $amount,
+        'description'     => $description,
+        'project_id'      => $projectId,
+        'receipt_files'   => $allFiles,
+        'is_paid'         => $isPaid,
+        'payment_method'  => $paymentMethod,
+        'payment_date'    => $paymentDate,
+        'bank_statement'  => $bankStatement,
     );
 
     $result = MjExpenses::update($expenseId, $updateData);
@@ -508,6 +567,10 @@ function mj_member_expense_update_handler(): void
             'reviewer_comment' => $exp->reviewer_comment ?? '',
             'created_at'      => $exp->created_at ?? '',
             'updated_at'      => $exp->updated_at ?? '',
+            'is_paid'         => (bool) ($exp->is_paid ?? false),
+            'payment_method'  => $exp->payment_method ?? null,
+            'payment_date'    => $exp->payment_date ?? null,
+            'bank_statement'  => $exp->bank_statement ?? null,
         ),
     ));
 }

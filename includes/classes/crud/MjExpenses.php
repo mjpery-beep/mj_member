@@ -20,6 +20,7 @@ class MjExpenses extends MjTools implements CrudRepositoryInterface
     public const STATUS_APPROVED = 'approved';
     public const STATUS_REJECTED = 'rejected';
     public const STATUS_REIMBURSED = 'reimbursed';
+    public const STATUS_ACCOUNTINGIZED = 'accountingized';
 
     /**
      * @return string
@@ -55,6 +56,7 @@ class MjExpenses extends MjTools implements CrudRepositoryInterface
             self::STATUS_APPROVED,
             self::STATUS_REJECTED,
             self::STATUS_REIMBURSED,
+            self::STATUS_ACCOUNTINGIZED,
         );
     }
 
@@ -64,10 +66,11 @@ class MjExpenses extends MjTools implements CrudRepositoryInterface
     public static function get_status_labels(): array
     {
         return array(
-            self::STATUS_PENDING    => __('En attente', 'mj-member'),
-            self::STATUS_APPROVED   => __('Approuvée', 'mj-member'),
-            self::STATUS_REJECTED   => __('Refusée', 'mj-member'),
-            self::STATUS_REIMBURSED => __('Remboursée', 'mj-member'),
+            self::STATUS_PENDING      => __('En attente', 'mj-member'),
+            self::STATUS_APPROVED     => __('Approuvée', 'mj-member'),
+            self::STATUS_REJECTED     => __('Refusée', 'mj-member'),
+            self::STATUS_REIMBURSED   => __('Remboursée', 'mj-member'),
+            self::STATUS_ACCOUNTINGIZED => __('Comptabilisée', 'mj-member'),
         );
     }
 
@@ -291,14 +294,24 @@ class MjExpenses extends MjTools implements CrudRepositoryInterface
             return new WP_Error('invalid_amount', __('Le montant doit être supérieur à 0.', 'mj-member'));
         }
 
+        // Payment fields
+        $isPaid = isset($data['is_paid']) ? (bool) $data['is_paid'] : false;
+        $paymentMethod = isset($data['payment_method']) ? sanitize_text_field($data['payment_method']) : null;
+        $paymentDate = isset($data['payment_date']) ? sanitize_text_field($data['payment_date']) : null;
+        $bankStatement = isset($data['bank_statement']) ? sanitize_text_field($data['bank_statement']) : null;
+
         $result = $wpdb->insert($table, array(
-            'member_id'    => $memberId,
-            'amount'       => $amount,
-            'description'  => $description,
-            'project_id'   => $projectId,
-            'receipt_file' => $receiptJson,
-            'status'       => $status,
-        ), array('%d', '%f', '%s', '%d', '%s', '%s'));
+            'member_id'       => $memberId,
+            'amount'          => $amount,
+            'description'     => $description,
+            'project_id'      => $projectId,
+            'receipt_file'    => $receiptJson,
+            'status'          => $status,
+            'is_paid'         => $isPaid ? 1 : 0,
+            'payment_method'  => $paymentMethod,
+            'payment_date'    => $paymentDate,
+            'bank_statement'  => $bankStatement,
+        ), array('%d', '%f', '%s', '%d', '%s', '%s', '%d', '%s', '%s', '%s'));
 
         if ($result === false) {
             return new WP_Error('db_error', __('Erreur lors de la création.', 'mj-member'));
@@ -360,6 +373,22 @@ class MjExpenses extends MjTools implements CrudRepositoryInterface
         }
         if (isset($data['reviewer_comment'])) {
             $set['reviewer_comment'] = sanitize_textarea_field($data['reviewer_comment']);
+            $formats[] = '%s';
+        }
+        if (array_key_exists('is_paid', $data)) {
+            $set['is_paid'] = (bool) $data['is_paid'] ? 1 : 0;
+            $formats[] = '%d';
+        }
+        if (array_key_exists('payment_method', $data)) {
+            $set['payment_method'] = $data['payment_method'] !== null ? sanitize_text_field($data['payment_method']) : null;
+            $formats[] = '%s';
+        }
+        if (array_key_exists('payment_date', $data)) {
+            $set['payment_date'] = $data['payment_date'] !== null ? sanitize_text_field($data['payment_date']) : null;
+            $formats[] = '%s';
+        }
+        if (array_key_exists('bank_statement', $data)) {
+            $set['bank_statement'] = $data['bank_statement'] !== null ? sanitize_text_field($data['bank_statement']) : null;
             $formats[] = '%s';
         }
 

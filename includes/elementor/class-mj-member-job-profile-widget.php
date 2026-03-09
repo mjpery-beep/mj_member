@@ -98,6 +98,16 @@ class Mj_Member_Elementor_Job_Profile_Widget extends Widget_Base
             )
         );
 
+        $this->add_control(
+            'common_provisions',
+            array(
+                'label'       => __('Dispositions communes', 'mj-member'),
+                'type'        => Controls_Manager::WYSIWYG,
+                'default'     => '',
+                'description' => __('Ce contenu s\'affichera sur tous les profils de fonction.', 'mj-member'),
+            )
+        );
+
         $this->end_controls_section();
 
         $this->register_visibility_controls();
@@ -112,9 +122,10 @@ class Mj_Member_Elementor_Job_Profile_Widget extends Widget_Base
         if (is_readable($template)) {
             $title           = isset($settings['title']) ? sanitize_text_field((string) $settings['title']) : '';
             $emptyMessage    = isset($settings['empty_message']) ? sanitize_text_field((string) $settings['empty_message']) : '';
-            $showDescription = !empty($settings['show_description']) && $settings['show_description'] === 'yes';
-            $showFunding     = !empty($settings['show_funding']) && $settings['show_funding'] === 'yes';
-            $widget          = $this;
+            $showDescription    = !empty($settings['show_description']) && $settings['show_description'] === 'yes';
+            $showFunding        = !empty($settings['show_funding']) && $settings['show_funding'] === 'yes';
+            $commonProvisions   = isset($settings['common_provisions']) ? (string) $settings['common_provisions'] : '';
+            $widget             = $this;
             include $template;
         }
     }

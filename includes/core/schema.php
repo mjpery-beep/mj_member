@@ -1889,6 +1889,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_70($wpdb);
     mj_member_upgrade_to_2_71($wpdb);
     mj_member_upgrade_to_2_73($wpdb);
+    mj_member_upgrade_to_2_74($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -5865,6 +5866,30 @@ function mj_member_upgrade_to_2_73($wpdb) {
         'work_regime'      => "VARCHAR(50) DEFAULT NULL",
         'funding_source'   => "VARCHAR(255) DEFAULT NULL",
         'job_description'  => "LONGTEXT DEFAULT NULL",
+    ];
+
+    foreach ($columns as $col => $def) {
+        if (!mj_member_column_exists($table, $col)) {
+            $wpdb->query("ALTER TABLE {$table} ADD COLUMN {$col} {$def}");
+        }
+    }
+}
+
+/**
+ * Migration 2.74: Add payment and accounting columns to mj_expenses.
+ */
+function mj_member_upgrade_to_2_74($wpdb) {
+    $table = mj_member_get_expenses_table_name();
+    if (!mj_member_table_exists($table)) {
+        return;
+    }
+
+    $columns = [
+        'is_paid'         => "TINYINT(1) DEFAULT 0",
+        'payment_method'  => "VARCHAR(50) DEFAULT NULL",
+        'payment_date'    => "DATE DEFAULT NULL",
+        'bank_statement'  => "VARCHAR(255) DEFAULT NULL",
+        'is_accountingized' => "TINYINT(1) DEFAULT 0",
     ];
 
     foreach ($columns as $col => $def) {

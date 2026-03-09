@@ -46,6 +46,23 @@
     return statusLabels[s] || s;
   }
 
+  function formatPaymentSummary(exp) {
+    var methodLabels = {
+      'cash_mj': i18n.cashMj || 'Cash MJ',
+      'cb_mj': i18n.cbMj || 'CB MJ',
+      'cash_perso': i18n.cashPerso || 'Cash personnel',
+      'cb_perso': i18n.cbPerso || 'CB personnel'
+    };
+    
+    if (!exp.is_paid) {
+      return '<span class="mj-expenses__payment-status mj-expenses__payment-status--unpaid">' + esc(i18n.unpaid || 'À payer') + '</span>';
+    }
+    
+    var method = methodLabels[exp.payment_method] || exp.payment_method || '-';
+    var date = exp.payment_date ? '<br><small>(' + formatDate(exp.payment_date) + ')</small>' : '';
+    return '<span class="mj-expenses__payment-status mj-expenses__payment-status--paid">' + esc(method) + date + '</span>';
+  }
+
   /* ── AJAX helper ─────────────────────────────────────── */
   function post(action, data, cb) {
     var fd = data instanceof FormData ? data : null;
@@ -158,7 +175,7 @@
     var isEdit = !!ed;
     var h = '<div class="mj-expenses__form-overlay" id="mj-exp-form-overlay">';
     h += '<div class="mj-expenses__form-modal">';
-    h += '<h3>' + esc(isEdit ? (i18n.editExpense || 'Modifier la note de frais') : i18n.newExpense) + '</h3>';
+    h += '<h2>' + esc(isEdit ? (i18n.editExpense || 'Modifier la note de frais') : (i18n.newExpense || 'Nouveau docuement')) + '</h2>';
     h += '<form id="mj-exp-form" enctype="multipart/form-data">';
     if (isEdit) {
       h += '<input type="hidden" name="expense_id" value="' + ed.id + '" />';
@@ -227,6 +244,48 @@
     }
     h += '<input type="file" name="receipts[]" multiple accept="image/jpeg,image/png,image/gif,application/pdf" class="mj-expenses__input" />';
     h += '<small>' + esc('Plusieurs fichiers possibles (PDF, JPG, PNG, GIF – max 10 Mo chacun)') + '</small>';
+    h += '</div>';
+
+    // Payment section
+    h += '<div class="mj-expenses__divider"></div>';
+    h += '<h4>' + esc('Paiement') + '</h4>';
+
+    // Is paid checkbox
+    h += '<div class="mj-expenses__field">';
+    h += '<label class="mj-expenses__checkbox-label">';
+    h += '<input type="checkbox" name="is_paid" class="mj-expenses__checkbox" value="1"' + (isEdit && ed.is_paid ? ' checked' : '') + ' id="mj-exp-is-paid" />';
+    h += ' ' + esc(i18n.isPaid);
+    h += '</label>';
+    h += '</div>';
+
+    // Payment method and date (conditional)
+    h += '<div id="mj-exp-payment-details" class="mj-expenses__payment-details" style="display: ' + (isEdit && ed.is_paid ? 'block' : 'none') + ';">';
+    h += '<div class="mj-expenses__field">';
+    h += '<label>' + esc(i18n.paymentMethod) + '</label>';
+    h += '<select name="payment_method" class="mj-expenses__input" id="mj-exp-payment-method">';
+    h += '<option value="">' + esc('— Choisir —') + '</option>';
+    h += '<option value="cash_mj"' + (isEdit && ed.payment_method === 'cash_mj' ? ' selected' : '') + '>' + esc(i18n.cashMj) + '</option>';
+    h += '<option value="cb_mj"' + (isEdit && ed.payment_method === 'cb_mj' ? ' selected' : '') + '>' + esc(i18n.cbMj) + '</option>';
+    h += '<option value="cash_perso"' + (isEdit && ed.payment_method === 'cash_perso' ? ' selected' : '') + '>' + esc(i18n.cashPerso) + '</option>';
+    h += '<option value="cb_perso"' + (isEdit && ed.payment_method === 'cb_perso' ? ' selected' : '') + '>' + esc(i18n.cbPerso) + '</option>';
+    h += '</select>';
+    h += '</div>';
+
+    h += '<div class="mj-expenses__field">';
+    h += '<label>' + esc(i18n.paymentDate) + '</label>';
+    h += '<input type="date" name="payment_date" class="mj-expenses__input" value="' + (isEdit && ed.payment_date ? ed.payment_date : '') + '" />';
+    h += '</div>';
+
+    // Bank statement (conditional - CB Perso only)
+    h += '<div id="mj-exp-bank-statement" class="mj-expenses__field" style="display: ' + (isEdit && ed.payment_method === 'cb_perso' ? 'block' : 'none') + ';">';
+    h += '<label>' + esc(i18n.bankStatement) + '</label>';
+    if (isEdit && ed.bank_statement) {
+      h += '<div class="mj-expenses__existing-file">';
+      h += '<small>Fichier existant : ' + esc(ed.bank_statement) + '</small>';
+      h += '</div>';
+    }
+    h += '<input type="file" name="bank_statement" accept="application/pdf,image/jpeg,image/png" class="mj-expenses__input" />';
+    h += '</div>';
     h += '</div>';
 
     // Buttons
@@ -325,7 +384,9 @@
     h += '<th>' + esc(i18n.amount) + '</th>';
     h += '<th>' + esc(i18n.project) + '</th>';
     h += '<th>' + esc(i18n.status) + '</th>';
+    h += '<th>' + esc(i18n.paymentMethod) + '</th>';
     h += '<th>' + esc(i18n.receipt) + '</th>';
+    h += '<th>' + esc(i18n.bankStatement) + '</th>';
     h += '<th>' + esc(i18n.actions) + '</th>';
     h += '</tr></thead><tbody>';
 
@@ -341,6 +402,10 @@
         h += '<br><small class="mj-expenses__comment">' + esc(exp.reviewer_comment) + '</small>';
       }
       h += '</td>';
+
+      // Payment method column
+      h += '<td class="mj-expenses__payment-method-cell">' + formatPaymentSummary(exp) + '</td>';
+
       h += '<td class="mj-expenses__receipt-cell">';
       if (exp.receipts && exp.receipts.length) {
         h += '<div class="mj-expenses__receipt-gallery">';
@@ -348,11 +413,11 @@
           var receiptUrl = ajaxUrl + '?action=mj_expense_receipt&expense_id=' + exp.id + '&file_index=' + r.index + '&nonce=' + encodeURIComponent(nonce);
           var ext = (r.ext || '').toLowerCase();
           if (ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'gif' || ext === 'webp') {
-            h += '<a href="' + receiptUrl + '" target="_blank" class="mj-expenses__thumb-link" title="' + esc(i18n.viewReceipt || 'Voir') + '">';
+            h += '<a href="#" class="mj-expenses__thumb-link mj-expenses__viewer-trigger" data-url="' + receiptUrl + '" data-type="image" data-title="' + esc(i18n.receipt || 'Reçu') + '" title="' + esc(i18n.viewReceipt || 'Voir') + '">';
             h += '<img src="' + receiptUrl + '" alt="' + esc(i18n.receipt || 'Reçu') + '" class="mj-expenses__thumb" loading="lazy" />';
             h += '</a>';
           } else {
-            h += '<a href="' + receiptUrl + '" target="_blank" class="mj-expenses__thumb-link mj-expenses__thumb-link--pdf" title="' + esc(i18n.viewReceipt || 'Voir') + '">';
+            h += '<a href="#" class="mj-expenses__thumb-link mj-expenses__thumb-link--pdf mj-expenses__viewer-trigger" data-url="' + receiptUrl + '" data-type="pdf" data-title="' + esc(i18n.receipt || 'Reçu') + ' PDF" title="' + esc(i18n.viewReceipt || 'Voir') + '">';
             h += '<span class="mj-expenses__thumb-pdf">PDF</span>';
             h += '</a>';
           }
@@ -362,17 +427,56 @@
         h += '-';
       }
       h += '</td>';
+      
+      // Bank statement column
+      h += '<td class="mj-expenses__bank-statement-cell">';
+      if (exp.bank_statement) {
+        var bankUrl = ajaxUrl + '?action=mj_expense_bank_statement&expense_id=' + exp.id + '&nonce=' + encodeURIComponent(nonce);
+        var bankExt = (exp.bank_statement.split('.').pop() || '').toLowerCase();
+        if (bankExt === 'pdf') {
+          h += '<a href="#" class="mj-expenses__thumb-link mj-expenses__thumb-link--pdf mj-expenses__viewer-trigger" data-url="' + bankUrl + '" data-type="pdf" data-title="' + esc(i18n.bankStatement || 'Extrait') + '" title="' + esc(i18n.bankStatement || 'Extrait') + '">';
+          h += '<span class="mj-expenses__thumb-pdf">PDF</span>';
+          h += '</a>';
+        } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].indexOf(bankExt) !== -1) {
+          h += '<a href="#" class="mj-expenses__thumb-link mj-expenses__viewer-trigger" data-url="' + bankUrl + '" data-type="image" data-title="' + esc(i18n.bankStatement || 'Extrait') + '" title="' + esc(i18n.bankStatement || 'Extrait') + '">';
+          h += '<img src="' + bankUrl + '" alt="' + esc(i18n.bankStatement || 'Extrait') + '" class="mj-expenses__thumb" loading="lazy" />';
+          h += '</a>';
+        } else {
+          h += '<a href="' + bankUrl + '" target="_blank" class="mj-expenses__bank-link">Fichier</a>';
+        }
+      } else {
+        h += '-';
+      }
+      h += '</td>';
 
       h += '<td class="mj-expenses__actions">';
       var canOwnerEdit = (exp.member_id === currentMemberId && exp.status === 'pending');
       if (isCoordinator) {
+        // Step 1: Approve/Reject
         if (exp.status === 'pending') {
-          h += '<button class="mj-expenses__btn mj-expenses__btn--sm mj-expenses__btn--success" data-action="reimburse" data-id="' + exp.id + '">' + esc(i18n.reimburse) + '</button> ';
-          h += '<button class="mj-expenses__btn mj-expenses__btn--sm mj-expenses__btn--danger" data-action="reject" data-id="' + exp.id + '">' + esc(i18n.reject) + '</button> ';
+          h += '<div class="mj-expenses__action-group">';
+          h += '<small class="mj-expenses__action-step">Étape 1 : Validation</small>';
+          h += '<button class="mj-expenses__btn mj-expenses__btn--sm mj-expenses__btn--success" data-action="approve" data-id="' + exp.id + '">' + esc(i18n.approve) + '</button> ';
+          h += '<button class="mj-expenses__btn mj-expenses__btn--sm mj-expenses__btn--danger" data-action="reject" data-id="' + exp.id + '">' + esc(i18n.reject) + '</button>';
+          h += '</div>';
         }
-        if (exp.status === 'approved') {
-          h += '<button class="mj-expenses__btn mj-expenses__btn--sm mj-expenses__btn--success" data-action="reimburse" data-id="' + exp.id + '">' + esc(i18n.reimburse) + '</button> ';
+        
+        // Step 2: Mark as reimbursed (only for cash_perso, cb_perso)
+        if (exp.status === 'approved' && (exp.payment_method === 'cash_perso' || exp.payment_method === 'cb_perso')) {
+          h += '<div class="mj-expenses__action-group">';
+          h += '<small class="mj-expenses__action-step">Étape 2 : Remboursement</small>';
+          h += '<button class="mj-expenses__btn mj-expenses__btn--sm mj-expenses__btn--success" data-action="mark-reimbursed" data-id="' + exp.id + '">' + esc(i18n.markAsReimbursed) + '</button>';
+          h += '</div>';
         }
+        
+        // Step 3: Accountingized (archive)
+        if (exp.status === 'reimbursed' || (exp.payment_method && ['cash_mj', 'cb_mj'].indexOf(exp.payment_method) !== -1 && exp.status === 'approved')) {
+          h += '<div class="mj-expenses__action-group">';
+          h += '<small class="mj-expenses__action-step">Étape 3 : Comptabilisation</small>';
+          h += '<button class="mj-expenses__btn mj-expenses__btn--sm mj-expenses__btn--info" data-action="accountingize" data-id="' + exp.id + '">' + esc(i18n.accountingized) + '</button>';
+          h += '</div>';
+        }
+        
         h += '<button class="mj-expenses__btn mj-expenses__btn--sm mj-expenses__btn--danger-outline" data-action="delete" data-id="' + exp.id + '">' + esc(i18n.delete) + '</button>';
       }
       if (canOwnerEdit) {
@@ -447,6 +551,24 @@
         if (form) form.appendChild(input);
       });
     });
+
+    // Payment details toggle
+    var isPaidCheckbox = $('#mj-exp-is-paid', ctx);
+    var paymentDetails = $('#mj-exp-payment-details', ctx);
+    if (isPaidCheckbox && paymentDetails) {
+      isPaidCheckbox.addEventListener('change', function () {
+        paymentDetails.style.display = isPaidCheckbox.checked ? 'block' : 'none';
+      });
+    }
+
+    // Bank statement toggle (CB Perso)
+    var paymentMethod = $('#mj-exp-payment-method', ctx);
+    var bankStatement = $('#mj-exp-bank-statement', ctx);
+    if (paymentMethod && bankStatement) {
+      paymentMethod.addEventListener('change', function () {
+        bankStatement.style.display = paymentMethod.value === 'cb_perso' ? 'block' : 'none';
+      });
+    }
 
     // Form submit
     var form = $('#mj-exp-form', ctx);
@@ -538,10 +660,28 @@
               alert((res.data && res.data.message) || i18n.error);
             }
           });
-        } else if (action === 'reimburse') {
+        } else if (action === 'approve') {
+          post('mj_expense_update_status', { expense_id: id, status: 'approved' }, function (res) {
+            if (res.success) {
+              updateExpenseStatus(id, 'approved');
+              render();
+            } else {
+              alert((res.data && res.data.message) || i18n.error);
+            }
+          });
+        } else if (action === 'mark-reimbursed') {
           post('mj_expense_update_status', { expense_id: id, status: 'reimbursed' }, function (res) {
             if (res.success) {
               updateExpenseStatus(id, 'reimbursed');
+              render();
+            } else {
+              alert((res.data && res.data.message) || i18n.error);
+            }
+          });
+        } else if (action === 'accountingize') {
+          post('mj_expense_update_status', { expense_id: id, status: 'accountingized' }, function (res) {
+            if (res.success) {
+              updateExpenseStatus(id, 'accountingized');
               render();
             } else {
               alert((res.data && res.data.message) || i18n.error);
@@ -565,6 +705,115 @@
         }
       });
     });
+
+    // Viewer triggers
+    $$('.mj-expenses__viewer-trigger', ctx).forEach(function (link) {
+      link.addEventListener('click', function (e) {
+        e.preventDefault();
+        var url = link.dataset.url;
+        var type = link.dataset.type;
+        var title = link.dataset.title || '';
+        openViewer(url, type, title);
+      });
+    });
+  }
+
+  /* ── Viewer Modal ─────────────────────────────────────── */
+  function openViewer(url, type, title) {
+    var overlay = document.createElement('div');
+    overlay.className = 'mj-expenses__viewer-overlay';
+    overlay.id = 'mj-expenses-viewer';
+
+    var header = '<div class="mj-expenses__viewer-header">';
+    header += '<h3 class="mj-expenses__viewer-title">' + esc(title) + '</h3>';
+    header += '<div class="mj-expenses__viewer-actions">';
+    header += '<button class="mj-expenses__viewer-btn" id="mj-viewer-download" title="Télécharger">';
+    header += '⬇️ Télécharger';
+    header += '</button>';
+    header += '<button class="mj-expenses__viewer-btn" id="mj-viewer-print" title="Imprimer">';
+    header += '🖨️ Imprimer';
+    header += '</button>';
+    header += '<button class="mj-expenses__viewer-btn mj-expenses__viewer-btn--close" id="mj-viewer-close" title="Fermer">';
+    header += '×';
+    header += '</button>';
+    header += '</div>';
+    header += '</div>';
+
+    var content;
+    if (type === 'image') {
+      content = '<div class="mj-expenses__viewer-content">';
+      content += '<img src="' + url + '" alt="' + esc(title) + '" class="mj-expenses__viewer-image" id="mj-viewer-content" />';
+      content += '</div>';
+    } else {
+      content = '<div class="mj-expenses__viewer-content">';
+      content += '<iframe src="' + url + '" class="mj-expenses__viewer-iframe" id="mj-viewer-content"></iframe>';
+      content += '</div>';
+    }
+
+    overlay.innerHTML = header + content;
+    document.body.appendChild(overlay);
+
+    // Close handlers
+    var closeBtn = document.getElementById('mj-viewer-close');
+    var closeViewer = function () {
+      document.body.removeChild(overlay);
+    };
+
+    if (closeBtn) {
+      closeBtn.addEventListener('click', closeViewer);
+    }
+
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) {
+        closeViewer();
+      }
+    });
+
+    // Escape key
+    var escHandler = function (e) {
+      if (e.key === 'Escape') {
+        closeViewer();
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    document.addEventListener('keydown', escHandler);
+
+    // Download handler
+    var downloadBtn = document.getElementById('mj-viewer-download');
+    if (downloadBtn) {
+      downloadBtn.addEventListener('click', function () {
+        var link = document.createElement('a');
+        link.href = url;
+        link.download = title || 'document';
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      });
+    }
+
+    // Print handler
+    var printBtn = document.getElementById('mj-viewer-print');
+    if (printBtn) {
+      printBtn.addEventListener('click', function () {
+        if (type === 'image') {
+          var img = document.getElementById('mj-viewer-content');
+          var win = window.open('');
+          win.document.write('<html><head><title>' + esc(title) + '</title></head><body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;">');
+          win.document.write('<img src="' + img.src + '" style="max-width:100%;height:auto;" />');
+          win.document.write('</body></html>');
+          win.document.close();
+          win.focus();
+          setTimeout(function () {
+            win.print();
+            win.close();
+          }, 250);
+        } else {
+          var iframe = document.getElementById('mj-viewer-content');
+          iframe.contentWindow.print();
+        }
+      });
+    }
   }
 
   function removeExpense(id) {

@@ -20,8 +20,9 @@ AssetsManager::requirePackage('job-profile');
 
 $title           = isset($title) ? (string) $title : '';
 $emptyMessage    = isset($emptyMessage) ? (string) $emptyMessage : __('Aucun profil de fonction défini.', 'mj-member');
-$showDescription = isset($showDescription) ? (bool) $showDescription : true;
-$showFunding     = isset($showFunding) ? (bool) $showFunding : true;
+$showDescription  = isset($showDescription) ? (bool) $showDescription : true;
+$showFunding      = isset($showFunding) ? (bool) $showFunding : true;
+$commonProvisions = isset($commonProvisions) ? (string) $commonProvisions : '';
 
 $isPreview     = function_exists('is_elementor_preview') && is_elementor_preview();
 $currentUserId = get_current_user_id();
@@ -137,6 +138,19 @@ $titleColorClass = !empty($jobTitle) && isset($titleColors[$jobTitle])
                     </span>
                 <?php endif; ?>
             </div>
+
+            <!-- Dispositions communes (after header) -->
+            <?php if (!empty($commonProvisions)) : ?>
+                <div class="mj-jp__provisions">
+                    <div class="mj-jp__provisions-label">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        <?php esc_html_e('Dispositions communes', 'mj-member'); ?>
+                    </div>
+                    <div class="mj-jp__provisions-body">
+                        <?php echo wp_kses_post($commonProvisions); ?>
+                    </div>
+                </div>
+            <?php endif; ?>
 
             <!-- Description block -->
             <?php if ($showDescription && !empty($jobDescription)) : ?>
