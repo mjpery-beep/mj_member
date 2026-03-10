@@ -25,6 +25,7 @@ class MjAccountLinks {
         $default_links = array(
             'section_profile' => array(
                 'label' => __('📋 Profil personnel', 'mj-member'),
+                'description' => __('Gérez vos informations personnelles et votre identité.', 'mj-member'),
                 'slug' => '',
                 'query' => array(),
                 'enabled' => true,
@@ -36,6 +37,7 @@ class MjAccountLinks {
             ),
             'profile' => array(
                 'label' => __('Mes données personnelles', 'mj-member'),
+                'description' => __('Consultez et modifiez vos coordonnées et informations de profil.', 'mj-member'),
                 'slug' => 'mon-compte',
                 'query' => $default_account_section,
                 'enabled' => true,
@@ -47,6 +49,7 @@ class MjAccountLinks {
             ),
             'photos' => array(
                 'label' => __('Mes photos', 'mj-member'),
+                'description' => __('Gérez vos photos de profil et vos albums.', 'mj-member'),
                 'slug' => 'mes-photos',
                 'query' => array('section' => 'photos'),
                 'enabled' => true,
@@ -58,6 +61,7 @@ class MjAccountLinks {
             ),
             'photo_grimlins' => array(
                 'label' => __('Créer mon avatar Grimlins', 'mj-member'),
+                'description' => __('Personnalisez votre avatar unique dans le style Grimlins.', 'mj-member'),
                 'slug' => 'avatar-grimlins',
                 'query' => array(),
                 'enabled' => true,
@@ -69,6 +73,7 @@ class MjAccountLinks {
             ),
             'badges' => array(
                 'label' => __('Mes badges', 'mj-member'),
+                'description' => __('Découvrez vos badges obtenus et les prochains à débloquer.', 'mj-member'),
                 'slug' => 'mes-badges',
                 'query' => array('section' => 'badges'),
                 'enabled' => true,
@@ -80,6 +85,7 @@ class MjAccountLinks {
             ),
             'section_activities' => array(
                 'label' => __('📅 Mes activités', 'mj-member'),
+                'description' => __('Suivez vos inscriptions, paiements et participations.', 'mj-member'),
                 'slug' => '',
                 'query' => array(),
                 'enabled' => true,
@@ -91,6 +97,7 @@ class MjAccountLinks {
             ),
             'registrations' => array(
                 'label' => __('Mes inscriptions', 'mj-member'),
+                'description' => __('Retrouvez vos inscriptions aux événements passés et à venir.', 'mj-member'),
                 'slug' => 'inscriptions',
                 'query' => array('section' => 'registrations'),
                 'enabled' => true,
@@ -102,6 +109,7 @@ class MjAccountLinks {
             ),
             'payments' => array(
                 'label' => __('Mes paiements', 'mj-member'),
+                'description' => __('Consultez votre historique de paiements et cotisations.', 'mj-member'),
                 'slug' => 'paiements',
                 'query' => array('section' => 'payments'),
                 'enabled' => true,
@@ -113,6 +121,7 @@ class MjAccountLinks {
             ),
             'documents' => array(
                 'label' => __('Mes documents', 'mj-member'),
+                'description' => __('Accédez à vos documents et attestations.', 'mj-member'),
                 'slug' => 'documents',
                 'query' => array('section' => 'documents'),
                 'enabled' => true,
@@ -124,6 +133,7 @@ class MjAccountLinks {
             ),
             'testimonials' => array(
                 'label' => __('Témoignages', 'mj-member'),
+                'description' => __('Partagez votre expérience et lisez les avis des autres membres.', 'mj-member'),
                 'slug' => 'temoignages',
                 'query' => array(),
                 'enabled' => true,
@@ -135,6 +145,7 @@ class MjAccountLinks {
             ),
             'section_messages' => array(
                 'label' => __('💬 Messages & Tâches', 'mj-member'),
+                'description' => __('Vos messages, tâches et suggestions.', 'mj-member'),
                 'slug' => '',
                 'query' => array(),
                 'enabled' => true,
@@ -146,6 +157,7 @@ class MjAccountLinks {
             ),
             'contact_messages' => array(
                 'label' => __('Messages', 'mj-member'),
+                'description' => __('Envoyez et recevez des messages avec votre équipe.', 'mj-member'),
                 'slug' => 'messages',
                 'query' => array('section' => 'contact_messages'),
                 'enabled' => true,
@@ -158,6 +170,7 @@ class MjAccountLinks {
             ),
             'todos' => array(
                 'label' => __('Mes tâches', 'mj-member'),
+                'description' => __('Suivez et gérez vos tâches assignées.', 'mj-member'),
                 'slug' => 'mes-taches',
                 'query' => array('section' => 'todos'),
                 'enabled' => true,
@@ -170,6 +183,7 @@ class MjAccountLinks {
             ),
             'idea_box' => array(
                 'label' => __('Boîte à idées', 'mj-member'),
+                'description' => __('Proposez vos idées et votez pour celles des autres.', 'mj-member'),
                 'slug' => 'boite-a-idees',
                 'query' => array('section' => 'idea_box'),
                 'enabled' => true,
@@ -181,6 +195,7 @@ class MjAccountLinks {
             ),
             'section_team' => array(
                 'label' => __('👥 Équipe & Animateurs', 'mj-member'),
+                'description' => __('Outils réservés au staff d\'animation et de coordination.', 'mj-member'),
                 'slug' => '',
                 'query' => array(),
                 'enabled' => true,
@@ -192,6 +207,7 @@ class MjAccountLinks {
             ),
             'animateur_events' => array(
                 'label' => __('Gestion des événements', 'mj-member'),
+                'description' => __('Créez et gérez les événements que vous animez.', 'mj-member'),
                 'slug' => 'animateurs',
                 'query' => array('section' => 'animateur_events'),
                 'enabled' => true,
@@ -203,6 +219,7 @@ class MjAccountLinks {
             ),
             'hours_encode' => array(
                 'label' => __('Encodage des Heures de Travail', 'mj-member'),
+                'description' => __('Encodez et consultez vos heures de travail prestées.', 'mj-member'),
                 'slug' => 'encodage-des-heures-de-travail',
                 'query' => array(),
                 'enabled' => true,
@@ -215,6 +232,7 @@ class MjAccountLinks {
             ),
             'expenses' => array(
                 'label' => __('Notes de Frais', 'mj-member'),
+                'description' => __('Soumettez et suivez vos notes de frais.', 'mj-member'),
                 'slug' => 'notes-de-frais',
                 'query' => array('section' => 'expenses'),
                 'enabled' => true,
@@ -226,6 +244,7 @@ class MjAccountLinks {
             ),
             'coordinator_dashboard' => array(
                 'label' => __('Coordinateur', 'mj-member'),
+                'description' => __('Tableau de bord de coordination et pilotage.', 'mj-member'),
                 'slug' => 'coordinateur',
                 'query' => array('section' => 'coordinator_dashboard'),
                 'enabled' => true,
@@ -237,6 +256,7 @@ class MjAccountLinks {
             ),
             'human_resources' => array(
                 'label' => __('Ressources humaines', 'mj-member'),
+                'description' => __('Gérez les fiches et les congés du personnel.', 'mj-member'),
                 'slug' => 'ressources-humaines',
                 'query' => array('section' => 'human_resources'),
                 'enabled' => true,
@@ -248,6 +268,7 @@ class MjAccountLinks {
             ),
             'employee_data' => array(
                 'label' => __('Données Employé', 'mj-member'),
+                'description' => __('Consultez et mettez à jour vos données contractuelles.', 'mj-member'),
                 'slug' => 'donnees-employe',
                 'query' => array('section' => 'employee_data'),
                 'enabled' => true,
@@ -259,6 +280,7 @@ class MjAccountLinks {
             ),
             'logout' => array(
                 'label' => __('Déconnexion', 'mj-member'),
+                'description' => __('Se déconnecter et revenir à la page d\'accueil.', 'mj-member'),
                 'slug' => '',
                 'query' => array(),
                 'enabled' => true,
@@ -290,6 +312,7 @@ class MjAccountLinks {
                 // Ajouter la section personnalisée aux valeurs par défaut
                 $defaults[$key] = array(
                     'label' => isset($config['label']) ? $config['label'] : '',
+                    'description' => isset($config['description']) ? $config['description'] : '',
                     'slug' => '',
                     'query' => array(),
                     'enabled' => true,
@@ -340,6 +363,10 @@ class MjAccountLinks {
 
             $icon_id = isset($saved_row['icon_id']) ? (int) $saved_row['icon_id'] : 0;
             $defaults[$key]['icon_id'] = $icon_id > 0 ? $icon_id : 0;
+
+            // Récupérer la description si sauvegardée
+            $description = isset($saved_row['description']) ? sanitize_text_field($saved_row['description']) : '';
+            $defaults[$key]['description'] = $description;
 
             // Récupérer la position si sauvegardée, sinon utiliser l'ordre par défaut
             $defaults[$key]['position'] = isset($saved_row['position']) ? (int) $saved_row['position'] : $position;
@@ -575,10 +602,13 @@ class MjAccountLinks {
                 $icon_payload = \mj_member_account_menu_build_icon_payload_from_attachment($icon_id);
             }
 
+            $description = isset($config['description']) ? trim((string) $config['description']) : '';
+
             if ($type === 'logout') {
                 $links[] = array(
                     'key' => sanitize_key($key),
                     'label' => $label,
+                    'description' => $description,
                     'url' => esc_url_raw(wp_logout_url($logoutRedirect)),
                     'is_logout' => true,
                     'badge' => 0,
@@ -634,6 +664,7 @@ class MjAccountLinks {
             $links[] = array(
                 'key' => sanitize_key($key),
                 'label' => $label,
+                'description' => $description,
                 'url' => $url,
                 'is_logout' => false,
                 'badge' => $badge,
@@ -656,6 +687,7 @@ class MjAccountLinks {
             $sanitized[] = array(
                 'key' => isset($link['key']) ? sanitize_key($link['key']) : '',
                 'label' => wp_strip_all_tags($link['label']),
+                'description' => isset($link['description']) ? sanitize_text_field($link['description']) : '',
                 'url' => esc_url($link['url']),
                 'is_logout' => !empty($link['is_logout']),
                 'badge' => isset($link['badge']) ? (int) $link['badge'] : 0,

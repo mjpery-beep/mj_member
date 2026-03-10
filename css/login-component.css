@@ -1267,6 +1267,38 @@ body .mj-member-login-component__actions button.mj-member-login-component__submi
     transform: none;
 }
 
+/* ── Description inline (visible au survol) ──────────────── */
+.mj-member-login-component__account-link {
+    flex-wrap: wrap;
+}
+
+.mj-member-login-component__account-desc {
+    display: block;
+    width: 100%;
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    padding: 0 4px;
+    font-size: 0.75rem;
+    font-weight: 400;
+    line-height: 1.45;
+    color: #64748b;
+    transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.25s ease;
+}
+
+.mj-member-login-component__account-link:hover .mj-member-login-component__account-desc,
+.mj-member-login-component__account-link:focus-visible .mj-member-login-component__account-desc {
+    max-height: 80px;
+    opacity: 1;
+    padding: 4px 4px 2px;
+}
+
+@media (max-width: 767px) {
+    .mj-member-login-component__account-desc {
+        display: none;
+    }
+}
+
 .mj-member-account-links {
     --mj-member-login-primary: var(--e-global-color-primary, #0073aa);
     --mj-member-login-primary-hover: var(--e-global-color-primary-hover, #005f8d);

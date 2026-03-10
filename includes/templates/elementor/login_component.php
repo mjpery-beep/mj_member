@@ -1098,6 +1098,7 @@ if (!function_exists('mj_member_render_login_modal_component')) {
                                                 if ($link_label === '' || $link_url === '') {
                                                     continue;
                                                 }
+                                                $link_description = isset($link_entry['description']) ? trim((string) $link_entry['description']) : '';
                                                 $link_badge = isset($link_entry['badge']) ? (int) $link_entry['badge'] : 0;
                                                 $link_icon_html = '';
                                                 if (!empty($link_entry['icon']) && is_array($link_entry['icon']) && !empty($link_entry['icon']['html'])) {
@@ -1124,6 +1125,9 @@ if (!function_exists('mj_member_render_login_modal_component')) {
                                                             <?php endif; ?>
                                                         </span>
                                                         <span class="mj-member-login-component__account-icon" aria-hidden="true">&rsaquo;</span>
+                                                        <?php if ($link_description !== '') : ?>
+                                                            <span class="mj-member-login-component__account-desc"><?php echo esc_html($link_description); ?></span>
+                                                        <?php endif; ?>
                                                     </a>
                                                 </li>
                                             <?php endforeach; ?>

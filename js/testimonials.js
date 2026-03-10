@@ -126,14 +126,29 @@
             this.linkPreviewDebounce = null;
             this.$linkPreviewContainer = null;
 
+            // Event @mention autocomplete
+            this.mentionActive = false;
+            this.mentionQuery = '';
+            this.mentionStart = -1;
+            this.mentionResults = [];
+            this.mentionSelectedIndex = 0;
+            this.mentionDebounce = null;
+            this.$mentionDropdown = null;
+
             this.bindEvents();
             this.initLinkPreviewContainer();
+            this.initMentionDropdown();
         }
 
         initLinkPreviewContainer() {
             // Create link preview container after photos grid
             this.$linkPreviewContainer = $('<div class="mj-testimonials__link-preview" style="display:none;"></div>');
             this.$photosGrid.after(this.$linkPreviewContainer);
+        }
+
+        initMentionDropdown() {
+            this.$mentionDropdown = $('<div class="mj-mention-dropdown" style="display:none;"></div>');
+            this.$textarea.parent().css('position', 'relative').append(this.$mentionDropdown);
         }
 
         bindEvents() {
@@ -144,6 +159,11 @@
             
             // Link preview detection on textarea input
             this.$textarea.on('input', () => this.detectUrl());
+
+            // Event @mention autocomplete on textarea
+            this.$textarea.on('input', () => this.handleMentionInput());
+            this.$textarea.on('keydown', (e) => this.handleMentionKeydown(e));
+            this.$textarea.on('blur', () => { setTimeout(() => this.closeMentionDropdown(), 200); });
             
             // Photo capture events
             this.$capturePhotoBtn.on('click', () => this.startPhotoCapture());
@@ -246,6 +266,199 @@
         }
 
         // ===== LINK PREVIEW METHODS =====
+
+        // ===== EVENT @MENTION AUTOCOMPLETE =====
+
+        handleMentionInput() {
+            const textarea = this.$textarea[0];
+            const cursorPos = textarea.selectionStart;
+            const content = textarea.value;
+
+            // Find the @ symbol before the cursor
+            const textBeforeCursor = content.substring(0, cursorPos);
+            const atIndex = textBeforeCursor.lastIndexOf('@');
+
+            if (atIndex === -1) {
+                this.closeMentionDropdown();
+                return;
+            }
+
+            // Check that @ is at start or preceded by a space/newline
+            if (atIndex > 0 && !/[\s]/.test(content.charAt(atIndex - 1))) {
+                this.closeMentionDropdown();
+                return;
+            }
+
+            // Extract the query after @
+            const query = textBeforeCursor.substring(atIndex + 1);
+
+            // Validate query: only slug-valid chars
+            if (query.length > 50) {
+                this.closeMentionDropdown();
+                return;
+            }
+
+            this.mentionActive = true;
+            this.mentionStart = atIndex;
+            this.mentionQuery = query;
+
+            // Debounce the AJAX search
+            clearTimeout(this.mentionDebounce);
+            if (query.length >= 1) {
+                this.mentionDebounce = setTimeout(() => this.searchEvents(query), 250);
+            } else {
+                // Just typed @, show hint
+                this.mentionResults = [];
+                this.renderMentionDropdown();
+            }
+        }
+
+        handleMentionKeydown(e) {
+            if (!this.mentionActive || !this.$mentionDropdown || !this.$mentionDropdown.is(':visible')) return;
+
+            switch (e.key) {
+                case 'ArrowDown':
+                    e.preventDefault();
+                    this.mentionSelectedIndex = Math.min(this.mentionSelectedIndex + 1, this.mentionResults.length - 1);
+                    this.highlightMentionItem();
+                    break;
+                case 'ArrowUp':
+                    e.preventDefault();
+                    this.mentionSelectedIndex = Math.max(this.mentionSelectedIndex - 1, 0);
+                    this.highlightMentionItem();
+                    break;
+                case 'Enter':
+                case 'Tab':
+                    if (this.mentionResults.length > 0) {
+                        e.preventDefault();
+                        this.selectMentionItem(this.mentionResults[this.mentionSelectedIndex]);
+                    }
+                    break;
+                case 'Escape':
+                    e.preventDefault();
+                    this.closeMentionDropdown();
+                    break;
+            }
+        }
+
+        async searchEvents(query) {
+            try {
+                const response = await $.ajax({
+                    url: config.ajaxUrl,
+                    method: 'POST',
+                    data: {
+                        action: 'mj_front_testimonial_search_events',
+                        _wpnonce: config.nonce,
+                        search: query
+                    },
+                    dataType: 'json'
+                });
+
+                if (response.success && response.data && response.data.events) {
+                    this.mentionResults = response.data.events;
+                    this.mentionSelectedIndex = 0;
+                    this.renderMentionDropdown();
+                }
+            } catch (err) {
+                console.error('Event search error:', err);
+            }
+        }
+
+        renderMentionDropdown() {
+            if (!this.mentionActive || !this.$mentionDropdown) return;
+
+            if (this.mentionResults.length === 0 && this.mentionQuery.length >= 1) {
+                this.$mentionDropdown.html(
+                    '<div class="mj-mention-dropdown__empty">Aucun \u00e9v\u00e9nement trouv\u00e9</div>'
+                ).show();
+                return;
+            }
+
+            if (this.mentionResults.length === 0) {
+                this.$mentionDropdown.html(
+                    '<div class="mj-mention-dropdown__hint">Tapez le nom d\'un \u00e9v\u00e9nement...</div>'
+                ).show();
+                return;
+            }
+
+            let html = '';
+            this.mentionResults.forEach((event, index) => {
+                const emoji = event.emoji ? this.escapeHtml(event.emoji) + ' ' : '';
+                const title = this.escapeHtml(event.title);
+                const slug = this.escapeHtml(event.slug);
+                const type = event.type ? '<span class="mj-mention-dropdown__type">' + this.escapeHtml(event.type) + '</span>' : '';
+                const date = event.date_debut ? '<span class="mj-mention-dropdown__date">' + this.formatShortDate(event.date_debut) + '</span>' : '';
+                const isSelected = index === this.mentionSelectedIndex ? ' is-selected' : '';
+
+                html += '<div class="mj-mention-dropdown__item' + isSelected + '" data-index="' + index + '" data-slug="' + slug + '">' +
+                    '<div class="mj-mention-dropdown__item-main">' +
+                        '<span class="mj-mention-dropdown__item-title">' + emoji + title + '</span>' +
+                        type +
+                    '</div>' +
+                    '<div class="mj-mention-dropdown__item-meta">' +
+                        '<span class="mj-mention-dropdown__item-slug">@' + slug + '</span>' +
+                        date +
+                    '</div>' +
+                '</div>';
+            });
+
+            this.$mentionDropdown.html(html).show();
+
+            // Bind click events
+            this.$mentionDropdown.find('.mj-mention-dropdown__item').on('mousedown', (e) => {
+                e.preventDefault();
+                const index = parseInt($(e.currentTarget).data('index'), 10);
+                if (this.mentionResults[index]) {
+                    this.selectMentionItem(this.mentionResults[index]);
+                }
+            });
+        }
+
+        highlightMentionItem() {
+            this.$mentionDropdown.find('.mj-mention-dropdown__item').removeClass('is-selected');
+            this.$mentionDropdown.find('.mj-mention-dropdown__item').eq(this.mentionSelectedIndex).addClass('is-selected');
+        }
+
+        selectMentionItem(event) {
+            const textarea = this.$textarea[0];
+            const content = textarea.value;
+            const cursorPos = textarea.selectionStart;
+
+            // Replace @query with @slug
+            const before = content.substring(0, this.mentionStart);
+            const after = content.substring(cursorPos);
+            const replacement = '@' + event.slug + ' ';
+
+            textarea.value = before + replacement + after;
+            const newCursorPos = this.mentionStart + replacement.length;
+            textarea.setSelectionRange(newCursorPos, newCursorPos);
+            textarea.focus();
+
+            this.closeMentionDropdown();
+        }
+
+        closeMentionDropdown() {
+            this.mentionActive = false;
+            this.mentionQuery = '';
+            this.mentionStart = -1;
+            this.mentionResults = [];
+            this.mentionSelectedIndex = 0;
+            if (this.$mentionDropdown) {
+                this.$mentionDropdown.hide().empty();
+            }
+        }
+
+        formatShortDate(dateStr) {
+            if (!dateStr) return '';
+            try {
+                const d = new Date(dateStr);
+                return d.toLocaleDateString('fr-BE', { day: 'numeric', month: 'short', year: 'numeric' });
+            } catch (e) {
+                return dateStr;
+            }
+        }
+
+        // ===== END EVENT @MENTION AUTOCOMPLETE =====
 
         detectUrl() {
             // Debounce URL detection
@@ -586,25 +799,67 @@
         async uploadVideo() {
             if (!this.videoBlob) return null;
 
+            // Client-side size validation before attempting upload
+            const maxVideoSize = config.maxVideoSize || (100 * 1024 * 1024);
+            if (this.videoBlob.size > maxVideoSize) {
+                const sizeMb = (maxVideoSize / (1024 * 1024)).toFixed(0);
+                const msg = (i18n.videoTooLarge || 'La vidéo est trop volumineuse. Taille maximale : %s.')
+                    .replace('%s', sizeMb + '\u00a0Mo');
+                throw new Error(msg);
+            }
+
             const formData = new FormData();
             formData.append('action', 'mj_front_testimonial_upload');
             formData.append('_wpnonce', config.nonce);
             formData.append('type', 'video');
             formData.append('file', this.videoBlob, 'testimonial-video.webm');
 
-            const response = await $.ajax({
-                url: config.ajaxUrl,
-                method: 'POST',
-                data: formData,
-                processData: false,
-                contentType: false
-            });
+            const self = this;
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
 
-            if (response.success && response.data && response.data.id) {
-                return response.data.id;
-            }
-            
-            throw new Error(response.data?.message || 'Video upload failed');
+                // Progress tracking
+                xhr.upload.addEventListener('progress', function (e) {
+                    if (e.lengthComputable) {
+                        const pct = Math.round((e.loaded / e.total) * 100);
+                        const uploadingLabel = i18n.videoUploading || 'Upload de la vidéo en cours...';
+                        self.showStatus(uploadingLabel + ' ' + pct + '%', '');
+                    }
+                });
+
+                xhr.addEventListener('load', function () {
+                    let response;
+                    try {
+                        response = JSON.parse(xhr.responseText);
+                    } catch (parseErr) {
+                        // Empty or non-JSON response = server-level rejection (post_max_size, 413…)
+                        const sizeMb = (maxVideoSize / (1024 * 1024)).toFixed(0);
+                        const tooBigMsg = (i18n.videoTooLarge || 'La vidéo est trop volumineuse. Taille maximale : %s.')
+                            .replace('%s', sizeMb + '\u00a0Mo');
+                        reject(new Error(tooBigMsg));
+                        return;
+                    }
+
+                    if (response && response.success && response.data && response.data.id) {
+                        resolve(response.data.id);
+                    } else {
+                        const errMsg = (response && response.data && (response.data.message || response.data))
+                            || (i18n.videoUploadError || 'Échec de l\'upload vidéo.');
+                        reject(new Error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg)));
+                    }
+                });
+
+                xhr.addEventListener('error', function () {
+                    reject(new Error(i18n.videoUploadError || 'Échec de l\'upload vidéo. Vérifiez votre connexion.'));
+                });
+
+                xhr.addEventListener('abort', function () {
+                    reject(new Error(i18n.videoUploadError || 'Upload vidéo annulé.'));
+                });
+
+                xhr.open('POST', config.ajaxUrl, true);
+                xhr.send(formData);
+            });
         }
 
         async handleSubmit(e) {
@@ -626,6 +881,7 @@
             try {
                 // Upload video if exists
                 if (this.videoBlob && !this.videoId) {
+                    this.showStatus(i18n.videoUploading || 'Upload de la vidéo en cours…', '');
                     this.videoId = await this.uploadVideo();
                 }
 
@@ -661,7 +917,7 @@
                 }
             } catch (err) {
                 console.error('Submit error:', err);
-                this.showStatus(i18n.submitError, 'error');
+                this.showStatus(err.message || i18n.submitError, 'error');
             } finally {
                 this.isSubmitting = false;
                 this.$submitBtn.removeClass('is-loading').prop('disabled', false);
@@ -1276,11 +1532,133 @@
             });
         });
         
+        // --- Owner menu: toggle ---
+        $(document).on('click.mjFeed', '[data-action="toggle-owner-menu"]', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const $dropdown = $(this).siblings('.mj-feed-post__owner-dropdown');
+            // Close any other open dropdown first
+            $('.mj-feed-post__owner-dropdown').not($dropdown).hide();
+            $dropdown.toggle();
+        });
+
+        // Close owner dropdown on outside click
+        $(document).on('click.mjFeed', function(e) {
+            if (!$(e.target).closest('.mj-feed-post__owner-menu').length) {
+                $('.mj-feed-post__owner-dropdown').hide();
+            }
+        });
+
+        // --- Owner: Delete testimonial ---
+        $(document).on('click.mjFeed', '[data-action="delete-testimonial"]', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const $wrapper = getWrapper(this);
+            const testimonialId = getTestimonialId($wrapper);
+
+            // Close dropdown
+            $(this).closest('.mj-feed-post__owner-dropdown').hide();
+
+            if (!confirm('Êtes-vous sûr de vouloir supprimer ce témoignage ? Cette action est irréversible.')) return;
+
+            $.post(config.ajaxUrl, {
+                action: 'mj_front_testimonial_delete',
+                _wpnonce: config.nonce,
+                testimonial_id: testimonialId
+            }).done(function(response) {
+                if (response.success) {
+                    $wrapper.fadeOut(300, function() { $(this).remove(); });
+                } else {
+                    alert(response.data || 'Erreur lors de la suppression.');
+                }
+            }).fail(function() {
+                alert('Erreur réseau lors de la suppression.');
+            });
+        });
+
+        // --- Owner: Edit testimonial (inline) ---
+        $(document).on('click.mjFeed', '[data-action="edit-testimonial"]', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const $wrapper = getWrapper(this);
+            const $content = $wrapper.find('.mj-feed-post__content');
+
+            // Close dropdown
+            $(this).closest('.mj-feed-post__owner-dropdown').hide();
+
+            // If already editing, do nothing
+            if ($wrapper.find('.mj-feed-post__edit-form').length) return;
+
+            // Get raw content from data attribute
+            const rawContent = $content.attr('data-raw-content') || $content.text().trim();
+
+            // Store original HTML for cancel
+            const originalHtml = $content.html();
+
+            // Replace content with edit form
+            const $editForm = $(
+                '<div class="mj-feed-post__edit-form">' +
+                    '<textarea class="mj-feed-post__edit-textarea">' + $('<span>').text(rawContent).html() + '</textarea>' +
+                    '<div class="mj-feed-post__edit-actions">' +
+                        '<button type="button" class="mj-btn mj-btn--small mj-feed-post__edit-save" data-action="save-edit">' +
+                            'Enregistrer' +
+                        '</button>' +
+                        '<button type="button" class="mj-btn mj-btn--small mj-btn--ghost mj-feed-post__edit-cancel" data-action="cancel-edit">' +
+                            'Annuler' +
+                        '</button>' +
+                    '</div>' +
+                '</div>'
+            );
+
+            $content.html($editForm);
+            $content.find('.mj-feed-post__edit-textarea').focus();
+
+            // Cancel
+            $content.find('[data-action="cancel-edit"]').on('click', function() {
+                $content.html(originalHtml);
+            });
+
+            // Save
+            $content.find('[data-action="save-edit"]').on('click', function() {
+                const newContent = $content.find('.mj-feed-post__edit-textarea').val().trim();
+                if (!newContent) {
+                    alert('Le contenu ne peut pas être vide.');
+                    return;
+                }
+
+                const testimonialId = getTestimonialId($wrapper);
+                const $saveBtn = $(this);
+                $saveBtn.prop('disabled', true).text('Enregistrement...');
+
+                $.post(config.ajaxUrl, {
+                    action: 'mj_front_testimonial_edit',
+                    _wpnonce: config.nonce,
+                    testimonial_id: testimonialId,
+                    content: newContent
+                }).done(function(response) {
+                    if (response.success) {
+                        // Update displayed content with linkified HTML
+                        $content.html(response.data.contentHtml);
+                        // Update the raw content attribute
+                        $content.attr('data-raw-content', response.data.content);
+                    } else {
+                        alert(response.data || 'Erreur lors de la modification.');
+                        $content.html(originalHtml);
+                    }
+                }).fail(function() {
+                    alert('Erreur réseau lors de la modification.');
+                    $content.html(originalHtml);
+                });
+            });
+        });
+
         // Click on post to navigate to single view (only in list mode)
         $(document).on('click', '.mj-feed-post-wrapper:not(.mj-feed-post-wrapper--single)', function(e) {
             // Don't navigate if clicking on interactive elements
             const $target = $(e.target);
-            const isInteractive = $target.closest('button, a, input, textarea, video, .mj-feed-post__actions, .mj-feed-post__reactions-bar, .mj-feed-post__comments, .mj-feed-post__reaction-picker, .mj-feed-post__photo').length > 0;
+            const isInteractive = $target.closest('button, a, input, textarea, video, .mj-feed-post__actions, .mj-feed-post__reactions-bar, .mj-feed-post__comments, .mj-feed-post__reaction-picker, .mj-feed-post__photo, .mj-feed-post__owner-menu, .mj-feed-post__edit-form').length > 0;
             
             if (isInteractive) {
                 return;

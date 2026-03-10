@@ -240,6 +240,7 @@ function mj_settings_page() {
 
             $enabled = isset($raw_row['enabled']) && (string) $raw_row['enabled'] === '1';
             $label = isset($raw_row['label']) ? sanitize_text_field($raw_row['label']) : '';
+            $link_description = isset($raw_row['description']) ? sanitize_text_field($raw_row['description']) : '';
             $page_id = isset($raw_row['page_id']) ? (int) $raw_row['page_id'] : 0;
             $icon_id = isset($raw_row['icon_id']) ? (int) $raw_row['icon_id'] : 0;
             $position = isset($raw_row['position']) ? (int) $raw_row['position'] : 999;
@@ -257,6 +258,7 @@ function mj_settings_page() {
             $normalized_account_links[$link_key] = array(
                 'enabled' => $enabled ? 1 : 0,
                 'label' => (!empty($link_defaults['editable_label']) && $label !== '') ? $label : '',
+                'description' => $link_description,
                 'page_id' => $page_id > 0 ? $page_id : 0,
                 'page_slug' => $page_slug,
                 'icon_id' => $icon_id > 0 ? $icon_id : 0,
@@ -283,6 +285,7 @@ function mj_settings_page() {
 
             $enabled = isset($raw_row['enabled']) && (string) $raw_row['enabled'] === '1';
             $label = isset($raw_row['label']) ? sanitize_text_field($raw_row['label']) : '';
+            $section_description = isset($raw_row['description']) ? sanitize_text_field($raw_row['description']) : '';
             $position = isset($raw_row['position']) ? (int) $raw_row['position'] : 999;
             $visibility = isset($raw_row['visibility']) ? sanitize_key($raw_row['visibility']) : 'all';
 
@@ -293,6 +296,7 @@ function mj_settings_page() {
             $normalized_account_links[$link_key] = array(
                 'enabled' => $enabled ? 1 : 0,
                 'label' => $label,
+                'description' => $section_description,
                 'page_id' => 0,
                 'page_slug' => '',
                 'icon_id' => 0,
@@ -985,6 +989,7 @@ function mj_settings_page() {
                                 $requires_capability = isset($link_config['requires_capability']) ? (string) $link_config['requires_capability'] : '';
                                 $editable_label = !empty($link_config['editable_label']);
                                 $current_label = isset($link_config['label']) ? $link_config['label'] : $default_label;
+                                $current_description = isset($link_config['description']) ? $link_config['description'] : '';
                                 $current_visibility = isset($link_config['visibility']) ? (string) $link_config['visibility'] : 'all';
                                 $page_id_value = isset($link_config['page_id']) ? (int) $link_config['page_id'] : 0;
                                 $section_value = isset($link_config['query']['section']) ? sanitize_key($link_config['query']['section']) : sanitize_key($link_key);
@@ -1064,6 +1069,10 @@ function mj_settings_page() {
                                         <div class="mj-account-link-field">
                                             <label for="<?php echo esc_attr($field_prefix . '-label'); ?>">Libellé</label>
                                             <input type="text" id="<?php echo esc_attr($field_prefix . '-label'); ?>" name="mj_account_links[<?php echo esc_attr($link_key); ?>][label]" value="<?php echo esc_attr($current_label); ?>" <?php echo $editable_label ? '' : 'readonly'; ?> />
+                                        </div>
+                                        <div class="mj-account-link-field mj-account-link-field--full">
+                                            <label for="<?php echo esc_attr($field_prefix . '-description'); ?>">Description</label>
+                                            <input type="text" id="<?php echo esc_attr($field_prefix . '-description'); ?>" name="mj_account_links[<?php echo esc_attr($link_key); ?>][description]" value="<?php echo esc_attr($current_description); ?>" placeholder="Courte description affichée sous le lien" />
                                         </div>
                                         <div class="mj-account-link-field">
                                             <label for="<?php echo esc_attr($field_prefix . '-visibility'); ?>">Visibilité</label>
@@ -1859,6 +1868,9 @@ function mj_settings_page() {
             gap: 10px;
             align-items: end;
         }
+        .mj-account-link-field--full {
+            grid-column: 1 / -1;
+        }
         .mj-account-link-field label {
             display: block;
             font-size: 11px;
@@ -2478,6 +2490,10 @@ function mj_settings_page() {
                                 <div class="mj-account-link-field">
                                     <label for="mj-account-link-${linkKey}-label">Libellé</label>
                                     <input type="text" id="mj-account-link-${linkKey}-label" name="mj_account_links[${linkKey}][label]" value="${escapeHtml(label)}" />
+                                </div>
+                                <div class="mj-account-link-field mj-account-link-field--full">
+                                    <label for="mj-account-link-${linkKey}-description">Description</label>
+                                    <input type="text" id="mj-account-link-${linkKey}-description" name="mj_account_links[${linkKey}][description]" value="" placeholder="Courte description affichée sous le lien" />
                                 </div>
                             </div>
                             <p class="mj-account-link-note">Ceci est un titre de section. Il apparaît dans la liste du menu Mon compte pour organiser les liens.</p>

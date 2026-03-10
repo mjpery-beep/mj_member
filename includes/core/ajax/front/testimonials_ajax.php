@@ -9,6 +9,7 @@ use Mj\Member\Classes\Crud\MjTestimonials;
 use Mj\Member\Classes\Crud\MjTestimonialReactions;
 use Mj\Member\Classes\Crud\MjTestimonialComments;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjEvents;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -131,7 +132,7 @@ function mj_front_testimonial_list_handler() {
 
         $items[] = array(
             'id' => (int) $t->id,
-            'content' => isset($t->content) ? $t->content : '',
+            'content' => isset($t->content) ? mj_member_testimonial_linkify_event_mentions($t->content) : '',
             'photos' => $photos,
             'video' => $video,
             'linkPreview' => $link_preview,
@@ -168,6 +169,28 @@ function mj_front_testimonial_upload_handler() {
     }
 
     $file = $_FILES['file'];
+
+    // Detect PHP-level upload errors before any custom validation
+    if (isset($file['error']) && $file['error'] !== UPLOAD_ERR_OK) {
+        $php_upload_errors = array(
+            UPLOAD_ERR_INI_SIZE   => sprintf(
+                __('La vidéo dépasse la limite autorisée par le serveur (%s). Raccourcissez l\'enregistrement.', 'mj-member'),
+                size_format(wp_max_upload_size())
+            ),
+            UPLOAD_ERR_FORM_SIZE  => __('La vidéo dépasse la taille maximale du formulaire.', 'mj-member'),
+            UPLOAD_ERR_PARTIAL    => __('Le fichier n\'a été que partiellement téléchargé. Réessayez.', 'mj-member'),
+            UPLOAD_ERR_NO_FILE    => __('Aucun fichier sélectionné.', 'mj-member'),
+            UPLOAD_ERR_NO_TMP_DIR => __('Dossier temporaire manquant sur le serveur.', 'mj-member'),
+            UPLOAD_ERR_CANT_WRITE => __('Impossible d\'écrire le fichier sur le serveur.', 'mj-member'),
+            UPLOAD_ERR_EXTENSION  => __('Upload bloqué par une extension PHP.', 'mj-member'),
+        );
+        $err_code = (int) $file['error'];
+        $err_msg  = isset($php_upload_errors[$err_code])
+            ? $php_upload_errors[$err_code]
+            : __('Erreur d\'upload inconnue.', 'mj-member');
+        wp_send_json_error($err_msg, 400);
+    }
+
     $media_type = isset($_POST['type']) ? sanitize_key($_POST['type']) : 'photo';
 
     // Validate file type
@@ -260,7 +283,7 @@ function mj_front_testimonial_my_list_handler() {
 
         $items[] = array(
             'id' => (int) $t->id,
-            'content' => isset($t->content) ? $t->content : '',
+            'content' => isset($t->content) ? mj_member_testimonial_linkify_event_mentions($t->content) : '',
             'photos' => $photos,
             'video' => $video,
             'status' => $status_key,
@@ -873,7 +896,7 @@ function mj_front_testimonial_pending_list_handler() {
 
         $items[] = array(
             'id' => (int) $t->id,
-            'content' => isset($t->content) ? $t->content : '',
+            'content' => isset($t->content) ? mj_member_testimonial_linkify_event_mentions($t->content) : '',
             'photos' => $photos,
             'video' => $video,
             'linkPreview' => $link_preview,
@@ -893,3 +916,183 @@ function mj_front_testimonial_pending_list_handler() {
     ));
 }
 add_action('wp_ajax_mj_front_testimonial_pending_list', 'mj_front_testimonial_pending_list_handler');
+
+/**
+ * AJAX: Search events for @mention autocomplete in testimonials.
+ *
+ * Returns a list of events matching the search query (title or slug).
+ * Used by the front-end autocomplete when users type @.
+ */
+function mj_front_testimonial_search_events_handler() {
+    check_ajax_referer('mj-testimonial-submit', '_wpnonce');
+
+    $search = isset($_POST['search']) ? sanitize_text_field(wp_unslash($_POST['search'])) : '';
+    if (mb_strlen($search) < 1) {
+        wp_send_json_success(array('events' => array()));
+    }
+
+    // Search events by title/slug, only active or past events
+    $events = MjEvents::get_all(array(
+        'search' => $search,
+        'statuses' => array(MjEvents::STATUS_ACTIVE, MjEvents::STATUS_PAST),
+        'orderby' => 'date_debut',
+        'order' => 'DESC',
+        'limit' => 10,
+    ));
+
+    $items = array();
+    foreach ($events as $event) {
+        $slug = '';
+        if (isset($event->slug) && $event->slug !== '') {
+            $slug = $event->slug;
+        } else {
+            $slug = MjEvents::get_or_create_slug((int) $event->id);
+        }
+
+        $items[] = array(
+            'id' => (int) $event->id,
+            'title' => isset($event->title) ? $event->title : '',
+            'slug' => $slug,
+            'emoji' => isset($event->emoji) ? $event->emoji : '',
+            'type' => isset($event->type) ? $event->type : '',
+            'date_debut' => isset($event->date_debut) ? $event->date_debut : '',
+            'permalink' => function_exists('mj_member_build_event_permalink') ? mj_member_build_event_permalink($slug) : '',
+        );
+    }
+
+    wp_send_json_success(array('events' => $items));
+}
+add_action('wp_ajax_mj_front_testimonial_search_events', 'mj_front_testimonial_search_events_handler');
+
+/**
+ * AJAX: Delete own testimonial (front-end).
+ *
+ * Verifies ownership by matching current member ID to testimonial member_id.
+ */
+function mj_front_testimonial_delete_handler() {
+    check_ajax_referer('mj-testimonial-submit', '_wpnonce');
+
+    $current_member = function_exists('mj_member_get_current_member') ? mj_member_get_current_member() : null;
+    if (!$current_member || !isset($current_member->id)) {
+        wp_send_json_error(__('Vous devez être connecté.', 'mj-member'), 403);
+    }
+
+    $testimonial_id = isset($_POST['testimonial_id']) ? intval($_POST['testimonial_id']) : 0;
+    if ($testimonial_id <= 0) {
+        wp_send_json_error(__('Témoignage invalide.', 'mj-member'), 400);
+    }
+
+    // Verify ownership
+    $testimonial = MjTestimonials::get_by_id($testimonial_id);
+    if (!$testimonial) {
+        wp_send_json_error(__('Témoignage introuvable.', 'mj-member'), 404);
+    }
+
+    if ((int) $testimonial->member_id !== (int) $current_member->id) {
+        wp_send_json_error(__('Vous ne pouvez supprimer que vos propres témoignages.', 'mj-member'), 403);
+    }
+
+    $deleted = MjTestimonials::delete($testimonial_id);
+    if (!$deleted) {
+        wp_send_json_error(__('Erreur lors de la suppression.', 'mj-member'), 500);
+    }
+
+    wp_send_json_success(array(
+        'message' => __('Témoignage supprimé.', 'mj-member'),
+    ));
+}
+add_action('wp_ajax_mj_front_testimonial_delete', 'mj_front_testimonial_delete_handler');
+
+/**
+ * AJAX: Edit own testimonial content (front-end).
+ *
+ * Verifies ownership by matching current member ID to testimonial member_id.
+ * Only the text content can be changed; photos/video stay unchanged.
+ */
+function mj_front_testimonial_edit_handler() {
+    check_ajax_referer('mj-testimonial-submit', '_wpnonce');
+
+    $current_member = function_exists('mj_member_get_current_member') ? mj_member_get_current_member() : null;
+    if (!$current_member || !isset($current_member->id)) {
+        wp_send_json_error(__('Vous devez être connecté.', 'mj-member'), 403);
+    }
+
+    $testimonial_id = isset($_POST['testimonial_id']) ? intval($_POST['testimonial_id']) : 0;
+    if ($testimonial_id <= 0) {
+        wp_send_json_error(__('Témoignage invalide.', 'mj-member'), 400);
+    }
+
+    $content = isset($_POST['content']) ? sanitize_textarea_field(wp_unslash($_POST['content'])) : '';
+    if (empty(trim($content))) {
+        wp_send_json_error(__('Le contenu ne peut pas être vide.', 'mj-member'), 400);
+    }
+
+    // Verify ownership
+    $testimonial = MjTestimonials::get_by_id($testimonial_id);
+    if (!$testimonial) {
+        wp_send_json_error(__('Témoignage introuvable.', 'mj-member'), 404);
+    }
+
+    if ((int) $testimonial->member_id !== (int) $current_member->id) {
+        wp_send_json_error(__('Vous ne pouvez modifier que vos propres témoignages.', 'mj-member'), 403);
+    }
+
+    $updated = MjTestimonials::update($testimonial_id, array(
+        'content' => $content,
+    ));
+
+    if (!$updated) {
+        wp_send_json_error(__('Erreur lors de la mise à jour.', 'mj-member'), 500);
+    }
+
+    // Return the linkified HTML so JS can update the DOM
+    $html_content = wp_kses_post(wpautop(mj_member_testimonial_linkify_event_mentions($content)));
+
+    wp_send_json_success(array(
+        'message'     => __('Témoignage modifié.', 'mj-member'),
+        'content'     => $content,
+        'contentHtml' => $html_content,
+    ));
+}
+add_action('wp_ajax_mj_front_testimonial_edit', 'mj_front_testimonial_edit_handler');
+
+/**
+ * Convert @event-slug mentions in testimonial content to clickable links.
+ *
+ * Matches patterns like @mon-evenement-slug and replaces them with
+ * an anchor link pointing to the event page.
+ *
+ * @param string $content The raw testimonial content.
+ * @return string Content with @mentions converted to links.
+ */
+function mj_member_testimonial_linkify_event_mentions(string $content): string {
+    // Match @followed-by-slug-chars (letters, digits, hyphens)
+    return preg_replace_callback(
+        '/@([a-z0-9](?:[a-z0-9\-]*[a-z0-9])?)\b/i',
+        function ($matches) {
+            $slug = sanitize_title($matches[1]);
+            if ($slug === '') {
+                return $matches[0];
+            }
+
+            $event = MjEvents::find_by_slug($slug);
+            if (!$event) {
+                return $matches[0]; // Not a valid event slug, leave as-is
+            }
+
+            $permalink = function_exists('mj_member_build_event_permalink')
+                ? mj_member_build_event_permalink($slug)
+                : '';
+            if ($permalink === '') {
+                return $matches[0];
+            }
+
+            $title = isset($event->title) ? esc_attr($event->title) : $slug;
+            $emoji = (isset($event->emoji) && $event->emoji !== '') ? $event->emoji . ' ' : '';
+            $label = $emoji . esc_html($event->title ?? $slug);
+
+            return '<a href="' . esc_url($permalink) . '" class="mj-testimonial-event-link" title="' . $title . '">' . $label . '</a>';
+        },
+        $content
+    );
+}

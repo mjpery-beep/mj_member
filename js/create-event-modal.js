@@ -307,8 +307,10 @@
             if (step === 2) {
                 var sv = startInput ? String(startInput.value || '').trim() : '';
                 var ev = endInput ? String(endInput.value || '').trim() : '';
-                if (!selectedDay || !sv || !ev) { setFeedback('Date et horaires obligatoires.', 'error'); return false; }
-                if (ev <= sv) { setFeedback("L'heure de fin doit \u00eatre apr\u00e8s l'heure de d\u00e9but.", 'error'); if (endInput) endInput.focus(); return false; }
+                var needDate = config.dateRequired !== false;
+                if (needDate && (!selectedDay || !sv || !ev)) { setFeedback('Date et horaires obligatoires.', 'error'); return false; }
+                if (!needDate && selectedDay && (!sv || !ev)) { setFeedback('Si vous renseignez une date, les horaires sont aussi requis.', 'error'); return false; }
+                if (selectedDay && sv && ev && ev <= sv) { setFeedback("L'heure de fin doit \u00eatre apr\u00e8s l'heure de d\u00e9but.", 'error'); if (endInput) endInput.focus(); return false; }
             }
             setFeedback('', '');
             return true;
@@ -348,7 +350,7 @@
             });
             if (prevButton) { prevButton.hidden = currentStep <= 1; prevButton.disabled = isSubmitting; }
             if (nextButton) { nextButton.hidden = currentStep >= totalSteps; nextButton.disabled = isSubmitting; }
-            if (submitButton) { submitButton.hidden = currentStep < totalSteps; submitButton.disabled = isSubmitting; }
+            if (submitButton) { submitButton.hidden = currentStep < totalSteps || config.showEditButton === false; submitButton.disabled = isSubmitting; }
             if (onlyButton) { onlyButton.hidden = currentStep < totalSteps; onlyButton.disabled = isSubmitting; }
             if (currentStep === 3) updateSummary();
         }
@@ -424,8 +426,8 @@
             fd.append('title', tv);
             fd.append('type', tyv);
             fd.append('status', statusSelect ? String(statusSelect.value || 'brouillon') : 'brouillon');
-            fd.append('start_date', buildDateTime(selectedDay, sv));
-            fd.append('end_date', buildDateTime(selectedDay, ev));
+            if (selectedDay && sv) fd.append('start_date', buildDateTime(selectedDay, sv));
+            if (selectedDay && ev) fd.append('end_date', buildDateTime(selectedDay, ev));
             if (selectedEmoji) fd.append('emoji', selectedEmoji);
             if (coverFile) fd.append('cover_image', coverFile);
             if (occurrenceChoice && occurrenceChoice.checked) fd.append('occurrence_choice', '1');

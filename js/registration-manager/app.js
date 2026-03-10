@@ -4826,6 +4826,8 @@
                     createTypeColors: config.createTypeColors || {},
                     createLocations: config.createLocations || {},
                     createAnimateurs: config.createAnimateurs || {},
+                    dateRequired: false,
+                    showEditButton: false,
                     onCreated: function (data) {
                         if (typeof ccmCreatedCallbackRef.current === 'function') {
                             ccmCreatedCallbackRef.current(data);

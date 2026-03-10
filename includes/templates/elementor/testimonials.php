@@ -162,6 +162,7 @@ $localize_data = array(
     'perPage' => $per_page,
     'maxPhotos' => $max_photos,
     'allowVideo' => $allow_video,
+    'maxVideoSize' => min(100 * 1024 * 1024, wp_max_upload_size()),
     'reactionTypes' => $reaction_types,
     'i18n' => array(
         'submitSuccess' => __('Merci pour votre témoignage ! Il sera visible après validation.', 'mj-member'),
@@ -178,6 +179,9 @@ $localize_data = array(
         'videoStop' => __('Arrêter', 'mj-member'),
         'videoRetake' => __('Recommencer', 'mj-member'),
         'videoUse' => __('Utiliser cette vidéo', 'mj-member'),
+        'videoUploading' => __('Upload de la vidéo en cours...', 'mj-member'),
+        'videoTooLarge' => __('La vidéo est trop volumineuse. Taille maximale : %s.', 'mj-member'),
+        'videoUploadError' => __('Echec de l\'upload vidéo. Veuillez réessayer.', 'mj-member'),
         'loadMore' => __('Voir plus', 'mj-member'),
         'noTestimonials' => __('Aucun témoignage pour le moment.', 'mj-member'),
         'back' => __('← Retour aux témoignages', 'mj-member'),
@@ -433,7 +437,7 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                                 <!-- Contenu texte -->
                                 <div class="mj-carousel-card__content">
                                     <?php if (isset($testimonial->content) && $testimonial->content): ?>
-                                        <?php echo wp_kses_post(wpautop($testimonial->content)); ?>
+                                        <?php echo wp_kses_post(wpautop(mj_member_testimonial_linkify_event_mentions($testimonial->content))); ?>
                                     <?php endif; ?>
                                 </div>
 
@@ -568,11 +572,28 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                                     <span class="mj-feed-post__date"><?php printf(esc_html__('Il y a %s', 'mj-member'), esc_html($created_ago)); ?> · 🌍</span>
                                 <?php endif; ?>
                             </div>
+                            <?php if ($is_my_testimonial): ?>
+                                <div class="mj-feed-post__owner-menu">
+                                    <button type="button" class="mj-feed-post__owner-menu-toggle" data-action="toggle-owner-menu" aria-label="<?php esc_attr_e('Options du témoignage', 'mj-member'); ?>">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                                    </button>
+                                    <div class="mj-feed-post__owner-dropdown" style="display:none;">
+                                        <button type="button" class="mj-feed-post__owner-action" data-action="edit-testimonial">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                            <span><?php esc_html_e('Modifier', 'mj-member'); ?></span>
+                                        </button>
+                                        <button type="button" class="mj-feed-post__owner-action mj-feed-post__owner-action--danger" data-action="delete-testimonial">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                            <span><?php esc_html_e('Supprimer', 'mj-member'); ?></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
                         </div>
                         
                         <?php if (isset($testimonial->content) && $testimonial->content): ?>
-                            <div class="mj-feed-post__content">
-                                <?php echo wp_kses_post(wpautop($testimonial->content)); ?>
+                            <div class="mj-feed-post__content" data-raw-content="<?php echo esc_attr($testimonial->content); ?>">
+                                <?php echo wp_kses_post(wpautop(mj_member_testimonial_linkify_event_mentions($testimonial->content))); ?>
                             </div>
                         <?php endif; ?>
 
