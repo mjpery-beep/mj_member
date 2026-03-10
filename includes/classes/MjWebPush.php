@@ -28,9 +28,16 @@ class MjWebPush
         $subscriptions = array();
         foreach ($member_ids as $member_id) {
             $subs = MjPushSubscriptions::get_for_member((int) $member_id);
+            if (empty($subs)) {
+                self::log('send_to_members: member_id=' . $member_id . ' has NO active push subscription');
+            }
             foreach ($subs as $sub) {
                 $subscriptions[] = $sub;
             }
+        }
+
+        if (empty($subscriptions)) {
+            self::log('send_to_members: 0 total subscriptions for member_ids=' . wp_json_encode($member_ids) . ' — push will NOT be sent');
         }
 
         return self::dispatch($subscriptions, $payload);
@@ -48,9 +55,16 @@ class MjWebPush
         $subscriptions = array();
         foreach ($user_ids as $user_id) {
             $subs = MjPushSubscriptions::get_for_user((int) $user_id);
+            if (empty($subs)) {
+                self::log('send_to_users: user_id=' . $user_id . ' has NO active push subscription');
+            }
             foreach ($subs as $sub) {
                 $subscriptions[] = $sub;
             }
+        }
+
+        if (empty($subscriptions)) {
+            self::log('send_to_users: 0 total subscriptions for user_ids=' . wp_json_encode($user_ids) . ' — push will NOT be sent');
         }
 
         return self::dispatch($subscriptions, $payload);
@@ -65,7 +79,13 @@ class MjWebPush
     {
         $stats = array('sent' => 0, 'failed' => 0, 'removed' => 0);
 
-        if (empty($db_subscriptions) || !Config::webPushIsReady()) {
+        if (empty($db_subscriptions)) {
+            self::log('dispatch() SKIP: no subscriptions to send to');
+            return $stats;
+        }
+
+        if (!Config::webPushIsReady()) {
+            self::log('dispatch() SKIP: VAPID keys not configured');
             return $stats;
         }
 
@@ -166,9 +186,10 @@ class MjWebPush
             } else {
                 $stats['failed']++;
 
-                // Si 410 Gone ou 404, l'abonnement n'est plus valide → supprimer
+                // Si 410 Gone ou 404, l'abonnement n'est plus valide → supprimer + blacklister
                 if ($report->isSubscriptionExpired() || in_array($statusCode, array(404, 410), true)) {
                     MjPushSubscriptions::delete_by_endpoint($ep);
+                    self::blacklist_endpoint($ep);
                     $stats['removed']++;
                 }
 
@@ -206,6 +227,44 @@ class MjWebPush
             'url'   => isset($payload['url']) ? (string) $payload['url'] : home_url('/'),
             'tag'   => isset($payload['tag']) ? (string) $payload['tag'] : '',
         );
+    }
+
+    /**
+     * Ajoute un endpoint à la blacklist temporaire (après 410 Gone).
+     * Empêche la ré-inscription immédiate du même endpoint périmé.
+     *
+     * @param string $endpoint
+     * @return void
+     */
+    public static function blacklist_endpoint(string $endpoint): void
+    {
+        $key = 'mj_push_bl_' . md5($endpoint);
+        set_transient($key, time(), 48 * HOUR_IN_SECONDS);
+        self::log('Blacklisted endpoint: ' . substr($endpoint, 0, 90));
+    }
+
+    /**
+     * Vérifie si un endpoint est blacklisté (récemment 410).
+     *
+     * @param string $endpoint
+     * @return bool
+     */
+    public static function is_endpoint_blacklisted(string $endpoint): bool
+    {
+        $key = 'mj_push_bl_' . md5($endpoint);
+        return get_transient($key) !== false;
+    }
+
+    /**
+     * Retire un endpoint de la blacklist.
+     *
+     * @param string $endpoint
+     * @return void
+     */
+    public static function unblacklist_endpoint(string $endpoint): void
+    {
+        $key = 'mj_push_bl_' . md5($endpoint);
+        delete_transient($key);
     }
 
     /**

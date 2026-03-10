@@ -129,6 +129,16 @@ if (!function_exists('mj_member_ajax_push_subscribe')) {
 
         $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_USER_AGENT'])) : '';
 
+        // ── Vérifier si cet endpoint a été blacklisté (410 Gone récent) ──
+        // Le navigateur renvoie le même endpoint périmé ; on doit forcer un re-subscribe frais.
+        if (MjWebPush::is_endpoint_blacklisted($endpoint)) {
+            error_log('[MJ Push] AJAX subscribe: endpoint BLACKLISTED (410 récent), demande refresh au client – endpoint=' . substr($endpoint, 0, 90));
+            wp_send_json_success(array(
+                'message'       => __('Abonnement expiré, re-souscription nécessaire.', 'mj-member'),
+                'needs_refresh' => true,
+            ));
+        }
+
         // Vérifier si cet endpoint est déjà enregistré
         $existing = MjPushSubscriptions::find_by_endpoint($endpoint);
         if ($existing) {
@@ -151,6 +161,9 @@ if (!function_exists('mj_member_ajax_push_subscribe')) {
 
         // Nouvel endpoint : supprimer tous les anciens de cet user avant d'insérer
         MjPushSubscriptions::delete_all_for_user(null, $user_id);
+
+        // Si le nouvel endpoint est différent d'un endpoint blacklisté, c'est un vrai refresh → lever la blacklist
+        MjWebPush::unblacklist_endpoint($endpoint);
 
         $result = MjPushSubscriptions::create(array(
             'member_id'        => $member_id,

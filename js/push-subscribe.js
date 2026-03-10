@@ -149,6 +149,11 @@
         // l'abonnement actif ou en crée un nouveau si l'ancien est expiré.
         subscribePush(registration).then(function (response) {
             if (response && response.success) {
+                // Le serveur demande un refresh ? L'endpoint actuel est blacklisté (410 récent)
+                if (response.data && response.data.needs_refresh) {
+                    if (window.console) console.warn('[MJ Push] Server says endpoint blacklisted, forcing fresh subscribe');
+                    return forceRefreshSubscription(registration);
+                }
                 try { localStorage.setItem('mj_push_endpoint', response.data && response.data.id ? String(response.data.id) : ''); } catch (e) { /* noop */ }
                 if (window.console) console.debug('[MJ Push] Subscribe/sync OK, id=' + (response.data && response.data.id));
             } else {
@@ -156,6 +161,37 @@
             }
         }).catch(function (err) {
             if (window.console) console.warn('[MJ Push] Subscribe/sync error:', err);
+        });
+    }
+
+    /**
+     * Force un re-subscribe frais : unsubscribe l'ancien endpoint
+     * puis subscribe de nouveau pour obtenir un nouvel endpoint de FCM.
+     */
+    function forceRefreshSubscription(registration) {
+        return registration.pushManager.getSubscription().then(function (existing) {
+            if (existing) {
+                if (window.console) console.debug('[MJ Push] Unsubscribing stale endpoint...');
+                return existing.unsubscribe();
+            }
+            return true;
+        }).then(function () {
+            if (window.console) console.debug('[MJ Push] Re-subscribing with fresh endpoint...');
+            return subscribePush(registration);
+        }).then(function (response) {
+            if (response && response.success) {
+                if (response.data && response.data.needs_refresh) {
+                    // Toujours blacklisté après refresh — problème plus profond
+                    if (window.console) console.error('[MJ Push] Still blacklisted after refresh, giving up');
+                    return;
+                }
+                try { localStorage.setItem('mj_push_endpoint', response.data && response.data.id ? String(response.data.id) : ''); } catch (e) { /* noop */ }
+                if (window.console) console.debug('[MJ Push] Fresh subscribe OK, id=' + (response.data && response.data.id));
+            } else {
+                if (window.console) console.warn('[MJ Push] Fresh subscribe refused:', response);
+            }
+        }).catch(function (err) {
+            if (window.console) console.warn('[MJ Push] Force refresh error:', err);
         });
     }
 

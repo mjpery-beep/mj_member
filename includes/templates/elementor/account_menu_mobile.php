@@ -847,7 +847,7 @@ if (!function_exists('mj_member_render_account_menu_component')) {
                 <?php if (!$panel_should_open) : ?>tabindex="-1"<?php endif; ?>>
                 <div class="mj-member-login-component__panel-arrow" aria-hidden="true"></div>
                 <div class="mj-member-login-component__panel-inner" role="document">
-                    <button type="button" class="mj-member-login-component__close" data-mj-login-close aria-label="<?php esc_attr_e('Fermer le panneau de menu', 'mj-member'); ?>"></button>
+                    <button type="button" class="mj-member-login-component__close" data-mj-login-close aria-label="<?php esc_attr_e('Fermer le panneau de menu', 'mj-member'); ?>"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                     <div class="mj-member-account-menu__header">
                         <?php if ($panel_title !== '') : ?>
                             <h2 id="<?php echo esc_attr($title_id); ?>" class="mj-member-login-component__title"><?php echo esc_html($panel_title); ?></h2>

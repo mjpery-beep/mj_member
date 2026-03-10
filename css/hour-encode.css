@@ -591,6 +591,11 @@
     z-index: 60;
 }
 
+/* Keep day above neighbours while it contains an active selection (quick-favs panel overflows) */
+.mj-hour-encode-calendar__day:has(.mj-hour-encode-calendar__selection) {
+    z-index: 61;
+}
+
 /* When hovering an occurrence dot or leave emoji, boost parent day above neighbours */
 .mj-hour-encode-calendar__day:has(.mj-hour-encode-calendar__occ-dot:hover),
 .mj-hour-encode-calendar__day:has(.mj-hour-encode-calendar__leave-emoji:hover) {
@@ -1328,6 +1333,42 @@
     animation: mj-duration-appear 0.3s ease-out;
 }
 
+/* ── Cancel selection button ── */
+.mj-hour-encode-calendar__selection-cancel {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 1.5px solid rgba(255, 255, 255, 0.6);
+    border-radius: 50%;
+    background: rgba(26, 45, 71, 0.45);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+    text-align: center;
+    cursor: pointer;
+    pointer-events: auto;
+    z-index: 10;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+    transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    animation: mj-duration-appear 0.25s ease-out;
+    opacity: 0.7;
+}
+
+.mj-hour-encode-calendar__selection-cancel:hover {
+    opacity: 1;
+    transform: scale(1.1);
+    background: rgba(239, 68, 68, 0.85);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.mj-hour-encode-calendar__selection-cancel:active {
+    transform: scale(0.92);
+}
+
 /* ── Quick-favorites panel floating next to selection ── */
 .mj-hour-encode-calendar__quick-favs {
     position: absolute;
@@ -1344,7 +1385,7 @@
     box-shadow: 0 4px 16px rgba(42, 85, 255, 0.15), 0 1px 3px rgba(0, 0, 0, 0.08);
     min-width: 140px;
     max-width: 220px;
-    max-height: 200px;
+    max-height: 400px;
     overflow-y: auto;
     pointer-events: auto;
     animation: mj-duration-appear 0.25s ease-out;

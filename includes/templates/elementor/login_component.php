@@ -1053,7 +1053,7 @@ if (!function_exists('mj_member_render_login_modal_component')) {
                 tabindex="-1">
                 <div class="mj-member-login-component__panel-arrow" aria-hidden="true"></div>
                 <div class="mj-member-login-component__panel-inner" role="document">
-                    <button type="button" class="mj-member-login-component__close" data-mj-login-close aria-label="<?php esc_attr_e('Fermer le panneau de connexion', 'mj-member'); ?>"></button>
+                    <button type="button" class="mj-member-login-component__close" data-mj-login-close aria-label="<?php esc_attr_e('Fermer le panneau de connexion', 'mj-member'); ?>"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                     <div class="mj-member-login-component__header">
                         <?php if (!empty($modal_description)) : ?>
                             <p class="mj-member-login-component__description"><?php echo esc_html($modal_description); ?></p>

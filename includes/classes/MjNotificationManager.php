@@ -19,7 +19,10 @@ class MjNotificationManager {
      * @return array{notification_id:int,recipient_ids:array<int,int>}|WP_Error
      */
     public static function record(array $notification_data, array $recipients) {
+        error_log('[MJ Push] record() CALLED – type=' . ($notification_data['type'] ?? '?') . ' title=' . substr($notification_data['title'] ?? '', 0, 60) . ' recipients=' . wp_json_encode($recipients));
+
         if (empty($recipients)) {
+            error_log('[MJ Push] record() SKIP: empty recipients');
             return new WP_Error('mj_notification_missing_recipients', __('Aucun destinataire fourni.', 'mj-member'));
         }
 
@@ -63,7 +66,7 @@ class MjNotificationManager {
         $output = apply_filters('mj_member_notification_recorded', $output, $notification_data, $recipients);
 
         // --- Web Push direct ---
-        self::dispatch_push($notification_data, $recipients);
+        self::dispatch_push($notification_data, $recipients, (int) $notification_id);
 
         return $output;
     }
@@ -590,8 +593,9 @@ class MjNotificationManager {
      *
      * @param array<string,mixed> $notification_data
      * @param array<int,mixed>    $recipients
+     * @param int                  $notification_id
      */
-    private static function dispatch_push(array $notification_data, array $recipients): void
+    private static function dispatch_push(array $notification_data, array $recipients, int $notification_id = 0): void
     {
         error_log('[MJ Push] dispatch_push CALLED – notification_data keys: ' . implode(',', array_keys($notification_data)));
         error_log('[MJ Push] dispatch_push recipients count=' . count($recipients) . ' raw=' . wp_json_encode($recipients));
@@ -665,11 +669,19 @@ class MjNotificationManager {
             return;
         }
 
+        // Tag unique par notification pour éviter que Chrome remplace silencieusement
+        $tag = $type !== '' ? $type : 'mj-member';
+        if ($notification_id > 0) {
+            $tag .= '-' . $notification_id;
+        } else {
+            $tag .= '-' . time();
+        }
+
         $payload = array(
             'title' => $title,
             'body'  => $body,
             'url'   => $url,
-            'tag'   => $type,
+            'tag'   => $tag,
         );
 
         try {

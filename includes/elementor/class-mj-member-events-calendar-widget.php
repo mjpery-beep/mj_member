@@ -447,6 +447,16 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             $empty_message = __('Aucun événement disponible pour le moment.', 'mj-member');
         }
 
+        // If the current user is an animateur/coordinateur, include drafts in the filter
+        $current_uid = get_current_user_id();
+        if ($current_uid > 0 && !in_array(MjEvents::STATUS_DRAFT, $status_filter, true)) {
+            $member_for_filter = MjMembers::getByWpUserId($current_uid);
+            $member_role = $member_for_filter ? ($member_for_filter->role ?? '') : '';
+            if (in_array($member_role, array(MjRoles::COORDINATEUR, MjRoles::ANIMATEUR), true)) {
+                $status_filter[] = MjEvents::STATUS_DRAFT;
+            }
+        }
+
         $events = array();
         if (function_exists('mj_member_get_public_events')) {
             $events = mj_member_get_public_events(
@@ -989,6 +999,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             $is_free_participation = !empty($event['free_participation']) || !empty($event['is_free_participation']);
             $legacy_registration_mode = isset($event['legacy_registration_mode']) ? sanitize_key((string) $event['legacy_registration_mode']) : '';
             $requires_validation = !empty($event['requires_validation']);
+            $event_is_draft = isset($event['status']) && $event['status'] === MjEvents::STATUS_DRAFT;
             $registration_label = self::build_registration_label($is_free_participation, $legacy_registration_mode, $requires_validation);
 
             $recurring_schedule_preview = self::build_recurring_schedule_preview($event);
@@ -1296,6 +1307,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     'recurring_schedule_preview' => $recurring_schedule_preview,
                     'is_cancelled' => $occurrence_is_cancelled,
                     'cancellation_reason' => $occurrence_cancellation_reason,
+                    'is_draft' => $event_is_draft,
                     'is_registered' => isset($user_registered_events[$event_id]),
                     'registration_details' => isset($user_registered_events[$event_id]) ? $user_registered_events[$event_id] : array(),
                 );
@@ -1337,6 +1349,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                     'palette' => $palette,
                                     'is_cancelled' => $occurrence_is_cancelled,
                                     'cancellation_reason' => $occurrence_cancellation_reason,
+                                    'is_draft' => $event_is_draft,
                                     'is_registered' => isset($user_registered_events[$event_id]),
                                     'registration_details' => isset($user_registered_events[$event_id]) ? $user_registered_events[$event_id] : array(),
                                 );
@@ -1791,6 +1804,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             'palette' => isset($multi_event['palette']) && is_array($multi_event['palette']) ? $multi_event['palette'] : array(),
                             'is_cancelled' => !empty($multi_event['is_cancelled']),
                             'cancellation_reason' => !empty($multi_event['cancellation_reason']) ? (string) $multi_event['cancellation_reason'] : '',
+                            'is_draft' => !empty($multi_event['is_draft']),
                             'is_registered' => !empty($multi_event['is_registered']),
                             'registration_details' => isset($multi_event['registration_details']) ? $multi_event['registration_details'] : array(),
                         );
@@ -1887,7 +1901,14 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
                     echo '<div class="' . esc_attr(implode(' ', $day_cell_classes)) . '">';
                     echo '<div class="' . esc_attr(implode(' ', $day_classes)) . '"' . $day_data_attr . '>';
+                    echo '<div class="mj-member-events-calendar__day-header">';
                     echo '<span class="mj-member-events-calendar__day-number">' . esc_html($cell_entry['day_number']) . '</span>';
+                    if ($can_edit_events) {
+                        echo '<button type="button" class="mj-member-events-calendar__day-add" data-calendar-create-day="' . esc_attr($day_key) . '" aria-label="' . esc_attr__('Ajouter un événement ce jour', 'mj-member') . '" title="' . esc_attr__('Ajouter un événement ce jour', 'mj-member') . '">';
+                        echo '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+                        echo '</button>';
+                    }
+                    echo '</div>';
 
                     if (!empty($events_for_day)) {
                         echo '<ul class="mj-member-events-calendar__events">';
@@ -1902,6 +1923,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             }
                             if (!empty($event_entry['is_cancelled'])) {
                                 $event_classes[] = 'is-cancelled';
+                            }
+                            if (!empty($event_entry['is_draft'])) {
+                                $event_classes[] = 'is-draft';
                             }
                             if ($next_event_pointer && $next_event_pointer['event_key'] === $event_entry['id']) {
                                 $event_classes[] = 'is-next';
@@ -1962,6 +1986,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                     echo '<span class="mj-member-events-calendar__event-cancellation-reason">' . esc_html($cancellation_reason) . '</span>';
                                 }
                                 echo '</span>';
+                            }
+                            if (!empty($event_entry['is_draft'])) {
+                                echo '<span class="mj-member-events-calendar__event-draft-badge">' . esc_html__('Brouillon', 'mj-member') . '</span>';
                             }
                             echo '</span>';
 
@@ -2302,6 +2329,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         if (!empty($mobile_event['is_cancelled'])) {
                             $mobile_classes[] = 'is-cancelled';
                         }
+                        if (!empty($mobile_event['is_draft'])) {
+                            $mobile_classes[] = 'is-draft';
+                        }
 
                         $mobile_style = self::build_event_style_attribute($mobile_event);
                         $mobile_cover_sources = array();
@@ -2383,6 +2413,9 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                             }
                             echo '</span>';
                         }
+                        if (!empty($mobile_event['is_draft'])) {
+                            echo '<span class="mj-member-events-calendar__event-draft-badge">' . esc_html__('Brouillon', 'mj-member') . '</span>';
+                        }
                         echo '</div>';
                         echo '</' . $mobile_tag . '>';
                         if ($can_edit_events && !$mobile_is_closure && empty($mobile_event['is_leave_request']) && !empty($mobile_event['id'])) {
@@ -2419,6 +2452,180 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '<p class="mj-member-events-calendar__empty">' . esc_html($empty_message) . '</p>';
         }
 
+        if ($can_edit_events) {
+            $dlg_id = 'mj-member-events-calendar-create-title-' . esc_attr($instance_id);
+            echo '<div class="ccm" data-calendar-create-modal hidden aria-hidden="true">';
+            echo '<div class="ccm__overlay" data-calendar-create-close></div>';
+            echo '<div class="ccm__dialog" role="dialog" aria-modal="true" aria-labelledby="' . $dlg_id . '">';
+
+            // Header
+            echo '<div class="ccm__header">';
+            echo '<div class="ccm__header-left">';
+            echo '<span class="ccm__header-icon">&#x1F4C5;</span>';
+            echo '<h2 class="ccm__title" id="' . $dlg_id . '">' . esc_html__('Nouvel événement', 'mj-member') . '</h2>';
+            echo '</div>';
+            echo '<button type="button" class="ccm__close" data-calendar-create-close aria-label="' . esc_attr__('Fermer', 'mj-member') . '">';
+            echo '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M15 5L5 15M5 5l10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+            echo '</button>';
+            echo '</div>';
+
+            // Stepper
+            echo '<nav class="ccm__stepper" data-calendar-create-stepper>';
+            $step_labels_arr = [
+                1 => __('Identité', 'mj-member'),
+                2 => __('Horaires', 'mj-member'),
+                3 => __('Options', 'mj-member'),
+                4 => __('Lieu & Équipe', 'mj-member'),
+            ];
+            foreach ($step_labels_arr as $sn => $sl) {
+                $cls = 'ccm__step-item' . ($sn === 1 ? ' is-active' : '');
+                echo '<button type="button" class="' . esc_attr($cls) . '" data-step-dot="' . $sn . '">';
+                echo '<span class="ccm__step-num">' . $sn . '</span>';
+                echo '<span class="ccm__step-text">' . esc_html($sl) . '</span>';
+                echo '</button>';
+            }
+            echo '</nav>';
+
+            // Feedback
+            echo '<div class="ccm__feedback" data-calendar-create-feedback hidden></div>';
+
+            // Step 1 – Identity
+            echo '<div class="ccm__panel is-active" data-calendar-create-panel="1">';
+            echo '<div class="ccm__emoji-zone">';
+            echo '<div class="ccm__emoji-mount mj-form-field--emoji" data-calendar-create-emoji-mount></div>';
+            echo '</div>';
+            echo '<div class="ccm__field">';
+            echo '<label class="ccm__label" for="ccm-title-' . esc_attr($instance_id) . '">' . esc_html__('Nom de l\'événement', 'mj-member') . '</label>';
+            echo '<input class="ccm__input" type="text" id="ccm-title-' . esc_attr($instance_id) . '" data-calendar-create-title maxlength="190" placeholder="' . esc_attr__('Ex : Atelier DJ', 'mj-member') . '" />';
+            echo '</div>';
+            echo '<div class="ccm__field">';
+            echo '<label class="ccm__label">' . esc_html__('Type d\'activité', 'mj-member') . '</label>';
+            echo '<div class="ccm__type-grid" data-calendar-create-type-grid></div>';
+            echo '<input type="hidden" data-calendar-create-type value="" />';
+            echo '</div>';
+            echo '</div>';
+
+            // Step 2 – Date & time
+            echo '<div class="ccm__panel" data-calendar-create-panel="2" hidden>';
+            echo '<div class="ccm__date-display" data-calendar-create-date-display></div>';
+            echo '<input type="hidden" data-calendar-create-date />';
+            echo '<div class="ccm__time-row">';
+            echo '<div class="ccm__field ccm__field--half">';
+            echo '<label class="ccm__label">' . esc_html__('Début', 'mj-member') . '</label>';
+            echo '<input class="ccm__input" type="time" data-calendar-create-start value="14:00" />';
+            echo '</div>';
+            echo '<span class="ccm__time-sep">&rarr;</span>';
+            echo '<div class="ccm__field ccm__field--half">';
+            echo '<label class="ccm__label">' . esc_html__('Fin', 'mj-member') . '</label>';
+            echo '<input class="ccm__input" type="time" data-calendar-create-end value="17:00" />';
+            echo '</div>';
+            echo '</div>';
+            echo '</div>';
+
+            // Step 3 – Options & Confirmation
+            echo '<div class="ccm__panel" data-calendar-create-panel="3" hidden>';
+
+            echo '<div class="ccm__summary-card" data-calendar-create-summary></div>';
+
+            echo '<div class="ccm__options-section">';
+            echo '<h4 class="ccm__options-title">' . esc_html__('Options d\'inscription', 'mj-member') . '</h4>';
+
+            echo '<label class="ccm__toggle-row">';
+            echo '<span class="ccm__toggle-text">' . esc_html__('Les membres choisissent leurs occurrences', 'mj-member') . '</span>';
+            echo '<span class="ccm__toggle"><input type="checkbox" data-calendar-create-occurrence-choice /><span class="ccm__toggle-slider"></span></span>';
+            echo '</label>';
+
+            echo '<label class="ccm__toggle-row">';
+            echo '<span class="ccm__toggle-text">' . esc_html__('Validation des inscriptions requise', 'mj-member') . '</span>';
+            echo '<span class="ccm__toggle"><input type="checkbox" data-calendar-create-require-validation /><span class="ccm__toggle-slider"></span></span>';
+            echo '</label>';
+
+            echo '<label class="ccm__toggle-row">';
+            echo '<span class="ccm__toggle-text">' . esc_html__('Participation libre (sans inscription)', 'mj-member') . '</span>';
+            echo '<span class="ccm__toggle"><input type="checkbox" data-calendar-create-free-participation /><span class="ccm__toggle-slider"></span></span>';
+            echo '</label>';
+
+            echo '<label class="ccm__toggle-row">';
+            echo '<span class="ccm__toggle-text">' . esc_html__('Afficher tous les membres en présence', 'mj-member') . '</span>';
+            echo '<span class="ccm__toggle"><input type="checkbox" data-calendar-create-show-all-members /><span class="ccm__toggle-slider"></span></span>';
+            echo '</label>';
+
+            echo '<div class="ccm__num-row">';
+            echo '<div class="ccm__field ccm__field--compact">';
+            echo '<label class="ccm__label">' . esc_html__('Places max', 'mj-member') . '</label>';
+            echo '<input class="ccm__input ccm__input--sm" type="number" data-calendar-create-capacity min="0" value="0" />';
+            echo '</div>';
+            echo '<div class="ccm__field ccm__field--compact">';
+            echo '<label class="ccm__label">' . esc_html__('Prix (€)', 'mj-member') . '</label>';
+            echo '<input class="ccm__input ccm__input--sm" type="number" data-calendar-create-price min="0" step="0.01" value="0" />';
+            echo '</div>';
+            echo '<div class="ccm__field ccm__field--compact">';
+            echo '<label class="ccm__label">' . esc_html__('Âge min', 'mj-member') . '</label>';
+            echo '<input class="ccm__input ccm__input--sm" type="number" data-calendar-create-age-min min="0" value="12" />';
+            echo '</div>';
+            echo '<div class="ccm__field ccm__field--compact">';
+            echo '<label class="ccm__label">' . esc_html__('Âge max', 'mj-member') . '</label>';
+            echo '<input class="ccm__input ccm__input--sm" type="number" data-calendar-create-age-max min="0" value="26" />';
+            echo '</div>';
+            echo '</div>';
+
+            echo '<p class="ccm__hint">' . esc_html__('0 = illimité. Ces options sont modifiables après création.', 'mj-member') . '</p>';
+            echo '</div>';
+            echo '</div>';
+
+            // Step 4 – Lieu, Équipe & Statut
+            echo '<div class="ccm__panel" data-calendar-create-panel="4" hidden>';
+
+            echo '<div class="ccm__field">';
+            echo '<label class="ccm__label">' . esc_html__('Statut', 'mj-member') . '</label>';
+            echo '<select class="ccm__input ccm__select" data-calendar-create-status>';
+            $status_labels = \Mj\Member\Classes\Crud\MjEvents::get_status_labels();
+            foreach ($status_labels as $sval => $slbl) {
+                $selected = ($sval === 'brouillon') ? ' selected' : '';
+                echo '<option value="' . esc_attr($sval) . '"' . $selected . '>' . esc_html($slbl) . '</option>';
+            }
+            echo '</select>';
+            echo '</div>';
+
+            echo '<div class="ccm__field">';
+            echo '<label class="ccm__label">' . esc_html__('Lieu', 'mj-member') . '</label>';
+            echo '<select class="ccm__input ccm__select" data-calendar-create-location>';
+            echo '<option value="0">' . esc_html__('— Aucun lieu —', 'mj-member') . '</option>';
+            echo '</select>';
+            echo '</div>';
+
+            echo '<div class="ccm__field">';
+            echo '<label class="ccm__label">' . esc_html__('Équipe responsable', 'mj-member') . '</label>';
+            echo '<p class="ccm__field-hint">' . esc_html__('Sélectionnez les animateurs référents pour cet événement.', 'mj-member') . '</p>';
+            echo '<div class="ccm__team-grid" data-calendar-create-team-grid></div>';
+            echo '</div>';
+
+            echo '</div>';
+
+            // Actions
+            echo '<div class="ccm__actions">';
+            echo '<div class="ccm__actions-left">';
+            echo '<button type="button" class="ccm__btn ccm__btn--ghost" data-calendar-create-prev hidden>' . esc_html__('Retour', 'mj-member') . '</button>';
+            echo '</div>';
+            echo '<div class="ccm__actions-center">';
+            echo '<button type="button" class="ccm__btn ccm__btn--secondary" data-calendar-create-only hidden>';
+            echo '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 4.5l-7 7L3 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+            echo ' ' . esc_html__('Créer', 'mj-member');
+            echo '</button>';
+            echo '<button type="button" class="ccm__btn ccm__btn--accent" data-calendar-create-submit hidden>';
+            echo '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M14 2.5l-8.5 8.5L2 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 6v5.5a1 1 0 01-1 1H3a1 1 0 01-1-1v-7a1 1 0 011-1h5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+            echo ' ' . esc_html__('Créer et éditer', 'mj-member');
+            echo '</button>';
+            echo '</div>';
+            echo '<div class="ccm__actions-right">';
+            echo '<button type="button" class="ccm__btn ccm__btn--primary" data-calendar-create-next>' . esc_html__('Continuer', 'mj-member') . '</button>';
+            echo '</div>';
+            echo '</div>';
+
+            echo '</div>'; // dialog
+            echo '</div>'; // modal
+        }
+
         echo '</div>';
 
         $preferred_index = ($preferred_index >= 0) ? $preferred_index : 0;
@@ -2431,6 +2638,51 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         if ($can_edit_events) {
             $instance_config['ajaxUrl'] = admin_url('admin-ajax.php');
             $instance_config['deleteNonce'] = wp_create_nonce('mj_calendar_delete_occurrence');
+            $instance_config['createNonce'] = wp_create_nonce('mj-events-manager');
+            $instance_config['createUrl'] = home_url('/mon-compte/gestionnaire/');
+            $instance_config['createTypes'] = \Mj\Member\Classes\Crud\MjEvents::get_type_labels();
+            $instance_config['createTypeColors'] = \Mj\Member\Classes\Crud\MjEvents::get_type_colors();
+
+            // Locations for step 4
+            $create_locations = array();
+            if (class_exists('\Mj\Member\Classes\Crud\MjEventLocations')) {
+                $all_locations = \Mj\Member\Classes\Crud\MjEventLocations::get_all(array('orderby' => 'name', 'order' => 'ASC'));
+                if (is_array($all_locations)) {
+                    foreach ($all_locations as $loc) {
+                        $loc_id = (int) ($loc->id ?? 0);
+                        if ($loc_id > 0) {
+                            $name = (string) ($loc->name ?? '');
+                            $city = (string) ($loc->city ?? '');
+                            $label = $name;
+                            if ($city !== '') {
+                                $label .= ' (' . $city . ')';
+                            }
+                            $create_locations[$loc_id] = $label;
+                        }
+                    }
+                }
+            }
+            $instance_config['createLocations'] = $create_locations;
+
+            // Animateurs for step 4
+            $create_animateurs = array();
+            if (class_exists('\Mj\Member\Classes\Crud\MjMembers') && class_exists('\Mj\Member\Classes\MjRoles')) {
+                $anim_filters = array('roles' => array(\Mj\Member\Classes\MjRoles::ANIMATEUR, \Mj\Member\Classes\MjRoles::COORDINATEUR));
+                $animateurs = \Mj\Member\Classes\Crud\MjMembers::getAll(0, 0, 'last_name', 'ASC', '', $anim_filters);
+                if (is_array($animateurs)) {
+                    foreach ($animateurs as $anim) {
+                        if (!is_object($anim) || !isset($anim->id)) continue;
+                        $anim_id = (int) $anim->id;
+                        if ($anim_id <= 0) continue;
+                        $first = isset($anim->first_name) ? $anim->first_name : '';
+                        $last = isset($anim->last_name) ? $anim->last_name : '';
+                        $display = trim($first . ' ' . $last);
+                        if ($display === '') $display = 'Animateur #' . $anim_id;
+                        $create_animateurs[$anim_id] = $display;
+                    }
+                }
+            }
+            $instance_config['createAnimateurs'] = $create_animateurs;
         }
 
 

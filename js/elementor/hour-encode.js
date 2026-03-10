@@ -2729,6 +2729,24 @@
                                     }, props.selectedSlot.duration));
                                 }
 
+                                // Cancel selection button
+                                selectionChildren.push(h('button', {
+                                    key: 'cancel-btn',
+                                    type: 'button',
+                                    className: 'mj-hour-encode-calendar__selection-cancel',
+                                    title: labels.cancelSelection || 'Annuler la sélection',
+                                    'aria-label': labels.cancelSelection || 'Annuler la sélection',
+                                    onPointerDown: function(ev) { ev.stopPropagation(); },
+                                    onTouchStart: function(ev) { ev.stopPropagation(); },
+                                    onClick: function(ev) {
+                                        ev.preventDefault();
+                                        ev.stopPropagation();
+                                        if (typeof props.onSelectionCancel === 'function') {
+                                            props.onSelectionCancel();
+                                        }
+                                    }
+                                }, '\u00D7'));
+
                                 // Quick-encode favorites panel
                                 if (Array.isArray(props.favoriteItems) && props.favoriteItems.length > 0) {
                                     selectionChildren.push(h('div', {
@@ -7371,7 +7389,8 @@
                                             ? (selectedSlot.hourId ? 'hour:' + selectedSlot.hourId : (selectedSlot.entryId ? 'entry:' + selectedSlot.entryId : null))
                                             : null,
                                         favoriteItems: favoriteItems,
-                                        onFavoriteQuickSubmit: handleFavoriteQuickSubmit
+                                        onFavoriteQuickSubmit: handleFavoriteQuickSubmit,
+                                        onSelectionCancel: handleSelectionCancel
                                     }),
                                     isMobileLayout ? null : aggregateSummary
                                 ]),

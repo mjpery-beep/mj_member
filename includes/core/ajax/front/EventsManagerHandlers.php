@@ -3,6 +3,9 @@
 namespace Mj\Member\Core\Ajax\Front;
 
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\Crud\MjEvents;
+use Mj\Member\Classes\Crud\MjEventOccurrences;
+use Mj\Member\Classes\Crud\MjEventAnimateurs;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -136,7 +139,12 @@ class EventsManagerHandlers
             wp_send_json_error(['message' => __('Le type est requis.', 'mj-member')], 400);
         }
 
-        $status = !empty($_POST['status']) ? sanitize_key($_POST['status']) : 'draft';
+        $status = !empty($_POST['status']) ? sanitize_key($_POST['status']) : 'brouillon';
+        // Validate status against allowed values
+        $allowed_statuses = array_keys(MjEvents::get_status_labels());
+        if (!in_array($status, $allowed_statuses, true)) {
+            $status = 'brouillon';
+        }
         $description = !empty($_POST['description']) ? wp_kses_post($_POST['description']) : '';
         $start_date = !empty($_POST['start_date']) ? self::parseDateTime($_POST['start_date']) : '';
         $end_date = !empty($_POST['end_date']) ? self::parseDateTime($_POST['end_date']) : '';
@@ -145,6 +153,10 @@ class EventsManagerHandlers
         $attendance_show_all_members = isset($_POST['attendance_show_all_members'])
             ? self::normalizeAttendanceFlag($_POST['attendance_show_all_members'])
             : false;
+
+        // Step 2 – inscription options
+        $occurrence_choice = !empty($_POST['occurrence_choice']);
+        $require_validation = !empty($_POST['require_validation']);
 
         $emoji = '';
         if (isset($_POST['emoji'])) {
@@ -170,10 +182,26 @@ class EventsManagerHandlers
 
         $registration_payload = [
             'attendance_show_all_members' => $attendance_show_all_members,
+            'occurrence_choice' => $occurrence_choice,
+            'require_validation' => $require_validation,
         ];
 
+        // Location ID
+        $location_id = isset($_POST['location_id']) ? intval($_POST['location_id']) : 0;
+
+        // Animateur IDs
+        $animateur_ids = [];
+        if (!empty($_POST['animateur_ids']) && is_array($_POST['animateur_ids'])) {
+            foreach ($_POST['animateur_ids'] as $aid) {
+                $aid = intval($aid);
+                if ($aid > 0) {
+                    $animateur_ids[] = $aid;
+                }
+            }
+        }
+
         try {
-            $event_id = \MjEvents::create([
+            $event_id = MjEvents::create([
                 'title' => $title,
                 'type' => $type,
                 'status' => $status,
@@ -187,13 +215,31 @@ class EventsManagerHandlers
                 'recurrence_until' => $recurrence_until,
                 'registration_payload' => $registration_payload,
                 'emoji' => $emoji,
+                'location_id' => $location_id,
             ]);
 
             if (is_wp_error($event_id)) {
                 throw new \Exception($event_id->get_error_message());
             }
 
-            $event = \MjEvents::getById($event_id);
+            // Create the initial occurrence at the encoded date
+            if (!empty($start_date) && !empty($end_date)) {
+                MjEventOccurrences::replace_for_event($event_id, [
+                    [
+                        'start'  => $start_date,
+                        'end'    => $end_date,
+                        'status' => MjEventOccurrences::STATUS_ACTIVE,
+                        'source' => MjEventOccurrences::SOURCE_MANUAL,
+                    ],
+                ]);
+            }
+
+            // Sync animateur assignments
+            if (!empty($animateur_ids)) {
+                MjEventAnimateurs::sync_for_event($event_id, $animateur_ids);
+            }
+
+            $event = MjEvents::find($event_id);
 
             wp_send_json_success([
                 'message' => __('Événement créé avec succès.', 'mj-member'),

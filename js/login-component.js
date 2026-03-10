@@ -244,24 +244,9 @@
         initAccountMenuAccordions(panel);
 
         trigger.addEventListener('click', function (event) {
-            var loginState = trigger.getAttribute('data-login-state') || 'logged-out';
-            var accountUrl = trigger.getAttribute('data-account-url') || '';
-            var isLoggedIn = loginState === 'logged-in';
-            var isKeyboard = event.detail === 0;
-
-            if (isLoggedIn && accountUrl !== '' && canHover && !isKeyboard) {
-                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button === 1) {
-                    window.open(accountUrl, '_blank', 'noopener');
-                    return;
-                }
-
-                window.location.assign(accountUrl);
-                return;
-            }
-
             event.preventDefault();
             if (panel.classList.contains('is-active')) {
-                focusFirstElement(state.panel);
+                closeState(state, true);
                 return;
             }
             openState(state);
