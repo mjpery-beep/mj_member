@@ -500,6 +500,13 @@
                 '</div>';
             });
 
+            // Keyboard hint footer
+            html += '<div class="mj-mention-dropdown__footer">' +
+                '<span class="mj-mention-dropdown__footer-key"><kbd>\u2191</kbd><kbd>\u2193</kbd> naviguer</span>' +
+                '<span class="mj-mention-dropdown__footer-key"><kbd>\u23CE</kbd> s\u00e9lectionner</span>' +
+                '<span class="mj-mention-dropdown__footer-key"><kbd>Esc</kbd> fermer</span>' +
+            '</div>';
+
             this.$mentionDropdown.html(html).show();
 
             // Bind click events
@@ -510,11 +517,32 @@
                     this.selectMentionItem(this.mentionResults[index]);
                 }
             });
+
+            // Sync hover with keyboard selection
+            this.$mentionDropdown.find('.mj-mention-dropdown__item').on('mouseenter', (e) => {
+                const index = parseInt($(e.currentTarget).data('index'), 10);
+                this.mentionSelectedIndex = index;
+                this.highlightMentionItem();
+            });
         }
 
         highlightMentionItem() {
-            this.$mentionDropdown.find('.mj-mention-dropdown__item').removeClass('is-selected');
-            this.$mentionDropdown.find('.mj-mention-dropdown__item').eq(this.mentionSelectedIndex).addClass('is-selected');
+            const $items = this.$mentionDropdown.find('.mj-mention-dropdown__item');
+            $items.removeClass('is-selected');
+            const $selected = $items.eq(this.mentionSelectedIndex).addClass('is-selected');
+
+            // Scroll selected item into view within the dropdown
+            if ($selected.length) {
+                const container = this.$mentionDropdown[0];
+                const el = $selected[0];
+                const elTop = el.offsetTop;
+                const elBottom = elTop + el.offsetHeight;
+                if (elTop < container.scrollTop) {
+                    container.scrollTop = elTop;
+                } else if (elBottom > container.scrollTop + container.clientHeight) {
+                    container.scrollTop = elBottom - container.clientHeight;
+                }
+            }
         }
 
         selectMentionItem(event) {
@@ -1681,13 +1709,14 @@
             });
         });
 
-        // --- Owner: Edit testimonial (inline) ---
+        // --- Owner: Edit testimonial (inline with media support) ---
         $(document).on('click.mjFeed', '[data-action="edit-testimonial"]', function(e) {
             e.preventDefault();
             e.stopPropagation();
 
             const $wrapper = getWrapper(this);
-            const $content = $wrapper.find('.mj-feed-post__content');
+            const $post = $wrapper.find('.mj-feed-post');
+            let $content = $wrapper.find('.mj-feed-post__content');
 
             // Close dropdown
             $(this).closest('.mj-feed-post__owner-dropdown').hide();
@@ -1695,66 +1724,378 @@
             // If already editing, do nothing
             if ($wrapper.find('.mj-feed-post__edit-form').length) return;
 
+            // If content div doesn't exist (media-only post), create it before media
+            if (!$content.length) {
+                const $insertBefore = $post.find('.mj-feed-post__media').first();
+                const $newContent = $('<div class="mj-feed-post__content" data-raw-content=""></div>');
+                if ($insertBefore.length) {
+                    $insertBefore.before($newContent);
+                } else {
+                    $post.append($newContent);
+                }
+                $content = $newContent;
+            }
+
             // Get raw content from data attribute
             const rawContent = $content.attr('data-raw-content') || $content.text().trim();
 
             // Store original HTML for cancel
-            const originalHtml = $content.html();
+            const originalContentHtml = $content.html();
 
-            // Replace content with edit form
-            const $editForm = $(
-                '<div class="mj-feed-post__edit-form">' +
-                    '<textarea class="mj-feed-post__edit-textarea">' + $('<span>').text(rawContent).html() + '</textarea>' +
-                    '<div class="mj-feed-post__edit-actions">' +
-                        '<button type="button" class="mj-btn mj-btn--small mj-feed-post__edit-save" data-action="save-edit">' +
-                            'Enregistrer' +
-                        '</button>' +
-                        '<button type="button" class="mj-btn mj-btn--small mj-btn--ghost mj-feed-post__edit-cancel" data-action="cancel-edit">' +
-                            'Annuler' +
-                        '</button>' +
-                    '</div>' +
-                '</div>'
-            );
+            // Get current media from data attributes
+            let editPhotos = [];
+            let editVideoId = 0;
+            let editVideoUrl = '';
+
+            try {
+                const photosData = $post.attr('data-photos');
+                if (photosData) editPhotos = JSON.parse(photosData);
+            } catch(e) {}
+
+            try {
+                const videoData = $post.attr('data-video');
+                if (videoData) {
+                    const v = JSON.parse(videoData);
+                    editVideoId = v.id || 0;
+                    editVideoUrl = v.url || '';
+                }
+            } catch(e) {}
+
+            // Store original media sections
+            const $origPhotosMedia = $wrapper.find('.mj-feed-post__media--photos-1, .mj-feed-post__media--photos-2, .mj-feed-post__media--photos-3, .mj-feed-post__media--photos-4, .mj-feed-post__media--photos-5');
+            const $origVideoMedia = $wrapper.find('.mj-feed-post__media--video');
+            const origPhotosHtml = $origPhotosMedia.length ? $origPhotosMedia[0].outerHTML : '';
+            const origVideoHtml = $origVideoMedia.length ? $origVideoMedia[0].outerHTML : '';
+
+            // Hide original media
+            $origPhotosMedia.hide();
+            $origVideoMedia.hide();
+
+            // --- Build the edit media grid ---
+            function buildMediaPreview() {
+                let html = '<div class="mj-feed-post__edit-media">';
+
+                // Photos grid
+                html += '<div class="mj-feed-post__edit-media-grid">';
+                editPhotos.forEach(function(p) {
+                    html += '<div class="mj-feed-post__edit-media-item" data-photo-id="' + p.id + '">';
+                    html += '<img src="' + escapeHtml(p.url) + '" alt="">';
+                    html += '<button type="button" class="mj-feed-post__edit-media-remove" data-action="edit-remove-photo" data-photo-id="' + p.id + '" title="Supprimer">&times;</button>';
+                    html += '</div>';
+                });
+                html += '</div>';
+
+                // Video preview
+                if (editVideoId && editVideoUrl) {
+                    html += '<div class="mj-feed-post__edit-video-preview" data-video-id="' + editVideoId + '">';
+                    html += '<video src="' + escapeHtml(editVideoUrl) + '" controls playsinline></video>';
+                    html += '<button type="button" class="mj-feed-post__edit-media-remove" data-action="edit-remove-video" title="Supprimer">&times;</button>';
+                    html += '</div>';
+                }
+
+                // Add media button (show if under limits)
+                const canAddPhoto = editPhotos.length < (config.maxPhotos || 5);
+                const canAddVideo = config.allowVideo && !editVideoId;
+                if (canAddPhoto || canAddVideo) {
+                    html += '<div class="mj-feed-post__edit-add-wrap">';
+                    let acceptTypes = [];
+                    if (canAddPhoto) acceptTypes.push('image/*');
+                    if (canAddVideo) acceptTypes.push('video/*');
+                    html += '<label class="mj-feed-post__edit-add-media">';
+                    html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
+                    html += ' <span>Ajouter</span>';
+                    html += '<input type="file" class="mj-feed-post__edit-file-input" accept="' + acceptTypes.join(',') + '" multiple style="display:none">';
+                    html += '</label>';
+                    html += '</div>';
+                }
+
+                html += '</div>';
+                return html;
+            }
+
+            // Build edit form
+            const $editForm = $('<div class="mj-feed-post__edit-form">' +
+                '<textarea class="mj-feed-post__edit-textarea">' + $('<span>').text(rawContent).html() + '</textarea>' +
+                buildMediaPreview() +
+                '<div class="mj-feed-post__edit-status" style="display:none;"></div>' +
+                '<div class="mj-feed-post__edit-actions">' +
+                    '<button type="button" class="mj-btn mj-btn--small mj-feed-post__edit-save" data-action="save-edit">' +
+                        'Enregistrer' +
+                    '</button>' +
+                    '<button type="button" class="mj-btn mj-btn--small mj-btn--ghost mj-feed-post__edit-cancel" data-action="cancel-edit">' +
+                        'Annuler' +
+                    '</button>' +
+                '</div>' +
+            '</div>');
 
             $content.html($editForm);
             $content.find('.mj-feed-post__edit-textarea').focus();
 
+            // --- Helper to refresh the media preview section ---
+            function refreshMediaPreview() {
+                $content.find('.mj-feed-post__edit-media').replaceWith(buildMediaPreview());
+                bindMediaEvents();
+            }
+
+            function showEditStatus(msg, type) {
+                const $status = $content.find('.mj-feed-post__edit-status');
+                if (!msg) { $status.hide().text(''); return; }
+                $status.text(msg)
+                    .removeClass('mj-feed-post__edit-status--error mj-feed-post__edit-status--success')
+                    .addClass(type ? 'mj-feed-post__edit-status--' + type : '')
+                    .show();
+            }
+
+            // --- Bind media events ---
+            function bindMediaEvents() {
+                // Remove photo
+                $content.find('[data-action="edit-remove-photo"]').off('click.editMedia').on('click.editMedia', function(ev) {
+                    ev.preventDefault();
+                    const photoId = parseInt($(this).data('photo-id'));
+                    editPhotos = editPhotos.filter(function(p) { return p.id !== photoId; });
+                    refreshMediaPreview();
+                });
+
+                // Remove video
+                $content.find('[data-action="edit-remove-video"]').off('click.editMedia').on('click.editMedia', function(ev) {
+                    ev.preventDefault();
+                    editVideoId = 0;
+                    editVideoUrl = '';
+                    refreshMediaPreview();
+                });
+
+                // File input change → upload
+                $content.find('.mj-feed-post__edit-file-input').off('change.editMedia').on('change.editMedia', function() {
+                    const files = Array.from(this.files || []);
+                    if (!files.length) return;
+
+                    files.forEach(function(file) {
+                        if (file.type.startsWith('video/')) {
+                            editUploadVideo(file);
+                        } else if (file.type.startsWith('image/')) {
+                            editUploadPhoto(file);
+                        }
+                    });
+
+                    // Reset input
+                    $(this).val('');
+                });
+            }
+
+            // --- Upload a photo in edit mode ---
+            function editUploadPhoto(file) {
+                if (editPhotos.length >= (config.maxPhotos || 5)) {
+                    showEditStatus(i18n.maxPhotosReached || 'Maximum de photos atteint.', 'error');
+                    return;
+                }
+
+                showEditStatus(i18n.uploading || 'Envoi en cours...', '');
+
+                const formData = new FormData();
+                formData.append('action', 'mj_front_testimonial_upload');
+                formData.append('_wpnonce', config.nonce);
+                formData.append('type', 'photo');
+                formData.append('file', file);
+
+                $.ajax({
+                    url: config.ajaxUrl,
+                    method: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false
+                }).done(function(response) {
+                    if (response.success && response.data && response.data.id) {
+                        editPhotos.push({ id: response.data.id, url: response.data.url || response.data.thumb });
+                        showEditStatus('', '');
+                        refreshMediaPreview();
+                    } else {
+                        const errMsg = (typeof response.data === 'string') ? response.data : (response.data?.message || i18n.submitError);
+                        showEditStatus(errMsg, 'error');
+                    }
+                }).fail(function(xhr) {
+                    let errMsg = i18n.submitError;
+                    if (xhr && xhr.responseJSON && xhr.responseJSON.data) {
+                        errMsg = (typeof xhr.responseJSON.data === 'string') ? xhr.responseJSON.data : (xhr.responseJSON.data.message || errMsg);
+                    }
+                    showEditStatus(errMsg, 'error');
+                });
+            }
+
+            // --- Upload a video in edit mode ---
+            function editUploadVideo(file) {
+                const maxVideoSize = config.maxVideoSize || (100 * 1024 * 1024);
+                if (file.size > maxVideoSize) {
+                    const sizeMb = (maxVideoSize / (1024 * 1024)).toFixed(0);
+                    const msg = (i18n.videoTooLarge || 'La vidéo est trop volumineuse. Taille maximale : %s.')
+                        .replace('%s', sizeMb + '\u00a0Mo');
+                    showEditStatus(msg, 'error');
+                    return;
+                }
+
+                if (editVideoId) {
+                    showEditStatus('Une vidéo est déjà attachée. Supprimez-la d\'abord.', 'error');
+                    return;
+                }
+
+                showEditStatus(i18n.videoUploading || 'Upload de la vidéo en cours...', '');
+
+                const formData = new FormData();
+                formData.append('action', 'mj_front_testimonial_upload');
+                formData.append('_wpnonce', config.nonce);
+                formData.append('type', 'video');
+                formData.append('file', file);
+
+                const xhr = new XMLHttpRequest();
+                xhr.upload.addEventListener('progress', function(ev) {
+                    if (ev.lengthComputable) {
+                        const pct = Math.round((ev.loaded / ev.total) * 100);
+                        showEditStatus((i18n.videoUploading || 'Upload de la vidéo en cours...') + ' ' + pct + '%', '');
+                    }
+                });
+
+                xhr.addEventListener('load', function() {
+                    let resp;
+                    try { resp = JSON.parse(xhr.responseText); } catch(_) {
+                        showEditStatus(i18n.videoUploadError || 'Échec de l\'upload vidéo.', 'error');
+                        return;
+                    }
+                    if (resp && resp.success && resp.data && resp.data.id) {
+                        editVideoId = resp.data.id;
+                        editVideoUrl = resp.data.url;
+                        showEditStatus('', '');
+                        refreshMediaPreview();
+                    } else {
+                        const errMsg = (resp && resp.data && (typeof resp.data === 'string' ? resp.data : resp.data.message))
+                            || (i18n.videoUploadError || 'Échec de l\'upload vidéo.');
+                        showEditStatus(errMsg, 'error');
+                    }
+                });
+
+                xhr.addEventListener('error', function() {
+                    showEditStatus(i18n.videoUploadError || 'Échec de l\'upload vidéo.', 'error');
+                });
+
+                xhr.open('POST', config.ajaxUrl, true);
+                xhr.send(formData);
+            }
+
+            // Initial bind
+            bindMediaEvents();
+
             // Cancel
             $content.find('[data-action="cancel-edit"]').on('click', function() {
-                $content.html(originalHtml);
+                $content.html(originalContentHtml);
+                $origPhotosMedia.show();
+                $origVideoMedia.show();
             });
 
             // Save
             $content.find('[data-action="save-edit"]').on('click', function() {
                 const newContent = $content.find('.mj-feed-post__edit-textarea').val().trim();
-                if (!newContent) {
-                    alert('Le contenu ne peut pas être vide.');
+                const hasMedia = editPhotos.length > 0 || editVideoId > 0;
+
+                if (!newContent && !hasMedia) {
+                    showEditStatus('Le témoignage doit contenir au moins du texte, une photo ou une vidéo.', 'error');
                     return;
                 }
 
                 const testimonialId = getTestimonialId($wrapper);
                 const $saveBtn = $(this);
                 $saveBtn.prop('disabled', true).text('Enregistrement...');
+                showEditStatus('', '');
 
-                $.post(config.ajaxUrl, {
+                const postData = {
                     action: 'mj_front_testimonial_edit',
                     _wpnonce: config.nonce,
                     testimonial_id: testimonialId,
-                    content: newContent
-                }).done(function(response) {
+                    content: newContent,
+                    photo_ids: JSON.stringify(editPhotos.map(function(p) { return p.id; })),
+                    video_id: editVideoId
+                };
+
+                $.post(config.ajaxUrl, postData).done(function(response) {
                     if (response.success) {
                         // Update displayed content with linkified HTML
-                        $content.html(response.data.contentHtml);
+                        $content.html(response.data.contentHtml || '');
                         // Update the raw content attribute
-                        $content.attr('data-raw-content', response.data.content);
+                        $content.attr('data-raw-content', response.data.content || '');
+
+                        // Remove old media sections and insert new ones
+                        $origPhotosMedia.remove();
+                        $origVideoMedia.remove();
+
+                        // Insert new media after content
+                        if (response.data.photosHtml) {
+                            $content.after(response.data.photosHtml);
+                        }
+                        if (response.data.videoHtml) {
+                            const $afterContent = $content.next('.mj-feed-post__media');
+                            if ($afterContent.length) {
+                                $afterContent.after(response.data.videoHtml);
+                            } else {
+                                $content.after(response.data.videoHtml);
+                            }
+                        }
+
+                        // Update data attributes for future edits
+                        $post.attr('data-photos', JSON.stringify(response.data.photos || []));
+                        $post.attr('data-video', response.data.video ? JSON.stringify(response.data.video) : '');
                     } else {
-                        alert(response.data || 'Erreur lors de la modification.');
-                        $content.html(originalHtml);
+                        showEditStatus(response.data || 'Erreur lors de la modification.', 'error');
+                        $saveBtn.prop('disabled', false).text('Enregistrer');
                     }
                 }).fail(function() {
-                    alert('Erreur réseau lors de la modification.');
-                    $content.html(originalHtml);
+                    showEditStatus('Erreur réseau lors de la modification.', 'error');
+                    $saveBtn.prop('disabled', false).text('Enregistrer');
                 });
+            });
+        });
+
+        // --- Animator: Toggle featured ---
+        $(document).on('click.mjFeed', '[data-action="toggle-featured"]', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const $btn = $(this);
+            const $wrapper = getWrapper(this);
+            const $post = $wrapper.find('.mj-feed-post');
+            const testimonialId = getTestimonialId($wrapper);
+
+            // Close dropdown
+            $btn.closest('.mj-feed-post__owner-dropdown').hide();
+
+            $btn.prop('disabled', true);
+
+            $.post(config.ajaxUrl, {
+                action: 'mj_front_testimonial_toggle_featured',
+                _wpnonce: config.nonce,
+                testimonial_id: testimonialId
+            }).done(function(response) {
+                if (response.success) {
+                    const featured = response.data.featured;
+                    // Update data attribute
+                    $post.attr('data-featured', featured ? '1' : '0');
+
+                    // Toggle featured class
+                    $post.toggleClass('mj-feed-post--featured', featured);
+
+                    // Update the button label & icon fill
+                    $btn.find('span').text(response.data.label);
+                    $btn.find('svg').attr('fill', featured ? 'currentColor' : 'none');
+
+                    // Toggle the star badge next to the menu
+                    const $menu = $wrapper.find('.mj-feed-post__owner-menu');
+                    $wrapper.find('.mj-feed-post__featured-badge').remove();
+                    if (featured) {
+                        $menu.before('<span class="mj-feed-post__featured-badge" title="Mis en avant">\u2b50</span>');
+                    }
+                } else {
+                    alert(response.data || 'Erreur.');
+                }
+            }).fail(function() {
+                alert('Erreur réseau.');
+            }).always(function() {
+                $btn.prop('disabled', false);
             });
         });
 

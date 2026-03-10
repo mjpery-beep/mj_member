@@ -988,7 +988,8 @@ function mj_front_testimonial_delete_handler() {
         wp_send_json_error(__('Témoignage introuvable.', 'mj-member'), 404);
     }
 
-    if ((int) $testimonial->member_id !== (int) $current_member->id) {
+    $is_animator = isset($current_member->role) && in_array($current_member->role, array('animateur', 'coordinateur'), true);
+    if ((int) $testimonial->member_id !== (int) $current_member->id && !$is_animator) {
         wp_send_json_error(__('Vous ne pouvez supprimer que vos propres témoignages.', 'mj-member'), 403);
     }
 
@@ -1022,36 +1023,114 @@ function mj_front_testimonial_edit_handler() {
         wp_send_json_error(__('Témoignage invalide.', 'mj-member'), 400);
     }
 
-    $content = isset($_POST['content']) ? sanitize_textarea_field(wp_unslash($_POST['content'])) : '';
-    if (empty(trim($content))) {
-        wp_send_json_error(__('Le contenu ne peut pas être vide.', 'mj-member'), 400);
-    }
-
-    // Verify ownership
+    // Verify ownership or animator role
     $testimonial = MjTestimonials::get_by_id($testimonial_id);
     if (!$testimonial) {
         wp_send_json_error(__('Témoignage introuvable.', 'mj-member'), 404);
     }
 
-    if ((int) $testimonial->member_id !== (int) $current_member->id) {
+    $is_animator = isset($current_member->role) && in_array($current_member->role, array('animateur', 'coordinateur'), true);
+    if ((int) $testimonial->member_id !== (int) $current_member->id && !$is_animator) {
         wp_send_json_error(__('Vous ne pouvez modifier que vos propres témoignages.', 'mj-member'), 403);
     }
 
-    $updated = MjTestimonials::update($testimonial_id, array(
-        'content' => $content,
-    ));
+    $content = isset($_POST['content']) ? sanitize_textarea_field(wp_unslash($_POST['content'])) : '';
 
-    if (!$updated) {
+    // Build update data
+    $update_data = array();
+
+    if (!empty(trim($content))) {
+        $update_data['content'] = $content;
+    }
+
+    // Parse photo_ids if provided
+    if (isset($_POST['photo_ids'])) {
+        $raw_photos = wp_unslash($_POST['photo_ids']);
+        if (is_string($raw_photos)) {
+            $decoded = json_decode($raw_photos, true);
+            if (is_array($decoded)) {
+                $update_data['photo_ids'] = array_map('intval', array_filter($decoded));
+            } else {
+                $update_data['photo_ids'] = array();
+            }
+        } elseif (is_array($raw_photos)) {
+            $update_data['photo_ids'] = array_map('intval', array_filter($raw_photos));
+        }
+    }
+
+    // Parse video_id if provided (0 = remove, >0 = set)
+    if (isset($_POST['video_id'])) {
+        $update_data['video_id'] = (int) $_POST['video_id'];
+    }
+
+    // Must have at least content or media
+    $has_content   = !empty(trim($content));
+    $has_photos    = isset($update_data['photo_ids']) ? !empty($update_data['photo_ids']) : !empty(MjTestimonials::parse_photo_ids($testimonial));
+    $has_video     = isset($update_data['video_id']) ? ($update_data['video_id'] > 0) : ((int)($testimonial->video_id ?? 0) > 0);
+
+    if (!$has_content && !$has_photos && !$has_video) {
+        wp_send_json_error(__('Le témoignage doit contenir au moins du texte, une photo ou une vidéo.', 'mj-member'), 400);
+    }
+
+    if (empty($update_data)) {
+        wp_send_json_error(__('Aucune modification détectée.', 'mj-member'), 400);
+    }
+
+    $updated = MjTestimonials::update($testimonial_id, $update_data);
+
+    if (!$updated || is_wp_error($updated)) {
         wp_send_json_error(__('Erreur lors de la mise à jour.', 'mj-member'), 500);
     }
 
+    // Re-fetch testimonial for response
+    $fresh = MjTestimonials::get_by_id($testimonial_id);
+    $final_content = $fresh->content ?? $content;
+
     // Return the linkified HTML so JS can update the DOM
-    $html_content = wp_kses_post(wpautop(mj_member_testimonial_linkify_event_mentions($content)));
+    $html_content = wp_kses_post(wpautop(mj_member_testimonial_linkify_event_mentions($final_content)));
+
+    // Build photos array for JS
+    $photos = MjTestimonials::get_photo_urls($fresh, 'large');
+    $photos_for_js = array_map(function($p) {
+        return array('id' => $p['id'], 'url' => $p['url'], 'full' => $p['full']);
+    }, $photos);
+
+    // Build video data for JS
+    $video = MjTestimonials::get_video_data($fresh);
+    $video_for_js = $video ? array('id' => $video['id'], 'url' => $video['url']) : null;
+
+    // Build photos HTML for DOM replacement
+    $photos_html = '';
+    if (!empty($photos)) {
+        $photos_html .= '<div class="mj-feed-post__media mj-feed-post__media--photos-' . min(count($photos), 5) . '">';
+        foreach (array_slice($photos, 0, 5) as $index => $photo) {
+            $photos_html .= '<a href="' . esc_url($photo['full']) . '" class="mj-feed-post__photo" data-lightbox="post-' . $testimonial_id . '">';
+            $photos_html .= '<img src="' . esc_url($photo['url']) . '" alt="" loading="lazy">';
+            if ($index === 4 && count($photos) > 5) {
+                $photos_html .= '<span class="mj-feed-post__photo-more">+' . (count($photos) - 5) . '</span>';
+            }
+            $photos_html .= '</a>';
+        }
+        $photos_html .= '</div>';
+    }
+
+    // Build video HTML for DOM replacement
+    $video_html = '';
+    if ($video) {
+        $video_html = '<div class="mj-feed-post__media mj-feed-post__media--video">';
+        $video_html .= '<video controls playsinline poster="' . esc_url($video['poster']) . '">';
+        $video_html .= '<source src="' . esc_url($video['url']) . '" type="video/mp4">';
+        $video_html .= '</video></div>';
+    }
 
     wp_send_json_success(array(
         'message'     => __('Témoignage modifié.', 'mj-member'),
-        'content'     => $content,
+        'content'     => $final_content,
         'contentHtml' => $html_content,
+        'photos'      => $photos_for_js,
+        'photosHtml'  => $photos_html,
+        'video'       => $video_for_js,
+        'videoHtml'   => $video_html,
     ));
 }
 add_action('wp_ajax_mj_front_testimonial_edit', 'mj_front_testimonial_edit_handler');
@@ -1096,3 +1175,45 @@ function mj_member_testimonial_linkify_event_mentions(string $content): string {
         $content
     );
 }
+
+/**
+ * AJAX: Toggle featured status for a testimonial (animator/coordinator only).
+ */
+function mj_front_testimonial_toggle_featured_handler() {
+    check_ajax_referer('mj-testimonial-submit', '_wpnonce');
+
+    $current_member = function_exists('mj_member_get_current_member') ? mj_member_get_current_member() : null;
+    if (!$current_member || !isset($current_member->id)) {
+        wp_send_json_error(__('Vous devez être connecté.', 'mj-member'), 403);
+    }
+
+    // Only animateurs/coordinateurs can toggle featured
+    $is_animator = isset($current_member->role) && in_array($current_member->role, array('animateur', 'coordinateur'), true);
+    if (!$is_animator) {
+        wp_send_json_error(__('Vous n\'avez pas les droits pour cette action.', 'mj-member'), 403);
+    }
+
+    $testimonial_id = isset($_POST['testimonial_id']) ? intval($_POST['testimonial_id']) : 0;
+    if ($testimonial_id <= 0) {
+        wp_send_json_error(__('Témoignage invalide.', 'mj-member'), 400);
+    }
+
+    $result = MjTestimonials::toggle_featured($testimonial_id);
+
+    if (is_wp_error($result)) {
+        wp_send_json_error($result->get_error_message(), 500);
+    }
+
+    $label = $result['featured']
+        ? __('Retirer la mise en avant', 'mj-member')
+        : __('Mettre en avant', 'mj-member');
+
+    wp_send_json_success(array(
+        'featured' => $result['featured'],
+        'label'    => $label,
+        'message'  => $result['featured']
+            ? __('Témoignage mis en avant.', 'mj-member')
+            : __('Témoignage retiré de la mise en avant.', 'mj-member'),
+    ));
+}
+add_action('wp_ajax_mj_front_testimonial_toggle_featured', 'mj_front_testimonial_toggle_featured_handler');

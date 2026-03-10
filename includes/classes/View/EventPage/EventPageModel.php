@@ -87,7 +87,7 @@ final class EventPageModel
             'registration' => $this->buildRegistrationData($eventArray),
             'animateurs' => $this->buildAnimateursData($eventArray),
             'photos' => $this->buildPhotosData($eventArray),
-            'testimonials' => $this->buildTestimonialsData(),
+            'testimonials' => $this->buildTestimonialsData($eventArray),
             'user' => $this->buildUserData(),
             'meta' => $this->buildMetaData($eventArray),
         );
@@ -2098,14 +2098,12 @@ final class EventPageModel
     /**
      * Build testimonials data (latest approved testimonials to display on the event page).
      *
+     * @param array<string, mixed> $eventArray
      * @return array<string, mixed>
      */
-    private function buildTestimonialsData(): array
+    private function buildTestimonialsData(array $eventArray): array
     {
-        $eventData = isset($this->data['event']) && is_array($this->data['event'])
-            ? $this->data['event']
-            : array();
-        $eventSlug = isset($eventData['slug']) ? (string) $eventData['slug'] : '';
+        $eventSlug = isset($eventArray['slug']) ? (string) $eventArray['slug'] : '';
 
         if ($eventSlug === '') {
             return array(
@@ -2165,6 +2163,8 @@ final class EventPageModel
 
             $linkPreview = MjTestimonials::get_link_preview($testimonial);
 
+            $videoData = MjTestimonials::get_video_data($testimonial);
+
             $createdAt = isset($testimonial->created_at) ? (string) $testimonial->created_at : '';
             $dateLabel = '';
             $dateIso = '';
@@ -2183,6 +2183,7 @@ final class EventPageModel
                 'author_avatar' => $avatarUrl,
                 'content' => $contentHtml,
                 'photos' => $photoItems,
+                'video' => $videoData,
                 'link_preview' => $linkPreview,
                 'date_label' => $dateLabel,
                 'date_iso' => $dateIso,

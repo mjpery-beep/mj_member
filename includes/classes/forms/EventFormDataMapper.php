@@ -65,6 +65,7 @@ final class EventFormDataMapper
             'event_status' => isset($values['status']) ? (string) $values['status'] : MjEvents::STATUS_DRAFT,
             'event_type' => isset($values['type']) ? (string) $values['type'] : MjEvents::TYPE_STAGE,
             'event_accent_color' => isset($values['accent_color']) ? (string) $values['accent_color'] : '',
+            'event_slug' => isset($values['slug']) ? (string) $values['slug'] : '',
             'event_emoji' => isset($values['emoji']) ? self::sanitizeEmoji($values['emoji']) : '',
             'event_article_cat' => isset($values['article_cat']) ? (int) $values['article_cat'] : 0,
             'event_article_id' => isset($values['article_id']) ? (int) $values['article_id'] : 0,
@@ -121,6 +122,7 @@ final class EventFormDataMapper
         $existing_recurring_frequency = isset($values['schedule_recurring_frequency']) ? (string) $values['schedule_recurring_frequency'] : 'weekly';
 
         $values['title'] = isset($formData['event_title']) ? sanitize_text_field((string) $formData['event_title']) : $values['title'];
+        $values['slug'] = isset($formData['event_slug']) ? sanitize_title((string) $formData['event_slug']) : (isset($values['slug']) ? $values['slug'] : '');
         $values['status'] = isset($formData['event_status']) ? sanitize_key((string) $formData['event_status']) : $values['status'];
         $values['type'] = isset($formData['event_type']) ? sanitize_key((string) $formData['event_type']) : $values['type'];
         $values['accent_color'] = isset($formData['event_accent_color']) ? (string) $formData['event_accent_color'] : $values['accent_color'];

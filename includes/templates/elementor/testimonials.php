@@ -390,7 +390,7 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                 <div class="mj-testimonials__carousel-viewport">
                     <div class="mj-testimonials__carousel-track">
                         <?php foreach ($all_display_testimonials as $testimonial):
-                            $photos = MjTestimonials::get_photo_urls($testimonial, 'medium');
+                            $photos = MjTestimonials::get_photo_urls($testimonial, 'large');
                             $video = MjTestimonials::get_video_data($testimonial);
                             $link_preview = MjTestimonials::get_link_preview($testimonial);
                             $member_name = '';
@@ -530,11 +530,13 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                     $testimonial_status = isset($testimonial->status) ? $testimonial->status : MjTestimonials::STATUS_APPROVED;
                     $t_member_id = isset($testimonial->member_id) ? (int)$testimonial->member_id : 0;
                     $is_my_testimonial = $is_logged_in && ($t_member_id === $member_id);
+                    $can_manage = $is_my_testimonial || $is_animator;
                     $is_pending = $testimonial_status === MjTestimonials::STATUS_PENDING;
+                    $is_featured = !empty($testimonial->featured);
                     $show_approval_actions = $is_animator && $is_pending && !$is_my_testimonial;
                 ?>
                 <article class="mj-feed-post-wrapper<?php echo $is_single_mode ? ' mj-feed-post-wrapper--single' : ''; ?><?php echo $is_pending ? ' mj-feed-post-wrapper--pending' : ''; ?>" data-post-id="<?php echo $post_id; ?>" data-post-url="<?php echo esc_url(add_query_arg('post', $post_id)); ?>" data-post-status="<?php echo esc_attr($testimonial_status); ?>">
-                    <div class="mj-feed-post<?php echo $is_single_mode ? ' mj-feed-post--single' : ''; ?><?php echo $is_pending ? ' mj-feed-post--pending' : ''; ?>" data-id="<?php echo $post_id; ?>">
+                    <div class="mj-feed-post<?php echo $is_single_mode ? ' mj-feed-post--single' : ''; ?><?php echo $is_pending ? ' mj-feed-post--pending' : ''; ?><?php echo $is_featured ? ' mj-feed-post--featured' : ''; ?>" data-id="<?php echo $post_id; ?>" data-featured="<?php echo $is_featured ? '1' : '0'; ?>"<?php if ($can_manage): ?> data-photos="<?php echo esc_attr(wp_json_encode(array_map(function($p) { return array('id' => $p['id'], 'url' => $p['url']); }, $photos))); ?>" data-video="<?php echo $video ? esc_attr(wp_json_encode(array('id' => $video['id'], 'url' => $video['url']))) : ''; ?>"<?php endif; ?>>
                         <?php if ($is_pending && $is_my_testimonial): ?>
                             <div class="mj-feed-post__pending-badge">
                                 <span class="mj-feed-post__pending-badge-icon">⏳</span>
@@ -572,7 +574,10 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                                     <span class="mj-feed-post__date"><?php printf(esc_html__('Il y a %s', 'mj-member'), esc_html($created_ago)); ?> · 🌍</span>
                                 <?php endif; ?>
                             </div>
-                            <?php if ($is_my_testimonial): ?>
+                            <?php if ($can_manage): ?>
+                                <?php if ($is_featured): ?>
+                                    <span class="mj-feed-post__featured-badge" title="<?php esc_attr_e('Mis en avant', 'mj-member'); ?>">⭐</span>
+                                <?php endif; ?>
                                 <div class="mj-feed-post__owner-menu">
                                     <button type="button" class="mj-feed-post__owner-menu-toggle" data-action="toggle-owner-menu" aria-label="<?php esc_attr_e('Options du témoignage', 'mj-member'); ?>">
                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
@@ -582,6 +587,12 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                             <span><?php esc_html_e('Modifier', 'mj-member'); ?></span>
                                         </button>
+                                        <?php if ($is_animator): ?>
+                                            <button type="button" class="mj-feed-post__owner-action mj-feed-post__owner-action--featured" data-action="toggle-featured">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="<?php echo $is_featured ? 'currentColor' : 'none'; ?>" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                                                <span><?php echo $is_featured ? esc_html__('Retirer la mise en avant', 'mj-member') : esc_html__('Mettre en avant', 'mj-member'); ?></span>
+                                            </button>
+                                        <?php endif; ?>
                                         <button type="button" class="mj-feed-post__owner-action mj-feed-post__owner-action--danger" data-action="delete-testimonial">
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                                             <span><?php esc_html_e('Supprimer', 'mj-member'); ?></span>
@@ -595,6 +606,8 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                             <div class="mj-feed-post__content" data-raw-content="<?php echo esc_attr($testimonial->content); ?>">
                                 <?php echo wp_kses_post(wpautop(mj_member_testimonial_linkify_event_mentions($testimonial->content))); ?>
                             </div>
+                        <?php elseif ($can_manage): ?>
+                            <div class="mj-feed-post__content" data-raw-content=""></div>
                         <?php endif; ?>
 
                         <?php if (!empty($photos)): ?>

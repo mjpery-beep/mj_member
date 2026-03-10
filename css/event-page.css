@@ -2026,6 +2026,21 @@
     transform: scale(1.05);
 }
 
+/* Video inside testimonial */
+.mj-event-page__testimonial-video {
+    margin-top: 0.75rem;
+    border-radius: var(--mj-event-radius-sm);
+    overflow: hidden;
+}
+
+.mj-event-page__testimonial-video-player {
+    display: block;
+    width: 100%;
+    max-height: 400px;
+    border-radius: var(--mj-event-radius-sm);
+    background: #000;
+}
+
 /* Link preview inside testimonial */
 .mj-event-page__testimonial-link-preview {
     display: flex;

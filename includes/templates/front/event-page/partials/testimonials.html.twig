@@ -59,6 +59,20 @@
                     </div>
                 {% endif %}
 
+                {% if item.video %}
+                    <div class="mj-event-page__testimonial-video">
+                        <video
+                            controls
+                            preload="metadata"
+                            playsinline
+                            {% if item.video.poster %}poster="{{ item.video.poster|esc_url }}"{% endif %}
+                            class="mj-event-page__testimonial-video-player"
+                        >
+                            <source src="{{ item.video.url|esc_url }}" />
+                        </video>
+                    </div>
+                {% endif %}
+
                 {% if item.link_preview %}
                     {% set lp = item.link_preview %}
                     <a href="{{ lp.url|esc_url }}" target="_blank" rel="noopener noreferrer" class="mj-event-page__testimonial-link-preview">

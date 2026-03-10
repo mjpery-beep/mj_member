@@ -3891,6 +3891,7 @@ function mj_regmgr_prepare_event_form_values($event, array $schedule_weekdays, a
 
         $form_values = array_merge($form_values, array(
             'title' => isset($event->title) ? (string) $event->title : '',
+            'slug' => isset($event->slug) ? (string) $event->slug : '',
             'status' => isset($event->status) ? (string) $event->status : $form_values['status'],
             'type' => isset($event->type) ? (string) $event->type : $form_values['type'],
             'accent_color' => $accent_color,
@@ -4862,8 +4863,11 @@ function mj_regmgr_build_event_update_payload($event, array $form_values, array 
         }
     }
 
+    $slug = isset($form_values['slug']) ? sanitize_title((string) $form_values['slug']) : '';
+
     $payload = array(
         'title' => $title,
+        'slug' => $slug,
         'status' => $status,
         'type' => $type,
         'accent_color' => $accent_color,

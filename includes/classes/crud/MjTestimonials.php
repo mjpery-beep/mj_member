@@ -95,8 +95,11 @@ class MjTestimonials implements CrudRepositoryInterface {
         }
 
         if ($args['event_slug'] !== null && $args['event_slug'] !== '') {
-            $where[] = 't.event_slug = %s';
-            $values[] = sanitize_title($args['event_slug']);
+            $slug = sanitize_title($args['event_slug']);
+            $mention = '%@' . $wpdb->esc_like($slug) . '%';
+            $where[] = '(t.event_slug = %s OR t.content LIKE %s)';
+            $values[] = $slug;
+            $values[] = $mention;
         }
 
         if ($args['search'] !== '') {
@@ -164,8 +167,11 @@ class MjTestimonials implements CrudRepositoryInterface {
         }
 
         if (isset($args['event_slug']) && $args['event_slug'] !== null && $args['event_slug'] !== '') {
-            $where[] = 'event_slug = %s';
-            $values[] = sanitize_title($args['event_slug']);
+            $slug = sanitize_title($args['event_slug']);
+            $mention = '%@' . $wpdb->esc_like($slug) . '%';
+            $where[] = '(event_slug = %s OR content LIKE %s)';
+            $values[] = $slug;
+            $values[] = $mention;
         }
 
         $where_sql = implode(' AND ', $where);

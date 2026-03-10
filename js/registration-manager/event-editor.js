@@ -62,6 +62,8 @@
         eventPrice: 'Tarif',
         eventStatus: 'Statut',
         eventTitle: 'Titre',
+        eventSlug: 'Slug',
+        eventSlugHint: 'Identifiant URL. Laissez vide pour generer automatiquement depuis le titre.',
         eventType: 'Type',
         eventEmoji: 'Emoticone',
         eventEmojiHint: 'Facultatif, s affiche dans les listes et apercus.',
@@ -4665,6 +4667,16 @@
                                 onChange: function (e) { updateFormValue('event_title', e.target.value); },
                                 required: true,
                             }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', null, getString(strings, 'eventSlug', 'Slug')),
+                            h('input', {
+                                type: 'text',
+                                value: formState.event_slug || '',
+                                onChange: function (e) { updateFormValue('event_slug', e.target.value); },
+                                placeholder: 'ex-soiree-jeux-de-societe',
+                            }),
+                            h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'eventSlugHint', 'Identifiant URL. Laissez vide pour generer automatiquement depuis le titre.')),
                         ]),
                         h('div', { class: 'mj-regmgr-form-field' }, [
                             h('label', null, getString(strings, 'eventStatus', 'Statut')),
