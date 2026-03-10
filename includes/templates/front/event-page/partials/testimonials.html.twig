@@ -1,0 +1,96 @@
+{% set items = testimonials.items|default([]) %}
+{% set total = testimonials.total|default(0) %}
+{% set all_url = testimonials.all_url|default('') %}
+
+{% if items|length > 0 %}
+<section class="mj-event-page__card mj-event-page__testimonials">
+    <div class="mj-event-page__testimonials-header">
+        <h2>{{ __('Ce qu\'ils en disent', 'mj-member') }}</h2>
+        {% if total > 0 %}
+            <span class="mj-event-page__testimonials-count">
+                {{ _n('%d témoignage', '%d témoignages', total, 'mj-member')|format(total) }}
+            </span>
+        {% endif %}
+    </div>
+
+    <div class="mj-event-page__testimonials-list">
+        {% for item in items %}
+            <article class="mj-event-page__testimonial">
+                <div class="mj-event-page__testimonial-author">
+                    {% if item.author_avatar %}
+                        <img
+                            class="mj-event-page__testimonial-avatar"
+                            src="{{ item.author_avatar|esc_url }}"
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    {% elseif item.author_initials %}
+                        <span class="mj-event-page__testimonial-initials">{{ item.author_initials }}</span>
+                    {% else %}
+                        <span class="mj-event-page__testimonial-initials">?</span>
+                    {% endif %}
+                    <div class="mj-event-page__testimonial-meta">
+                        <span class="mj-event-page__testimonial-name">{{ item.author_name }}</span>
+                        {% if item.date_label %}
+                            <time class="mj-event-page__testimonial-date" datetime="{{ item.date_iso|default('')|esc_attr }}">{{ item.date_label }}</time>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if item.content %}
+                    <div class="mj-event-page__testimonial-content">
+                        {{ item.content|wp_kses_post }}
+                    </div>
+                {% endif %}
+
+                {% if item.photos|default([])|length > 0 %}
+                    <div class="mj-event-page__testimonial-photos">
+                        {% for photo in item.photos %}
+                            <a href="{{ photo.full|esc_url }}" target="_blank" rel="noopener" class="mj-event-page__testimonial-photo-link">
+                                <img
+                                    src="{{ photo.thumb|esc_url }}"
+                                    alt=""
+                                    loading="lazy"
+                                    decoding="async"
+                                />
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                {% if item.link_preview %}
+                    {% set lp = item.link_preview %}
+                    <a href="{{ lp.url|esc_url }}" target="_blank" rel="noopener noreferrer" class="mj-event-page__testimonial-link-preview">
+                        {% if lp.image %}
+                            <img class="mj-event-page__testimonial-lp-image" src="{{ lp.image|esc_url }}" alt="" loading="lazy" decoding="async" />
+                        {% endif %}
+                        <div class="mj-event-page__testimonial-lp-body">
+                            {% if lp.site_name %}
+                                <span class="mj-event-page__testimonial-lp-site">{{ lp.site_name }}</span>
+                            {% endif %}
+                            {% if lp.title %}
+                                <span class="mj-event-page__testimonial-lp-title">{{ lp.title }}</span>
+                            {% endif %}
+                            {% if lp.description %}
+                                <span class="mj-event-page__testimonial-lp-desc">{{ lp.description }}</span>
+                            {% endif %}
+                        </div>
+                    </a>
+                {% endif %}
+            </article>
+        {% endfor %}
+    </div>
+
+    {% if all_url %}
+        <div class="mj-event-page__testimonials-footer">
+            <a href="{{ all_url|esc_url }}" class="mj-event-page__testimonials-all">
+                {{ __('Voir tous les témoignages', 'mj-member') }}
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+            </a>
+        </div>
+    {% endif %}
+</section>
+{% endif %}

@@ -12,6 +12,7 @@ use Mj\Member\Classes\Crud\MjEventRegistrations;
 use Mj\Member\Classes\Crud\MjEventPhotos;
 use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjTestimonials;
 use Mj\Member\Classes\MjEventSchedule;
 use Mj\Member\Classes\Value\EventData;
 use Mj\Member\Classes\Value\EventLocationData;
@@ -86,6 +87,7 @@ final class EventPageModel
             'registration' => $this->buildRegistrationData($eventArray),
             'animateurs' => $this->buildAnimateursData($eventArray),
             'photos' => $this->buildPhotosData($eventArray),
+            'testimonials' => $this->buildTestimonialsData(),
             'user' => $this->buildUserData(),
             'meta' => $this->buildMetaData($eventArray),
         );
@@ -2090,6 +2092,106 @@ final class EventPageModel
             'age_label' => $ageLabel,
             'created_at' => isset($eventArray['created_at']) ? (string) $eventArray['created_at'] : '',
             'updated_at' => isset($eventArray['updated_at']) ? (string) $eventArray['updated_at'] : '',
+        );
+    }
+
+    /**
+     * Build testimonials data (latest approved testimonials to display on the event page).
+     *
+     * @return array<string, mixed>
+     */
+    private function buildTestimonialsData(): array
+    {
+        $eventData = isset($this->data['event']) && is_array($this->data['event'])
+            ? $this->data['event']
+            : array();
+        $eventSlug = isset($eventData['slug']) ? (string) $eventData['slug'] : '';
+
+        if ($eventSlug === '') {
+            return array(
+                'items' => array(),
+                'total' => 0,
+            );
+        }
+
+        $testimonials = MjTestimonials::get_approved(array(
+            'event_slug' => $eventSlug,
+            'per_page' => 3,
+            'page' => 1,
+            'orderby' => 'created_at',
+            'order' => 'DESC',
+        ));
+
+        if (empty($testimonials)) {
+            return array(
+                'items' => array(),
+                'total' => 0,
+            );
+        }
+
+        $total = MjTestimonials::count(array(
+            'status' => MjTestimonials::STATUS_APPROVED,
+            'event_slug' => $eventSlug,
+        ));
+
+        $items = array();
+        foreach ($testimonials as $testimonial) {
+            $memberId = isset($testimonial->member_id) ? (int) $testimonial->member_id : 0;
+            $firstName = isset($testimonial->first_name) ? (string) $testimonial->first_name : '';
+            $lastName = isset($testimonial->last_name) ? (string) $testimonial->last_name : '';
+            $authorName = trim($firstName . ' ' . ($lastName !== '' ? mb_substr($lastName, 0, 1) . '.' : ''));
+            $authorInitials = '';
+            if ($firstName !== '' && $lastName !== '') {
+                $authorInitials = mb_strtoupper(mb_substr($firstName, 0, 1) . mb_substr($lastName, 0, 1));
+            }
+
+            $avatarUrl = '';
+            $avatarId = isset($testimonial->member_photo_id) ? (int) $testimonial->member_photo_id : 0;
+            if ($avatarId > 0) {
+                $avatarUrl = wp_get_attachment_image_url($avatarId, 'thumbnail') ?: '';
+            }
+
+            $content = isset($testimonial->content) ? (string) $testimonial->content : '';
+            $contentHtml = $content !== '' ? wpautop($content) : '';
+
+            $photos = MjTestimonials::get_photo_urls($testimonial, 'medium');
+            $photoItems = array();
+            foreach ($photos as $photo) {
+                $photoItems[] = array(
+                    'thumb' => $photo['thumb'] ?? $photo['url'],
+                    'full' => $photo['full'] ?? $photo['url'],
+                );
+            }
+
+            $linkPreview = MjTestimonials::get_link_preview($testimonial);
+
+            $createdAt = isset($testimonial->created_at) ? (string) $testimonial->created_at : '';
+            $dateLabel = '';
+            $dateIso = '';
+            if ($createdAt !== '') {
+                $timestamp = strtotime($createdAt);
+                if ($timestamp) {
+                    $dateLabel = wp_date('j F Y', $timestamp);
+                    $dateIso = wp_date('Y-m-d', $timestamp);
+                }
+            }
+
+            $items[] = array(
+                'id' => isset($testimonial->id) ? (int) $testimonial->id : 0,
+                'author_name' => $authorName,
+                'author_initials' => $authorInitials,
+                'author_avatar' => $avatarUrl,
+                'content' => $contentHtml,
+                'photos' => $photoItems,
+                'link_preview' => $linkPreview,
+                'date_label' => $dateLabel,
+                'date_iso' => $dateIso,
+            );
+        }
+
+        return array(
+            'items' => $items,
+            'total' => $total,
         );
     }
 

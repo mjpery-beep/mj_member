@@ -120,6 +120,7 @@ final class EventPageViewBuilder
             'sidebar' => $this->buildSidebarPartial(),
             'animateurs' => $this->buildAnimateursPartial(),
             'photos' => $this->buildPhotosPartial(),
+            'testimonials' => $this->buildTestimonialsPartial(),
         );
     }
 
@@ -675,6 +676,30 @@ final class EventPageViewBuilder
             'admin_post_url' => isset($photos['admin_post_url']) ? (string) $photos['admin_post_url'] : '',
             'member_remaining' => isset($photos['member_remaining']) ? (int) $photos['member_remaining'] : 0,
             'is_unlimited' => !empty($photos['is_unlimited']),
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildTestimonialsPartial(): array
+    {
+        $testimonials = isset($this->model['testimonials']) && is_array($this->model['testimonials'])
+            ? $this->model['testimonials']
+            : array();
+
+        $items = isset($testimonials['items']) && is_array($testimonials['items'])
+            ? $testimonials['items']
+            : array();
+
+        $total = isset($testimonials['total']) ? (int) $testimonials['total'] : 0;
+
+        $allUrl = home_url('/mon-compte/temoignages/');
+
+        return array(
+            'items' => $items,
+            'total' => $total,
+            'all_url' => $allUrl,
         );
     }
 

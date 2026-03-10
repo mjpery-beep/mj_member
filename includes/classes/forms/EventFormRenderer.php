@@ -111,7 +111,7 @@ class EventFormRenderer
 
         ?>
         <div class="<?php echo esc_attr($wrapper_class); ?>">
-            <label for="<?php echo esc_attr($date_input_id); ?>">
+            <label for="<?php echo esc_attr($id); ?>">
                 <?php echo esc_html($label); ?>
                 <?php if ($required): ?>
                     <span class="required">*</span>
@@ -522,6 +522,8 @@ class EventFormRenderer
             ]
         );
 
+        $slug = $event['slug'] ?? '';
+
         $emoji_input_id = 'mj-event-emoji';
         $emoji_hint_id = 'mj-event-emoji-hint';
         $emoji_placeholder = __('Ex : 🎉', 'mj-member');
@@ -547,6 +549,18 @@ class EventFormRenderer
             <p class="description mj-form-emoji__hint" id="<?php echo esc_attr($emoji_hint_id); ?>"><?php echo esc_html($emoji_hint_text); ?></p>
         </div>
         <?php
+
+        self::renderTextField(
+            'slug',
+            __('Slug', 'mj-member'),
+            $slug,
+            [
+                'placeholder' => __('ex-soiree-jeux-de-societe', 'mj-member'),
+                'description' => __('Identifiant URL de l\'événement. Laissez vide pour générer automatiquement depuis le titre.', 'mj-member'),
+                'class' => 'widefat',
+                'maxlength' => '200',
+            ]
+        );
 
         $include_description = $args['include_description'] ?? true;
         if ($include_description) {

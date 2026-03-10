@@ -776,6 +776,10 @@ class Mj_Member_Elementor_Account_Links_Widget extends Widget_Base {
                     }
                     echo '</span>';
                     echo '<span class="mj-member-login-component__account-icon" aria-hidden="true">&rsaquo;</span>';
+                    $link_description = isset($link['description']) ? trim((string) $link['description']) : '';
+                    if ($link_description !== '') {
+                        echo '<span class="mj-member-login-component__account-desc">' . esc_html($link_description) . '</span>';
+                    }
                     echo '</a>';
                     echo '</li>';
                 }

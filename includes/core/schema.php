@@ -1890,6 +1890,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_71($wpdb);
     mj_member_upgrade_to_2_73($wpdb);
     mj_member_upgrade_to_2_74($wpdb);
+    mj_member_upgrade_to_2_75($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -5896,6 +5897,24 @@ function mj_member_upgrade_to_2_74($wpdb) {
         if (!mj_member_column_exists($table, $col)) {
             $wpdb->query("ALTER TABLE {$table} ADD COLUMN {$col} {$def}");
         }
+    }
+}
+
+/**
+ * Schema upgrade 2.75: Add event_slug column to testimonials table.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_75($wpdb) {
+    $table = mj_member_get_testimonials_table_name();
+
+    if (!mj_member_table_exists($table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($table, 'event_slug')) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN event_slug varchar(200) DEFAULT NULL AFTER link_preview");
+        $wpdb->query("ALTER TABLE {$table} ADD INDEX idx_event_slug (event_slug)");
     }
 }
 

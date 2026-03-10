@@ -183,17 +183,31 @@
             const files = e.target.files;
             if (!files || files.length === 0) return;
 
-            const maxPhotos = config.maxPhotos || 5;
-            const remaining = maxPhotos - this.photos.length;
-            
-            if (remaining <= 0) {
-                this.showStatus(i18n.maxPhotosReached || `Maximum ${maxPhotos} photos`, 'error');
-                return;
+            const allFiles = Array.from(files);
+            const videoFiles = allFiles.filter(f => f.type.startsWith('video/'));
+            const photoFiles = allFiles.filter(f => !f.type.startsWith('video/'));
+
+            // Handle video file(s) — only one video allowed
+            if (videoFiles.length > 0) {
+                if (this.videoBlob || this.videoId) {
+                    this.showStatus(i18n.videoAlreadyAdded || 'Une vidéo est déjà ajoutée. Supprimez-la d\'abord.', 'error');
+                } else {
+                    this.uploadVideoFile(videoFiles[0]);
+                }
             }
 
-            const filesToUpload = Array.from(files).slice(0, remaining);
-            filesToUpload.forEach(file => this.uploadPhoto(file));
-            
+            // Handle photo files
+            if (photoFiles.length > 0) {
+                const maxPhotos = config.maxPhotos || 5;
+                const remaining = maxPhotos - this.photos.length;
+
+                if (remaining <= 0) {
+                    this.showStatus(i18n.maxPhotosReached || `Maximum ${maxPhotos} photos`, 'error');
+                } else {
+                    photoFiles.slice(0, remaining).forEach(file => this.uploadPhoto(file));
+                }
+            }
+
             // Reset input to allow selecting same file again
             this.$photoInput.val('');
         }
@@ -226,12 +240,96 @@
                     this.renderPhoto(placeholder, response.data);
                 } else {
                     placeholder.remove();
-                    this.showStatus(response.data?.message || i18n.submitError, 'error');
+                    const errMsg = (typeof response.data === 'string') ? response.data : (response.data?.message || i18n.submitError);
+                    this.showStatus(errMsg, 'error');
                 }
             } catch (err) {
                 placeholder.remove();
-                this.showStatus(i18n.submitError, 'error');
+                // Extract server error message from jQuery jqXHR if available
+                let errMsg = i18n.submitError;
+                if (err && err.responseJSON && err.responseJSON.data) {
+                    errMsg = (typeof err.responseJSON.data === 'string') ? err.responseJSON.data : (err.responseJSON.data.message || errMsg);
+                }
+                this.showStatus(errMsg, 'error');
                 console.error('Photo upload error:', err);
+            }
+        }
+
+        /**
+         * Upload a video file (from file input, not camera capture).
+         */
+        async uploadVideoFile(file) {
+            const maxVideoSize = config.maxVideoSize || (100 * 1024 * 1024);
+            if (file.size > maxVideoSize) {
+                const sizeMb = (maxVideoSize / (1024 * 1024)).toFixed(0);
+                const msg = (i18n.videoTooLarge || 'La vidéo est trop volumineuse. Taille maximale : %s.')
+                    .replace('%s', sizeMb + '\u00a0Mo');
+                this.showStatus(msg, 'error');
+                return;
+            }
+
+            this.showStatus(i18n.videoUploading || 'Upload de la vidéo en cours...', '');
+            this.$addVideoBtn.hide();
+
+            const formData = new FormData();
+            formData.append('action', 'mj_front_testimonial_upload');
+            formData.append('_wpnonce', config.nonce);
+            formData.append('type', 'video');
+            formData.append('file', file);
+
+            const self = this;
+
+            try {
+                const response = await new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+
+                    xhr.upload.addEventListener('progress', function (e) {
+                        if (e.lengthComputable) {
+                            const pct = Math.round((e.loaded / e.total) * 100);
+                            self.showStatus((i18n.videoUploading || 'Upload de la vidéo en cours...') + ' ' + pct + '%', '');
+                        }
+                    });
+
+                    xhr.addEventListener('load', function () {
+                        let resp;
+                        try {
+                            resp = JSON.parse(xhr.responseText);
+                        } catch (_) {
+                            const sizeMb = (maxVideoSize / (1024 * 1024)).toFixed(0);
+                            reject(new Error((i18n.videoTooLarge || 'La vidéo est trop volumineuse. Taille maximale : %s.').replace('%s', sizeMb + '\u00a0Mo')));
+                            return;
+                        }
+                        if (resp && resp.success && resp.data && resp.data.id) {
+                            resolve(resp.data);
+                        } else {
+                            const errMsg = (resp && resp.data && (typeof resp.data === 'string' ? resp.data : resp.data.message))
+                                || (i18n.videoUploadError || 'Échec de l\'upload vidéo.');
+                            reject(new Error(errMsg));
+                        }
+                    });
+
+                    xhr.addEventListener('error', function () {
+                        reject(new Error(i18n.videoUploadError || 'Échec de l\'upload vidéo. Vérifiez votre connexion.'));
+                    });
+
+                    xhr.addEventListener('abort', function () {
+                        reject(new Error(i18n.videoUploadError || 'Upload vidéo annulé.'));
+                    });
+
+                    xhr.open('POST', config.ajaxUrl, true);
+                    xhr.send(formData);
+                });
+
+                // Success: show video in result area
+                this.videoId = response.id;
+                this.$videoIdInput.val(response.id);
+                this.$videoPlayback[0].src = response.url;
+                this.$videoResult.show();
+                this.showStatus('', '');
+            } catch (err) {
+                this.$addVideoBtn.show();
+                this.showStatus(err.message || i18n.videoUploadError || 'Échec de l\'upload vidéo.', 'error');
+                console.error('Video file upload error:', err);
             }
         }
 
@@ -869,7 +967,7 @@
 
             const content = this.$textarea.val().trim();
             
-            if (!content && this.photos.length === 0 && !this.videoBlob) {
+            if (!content && this.photos.length === 0 && !this.videoBlob && !this.videoId) {
                 this.showStatus('Veuillez ajouter du texte, des photos ou une vidéo.', 'error');
                 return;
             }
@@ -917,7 +1015,13 @@
                 }
             } catch (err) {
                 console.error('Submit error:', err);
-                this.showStatus(err.message || i18n.submitError, 'error');
+                let errMsg = err.message || i18n.submitError;
+                // Extract server error from jQuery jqXHR if available
+                if (err && err.responseJSON && err.responseJSON.data) {
+                    const d = err.responseJSON.data;
+                    errMsg = (typeof d === 'string') ? d : (d.message || errMsg);
+                }
+                this.showStatus(errMsg, 'error');
             } finally {
                 this.isSubmitting = false;
                 this.$submitBtn.removeClass('is-loading').prop('disabled', false);

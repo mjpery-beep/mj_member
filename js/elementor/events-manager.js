@@ -2373,6 +2373,10 @@
 
             const form = this.elements.form;
             form.querySelector('[name="title"]').value = event.title || '';
+            const slugInput = form.querySelector('[name="slug"]');
+            if (slugInput) {
+                slugInput.value = event.slug || '';
+            }
             form.querySelector('[name="type"]').value = event.type || '';
             form.querySelector('[name="status"]').value = event.status || '';
             if (this.descriptionField) {

@@ -1272,6 +1272,15 @@ body .mj-member-login-component__actions button.mj-member-login-component__submi
     flex-wrap: wrap;
 }
 
+.mj-member-login-component__account-link > .mj-member-login-component__account-main {
+    flex: 1 1 0%;
+    min-width: 0;
+}
+
+.mj-member-login-component__account-link > .mj-member-login-component__account-icon {
+    flex: 0 0 auto;
+}
+
 .mj-member-login-component__account-desc {
     display: block;
     width: 100%;

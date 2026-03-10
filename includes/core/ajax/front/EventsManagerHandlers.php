@@ -348,6 +348,10 @@ class EventsManagerHandlers
             $data['emoji'] = self::sanitizeEmoji(wp_unslash((string) $_POST['emoji']));
         }
 
+        if (isset($_POST['slug'])) {
+            $data['slug'] = sanitize_title($_POST['slug']);
+        }
+
         // Schedule mode and payload
         if (isset($_POST['schedule_mode'])) {
             $data['schedule_mode'] = sanitize_key($_POST['schedule_mode']);

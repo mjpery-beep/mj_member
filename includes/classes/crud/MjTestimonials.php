@@ -72,6 +72,7 @@ class MjTestimonials implements CrudRepositoryInterface {
         $defaults = array(
             'status' => null,
             'member_id' => null,
+            'event_slug' => null,
             'search' => '',
             'orderby' => 'created_at',
             'order' => 'DESC',
@@ -91,6 +92,11 @@ class MjTestimonials implements CrudRepositoryInterface {
         if ($args['member_id'] !== null) {
             $where[] = 't.member_id = %d';
             $values[] = (int) $args['member_id'];
+        }
+
+        if ($args['event_slug'] !== null && $args['event_slug'] !== '') {
+            $where[] = 't.event_slug = %s';
+            $values[] = sanitize_title($args['event_slug']);
         }
 
         if ($args['search'] !== '') {
@@ -157,6 +163,11 @@ class MjTestimonials implements CrudRepositoryInterface {
             $values[] = (int) $args['featured'];
         }
 
+        if (isset($args['event_slug']) && $args['event_slug'] !== null && $args['event_slug'] !== '') {
+            $where[] = 'event_slug = %s';
+            $values[] = sanitize_title($args['event_slug']);
+        }
+
         $where_sql = implode(' AND ', $where);
 
         $sql = "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}";
@@ -210,6 +221,7 @@ class MjTestimonials implements CrudRepositoryInterface {
             'photo_ids' => array(),
             'video_id' => null,
             'link_preview' => null,
+            'event_slug' => null,
             'status' => self::STATUS_PENDING,
             'rejection_reason' => null,
             'created_at' => current_time('mysql'),
@@ -289,12 +301,17 @@ class MjTestimonials implements CrudRepositoryInterface {
             ? (int) $payload['reviewed_by']
             : null;
 
+        $event_slug = isset($payload['event_slug']) && $payload['event_slug'] !== ''
+            ? sanitize_title($payload['event_slug'])
+            : null;
+
         $insert_data = array(
             'member_id' => $member_id,
             'content' => $content,
             'photo_ids' => wp_json_encode($photo_ids),
             'video_id' => $video_id,
             'link_preview' => $link_preview,
+            'event_slug' => $event_slug,
             'status' => $status,
             'rejection_reason' => $rejection_reason,
             'created_at' => $created_at,
@@ -302,7 +319,7 @@ class MjTestimonials implements CrudRepositoryInterface {
             'reviewed_by' => $reviewed_by,
         );
 
-        $formats = array('%d', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%d');
+        $formats = array('%d', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%d');
 
         $result = $wpdb->insert($table, $insert_data, $formats);
         if ($result === false) {
@@ -380,6 +397,13 @@ class MjTestimonials implements CrudRepositoryInterface {
         if (array_key_exists('featured', $data)) {
             $fields['featured'] = !empty($data['featured']) ? 1 : 0;
             $formats[] = '%d';
+        }
+
+        if (array_key_exists('event_slug', $data)) {
+            $fields['event_slug'] = ($data['event_slug'] !== null && $data['event_slug'] !== '')
+                ? sanitize_title($data['event_slug'])
+                : null;
+            $formats[] = '%s';
         }
 
         if (empty($fields)) {
