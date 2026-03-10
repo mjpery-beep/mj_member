@@ -541,6 +541,7 @@
         return h('div', {
             class: classNames('mj-regmgr-member-card', {
                 'mj-regmgr-member-card--selected': isSelected,
+                'mj-regmgr-member-card--inactive': member.status === 'inactive',
             }),
             onClick: function () { onClick(member); },
             role: 'button',
@@ -602,6 +603,10 @@
                     member.isVolunteer && h('span', {
                         class: classNames('mj-regmgr-member-card__volunteer', 'mj-regmgr-badge', 'mj-regmgr-badge--volunteer'),
                     }, volunteerLabel),
+                    member.status === 'inactive' && h('span', {
+                        class: classNames('mj-regmgr-badge', 'mj-regmgr-badge--secondary'),
+                        title: 'Compte inactif',
+                    }, getString(strings, 'memberStatusInactive', 'Inactif')),
                     
                     member.birthDate && calculateAge(member.birthDate) !== null && h('span', {
                         class: 'mj-regmgr-member-card__age',
@@ -2981,6 +2986,14 @@
         var showPaymentModal = _useStateShowPaymentModal[0];
         var setShowPaymentModal = _useStateShowPaymentModal[1];
 
+        var _useStateAccountStatusDraft = useState(member && member.status ? member.status : 'active');
+        var accountStatusDraft = _useStateAccountStatusDraft[0];
+        var setAccountStatusDraft = _useStateAccountStatusDraft[1];
+
+        var _useStateAccountStatusSaving = useState(false);
+        var accountStatusSaving = _useStateAccountStatusSaving[0];
+        var setAccountStatusSaving = _useStateAccountStatusSaving[1];
+
         var _useStateBadgeData = useState(normalizeBadgeEntries(member));
         var badgeData = _useStateBadgeData[0];
         var setBadgeData = _useStateBadgeData[1];
@@ -3079,6 +3092,8 @@
             setNewMessageSaving(false);
             setPaymentProcessing(false);
             setShowPaymentModal(false);
+            setAccountStatusDraft(member && member.status ? member.status : 'active');
+            setAccountStatusSaving(false);
         }, [memberId]);
 
         useEffect(function () {
@@ -3614,6 +3629,23 @@
         var handleSave = function () {
             onUpdateMember(member.id, editData);
             setEditMode(false);
+        };
+
+        var handleSaveAccountStatus = function () {
+            if (!member || !member.id || !onUpdateMember || accountStatusSaving) {
+                return;
+            }
+
+            var nextStatus = accountStatusDraft || 'active';
+            if (nextStatus === member.status) {
+                return;
+            }
+
+            setAccountStatusSaving(true);
+            Promise.resolve(onUpdateMember(member.id, { status: nextStatus }))
+                .finally(function () {
+                    setAccountStatusSaving(false);
+                });
         };
 
         var handleToggleTrustedMember = function (isTrusted) {
@@ -4367,6 +4399,9 @@
         var profileTitle = getString(strings, 'memberProfile', 'Profil');
         var messageHistoryLabel = getString(strings, 'messageHistory', 'Historique');
         var fieldIdPrefix = 'member-edit-' + (member && member.id ? member.id : 'current') + '-';
+        var memberRegistrationDate = member.dateInscription || member.createdAt || '';
+        var memberLastLoginDate = member.lastLoginAt || '';
+        var memberLastActivityDate = member.lastActivityAt || '';
 
         var tabsNav = null;
         if (memberTabs.length > 0) {
@@ -4853,12 +4888,32 @@
                                 h('div', { class: 'mj-regmgr-member-detail__membership-main' }, [
                                     h('div', { class: 'mj-regmgr-member-detail__membership-item' }, [
                                         h('span', { class: 'mj-regmgr-member-detail__status-label' }, 'Statut du compte'),
-                                        h('span', {
-                                            class: classNames('mj-regmgr-badge', {
-                                                'mj-regmgr-badge--success': member.status === 'active',
-                                                'mj-regmgr-badge--secondary': member.status !== 'active',
-                                            }),
-                                        }, statusLabels[member.status] || member.status || 'Actif'),
+                                        h('div', { class: 'mj-regmgr-member-detail__membership-info' }, [
+                                            h('span', {
+                                                class: classNames('mj-regmgr-badge', {
+                                                    'mj-regmgr-badge--success': member.status === 'active',
+                                                    'mj-regmgr-badge--secondary': member.status !== 'active',
+                                                }),
+                                            }, statusLabels[member.status] || member.status || 'Actif'),
+                                            onUpdateMember && h('div', { class: 'mj-regmgr-member-detail__membership-actions' }, [
+                                                h('select', {
+                                                    class: 'mj-regmgr-select mj-regmgr-select--small',
+                                                    value: accountStatusDraft,
+                                                    onChange: function (e) { setAccountStatusDraft(e.target.value); },
+                                                    disabled: accountStatusSaving,
+                                                    'aria-label': 'Statut du compte',
+                                                }, [
+                                                    h('option', { value: 'active' }, statusLabels.active || 'Actif'),
+                                                    h('option', { value: 'inactive' }, statusLabels.inactive || 'Inactif'),
+                                                ]),
+                                                h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--small mj-btn--secondary',
+                                                    onClick: handleSaveAccountStatus,
+                                                    disabled: accountStatusSaving || accountStatusDraft === (member.status || 'active'),
+                                                }, accountStatusSaving ? 'Enregistrement...' : 'Enregistrer'),
+                                            ]),
+                                        ]),
                                     ]),
                                     h('div', { class: 'mj-regmgr-member-detail__membership-item mj-regmgr-member-detail__membership-item--subscription' }, [
                                         h('span', { class: 'mj-regmgr-member-detail__status-label' }, 'Cotisation'),
@@ -4937,9 +4992,17 @@
                                         h('span', { class: 'mj-regmgr-member-detail__meta-label' }, 'N° de membre'),
                                         h('span', { class: 'mj-regmgr-member-detail__meta-value' }, member.membershipNumber),
                                     ]),
-                                    member.dateInscription && h('div', { class: 'mj-regmgr-member-detail__meta-row' }, [
-                                        h('span', { class: 'mj-regmgr-member-detail__meta-label' }, 'Inscrit depuis'),
-                                        h('span', { class: 'mj-regmgr-member-detail__meta-value' }, formatDate(member.dateInscription)),
+                                    h('div', { class: 'mj-regmgr-member-detail__meta-row' }, [
+                                        h('span', { class: 'mj-regmgr-member-detail__meta-label' }, 'Date d\'inscription'),
+                                        h('span', { class: 'mj-regmgr-member-detail__meta-value' }, memberRegistrationDate ? formatDate(memberRegistrationDate, true) : '—'),
+                                    ]),
+                                    h('div', { class: 'mj-regmgr-member-detail__meta-row' }, [
+                                        h('span', { class: 'mj-regmgr-member-detail__meta-label' }, 'Dernière connexion'),
+                                        h('span', { class: 'mj-regmgr-member-detail__meta-value' }, memberLastLoginDate ? formatDate(memberLastLoginDate, true) : '—'),
+                                    ]),
+                                    h('div', { class: 'mj-regmgr-member-detail__meta-row' }, [
+                                        h('span', { class: 'mj-regmgr-member-detail__meta-label' }, 'Dernière activité'),
+                                        h('span', { class: 'mj-regmgr-member-detail__meta-value' }, memberLastActivityDate ? formatDate(memberLastActivityDate, true) : '—'),
                                     ]),
                                     member.isVolunteer && h('div', { class: 'mj-regmgr-member-detail__meta-row' }, [
                                         h('span', { class: 'mj-regmgr-member-detail__meta-label' }, 'Bénévole'),

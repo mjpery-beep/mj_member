@@ -5529,6 +5529,7 @@ function mj_regmgr_get_members() {
             'membershipStatus' => $membership_status,
             'membershipYear' => $membership_year > 0 ? $membership_year : null,
             'isVolunteer' => !empty($member->is_volunteer),
+            'status' => isset($member->status) ? (string) $member->status : MjMembers::STATUS_ACTIVE,
             'xpTotal' => isset($member->xp_total) ? (int) $member->xp_total : 0,
             'coinsTotal' => isset($member->coins_total) ? (int) $member->coins_total : 0,
             'levelNumber' => (function () use ($member, $all_levels) {
@@ -6266,6 +6267,58 @@ function mj_regmgr_get_member_details() {
     // Ajouter les informations de niveau
     $member['levelProgression'] = mj_regmgr_get_member_level_progression($member['xpTotal']);
 
+    // Ajouter les données d'activité du membre
+    $member['lastLoginAt'] = $memberData->last_login_at ?? null;
+    $member['lastActivityAt'] = $memberData->last_activity_at ?? null;
+    
+    // Récupérer les statistiques d'activité générale
+    $activity_stats = array(
+        'eventRegistrations' => 0,
+        'eventAttendances' => 0,
+        'eventContributions' => 0,
+        'ideas' => 0,
+        'badges' => 0,
+    );
+    
+    // Compter les inscriptions aux événements
+    $event_regs = MjEventRegistrations::get_all(array(
+        'member_id' => $member_id,
+        'limit' => 1000,
+    ));
+    if (!empty($event_regs)) {
+        $activity_stats['eventRegistrations'] = count($event_regs);
+        
+        // Compter les présences confirmées
+        foreach ($event_regs as $reg) {
+            // Les attendances sont stockées dans le payload JSON
+            if (isset($reg->attendance_payload) && !empty($reg->attendance_payload)) {
+                $payload = json_decode($reg->attendance_payload, true);
+                if (is_array($payload) && !empty($payload['occurrences'])) {
+                    foreach ($payload['occurrences'] as $occurrence) {
+                        if (isset($occurrence['status']) && $occurrence['status'] === 'present') {
+                            $activity_stats['eventAttendances']++;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Compter les contributions (photos, idées)
+    if (!empty($member['photos'])) {
+        $activity_stats['eventContributions'] += count($member['photos']);
+    }
+    if (!empty($member['ideas'])) {
+        $activity_stats['ideas'] = count($member['ideas']);
+    }
+    
+    // Compter les badges
+    if (!empty($member['badges'])) {
+        $activity_stats['badges'] = count($member['badges']);
+    }
+    
+    $member['activityStats'] = $activity_stats;
+
     // Ajouter les quotas de congés (si l'utilisateur a le droit de gérer les membres)
     if (current_user_can(Config::capability()) || !empty($current_member['is_coordinateur'])) {
         $current_year = (int) date('Y');
@@ -6599,6 +6652,18 @@ function mj_regmgr_update_member() {
     }
     if (array_key_exists('photoUsageConsent', $data)) {
         $update_data['photo_usage_consent'] = mj_regmgr_to_bool($data['photoUsageConsent']) ? 1 : 0;
+    }
+    if (array_key_exists('status', $data)) {
+        $allowed_statuses = array(
+            MjMembers::STATUS_ACTIVE,
+            MjMembers::STATUS_INACTIVE,
+        );
+        $candidate_status = sanitize_key((string) $data['status']);
+        if (!in_array($candidate_status, $allowed_statuses, true)) {
+            wp_send_json_error(array('message' => __('Statut de membre invalide.', 'mj-member')));
+            return;
+        }
+        $update_data['status'] = $candidate_status;
     }
     if (array_key_exists('guardianId', $data)) {
         $raw_guardian_id = (int) $data['guardianId'];
