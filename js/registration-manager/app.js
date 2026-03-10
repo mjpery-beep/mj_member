@@ -4806,12 +4806,44 @@
             loadRegistrations(event.id);
         }, [loadEventDetails, loadRegistrations, storageKey, setDescriptionState, setDescriptionSaving, setDescriptionError, setRegDocState, setRegDocSaving, setRegDocError, setActiveTab]);
 
+        // ── CCM (shared stepper modal) integration ──
+        var ccmRef = useRef(null);
+        var ccmCreatedCallbackRef = useRef(null);
+
         var openCreateEventModal = useCallback(function () {
             if (creatingEvent) {
                 return;
             }
-            createEventModal.open();
-        }, [creatingEvent, createEventModal]);
+
+            // Lazy-init the shared CCM on first open
+            if (!ccmRef.current && global.MjCreateEventModal) {
+                var widgetRoot = document.getElementById(config.widgetId || '');
+                ccmRef.current = global.MjCreateEventModal.init(widgetRoot || document, {
+                    ajaxUrl: config.ajaxUrl || '',
+                    createNonce: config.createNonce || '',
+                    createUrl: config.createUrl || config.adminAddEventUrl || '',
+                    createTypes: config.createTypes || {},
+                    createTypeColors: config.createTypeColors || {},
+                    createLocations: config.createLocations || {},
+                    createAnimateurs: config.createAnimateurs || {},
+                    onCreated: function (data) {
+                        if (typeof ccmCreatedCallbackRef.current === 'function') {
+                            ccmCreatedCallbackRef.current(data);
+                        }
+                    },
+                    onAfterCreate: function () {
+                        // Prevent default page reload – Preact handles state updates
+                    },
+                });
+            }
+
+            if (ccmRef.current) {
+                ccmRef.current.open();
+            } else {
+                // Fallback to old Preact modal if CCM not available
+                createEventModal.open();
+            }
+        }, [creatingEvent, createEventModal, config]);
 
         var handleCloseCreateEventModal = useCallback(function () {
             if (creatingEvent) {
@@ -4877,6 +4909,29 @@
                     throw error;
                 });
         }, [api, filter, search, loadEvents, handleSelectEvent, setActiveTab, showSuccess, createEventModal, strings, setEvents, setFilter, setSearch]);
+
+        // Keep the CCM post-creation callback up to date (avoids stale closures)
+        ccmCreatedCallbackRef.current = function (data) {
+            var createdEvent = data && data.event ? data.event : null;
+            if (createdEvent) {
+                setEvents(function (prev) {
+                    if (!Array.isArray(prev)) { return [createdEvent]; }
+                    var without = prev.filter(function (evt) {
+                        return evt && evt.id !== createdEvent.id;
+                    });
+                    without.unshift(createdEvent);
+                    return without;
+                });
+                var isDraftFilter = Array.isArray(filter) && filter.length === 1 && filter[0] === 'draft';
+                var shouldReload = isDraftFilter && search === '';
+                if (search !== '') { setSearch(''); shouldReload = false; }
+                if (!isDraftFilter) { setFilter(['draft']); shouldReload = false; }
+                if (shouldReload) { loadEvents(1); }
+                handleSelectEvent(createdEvent);
+                setActiveTab('editor');
+            }
+            showSuccess(data && data.message ? data.message : getString(strings, 'createEventSuccess', 'Brouillon créé.'));
+        };
 
         var handleDeleteEvent = useCallback(function (target) {
             if (deletingEvent) {
@@ -7589,13 +7644,7 @@
             ]),
 
             // Modals
-            h(CreateEventModal, {
-                isOpen: createEventModal.isOpen,
-                onClose: handleCloseCreateEventModal,
-                onCreate: handleCreateEvent,
-                strings: strings,
-                submitting: creatingEvent,
-            }),
+            // (CreateEventModal replaced by shared CCM – rendered in PHP template)
 
             h(AddParticipantModal, {
                 isOpen: addParticipantModal.isOpen,

@@ -5,6 +5,7 @@ if (!defined('ABSPATH')) {
 
 use Mj\Member\Core\Config;
 use Mj\Member\Core\AssetsManager;
+use Mj\Member\Classes\View\CreateEventModalRenderer;
 
 $settings = $this->get_settings_for_display();
 $widget_id = 'mj-events-manager-' . $this->get_id();
@@ -202,7 +203,7 @@ if (function_exists('get_terms')) {
     }
 }
 
-$config_json = wp_json_encode([
+$config_array = [
     'widgetId' => $widget_id,
     'ajaxUrl' => $ajax_url,
     'nonce' => $ajax_nonce,
@@ -254,7 +255,12 @@ $config_json = wp_json_encode([
         'attendanceAllMembers' => __('Liste de présence : tous les membres', 'mj-member'),
         'attendanceRegisteredOnly' => __('Liste de présence : inscrits uniquement', 'mj-member'),
     ],
-]);
+];
+
+// Merge CCM (create-event modal) config
+$ccm_config = CreateEventModalRenderer::buildConfig();
+$config_array = array_merge($config_array, $ccm_config);
+$config_json = wp_json_encode($config_array);
 ?>
 
 <div class="mj-events-manager" data-widget-id="<?php echo esc_attr($widget_id); ?>" data-mj-events-manager data-config="<?php echo esc_attr($config_json); ?>">
@@ -309,6 +315,8 @@ $config_json = wp_json_encode([
         <div class="mj-events-manager__pagination" data-pagination hidden></div>
     </div>
 </div>
+
+<?php CreateEventModalRenderer::render($widget_id); ?>
 
 <div class="mj-events-manager-modal" data-modal hidden>
     <div class="mj-events-manager-modal__overlay" data-modal-overlay></div>

@@ -512,6 +512,11 @@
         var loading = props.loading;
         var loadingMembers = props.loadingMembers || {};
         var requiresValidation = props.eventRequiresValidation !== false;
+        
+        // Search state
+        var _searchQuery = useState('');
+        var searchQuery = _searchQuery[0];
+        var setSearchQuery = _searchQuery[1];
         var allowAttendanceAll = useMemo(function () {
             if (!event) {
                 return Array.isArray(attendanceMembers) && attendanceMembers.length > 0;
@@ -701,6 +706,37 @@
             return { valid: valid, unpaid: unpaid, notRegistered: notRegistered };
         }, [mergedRegistrations, selectedOccurrence, occurrences, requiresValidation, requiresPayment, allowAttendanceAll]);
 
+        // Filter registrations by search query
+        var filteredRegistrations = useMemo(function () {
+            if (!searchQuery || searchQuery.trim() === '') {
+                return categorizedRegistrations;
+            }
+            
+            var query = searchQuery.toLowerCase().trim();
+            
+            var filterReg = function (reg) {
+                if (!reg) return false;
+                var member = reg.member || {};
+                var firstName = (member.firstName || '').toLowerCase();
+                var lastName = (member.lastName || '').toLowerCase();
+                var fullName = (firstName + ' ' + lastName).toLowerCase();
+                var phone = (member.phone || '').toLowerCase();
+                var guardianPhone = (member.guardianPhone || '').toLowerCase();
+                
+                return fullName.includes(query) 
+                    || firstName.includes(query)
+                    || lastName.includes(query)
+                    || phone.includes(query)
+                    || guardianPhone.includes(query);
+            };
+            
+            return {
+                valid: categorizedRegistrations.valid.filter(filterReg),
+                unpaid: categorizedRegistrations.unpaid.filter(filterReg),
+                notRegistered: categorizedRegistrations.notRegistered.filter(filterReg),
+            };
+        }, [categorizedRegistrations, searchQuery]);
+
         // Obtenir le statut de présence
         var getAttendanceStatus = useCallback(function (memberId) {
             if (!selectedOccurrence || !attendanceMap[selectedOccurrence]) {
@@ -713,23 +749,23 @@
         // Calculer les stats (uniquement pour les validés inscrits)
         var stats = useMemo(function () {
             var result = { present: 0, absent: 0, pending: 0, undefined: 0 };
-            categorizedRegistrations.valid.forEach(function (reg) {
+            filteredRegistrations.valid.forEach(function (reg) {
                 var status = getAttendanceStatus(reg.memberId);
                 if (status === 'present') result.present++;
                 else if (status === 'absent') result.absent++;
                 else result.undefined++;
             });
             return result;
-        }, [categorizedRegistrations.valid, getAttendanceStatus]);
+        }, [filteredRegistrations.valid, getAttendanceStatus]);
 
         // Actions en masse (uniquement pour les validés inscrits)
         var handleBulkAction = useCallback(function (status) {
             if (!selectedOccurrence || loading) return;
-            var updates = categorizedRegistrations.valid.map(function (reg) {
+            var updates = filteredRegistrations.valid.map(function (reg) {
                 return { memberId: reg.memberId, status: status };
             });
             onBulkAttendance(selectedOccurrence, updates);
-        }, [selectedOccurrence, categorizedRegistrations.valid, onBulkAttendance, loading]);
+        }, [selectedOccurrence, filteredRegistrations.valid, onBulkAttendance, loading]);
 
         // Changement de statut individuel
         var handleStatusChange = useCallback(function (registration, status) {
@@ -761,8 +797,8 @@
             }
         }, [onValidatePayment, onValidateRegistration, onChangeOccurrences, onAddOccurrence, selectedOccurrence, requiresPayment, requiresValidation]);
 
-        var totalValid = categorizedRegistrations.valid.length;
-        var totalIrregular = categorizedRegistrations.unpaid.length + categorizedRegistrations.notRegistered.length;
+        var totalValid = filteredRegistrations.valid.length;
+        var totalIrregular = filteredRegistrations.unpaid.length + filteredRegistrations.notRegistered.length;
 
         return h('div', { class: 'mj-att' }, [
             // Header
@@ -792,6 +828,43 @@
                     stats: stats,
                     total: totalValid,
                 }),
+
+                // Champ de recherche
+                h('div', { class: 'mj-att__search-container' }, [
+                    h('div', { class: 'mj-att__search-wrapper' }, [
+                        h('svg', {
+                            class: 'mj-att__search-icon',
+                            width: 18,
+                            height: 18,
+                            viewBox: '0 0 24 24',
+                            fill: 'none',
+                            stroke: 'currentColor',
+                            'stroke-width': 2,
+                        }, [
+                            h('circle', { cx: 11, cy: 11, r: 8 }),
+                            h('path', { d: 'm21 21-4.35-4.35' }),
+                        ]),
+                        h('input', {
+                            type: 'text',
+                            class: 'mj-att__search-input',
+                            placeholder: getString(strings, 'searchMembers', 'Rechercher un membre...'),
+                            value: searchQuery,
+                            onInput: function (e) { setSearchQuery(e.target.value); },
+                        }),
+                        searchQuery && h('button', {
+                            type: 'button',
+                            class: 'mj-att__search-clear',
+                            onClick: function () { setSearchQuery(''); },
+                            title: getString(strings, 'clearSearch', 'Effacer'),
+                            'aria-label': getString(strings, 'clearSearch', 'Effacer'),
+                        }, [
+                            h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                h('line', { x1: 18, y1: 6, x2: 6, y2: 18 }),
+                                h('line', { x1: 6, y1: 6, x2: 18, y2: 18 }),
+                            ]),
+                        ]),
+                    ]),
+                ]),
 
                 // Actions rapides
                 h('div', { class: 'mj-att__bulk-actions' }, [
@@ -845,7 +918,7 @@
                     ]),
 
                     // Section: Inscrits validés
-                    categorizedRegistrations.valid.map(function (reg) {
+                    filteredRegistrations.valid.map(function (reg) {
                         var isLoading = loadingMembers[reg.memberId];
                         return h(AttendanceMemberCard, {
                             key: reg.id,
@@ -876,7 +949,7 @@
 
                     h('div', { class: 'mj-att__irregular-list' }, [
                         // Non payés
-                        categorizedRegistrations.unpaid.map(function (reg) {
+                        filteredRegistrations.unpaid.map(function (reg) {
                             var isLoading = loadingMembers[reg.memberId];
                             return h(AttendanceMemberCard, {
                                 key: 'unpaid-' + reg.id,
@@ -896,7 +969,7 @@
                         }),
 
                         // Non inscrits à cette séance
-                        categorizedRegistrations.notRegistered.map(function (reg) {
+                        filteredRegistrations.notRegistered.map(function (reg) {
                             var isLoading = loadingMembers[reg.memberId];
                             return h(AttendanceMemberCard, {
                                 key: 'notreg-' + reg.id,

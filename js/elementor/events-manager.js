@@ -1631,15 +1631,53 @@
         }
 
         init() {
+            this.initCreateModal();
             this.attachEventListeners();
             this.loadEvents();
             this.setupTabs();
         }
 
+        /**
+         * Initialise the shared create-event modal (CCM) if available.
+         */
+        initCreateModal() {
+            this.ccmInstance = null;
+            if (!globalObject.MjCreateEventModal) {
+                console.warn('[EventsManager] MjCreateEventModal not available on window');
+                return;
+            }
+
+            // The CCM module now scopes all queries to the modal element itself,
+            // so we just need to pass any ancestor that contains [data-ccm-modal].
+            // Use closest widget container → parent → document as fallback chain.
+            var ccmRoot = this.container.closest('.elementor-widget-container')
+                       || this.container.parentElement
+                       || document;
+
+            var self = this;
+            this.ccmInstance = globalObject.MjCreateEventModal.init(ccmRoot, Object.assign({}, this.config, {
+                onCreated: function (data) {
+                    self.loadEvents();
+                },
+                onAfterCreate: function () {
+                    // No-op: list already refreshed via onCreated
+                }
+            }));
+            if (!this.ccmInstance) {
+                console.warn('[EventsManager] CCM modal init returned null – falling back to built-in modal for add.');
+            }
+        }
+
         attachEventListeners() {
-            // Add event button
+            // Add event button – delegate to CCM shared modal when available
             this.container.querySelectorAll('[data-action="add-event"]').forEach(btn => {
-                btn.addEventListener('click', () => this.openModal('add'));
+                btn.addEventListener('click', () => {
+                    if (this.ccmInstance) {
+                        this.ccmInstance.open('', btn);
+                    } else {
+                        this.openModal('add');
+                    }
+                });
             });
 
             // Search

@@ -15,6 +15,7 @@ use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Crud\MjEventAttendance;
 use Mj\Member\Classes\Crud\MjLeaveTypes;
 use Mj\Member\Classes\MjRoles;
+use Mj\Member\Classes\View\CreateEventModalRenderer;
 use Mj\Member\Core\AssetsManager;
 use Mj\Member\Core\Config;
 
@@ -881,7 +882,7 @@ $config_json = wp_json_encode(array(
         'occurrenceDaySun' => __('Dim', 'mj-member'),
         'occurrenceNoEventSelected' => __('Sélectionnez un événement pour gérer ses occurrences.', 'mj-member'),
     ),
-));
+) + CreateEventModalRenderer::buildConfig());
 ?>
 
 <div class="mj-registration-manager mj-registration-manager--booting" 
@@ -982,4 +983,7 @@ $config_json = wp_json_encode(array(
     
     <!-- Toast notifications -->
     <div class="mj-registration-manager__toasts" data-toasts aria-live="polite"></div>
+
+    <!-- Shared Create Event Modal (CCM) -->
+    <?php CreateEventModalRenderer::render($widget_id); ?>
 </div>

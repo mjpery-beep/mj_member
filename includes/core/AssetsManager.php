@@ -319,9 +319,11 @@ final class AssetsManager
         self::registerScript('mj-member-event-toggles', 'js/event-toggles.js');
         self::registerScript('mj-member-animateur-account', 'js/animateur-account.js', array('jquery', 'mj-member-utils'));
         self::registerScript('mj-member-member-account', 'js/member-account.js', array(), false);
-        self::registerScript('mj-member-events-calendar', 'js/elementor/events-calendar.js', array('mj-member-utils', 'mj-member-regmgr-emoji-picker'));
+        self::registerScript('mj-member-create-event-modal', 'js/create-event-modal.js', array('mj-member-utils', 'mj-member-regmgr-emoji-picker'));
+        self::registerStyle('mj-member-create-event-modal', 'css/create-event-modal.css');
+        self::registerScript('mj-member-events-calendar', 'js/elementor/events-calendar.js', array('mj-member-utils', 'mj-member-create-event-modal'));
         self::registerScript('mj-member-registrations-widget', 'js/elementor/registrations-widget.js', array('mj-member-utils'));
-        self::registerStyle('mj-member-events-calendar', 'css/events-calendar.css', array('mj-member-components', 'mj-member-event-form'));
+        self::registerStyle('mj-member-events-calendar', 'css/events-calendar.css', array('mj-member-components', 'mj-member-event-form', 'mj-member-create-event-modal'));
         self::registerScript('mj-member-upcoming-events', 'js/elementor/upcoming-events.js', array('mj-member-utils'));
         self::registerScript('mj-member-hour-encode', 'js/elementor/hour-encode.js', array('mj-member-utils'));
         self::registerScript('mj-member-photo-grimlins', 'js/elementor/photo-grimlins.js', array('mj-member-utils'));
@@ -330,9 +332,9 @@ final class AssetsManager
         self::registerScript('mj-member-documents-manager', 'js/elementor/documents-manager.js', array('mj-member-utils'));
         self::registerScript('mj-member-payments-overview', 'js/elementor/payments-overview.js', array('mj-member-utils'));
         self::registerStyle('mj-member-payments-overview', 'css/payments-overview.css', array('mj-member-components'));
-        self::registerScript('mj-member-events-manager', 'js/elementor/events-manager.js', array('mj-member-utils', 'mj-member-regmgr-emoji-picker'));
+        self::registerScript('mj-member-events-manager', 'js/elementor/events-manager.js', array('mj-member-utils', 'mj-member-create-event-modal'));
         self::registerStyle('mj-member-event-form', 'css/event-form.css');
-        self::registerStyle('mj-member-events-manager', 'css/events-manager.css', array('mj-member-components', 'mj-member-event-form'));
+        self::registerStyle('mj-member-events-manager', 'css/events-manager.css', array('mj-member-components', 'mj-member-event-form', 'mj-member-create-event-modal'));
         wp_register_script(
             'mj-member-preact',
             'https://unpkg.com/preact@10.19.3/dist/preact.min.js',
@@ -396,7 +398,7 @@ final class AssetsManager
         self::registerScript('mj-member-push-subscribe', 'js/push-subscribe.js', array());
 
         // Registration Manager Widget
-        self::registerStyle('mj-member-registration-manager', 'css/registration-manager.css', array('mj-member-components'));
+        self::registerStyle('mj-member-registration-manager', 'css/registration-manager.css', array('mj-member-components', 'mj-member-create-event-modal'));
         self::registerScript('mj-member-regmgr-services', 'js/registration-manager/services.js', array('mj-member-utils'));
         self::registerScript('mj-member-regmgr-hooks', 'js/registration-manager/hooks.js', array('mj-member-preact-hooks'));
         self::registerScript('mj-member-regmgr-emoji-picker', 'js/registration-manager/emoji-picker.js', array('mj-member-regmgr-hooks'));
@@ -417,6 +419,7 @@ final class AssetsManager
             'mj-member-regmgr-event-editor',
             'mj-member-regmgr-modals',
             'mj-member-regmgr-tabs',
+            'mj-member-create-event-modal',
         ));
 
         // Leave Requests Widget

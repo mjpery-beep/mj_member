@@ -201,6 +201,31 @@ class EventsManagerHandlers
         }
 
         try {
+            // Handle cover image upload
+            $cover_id = 0;
+            if (!empty($_FILES['cover_image']) && $_FILES['cover_image']['error'] === UPLOAD_ERR_OK) {
+                $allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                if (!in_array($_FILES['cover_image']['type'], $allowed_types, true)) {
+                    wp_send_json_error(['message' => __('Format image non supporté. Utilisez JPG, PNG, GIF ou WebP.', 'mj-member')], 400);
+                }
+                if ($_FILES['cover_image']['size'] > 5 * 1024 * 1024) {
+                    wp_send_json_error(['message' => __('L\'image est trop volumineuse (max 5 Mo).', 'mj-member')], 400);
+                }
+                if (!function_exists('wp_handle_upload')) {
+                    require_once ABSPATH . 'wp-admin/includes/file.php';
+                }
+                if (!function_exists('wp_generate_attachment_metadata')) {
+                    require_once ABSPATH . 'wp-admin/includes/image.php';
+                }
+                if (!function_exists('media_handle_upload')) {
+                    require_once ABSPATH . 'wp-admin/includes/media.php';
+                }
+                $attachment_id = media_handle_upload('cover_image', 0);
+                if (!is_wp_error($attachment_id)) {
+                    $cover_id = (int) $attachment_id;
+                }
+            }
+
             $event_id = MjEvents::create([
                 'title' => $title,
                 'type' => $type,
@@ -216,6 +241,7 @@ class EventsManagerHandlers
                 'registration_payload' => $registration_payload,
                 'emoji' => $emoji,
                 'location_id' => $location_id,
+                'cover_id' => $cover_id,
             ]);
 
             if (is_wp_error($event_id)) {
