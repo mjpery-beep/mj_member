@@ -620,15 +620,43 @@ class MjNotificationManager {
         foreach ($recipients as $spec) {
             if (is_numeric($spec)) {
                 $member_ids[] = (int) $spec;
-            } elseif (is_array($spec)) {
-                if (isset($spec['member_id']) && (int) $spec['member_id'] > 0) {
-                    $member_ids[] = (int) $spec['member_id'];
+            } elseif (is_string($spec)) {
+                // Recipient par rôle sous forme de chaîne (ex: 'animateur')
+                $role_targets = self::collect_role_targets($spec);
+                foreach ($role_targets as $target) {
+                    if (isset($target['member_id'])) {
+                        $member_ids[] = (int) $target['member_id'];
+                    }
+                    if (isset($target['user_id'])) {
+                        $user_ids[] = (int) $target['user_id'];
+                    }
                 }
-                if (isset($spec['user_id']) && (int) $spec['user_id'] > 0) {
-                    $user_ids[] = (int) $spec['user_id'];
+            } elseif (is_array($spec)) {
+                // Recipient par rôle sous forme de tableau (ex: {'role':'animateur'})
+                if (isset($spec['role']) && !isset($spec['member_id']) && !isset($spec['user_id'])) {
+                    $role_targets = self::collect_role_targets((string) $spec['role']);
+                    foreach ($role_targets as $target) {
+                        if (isset($target['member_id'])) {
+                            $member_ids[] = (int) $target['member_id'];
+                        }
+                        if (isset($target['user_id'])) {
+                            $user_ids[] = (int) $target['user_id'];
+                        }
+                    }
+                } else {
+                    if (isset($spec['member_id']) && (int) $spec['member_id'] > 0) {
+                        $member_ids[] = (int) $spec['member_id'];
+                    }
+                    if (isset($spec['user_id']) && (int) $spec['user_id'] > 0) {
+                        $user_ids[] = (int) $spec['user_id'];
+                    }
                 }
             }
         }
+
+        // Dédupliquer
+        $member_ids = array_values(array_unique($member_ids));
+        $user_ids   = array_values(array_unique($user_ids));
 
         error_log('[MJ Push] dispatch_push member_ids=' . wp_json_encode($member_ids) . ' user_ids=' . wp_json_encode($user_ids));
 
