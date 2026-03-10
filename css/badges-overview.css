@@ -407,6 +407,10 @@
 }
 
 @media (max-width:700px){
+    .mj-badges-overview,
+    .mj-badges-overview *{
+        box-sizing:border-box;
+    }
     .mj-badges-xp-bar__bg-image{
         height:160px;
     }
@@ -428,9 +432,44 @@
         flex-wrap:wrap;
         justify-content:center;
         padding:4px 8px;
+        white-space:normal;
+    }
+    .mj-badges-xp-bar__next-xp-label{
+        white-space:normal;
+        line-height:1.2;
     }
     .mj-badges-xp-bar__badges-count{order:3;gap:8px;padding-top:10px;}
     .mj-badges-xp-bar__badge-stat{padding:6px 10px;}
+
+    .mj-badges-overview__heading-row,
+    .mj-badges-overview__rewards{
+        flex-wrap:wrap;
+        justify-content:center;
+    }
+
+    .mj-badges-overview__state{
+        font-size:0.6rem;
+        letter-spacing:0.06em;
+        text-align:center;
+    }
+
+    .mj-badges-overview__criterion-body{
+        flex-direction:column;
+        align-items:flex-start;
+        gap:6px;
+    }
+
+    .mj-badges-overview__criterion-title{
+        width:100%;
+        overflow-wrap:anywhere;
+        word-break:break-word;
+    }
+
+    .mj-badges-overview__criterion-rewards{
+        width:100%;
+        justify-content:flex-end;
+        flex-wrap:wrap;
+    }
 }
 
 /* ========================================
@@ -932,6 +971,7 @@
     .mj-badges-overview{
         padding:12px;
         gap:16px;
+        border-radius:16px;
     }
     .mj-badges-overview__grid{
         grid-template-columns:1fr;
@@ -947,6 +987,21 @@
     .mj-badges-overview__media img{
         width:100%;
         height:100%;
+    }
+
+    .mj-badges-xp-bar__xp-current,
+    .mj-badges-xp-bar__coins-current{
+        width:100%;
+        justify-content:center;
+    }
+
+    .mj-badges-xp-bar__xp-value,
+    .mj-badges-xp-bar__coins-value{
+        font-size:1.45rem;
+    }
+
+    .mj-badges-overview__criterion{
+        align-items:flex-start;
     }
 }
 
@@ -1394,9 +1449,9 @@
     }
 }
 
-@media (min-width:500px) and (max-width:899px){
+@media (min-width:500px) and (max-width:1024px){
     .mj-trophies-section__grid{
-        grid-template-columns:repeat(3,1fr);
+        grid-template-columns:repeat(2,1fr);
     }
 }
 
@@ -1422,7 +1477,7 @@
         font-size:1.2rem;
     }
     .mj-trophies-section__grid{
-        grid-template-columns:repeat(2,1fr);
+        grid-template-columns:1fr;
         gap:12px;
     }
     .mj-trophy{
@@ -1655,5 +1710,75 @@
         min-width: 20px;
         height: 20px;
         font-size: 0.65rem;
+    }
+}
+
+@media (min-width:701px) and (max-width:1024px){
+    .mj-badges-overview{
+        padding:14px;
+        gap:18px;
+    }
+
+    .mj-badges-overview__grid{
+        grid-template-columns:1fr;
+        gap:18px;
+    }
+
+    .mj-badges-xp-bar__content{
+        padding:18px;
+        gap:14px;
+    }
+
+    .mj-badges-xp-bar__xp-info{
+        gap:10px;
+    }
+
+    .mj-badges-xp-bar__xp-current,
+    .mj-badges-xp-bar__coins-current{
+        flex:1 1 220px;
+        justify-content:center;
+    }
+
+    .mj-badges-overview__card{
+        min-height:0;
+    }
+
+    .mj-badges-overview__heading-row,
+    .mj-badges-overview__rewards{
+        flex-wrap:wrap;
+        justify-content:center;
+    }
+
+    .mj-badges-overview__criterion-body{
+        flex-direction:column;
+        align-items:flex-start;
+        gap:6px;
+    }
+
+    .mj-badges-overview__criterion-title{
+        width:100%;
+        overflow-wrap:anywhere;
+        word-break:break-word;
+    }
+
+    .mj-badges-overview__criterion-rewards{
+        width:100%;
+        justify-content:flex-end;
+        flex-wrap:wrap;
+    }
+
+    .mj-actions-section__header{
+        gap:10px;
+    }
+
+    .mj-action{
+        flex-wrap:wrap;
+        row-gap:4px;
+        max-width:100%;
+    }
+
+    .mj-action__title{
+        overflow-wrap:anywhere;
+        word-break:break-word;
     }
 }
