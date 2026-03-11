@@ -1156,7 +1156,8 @@ body .mj-member-login-component__actions button.mj-member-login-component__submi
     display: flex;
     align-items: center;
     gap: 0.65rem;
-    margin: 0 0 1rem;
+    margin: 0;
+    margin-top: -15px;
 }
 
 .mj-member-login-component__member-avatar {

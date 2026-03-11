@@ -95,6 +95,18 @@ class MjAccountLinks {
                 'type' => 'section_header',
                 'icon_id' => 0,
             ),
+            'agenda' => array(
+                'label' => __('Agenda', 'mj-member'),
+                'description' => __('Consultez le calendrier des événements à venir.', 'mj-member'),
+                'slug' => 'agenda',
+                'query' => array(),
+                'enabled' => true,
+                'page_id' => 0,
+                'visibility' => 'all',
+                'editable_label' => true,
+                'type' => 'standard',
+                'icon_id' => 0,
+            ),
             'registrations' => array(
                 'label' => __('Mes inscriptions', 'mj-member'),
                 'description' => __('Retrouvez vos inscriptions aux événements passés et à venir.', 'mj-member'),
