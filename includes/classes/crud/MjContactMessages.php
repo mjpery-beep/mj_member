@@ -131,6 +131,7 @@ class MjContactMessages implements CrudRepositoryInterface {
 
         $conditions = array();
         $params = array();
+        $messages_table = self::get_table_name();
         $recipients_table = self::get_recipients_table_name();
         $recipients_table_exists = self::recipients_table_exists();
 
@@ -169,7 +170,7 @@ class MjContactMessages implements CrudRepositoryInterface {
         if (!empty($args['include_all_targets'])) {
             $meta_all_pattern = sprintf('%%"recipient_keys":"%%%s%%"', $wpdb->esc_like(self::TARGET_ALL));
             if ($recipients_table_exists) {
-                $assignment_clauses[] = '(target_type = %s OR EXISTS (SELECT 1 FROM ' . $recipients_table . ' r WHERE r.message_id = id AND r.recipient_type = %s) OR (meta IS NOT NULL AND meta LIKE %s))';
+                $assignment_clauses[] = '(target_type = %s OR EXISTS (SELECT 1 FROM ' . $recipients_table . ' r WHERE r.message_id = ' . $messages_table . '.id AND r.recipient_type = %s) OR (meta IS NOT NULL AND meta LIKE %s))';
                 $assignment_params[] = self::TARGET_ALL;
                 $assignment_params[] = self::TARGET_ALL;
                 $assignment_params[] = $meta_all_pattern;
@@ -224,7 +225,7 @@ class MjContactMessages implements CrudRepositoryInterface {
                 if ($target_reference !== null) {
                     $meta_pattern = sprintf('%%"recipient_keys":"%%%s%%"', $wpdb->esc_like($target_type . ':' . $target_reference));
                     if ($recipients_table_exists) {
-                        $assignment_clauses[] = '((target_type = %s AND target_reference = %d) OR EXISTS (SELECT 1 FROM ' . $recipients_table . ' r WHERE r.message_id = id AND r.recipient_type = %s AND r.recipient_reference = %d) OR (meta IS NOT NULL AND meta LIKE %s))';
+                        $assignment_clauses[] = '((target_type = %s AND target_reference = %d) OR EXISTS (SELECT 1 FROM ' . $recipients_table . ' r WHERE r.message_id = ' . $messages_table . '.id AND r.recipient_type = %s AND r.recipient_reference = %d) OR (meta IS NOT NULL AND meta LIKE %s))';
                         $assignment_params[] = $target_type;
                         $assignment_params[] = $target_reference;
                         $assignment_params[] = $target_type;
@@ -239,7 +240,7 @@ class MjContactMessages implements CrudRepositoryInterface {
                 } else {
                     $meta_pattern = sprintf('%%"recipient_keys":"%%%s%%"', $wpdb->esc_like($target_type));
                     if ($recipients_table_exists) {
-                        $assignment_clauses[] = '(target_type = %s OR EXISTS (SELECT 1 FROM ' . $recipients_table . ' r WHERE r.message_id = id AND r.recipient_type = %s) OR (meta IS NOT NULL AND meta LIKE %s))';
+                        $assignment_clauses[] = '(target_type = %s OR EXISTS (SELECT 1 FROM ' . $recipients_table . ' r WHERE r.message_id = ' . $messages_table . '.id AND r.recipient_type = %s) OR (meta IS NOT NULL AND meta LIKE %s))';
                         $assignment_params[] = $target_type;
                         $assignment_params[] = $target_type;
                         $assignment_params[] = $meta_pattern;
@@ -255,6 +256,30 @@ class MjContactMessages implements CrudRepositoryInterface {
         if (!empty($assignment_clauses)) {
             $conditions[] = '(' . implode(' OR ', $assignment_clauses) . ')';
             $params = array_merge($params, $assignment_params);
+        }
+
+        // Direct recipient match by user_id or member_id in the recipients table.
+        // This is the most reliable check: if the user or member appears in the
+        // recipients table for a message, they must be able to see it regardless
+        // of the target_type/reference resolution above.
+        if ($recipients_table_exists) {
+            $direct_rcpt_clauses = array();
+            $direct_rcpt_params = array();
+
+            if ($user_id > 0) {
+                $direct_rcpt_clauses[] = 'EXISTS (SELECT 1 FROM ' . $recipients_table . ' r WHERE r.message_id = ' . $messages_table . '.id AND r.user_id = %d)';
+                $direct_rcpt_params[] = $user_id;
+            }
+
+            if ($member_id > 0) {
+                $direct_rcpt_clauses[] = 'EXISTS (SELECT 1 FROM ' . $recipients_table . ' r WHERE r.message_id = ' . $messages_table . '.id AND r.member_id = %d)';
+                $direct_rcpt_params[] = $member_id;
+            }
+
+            if (!empty($direct_rcpt_clauses)) {
+                $conditions[] = '(' . implode(' OR ', $direct_rcpt_clauses) . ')';
+                $params = array_merge($params, $direct_rcpt_params);
+            }
         }
 
         if (empty($conditions)) {
@@ -1042,12 +1067,205 @@ class MjContactMessages implements CrudRepositoryInterface {
             return new WP_Error('mj_contact_message_invalid_id', __('Identifiant message invalide.', 'mj-member'));
         }
 
+        if (self::recipients_table_exists()) {
+            $recipients_table = self::get_recipients_table_name();
+            $wpdb->delete($recipients_table, array('message_id' => $message_id), array('%d'));
+        }
+
         $result = $wpdb->delete($table, array('id' => $message_id), array('%d'));
         if ($result === false) {
             return new WP_Error('mj_contact_message_delete_failed', __('Suppression impossible.', 'mj-member'));
         }
 
         return true;
+    }
+
+    /**
+     * Save recipient entries for a message into the recipients table.
+     *
+     * Each entry must contain 'type' (string) and optionally 'reference' (int) and 'label' (string).
+     *
+     * @param int                       $message_id      The message ID.
+     * @param array<int,array<string,mixed>> $recipient_specs Array of recipient specifications.
+     * @return bool True on success, false if the table does not exist or specs are empty.
+     */
+    public static function save_recipients($message_id, array $recipient_specs) {
+        $log_prefix = '[save_recipients]';
+
+        if (!self::recipients_table_exists()) {
+            error_log("{$log_prefix} ABORT: recipients_table_exists() returned false");
+            return false;
+        }
+
+        $message_id = (int) $message_id;
+        if ($message_id <= 0 || empty($recipient_specs)) {
+            error_log("{$log_prefix} ABORT: message_id={$message_id}, specs_count=" . count($recipient_specs));
+            return false;
+        }
+
+        error_log("{$log_prefix} Saving {$message_id} with " . count($recipient_specs) . " specs");
+
+        global $wpdb;
+        $recipients_table = self::get_recipients_table_name();
+        $members_table_exists = class_exists('MjMembers');
+
+        $wpdb->delete($recipients_table, array('message_id' => $message_id), array('%d'));
+
+        foreach ($recipient_specs as $spec) {
+            if (!is_array($spec)) {
+                continue;
+            }
+
+            $type = isset($spec['type']) ? sanitize_key((string) $spec['type']) : '';
+            if ($type === '') {
+                continue;
+            }
+
+            $reference = isset($spec['reference']) ? (int) $spec['reference'] : 0;
+            if ($reference < 0) {
+                $reference = 0;
+            }
+
+            $label = isset($spec['label']) ? sanitize_text_field((string) $spec['label']) : '';
+
+            $member_id = 0;
+            $user_id = 0;
+
+            if ($reference > 0 && in_array($type, array(self::TARGET_ANIMATEUR, self::TARGET_COORDINATEUR, self::TARGET_MEMBER), true)) {
+                if ($members_table_exists) {
+                    $staff_member = \MjMembers::getById($reference);
+                    if ($staff_member && isset($staff_member->id)) {
+                        $member_id = (int) $staff_member->id;
+                        if (isset($staff_member->wp_user_id) && (int) $staff_member->wp_user_id > 0) {
+                            $user_id = (int) $staff_member->wp_user_id;
+                        }
+                    }
+                }
+            }
+
+            $wpdb->insert(
+                $recipients_table,
+                array(
+                    'message_id'          => $message_id,
+                    'recipient_type'      => $type,
+                    'recipient_reference' => $reference,
+                    'recipient_label'     => $label,
+                    'member_id'           => $member_id > 0 ? $member_id : null,
+                    'user_id'             => $user_id > 0 ? $user_id : null,
+                ),
+                array('%d', '%s', '%d', '%s', '%d', '%d')
+            );
+        }
+
+        return true;
+    }
+
+    /**
+     * Retrieve all recipient entries for a given message.
+     *
+     * Returns rows from the recipients table when available, otherwise falls back
+     * to reconstructing from the main message columns and meta.
+     *
+     * @param int|object $message Message ID or message row object.
+     * @return array<int,array{type:string,reference:int,label:string,member_id:int,user_id:int}>
+     */
+    public static function get_recipients($message) {
+        if (is_numeric($message)) {
+            $message = self::get((int) $message);
+        }
+
+        if (!is_object($message) || !isset($message->id)) {
+            return array();
+        }
+
+        $message_id = (int) $message->id;
+
+        if (self::recipients_table_exists()) {
+            global $wpdb;
+            $recipients_table = self::get_recipients_table_name();
+            $rows = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT recipient_type, recipient_reference, recipient_label, member_id, user_id FROM {$recipients_table} WHERE message_id = %d ORDER BY id ASC",
+                    $message_id
+                )
+            );
+
+            if (!empty($rows)) {
+                $result = array();
+                foreach ($rows as $row) {
+                    $result[] = array(
+                        'type'      => isset($row->recipient_type) ? sanitize_key((string) $row->recipient_type) : '',
+                        'reference' => isset($row->recipient_reference) ? (int) $row->recipient_reference : 0,
+                        'label'     => isset($row->recipient_label) ? sanitize_text_field((string) $row->recipient_label) : '',
+                        'member_id' => isset($row->member_id) ? (int) $row->member_id : 0,
+                        'user_id'   => isset($row->user_id) ? (int) $row->user_id : 0,
+                    );
+                }
+                return $result;
+            }
+        }
+
+        $recipients = array();
+        $seen = array();
+
+        $base_type = isset($message->target_type) ? sanitize_key((string) $message->target_type) : '';
+        $base_reference = isset($message->target_reference) ? (int) $message->target_reference : 0;
+        $base_label = isset($message->target_label) ? sanitize_text_field((string) $message->target_label) : '';
+
+        if (!empty($message->meta)) {
+            $meta = is_string($message->meta) ? json_decode($message->meta, true) : (is_array($message->meta) ? $message->meta : null);
+            if (is_array($meta) && !empty($meta['recipient_keys'])) {
+                $keys = explode('|', (string) $meta['recipient_keys']);
+                foreach ($keys as $raw_key) {
+                    $raw_key = trim($raw_key);
+                    if ($raw_key === '') {
+                        continue;
+                    }
+
+                    $type = $raw_key;
+                    $reference = 0;
+
+                    if (strpos($raw_key, ':') !== false) {
+                        list($raw_type, $raw_ref) = explode(':', $raw_key, 2);
+                        $type = sanitize_key($raw_type);
+                        $reference = (int) $raw_ref;
+                    } else {
+                        $type = sanitize_key($type);
+                    }
+
+                    $key = $type . '|' . $reference;
+                    if (isset($seen[$key])) {
+                        continue;
+                    }
+                    $seen[$key] = true;
+
+                    $label = '';
+                    if ($type === $base_type && $reference === $base_reference) {
+                        $label = $base_label;
+                    }
+
+                    $recipients[] = array(
+                        'type'      => $type,
+                        'reference' => $reference,
+                        'label'     => $label,
+                        'member_id' => 0,
+                        'user_id'   => 0,
+                    );
+                }
+            }
+        }
+
+        if (empty($recipients) && $base_type !== '') {
+            $recipients[] = array(
+                'type'      => $base_type,
+                'reference' => $base_reference,
+                'label'     => $base_label,
+                'member_id' => 0,
+                'user_id'   => 0,
+            );
+        }
+
+        return $recipients;
     }
 
     /**

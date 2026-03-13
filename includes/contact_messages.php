@@ -873,6 +873,10 @@ if (!function_exists('mj_member_handle_contact_message_submission')) {
             wp_send_json_error(array('message' => $created_message_id->get_error_message()), 500);
         }
 
+        if (count($recipient_specs) > 0) {
+            MjContactMessages::save_recipients((int) $created_message_id, $recipient_specs);
+        }
+
         $member_target_key = mj_member_contact_member_target_key();
         $notification_recipients = array();
         $staff_notification_recipients = array();
@@ -927,11 +931,13 @@ if (!function_exists('mj_member_handle_contact_message_submission')) {
                 'sender_email' => $sender_email,
             );
 
+            $notification_url = add_query_arg('mj_contact_msg', (int) $created_message_id, home_url('/mon-compte/messages/'));
+
             $notification_data = array(
                 'type' => 'message_received',
                 'title' => $notification_title,
                 'excerpt' => $notification_excerpt,
-                'url' => home_url('/mon-compte/messages/'),
+                'url' => $notification_url,
                 'payload' => $notification_payload,
                 'context' => 'contact',
                 'source' => 'contact_form',

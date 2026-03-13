@@ -207,10 +207,6 @@
 
         if ($input.is('[data-recipient-general]')) {
             $form.find('[data-recipient-staff]').prop('checked', isChecked);
-            if (!isChecked) {
-                $form.find('[data-recipient-youth-toggle]').prop('checked', false);
-                $form.find('[data-recipient-youth]').prop('checked', false);
-            }
         } else if ($input.is('[data-recipient-youth-toggle]')) {
             $form.find('[data-recipient-youth]').prop('checked', isChecked);
         }

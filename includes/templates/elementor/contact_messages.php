@@ -48,11 +48,17 @@ if (!$mj_contact_messages_styles_printed) {
             .'.mj-contact-messages__pagination-link--prev,.mj-contact-messages__pagination-link--next{gap:0.35rem;padding-inline:0.75rem;}'
             .'.mj-contact-messages__pagination-link--prev .mj-contact-messages__pagination-icon,.mj-contact-messages__pagination-link--next .mj-contact-messages__pagination-icon{font-size:0.9rem;line-height:1;}'
             .'.mj-contact-messages__pagination-link--prev.is-disabled .mj-contact-messages__pagination-icon,.mj-contact-messages__pagination-link--next.is-disabled .mj-contact-messages__pagination-icon{opacity:0.8;}'
+            .'.mj-contact-messages__back-link{display:inline-flex;align-items:center;gap:0.4rem;margin-bottom:1rem;padding:0.45rem 1rem;border-radius:999px;border:1px solid rgba(79,70,229,0.22);background:rgba(79,70,229,0.06);color:rgba(55,48,163,0.88);font-size:0.88rem;font-weight:600;text-decoration:none;transition:background 0.18s,border-color 0.18s,color 0.18s;}'
+            .'.mj-contact-messages__back-link:hover,.mj-contact-messages__back-link:focus-visible{background:rgba(79,70,229,0.14);border-color:rgba(79,70,229,0.35);color:#2e26a1;outline:none;}'
             .'</style>';
     }, 99);
 }
 
 $template_data = isset($template_data) && is_array($template_data) ? $template_data : array();
+
+$single_message_id = isset($template_data['single_message_id']) ? (int) $template_data['single_message_id'] : 0;
+$back_url = isset($template_data['back_url']) ? (string) $template_data['back_url'] : '';
+$is_single_view = $single_message_id > 0;
 
 $title = isset($template_data['title']) ? (string) $template_data['title'] : '';
 $description = isset($template_data['description']) ? (string) $template_data['description'] : '';
@@ -280,7 +286,13 @@ if ($notice_message !== '' && $notice_detail !== '') {
             </div>
         <?php endif; ?>
 
-        <?php if ($can_view) : ?>
+        <?php if ($is_single_view && $back_url !== '') : ?>
+            <a href="<?php echo esc_url($back_url); ?>" class="mj-contact-messages__back-link">
+                <span aria-hidden="true">&larr;</span> <?php esc_html_e('Retour aux messages', 'mj-member'); ?>
+            </a>
+        <?php endif; ?>
+
+        <?php if ($can_view && !$is_single_view) : ?>
             <div class="mj-contact-messages__toolbar" data-mj-element="toolbar">
                 <div class="mj-contact-messages__filters" role="group" aria-label="<?php esc_attr_e('Filtrer les messages', 'mj-member'); ?>">
                     <button type="button" class="mj-contact-messages__filter-button is-active" data-filter="all" aria-pressed="true"><?php esc_html_e('Tous', 'mj-member'); ?></button>
@@ -374,7 +386,7 @@ if ($notice_message !== '' && $notice_detail !== '') {
                     $recipient_choice = isset($message['recipient_choice']) ? (string) $message['recipient_choice'] : '';
                     $quick_reply_subject = isset($message['quick_reply_subject']) ? (string) $message['quick_reply_subject'] : '';
                     $quick_reply_available = $message_owner_view && $owner_reply_ready && $recipient_choice !== '';
-                    $panel_open = false;
+                    $panel_open = $is_single_view;
                     ?>
                     <li class="<?php echo esc_attr($item_classes); ?>" data-message-id="<?php echo esc_attr($message_id); ?>" data-status-key="<?php echo esc_attr($status_key); ?>" data-is-unread="<?php echo $is_unread ? '1' : '0'; ?>" data-is-archived="<?php echo $is_archived ? '1' : '0'; ?>" data-search="<?php echo esc_attr($search_terms); ?>">
                         <details class="mj-contact-messages__panel" data-message-id="<?php echo esc_attr($message_id); ?>"<?php echo $panel_open ? ' open' : ''; ?>>
@@ -590,10 +602,12 @@ if ($notice_message !== '' && $notice_detail !== '') {
                     </li>
                 <?php endforeach; ?>
             </ul>
+            <?php if (!$is_single_view) : ?>
             <div class="mj-contact-messages__filter-empty" data-mj-element="filter-empty" aria-live="polite" hidden>
                 <?php esc_html_e('Aucun message ne correspond à ces critères.', 'mj-member'); ?>
             </div>
-            <?php if ($pagination_total_items > 0) : ?>
+            <?php endif; ?>
+            <?php if ($pagination_total_items > 0 && !$is_single_view) : ?>
                 <nav class="mj-contact-messages__pagination" aria-label="<?php echo esc_attr__('Pagination des messages', 'mj-member'); ?>">
                     <div class="mj-contact-messages__pagination-info">
                         <?php

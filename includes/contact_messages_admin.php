@@ -149,6 +149,52 @@ if (!function_exists('mj_member_contact_messages_get_from_settings')) {
     }
 }
 
+if (!function_exists('mj_member_contact_messages_resolve_recipients_label')) {
+    /**
+     * Build a comma-separated label string for all recipients of a message.
+     *
+     * Falls back to the single target_label when no recipients rows exist.
+     *
+     * @param object $message  A contact-message row object.
+     * @return string  Human-readable recipient label(s).
+     */
+    function mj_member_contact_messages_resolve_recipients_label($message) {
+        $recipients = MjContactMessages::get_recipients($message);
+
+        if (empty($recipients)) {
+            return isset($message->target_label) && $message->target_label !== ''
+                ? sanitize_text_field((string) $message->target_label)
+                : __('Tous', 'mj-member');
+        }
+
+        $names = array();
+        foreach ($recipients as $r) {
+            $label = isset($r['label']) ? trim((string) $r['label']) : '';
+
+            // Try to resolve via member lookup when label is empty.
+            if ($label === '' && !empty($r['member_id'])) {
+                $member = MjMembers::getById((int) $r['member_id']);
+                if ($member && isset($member->last_name)) {
+                    $label = trim(($member->first_name ?? '') . ' ' . ($member->last_name ?? ''));
+                }
+            }
+
+            if ($label === '') {
+                $type = isset($r['type']) ? $r['type'] : '';
+                $target_labels = MjContactMessages::get_target_labels();
+                $label = isset($target_labels[$type]) ? $target_labels[$type] : $type;
+                if (!empty($r['reference'])) {
+                    $label .= ' #' . (int) $r['reference'];
+                }
+            }
+
+            $names[] = $label;
+        }
+
+        return implode(', ', array_unique(array_filter($names)));
+    }
+}
+
 if (!function_exists('mj_member_contact_messages_page')) {
     function mj_member_contact_messages_page() {
         $contactCapability = Config::contactCapability();
@@ -362,7 +408,7 @@ if (!function_exists('mj_member_render_contact_messages_list')) {
                             $subject = isset($message->subject) && $message->subject !== '' ? $message->subject : __('(Sans sujet)', 'mj-member');
                             $sender = isset($message->sender_name) ? $message->sender_name : '';
                             $sender_email = isset($message->sender_email) ? $message->sender_email : '';
-                            $target_label = isset($message->target_label) && $message->target_label !== '' ? $message->target_label : __('Tous', 'mj-member');
+                            $target_label = mj_member_contact_messages_resolve_recipients_label($message);
                             $assigned = '';
                             if (!empty($message->assigned_to)) {
                                 $assigned_user = get_user_by('id', (int) $message->assigned_to);
@@ -523,7 +569,7 @@ if (!function_exists('mj_member_render_contact_message_detail')) {
                         </form>
                     </p>
                     <p><strong><?php esc_html_e('Assigné à', 'mj-member'); ?> :</strong> <?php echo $assigned_user ? esc_html($assigned_user->display_name) : '&mdash;'; ?></p>
-                    <p><strong><?php esc_html_e('Destinataire', 'mj-member'); ?> :</strong> <?php echo isset($message->target_label) ? esc_html($message->target_label) : '&mdash;'; ?></p>
+                    <p><strong><?php esc_html_e('Destinataire(s)', 'mj-member'); ?> :</strong> <?php echo esc_html(mj_member_contact_messages_resolve_recipients_label($message)); ?></p>
                     <?php if (!empty($message->source_url)) : ?>
                         <p><strong><?php esc_html_e('Page d’origine', 'mj-member'); ?> :</strong> <a href="<?php echo esc_url($message->source_url); ?>" target="_blank" rel="noopener"><?php echo esc_html($message->source_url); ?></a></p>
                     <?php endif; ?>

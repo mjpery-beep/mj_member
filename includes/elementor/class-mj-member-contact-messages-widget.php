@@ -311,6 +311,8 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
 
         $show_unread_only = !empty($settings['show_unread_only']) && $settings['show_unread_only'] === 'yes';
 
+        $single_message_id = isset($_GET['mj_contact_msg']) ? (int) wp_unslash($_GET['mj_contact_msg']) : 0;
+
         $current_user_id = get_current_user_id();
         $is_logged_in = $current_user_id > 0;
         $can_moderate = current_user_can(Config::contactCapability()) && $is_logged_in;
@@ -421,11 +423,29 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
             $can_view = true;
         }
 
-        if ($should_query) {
+        if ($should_query && $single_message_id > 0) {
+            $single_msg = MjContactMessages::get($single_message_id);
+            if ($single_msg) {
+                $messages_payload = $this->format_messages_for_template(array($single_msg), $status_labels, array(
+                    'can_moderate' => $can_moderate,
+                    'include_activity' => true,
+                    'include_full' => true,
+                    'owner_view' => !$can_moderate,
+                    'activity_actions' => $can_moderate ? array() : array('reply_sent', 'reply_owner', 'note'),
+                ));
+                $total_items = 1;
+                $total_pages = 1;
+                $current_page = 1;
+            } else {
+                $single_message_id = 0;
+            }
+        }
+
+        if ($should_query && empty($messages_payload) && $single_message_id <= 0) {
             $common_args = array(
                 'read_state' => $show_unread_only ? 'unread' : '',
                 'include_assigned' => $can_moderate,
-                'include_all_targets' => false,
+                'include_all_targets' => $can_moderate,
                 'extra_targets' => $sanitized_targets,
                 'member_id' => $member_id,
                 'sender_email' => $current_user_email,
@@ -455,7 +475,7 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
                 'owner_view' => !$can_moderate,
                 'activity_actions' => $can_moderate ? array() : array('reply_sent', 'reply_owner', 'note'),
             ));
-        } else {
+        } elseif (!$should_query) {
             $current_page = 1;
         }
 
@@ -580,6 +600,11 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
         );
 
         $template_path = Config::path() . 'includes/templates/elementor/contact_messages.php';
+        $back_url = '';
+        if ($single_message_id > 0) {
+            $back_url = remove_query_arg('mj_contact_msg', $current_url);
+        }
+
         $template_data = array(
             'title' => $title,
             'description' => $description,
@@ -595,6 +620,8 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
             'redirect_base' => $redirect_base,
             'owner_reply' => $owner_reply,
             'pagination' => $pagination,
+            'single_message_id' => $single_message_id,
+            'back_url' => $back_url,
         );
 
         if (file_exists($template_path)) {
@@ -649,11 +676,47 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
             $excerpt = $full_message_raw !== '' ? wp_trim_words(wp_strip_all_tags($full_message_raw), 18, '...') : '';
             $target_label = isset($message->target_label) ? sanitize_text_field((string) $message->target_label) : '';
             $target_type = isset($message->target_type) ? sanitize_key((string) $message->target_type) : '';
-            if ($target_type === MjContactMessages::TARGET_ALL) {
+
+            $all_recipients = MjContactMessages::get_recipients($message);
+            if (count($all_recipients) > 1) {
+                $recipient_labels = array();
+                foreach ($all_recipients as $r) {
+                    $lbl = isset($r['label']) ? trim((string) $r['label']) : '';
+                    if ($lbl === '') {
+                        $target_labels_map = MjContactMessages::get_target_labels();
+                        $r_type = isset($r['type']) ? (string) $r['type'] : '';
+                        $r_ref = isset($r['reference']) ? (int) $r['reference'] : 0;
+                        if ($r_type === MjContactMessages::TARGET_ALL) {
+                            $lbl = __('Toute l\'équipe', 'mj-member');
+                        } elseif ($r_ref > 0 && class_exists('MjMembers')) {
+                            $r_member = \MjMembers::getById($r_ref);
+                            if ($r_member) {
+                                $first = isset($r_member->first_name) ? trim((string) $r_member->first_name) : '';
+                                $last = isset($r_member->last_name) ? trim((string) $r_member->last_name) : '';
+                                $lbl = trim($first . ' ' . $last);
+                            }
+                            if ($lbl === '') {
+                                $lbl = isset($target_labels_map[$r_type]) ? $target_labels_map[$r_type] . ' #' . $r_ref : $r_type . ':' . $r_ref;
+                            }
+                        } elseif (isset($target_labels_map[$r_type])) {
+                            $lbl = $target_labels_map[$r_type];
+                        } else {
+                            $lbl = $r_type;
+                        }
+                    }
+                    if ($lbl !== '' && !in_array($lbl, $recipient_labels, true)) {
+                        $recipient_labels[] = $lbl;
+                    }
+                }
+                if (!empty($recipient_labels)) {
+                    $target_label = implode(', ', $recipient_labels);
+                }
+            } elseif ($target_type === MjContactMessages::TARGET_ALL) {
                 if ($target_label === '' || $target_label === __('Tous les destinataires', 'mj-member')) {
                     $target_label = __('Toute l\'équipe', 'mj-member');
                 }
             }
+
             $is_unread = MjContactMessages::is_unread($message);
             $reply_subject = $subject !== '' ? sprintf(__('Re: %s', 'mj-member'), $subject) : __('Réponse à votre message', 'mj-member');
             $activity_entries = array();
@@ -833,6 +896,23 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
     private static function build_recipient_choice($message) {
         if (!isset($message->target_type)) {
             return '';
+        }
+
+        $all_recipients = MjContactMessages::get_recipients($message);
+        if (count($all_recipients) > 1) {
+            $choices = array();
+            foreach ($all_recipients as $r) {
+                $type = isset($r['type']) ? sanitize_key((string) $r['type']) : '';
+                if ($type === '') {
+                    continue;
+                }
+                $reference = isset($r['reference']) ? (int) $r['reference'] : 0;
+                $choice = $reference > 0 ? $type . ':' . $reference : $type;
+                if (!in_array($choice, $choices, true)) {
+                    $choices[] = $choice;
+                }
+            }
+            return implode(',', $choices);
         }
 
         $target_type = sanitize_key((string) $message->target_type);
