@@ -981,10 +981,23 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 4px;
     padding: 6px 8px;
     background: rgba(26, 45, 71, 0.03);
     border-top: 1px solid rgba(26, 45, 71, 0.08);
     min-height: 28px;
+}
+
+.mj-hour-encode-calendar__day-encoded {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(42, 85, 255, 0.8);
+    white-space: nowrap;
+}
+
+.mj-hour-encode-calendar__day-footer-sep {
+    font-size: 11px;
+    color: rgba(26, 45, 71, 0.3);
 }
 
 .mj-hour-encode-calendar__day-contractual {

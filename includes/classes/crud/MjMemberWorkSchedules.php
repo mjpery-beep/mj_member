@@ -92,6 +92,46 @@ class MjMemberWorkSchedules extends MjTools
     }
 
     /**
+     * Get all work schedules for multiple members at once.
+     *
+     * @param int[] $memberIds Array of member IDs
+     * @return array<int, array<object>> Schedules grouped by member_id
+     */
+    public static function get_all_for_members(array $memberIds): array
+    {
+        $memberIds = array_values(array_unique(array_filter(array_map('intval', $memberIds), static function (int $v): bool {
+            return $v > 0;
+        })));
+
+        if (empty($memberIds)) {
+            return array();
+        }
+
+        global $wpdb;
+        $table = self::table();
+        $placeholders = implode(',', array_fill(0, count($memberIds), '%d'));
+        $sql = "SELECT * FROM {$table} WHERE member_id IN ({$placeholders}) ORDER BY member_id, start_date DESC";
+        $prepared = call_user_func_array(array($wpdb, 'prepare'), array_merge(array($sql), $memberIds));
+        $rows = $wpdb->get_results($prepared);
+
+        $grouped = array();
+        if (is_array($rows)) {
+            foreach ($rows as $row) {
+                $mid = isset($row->member_id) ? (int) $row->member_id : 0;
+                if ($mid <= 0) {
+                    continue;
+                }
+                if (!isset($grouped[$mid])) {
+                    $grouped[$mid] = array();
+                }
+                $grouped[$mid][] = $row;
+            }
+        }
+
+        return $grouped;
+    }
+
+    /**
      * Check if dates overlap with existing schedules for a member.
      *
      * @param int $member_id Member ID

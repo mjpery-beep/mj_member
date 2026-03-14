@@ -123,6 +123,73 @@ class EventPageController extends Controller
     protected function enqueueAssets(): void
     {
         AssetsManager::requirePackage('event-page');
+
+        // Load testimonials assets for the submission form
+        AssetsManager::requirePackage('testimonials');
+        $this->localizeTestimonialsScript();
+    }
+
+    /**
+     * Localize the testimonials script with data needed for the event page form
+     */
+    private function localizeTestimonialsScript(): void
+    {
+        $model = isset($this->payload['model']) && is_array($this->payload['model'])
+            ? $this->payload['model']
+            : array();
+
+        $user = isset($model['user']) && is_array($model['user'])
+            ? $model['user']
+            : array();
+
+        $event = isset($model['event']) && is_array($model['event'])
+            ? $model['event']
+            : array();
+
+        $isLoggedIn = !empty($user['is_logged_in']);
+        $memberId = isset($user['member_id']) ? (int) $user['member_id'] : 0;
+        $eventSlug = isset($event['slug']) ? (string) $event['slug'] : '';
+
+        $reactionTypes = array();
+        if (class_exists('Mj\Member\Classes\Crud\MjTestimonialReactions')) {
+            $reactionTypes = \Mj\Member\Classes\Crud\MjTestimonialReactions::get_reaction_types();
+        }
+
+        $data = array(
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('mj-testimonial-submit'),
+            'isLoggedIn' => $isLoggedIn,
+            'memberId' => $memberId,
+            'perPage' => 6,
+            'maxPhotos' => 5,
+            'allowVideo' => true,
+            'maxVideoSize' => min(100 * 1024 * 1024, wp_max_upload_size()),
+            'reactionTypes' => $reactionTypes,
+            'eventSlug' => $eventSlug,
+            'i18n' => array(
+                'submitSuccess' => __('Merci pour votre témoignage ! Il sera visible après validation.', 'mj-member'),
+                'submitError' => __('Une erreur est survenue. Veuillez réessayer.', 'mj-member'),
+                'uploading' => __('Envoi en cours...', 'mj-member'),
+                'submit' => __('Envoyer mon témoignage', 'mj-member'),
+                'addPhoto' => __('Ajouter une photo', 'mj-member'),
+                'addVideo' => __('Enregistrer une vidéo', 'mj-member'),
+                'removePhoto' => __('Supprimer', 'mj-member'),
+                'maxPhotosReached' => sprintf(__('Maximum %d photos', 'mj-member'), 5),
+                'textPlaceholder' => __('Partagez votre expérience...', 'mj-member'),
+                'loginRequired' => __('Connectez-vous pour partager votre témoignage.', 'mj-member'),
+                'videoRecording' => __('Enregistrement...', 'mj-member'),
+                'videoStop' => __('Arrêter', 'mj-member'),
+                'videoRetake' => __('Recommencer', 'mj-member'),
+                'videoUse' => __('Utiliser cette vidéo', 'mj-member'),
+                'videoUploading' => __('Upload de la vidéo en cours...', 'mj-member'),
+                'videoTooLarge' => __('La vidéo est trop volumineuse.', 'mj-member'),
+                'videoUploadError' => __('Echec de l\'upload vidéo. Veuillez réessayer.', 'mj-member'),
+                'loadMore' => __('Voir plus', 'mj-member'),
+                'noTestimonials' => __('Aucun témoignage pour le moment.', 'mj-member'),
+            ),
+        );
+
+        wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $data);
     }
 
     /**

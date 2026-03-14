@@ -27,13 +27,15 @@
      * ================================================================ */
 
     function EmployeeDropZone(_ref) {
-        var employee = _ref.employee, year = _ref.year, month = _ref.month, cfg = _ref.cfg, i18n = _ref.i18n, onUploaded = _ref.onUploaded;
+        var employee = _ref.employee, year = _ref.year, month = _ref.month, docType = _ref.docType, cfg = _ref.cfg, i18n = _ref.i18n, onUploaded = _ref.onUploaded;
 
         var _s = useState('idle'); // idle | dragover | uploading | done | error
         var status = _s[0], setStatus = _s[1];
         var _m = useState('');
         var message = _m[0], setMessage = _m[1];
         var fileRef = useRef(null);
+
+        var isPayslip = docType === 'payslip';
 
         var handleFile = useCallback(function (file) {
             if (!file) return;
@@ -57,9 +59,15 @@
             fd.append('action', 'mj_empdocs_upload');
             fd.append('nonce', cfg.nonce);
             fd.append('memberId', employee.id);
-            fd.append('docType', 'payslip');
-            fd.append('payslipMonth', month);
-            fd.append('payslipYear', year);
+            fd.append('docType', docType);
+            if (isPayslip) {
+                fd.append('payslipMonth', month);
+                fd.append('payslipYear', year);
+            } else {
+                // For non-payslip types, use today's date and original filename as label
+                fd.append('documentDate', new Date().toISOString().slice(0, 10));
+                fd.append('label', file.name.replace(/\.[^.]+$/, ''));
+            }
             fd.append('file', file);
 
             post(cfg.ajaxUrl, fd).then(function (res) {
@@ -76,7 +84,7 @@
                 setStatus('error');
                 setMessage(i18n.uploadError);
             });
-        }, [employee, year, month, cfg, i18n, onUploaded]);
+        }, [employee, year, month, docType, isPayslip, cfg, i18n, onUploaded]);
 
         var onDragOver = useCallback(function (e) {
             e.preventDefault();
@@ -143,11 +151,21 @@
     function BulkUploadPanel(_ref) {
         var employees = _ref.employees, cfg = _ref.cfg, i18n = _ref.i18n;
 
+        var docTypes = cfg.docTypes || [
+            { value: 'payslip', label: 'Fiche de paie' },
+            { value: 'contract', label: 'Emploi' },
+            { value: 'misc', label: 'Divers' },
+        ];
+
         var now = new Date();
+        var _dt = useState(docTypes[0].value);
+        var docType = _dt[0], setDocType = _dt[1];
         var _y = useState(now.getFullYear());
         var year = _y[0], setYear = _y[1];
         var _mo = useState(now.getMonth() + 1);
         var month = _mo[0], setMonth = _mo[1];
+
+        var isPayslip = docType === 'payslip';
 
         var _uploads = useState([]);
         var recentUploads = _uploads[0], setRecentUploads = _uploads[1];
@@ -170,6 +188,18 @@
                 ),
                 h('div', { className: 'mj-payslip__selectors' },
                     h('div', { className: 'mj-payslip__selector' },
+                        h('label', { className: 'mj-payslip__selector-label' }, i18n.docTypeLabel || 'Type de document'),
+                        h('select', {
+                            className: 'mj-payslip__select',
+                            value: docType,
+                            onChange: function (e) { setDocType(e.target.value); }
+                        },
+                            docTypes.map(function (dt) {
+                                return h('option', { key: dt.value, value: dt.value }, dt.label);
+                            })
+                        )
+                    ),
+                    isPayslip ? h('div', { className: 'mj-payslip__selector' },
                         h('label', { className: 'mj-payslip__selector-label' }, i18n.year),
                         h('select', {
                             className: 'mj-payslip__select',
@@ -178,8 +208,8 @@
                         },
                             years.map(function (y) { return h('option', { key: y, value: y }, y); })
                         )
-                    ),
-                    h('div', { className: 'mj-payslip__selector' },
+                    ) : null,
+                    isPayslip ? h('div', { className: 'mj-payslip__selector' },
                         h('label', { className: 'mj-payslip__selector-label' }, i18n.month),
                         h('select', {
                             className: 'mj-payslip__select',
@@ -190,13 +220,13 @@
                                 return h('option', { key: idx + 1, value: idx + 1 }, name);
                             })
                         )
-                    )
+                    ) : null
                 ),
                 h('div', { className: 'mj-payslip__dropzones' },
                     employees.map(function (emp) {
                         return h(EmployeeDropZone, {
-                            key: emp.id, employee: emp, year: year, month: month,
-                            cfg: cfg, i18n: i18n, onUploaded: handleUploaded
+                            key: emp.id + '-' + docType, employee: emp, year: year, month: month,
+                            docType: docType, cfg: cfg, i18n: i18n, onUploaded: handleUploaded
                         });
                     })
                 ),

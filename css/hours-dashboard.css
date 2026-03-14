@@ -1,0 +1,358 @@
+/**
+ * MJ Member – Hours Dashboard front-end widget styles.
+ *
+ * Uses the .mj-hd- prefix to avoid collisions with the admin dashboard.
+ */
+
+/* ── Widget wrapper ── */
+
+.mj-hours-dashboard-widget {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.mj-hours-dashboard-widget--restricted {
+    padding: 2rem;
+    text-align: center;
+    color: #64748b;
+    font-size: 0.95rem;
+}
+
+.mj-hours-dashboard-widget__updated {
+    margin: 0 0 0.75rem;
+    color: #6b7280;
+    font-size: 0.875rem;
+}
+
+.mj-hours-dashboard-front {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+/* ── Content layout ── */
+
+.mj-hd__content {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+/* ── Summary cards grid ── */
+
+.mj-hd__summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.25rem;
+}
+
+/* ── Card base ── */
+
+.mj-hd-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.mj-hd-card__heading {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0;
+}
+
+.mj-hd-card__title {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #64748b;
+    margin: 0;
+}
+
+.mj-hd-card__value {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0;
+}
+
+.mj-hd-card__meta {
+    font-size: 0.85rem;
+    color: #6b7280;
+    margin: 0;
+}
+
+.mj-hd-card__subtitle {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin: 0;
+}
+
+/* ── Grids ── */
+
+.mj-hd__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+}
+
+.mj-hd__grid--timeseries {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+/* ── Donut chart ── */
+
+.mj-hd-donut {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+    text-align: center;
+}
+
+.mj-hd-donut__title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0;
+}
+
+.mj-hd-donut__canvas {
+    position: relative;
+    width: 220px;
+    height: 220px;
+}
+
+.mj-hd-donut__canvas canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.mj-hd-donut__center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+}
+
+.mj-hd-donut__center-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0;
+}
+
+.mj-hd-donut__center-label {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin: 0;
+}
+
+.mj-hd-donut__legend {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.mj-hd-donut__legend-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    font-size: 0.875rem;
+    color: #0f172a;
+}
+
+.mj-hd-donut__legend-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.mj-hd-donut__legend-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    flex-shrink: 0;
+}
+
+/* ── Bar chart ── */
+
+.mj-hd-bar-chart {
+    min-height: 340px;
+}
+
+.mj-hd-bar-chart__canvas {
+    position: relative;
+    flex: 1;
+    min-height: 280px;
+}
+
+.mj-hd-bar-chart__canvas canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* ── Member selector ── */
+
+.mj-hd__select {
+    align-self: flex-start;
+    width: 100%;
+    max-width: 340px;
+}
+
+.mj-hd__select label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #475569;
+    margin-bottom: 0.5rem;
+}
+
+.mj-hd__select select {
+    width: 100%;
+    padding: 0.75rem 0.85rem;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    font-size: 0.95rem;
+    color: #0f172a;
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+}
+
+.mj-hd__select select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.mj-hd__select-helper {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+/* ── Tabs ── */
+
+.mj-hd__tabs {
+    display: flex;
+    gap: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    margin-top: 1rem;
+}
+
+.mj-hd__tab {
+    background: transparent;
+    border: none;
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #64748b;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.mj-hd__tab:hover {
+    color: #1f2937;
+}
+
+.mj-hd__tab:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+    border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.mj-hd__tab--active {
+    color: #1f2937;
+    border-color: #3b82f6;
+}
+
+/* ── Graphs panel ── */
+
+.mj-hd__graphs {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+/* ── Editor embed ── */
+
+.mj-hd__editor-card {
+    padding: 1.5rem;
+}
+
+.mj-hd__editor-card .mj-hour-encode {
+    width: 100%;
+}
+
+/* ── Members table ── */
+
+.mj-hd__table-card {
+    overflow: hidden;
+}
+
+.mj-hd__table-card table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.mj-hd__table-card thead {
+    background: #f8fafc;
+}
+
+.mj-hd__table-card th,
+.mj-hd__table-card td {
+    padding: 0.85rem 1.25rem;
+    text-align: left;
+    font-size: 0.95rem;
+    color: #0f172a;
+}
+
+.mj-hd__table-card th {
+    font-weight: 600;
+    color: #475569;
+}
+
+.mj-hd__table-card tbody tr:nth-child(even) {
+    background: #f8fafc;
+}
+
+/* ── Empty state ── */
+
+.mj-hd__empty {
+    font-size: 0.95rem;
+    color: #6b7280;
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 640px) {
+    .mj-hd-donut__canvas {
+        width: 180px;
+        height: 180px;
+    }
+
+    .mj-hd__summary {
+        grid-template-columns: 1fr;
+    }
+
+    .mj-hd__grid,
+    .mj-hd__grid--timeseries {
+        grid-template-columns: 1fr;
+    }
+
+    .mj-hd-card__value {
+        font-size: 1.5rem;
+    }
+}

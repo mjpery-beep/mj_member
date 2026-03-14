@@ -696,10 +696,29 @@ final class EventPageViewBuilder
 
         $allUrl = home_url('/mon-compte/temoignages/');
 
+        // Form data for testimonial submission
+        $user = isset($this->model['user']) && is_array($this->model['user'])
+            ? $this->model['user']
+            : array();
+
+        $event = isset($this->model['event']) && is_array($this->model['event'])
+            ? $this->model['event']
+            : array();
+
+        $isLoggedIn = !empty($user['is_logged_in']);
+        $eventSlug = isset($event['slug']) ? (string) $event['slug'] : '';
+        $eventTitle = isset($event['title']) ? (string) $event['title'] : '';
+
         return array(
             'items' => $items,
             'total' => $total,
             'all_url' => $allUrl,
+            'allow_submission' => true,
+            'is_logged_in' => $isLoggedIn,
+            'event_slug' => $eventSlug,
+            'event_title' => $eventTitle,
+            'max_photos' => 5,
+            'allow_video' => true,
         );
     }
 

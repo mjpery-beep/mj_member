@@ -101,6 +101,8 @@ if ($isPreview) {
 /* ------------------------------------------------------------------ *
  * Build config JSON                                                   *
  * ------------------------------------------------------------------ */
+use Mj\Member\Classes\Crud\MjEmployeeDocuments;
+
 $config = array(
     'title'         => $title,
     'hasAccess'     => $hasAccess,
@@ -109,8 +111,14 @@ $config = array(
     'nonce'         => wp_create_nonce('mj_employee_documents'),
     'ajaxUrl'       => admin_url('admin-ajax.php'),
     'employees'     => $employees,
+    'docTypes'      => array(
+        array('value' => MjEmployeeDocuments::TYPE_PAYSLIP,  'label' => __('Fiche de paie', 'mj-member')),
+        array('value' => MjEmployeeDocuments::TYPE_CONTRACT, 'label' => __('Emploi', 'mj-member')),
+        array('value' => MjEmployeeDocuments::TYPE_MISC,     'label' => __('Divers', 'mj-member')),
+    ),
     'i18n'          => array(
-        'uploadTitle'    => __('Ajouter des fiches de paie', 'mj-member'),
+        'uploadTitle'    => __('Ajouter des documents', 'mj-member'),
+        'docTypeLabel'   => __('Type de document', 'mj-member'),
         'year'           => __('Année', 'mj-member'),
         'month'          => __('Mois', 'mj-member'),
         'dropHint'       => __('Glissez un fichier PDF ici', 'mj-member'),

@@ -1550,9 +1550,8 @@
     flex-shrink: 0;
     width: 72px;
     height: 72px;
-    border-radius: 50%;
+    
     overflow: hidden;
-    background: var(--mj-event-accent);
     color: var(--mj-event-contrast);
     display: flex;
     align-items: center;
@@ -1898,6 +1897,65 @@
 /* =====================================================
    Testimonials Section
    ===================================================== */
+
+/* Testimonial form section inside event page */
+.mj-event-page__testimonials-form-section {
+    margin-bottom: 1.5rem;
+}
+
+.mj-event-page__testimonials-form-section .mj-testimonials__form {
+    background: var(--mj-event-surface);
+    border: 1px solid var(--mj-event-border);
+    border-radius: var(--mj-event-radius);
+    padding: 1rem 1.25rem;
+}
+
+.mj-event-page__testimonials-form-section .mj-testimonials__textarea {
+    width: 100%;
+    border: 1px solid var(--mj-event-border);
+    border-radius: var(--mj-event-radius-sm);
+    padding: 0.75rem;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    resize: vertical;
+    font-family: inherit;
+    color: var(--mj-event-text);
+    background: var(--mj-event-surface-alt);
+    transition: border-color var(--mj-event-transition);
+    box-sizing: border-box;
+}
+
+.mj-event-page__testimonials-form-section .mj-testimonials__textarea:focus {
+    outline: none;
+    border-color: var(--mj-event-accent);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.mj-event-page__testimonials-form-section .mj-testimonials__media-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.mj-event-page__testimonials-form-section .mj-testimonials__form-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.mj-event-page__testimonials-form-section .mj-testimonials__login-prompt {
+    text-align: center;
+    padding: 1rem;
+    background: var(--mj-event-surface-alt);
+    border: 1px solid var(--mj-event-border);
+    border-radius: var(--mj-event-radius);
+    color: var(--mj-event-text-muted);
+    font-size: 0.9rem;
+}
+
 .mj-event-page__testimonials-header {
     display: flex;
     align-items: center;

@@ -3174,6 +3174,29 @@
                             var dayContractualMinutes = getDayContractualMinutes(day.weekday);
                             var dayContractualLabel = dayContractualMinutes > 0 ? formatTotalMinutes(dayContractualMinutes, labels) : null;
 
+                            // Calculer le total des heures encodées pour la journée
+                            var dayEncodedMinutes = 0;
+                            if (Array.isArray(day.events)) {
+                                day.events.forEach(function(ev) {
+                                    if (ev.kind !== 'entry' && !ev.isEntry) return;
+                                    if (Number.isFinite(ev.durationMinutes)) {
+                                        dayEncodedMinutes += Math.max(0, Math.round(ev.durationMinutes));
+                                    } else if (ev.position && Number.isFinite(ev.position.height)) {
+                                        dayEncodedMinutes += Math.max(0, Math.round(ev.position.height * MINUTES_PER_PIXEL));
+                                    } else {
+                                        var evSrc = ev.source || {};
+                                        if (evSrc.start && evSrc.end) {
+                                            var evS = parseDateTime(evSrc.start);
+                                            var evE = parseDateTime(evSrc.end);
+                                            if (isValidDate(evS) && isValidDate(evE) && evE > evS) {
+                                                dayEncodedMinutes += Math.round((evE - evS) / 60000);
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                            var dayEncodedLabel = dayEncodedMinutes > 0 ? formatTotalMinutes(dayEncodedMinutes, labels) : null;
+
                             return h('div', { key: day.iso, className: dayClass }, [
                                 h('div', {
                                     className: 'mj-hour-encode-calendar__day-body'
@@ -3210,10 +3233,12 @@
                                         onTouchCancel: handleTouchEnd
                                     }, [hourLabels].concat(canvasChildren))
                                 ]),
-                                dayContractualLabel ? h('div', {
+                                (dayContractualLabel || dayEncodedLabel) ? h('div', {
                                     className: 'mj-hour-encode-calendar__day-footer'
                                 }, [
-                                    h('span', { className: 'mj-hour-encode-calendar__day-contractual' }, dayContractualLabel)
+                                    dayEncodedLabel ? h('span', { className: 'mj-hour-encode-calendar__day-encoded' }, dayEncodedLabel) : null,
+                                    (dayEncodedLabel && dayContractualLabel) ? h('span', { className: 'mj-hour-encode-calendar__day-footer-sep' }, '/') : null,
+                                    dayContractualLabel ? h('span', { className: 'mj-hour-encode-calendar__day-contractual' }, dayContractualLabel) : null
                                 ]) : null
                             ]);
                         });

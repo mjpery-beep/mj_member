@@ -1026,6 +1026,12 @@
                     formData.append('link_preview', JSON.stringify(this.linkPreview));
                 }
 
+                // Pass event_slug when form is on an event page
+                const eventSlug = this.$form.attr('data-event-slug') || config.eventSlug || '';
+                if (eventSlug) {
+                    formData.append('event_slug', eventSlug);
+                }
+
                 const response = await $.ajax({
                     url: config.ajaxUrl,
                     method: 'POST',

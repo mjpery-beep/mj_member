@@ -29,8 +29,20 @@ function mj_front_testimonial_submit_handler() {
 
     $member_id = (int) $current_member->id;
 
+    // Parse event slug (from EventPage submissions)
+    $event_slug = isset($_POST['event_slug']) ? sanitize_title(wp_unslash($_POST['event_slug'])) : '';
+
     // Parse content
     $content = isset($_POST['content']) ? wp_kses_post(wp_unslash($_POST['content'])) : '';
+
+    // Prepend @slug to content when submitted from an event page
+    if ($event_slug !== '' && $content !== '') {
+        $mention = '@' . $event_slug;
+        // Only prepend if not already present
+        if (strpos($content, $mention) === false) {
+            $content = $mention . ' ' . $content;
+        }
+    }
 
     // Parse photo IDs
     $photo_ids = array();
@@ -65,14 +77,21 @@ function mj_front_testimonial_submit_handler() {
     $initial_status = $is_trusted ? MjTestimonials::STATUS_APPROVED : MjTestimonials::STATUS_PENDING;
 
     // Create testimonial
-    $result = MjTestimonials::create(array(
+    $create_data = array(
         'member_id' => $member_id,
         'content' => $content,
         'photo_ids' => $photo_ids,
         'video_id' => $video_id > 0 ? $video_id : null,
         'link_preview' => $link_preview,
         'status' => $initial_status,
-    ));
+    );
+
+    // Attach event_slug when submitted from an event page
+    if ($event_slug !== '') {
+        $create_data['event_slug'] = $event_slug;
+    }
+
+    $result = MjTestimonials::create($create_data);
 
     if (is_wp_error($result)) {
         wp_send_json_error($result->get_error_message(), 500);

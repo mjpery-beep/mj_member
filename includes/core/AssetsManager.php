@@ -444,6 +444,10 @@ final class AssetsManager
 
         // Job Profile Widget
         self::registerStyle('mj-member-job-profile', 'css/job-profile.css', array('mj-member-components'));
+
+        // Hours Dashboard Widget (front-end for coordinators)
+        self::registerScript('mj-member-hours-dashboard', 'js/elementor/hours-dashboard.js', array('mj-member-utils'));
+        self::registerStyle('mj-member-hours-dashboard', 'css/hours-dashboard.css', array('mj-member-components'));
     }
 
     /**
@@ -717,6 +721,14 @@ final class AssetsManager
             case 'job-profile':
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-job-profile');
+                break;
+
+            case 'hours-dashboard':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-hours-dashboard');
+                wp_enqueue_style('mj-member-hour-encode');
+                wp_enqueue_script('mj-member-hours-dashboard');
+                wp_enqueue_script('mj-member-hour-encode');
                 break;
 
             default:

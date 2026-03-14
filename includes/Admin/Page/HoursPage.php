@@ -388,7 +388,12 @@ final class HoursPage
 
         $monthlySeries = self::prepareMonthlySeries($monthlyTotals, $monthlySeriesLimit);
         $weeklySeries = self::prepareWeeklySeries($weeklyTotals, $weeklySeriesLimit);
-        $weeklySeries = self::augmentWeeklySeriesWithExpectations($weeklySeries, $contractMinutesByMember, $aggregateWeeklyContractMinutes);
+
+        // Load all work schedule periods for all members so we can resolve the
+        // correct expected hours for each individual week (instead of applying
+        // the currently-active schedule to every week).
+        $allSchedulesByMember = self::loadAllSchedulesByMember($memberIdsForSeries);
+        $weeklySeries = self::augmentWeeklySeriesWithExpectations($weeklySeries, $contractMinutesByMember, $aggregateWeeklyContractMinutes, $allSchedulesByMember);
 
         $weeklyBalanceByMember = array();
         if (isset($weeklySeries['by_member']) && is_array($weeklySeries['by_member'])) {
@@ -708,14 +713,38 @@ final class HoursPage
         return array_values($series);
     }
 
-    private static function augmentWeeklySeriesWithExpectations(array $seriesData, array $contractMinutesByMember, int $aggregateContractMinutes): array
+    /**
+     * @param array<int, array<object>> $allSchedulesByMember  All work-schedule periods keyed by member ID.
+     */
+    private static function augmentWeeklySeriesWithExpectations(array $seriesData, array $contractMinutesByMember, int $aggregateContractMinutes, array $allSchedulesByMember = array()): array
     {
-        $seriesData['all'] = self::applyWeeklyExpectationToSeries($seriesData['all'], $aggregateContractMinutes);
+        $hasSchedules = !empty($allSchedulesByMember);
+
+        if ($hasSchedules) {
+            // Resolve expected minutes per week from the schedule that was
+            // active during that particular week (source #2).
+            $seriesData['all'] = self::applyWeeklyExpectationToSeriesFromSchedules(
+                $seriesData['all'],
+                $allSchedulesByMember,
+                array_keys($contractMinutesByMember)
+            );
+        } else {
+            $seriesData['all'] = self::applyWeeklyExpectationToSeries($seriesData['all'], $aggregateContractMinutes);
+        }
 
         $decoratedByMember = array();
         foreach ($seriesData['by_member'] as $memberId => $memberSeries) {
-            $expected = isset($contractMinutesByMember[$memberId]) ? (int) $contractMinutesByMember[$memberId] : 0;
-            $decoratedByMember[$memberId] = self::applyWeeklyExpectationToSeries($memberSeries, $expected);
+            if ($hasSchedules) {
+                $memberSchedules = isset($allSchedulesByMember[$memberId]) ? $allSchedulesByMember[$memberId] : array();
+                $decoratedByMember[$memberId] = self::applyWeeklyExpectationToSeriesFromSchedules(
+                    $memberSeries,
+                    array($memberId => $memberSchedules),
+                    array($memberId)
+                );
+            } else {
+                $expected = isset($contractMinutesByMember[$memberId]) ? (int) $contractMinutesByMember[$memberId] : 0;
+                $decoratedByMember[$memberId] = self::applyWeeklyExpectationToSeries($memberSeries, $expected);
+            }
         }
 
         $seriesData['by_member'] = $decoratedByMember;
@@ -753,6 +782,124 @@ final class HoursPage
         unset($item);
 
         return $series;
+    }
+
+    /**
+     * Apply weekly expectations by resolving the work schedule that was active
+     * during each specific week, instead of using a fixed value.
+     *
+     * @param array              $series               The weekly series items (each with a 'key' like '2026-W10').
+     * @param array<int, array>  $allSchedulesByMember  All schedule rows grouped by member ID.
+     * @param array<int>         $memberIds             Member IDs to consider for aggregate sums.
+     * @return array
+     */
+    private static function applyWeeklyExpectationToSeriesFromSchedules(array $series, array $allSchedulesByMember, array $memberIds): array
+    {
+        foreach ($series as &$item) {
+            $weekKey = isset($item['key']) ? (string) $item['key'] : '';
+            $weekDate = self::weekKeyToDate($weekKey);
+
+            $expectedTotal = 0;
+            if ($weekDate !== null) {
+                foreach ($memberIds as $memberId) {
+                    $memberId = (int) $memberId;
+                    $memberSchedules = isset($allSchedulesByMember[$memberId]) ? $allSchedulesByMember[$memberId] : array();
+                    $expectedTotal += self::resolveContractMinutesAtDate($memberSchedules, $weekDate);
+                }
+            }
+
+            $actual = isset($item['minutes']) ? max(0, (int) $item['minutes']) : 0;
+            $expected = max(0, $expectedTotal);
+            $required = $expected > 0 ? min($actual, $expected) : $actual;
+            $extra = $actual > $expected ? $actual - $expected : 0;
+            $deficit = ($expected > 0 && $actual < $expected) ? $expected - $actual : 0;
+            $difference = $actual - $expected;
+
+            $item['expected_minutes'] = $expected;
+            $item['expected_human'] = self::formatDuration($expected);
+            $item['required_minutes'] = $required;
+            $item['required_human'] = self::formatDuration($required);
+            $item['extra_minutes'] = $extra;
+            $item['extra_human'] = self::formatDuration($extra);
+            $item['deficit_minutes'] = $deficit;
+            $item['deficit_human'] = self::formatDuration($deficit);
+            $item['difference_minutes'] = $difference;
+            $item['difference_human'] = $difference === 0 ? '0 min' : sprintf(
+                '%s%s',
+                $difference > 0 ? '+' : '-',
+                self::formatDuration(abs($difference))
+            );
+        }
+        unset($item);
+
+        return $series;
+    }
+
+    /**
+     * Load all work-schedule periods for a set of members.
+     *
+     * @param int[] $memberIds
+     * @return array<int, array<object>>  Keyed by member ID, each value is an array of schedule row objects.
+     */
+    private static function loadAllSchedulesByMember(array $memberIds): array
+    {
+        if (!class_exists(MjMemberWorkSchedules::class)) {
+            return array();
+        }
+
+        return MjMemberWorkSchedules::get_all_for_members($memberIds);
+    }
+
+    /**
+     * Resolve the weekly contract minutes from the schedule active at a given date.
+     *
+     * @param array<object> $schedules  All schedule rows for a single member (ordered by start_date DESC).
+     * @param string        $date       Reference date (Y-m-d).
+     * @return int  Net weekly contract minutes.
+     */
+    private static function resolveContractMinutesAtDate(array $schedules, string $date): int
+    {
+        foreach ($schedules as $schedule) {
+            $start = isset($schedule->start_date) ? (string) $schedule->start_date : '';
+            $end = isset($schedule->end_date) ? (string) $schedule->end_date : '';
+
+            if ($start === '' || $start > $date) {
+                continue;
+            }
+            if ($end !== '' && $end < $date) {
+                continue;
+            }
+
+            // This schedule covers the given date.
+            $json = isset($schedule->schedule) ? (string) $schedule->schedule : '';
+            return self::calculateWeeklyContractMinutesFromSchedule($json);
+        }
+
+        return 0;
+    }
+
+    /**
+     * Convert a week key (e.g. '2026-W10') to the Monday date string (Y-m-d).
+     *
+     * @param string $weekKey  Format 'YYYY-Www'.
+     * @return string|null  Date string or null on failure.
+     */
+    private static function weekKeyToDate(string $weekKey): ?string
+    {
+        if (!preg_match('/^(\d{4})-W(\d{2})$/', $weekKey, $m)) {
+            return null;
+        }
+
+        $isoYear = (int) $m[1];
+        $isoWeek = (int) $m[2];
+
+        try {
+            $date = new \DateTimeImmutable('now');
+            $date = $date->setISODate($isoYear, $isoWeek)->setTime(0, 0, 0);
+            return $date->format('Y-m-d');
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 
     private static function sumWeeklyDifferenceMinutes(array $series): int
@@ -2223,5 +2370,28 @@ final class HoursPage
             'Atelier cuisine healthy',
             'Atelier mixologie sans alcool',
         );
+    }
+
+    /**
+     * Prepare dashboard config for the front-end Elementor widget.
+     * Mirrors prepareDashboardConfig() but is public and adds the showEditTab flag.
+     *
+     * @param bool $showEditTab Whether to include the hour-encode editor tab.
+     * @return array<string,mixed>
+     */
+    public static function prepareFrontDashboardConfig(bool $showEditTab = true): array
+    {
+        $config = self::prepareDashboardConfig();
+        $config['showEditTab'] = $showEditTab;
+
+        // Add extra i18n keys used by the front widget
+        if (!isset($config['i18n']['graphsTabLabel'])) {
+            $config['i18n']['graphsTabLabel'] = __('Graphiques', 'mj-member');
+        }
+        if (!isset($config['i18n']['editTabLabel'])) {
+            $config['i18n']['editTabLabel'] = __('Éditer les heures', 'mj-member');
+        }
+
+        return $config;
     }
 }

@@ -220,6 +220,13 @@ function mj_empdocs_upload(): void
         $label = 'Fiche de paie – ' . ($months[$payslipMonth] ?? '') . ' ' . $payslipYear;
     }
 
+    // Auto-generate label for non-payslip types when no label provided
+    if ($docType !== MjEmployeeDocuments::TYPE_PAYSLIP && $label === '') {
+        $typeName = MjEmployeeDocuments::TYPES[$docType] ?? 'Document';
+        $originalNameClean = pathinfo(sanitize_file_name($_FILES['file']['name']), PATHINFO_FILENAME);
+        $label = $typeName . ' – ' . $originalNameClean;
+    }
+
     $insertId = MjEmployeeDocuments::create(array(
         'member_id'     => $memberId,
         'doc_type'      => $docType,

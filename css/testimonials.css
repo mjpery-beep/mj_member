@@ -1650,7 +1650,7 @@ button.mj-feed-post__owner-action--danger:hover {
 }
 
 /* Submit button */
-.mj-testimonials__submit {
+button.mj-testimonials__submit {
     background: var(--feed-accent) !important;
     color: #fff !important;
     border-radius: 8px !important;
@@ -1658,7 +1658,7 @@ button.mj-feed-post__owner-action--danger:hover {
     padding: 10px 20px !important;
 }
 
-.mj-testimonials__submit:hover {
+button.mj-testimonials__submit:hover {
     background: #166fe5 !important;
 }
 

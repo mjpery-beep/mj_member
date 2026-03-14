@@ -51,6 +51,7 @@ if (!function_exists('mj_member_get_elementor_widgets_map')) {
             'Mj_Member_Elementor_Employee_Documents_Widget' => 'includes/elementor/class-mj-member-employee-documents-widget.php',
             'Mj_Member_Elementor_Payslip_Upload_Widget' => 'includes/elementor/class-mj-member-payslip-upload-widget.php',
             'Mj_Member_Elementor_Job_Profile_Widget' => 'includes/elementor/class-mj-member-job-profile-widget.php',
+            'Mj_Member_Elementor_Hours_Dashboard_Widget' => 'includes/elementor/class-mj-member-hours-dashboard-widget.php',
         );
     }
 }
