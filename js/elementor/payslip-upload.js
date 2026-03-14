@@ -183,7 +183,7 @@
 
         return h('div', { className: 'mj-payslip' },
             h('div', { className: 'mj-payslip__panel' },
-                h('h3', { className: 'mj-payslip__title' },
+                h('h2', { className: 'mj-payslip__title' },
                     h('i', { className: 'fas fa-cloud-upload-alt' }), ' ', i18n.uploadTitle
                 ),
                 h('div', { className: 'mj-payslip__selectors' },
