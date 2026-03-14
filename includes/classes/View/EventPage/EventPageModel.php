@@ -2152,12 +2152,13 @@ final class EventPageModel
             $content = isset($testimonial->content) ? (string) $testimonial->content : '';
             $contentHtml = $content !== '' ? wpautop($content) : '';
 
-            $photos = MjTestimonials::get_photo_urls($testimonial, 'medium');
+            $photos = MjTestimonials::get_photo_urls($testimonial, 'large');
             $photoItems = array();
             foreach ($photos as $photo) {
                 $photoItems[] = array(
                     'thumb' => $photo['thumb'] ?? $photo['url'],
                     'full' => $photo['full'] ?? $photo['url'],
+                    'large' => $photo['url'],
                 );
             }
 

@@ -134,6 +134,12 @@ function mj_settings_page() {
         update_option('mj_member_openai_api_key', $openai_api_key);
         update_option('mj_member_photo_grimlins_prompt', $photo_grimlins_prompt);
 
+        // Disabled widgets
+        $disabled_widgets = isset($_POST['mj_member_disabled_widgets']) && is_array($_POST['mj_member_disabled_widgets'])
+            ? array_map('sanitize_text_field', $_POST['mj_member_disabled_widgets'])
+            : array();
+        update_option('mj_member_disabled_widgets', $disabled_widgets);
+
         // Web Push VAPID
         update_option('mj_member_vapid_public_key', $vapid_public_key);
         update_option('mj_member_vapid_private_key', $vapid_private_key);
@@ -562,6 +568,7 @@ function mj_settings_page() {
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-regdoc" data-tab-target="regdoc" role="tab" aria-controls="mj-tab-regdoc" aria-selected="false">📄 Document d'inscription</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-dynfields" data-tab-target="dynfields" role="tab" aria-controls="mj-tab-dynfields" aria-selected="false">🧩 Données dynamiques</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-webpush" data-tab-target="webpush" role="tab" aria-controls="mj-tab-webpush" aria-selected="false">🔔 Web Push</button>
+                    <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-widgets" data-tab-target="widgets" role="tab" aria-controls="mj-tab-widgets" aria-selected="false">🧩 Widgets</button>
                 </div>
 
                 <div class="mj-settings-tabs__panels">
@@ -1632,6 +1639,140 @@ function mj_settings_page() {
                                     alert('Erreur réseau.');
                                 });
                             });
+                        })();
+                        </script>
+                    </div>
+
+                    <?php
+                    // --- Widgets tab ---
+                    $disabled_widgets_option = get_option('mj_member_disabled_widgets', array());
+                    if (!is_array($disabled_widgets_option)) {
+                        $disabled_widgets_option = array();
+                    }
+                    $widgets_catalog = array();
+                    if (function_exists('mj_member_get_elementor_widgets_catalog')) {
+                        $widgets_catalog = mj_member_get_elementor_widgets_catalog();
+                    }
+                    ?>
+                    <div id="mj-tab-widgets" class="mj-settings-tabs__panel" data-tab="widgets" role="tabpanel" aria-labelledby="mj-tab-button-widgets" aria-hidden="true">
+                        <div style="background:#f0fdf4; border-left:4px solid #22c55e; padding:18px 20px; border-radius:10px; margin-bottom:24px;">
+                            <h2 style="margin:0 0 8px 0;">🧩 Widgets Elementor</h2>
+                            <p style="margin:0; color:#475569;">
+                                Activez ou désactivez individuellement les widgets Elementor du plugin. Un widget désactivé ne sera plus disponible dans l'éditeur Elementor.
+                            </p>
+                        </div>
+
+                        <div style="margin-bottom:12px; display:flex; gap:10px; align-items:center;">
+                            <button type="button" id="mj-widgets-select-all" class="button button-small">✅ Tout activer</button>
+                            <button type="button" id="mj-widgets-deselect-all" class="button button-small">❌ Tout désactiver</button>
+                            <span style="color:#6b7280; font-size:13px; margin-left:8px;" id="mj-widgets-counter"></span>
+                        </div>
+
+                        <table class="widefat striped" style="max-width:900px;">
+                            <thead>
+                                <tr>
+                                    <th style="width:50px; text-align:center;">Activé</th>
+                                    <th style="width:40px;"></th>
+                                    <th>Widget</th>
+                                    <th>Slug</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (!empty($widgets_catalog)) : ?>
+                                    <?php foreach ($widgets_catalog as $widget_info) :
+                                        $w_slug = !empty($widget_info['slug']) ? $widget_info['slug'] : '';
+                                        $w_title = !empty($widget_info['title']) ? $widget_info['title'] : $widget_info['class'];
+                                        $w_desc = '';
+                                        if (!empty($widget_info['keywords'])) {
+                                            $w_desc = implode(', ', $widget_info['keywords']);
+                                        } elseif (!empty($widget_info['categories'])) {
+                                            $w_desc = implode(', ', $widget_info['categories']);
+                                        }
+                                        if ($w_slug === '') {
+                                            continue;
+                                        }
+                                        $is_disabled = in_array($w_slug, $disabled_widgets_option, true);
+                                    ?>
+                                    <tr>
+                                        <td style="text-align:center; vertical-align:middle;">
+                                            <input type="checkbox" class="mj-widget-toggle" name="mj_member_enabled_widgets[]" value="<?php echo esc_attr($w_slug); ?>" <?php checked(!$is_disabled); ?> />
+                                            <?php if ($is_disabled) : ?>
+                                                <input type="hidden" class="mj-widget-disabled-hidden" name="mj_member_disabled_widgets[]" value="<?php echo esc_attr($w_slug); ?>" />
+                                            <?php endif; ?>
+                                        </td>
+                                        <td style="text-align:center; vertical-align:middle;">
+                                            <?php if (!empty($widget_info['icon'])) : ?>
+                                                <i class="<?php echo esc_attr($widget_info['icon']); ?>" style="font-size:24px; color:#6366f1;"></i>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td style="vertical-align:middle;">
+                                            <strong><?php echo esc_html($w_title); ?></strong>
+                                            <?php if ($w_desc !== '') : ?>
+                                                <br><span style="color:#6b7280; font-size:12px;"><?php echo esc_html($w_desc); ?></span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td style="vertical-align:middle; color:#6b7280; font-family:monospace; font-size:12px;">
+                                            <?php echo esc_html($w_slug); ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                <?php else : ?>
+                                    <tr><td colspan="4" style="color:#999;">Aucun widget détecté.</td></tr>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+
+                        <script>
+                        (function() {
+                            function updateCounter() {
+                                var boxes = document.querySelectorAll('.mj-widget-toggle');
+                                var checked = 0;
+                                boxes.forEach(function(b) { if (b.checked) checked++; });
+                                var el = document.getElementById('mj-widgets-counter');
+                                if (el) el.textContent = checked + ' / ' + boxes.length + ' activés';
+                            }
+
+                            function syncHiddenFields() {
+                                // Remove all existing hidden disabled fields
+                                document.querySelectorAll('.mj-widget-disabled-hidden').forEach(function(h) { h.remove(); });
+                                // Add hidden fields for unchecked (disabled) widgets
+                                document.querySelectorAll('.mj-widget-toggle').forEach(function(cb) {
+                                    if (!cb.checked) {
+                                        var hidden = document.createElement('input');
+                                        hidden.type = 'hidden';
+                                        hidden.name = 'mj_member_disabled_widgets[]';
+                                        hidden.value = cb.value;
+                                        hidden.className = 'mj-widget-disabled-hidden';
+                                        cb.parentNode.appendChild(hidden);
+                                    }
+                                });
+                            }
+
+                            document.querySelectorAll('.mj-widget-toggle').forEach(function(cb) {
+                                cb.addEventListener('change', function() {
+                                    syncHiddenFields();
+                                    updateCounter();
+                                });
+                            });
+
+                            var selectAll = document.getElementById('mj-widgets-select-all');
+                            var deselectAll = document.getElementById('mj-widgets-deselect-all');
+                            if (selectAll) {
+                                selectAll.addEventListener('click', function() {
+                                    document.querySelectorAll('.mj-widget-toggle').forEach(function(cb) { cb.checked = true; });
+                                    syncHiddenFields();
+                                    updateCounter();
+                                });
+                            }
+                            if (deselectAll) {
+                                deselectAll.addEventListener('click', function() {
+                                    document.querySelectorAll('.mj-widget-toggle').forEach(function(cb) { cb.checked = false; });
+                                    syncHiddenFields();
+                                    updateCounter();
+                                });
+                            }
+
+                            updateCounter();
                         })();
                         </script>
                     </div>

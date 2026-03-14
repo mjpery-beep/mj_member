@@ -5,6 +5,8 @@ use Mj\Member\Core\Config;
 use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Crud\MjMemberHours;
+use Mj\Member\Classes\Crud\MjDynamicFields;
+use Mj\Member\Classes\Crud\MjDynamicFieldValues;
 use Mj\Member\Classes\MjRoles;
 
 if (!defined('ABSPATH')) {
@@ -661,11 +663,16 @@ function mj_member_get_dashboard_stats() {
     $cutoff_datetime = wp_date('Y-m-d H:i:s', $cutoff_timestamp, wp_timezone());
 
     $stats = array(
+        'total_members' => 0,
         'active_members' => 0,
         'active_animateurs' => 0,
         'recent_payments_count' => 0,
         'recent_payments_total' => 0.0,
         'recent_registrations' => 0,
+    );
+
+    $stats['total_members'] = (int) $wpdb->get_var(
+        "SELECT COUNT(*) FROM {$members_table}"
     );
 
     $stats['active_members'] = (int) $wpdb->get_var($wpdb->prepare(
@@ -699,7 +706,51 @@ function mj_member_get_dashboard_stats() {
         $cutoff_datetime
     ));
 
+    $stats['members_with_login'] = (int) $wpdb->get_var(
+        "SELECT COUNT(*) FROM {$members_table} WHERE wp_user_id IS NOT NULL AND wp_user_id > 0"
+    );
+
     return $stats;
+}
+
+/**
+ * Get list of members with a linked WordPress login.
+ *
+ * @param int $limit Max records to return.
+ * @return array
+ */
+function mj_member_get_members_with_login($limit = 20) {
+    global $wpdb;
+
+    $table = MjMembers::getTableName(MjMembers::TABLE_NAME);
+
+    $rows = $wpdb->get_results($wpdb->prepare(
+        "SELECT id, first_name, last_name, role, status, last_login_at, last_activity_at, wp_user_id
+         FROM {$table}
+         WHERE wp_user_id IS NOT NULL AND wp_user_id > 0
+         ORDER BY last_login_at DESC, last_activity_at DESC
+         LIMIT %d",
+        $limit
+    ));
+
+    if (!$rows || !is_array($rows)) {
+        return array();
+    }
+
+    $result = array();
+    foreach ($rows as $row) {
+        $name = trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? ''));
+        $result[] = array(
+            'label'          => $name ?: __('Inconnu', 'mj-member'),
+            'role'           => ucfirst($row->role ?? ''),
+            'status'         => $row->status ?? '',
+            'status_label'   => ($row->status === MjMembers::STATUS_ACTIVE) ? 'Actif' : 'Inactif',
+            'last_login'     => $row->last_login_at ? date_i18n('d/m/Y H:i', strtotime($row->last_login_at)) : '—',
+            'last_activity'  => $row->last_activity_at ? date_i18n('d/m/Y H:i', strtotime($row->last_activity_at)) : '—',
+        );
+    }
+
+    return $result;
 }
 
 function mj_member_get_dashboard_monthly_series($months = 6) {
@@ -1891,4 +1942,117 @@ function mj_member_render_wp_dashboard_widget() {
         .mj-dashboard-widget__table th { font-weight: 600; }
     </style>
     <?php
+}
+
+/**
+ * Compute value distributions for selected dynamic fields.
+ *
+ * Returns an array of chart-ready datasets, one per field.
+ * Only chart-friendly types (dropdown, radio, checkbox, checklist) are supported.
+ *
+ * @param int[] $field_ids Selected field IDs from widget settings.
+ * @return array
+ */
+function mj_member_dashboard_compute_dynfield_stats(array $field_ids): array {
+    if (empty($field_ids) || !class_exists('\Mj\Member\Classes\Crud\MjDynamicFields')) {
+        return array();
+    }
+
+    global $wpdb;
+
+    $chart_types = array(
+        MjDynamicFields::TYPE_DROPDOWN,
+        MjDynamicFields::TYPE_RADIO,
+        MjDynamicFields::TYPE_CHECKBOX,
+        MjDynamicFields::TYPE_CHECKLIST,
+    );
+
+    $values_table = MjDynamicFieldValues::getTableName(MjDynamicFieldValues::TABLE_NAME);
+    $members_table = MjMembers::getTableName(MjMembers::TABLE_NAME);
+    $result = array();
+
+    foreach ($field_ids as $fid) {
+        $fid = (int) $fid;
+        $field = MjDynamicFields::getById($fid);
+        if (!$field || !in_array($field->field_type, $chart_types, true)) {
+            continue;
+        }
+
+        $field_title = $field->title;
+
+        // Get all non-empty values for active members
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT v.field_value
+             FROM {$values_table} v
+             INNER JOIN {$members_table} m ON m.id = v.member_id
+             WHERE v.field_id = %d AND v.field_value <> '' AND m.status = %s",
+            $fid,
+            MjMembers::STATUS_ACTIVE
+        ));
+
+        $counts = array();
+
+        if ($field->field_type === MjDynamicFields::TYPE_CHECKBOX) {
+            // Simple yes/no
+            $yes = 0;
+            $no  = 0;
+            foreach ($rows as $r) {
+                if ($r->field_value === '1') {
+                    $yes++;
+                } else {
+                    $no++;
+                }
+            }
+            if ($yes) $counts['Oui'] = $yes;
+            if ($no)  $counts['Non'] = $no;
+        } elseif ($field->field_type === MjDynamicFields::TYPE_CHECKLIST) {
+            // JSON array — each value can contain multiple selections
+            foreach ($rows as $r) {
+                $arr = json_decode($r->field_value, true);
+                if (!is_array($arr)) continue;
+                foreach ($arr as $val) {
+                    $val = (string) $val;
+                    if (strpos($val, '__other:') === 0) {
+                        $val = 'Autre';
+                    }
+                    if ($val === '' || $val === '__other') continue;
+                    $counts[$val] = ($counts[$val] ?? 0) + 1;
+                }
+            }
+        } else {
+            // dropdown / radio — single value
+            foreach ($rows as $r) {
+                $val = $r->field_value;
+                if (strpos($val, '__other:') === 0) {
+                    $val = 'Autre';
+                }
+                if ($val === '' || $val === '__other') continue;
+                $counts[$val] = ($counts[$val] ?? 0) + 1;
+            }
+        }
+
+        if (empty($counts)) continue;
+
+        // Sort descending by count
+        arsort($counts);
+
+        $total = array_sum($counts);
+        $items = array();
+        foreach ($counts as $label => $count) {
+            $items[] = array(
+                'key'     => sanitize_title($label),
+                'label'   => $label,
+                'count'   => $count,
+                'percent' => $total > 0 ? round($count / $total * 100) : 0,
+            );
+        }
+
+        $result[] = array(
+            'title' => $field_title,
+            'items' => $items,
+            'total' => $total,
+        );
+    }
+
+    return $result;
 }

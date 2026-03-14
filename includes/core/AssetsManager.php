@@ -448,6 +448,10 @@ final class AssetsManager
         // Hours Dashboard Widget (front-end for coordinators)
         self::registerScript('mj-member-hours-dashboard', 'js/elementor/hours-dashboard.js', array('mj-member-utils'));
         self::registerStyle('mj-member-hours-dashboard', 'css/hours-dashboard.css', array('mj-member-components'));
+
+        // Admin Dashboard Widget (front-end for gestionnaires)
+        self::registerScript('mj-member-admin-dashboard-widget', 'js/elementor/admin-dashboard.js', array('mj-member-preact', 'mj-member-preact-hooks'));
+        self::registerStyle('mj-member-admin-dashboard-widget', 'css/admin-dashboard-widget.css', array('mj-member-components'));
     }
 
     /**
@@ -729,6 +733,14 @@ final class AssetsManager
                 wp_enqueue_style('mj-member-hour-encode');
                 wp_enqueue_script('mj-member-hours-dashboard');
                 wp_enqueue_script('mj-member-hour-encode');
+                break;
+
+            case 'admin-dashboard-widget':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-admin-dashboard-widget');
+                wp_enqueue_script('mj-member-preact');
+                wp_enqueue_script('mj-member-preact-hooks');
+                wp_enqueue_script('mj-member-admin-dashboard-widget');
                 break;
 
             default:

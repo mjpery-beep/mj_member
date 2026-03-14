@@ -1,8 +1,8 @@
 /**
  * MJ Member – Hours Dashboard front-end Elementor widget.
  *
- * Preact-based widget that renders hour statistics for coordinators.
- * Re-uses the same visual components as the admin hours dashboard.
+ * Preact-based UI for coordinators to review hour statistics.
+ * Completely self-contained IIFE — loads Preact + Chart.js from CDN if needed.
  */
 
 /* global preact, preactHooks */
@@ -10,621 +10,584 @@
 (function () {
     'use strict';
 
-    /* ---------- Preact bootstrap helpers ---------- */
+    /* ====================================================================
+     *  Preact & Chart.js bootstrap
+     * ==================================================================== */
 
-    var mjHoursPreactReadyPromise = null;
-    var mjHoursScriptPromises = {};
-    var h = null;
-    var render = null;
-    var useMemo = null;
-    var useState = null;
-    var useEffect = null;
-    var useRef = null;
+    var _p = {};          // { h, render, useState, useEffect, useMemo, useRef, useCallback }
+    var _preactReady = null;
+    var _chartReady = null;
+    var _scriptCache = {};
 
-    var PREACT_SCRIPT_ID = 'mj-member-preact-lib';
-    var PREACT_HOOKS_SCRIPT_ID = 'mj-member-preact-hooks';
-    var PREACT_SCRIPT_URL = 'https://unpkg.com/preact@10.19.3/dist/preact.min.js';
-    var PREACT_HOOKS_SCRIPT_URL = 'https://unpkg.com/preact@10.19.3/hooks/dist/hooks.umd.js';
+    var PREACT_ID   = 'mj-member-preact-lib';
+    var HOOKS_ID    = 'mj-member-preact-hooks';
+    var CHART_ID    = 'mj-member-chartjs';
+    var PREACT_URL  = 'https://unpkg.com/preact@10.19.3/dist/preact.min.js';
+    var HOOKS_URL   = 'https://unpkg.com/preact@10.19.3/hooks/dist/hooks.umd.js';
+    var CHART_URL   = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js';
 
-    var CHART_JS_SCRIPT_ID = 'mj-member-chartjs';
-    var CHART_JS_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js';
-    var chartJsReadyPromise = null;
-
-    var COLOR_PALETTE = [
-        '#6366f1', '#22c55e', '#f97316', '#a855f7',
-        '#ef4444', '#14b8a6', '#f59e0b', '#3b82f6',
-    ];
-
-    var WEEKLY_REQUIRED_COLOR = '#3b82f6';
-    var WEEKLY_EXTRA_COLOR = '#f97316';
-
-    function loadScriptOnce(id, url) {
-        if (mjHoursScriptPromises[id]) return mjHoursScriptPromises[id];
-        var existing = document.getElementById(id);
-        if (existing) { mjHoursScriptPromises[id] = Promise.resolve(); return mjHoursScriptPromises[id]; }
-        mjHoursScriptPromises[id] = new Promise(function (resolve, reject) {
+    function loadScript(id, url) {
+        if (_scriptCache[id]) return _scriptCache[id];
+        if (document.getElementById(id)) { _scriptCache[id] = Promise.resolve(); return _scriptCache[id]; }
+        _scriptCache[id] = new Promise(function (ok, fail) {
             var s = document.createElement('script');
             s.id = id; s.src = url; s.async = true;
-            s.onload = resolve; s.onerror = function () { reject(new Error('Failed to load ' + url)); };
+            s.onload = ok; s.onerror = function () { fail(new Error('load ' + url)); };
             document.head.appendChild(s);
         });
-        return mjHoursScriptPromises[id];
+        return _scriptCache[id];
     }
 
     function ensurePreact() {
-        if (h && render && useMemo && useState) return Promise.resolve();
-        if (!mjHoursPreactReadyPromise) {
-            mjHoursPreactReadyPromise = Promise.resolve()
-                .then(function () { if (typeof window !== 'undefined' && window.preact) return; return loadScriptOnce(PREACT_SCRIPT_ID, PREACT_SCRIPT_URL); })
-                .then(function () { if (typeof window !== 'undefined' && window.preactHooks) return; return loadScriptOnce(PREACT_HOOKS_SCRIPT_ID, PREACT_HOOKS_SCRIPT_URL); })
+        if (_p.h) return Promise.resolve();
+        if (!_preactReady) {
+            _preactReady = Promise.resolve()
+                .then(function () { if (window.preact) return; return loadScript(PREACT_ID, PREACT_URL); })
+                .then(function () { if (window.preactHooks) return; return loadScript(HOOKS_ID, HOOKS_URL); })
                 .then(function () {
-                    var g = typeof window !== 'undefined' ? window : {};
-                    var p = g.preact; var hooks = g.preactHooks;
-                    if (!p || !hooks) throw new Error('Preact global introuvable');
-                    h = p.h; render = p.render; useMemo = hooks.useMemo; useState = hooks.useState; useEffect = hooks.useEffect; useRef = hooks.useRef;
-                    if (typeof h !== 'function' || typeof render !== 'function') throw new Error('Exports Preact incomplets');
-                })
-                .catch(function (e) { console.error('[MJ Hours Dashboard] Preact load error', e); throw e; });
+                    var pr = window.preact; var hk = window.preactHooks;
+                    if (!pr || !hk) throw new Error('Preact introuvable');
+                    _p.h = pr.h; _p.render = pr.render;
+                    _p.useState = hk.useState; _p.useEffect = hk.useEffect;
+                    _p.useMemo = hk.useMemo; _p.useRef = hk.useRef; _p.useCallback = hk.useCallback;
+                });
         }
-        return mjHoursPreactReadyPromise;
+        return _preactReady;
     }
 
-    function ensureChartJs() {
-        if (typeof window !== 'undefined' && typeof window.Chart !== 'undefined') return Promise.resolve(window.Chart);
-        if (!chartJsReadyPromise) {
-            chartJsReadyPromise = loadScriptOnce(CHART_JS_SCRIPT_ID, CHART_JS_SCRIPT_URL)
-                .then(function () { if (!window.Chart) throw new Error('Chart.js introuvable'); return window.Chart; })
-                .catch(function (e) { console.error('[MJ Hours Dashboard] Chart.js load error', e); throw e; });
+    function ensureChart() {
+        if (window.Chart) return Promise.resolve(window.Chart);
+        if (!_chartReady) {
+            _chartReady = loadScript(CHART_ID, CHART_URL)
+                .then(function () { if (!window.Chart) throw new Error('Chart.js introuvable'); return window.Chart; });
         }
-        return chartJsReadyPromise;
+        return _chartReady;
     }
 
-    /* ---------- Utility functions ---------- */
+    /* ====================================================================
+     *  Helpers
+     * ==================================================================== */
 
-    function parseConfig(raw) {
-        if (!raw || typeof raw !== 'string') return {};
-        try { return JSON.parse(raw); } catch (_) { return {}; }
-    }
+    var PALETTE = ['#6366f1','#22c55e','#f97316','#a855f7','#ef4444','#14b8a6','#f59e0b','#3b82f6','#ec4899','#06b6d4'];
+    var REQUIRED_COLOR = '#3b82f6';
+    var EXTRA_COLOR    = '#f97316';
 
-    function formatMinutesToHoursLabel(m) {
+    function clr(i) { return PALETTE[i % PALETTE.length]; }
+
+    function fmtMin(m) {
         m = Math.max(Math.round(m || 0), 0);
         if (m === 0) return '0 min';
-        var hrs = Math.floor(m / 60); var rest = m % 60;
-        if (hrs === 0) return rest + ' min';
-        if (rest === 0) return hrs + ' h';
-        return hrs + ' h ' + rest + ' min';
+        var h = Math.floor(m / 60); var r = m % 60;
+        if (h === 0) return r + ' min';
+        if (r === 0) return h + ' h';
+        return h + ' h ' + r + ' min';
     }
 
-    function formatSignedMinutesToHoursLabel(m) {
+    function fmtSigned(m) {
         if (!Number.isFinite(m) || m === 0) return '0 min';
-        var sign = m > 0 ? '+' : '-';
-        return sign + formatMinutesToHoursLabel(Math.abs(m));
+        return (m > 0 ? '+' : '-') + fmtMin(Math.abs(m));
     }
 
-    function formatPercentage(value) {
-        if (!Number.isFinite(value)) return '0 %';
-        return value.toFixed(1) + ' %';
+    function fmtPct(v) { return Number.isFinite(v) ? v.toFixed(1) + ' %' : '0 %'; }
+
+    function parseJSON(s) { try { return JSON.parse(s); } catch (_) { return {}; } }
+
+    /* ====================================================================
+     *  Chart.js hook
+     * ==================================================================== */
+
+    function useChart(canvasRef, type, data, options) {
+        var stateRef = _p.useRef({ chart: null });
+
+        _p.useEffect(function () {
+            var alive = true;
+            var st = stateRef.current;
+            function kill() { if (st.chart) { try { st.chart.destroy(); } catch (_) {} st.chart = null; } }
+
+            if (!canvasRef || !canvasRef.current || !type || !data) { kill(); return function () { alive = false; kill(); }; }
+
+            ensureChart().then(function (Chart) {
+                if (!alive || !canvasRef.current) return;
+                kill();
+                try { st.chart = new Chart(canvasRef.current, { type: type, data: data, options: options || {} }); } catch (e) { console.error('[MJ-HD] chart', e); }
+            });
+
+            return function () { alive = false; kill(); };
+        }, [canvasRef, type, data, options]);
     }
 
-    /* ---------- Chart hook ---------- */
+    /* ====================================================================
+     *  KPI strip
+     * ==================================================================== */
 
-    function useChartJs(canvasRef, chartType, chartData, chartOptions) {
-        var chartStateRef = useRef({ chart: null });
-        useEffect(function () {
-            var isActive = true;
-            var state = chartStateRef.current;
+    function KpiStrip(props) {
+        var h = _p.h;
+        var t = props.totals || {};
+        var i = props.i18n || {};
+        var entries = t.entries || 0;
 
-            function destroyChart() {
-                if (state.chart) { try { state.chart.destroy(); } catch (_) {} state.chart = null; }
-            }
+        var cards = [
+            { accent: 'blue',   label: i.totalHours || 'Heures totales',        value: t.human || '0', meta: entries > 0 ? entries + ' ' + (i.entriesLabel || 'encodages') : '' },
+            { accent: 'green',  label: i.membersCount || 'Membres',              value: String(t.member_count || 0), meta: (t.project_count || 0) + ' ' + (i.projectsCount || 'projets') },
+            { accent: 'amber',  label: i.averageWeeklyHours || 'Moy. hebdo.',    value: t.weekly_average_human || '0', meta: t.weekly_average_meta || '' },
+            { accent: 'violet', label: i.weeklyExpectedLabel || 'Heures attendues', value: t.weekly_contract_human || '0', meta: '' },
+            { accent: 'rose',   label: i.weeklyBalanceNetLabel || 'Solde cumulé', value: t.weekly_balance_human || '0', meta: '' },
+        ];
 
-            if (!canvasRef || !canvasRef.current || !chartType || !chartData) {
-                destroyChart();
-                return function () { isActive = false; destroyChart(); };
-            }
-
-            ensureChartJs().then(function (Chart) {
-                if (!isActive || !canvasRef.current) return;
-                destroyChart();
-                try {
-                    state.chart = new Chart(canvasRef.current, { type: chartType, data: chartData, options: chartOptions || {} });
-                } catch (e) { console.error('[MJ Hours Dashboard] Chart render error', e); }
-            }).catch(function () {});
-
-            return function () { isActive = false; destroyChart(); };
-        }, [canvasRef, chartType, chartData, chartOptions]);
+        return h('div', { className: 'mj-hd__kpi-strip' },
+            cards.map(function (c) {
+                return h('div', { key: c.label, className: 'mj-hd-kpi mj-hd-kpi--accent-' + c.accent },
+                    h('p', { className: 'mj-hd-kpi__label' }, c.label),
+                    h('p', { className: 'mj-hd-kpi__value' }, c.value),
+                    c.meta ? h('p', { className: 'mj-hd-kpi__meta' }, c.meta) : null
+                );
+            })
+        );
     }
 
-    /* ---------- Preact Components ---------- */
+    /* ====================================================================
+     *  Member selector
+     * ==================================================================== */
+
+    function MemberSelector(props) {
+        var h = _p.h;
+        var members = Array.isArray(props.members) ? props.members : [];
+        if (members.length === 0) return null;
+
+        return h('div', { className: 'mj-hd__member-tabs' },
+            h('div', { className: 'mj-hd__member-tabs-scroll', role: 'tablist' },
+                members.map(function (m) {
+                    var active = m.id === props.selectedId;
+                    return h('button', {
+                        key: m.id,
+                        type: 'button',
+                        role: 'tab',
+                        'aria-selected': String(active),
+                        className: 'mj-hd__member-tab' + (active ? ' mj-hd__member-tab--active' : ''),
+                        onClick: function () { props.onChange(m.id); },
+                    }, m.label || '');
+                })
+            )
+        );
+    }
+
+    /* ====================================================================
+     *  Donut chart
+     * ==================================================================== */
 
     function DonutChart(props) {
-        var title = props.title || '';
+        var h = _p.h;
         var items = Array.isArray(props.items) ? props.items : [];
-        var totalMinutes = Math.max(props.totalMinutes || 0, 0);
-        var centerValue = props.centerValue || '0';
-        var centerLabel = props.centerLabel || '';
-        var emptyLabel = props.emptyLabel || '';
-        var i18n = props.i18n || {};
+        var total = Math.max(props.totalMinutes || 0, 0);
+        var ok = items.length > 0 && total > 0;
+        var canvasRef = _p.useRef(null);
 
-        var hasData = items.length > 0 && totalMinutes > 0;
-        var canvasRef = useRef(null);
-
-        var chartData = useMemo(function () {
-            if (!hasData) return null;
+        var chartData = _p.useMemo(function () {
+            if (!ok) return null;
             return {
-                labels: items.map(function (item) { return item.label || ''; }),
-                datasets: [{
-                    data: items.map(function (item) { return Math.max(item.minutes || 0, 0); }),
-                    backgroundColor: items.map(function (item, index) { return item.color || COLOR_PALETTE[index % COLOR_PALETTE.length]; }),
-                    borderWidth: 0,
-                    hoverOffset: 6,
-                }],
+                labels: items.map(function (x) { return x.label || ''; }),
+                datasets: [{ data: items.map(function (x) { return Math.max(x.minutes || 0, 0); }),
+                    backgroundColor: items.map(function (x, i) { return x.color || clr(i); }),
+                    borderWidth: 0, hoverOffset: 4 }],
             };
-        }, [hasData, items]);
+        }, [ok, items]);
 
-        var chartOptions = useMemo(function () {
-            if (!hasData) return null;
+        var chartOpts = _p.useMemo(function () {
+            if (!ok) return null;
             return {
-                responsive: true, maintainAspectRatio: true, cutout: '65%',
-                plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (ctx) {
-                    var label = ctx.label || ''; var min = ctx.parsed || 0; return label + ': ' + formatMinutesToHoursLabel(min);
-                } } } },
+                responsive: true, maintainAspectRatio: true, cutout: '68%',
+                plugins: { legend: { display: false },
+                    tooltip: { callbacks: { label: function (ctx) { return (ctx.label || '') + ': ' + fmtMin(ctx.parsed); } } } },
             };
-        }, [hasData]);
+        }, [ok]);
 
-        useChartJs(canvasRef, hasData ? 'doughnut' : null, chartData, chartOptions);
+        useChart(canvasRef, ok ? 'doughnut' : null, chartData, chartOpts);
 
         return h('div', { className: 'mj-hd-card mj-hd-donut' },
-            title ? h('h2', { className: 'mj-hd-donut__title' }, title) : null,
-            hasData ? h('div', { className: 'mj-hd-donut__canvas' },
+            props.title ? h('h2', { className: 'mj-hd-donut__title' }, props.title) : null,
+            ok ? h('div', { className: 'mj-hd-donut__canvas-wrap' },
                 h('canvas', { ref: canvasRef }),
                 h('div', { className: 'mj-hd-donut__center' },
-                    h('p', { className: 'mj-hd-donut__center-value' }, centerValue),
-                    centerLabel ? h('p', { className: 'mj-hd-donut__center-label' }, centerLabel) : null
+                    h('p', { className: 'mj-hd-donut__center-value' }, props.centerValue || '0'),
+                    props.centerLabel ? h('p', { className: 'mj-hd-donut__center-label' }, props.centerLabel) : null
                 )
-            ) : h('p', { className: 'mj-hd__empty' }, emptyLabel || i18n.noProjectsForMember || ''),
-            hasData ? h('ul', { className: 'mj-hd-donut__legend' },
-                items.map(function (item, index) {
-                    var color = item.color || COLOR_PALETTE[index % COLOR_PALETTE.length];
-                    return h('li', { key: item.key || index, className: 'mj-hd-donut__legend-item' },
-                        h('span', { className: 'mj-hd-donut__legend-label' },
-                            h('span', { className: 'mj-hd-donut__legend-swatch', style: { background: color } }),
-                            item.label || ''
+            ) : h('p', { className: 'mj-hd__empty' }, props.emptyLabel || ''),
+            ok ? h('ul', { className: 'mj-hd-donut__legend' },
+                items.map(function (item, idx) {
+                    var c = item.color || clr(idx);
+                    return h('li', { key: item.key || idx, className: 'mj-hd-donut__legend-item' },
+                        h('span', { className: 'mj-hd-donut__legend-left' },
+                            h('span', { className: 'mj-hd-donut__legend-swatch', style: { background: c } }),
+                            h('span', { className: 'mj-hd-donut__legend-name' }, item.label || '')
                         ),
-                        h('span', null, item.human || '0')
+                        h('span', { className: 'mj-hd-donut__legend-value' }, item.human || '0')
                     );
                 })
             ) : null
         );
     }
 
+    /* ====================================================================
+     *  Bar chart
+     * ==================================================================== */
+
     function BarChart(props) {
-        var title = props.title || '';
-        var subtitle = props.subtitle || '';
+        var h = _p.h;
         var items = Array.isArray(props.items) ? props.items : [];
-        var datasetLabel = props.datasetLabel || title;
-        var emptyLabel = props.emptyLabel || '';
+        var ok = items.length > 0;
         var i18n = props.i18n || {};
+        var canvasRef = _p.useRef(null);
 
-        var hasData = items.length > 0;
-        var canvasRef = useRef(null);
+        var hasSegments = _p.useMemo(function () {
+            return ok && items.some(function (x) { return typeof x.required_minutes === 'number' && typeof x.extra_minutes === 'number'; });
+        }, [ok, items]);
 
-        var hasSegments = useMemo(function () {
-            return hasData && items.some(function (item) {
-                return typeof item.required_minutes === 'number' && typeof item.extra_minutes === 'number';
-            });
-        }, [hasData, items]);
-
-        var chartData = useMemo(function () {
-            if (!hasData) return null;
-            var labels = items.map(function (item) { return item.short_label || item.label || ''; });
-
+        var chartData = _p.useMemo(function () {
+            if (!ok) return null;
+            var labels = items.map(function (x) { return x.short_label || x.label || ''; });
             if (hasSegments) {
-                var requiredLabel = (i18n && i18n.weeklyRequiredLabel) || 'Heures dues';
-                var extraLabel = (i18n && i18n.weeklyExtraLabel) || 'Heures supplémentaires';
-                return {
-                    labels: labels,
-                    datasets: [
-                        { label: requiredLabel, data: items.map(function (item) { return Math.max(item.required_minutes || 0, 0); }), backgroundColor: WEEKLY_REQUIRED_COLOR, stack: 'hours', borderRadius: 10, maxBarThickness: 48 },
-                        { label: extraLabel, data: items.map(function (item) { return Math.max(item.extra_minutes || 0, 0); }), backgroundColor: WEEKLY_EXTRA_COLOR, stack: 'hours', borderRadius: 10, maxBarThickness: 48 },
-                    ],
-                };
+                return { labels: labels, datasets: [
+                    { label: i18n.weeklyRequiredLabel || 'Heures dues', data: items.map(function (x) { return Math.max(x.required_minutes || 0, 0); }),
+                      backgroundColor: REQUIRED_COLOR, stack: 'h', borderRadius: 6, maxBarThickness: 40 },
+                    { label: i18n.weeklyExtraLabel || 'Supplémentaires', data: items.map(function (x) { return Math.max(x.extra_minutes || 0, 0); }),
+                      backgroundColor: EXTRA_COLOR, stack: 'h', borderRadius: 6, maxBarThickness: 40 },
+                ] };
             }
+            return { labels: labels, datasets: [{ label: props.datasetLabel || props.title || '',
+                data: items.map(function (x) { return Math.max(x.minutes || 0, 0); }),
+                backgroundColor: items.map(function (_, i) { return clr(i); }),
+                borderRadius: 6, maxBarThickness: 40 }] };
+        }, [ok, hasSegments, items, i18n]);
 
-            return {
-                labels: labels,
-                datasets: [{
-                    label: datasetLabel,
-                    data: items.map(function (item) { return Math.max(item.minutes || 0, 0); }),
-                    backgroundColor: items.map(function (_, index) { return COLOR_PALETTE[index % COLOR_PALETTE.length]; }),
-                    borderRadius: 10, maxBarThickness: 48,
-                }],
-            };
-        }, [hasData, hasSegments, items, datasetLabel, i18n]);
-
-        var chartOptions = useMemo(function () {
-            if (!hasData) return null;
+        var chartOpts = _p.useMemo(function () {
+            if (!ok) return null;
             return {
                 responsive: true, maintainAspectRatio: false,
                 scales: {
-                    x: { stacked: hasSegments, grid: { display: false }, ticks: { autoSkip: false, maxRotation: 0, minRotation: 0 } },
-                    y: {
-                        beginAtZero: true, stacked: hasSegments,
-                        grid: { color: 'rgba(148,163,184,0.25)', drawBorder: false },
-                        ticks: { callback: function (v) { return formatMinutesToHoursLabel(v); } },
-                    },
+                    x: { stacked: hasSegments, grid: { display: false }, ticks: { autoSkip: false, maxRotation: 0, font: { size: 11 } } },
+                    y: { beginAtZero: true, stacked: hasSegments,
+                        grid: { color: 'rgba(148,163,184,0.18)', drawBorder: false },
+                        ticks: { callback: function (v) { return fmtMin(v); }, font: { size: 11 } } },
                 },
                 plugins: {
-                    legend: { display: hasSegments, position: 'bottom', labels: { usePointStyle: true } },
-                    tooltip: {
-                        callbacks: {
-                            label: function (ctx) {
-                                var dsLabel = ctx.dataset && ctx.dataset.label ? ctx.dataset.label : '';
-                                var fallback = !hasSegments && dsLabel === '' ? datasetLabel : dsLabel;
-                                var label = hasSegments ? dsLabel : (ctx.label || fallback || '');
-                                var val = (ctx.parsed && typeof ctx.parsed.y === 'number') ? ctx.parsed.y : ctx.parsed;
-                                return label ? label + ': ' + formatMinutesToHoursLabel(val) : formatMinutesToHoursLabel(val);
-                            },
-                            afterBody: hasSegments ? function (contexts) {
-                                if (!Array.isArray(contexts) || contexts.length === 0) return [];
-                                var idx = contexts[0].dataIndex;
-                                var item = items && items[idx] ? items[idx] : null;
-                                if (!item) return [];
-                                var lines = [];
-                                var exp = typeof item.expected_minutes === 'number' ? Math.max(item.expected_minutes, 0) : 0;
-                                if (exp > 0) {
-                                    lines.push(((i18n && i18n.weeklyExpectedLabel) || 'Heures attendues') + ': ' + formatMinutesToHoursLabel(exp));
-                                }
-                                var diff = typeof item.difference_minutes === 'number' ? item.difference_minutes : 0;
-                                if (diff !== 0) {
-                                    var dl = diff > 0 ? ((i18n && i18n.weeklyExtraLabel) || 'Heures supplémentaires') : ((i18n && i18n.weeklyDeficitLabel) || 'Heures manquantes');
-                                    lines.push(dl + ': ' + (diff > 0 ? '+' : '-') + formatMinutesToHoursLabel(Math.abs(diff)));
-                                }
-                                return lines;
-                            } : undefined,
+                    legend: { display: hasSegments, position: 'bottom', labels: { usePointStyle: true, font: { size: 12 } } },
+                    tooltip: { callbacks: {
+                        label: function (ctx) {
+                            var l = hasSegments ? (ctx.dataset.label || '') : (ctx.label || props.title || '');
+                            var v = (ctx.parsed && typeof ctx.parsed.y === 'number') ? ctx.parsed.y : ctx.parsed;
+                            return l ? l + ': ' + fmtMin(v) : fmtMin(v);
                         },
-                    },
+                        afterBody: hasSegments ? function (ctxs) {
+                            if (!ctxs.length) return [];
+                            var item = items[ctxs[0].dataIndex];
+                            if (!item) return [];
+                            var lines = [];
+                            var exp = Math.max(item.expected_minutes || 0, 0);
+                            if (exp > 0) lines.push((i18n.weeklyExpectedLabel || 'Attendues') + ': ' + fmtMin(exp));
+                            var diff = item.difference_minutes || 0;
+                            if (diff !== 0) {
+                                var dl = diff > 0 ? (i18n.weeklyExtraLabel || 'Supp.') : (i18n.weeklyDeficitLabel || 'Manquantes');
+                                lines.push(dl + ': ' + fmtSigned(diff));
+                            }
+                            return lines;
+                        } : undefined,
+                    } },
                 },
             };
-        }, [hasData, hasSegments, items, i18n]);
+        }, [ok, hasSegments, items, i18n]);
 
-        useChartJs(canvasRef, hasData ? 'bar' : null, chartData, chartOptions);
+        useChart(canvasRef, ok ? 'bar' : null, chartData, chartOpts);
 
-        return h('div', { className: 'mj-hd-card mj-hd-bar-chart' },
-            title ? h('h2', { className: 'mj-hd-card__heading' }, title) : null,
-            subtitle ? h('p', { className: 'mj-hd-card__subtitle' }, subtitle) : null,
-            hasData ? h('div', { className: 'mj-hd-bar-chart__canvas' },
-                h('canvas', { ref: canvasRef, role: 'img', 'aria-label': title || '' })
-            ) : h('p', { className: 'mj-hd__empty' }, emptyLabel || (i18n && i18n.barChartEmpty) || '')
-        );
-    }
-
-    function SummaryCards(props) {
-        var totals = props.totals || {};
-        var i18n = props.i18n || {};
-        var totalEntries = Number.isFinite(totals.entries) ? totals.entries : 0;
-        var entriesLabel = i18n.entriesLabel || '';
-        var entriesMeta = totalEntries > 0 && entriesLabel ? totalEntries + ' ' + entriesLabel : '';
-        var membersCount = Number.isFinite(totals.member_count) ? totals.member_count : 0;
-        var projectsCount = Number.isFinite(totals.project_count) ? totals.project_count : 0;
-        var membersMeta = projectsCount > 0 && (i18n.projectsCount || '') ? projectsCount + ' ' + i18n.projectsCount : '';
-        var weeklyAverageMeta = (totals.weekly_average_meta && totals.weekly_average_meta !== '') ? totals.weekly_average_meta : (i18n.weeklyAverageMetaFallback || '');
-        var balanceExtraHuman = typeof totals.weekly_extra_recent_human === 'string' ? totals.weekly_extra_recent_human : '';
-        var balanceMeta = balanceExtraHuman && (i18n.weeklyExtraLabel || '') ? i18n.weeklyExtraLabel + ' : ' + balanceExtraHuman : '';
-        var expectedLabel = i18n.weeklyExpectedLabel || i18n.weeklyRequiredLabel || '';
-
-        var cards = [
-            { key: 'total-hours', title: i18n.totalHours || 'Heures totales encodées', value: totals.human || '0 min', meta: entriesMeta },
-            { key: 'members-count', title: i18n.membersCount || 'Membres', value: membersCount > 0 ? String(membersCount) : '0', meta: membersMeta },
-            { key: 'weekly-average', title: i18n.averageWeeklyHours || 'Moyenne hebdomadaire encodée', value: totals.weekly_average_human || '0 min', meta: weeklyAverageMeta },
-            { key: 'weekly-expected', title: expectedLabel || 'Heures attendues', value: totals.weekly_contract_human || '0 min', meta: balanceMeta },
-            { key: 'weekly-balance', title: i18n.weeklyBalanceNetLabel || 'Solde cumulé', value: totals.weekly_balance_human || '0 min', meta: balanceMeta },
-        ];
-
-        var filtered = cards.filter(function (c) { return c && c.title; });
-        if (filtered.length === 0) return null;
-
-        return h('div', { className: 'mj-hd__summary' },
-            filtered.map(function (card) {
-                return h('article', { key: card.key, className: 'mj-hd-card' },
-                    h('p', { className: 'mj-hd-card__title' }, card.title),
-                    h('p', { className: 'mj-hd-card__value' }, card.value || '0'),
-                    card.meta ? h('p', { className: 'mj-hd-card__meta' }, card.meta) : null
-                );
-            })
-        );
-    }
-
-    function MemberSelector(props) {
-        var members = Array.isArray(props.members) ? props.members : [];
-        if (members.length === 0) return null;
-
-        return h('div', { className: 'mj-hd__select' },
-            props.label ? h('label', { htmlFor: 'mj-hd-member-select' }, props.label) : null,
-            h('select', {
-                id: 'mj-hd-member-select',
-                value: props.selectedId || '',
-                onChange: function (e) {
-                    var val = parseInt(e.target.value, 10);
-                    if (Number.isNaN(val)) val = 0;
-                    props.onChange(val);
-                },
-            },
-                members.map(function (m) { return h('option', { key: m.id, value: m.id }, m.label || ''); })
+        return h('div', { className: 'mj-hd-card mj-hd-bar' },
+            h('div', { className: 'mj-hd-bar__header' },
+                props.title ? h('h2', { className: 'mj-hd-bar__title' }, props.title) : null,
+                props.subtitle ? h('span', { className: 'mj-hd-bar__subtitle' }, props.subtitle) : null
             ),
-            props.helper ? h('p', { className: 'mj-hd__select-helper' }, props.helper) : null
+            ok ? h('div', { className: 'mj-hd-bar__canvas-wrap' },
+                h('canvas', { ref: canvasRef, role: 'img', 'aria-label': props.title || '' })
+            ) : h('p', { className: 'mj-hd__empty' }, props.emptyLabel || i18n.barChartEmpty || '')
         );
     }
+
+    /* ====================================================================
+     *  Balance chip
+     * ==================================================================== */
+
+    function BalanceChip(props) {
+        var h = _p.h;
+        var minutes = props.minutes;
+        var human = props.human || fmtSigned(minutes);
+        var variant = minutes > 0 ? 'positive' : minutes < 0 ? 'negative' : 'neutral';
+        return h('span', { className: 'mj-hd-balance mj-hd-balance--' + variant }, human);
+    }
+
+    /* ====================================================================
+     *  Members table
+     * ==================================================================== */
 
     function MembersTable(props) {
+        var h = _p.h;
         var members = Array.isArray(props.members) ? props.members : [];
         var totals = props.totals || {};
         var i18n = props.i18n || {};
+        if (members.length === 0) return h('p', { className: 'mj-hd__empty' }, i18n.noMemberData || '');
 
-        if (members.length === 0) {
-            return h('p', { className: 'mj-hd__empty' }, i18n.noMemberData || '');
-        }
+        var maxMinutes = Math.max.apply(null, members.map(function (m) { return m.minutes || 0; }).concat([1]));
+        var totalMinutes = Math.max(totals.minutes || 0, 1);
 
-        var totalMinutes = Math.max(totals.minutes || 0, 0);
-
-        return h('div', { className: 'mj-hd-card mj-hd__table-card' },
-            h('h2', { className: 'mj-hd-card__heading' }, i18n.memberTableTitle || ''),
-            h('table', null,
-                h('thead', null,
-                    h('tr', null,
-                        h('th', null, i18n.memberColumn || ''),
-                        h('th', null, i18n.hoursColumn || ''),
-                        h('th', null, i18n.entriesColumn || ''),
-                        h('th', null, i18n.rateColumn || '')
+        return h('div', { className: 'mj-hd-card mj-hd-members' },
+            h('h2', { className: 'mj-hd-card__heading' }, i18n.memberTableTitle || 'Heures par membre'),
+            h('div', { className: 'mj-hd-members__scroll' },
+                h('table', null,
+                    h('thead', null,
+                        h('tr', null,
+                            h('th', null, i18n.memberColumn || 'Membre'),
+                            h('th', null, i18n.hoursColumn || 'Heures'),
+                            h('th', null, i18n.entriesColumn || 'Encodages'),
+                            h('th', null, i18n.rateColumn || 'Part'),
+                            h('th', null, i18n.weeklyBalanceNetLabel || 'Solde')
+                        )
+                    ),
+                    h('tbody', null,
+                        members.map(function (m) {
+                            var share = (m.minutes || 0) / totalMinutes;
+                            var barW = Math.round(((m.minutes || 0) / maxMinutes) * 100);
+                            var balMin = typeof m.weekly_balance_minutes === 'number' ? m.weekly_balance_minutes : null;
+                            return h('tr', { key: m.id },
+                                h('td', null, h('span', { className: 'mj-hd-members__name' }, m.label || '')),
+                                h('td', null,
+                                    h('span', { className: 'mj-hd-members__bar', style: { width: barW + '%', minWidth: '4px' } }),
+                                    m.human || '0'
+                                ),
+                                h('td', null, String(m.entries || 0)),
+                                h('td', null, fmtPct(share * 100)),
+                                h('td', null,
+                                    balMin !== null
+                                        ? h(BalanceChip, { minutes: balMin, human: m.weekly_balance_human || '' })
+                                        : '—'
+                                )
+                            );
+                        })
                     )
-                ),
-                h('tbody', null,
-                    members.map(function (m) {
-                        var share = totalMinutes > 0 ? (m.minutes || 0) / totalMinutes : 0;
-                        return h('tr', { key: m.id },
-                            h('td', null, m.label || ''),
-                            h('td', null, m.human || '0'),
-                            h('td', null, String(m.entries || 0)),
-                            h('td', null, formatPercentage(share * 100))
-                        );
-                    })
                 )
             )
         );
     }
 
+    /* ====================================================================
+     *  Hour-encode embed
+     * ==================================================================== */
+
     function HourEncodeEmbed(props) {
-        var config = props.config;
-        var configJson = props.configJson;
-        var panelId = props.panelId;
-        var labelledBy = props.labelledBy;
-        var emptyLabel = props.emptyLabel;
-        var containerRef = useRef(null);
+        var h = _p.h;
+        var containerRef = _p.useRef(null);
 
-        useEffect(function () {
-            if (!config || !configJson) return undefined;
-            var container = containerRef.current;
-            if (!container) return undefined;
+        _p.useEffect(function () {
+            if (!props.config || !props.configJson) return;
+            var el = containerRef.current;
+            if (!el) return;
 
-            var destroyEvent = new CustomEvent('mj-member-hour-encode:destroy', { detail: { context: container } });
-            document.dispatchEvent(destroyEvent);
-            container.innerHTML = '';
+            document.dispatchEvent(new CustomEvent('mj-member-hour-encode:destroy', { detail: { context: el } }));
+            el.innerHTML = '';
 
-            var widgetElement = document.createElement('div');
-            widgetElement.className = 'mj-hour-encode';
-            widgetElement.setAttribute('data-config', configJson);
-            container.appendChild(widgetElement);
+            var w = document.createElement('div');
+            w.className = 'mj-hour-encode';
+            w.setAttribute('data-config', props.configJson);
+            el.appendChild(w);
 
-            var initEvent = new CustomEvent('mj-member-hour-encode:init', { detail: { context: container } });
-            document.dispatchEvent(initEvent);
+            document.dispatchEvent(new CustomEvent('mj-member-hour-encode:init', { detail: { context: el } }));
 
             return function () {
-                var cleanup = new CustomEvent('mj-member-hour-encode:destroy', { detail: { context: container } });
-                document.dispatchEvent(cleanup);
-                container.innerHTML = '';
+                document.dispatchEvent(new CustomEvent('mj-member-hour-encode:destroy', { detail: { context: el } }));
+                el.innerHTML = '';
             };
-        }, [config, configJson]);
+        }, [props.config, props.configJson]);
 
-        var panelProps = { className: 'mj-hd-card mj-hd__editor-card' };
-        if (panelId) panelProps.id = panelId;
-        if (labelledBy) { panelProps.role = 'tabpanel'; panelProps['aria-labelledby'] = labelledBy; }
+        var wrapProps = { className: 'mj-hd-card mj-hd__editor-card' };
+        if (props.panelId) wrapProps.id = props.panelId;
+        if (props.labelledBy) { wrapProps.role = 'tabpanel'; wrapProps['aria-labelledby'] = props.labelledBy; }
 
-        if (!config || !configJson) {
-            return h('div', panelProps, h('p', { className: 'mj-hd__empty' }, emptyLabel || ''));
-        }
-
-        return h('div', panelProps, h('div', { ref: containerRef, className: 'mj-hd__editor-widget' }));
+        if (!props.config || !props.configJson) return h('div', wrapProps, h('p', { className: 'mj-hd__empty' }, props.emptyLabel || ''));
+        return h('div', wrapProps, h('div', { ref: containerRef }));
     }
 
-    /* ---------- Main App Component ---------- */
+    /* ====================================================================
+     *  Dashboard App
+     * ==================================================================== */
 
     function DashboardApp(props) {
-        var config = props.config || {};
-        var data = config.data || {};
-        var i18n = config.i18n || {};
+        var h = _p.h;
+        var cfg  = props.config || {};
+        var data = cfg.data || {};
+        var i18n = cfg.i18n || {};
         var totals = data.totals || {};
         var projects = Array.isArray(data.projects) ? data.projects : [];
-        var members = Array.isArray(data.members) ? data.members : [];
-        var timeseries = data.timeseries || {};
-        var monthlyAll = Array.isArray(timeseries.months) ? timeseries.months : [];
-        var weeklyAll = Array.isArray(timeseries.weeks) ? timeseries.weeks : [];
-        var monthlyByMember = timeseries.months_by_member || {};
-        var weeklyByMember = timeseries.weeks_by_member || {};
-        var showEditTab = config.showEditTab !== false;
+        var members  = Array.isArray(data.members) ? data.members : [];
+        var ts = data.timeseries || {};
+        var monthlyAll  = Array.isArray(ts.months) ? ts.months : [];
+        var weeklyAll   = Array.isArray(ts.weeks)  ? ts.weeks  : [];
+        var monthlyByM  = ts.months_by_member || {};
+        var weeklyByM   = ts.weeks_by_member  || {};
+        var showEdit = cfg.showEditTab !== false;
 
-        var defaultMemberId = members.length > 0 ? members[0].id : 0;
-        var stateArr = useState(defaultMemberId);
-        var selectedMemberId = stateArr[0];
-        var setSelectedMemberId = stateArr[1];
-        var tabArr = useState('graphs');
-        var activeTab = tabArr[0];
-        var setActiveTab = tabArr[1];
+        /* state */
+        var selArr = _p.useState(members.length > 0 ? members[0].id : 0);
+        var selId = selArr[0]; var setSelId = selArr[1];
+        var tabArr = _p.useState('graphs');
+        var tab = tabArr[0]; var setTab = tabArr[1];
 
-        var selectedMember = useMemo(function () {
-            if (!Array.isArray(members)) return null;
-            return members.find(function (m) { return m.id === selectedMemberId; }) || null;
-        }, [members, selectedMemberId]);
+        /* selected member */
+        var selMember = _p.useMemo(function () {
+            return members.find(function (m) { return m.id === selId; }) || null;
+        }, [members, selId]);
 
-        var hourEncodeBase = config.hourEncode || null;
-        var memberProjects = selectedMember && Array.isArray(selectedMember.projects) ? selectedMember.projects : [];
-        var memberTotalMinutes = selectedMember ? Math.max(selectedMember.minutes || 0, 0) : 0;
-        var memberContractHuman = selectedMember ? (selectedMember.weekly_contract_human || '') : '';
-        var memberContractMinutes = selectedMember ? Math.max(selectedMember.weekly_contract_minutes || 0, 0) : 0;
-        var totalContractMinutes = Math.max(totals.weekly_contract_minutes || 0, 0);
-        var totalContractHuman = totals.weekly_contract_human || '';
-        var memberBalanceHuman = selectedMember ? (selectedMember.weekly_balance_human || '') : '';
-        var totalBalanceHuman = totals.weekly_balance_human || '';
-
-        var donutItems, donutTotalMinutes, donutCenterValue, donutCenterLabel;
-        if (selectedMember) {
-            donutItems = memberProjects; donutTotalMinutes = memberTotalMinutes;
-            donutCenterValue = selectedMember.human || '0'; donutCenterLabel = selectedMember.label || '';
+        /* donut data */
+        var donutItems, donutTotal, donutValue, donutLabel;
+        if (selMember) {
+            donutItems = selMember.projects || [];
+            donutTotal = Math.max(selMember.minutes || 0, 0);
+            donutValue = selMember.human || '0';
+            donutLabel = selMember.label || '';
         } else {
-            donutItems = projects; donutTotalMinutes = Math.max(totals.minutes || 0, 0);
-            donutCenterValue = totals.human || '0'; donutCenterLabel = i18n.totalHours || '';
+            donutItems = projects;
+            donutTotal = Math.max(totals.minutes || 0, 0);
+            donutValue = totals.human || '0';
+            donutLabel = i18n.totalHours || '';
         }
 
-        var monthlySeries = selectedMember
-            ? (Array.isArray(monthlyByMember[selectedMemberId]) ? monthlyByMember[selectedMemberId] : [])
-            : monthlyAll;
-        var weeklySeries = selectedMember
-            ? (Array.isArray(weeklyByMember[selectedMemberId]) ? weeklyByMember[selectedMemberId] : [])
-            : weeklyAll;
+        /* series */
+        var monthly = selMember ? (monthlyByM[selId] || []) : monthlyAll;
+        var weekly  = selMember ? (weeklyByM[selId]  || []) : weeklyAll;
 
-        var memberLabel = selectedMember ? (selectedMember.label || '') : '';
-        var memberHuman = selectedMember ? (selectedMember.human || '0') : '';
-        var totalHuman = totals.human || '';
-        var monthlySubtitle = selectedMember ? (memberLabel ? memberLabel + ' · ' + memberHuman : memberHuman) : totalHuman;
-        var expectedLabelShort = i18n.weeklyExpectedLabel || i18n.weeklyRequiredLabel || '';
-        var weeklySubtitle;
-        if (selectedMember) {
-            weeklySubtitle = memberLabel ? memberLabel + ' · ' + memberHuman : memberHuman;
-            if (memberContractMinutes > 0 && expectedLabelShort && memberContractHuman) weeklySubtitle += ' · ' + expectedLabelShort + ' : ' + memberContractHuman;
-        } else {
-            weeklySubtitle = totalHuman;
-            if (totalContractMinutes > 0 && expectedLabelShort && totalContractHuman) weeklySubtitle += ' · ' + expectedLabelShort + ' : ' + totalContractHuman;
-        }
-        var balanceLabel = i18n.weeklyBalanceNetLabel || '';
-        var balanceHuman = selectedMember ? memberBalanceHuman : totalBalanceHuman;
-        if (balanceLabel && balanceHuman) weeklySubtitle += ' · ' + balanceLabel + ' : ' + balanceHuman;
+        /* subtitles */
+        var mLabel = selMember ? (selMember.label || '') : '';
+        var mHuman = selMember ? (selMember.human || '0') : (totals.human || '');
+        var monthSub = selMember ? (mLabel + ' · ' + mHuman) : mHuman;
 
-        var projectsDonutTitle = i18n.projectsDonutTitle || '';
-        if (selectedMember && memberLabel) {
-            projectsDonutTitle = projectsDonutTitle ? projectsDonutTitle + ' · ' + memberLabel : memberLabel;
-        }
+        var expectedLbl = i18n.weeklyExpectedLabel || '';
+        var cMins = selMember ? Math.max(selMember.weekly_contract_minutes || 0, 0) : Math.max(totals.weekly_contract_minutes || 0, 0);
+        var cHuman = selMember ? (selMember.weekly_contract_human || '') : (totals.weekly_contract_human || '');
+        var weekSub = selMember ? (mLabel + ' · ' + mHuman) : mHuman;
+        if (cMins > 0 && expectedLbl && cHuman) weekSub += ' · ' + expectedLbl + ' : ' + cHuman;
 
-        var canShowEditTab = showEditTab && Boolean(hourEncodeBase && selectedMember && selectedMemberId);
-        useEffect(function () {
-            if (!canShowEditTab && activeTab !== 'graphs') setActiveTab('graphs');
-        }, [canShowEditTab, activeTab]);
+        var balLbl = i18n.weeklyBalanceNetLabel || '';
+        var balHuman = selMember ? (selMember.weekly_balance_human || '') : (totals.weekly_balance_human || '');
+        if (balLbl && balHuman) weekSub += ' · ' + balLbl + ' : ' + balHuman;
 
-        var editConfig = useMemo(function () {
-            if (!hourEncodeBase || !selectedMember || !selectedMemberId) return null;
-            var ajaxConfig = Object.assign({}, hourEncodeBase.ajax || {});
-            var staticParams = Object.assign({}, ajaxConfig.staticParams || {});
-            staticParams.member_id = String(selectedMemberId);
-            ajaxConfig.staticParams = staticParams;
+        var donutTitle = (selMember && mLabel)
+            ? (i18n.memberDonutPrefix || 'Projets de ') + mLabel
+            : (i18n.projectsDonutTitle || 'Répartition par projet');
 
-            var labelsConfig = Object.assign({}, hourEncodeBase.labels || {});
-            if (selectedMember.label) {
-                var baseTitle = (hourEncodeBase.labels && hourEncodeBase.labels.title) || '';
-                labelsConfig.title = baseTitle !== '' ? baseTitle + ' · ' + selectedMember.label : selectedMember.label;
-            }
+        /* edit tab */
+        var hourEncodeBase = cfg.hourEncode || null;
+        var canEdit = showEdit && Boolean(hourEncodeBase && selMember && selId);
+        _p.useEffect(function () { if (!canEdit && tab !== 'graphs') setTab('graphs'); }, [canEdit, tab]);
 
-            var projectSuggestions = Array.isArray(selectedMember.projects)
-                ? selectedMember.projects.map(function (p) { return p && p.raw_label ? String(p.raw_label) : (p && !p.is_unassigned && p.label ? String(p.label) : ''); })
-                : [];
-            if (projectSuggestions.length === 0 && Array.isArray(hourEncodeBase.projects)) projectSuggestions = hourEncodeBase.projects;
-            var uniqueProjects = Array.from(new Set(projectSuggestions.map(function (n) { return typeof n === 'string' ? n.trim() : ''; }).filter(function (n) { return n !== ''; })));
+        var editConfig = _p.useMemo(function () {
+            if (!hourEncodeBase || !selMember || !selId) return null;
+            var ajx = Object.assign({}, hourEncodeBase.ajax || {});
+            var sp = Object.assign({}, ajx.staticParams || {}); sp.member_id = String(selId); ajx.staticParams = sp;
+            var lbl = Object.assign({}, hourEncodeBase.labels || {});
+            if (selMember.label) { var bt = (lbl.title || ''); lbl.title = bt ? bt + ' · ' + selMember.label : selMember.label; }
+            var projects2 = (selMember.projects || []).map(function (p) { return (p.raw_label || (!p.is_unassigned && p.label) || '').trim(); }).filter(Boolean);
+            if (!projects2.length && Array.isArray(hourEncodeBase.projects)) projects2 = hourEncodeBase.projects;
+            projects2 = Array.from(new Set(projects2));
+            var ws = Array.isArray(selMember.work_schedule) ? selMember.work_schedule : (hourEncodeBase.workSchedule || []);
+            var cb = selMember.cumulative_balance || null;
+            return Object.assign({}, hourEncodeBase, { ajax: ajx, labels: lbl, projects: projects2, entries: [], events: [], workSchedule: ws, cumulativeBalance: cb, capabilities: Object.assign({}, hourEncodeBase.capabilities || {}, { canManage: true }) });
+        }, [hourEncodeBase, selMember, selId]);
 
-            var ws = Array.isArray(selectedMember.work_schedule) ? selectedMember.work_schedule : (hourEncodeBase.workSchedule || []);
-            var cb = selectedMember.cumulative_balance || null;
-            var caps = Object.assign({}, hourEncodeBase.capabilities || {}, { canManage: true });
-
-            return Object.assign({}, hourEncodeBase, {
-                ajax: ajaxConfig, labels: labelsConfig, projects: uniqueProjects,
-                entries: [], events: [], projectTotals: hourEncodeBase.projectTotals || [],
-                workSchedule: ws, cumulativeBalance: cb, capabilities: caps,
-            });
-        }, [hourEncodeBase, selectedMember, selectedMemberId]);
-
-        var editConfigJson = useMemo(function () {
+        var editJSON = _p.useMemo(function () {
             if (!editConfig) return null;
             try { return JSON.stringify(editConfig); } catch (_) { return null; }
         }, [editConfig]);
 
+        /* render */
         return h('div', { className: 'mj-hd__content' },
-            h(SummaryCards, { totals: totals, i18n: i18n }),
+
+            /* KPI strip */
+            h(KpiStrip, { totals: totals, i18n: i18n }),
+
+            /* Member selector */
             h(MemberSelector, {
-                members: members, selectedId: selectedMemberId,
-                onChange: setSelectedMemberId, label: i18n.memberSelectLabel, helper: i18n.memberSelectHelper,
+                members: members, selectedId: selId, onChange: setSelId,
+                label: i18n.memberSelectLabel, helper: i18n.memberSelectHelper,
             }),
-            canShowEditTab ? h('div', { className: 'mj-hd__tabs', role: 'tablist' },
-                h('button', {
-                    type: 'button', id: 'mj-hd-tab-graphs', role: 'tab',
-                    'aria-selected': activeTab === 'graphs' ? 'true' : 'false', 'aria-controls': 'mj-hd-panel-graphs',
-                    tabIndex: activeTab === 'graphs' ? 0 : -1,
-                    className: 'mj-hd__tab' + (activeTab === 'graphs' ? ' mj-hd__tab--active' : ''),
-                    onClick: function () { setActiveTab('graphs'); },
-                }, i18n.graphsTabLabel || 'Graphiques'),
-                h('button', {
-                    type: 'button', id: 'mj-hd-tab-edit', role: 'tab',
-                    'aria-selected': activeTab === 'edit' ? 'true' : 'false', 'aria-controls': 'mj-hd-panel-edit',
-                    tabIndex: activeTab === 'edit' ? 0 : -1,
-                    className: 'mj-hd__tab' + (activeTab === 'edit' ? ' mj-hd__tab--active' : ''),
-                    onClick: function () { setActiveTab('edit'); },
-                }, i18n.editTabLabel || 'Éditer les heures')
+
+            /* Tabs */
+            canEdit ? h('div', { className: 'mj-hd__tabs', role: 'tablist' },
+                h('button', { type: 'button', role: 'tab', id: 'mj-hd-tg', 'aria-selected': String(tab === 'graphs'), 'aria-controls': 'mj-hd-pg',
+                    className: 'mj-hd__tab' + (tab === 'graphs' ? ' mj-hd__tab--active' : ''), onClick: function () { setTab('graphs'); } },
+                    i18n.graphsTabLabel || 'Graphiques'),
+                h('button', { type: 'button', role: 'tab', id: 'mj-hd-te', 'aria-selected': String(tab === 'edit'), 'aria-controls': 'mj-hd-pe',
+                    className: 'mj-hd__tab' + (tab === 'edit' ? ' mj-hd__tab--active' : ''), onClick: function () { setTab('edit'); } },
+                    i18n.editTabLabel || 'Éditer les heures')
             ) : null,
-            (!canShowEditTab || activeTab === 'graphs') ? h('div', {
+
+            /* Graphs panel */
+            (!canEdit || tab === 'graphs') ? h('div', {
                 className: 'mj-hd__graphs',
-                id: canShowEditTab ? 'mj-hd-panel-graphs' : undefined,
-                role: canShowEditTab ? 'tabpanel' : undefined,
-                'aria-labelledby': canShowEditTab ? 'mj-hd-tab-graphs' : undefined,
+                id: canEdit ? 'mj-hd-pg' : undefined,
+                role: canEdit ? 'tabpanel' : undefined,
+                'aria-labelledby': canEdit ? 'mj-hd-tg' : undefined,
             },
-                h(DonutChart, {
-                    title: projectsDonutTitle, items: donutItems, totalMinutes: donutTotalMinutes,
-                    centerValue: donutCenterValue, centerLabel: donutCenterLabel, i18n: i18n,
-                    emptyLabel: i18n.noProjectsForMember,
-                }),
-                h('div', { className: 'mj-hd__grid mj-hd__grid--timeseries' },
-                    h(BarChart, { title: i18n.monthlyHoursTitle || '', subtitle: monthlySubtitle, items: monthlySeries, i18n: i18n, emptyLabel: i18n.barChartEmpty }),
-                    h(BarChart, { title: i18n.weeklyHoursTitle || '', subtitle: weeklySubtitle, items: weeklySeries, i18n: i18n, emptyLabel: i18n.barChartEmpty })
+                /* Donut + Weekly bar side by side */
+                h('div', { className: 'mj-hd__charts-row' },
+                    h(DonutChart, {
+                        title: donutTitle, items: donutItems, totalMinutes: donutTotal,
+                        centerValue: donutValue, centerLabel: donutLabel, i18n: i18n,
+                        emptyLabel: i18n.noProjectsForMember,
+                    }),
+                    h(BarChart, {
+                        title: i18n.weeklyHoursTitle || 'Heures par semaine',
+                        subtitle: weekSub, items: weekly, i18n: i18n,
+                        emptyLabel: i18n.barChartEmpty,
+                    })
                 ),
+
+                /* Monthly bar full width */
+                h(BarChart, {
+                    title: i18n.monthlyHoursTitle || 'Heures par mois',
+                    subtitle: monthSub, items: monthly, i18n: i18n,
+                    emptyLabel: i18n.barChartEmpty,
+                }),
+
+                /* Members table */
                 h(MembersTable, { members: members, totals: totals, i18n: i18n })
             ) : null,
-            (canShowEditTab && activeTab === 'edit') ? h(HourEncodeEmbed, {
-                config: editConfig, configJson: editConfigJson,
-                panelId: 'mj-hd-panel-edit', labelledBy: 'mj-hd-tab-edit',
-                emptyLabel: i18n.editTabError || 'Impossible de charger l\'éditeur pour ce membre.',
+
+            /* Edit panel */
+            (canEdit && tab === 'edit') ? h(HourEncodeEmbed, {
+                config: editConfig, configJson: editJSON,
+                panelId: 'mj-hd-pe', labelledBy: 'mj-hd-te',
+                emptyLabel: i18n.editTabError || 'Impossible de charger l\'éditeur.',
             }) : null
         );
     }
 
-    /* ---------- Bootstrap ---------- */
+    /* ====================================================================
+     *  Bootstrap
+     * ==================================================================== */
 
-    function bootstrap(root) {
-        var rawConfig = root.getAttribute('data-config') || root.dataset.config || '{}';
-        var config = parseConfig(rawConfig);
-        if (!config || typeof config !== 'object') config = {};
+    function boot(root) {
+        var raw = root.getAttribute('data-config') || '{}';
+        var cfg = parseJSON(raw);
 
         ensurePreact().then(function () {
             try {
-                render(h(DashboardApp, { config: config }), root);
+                _p.render(_p.h(DashboardApp, { config: cfg }), root);
                 root.setAttribute('data-mj-hours-dashboard-front-ready', '1');
             } catch (e) {
-                console.error('[MJ Hours Dashboard] Render error', e);
-                var msg = (config && config.i18n && config.i18n.renderError) || "Impossible d'afficher le tableau de bord.";
-                root.innerHTML = '<p class="mj-hd__empty">' + msg + '</p>';
+                console.error('[MJ-HD] render', e);
+                root.innerHTML = '<p class="mj-hd__empty">' + ((cfg.i18n || {}).renderError || "Impossible d'afficher le tableau de bord.") + '</p>';
             }
         }).catch(function () {
-            var msg = (config && config.i18n && config.i18n.renderError) || "Impossible d'afficher le tableau de bord.";
-            root.innerHTML = '<p class="mj-hd__empty">' + msg + '</p>';
+            root.innerHTML = '<p class="mj-hd__empty">' + ((cfg.i18n || {}).renderError || "Impossible d'afficher le tableau de bord.") + '</p>';
         });
     }
 
     function init() {
-        var roots = document.querySelectorAll('[data-mj-hours-dashboard-front]');
-        roots.forEach(function (root) { bootstrap(root); });
+        document.querySelectorAll('[data-mj-hours-dashboard-front]').forEach(boot);
     }
 
     if (document.readyState === 'loading') {

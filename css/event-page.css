@@ -2073,8 +2073,8 @@
 }
 
 .mj-event-page__testimonial-photo-link img {
-    width: 80px;
-    height: 80px;
+    width: 160px;
+    height: 160px;
     object-fit: cover;
     display: block;
     transition: transform var(--mj-event-transition);
@@ -2082,6 +2082,17 @@
 
 .mj-event-page__testimonial-photo-link:hover img {
     transform: scale(1.05);
+}
+
+/* Single photo: full width */
+.mj-event-page__testimonial-photo-link:only-child {
+    flex: 1 1 100%;
+}
+
+.mj-event-page__testimonial-photo-link:only-child img {
+    width: 100%;
+    height: auto;
+    max-height: 400px;
 }
 
 /* Video inside testimonial */
@@ -2190,8 +2201,8 @@
 /* Responsive adjustments */
 @media (max-width: 640px) {
     .mj-event-page__testimonial-photo-link img {
-        width: 64px;
-        height: 64px;
+        width: 120px;
+        height: 120px;
     }
 }
 

@@ -1262,6 +1262,10 @@ if (!function_exists('mj_member_register_elementor_login_widget')) {
 
         $widgets_map = mj_member_get_elementor_widgets_map();
         $loaded_widgets = mj_member_load_elementor_widgets($widgets_map);
+        $disabled_widgets = get_option('mj_member_disabled_widgets', array());
+        if (!is_array($disabled_widgets)) {
+            $disabled_widgets = array();
+        }
 
         foreach ($widgets_map as $class_name => $relative_path) {
             if (empty($loaded_widgets[$class_name]) || !class_exists($class_name, false)) {
@@ -1269,7 +1273,11 @@ if (!function_exists('mj_member_register_elementor_login_widget')) {
             }
 
             if (is_subclass_of($class_name, 'Elementor\\Widget_Base')) {
-                $widgets_manager->register(new $class_name());
+                $instance = new $class_name();
+                if (!empty($disabled_widgets) && in_array($instance->get_name(), $disabled_widgets, true)) {
+                    continue;
+                }
+                $widgets_manager->register($instance);
             }
         }
     }

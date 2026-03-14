@@ -103,6 +103,10 @@ class EventsManager extends Widget_Base
 if (!function_exists('mj_member_register_events_manager_widget')) {
     function mj_member_register_events_manager_widget($widgets_manager) {
         if (class_exists('Mj\Member\Elementor\EventsManager')) {
+            $disabled_widgets = get_option('mj_member_disabled_widgets', array());
+            if (is_array($disabled_widgets) && in_array('mj-events-manager', $disabled_widgets, true)) {
+                return;
+            }
             $widgets_manager->register(new \Mj\Member\Elementor\EventsManager());
         }
     }

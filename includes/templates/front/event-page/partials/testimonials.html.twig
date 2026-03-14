@@ -169,7 +169,11 @@
                         {% for photo in item.photos %}
                             <a href="{{ photo.full|esc_url }}" target="_blank" rel="noopener" class="mj-event-page__testimonial-photo-link">
                                 <img
-                                    src="{{ photo.thumb|esc_url }}"
+                                    src="{{ photo.full|esc_url }}"
+                                    {% if photo.large is defined and photo.large and photo.large != photo.full %}
+                                        srcset="{{ photo.large|esc_url }} 1024w, {{ photo.full|esc_url }} 2048w"
+                                        sizes="(max-width: 640px) 100vw, 50vw"
+                                    {% endif %}
                                     alt=""
                                     loading="lazy"
                                     decoding="async"
