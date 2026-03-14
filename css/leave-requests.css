@@ -645,14 +645,14 @@
     background: #e9ecef;
     border-color: #adb5bd;
 }
-
+.mj-leave-requests__coordinator-member-header button,
 .mj-leave-requests__overview-nav-btn--today {
     background: var(--mj-primary, #00a7e8);
     border-color: var(--mj-primary, #00a7e8);
     color: #fff;
     font-size: 0.875rem;
 }
-
+.mj-leave-requests__coordinator-member-header button:hover,
 .mj-leave-requests__overview-nav-btn--today:hover {
     background: var(--mj-primary-dark, #0090c9);
 }

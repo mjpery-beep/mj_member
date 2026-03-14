@@ -918,29 +918,30 @@ button.mj-feed-post__owner-action--danger:hover {
 .mj-feed-post__media {
     position: relative;
     background: #1c1e21;
-    max-height: 500px;
     overflow: hidden;
 }
 
 .mj-feed-post__media--video video {
     width: 100%;
-    max-height: 500px;
+    max-height: 600px;
     object-fit: contain;
 }
 
 /* Photo Grid Layouts */
 .mj-feed-post__media--photos-1 {
-    display: block;
-    max-height: 500px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 .mj-feed-post__media--photos-1 .mj-feed-post__photo {
-    max-height: 500px;
+    width: 100%;
+    max-height: none;
 }
 
 .mj-feed-post__media--photos-1 .mj-feed-post__photo img {
     width: 100%;
-    max-height: 500px;
+    max-height: 600px;
     object-fit: contain;
     object-position: center;
 }
@@ -950,15 +951,15 @@ button.mj-feed-post__owner-action--danger:hover {
     grid-template-columns: repeat(2, 1fr);
     grid-template-rows: 1fr;
     gap: 2px;
-    height: 250px;
-    max-height: 250px;
+    height: 350px;
+    max-height: 350px;
     width: 100%;
 }
 
 .mj-feed-post__media--photos-2 .mj-feed-post__photo {
     aspect-ratio: auto;
     height: 100%;
-    max-height: 250px;
+    max-height: 350px;
 }
 
 .mj-feed-post__media--photos-2 .mj-feed-post__photo img {
@@ -969,10 +970,11 @@ button.mj-feed-post__owner-action--danger:hover {
 
 .mj-feed-post__media--photos-3 {
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: 1fr 1fr;
     grid-template-rows: repeat(2, 1fr);
     gap: 2px;
-    max-height: 300px;
+    height: 400px;
+    max-height: 400px;
     width: 100%;
 }
 
@@ -985,7 +987,8 @@ button.mj-feed-post__owner-action--danger:hover {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 2px;
-    max-height: 300px;
+    height: 400px;
+    max-height: 400px;
     width: 100%;
 }
 
@@ -993,19 +996,19 @@ button.mj-feed-post__owner-action--danger:hover {
     display: block;
     overflow: hidden;
     position: relative;
-    aspect-ratio: 1;
-    max-height: 200px;
+    aspect-ratio: auto;
+    max-height: none;
     width: 100%;
 }
 
 .mj-feed-post__media--photos-1 .mj-feed-post__photo {
     aspect-ratio: auto;
-    max-height: 500px;
+    max-height: none;
 }
 
 .mj-feed-post__media--photos-3 .mj-feed-post__photo:first-child {
     aspect-ratio: auto;
-    max-height: 400px;
+    max-height: none;
 }
 
 .mj-feed-post__photo img {
@@ -1017,7 +1020,7 @@ button.mj-feed-post__owner-action--danger:hover {
 
 .mj-feed-post__media--photos-1 .mj-feed-post__photo img {
     object-fit: contain;
-    background: #000;
+    background: #1c1e21;
 }
 
 .mj-feed-post__photo:hover img {
@@ -1406,6 +1409,84 @@ button.mj-feed-post__owner-action--danger:hover {
     display: block;
 }
 
+/* Share Picker */
+.mj-feed-post__action--share {
+    position: relative;
+}
+
+.mj-feed-post__share-picker {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%) scale(0.9);
+    display: flex;
+    gap: 6px;
+    background: #fff;
+    border-radius: 28px;
+    padding: 10px 14px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    z-index: 100;
+    margin-bottom: 8px;
+    white-space: nowrap;
+}
+
+.mj-feed-post__share-picker.is-visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) scale(1);
+}
+
+.mj-feed-post__share-option {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--feed-separator, #f0f2f5);
+    border: none;
+    cursor: pointer;
+    transition: transform 0.2s, background 0.2s;
+    padding: 0;
+    text-decoration: none;
+}
+
+.mj-feed-post__share-option:hover {
+    transform: scale(1.15) translateY(-3px);
+    background: var(--feed-hover, #e4e6eb);
+}
+
+.mj-feed-post__share-option svg {
+    display: block;
+}
+
+/* Share toast notification */
+.mj-share-toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #333;
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 99999;
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.mj-share-toast.is-visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
 /* Comments Section - inside the post card */
 .mj-feed-post__comments {
     padding: 12px 20px 20px;
@@ -1678,6 +1759,47 @@ button.mj-testimonials__submit:hover {
     
     .mj-feed-post__reaction-picker {
         padding: 4px 8px;
+    }
+
+    .mj-feed-post__share-picker {
+        left: auto;
+        right: 0;
+        transform: scale(0.9);
+    }
+
+    .mj-feed-post__share-picker.is-visible {
+        transform: scale(1);
+    }
+
+    .mj-feed-post__share-option {
+        width: 36px;
+        height: 36px;
+    }
+
+    .mj-feed-post__share-option svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    /* Portrait media on mobile: allow taller display */
+    .mj-feed-post__media--photos-1 .mj-feed-post__photo img {
+        max-height: 70vh;
+    }
+
+    .mj-feed-post__media--video video {
+        max-height: 70vh;
+    }
+
+    .mj-feed-post__media--photos-2 {
+        height: 250px;
+        max-height: 250px;
+    }
+
+    .mj-feed-post__media--photos-3,
+    .mj-feed-post__media--photos-4,
+    .mj-feed-post__media--photos-5 {
+        height: 300px;
+        max-height: 300px;
     }
 }
 
@@ -2040,7 +2162,8 @@ button.mj-testimonials__submit:hover {
 .mj-carousel-card__media--photos-1 .mj-carousel-card__photo {
     display: block;
     width: 100%;
-    aspect-ratio: 16 / 10;
+    aspect-ratio: auto;
+    max-height: 320px;
     overflow: hidden;
 }
 

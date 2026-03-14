@@ -2105,11 +2105,123 @@
             });
         });
 
+        // Share button - toggle picker
+        $(document).on('click.mjFeed', '.mj-feed-post__action--share', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const $picker = $(this).find('.mj-feed-post__share-picker');
+            // Close all other open pickers
+            $('.mj-feed-post__share-picker').not($picker).removeClass('is-visible');
+            $picker.toggleClass('is-visible');
+        });
+
+        // Close share picker on outside click
+        $(document).on('click.mjFeed', function(e) {
+            if (!$(e.target).closest('.mj-feed-post__action--share').length) {
+                $('.mj-feed-post__share-picker.is-visible').removeClass('is-visible');
+            }
+        });
+
+        // Share option click
+        $(document).on('click.mjFeed', '.mj-feed-post__share-option', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const platform = $(this).data('share');
+            const $wrapper = getWrapper(this);
+            const relativeUrl = $wrapper.data('post-url') || window.location.href;
+            // Ensure absolute URL with domain
+            const postUrl = relativeUrl.startsWith('http') ? relativeUrl : window.location.origin + (relativeUrl.startsWith('/') ? '' : window.location.pathname) + relativeUrl;
+            const $post = $wrapper.find('.mj-feed-post');
+            const rawContent = $post.find('.mj-feed-post__content').data('raw-content') || '';
+            const author = $post.find('.mj-feed-post__author').text().trim();
+            const shareText = author
+                ? 'Découvrez le témoignage de ' + author + ' sur la MJ Pery : ' + rawContent.substring(0, 100) + (rawContent.length > 100 ? '...' : '')
+                : rawContent.substring(0, 140) + (rawContent.length > 140 ? '...' : '');
+            const encodedUrl = encodeURIComponent(postUrl);
+            const encodedText = encodeURIComponent(shareText);
+
+            let shareUrl = '';
+            switch (platform) {
+                case 'whatsapp':
+                    shareUrl = 'https://api.whatsapp.com/send?text=' + encodedText + '%20' + encodedUrl;
+                    break;
+                case 'facebook':
+                    shareUrl = 'https://www.facebook.com/sharer/sharer.php?u=' + encodedUrl + '&quote=' + encodedText;
+                    break;
+                case 'instagram':
+                    // Instagram n'a pas d'API de partage web, on copie le lien
+                    copyToClipboard(postUrl, 'Lien copié ! Collez-le dans votre story ou publication Instagram.');
+                    $('.mj-feed-post__share-picker.is-visible').removeClass('is-visible');
+                    return;
+                case 'tiktok':
+                    // TikTok n'a pas d'API de partage web, on copie le lien
+                    copyToClipboard(postUrl, 'Lien copié ! Collez-le dans votre vidéo TikTok.');
+                    $('.mj-feed-post__share-picker.is-visible').removeClass('is-visible');
+                    return;
+                case 'copy':
+                    copyToClipboard(postUrl, 'Lien copié dans le presse-papier !');
+                    $('.mj-feed-post__share-picker.is-visible').removeClass('is-visible');
+                    return;
+            }
+
+            if (shareUrl) {
+                window.open(shareUrl, '_blank', 'noopener,noreferrer,width=600,height=400');
+                $('.mj-feed-post__share-picker.is-visible').removeClass('is-visible');
+            }
+        });
+
+        /**
+         * Copy text to clipboard and show feedback
+         */
+        function copyToClipboard(text, message) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function() {
+                    showShareToast(message);
+                }).catch(function() {
+                    fallbackCopy(text, message);
+                });
+            } else {
+                fallbackCopy(text, message);
+            }
+        }
+
+        function fallbackCopy(text, message) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showShareToast(message);
+            } catch (err) {
+                showShareToast('Impossible de copier le lien.');
+            }
+            document.body.removeChild(textarea);
+        }
+
+        function showShareToast(message) {
+            // Remove existing toast
+            $('.mj-share-toast').remove();
+            const $toast = $('<div class="mj-share-toast">' + $('<span>').text(message).html() + '</div>');
+            $('body').append($toast);
+            // Trigger animation
+            requestAnimationFrame(function() {
+                $toast.addClass('is-visible');
+            });
+            setTimeout(function() {
+                $toast.removeClass('is-visible');
+                setTimeout(function() { $toast.remove(); }, 300);
+            }, 2500);
+        }
+
         // Click on post to navigate to single view (only in list mode)
         $(document).on('click', '.mj-feed-post-wrapper:not(.mj-feed-post-wrapper--single)', function(e) {
             // Don't navigate if clicking on interactive elements
             const $target = $(e.target);
-            const isInteractive = $target.closest('button, a, input, textarea, video, .mj-feed-post__actions, .mj-feed-post__reactions-bar, .mj-feed-post__comments, .mj-feed-post__reaction-picker, .mj-feed-post__photo, .mj-feed-post__owner-menu, .mj-feed-post__edit-form').length > 0;
+            const isInteractive = $target.closest('button, a, input, textarea, video, .mj-feed-post__actions, .mj-feed-post__reactions-bar, .mj-feed-post__comments, .mj-feed-post__reaction-picker, .mj-feed-post__share-picker, .mj-feed-post__photo, .mj-feed-post__owner-menu, .mj-feed-post__edit-form').length > 0;
             
             if (isInteractive) {
                 return;
