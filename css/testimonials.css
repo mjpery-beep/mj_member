@@ -420,6 +420,32 @@
     opacity: 0.7;
 }
 
+/* Infinite Scroll */
+.mj-testimonials__infinite-scroll-sentinel {
+    display: flex;
+    justify-content: center;
+    padding: 1.5rem 0;
+    min-height: 40px;
+}
+
+.mj-testimonials__infinite-scroll-spinner {
+    display: none;
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--mj-color-border, #e0e0e0);
+    border-top-color: var(--mj-color-primary, #3b82f6);
+    border-radius: 50%;
+}
+
+.mj-testimonials__infinite-scroll-spinner.is-active {
+    display: block;
+    animation: mj-spin 0.7s linear infinite;
+}
+
+@keyframes mj-spin {
+    to { transform: rotate(360deg); }
+}
+
 /* Layout: List */
 .mj-testimonials--layout-list .mj-testimonials__list {
     display: flex;

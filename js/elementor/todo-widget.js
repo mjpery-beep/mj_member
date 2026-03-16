@@ -529,6 +529,7 @@
             var rawAssignees = item && Array.isArray(item.assignees) ? item.assignees : [];
             var assignees = rawAssignees.map(function (assignee) {
                 var assigneeId = assignee && assignee.id !== undefined ? assignee.id : assignee && assignee.member_id !== undefined ? assignee.member_id : '';
+                var avatarRaw = assignee && assignee.avatar && typeof assignee.avatar === 'object' ? assignee.avatar : {};
                 return {
                     id: assigneeId,
                     name: assignee && typeof assignee.name === 'string' ? assignee.name : '',
@@ -536,6 +537,11 @@
                     isSelf: !!(assignee && assignee.isSelf),
                     assignedAt: assignee && typeof assignee.assignedAt === 'string' ? assignee.assignedAt : assignee && typeof assignee.assigned_at === 'string' ? assignee.assigned_at : '',
                     assignedBy: assignee && assignee.assignedBy !== undefined ? assignee.assignedBy : assignee && assignee.assigned_by !== undefined ? assignee.assigned_by : '',
+                    avatar: {
+                        url: typeof avatarRaw.url === 'string' ? avatarRaw.url : (assignee && typeof assignee.avatarUrl === 'string' ? assignee.avatarUrl : ''),
+                        initials: typeof avatarRaw.initials === 'string' ? avatarRaw.initials : (assignee && typeof assignee.avatarInitials === 'string' ? assignee.avatarInitials : ''),
+                        alt: typeof avatarRaw.alt === 'string' ? avatarRaw.alt : (assignee && typeof assignee.avatarAlt === 'string' ? assignee.avatarAlt : ''),
+                    },
                 };
             }).filter(function (assignee) {
                 return assignee && assignee.id !== undefined && assignee.id !== null && assignee.id !== '';
@@ -826,6 +832,7 @@
     function TodoApp(props) {
         var datasetConfig = props.datasetConfig || {};
         var runtime = props.runtime || {};
+        var propSingleTodoId = typeof props.singleTodoId === 'number' && props.singleTodoId > 0 ? props.singleTodoId : 0;
 
         var preview = !!datasetConfig.preview;
         var ajaxUrl = typeof runtime.ajaxUrl === 'string' ? runtime.ajaxUrl : '';
@@ -918,6 +925,7 @@
         var projectInputRef = useRef(null);
         var descriptionInputRef = useRef(null);
         var sortSelectIdRef = useRef('mj-todo-sort-' + Math.random().toString(36).slice(2));
+        var scopeSelectIdRef = useRef('mj-todo-scope-' + Math.random().toString(36).slice(2));
         var assigneesGroupIdRef = useRef('mj-todo-assignees-' + Math.random().toString(36).slice(2));
         var projectNameInputIdRef = useRef('mj-todo-project-name-' + Math.random().toString(36).slice(2));
         var descriptionInputIdRef = useRef('mj-todo-description-' + Math.random().toString(36).slice(2));
@@ -978,6 +986,8 @@
             return seed;
         }), assigneeSelection = _o[0], setAssigneeSelection = _o[1];
         var _p = useState({ id: initialViewerId, name: '', role: '' }), viewer = _p[0], setViewer = _p[1];
+        var _p1 = useState('mine'), scope = _p1[0], setScope = _p1[1];
+        var _p2 = useState(0), scopeMemberId = _p2[0], setScopeMemberId = _p2[1];
         var _q = useState(false), showProjectForm = _q[0], setShowProjectForm = _q[1];
         var _r = useState(''), projectFormTitle = _r[0], setProjectFormTitle = _r[1];
         var _s = useState(false), creatingProject = _s[0], setCreatingProject = _s[1];
@@ -1193,11 +1203,16 @@
             setLoading(true);
 
             var includeCompleted = statusFilter === 'todo' ? '0' : '1';
-            var body = encodeForm({
+            var fetchParams = {
                 action: fetchAction,
                 nonce: nonce || '',
                 include_completed: includeCompleted,
-            });
+                scope: scope || 'mine',
+            };
+            if (scope === 'member' && scopeMemberId > 0) {
+                fetchParams.view_member_id = String(scopeMemberId);
+            }
+            var body = encodeForm(fetchParams);
 
             return fetch(ajaxUrl, {
                 method: 'POST',
@@ -1286,7 +1301,7 @@
                     }
                     setLoading(false);
                 });
-        }, [preview, hasAccess, fetchAction, ajaxUrl, nonce, statusFilter, i18n]);
+        }, [preview, hasAccess, fetchAction, ajaxUrl, nonce, statusFilter, i18n, scope, scopeMemberId]);
 
         useEffect(function () {
             refresh();
@@ -1313,6 +1328,8 @@
             var body = encodeForm({
                 action: fetchArchivedAction,
                 nonce: nonce || '',
+                scope: scope || 'mine',
+                view_member_id: scope === 'member' && scopeMemberId > 0 ? String(scopeMemberId) : '',
             });
 
             return fetch(ajaxUrl, {
@@ -1364,7 +1381,7 @@
                     }
                     setLoadingArchives(false);
                 });
-        }, [preview, hasAccess, fetchArchivedAction, ajaxUrl, nonce, i18n, setArchivedTodos, setArchivedProjectsMap, setArchivesError, setLoadingArchives]);
+        }, [preview, hasAccess, fetchArchivedAction, ajaxUrl, nonce, i18n, scope, scopeMemberId, setArchivedTodos, setArchivedProjectsMap, setArchivesError, setLoadingArchives]);
 
         var projectsMap = useMemo(function () {
             var map = new Map();
@@ -1383,6 +1400,14 @@
 
         var visibleTodos = useMemo(function () {
             var list = Array.isArray(todos) ? todos.slice() : [];
+
+            // Single todo mode: show only the targeted todo
+            if (propSingleTodoId > 0) {
+                list = list.filter(function (todo) {
+                    return todo && String(todo.id) === String(propSingleTodoId);
+                });
+                return list;
+            }
 
             if (statusFilter === 'todo') {
                 list = list.filter(function (todo) {
@@ -1436,7 +1461,7 @@
             }
 
             return list;
-        }, [todos, statusFilter, selectedProject, sortMode, projectsMap]);
+        }, [todos, statusFilter, selectedProject, sortMode, projectsMap, propSingleTodoId]);
 
         var visibleArchivedTodos = useMemo(function () {
             var list = Array.isArray(archivedTodos) ? archivedTodos.slice() : [];
@@ -1517,10 +1542,12 @@
                 var titleValue = typeof todo.title === 'string' ? todo.title : '';
                 var descriptionValue = typeof todo.description === 'string' ? todo.description : '';
                 var emojiValue = typeof todo.emoji === 'string' ? sanitizeEmojiInput(todo.emoji) : '';
+                var dueDateValue = typeof todo.dueDate === 'string' ? todo.dueDate : '';
                 next.set(key, {
                     title: titleValue,
                     description: descriptionValue,
                     emoji: emojiValue,
+                    dueDate: dueDateValue,
                 });
                 return next;
             });
@@ -1600,6 +1627,7 @@
                     title: '',
                     description: '',
                     emoji: '',
+                    dueDate: '',
                 };
                 if (field === 'title') {
                     draft = Object.assign({}, draft, { title: nextValue });
@@ -1608,6 +1636,8 @@
                 } else if (field === 'emoji') {
                     var sanitizedEmoji = sanitizeEmojiInput(nextValue);
                     draft = Object.assign({}, draft, { emoji: sanitizedEmoji });
+                } else if (field === 'dueDate') {
+                    draft = Object.assign({}, draft, { dueDate: nextValue });
                 }
                 next.set(key, draft);
                 return next;
@@ -1620,6 +1650,7 @@
             var draftTitle = draft && typeof draft.title === 'string' ? draft.title.trim() : '';
             var draftDescription = draft && typeof draft.description === 'string' ? draft.description : '';
             var draftEmoji = draft && typeof draft.emoji === 'string' ? sanitizeEmojiInput(draft.emoji) : '';
+            var draftDueDate = draft && typeof draft.dueDate === 'string' ? draft.dueDate : '';
 
             if (draftTitle === '') {
                 setEditErrors(function (previous) {
@@ -1647,6 +1678,7 @@
                                 title: draftTitle,
                                 description: draftDescription,
                                 emoji: draftEmoji,
+                                dueDate: draftDueDate,
                             });
                         }
                         return todo;
@@ -1659,6 +1691,7 @@
                                 title: draftTitle,
                                 description: draftDescription,
                                 emoji: draftEmoji,
+                                dueDate: draftDueDate,
                             });
                         }
                         return todo;
@@ -1690,6 +1723,7 @@
                 title: draftTitle,
                 description: draftDescription,
                 emoji: draftEmoji,
+                due_date: draftDueDate,
             });
 
             fetch(ajaxUrl, {
@@ -1939,6 +1973,26 @@
                 setArchivesError('');
             }
         }, [fetchArchived, setArchivesError]);
+
+        var handleScopeChange = useCallback(function (event) {
+            var value = event && event.target ? event.target.value : 'mine';
+            if (value === 'mine' || value === 'all') {
+                setScope(value);
+                setScopeMemberId(0);
+            } else if (typeof value === 'string' && value.indexOf('member:') === 0) {
+                var idPart = parseInt(value.slice(7), 10);
+                if (!isNaN(idPart) && idPart > 0) {
+                    setScope('member');
+                    setScopeMemberId(idPart);
+                } else {
+                    setScope('mine');
+                    setScopeMemberId(0);
+                }
+            } else {
+                setScope('mine');
+                setScopeMemberId(0);
+            }
+        }, []);
 
         var handleToggle = useCallback(function (todoId, complete) {
             var toggleKey = String(todoId);
@@ -3479,6 +3533,18 @@
             ])
             : null;
 
+        var isSingleTodoMode = propSingleTodoId > 0;
+
+        var backButton = isSingleTodoMode
+            ? h('a', {
+                className: 'mj-todo-widget__back-button',
+                href: window.location.pathname + '?section=todos',
+            }, [
+                h('span', { 'aria-hidden': 'true' }, '\u2039 '),
+                getString(i18n, 'backToAll', 'Retour à toutes les tâches'),
+            ])
+            : null;
+
         var header = null;
         if (title || intro) {
             header = h('div', { className: 'mj-todo-widget__header' }, [
@@ -3908,6 +3974,31 @@
             h('div', { className: 'mj-todo-widget__filters-block mj-todo-widget__filters-block--sort' }, [
                 h('label', {
                     className: 'mj-todo-widget__filters-label',
+                    htmlFor: scopeSelectIdRef.current,
+                }, getString(i18n, 'scopeLabel', 'Affichage')),
+                h('select', {
+                    id: scopeSelectIdRef.current,
+                    className: 'mj-todo-widget__select',
+                    value: scope === 'member' && scopeMemberId > 0 ? 'member:' + scopeMemberId : scope,
+                    onChange: handleScopeChange,
+                }, [
+                    h('option', { value: 'mine' }, getString(i18n, 'scopeMine', 'Mes tâches')),
+                    h('option', { value: 'all' }, getString(i18n, 'scopeAll', 'Toutes les tâches')),
+                ].concat(
+                    assignableMembers
+                        .filter(function (m) {
+                            if (!m || m.isSelf) return false;
+                            var r = typeof m.role === 'string' ? m.role : '';
+                            var animateurKey = roles && roles.ANIMATEUR ? roles.ANIMATEUR : 'animateur';
+                            var coordinateurKey = roles && roles.COORDINATEUR ? roles.COORDINATEUR : 'coordinateur';
+                            return r === animateurKey || r === coordinateurKey;
+                        })
+                        .map(function (m) {
+                            return h('option', { value: 'member:' + m.id, key: 'scope-member-' + m.id }, m.name);
+                        })
+                )),
+                h('label', {
+                    className: 'mj-todo-widget__filters-label',
                     htmlFor: sortSelectIdRef.current,
                 }, getString(i18n, 'sortLabel', 'Tri')),
                 h('select', {
@@ -3995,6 +4086,9 @@
                     ? draft.emoji
                     : (typeof todo.emoji === 'string' ? todo.emoji : '');
                 var draftEmoji = sanitizeEmojiInput(draftEmojiRaw);
+                var draftDueDate = draft && typeof draft.dueDate === 'string'
+                    ? draft.dueDate
+                    : (typeof todo.dueDate === 'string' ? todo.dueDate : '');
                 var updatePending = pendingUpdates.has(todoKey);
                 var editErrorMessage = editErrors.has(todoKey) ? editErrors.get(todoKey) : '';
                 var itemClasses = 'mj-todo-widget__item';
@@ -4079,15 +4173,21 @@
                         chipMetaSegments.push(assignee.role);
                     }
                     var chipMeta = chipMetaSegments.join(' • ');
-                    var chipInitials = extractInitials(chipName);
+                    var chipAvatarData = assignee && assignee.avatar ? assignee.avatar : {};
+                    var chipAvatarUrl = typeof chipAvatarData.url === 'string' ? chipAvatarData.url : '';
+                    var chipAvatarAlt = typeof chipAvatarData.alt === 'string' && chipAvatarData.alt !== '' ? chipAvatarData.alt : chipName;
+                    var chipInitials = typeof chipAvatarData.initials === 'string' && chipAvatarData.initials !== '' ? chipAvatarData.initials : extractInitials(chipName);
                     if (!chipInitials) {
                         chipInitials = chipMeta ? extractInitials(chipMeta) : '';
                     }
                     if (!chipInitials) {
                         chipInitials = '?';
                     }
+                    var chipAvatarNode = chipAvatarUrl
+                        ? h('img', { className: 'mj-todo-widget__assignee-chip-avatar-img', src: chipAvatarUrl, alt: chipAvatarAlt, loading: 'lazy' })
+                        : h('span', { className: 'mj-todo-widget__assignee-chip-avatar', 'aria-hidden': 'true' }, chipInitials);
                     return h('span', { key: chipKey, className: 'mj-todo-widget__assignee-chip' }, [
-                        h('span', { className: 'mj-todo-widget__assignee-chip-avatar', 'aria-hidden': 'true' }, chipInitials),
+                        chipAvatarNode,
                         h('span', { className: 'mj-todo-widget__assignee-chip-text' }, [
                             h('span', { className: 'mj-todo-widget__assignee-chip-name' }, chipName),
                             chipMeta ? h('span', { className: 'mj-todo-widget__assignee-chip-role' }, chipMeta) : null,
@@ -4201,6 +4301,32 @@
                             h('span', { className: 'mj-todo-widget__collapsed-chip-text' }, dueDisplay),
                         ])
                     );
+                }
+                var collapsedAssigneesNode = null;
+                if (assignees.length > 0) {
+                    var compactChips = assignees.map(function (assignee, idx) {
+                        if (!assignee) return null;
+                        var aName = typeof assignee.name === 'string' && assignee.name !== '' ? assignee.name : '';
+                        if (!aName) {
+                            var fId = assignee.id !== undefined && assignee.id !== null ? String(assignee.id) : '';
+                            aName = fId !== '' ? '#' + fId : '';
+                        }
+                        var aAvatar = assignee.avatar || {};
+                        var aUrl = typeof aAvatar.url === 'string' ? aAvatar.url : '';
+                        var aInitials = typeof aAvatar.initials === 'string' ? aAvatar.initials : '';
+                        var aAlt = typeof aAvatar.alt === 'string' && aAvatar.alt !== '' ? aAvatar.alt : aName;
+                        if (!aInitials) aInitials = extractInitials(aName) || '?';
+                        var avatarNode = aUrl
+                            ? h('img', { className: 'mj-todo-widget__inline-assignee-img', src: aUrl, alt: aAlt, loading: 'lazy', title: aName })
+                            : h('span', { className: 'mj-todo-widget__inline-assignee-initials', title: aName, 'aria-label': aName }, aInitials);
+                        return h('span', { key: 'iassignee-' + idx, className: 'mj-todo-widget__inline-assignee' }, [
+                            avatarNode,
+                            h('span', { className: 'mj-todo-widget__inline-assignee-name' }, aName),
+                        ]);
+                    }).filter(Boolean);
+                    if (compactChips.length > 0) {
+                        collapsedAssigneesNode = h('div', { className: 'mj-todo-widget__inline-assignees' }, compactChips);
+                    }
                 }
                 var collapsedSummaryNode = isCollapsed && collapsedSummaryItems.length
                     ? h('div', { className: 'mj-todo-widget__collapsed-summary' }, collapsedSummaryItems)
@@ -4564,6 +4690,7 @@
                 var titleDisplay = draftTitle !== '' ? draftTitle : getString(i18n, 'untitled', 'Tâche sans titre');
                 var titleFieldId = 'mj-todo-edit-title-' + todoKey;
                 var descriptionFieldId = 'mj-todo-edit-description-' + todoKey;
+                var dueDateFieldId = 'mj-todo-edit-duedate-' + todoKey;
                 var emojiFieldId = 'mj-todo-edit-emoji-' + todoKey;
                 var editEmojiHintId = emojiHint ? emojiFieldId + '-hint' : '';
                 var editFieldsNode = isEditing
@@ -4592,7 +4719,18 @@
                                 placeholder: getString(i18n, 'descriptionPlaceholder', 'Description (optionnel)'),
                             }),
                         ]),
-                        h('div', { className: 'mj-todo-widget__edit-field mj-todo-widget__edit-field--emoji' }, [
+                        h('div', { className: 'mj-todo-widget__edit-field mj-todo-widget__edit-field--date' }, [
+                            h('label', { className: 'mj-todo-widget__edit-label', htmlFor: dueDateFieldId }, getString(i18n, 'dueLabel', 'Échéance')),
+                            h('input', {
+                                id: dueDateFieldId,
+                                type: 'date',
+                                className: 'mj-todo-widget__edit-input mj-todo-widget__edit-input--date',
+                                value: draftDueDate,
+                                onInput: function (event) { return handleEditDraftChange(todoId, 'dueDate', event.target.value); },
+                                disabled: updatePending,
+                            }),
+                        ]),
+                        h('div', { className: 'mj-todo-widget__edit-field mj-todo-widget__edit-field--emoji mj-todo-widget__form-emoji' }, [
                             h('label', { className: 'mj-todo-widget__edit-label', htmlFor: emojiFieldId }, emojiStrings.eventEmoji || getString(i18n, 'emojiLabel', 'Emoji')),
                             renderEmojiPickerControl({
                                 id: emojiFieldId,
@@ -4662,6 +4800,7 @@
                                 titleDisplay,
                             ].filter(Boolean)),
                         ]),
+                        collapsedAssigneesNode,
                         actionsNode,
                     ]),
                 ];
@@ -4752,6 +4891,11 @@
             ? null
             : h('div', { className: 'mj-todo-widget__body' }, (function () {
                 var parts = [];
+                if (isSingleTodoMode) {
+                    parts.push(backButton);
+                    parts.push(listNode);
+                    return parts;
+                }
                 if (effectiveAccess && createButton) {
                     parts.push(createButton);
                 }
@@ -4788,7 +4932,22 @@
         }
 
         var datasetConfig = parseDatasetConfig(element);
-        render(h(TodoApp, { datasetConfig: datasetConfig, runtime: runtimeConfig }), element);
+
+        var singleTodoId = 0;
+        try {
+            var urlParams = new URLSearchParams(window.location.search);
+            var todoIdParam = urlParams.get('todo_id');
+            if (todoIdParam) {
+                var parsed = parseInt(todoIdParam, 10);
+                if (!isNaN(parsed) && parsed > 0) {
+                    singleTodoId = parsed;
+                }
+            }
+        } catch (e) {
+            // URLSearchParams unsupported
+        }
+
+        render(h(TodoApp, { datasetConfig: datasetConfig, runtime: runtimeConfig, singleTodoId: singleTodoId }), element);
 
         element.__mjTodoUnmount = function () {
             render(null, element);

@@ -1184,6 +1184,16 @@ button.mj-member-events-calendar__day-add {
     color: #ffe3eb;
 }
 
+.mj-member-events-calendar__event[data-calendar-type="todo"] {
+    background: #ede9fe;
+    border-color: #ddd6fe;
+}
+
+.mj-member-events-calendar__event[data-calendar-type="todo"] .mj-member-events-calendar__event-type {
+    background: #7c3aed;
+    color: #ffffff;
+}
+
 
 
 /* ==========================================================================
@@ -1405,6 +1415,16 @@ button.mj-member-events-calendar__day-add {
 .mj-member-events-calendar__mobile-event[data-calendar-type="closure"] .mj-member-events-calendar__mobile-pill {
     background: #ffe4e6;
     color: #be123c;
+}
+
+.mj-member-events-calendar__mobile-event[data-calendar-type="todo"] {
+    background: #ede9fe;
+    border-color: #ddd6fe;
+}
+
+.mj-member-events-calendar__mobile-event[data-calendar-type="todo"] .mj-member-events-calendar__mobile-pill {
+    background: #7c3aed;
+    color: #ffffff;
 }
 
 .mj-member-events-calendar__mobile-body {

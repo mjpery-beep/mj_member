@@ -32,14 +32,14 @@
             new TestimonialsForm($form);
         });
 
-        $('.mj-testimonials__load-more-btn').each(function() {
-            const $btn = $(this);
+        $('.mj-testimonials__infinite-scroll-sentinel').each(function() {
+            const $sentinel = $(this);
             // Prevent double initialization
-            if ($btn.data('mj-testimonials-init')) {
+            if ($sentinel.data('mj-testimonials-init')) {
                 return;
             }
-            $btn.data('mj-testimonials-init', true);
-            new TestimonialsLoadMore($btn);
+            $sentinel.data('mj-testimonials-init', true);
+            new TestimonialsInfiniteScroll($sentinel);
         });
 
         // Initialize carousel if present
@@ -1086,30 +1086,45 @@
     }
 
     /**
-     * TestimonialsLoadMore class
+     * TestimonialsInfiniteScroll class
+     * Uses IntersectionObserver to trigger loading when the sentinel enters the viewport.
      */
-    class TestimonialsLoadMore {
-        constructor($btn) {
-            this.$btn = $btn;
-            this.$container = $btn.closest('.mj-testimonials');
+    class TestimonialsInfiniteScroll {
+        constructor($sentinel) {
+            this.$sentinel = $sentinel;
+            this.$container = $sentinel.closest('.mj-testimonials');
             this.$feed = this.$container.find('.mj-testimonials__feed');
-            this.page = parseInt($btn.data('page'), 10) || 1;
-            this.totalPages = parseInt($btn.data('total-pages'), 10) || 1;
+            this.$spinner = $sentinel.find('.mj-testimonials__infinite-scroll-spinner');
+            this.page = parseInt($sentinel.data('page'), 10) || 1;
+            this.totalPages = parseInt($sentinel.data('total-pages'), 10) || 1;
             this.perPage = config.perPage || 6;
             this.isLoading = false;
 
-            this.bindEvents();
+            if (this.page >= this.totalPages) {
+                this.$sentinel.hide();
+                return;
+            }
+
+            this.initObserver();
         }
 
-        bindEvents() {
-            this.$btn.on('click', () => this.loadMore());
+        initObserver() {
+            this.observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        this.loadMore();
+                    }
+                });
+            }, { rootMargin: '200px' });
+
+            this.observer.observe(this.$sentinel[0]);
         }
 
         async loadMore() {
             if (this.isLoading || this.page >= this.totalPages) return;
 
             this.isLoading = true;
-            this.$btn.addClass('is-loading');
+            this.$spinner.addClass('is-active');
 
             try {
                 const response = await $.ajax({
@@ -1120,102 +1135,156 @@
                         nonce: config.nonce,
                         page: this.page + 1,
                         per_page: this.perPage,
-                        featured_only: config.featuredOnly ? 'yes' : ''
+                        featured_only: config.featuredOnly ? '1' : ''
                     }
                 });
 
                 if (response.success && response.data && response.data.testimonials) {
                     this.page++;
                     this.renderTestimonials(response.data.testimonials);
-                    
+
                     if (this.page >= this.totalPages) {
-                        this.$btn.hide();
+                        this.observer.disconnect();
+                        this.$sentinel.hide();
                     }
                 }
             } catch (err) {
-                console.error('Load more error:', err);
+                console.error('Infinite scroll error:', err);
             } finally {
                 this.isLoading = false;
-                this.$btn.removeClass('is-loading');
+                this.$spinner.removeClass('is-active');
             }
         }
 
         renderTestimonials(testimonials) {
             testimonials.forEach(t => {
                 const card = this.createCard(t);
-                this.$list.append(card);
+                this.$feed.append(card);
             });
         }
 
         createCard(t) {
+            // Avatar
+            const avatarInner = t.memberAvatarUrl
+                ? `<img src="${this.escapeHtml(t.memberAvatarUrl)}" alt="${this.escapeHtml(t.memberName)}" class="mj-feed-post__avatar-img">`
+                : `<span class="mj-feed-post__avatar-initial">${this.escapeHtml(t.memberInitial || '?')}</span>`;
+
+            // Date
+            const dateHtml = t.createdAgo
+                ? `<span class="mj-feed-post__date">Il y a ${this.escapeHtml(t.createdAgo)} · 🌍</span>`
+                : '';
+
+            // Content
+            const contentHtml = t.content
+                ? `<div class="mj-feed-post__content">${this.formatContent(t.content)}</div>`
+                : '';
+
+            // Photos
             let photosHtml = '';
             if (t.photos && t.photos.length > 0) {
-                const visiblePhotos = t.photos.slice(0, 3);
-                const moreCount = t.photos.length - 3;
-                
-                photosHtml = `
-                    <div class="mj-testimonial-card__photos">
-                        ${visiblePhotos.map(p => `
-                            <a href="${this.escapeHtml(p.full)}" class="mj-testimonial-card__photo" target="_blank">
-                                <img src="${this.escapeHtml(p.thumb)}" alt="" loading="lazy">
-                            </a>
-                        `).join('')}
-                        ${moreCount > 0 ? `<span class="mj-testimonial-card__photos-more">+${moreCount}</span>` : ''}
-                    </div>
-                `;
+                const visible = t.photos.slice(0, 5);
+                const moreCount = t.photos.length - 5;
+                photosHtml = `<div class="mj-feed-post__media mj-feed-post__media--photos-${Math.min(t.photos.length, 5)}">`;
+                visible.forEach((p, i) => {
+                    const moreTag = (i === 4 && moreCount > 0) ? `<span class="mj-feed-post__photo-more">+${moreCount}</span>` : '';
+                    photosHtml += `<a href="${this.escapeHtml(p.full)}" class="mj-feed-post__photo" data-lightbox="post-${t.id}"><img src="${this.escapeHtml(p.url)}" alt="" loading="lazy">${moreTag}</a>`;
+                });
+                photosHtml += '</div>';
             }
 
+            // Video
             let videoHtml = '';
             if (t.video && t.video.url) {
-                videoHtml = `
-                    <div class="mj-testimonial-card__video">
-                        <video controls playsinline poster="${this.escapeHtml(t.video.poster || '')}">
-                            <source src="${this.escapeHtml(t.video.url)}" type="video/mp4">
-                        </video>
-                    </div>
-                `;
+                videoHtml = `<div class="mj-feed-post__media mj-feed-post__media--video"><video controls playsinline poster="${this.escapeHtml(t.video.poster || '')}"><source src="${this.escapeHtml(t.video.url)}" type="video/mp4"></video></div>`;
             }
 
-            let linkPreviewHtml = '';
+            // Link preview / YouTube
+            let linkHtml = '';
             if (t.linkPreview && t.linkPreview.url) {
                 const lp = t.linkPreview;
-                const imageHtml = lp.image ? `<img src="${this.escapeHtml(lp.image)}" alt="" class="mj-testimonial-card__link-image">` : '';
-                linkPreviewHtml = `
-                    <a href="${this.escapeHtml(lp.url)}" class="mj-testimonial-card__link-preview" target="_blank" rel="noopener">
-                        ${imageHtml}
-                        <div class="mj-testimonial-card__link-content">
-                            <div class="mj-testimonial-card__link-site">${this.escapeHtml(lp.site_name || '')}</div>
-                            <div class="mj-testimonial-card__link-title">${this.escapeHtml(lp.title || lp.url)}</div>
-                            ${lp.description ? `<div class="mj-testimonial-card__link-desc">${this.escapeHtml(lp.description)}</div>` : ''}
-                        </div>
-                    </a>
-                `;
+                if (lp.is_youtube && lp.youtube_id) {
+                    linkHtml = `<div class="mj-feed-post__youtube-embed-container"><iframe class="mj-feed-post__youtube-embed" src="https://www.youtube.com/embed/${this.escapeHtml(lp.youtube_id)}?rel=0" title="YouTube video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+                } else {
+                    const imgTag = lp.image ? `<img src="${this.escapeHtml(lp.image)}" alt="" class="mj-feed-post__link-preview-image" loading="lazy">` : '';
+                    const siteTag = lp.site_name ? `<div class="mj-feed-post__link-preview-site">${this.escapeHtml(lp.site_name)}</div>` : '';
+                    const descTag = lp.description ? `<div class="mj-feed-post__link-preview-desc">${this.escapeHtml(lp.description)}</div>` : '';
+                    linkHtml = `<a href="${this.escapeHtml(lp.url)}" class="mj-feed-post__link-preview" target="_blank" rel="noopener noreferrer">${imgTag}<div class="mj-feed-post__link-preview-content">${siteTag}<div class="mj-feed-post__link-preview-title">${this.escapeHtml(lp.title || lp.url)}</div>${descTag}</div></a>`;
+                }
             }
 
-            const contentHtml = t.content ? `
-                <div class="mj-testimonial-card__content">
-                    <blockquote>${this.formatContent(t.content)}</blockquote>
-                </div>
-            ` : '';
+            // Like button SVG
+            const likeSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>';
+            const commentSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
+            const shareSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>';
+
+            // Reaction picker
+            let pickerHtml = '';
+            if (config.reactionTypes) {
+                pickerHtml = '<div class="mj-feed-post__reaction-picker">';
+                for (const [type, data] of Object.entries(config.reactionTypes)) {
+                    pickerHtml += `<button type="button" class="mj-feed-post__reaction-option" data-reaction="${this.escapeHtml(type)}" title="${this.escapeHtml(data.label)}"><span class="mj-feed-post__reaction-option-emoji">${this.escapeHtml(data.emoji)}</span></button>`;
+                }
+                pickerHtml += '</div>';
+            }
+
+            // Comment form (only if logged in)
+            let commentFormHtml = '';
+            if (config.isLoggedIn) {
+                const myInitial = config.memberInitial || 'M';
+                commentFormHtml = `
+                    <form class="mj-feed-post__comment-form">
+                        <div class="mj-feed-comment__avatar"><span class="mj-feed-comment__avatar-initial">${this.escapeHtml(myInitial)}</span></div>
+                        <div class="mj-feed-post__comment-input-wrap">
+                            <input type="text" class="mj-feed-post__comment-input" placeholder="${this.escapeHtml(i18n.writeComment || 'Écrire un commentaire...')}">
+                            <button type="submit" class="mj-feed-post__comment-submit"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg></button>
+                        </div>
+                    </form>`;
+            }
 
             return `
-                <article class="mj-testimonial-card" data-id="${t.id}">
-                    ${photosHtml}
-                    ${videoHtml}
-                    ${linkPreviewHtml}
-                    ${contentHtml}
-                    <footer class="mj-testimonial-card__footer">
-                        <div class="mj-testimonial-card__author">
-                            <span class="mj-testimonial-card__author-name">${this.escapeHtml(t.author || '')}</span>
+                <article class="mj-feed-post-wrapper" data-post-id="${t.id}" data-post-status="approved">
+                    <div class="mj-feed-post" data-id="${t.id}">
+                        <div class="mj-feed-post__header">
+                            <div class="mj-feed-post__avatar">${avatarInner}</div>
+                            <div class="mj-feed-post__meta">
+                                <span class="mj-feed-post__author">${this.escapeHtml(t.memberName)}</span>
+                                ${dateHtml}
+                            </div>
                         </div>
-                        <time class="mj-testimonial-card__date">${this.escapeHtml(t.date_ago || '')}</time>
-                    </footer>
-                </article>
-            `;
+                        ${contentHtml}
+                        ${photosHtml}
+                        ${videoHtml}
+                        ${linkHtml}
+                        <div class="mj-feed-post__reactions-bar">
+                            <div class="mj-feed-post__reactions-summary"></div>
+                        </div>
+                        <div class="mj-feed-post__actions">
+                            <div class="mj-feed-post__action mj-feed-post__action--like" data-action="react" data-current-reaction="">
+                                <span class="mj-feed-post__action-icon">${likeSvg}</span>
+                                <span class="mj-feed-post__action-label">${this.escapeHtml(i18n.like || "J'aime")}</span>
+                                ${pickerHtml}
+                            </div>
+                            <button type="button" class="mj-feed-post__action mj-feed-post__action--comment" data-action="toggle-comments">
+                                <span class="mj-feed-post__action-icon">${commentSvg}</span>
+                                <span class="mj-feed-post__action-label">${this.escapeHtml(i18n.comment || 'Commenter')}</span>
+                            </button>
+                            <div class="mj-feed-post__action mj-feed-post__action--share" data-action="toggle-share">
+                                <span class="mj-feed-post__action-icon">${shareSvg}</span>
+                                <span class="mj-feed-post__action-label">${this.escapeHtml(i18n.share || 'Partager')}</span>
+                            </div>
+                        </div>
+                        <div class="mj-feed-post__comments" style="display: none;">
+                            <div class="mj-feed-post__comments-list"></div>
+                            ${commentFormHtml}
+                        </div>
+                    </div>
+                </article>`;
         }
 
         formatContent(content) {
-            return content.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>');
+            // Content already contains HTML from server-side linkify, wrap in <p> tags similar to wpautop
+            const escaped = content.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>');
+            return '<p>' + escaped + '</p>';
         }
 
         escapeHtml(text) {

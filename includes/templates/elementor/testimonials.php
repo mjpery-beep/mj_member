@@ -204,6 +204,7 @@ $localize_data['isAnimator'] = $is_animator ?? false;
 $localize_data['hasPendingApprovals'] = $is_animator && !empty($pending_testimonials);
 $localize_data['featuredOnly'] = $featured_only;
 $localize_data['displayTemplate'] = $display_template;
+$localize_data['memberInitial'] = ($is_logged_in && isset($current_member->first_name) && $current_member->first_name) ? mb_strtoupper(mb_substr($current_member->first_name, 0, 1)) : 'M';
 
 wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_data);
 ?>
@@ -825,10 +826,8 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
             $total_approved = MjTestimonials::count($count_args);
             if ($total_approved > $per_page && !$is_single_mode):
         ?>
-            <div class="mj-testimonials__load-more">
-                <button type="button" class="mj-btn mj-btn--secondary mj-testimonials__load-more-btn" data-page="1" data-total-pages="<?php echo esc_attr((string)ceil($total_approved / $per_page)); ?>">
-                    <?php esc_html_e('Voir plus de témoignages', 'mj-member'); ?>
-                </button>
+            <div class="mj-testimonials__infinite-scroll-sentinel" data-page="1" data-total-pages="<?php echo esc_attr((string)ceil($total_approved / $per_page)); ?>">
+                <div class="mj-testimonials__infinite-scroll-spinner"></div>
             </div>
         <?php endif; endif; ?>
     <?php endif; ?>

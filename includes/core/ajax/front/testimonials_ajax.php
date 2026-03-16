@@ -136,15 +136,30 @@ function mj_front_testimonial_list_handler() {
     $items = array();
 
     foreach ($testimonials as $t) {
-        $photos = MjTestimonials::get_photo_urls($t, 'medium');
+        $photos = MjTestimonials::get_photo_urls($t, 'large');
         $video = MjTestimonials::get_video_data($t);
 
         $member_name = '';
-        if (isset($t->first_name)) {
+        $member_initial = '?';
+        if (isset($t->first_name) && $t->first_name) {
             $member_name = $t->first_name;
+            $member_initial = mb_strtoupper(mb_substr($t->first_name, 0, 1));
             if (isset($t->last_name) && $t->last_name) {
                 $member_name .= ' ' . mb_substr($t->last_name, 0, 1) . '.';
             }
+        }
+
+        $member_avatar_url = '';
+        if (isset($t->member_photo_id) && $t->member_photo_id) {
+            $avatar_src = wp_get_attachment_image_src((int) $t->member_photo_id, 'thumbnail');
+            if ($avatar_src) {
+                $member_avatar_url = $avatar_src[0];
+            }
+        }
+
+        $created_ago = '';
+        if (isset($t->created_at) && $t->created_at) {
+            $created_ago = human_time_diff(strtotime($t->created_at), current_time('timestamp'));
         }
 
         $link_preview = MjTestimonials::get_link_preview($t);
@@ -156,6 +171,9 @@ function mj_front_testimonial_list_handler() {
             'video' => $video,
             'linkPreview' => $link_preview,
             'memberName' => $member_name,
+            'memberInitial' => $member_initial,
+            'memberAvatarUrl' => $member_avatar_url,
+            'createdAgo' => $created_ago,
             'createdAt' => isset($t->created_at) ? $t->created_at : '',
         );
     }

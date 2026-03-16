@@ -452,6 +452,10 @@ final class AssetsManager
         // Admin Dashboard Widget (front-end for gestionnaires)
         self::registerScript('mj-member-admin-dashboard-widget', 'js/elementor/admin-dashboard.js', array('mj-member-preact', 'mj-member-preact-hooks'));
         self::registerStyle('mj-member-admin-dashboard-widget', 'css/admin-dashboard-widget.css', array('mj-member-components'));
+
+        // Mileage Widget
+        self::registerScript('mj-member-mileage', 'js/elementor/mileage.js', array('mj-member-utils'));
+        self::registerStyle('mj-member-mileage', 'css/mileage.css', array('mj-member-components'));
     }
 
     /**
@@ -741,6 +745,15 @@ final class AssetsManager
                 wp_enqueue_script('mj-member-preact');
                 wp_enqueue_script('mj-member-preact-hooks');
                 wp_enqueue_script('mj-member-admin-dashboard-widget');
+                break;
+
+            case 'mileage':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-mileage');
+                wp_enqueue_script('mj-member-mileage');
+                if (function_exists('mj_member_mileage_localize')) {
+                    mj_member_mileage_localize();
+                }
                 break;
 
             default:

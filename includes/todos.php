@@ -105,6 +105,9 @@ if (!function_exists('mj_member_todo_widget_localize')) {
                 'emojiSearchPlaceholder' => __('Rechercher un emoji', 'mj-member'),
                 'emojiSearchNoResult' => __('Aucun emoji ne correspond à votre recherche.', 'mj-member'),
                 'emojiAllCategory' => __('Tout', 'mj-member'),
+                'scopeMine' => __('Mes tâches', 'mj-member'),
+                'scopeAll' => __('Toutes les tâches', 'mj-member'),
+                'scopeLabel' => __('Affichage', 'mj-member'),
             ),
         );
 

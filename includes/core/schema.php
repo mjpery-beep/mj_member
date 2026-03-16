@@ -819,6 +819,24 @@ function mj_member_get_member_actions_table_name() {
     return $cached;
 }
 
+function mj_member_get_mileage_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidate = $wpdb->prefix . 'mj_mileage';
+
+    if (mj_member_table_exists($candidate)) {
+        $cached = $candidate;
+        return $cached;
+    }
+
+    $cached = $candidate;
+    return $cached;
+}
+
 function mj_member_ensure_auxiliary_tables() {
     global $wpdb;
     if ( ! function_exists('dbDelta') ) {
@@ -1891,6 +1909,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_73($wpdb);
     mj_member_upgrade_to_2_74($wpdb);
     mj_member_upgrade_to_2_75($wpdb);
+    mj_member_upgrade_to_2_76($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -5915,6 +5934,48 @@ function mj_member_upgrade_to_2_75($wpdb) {
     if (!mj_member_column_exists($table, 'event_slug')) {
         $wpdb->query("ALTER TABLE {$table} ADD COLUMN event_slug varchar(200) DEFAULT NULL AFTER link_preview");
         $wpdb->query("ALTER TABLE {$table} ADD INDEX idx_event_slug (event_slug)");
+    }
+}
+
+/**
+ * Schema upgrade 2.76: Create mj_mileage table for mileage expense claims.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_76($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $charset_collate = $wpdb->get_charset_collate();
+    $table = mj_member_get_mileage_table_name();
+
+    if (!mj_member_table_exists($table)) {
+        $sql = "CREATE TABLE {$table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            member_id bigint(20) unsigned NOT NULL,
+            trip_date date NOT NULL,
+            origin varchar(255) NOT NULL DEFAULT '',
+            origin_location_id bigint(20) unsigned DEFAULT NULL,
+            destination varchar(255) NOT NULL DEFAULT '',
+            destination_location_id bigint(20) unsigned DEFAULT NULL,
+            distance_km decimal(8,2) NOT NULL DEFAULT 0,
+            cost_per_km decimal(6,4) NOT NULL DEFAULT 0,
+            total_cost decimal(10,2) NOT NULL DEFAULT 0,
+            description text DEFAULT NULL,
+            round_trip tinyint(1) NOT NULL DEFAULT 0,
+            status varchar(20) NOT NULL DEFAULT 'pending',
+            reviewed_by bigint(20) unsigned DEFAULT NULL,
+            reviewed_at datetime DEFAULT NULL,
+            reviewer_comment text DEFAULT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY member_idx (member_id),
+            KEY date_idx (trip_date),
+            KEY status_idx (status)
+        ) {$charset_collate};";
+        dbDelta($sql);
     }
 }
 

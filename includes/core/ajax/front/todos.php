@@ -24,11 +24,25 @@ if (!function_exists('mj_member_ajax_todos_fetch_my')) {
         $includeCompleted = isset($_POST['include_completed']) ? (int) $_POST['include_completed'] === 1 : true;
         $statuses = $includeCompleted ? array(MjTodos::STATUS_OPEN, MjTodos::STATUS_COMPLETED) : array(MjTodos::STATUS_OPEN);
 
-        $todos = MjTodos::get_for_member($memberId, array(
+        $scope = isset($_POST['scope']) ? sanitize_key((string) $_POST['scope']) : 'mine';
+        $fetchArgs = array(
             'statuses' => $statuses,
             'orderby' => 'position',
             'order' => 'ASC',
-        ));
+        );
+
+        if ($scope === 'all') {
+            $todos = MjTodos::get_all($fetchArgs);
+        } elseif ($scope === 'member') {
+            $viewMemberId = isset($_POST['view_member_id']) ? (int) $_POST['view_member_id'] : 0;
+            if ($viewMemberId > 0) {
+                $todos = MjTodos::get_for_member($viewMemberId, $fetchArgs);
+            } else {
+                $todos = MjTodos::get_for_member($memberId, $fetchArgs);
+            }
+        } else {
+            $todos = MjTodos::get_for_member($memberId, $fetchArgs);
+        }
 
         $projects = MjTodoProjects::get_all(array(
             'orderby' => 'title',
@@ -395,6 +409,16 @@ if (!function_exists('mj_member_ajax_todo_update_front')) {
             $hasField = true;
         }
 
+        if (array_key_exists('due_date', $_POST)) {
+            $rawDueDate = wp_unslash((string) $_POST['due_date']);
+            $dueDate = MjTodos::sanitize_due_date($rawDueDate);
+            if ($dueDate instanceof \WP_Error) {
+                wp_send_json_error(array('message' => $dueDate->get_error_message()));
+            }
+            $payload['due_date'] = $dueDate;
+            $hasField = true;
+        }
+
         if (!$hasField) {
             wp_send_json_error(array('message' => __('Aucun champ à mettre à jour.', 'mj-member')));
         }
@@ -661,11 +685,25 @@ if (!function_exists('mj_member_ajax_todos_fetch_archived')) {
             wp_send_json_error(array('message' => __('Membre invalide.', 'mj-member')));
         }
 
-        $todos = MjTodos::get_for_member($memberId, array(
+        $scope = isset($_POST['scope']) ? sanitize_key((string) $_POST['scope']) : 'mine';
+        $archivedArgs = array(
             'statuses' => array(MjTodos::STATUS_ARCHIVED),
             'orderby' => 'updated_at',
             'order' => 'DESC',
-        ));
+        );
+
+        if ($scope === 'all') {
+            $todos = MjTodos::get_all($archivedArgs);
+        } elseif ($scope === 'member') {
+            $viewMemberId = isset($_POST['view_member_id']) ? (int) $_POST['view_member_id'] : 0;
+            if ($viewMemberId > 0) {
+                $todos = MjTodos::get_for_member($viewMemberId, $archivedArgs);
+            } else {
+                $todos = MjTodos::get_for_member($memberId, $archivedArgs);
+            }
+        } else {
+            $todos = MjTodos::get_for_member($memberId, $archivedArgs);
+        }
 
         $projects = MjTodoProjects::get_all(array(
             'orderby' => 'title',

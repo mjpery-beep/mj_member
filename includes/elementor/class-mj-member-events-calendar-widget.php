@@ -15,6 +15,8 @@ use Mj\Member\Classes\Crud\MjEventAnimateurs;
 use Mj\Member\Classes\Crud\MjEventLocationLinks;
 use Mj\Member\Classes\Crud\MjLeaveRequests;
 use Mj\Member\Classes\Crud\MjLeaveTypes;
+use Mj\Member\Classes\Crud\MjTodos;
+use Mj\Member\Classes\Crud\MjTodoProjects;
 use Mj\Member\Classes\MjEventSchedule;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper;
@@ -311,6 +313,19 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                 'return_value' => 'yes',
                 'default' => 'yes',
                 'description' => __('Affiche les demandes de congé approuvées pour les coordinateurs et animateurs.', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
+            'show_todos',
+            array(
+                'label' => __('Afficher les tâches', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'description' => __('Affiche les tâches avec date d\'échéance pour les coordinateurs et animateurs.', 'mj-member'),
             )
         );
 
@@ -1550,6 +1565,154 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             }
         }
 
+        // Fetch todos with due dates for animateur/coordinateur
+        $show_todos = isset($settings['show_todos']) && $settings['show_todos'] === 'yes';
+        $todos_added = false;
+
+        if ($show_todos && !$is_elementor_preview && $can_edit_events && class_exists(MjTodos::class)) {
+            $date_from_str = wp_date('Y-m-d', $range_start, $timezone);
+            $date_to_str = wp_date('Y-m-d', $range_end, $timezone);
+
+            $todos_in_range = MjTodos::get_by_date_range($date_from_str, $date_to_str);
+
+            if (!empty($todos_in_range)) {
+                // Pre-fetch project data for color
+                $project_ids = array();
+                foreach ($todos_in_range as $todo_item) {
+                    $pid = isset($todo_item['project_id']) ? (int) $todo_item['project_id'] : 0;
+                    if ($pid > 0) {
+                        $project_ids[$pid] = $pid;
+                    }
+                }
+                $projects_map = array();
+                if (!empty($project_ids) && class_exists(MjTodoProjects::class)) {
+                    $all_projects = MjTodoProjects::get_all(array('include_ids' => array_values($project_ids)));
+                    foreach ($all_projects as $proj) {
+                        if (isset($proj['id'])) {
+                            $projects_map[(int) $proj['id']] = $proj;
+                        }
+                    }
+                }
+
+                // Build assignee names map from assignments
+                $member_ids_for_todos = array();
+                foreach ($todos_in_range as $todo_item) {
+                    if (!empty($todo_item['assignees']) && is_array($todo_item['assignees'])) {
+                        foreach ($todo_item['assignees'] as $assignee) {
+                            $aid = isset($assignee['id']) ? (int) $assignee['id'] : 0;
+                            if ($aid > 0) {
+                                $member_ids_for_todos[$aid] = $aid;
+                            }
+                        }
+                    }
+                    $primary_assigned = isset($todo_item['assigned_member_id']) ? (int) $todo_item['assigned_member_id'] : 0;
+                    if ($primary_assigned > 0) {
+                        $member_ids_for_todos[$primary_assigned] = $primary_assigned;
+                    }
+                }
+
+                foreach ($todos_in_range as $todo_item) {
+                    $todo_due = isset($todo_item['due_date']) ? (string) $todo_item['due_date'] : '';
+                    if ($todo_due === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $todo_due)) {
+                        continue;
+                    }
+
+                    $todo_ts = strtotime($todo_due);
+                    if ($todo_ts === false || $todo_ts < $range_start || $todo_ts > $range_end) {
+                        continue;
+                    }
+
+                    $todo_month_key = substr($todo_due, 0, 7);
+                    if (!isset($months[$todo_month_key])) {
+                        continue;
+                    }
+
+                    $ensure_day_bucket($months, $todo_month_key, $todo_due);
+
+                    $todo_id = isset($todo_item['id']) ? (int) $todo_item['id'] : 0;
+                    $todo_title = isset($todo_item['title']) ? (string) $todo_item['title'] : __('Tâche', 'mj-member');
+                    $todo_emoji = isset($todo_item['emoji']) && $todo_item['emoji'] !== '' ? (string) $todo_item['emoji'] : '📋';
+                    $todo_project_id = isset($todo_item['project_id']) ? (int) $todo_item['project_id'] : 0;
+
+                    $todo_color = '#8B5CF6'; // Default purple for todos
+                    $todo_project_name = '';
+                    if ($todo_project_id > 0 && isset($projects_map[$todo_project_id])) {
+                        $proj_data = $projects_map[$todo_project_id];
+                        if (!empty($proj_data['color'])) {
+                            $todo_color = (string) $proj_data['color'];
+                        }
+                        if (!empty($proj_data['title'])) {
+                            $todo_project_name = (string) $proj_data['title'];
+                        }
+                    }
+
+                    // Build assignee label
+                    $assignee_names = array();
+                    if (!empty($todo_item['assignees']) && is_array($todo_item['assignees'])) {
+                        foreach ($todo_item['assignees'] as $assignee) {
+                            $name = isset($assignee['name']) ? (string) $assignee['name'] : '';
+                            if ($name === '') {
+                                $fn = isset($assignee['first_name']) ? (string) $assignee['first_name'] : '';
+                                $ln = isset($assignee['last_name']) ? (string) $assignee['last_name'] : '';
+                                $name = trim($fn . ' ' . $ln);
+                            }
+                            if ($name !== '') {
+                                $assignee_names[] = $name;
+                            }
+                        }
+                    }
+                    $assignee_label = !empty($assignee_names) ? implode(', ', $assignee_names) : '';
+
+                    $todo_entry_id = 'todo:' . $todo_id;
+
+                    $months[$todo_month_key]['days'][$todo_due]['events'][] = array(
+                        'id' => $todo_entry_id,
+                        'title' => $todo_title,
+                        'emoji' => $todo_emoji,
+                        'time' => $assignee_label,
+                        'schedule_label' => $todo_project_name !== '' ? $todo_project_name : '',
+                        'type_label' => __('Tâche', 'mj-member'),
+                        'type_key' => 'todo',
+                        'start_ts' => $todo_ts,
+                        'is_todo' => true,
+                        'accent_color' => $todo_color,
+                        'description_excerpt' => isset($todo_item['description']) ? wp_html_excerpt(wp_strip_all_tags((string) $todo_item['description']), 120, '...') : '',
+                        'palette' => array(
+                            'base' => $todo_color,
+                            'light' => self::lighten_color($todo_color, 20),
+                            'text' => '#ffffff',
+                            'highlight' => self::lighten_color($todo_color, 40),
+                            'surface' => self::lighten_color($todo_color, 60),
+                            'border' => $todo_color,
+                            'pill_bg' => $todo_color,
+                            'pill_text' => '#ffffff',
+                            'thumb_bg' => self::lighten_color($todo_color, 30),
+                            'range_bg' => self::lighten_color($todo_color, 50),
+                            'range_border' => $todo_color,
+                        ),
+                        'permalink' => '',
+                        'schedule_mode' => 'todo',
+                        'recurring_schedule_preview' => array(),
+                        'cover' => '',
+                        'cover_full' => '',
+                        'cover_sources' => array(),
+                    );
+
+                    $has_any_event = true;
+                    $todos_added = true;
+                }
+            }
+        }
+
+        // Add todo filter type if any todos exist
+        if ($todos_added) {
+            if (!isset($available_type_filters['todo'])) {
+                $available_type_filters['todo'] = array(
+                    'label' => __('Tâches', 'mj-member'),
+                );
+            }
+        }
+
         if ($next_event_pointer !== null && isset($months[$next_event_pointer['month_key']])) {
             $months[$next_event_pointer['month_key']]['has_next_event'] = true;
         }
@@ -2234,19 +2397,30 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 echo '</a>';
                             }
                             if ($can_edit_events && !$event_is_closure && empty($event_entry['is_leave_request']) && !empty($event_entry['id'])) {
-                                // Parse event_id from occurrence key (format: "eventId:timestamp")
-                                $occ_parts = explode(':', (string) $event_entry['id'], 2);
-                                $occ_event_id = isset($occ_parts[0]) ? (int) $occ_parts[0] : 0;
-                                $occ_start_ts = isset($occ_parts[1]) ? (int) $occ_parts[1] : 0;
-                                $edit_url = home_url('/mon-compte/gestionnaire/?event=' . $occ_event_id);
-                                echo '<div class="mj-member-events-calendar__event-actions">';
-                                echo '<a class="mj-member-events-calendar__event-edit" href="' . esc_url($edit_url) . '" title="' . esc_attr__('Modifier l\'événement', 'mj-member') . '" aria-label="' . esc_attr__('Modifier l\'événement', 'mj-member') . '">';
-                                echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-                                echo '</a>';
-                                echo '<button type="button" class="mj-member-events-calendar__event-delete" data-delete-event="' . esc_attr($occ_event_id) . '" data-delete-ts="' . esc_attr($occ_start_ts) . '" title="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '" aria-label="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '">';
-                                echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-                                echo '</button>';
-                                echo '</div>';
+                                if (!empty($event_entry['is_todo'])) {
+                                    $todo_entry_parts = explode(':', (string) $event_entry['id'], 2);
+                                    $todo_entry_id = isset($todo_entry_parts[1]) ? (int) $todo_entry_parts[1] : 0;
+                                    $todo_page_url = home_url('/mon-compte/todo/?section=todos' . ($todo_entry_id > 0 ? '&todo_id=' . $todo_entry_id : ''));
+                                    echo '<div class="mj-member-events-calendar__event-actions">';
+                                    echo '<a class="mj-member-events-calendar__event-edit" href="' . esc_url($todo_page_url) . '" title="' . esc_attr__('Voir la tâche', 'mj-member') . '" aria-label="' . esc_attr__('Voir la tâche', 'mj-member') . '">';
+                                    echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+                                    echo '</a>';
+                                    echo '</div>';
+                                } else {
+                                    // Parse event_id from occurrence key (format: "eventId:timestamp")
+                                    $occ_parts = explode(':', (string) $event_entry['id'], 2);
+                                    $occ_event_id = isset($occ_parts[0]) ? (int) $occ_parts[0] : 0;
+                                    $occ_start_ts = isset($occ_parts[1]) ? (int) $occ_parts[1] : 0;
+                                    $edit_url = home_url('/mon-compte/gestionnaire/?event=' . $occ_event_id);
+                                    echo '<div class="mj-member-events-calendar__event-actions">';
+                                    echo '<a class="mj-member-events-calendar__event-edit" href="' . esc_url($edit_url) . '" title="' . esc_attr__('Modifier l\'événement', 'mj-member') . '" aria-label="' . esc_attr__('Modifier l\'événement', 'mj-member') . '">';
+                                    echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+                                    echo '</a>';
+                                    echo '<button type="button" class="mj-member-events-calendar__event-delete" data-delete-event="' . esc_attr($occ_event_id) . '" data-delete-ts="' . esc_attr($occ_start_ts) . '" title="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '" aria-label="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '">';
+                                    echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+                                    echo '</button>';
+                                    echo '</div>';
+                                }
                             }
                             echo '</li>';
                         }
@@ -2421,18 +2595,29 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                         echo '</div>';
                         echo '</' . $mobile_tag . '>';
                         if ($can_edit_events && !$mobile_is_closure && empty($mobile_event['is_leave_request']) && !empty($mobile_event['id'])) {
-                            $mobile_occ_parts = explode(':', (string) $mobile_event['id'], 2);
-                            $mobile_occ_event_id = isset($mobile_occ_parts[0]) ? (int) $mobile_occ_parts[0] : 0;
-                            $mobile_occ_start_ts = isset($mobile_occ_parts[1]) ? (int) $mobile_occ_parts[1] : 0;
-                            $edit_url = home_url('/mon-compte/gestionnaire/?event=' . $mobile_occ_event_id);
-                            echo '<div class="mj-member-events-calendar__event-actions mj-member-events-calendar__event-actions--mobile">';
-                            echo '<a class="mj-member-events-calendar__event-edit mj-member-events-calendar__event-edit--mobile" href="' . esc_url($edit_url) . '" title="' . esc_attr__('Modifier l\'événement', 'mj-member') . '" aria-label="' . esc_attr__('Modifier l\'événement', 'mj-member') . '">';
-                            echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-                            echo '</a>';
-                            echo '<button type="button" class="mj-member-events-calendar__event-delete mj-member-events-calendar__event-delete--mobile" data-delete-event="' . esc_attr($mobile_occ_event_id) . '" data-delete-ts="' . esc_attr($mobile_occ_start_ts) . '" title="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '" aria-label="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '">';
-                            echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-                            echo '</button>';
-                            echo '</div>';
+                            if (!empty($mobile_event['is_todo'])) {
+                                $mobile_todo_parts = explode(':', (string) $mobile_event['id'], 2);
+                                $mobile_todo_id = isset($mobile_todo_parts[1]) ? (int) $mobile_todo_parts[1] : 0;
+                                $todo_page_url = home_url('/mon-compte/todo/?section=todos' . ($mobile_todo_id > 0 ? '&todo_id=' . $mobile_todo_id : ''));
+                                echo '<div class="mj-member-events-calendar__event-actions mj-member-events-calendar__event-actions--mobile">';
+                                echo '<a class="mj-member-events-calendar__event-edit mj-member-events-calendar__event-edit--mobile" href="' . esc_url($todo_page_url) . '" title="' . esc_attr__('Voir la tâche', 'mj-member') . '" aria-label="' . esc_attr__('Voir la tâche', 'mj-member') . '">';
+                                echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+                                echo '</a>';
+                                echo '</div>';
+                            } else {
+                                $mobile_occ_parts = explode(':', (string) $mobile_event['id'], 2);
+                                $mobile_occ_event_id = isset($mobile_occ_parts[0]) ? (int) $mobile_occ_parts[0] : 0;
+                                $mobile_occ_start_ts = isset($mobile_occ_parts[1]) ? (int) $mobile_occ_parts[1] : 0;
+                                $edit_url = home_url('/mon-compte/gestionnaire/?event=' . $mobile_occ_event_id);
+                                echo '<div class="mj-member-events-calendar__event-actions mj-member-events-calendar__event-actions--mobile">';
+                                echo '<a class="mj-member-events-calendar__event-edit mj-member-events-calendar__event-edit--mobile" href="' . esc_url($edit_url) . '" title="' . esc_attr__('Modifier l\'événement', 'mj-member') . '" aria-label="' . esc_attr__('Modifier l\'événement', 'mj-member') . '">';
+                                echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+                                echo '</a>';
+                                echo '<button type="button" class="mj-member-events-calendar__event-delete mj-member-events-calendar__event-delete--mobile" data-delete-event="' . esc_attr($mobile_occ_event_id) . '" data-delete-ts="' . esc_attr($mobile_occ_start_ts) . '" title="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '" aria-label="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '">';
+                                echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+                                echo '</button>';
+                                echo '</div>';
+                            }
                         }
                         echo '</li>';
                     }

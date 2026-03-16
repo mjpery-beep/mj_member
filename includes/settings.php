@@ -145,6 +145,14 @@ function mj_settings_page() {
         update_option('mj_member_vapid_private_key', $vapid_private_key);
         update_option('mj_member_vapid_subject', $vapid_subject);
 
+        // Mileage settings
+        $mileage_cost = isset($_POST['mj_mileage_cost_per_km']) ? floatval($_POST['mj_mileage_cost_per_km']) : 0.4326;
+        $mileage_disclaimer = isset($_POST['mj_mileage_disclaimer']) ? sanitize_textarea_field(wp_unslash($_POST['mj_mileage_disclaimer'])) : '';
+        $mileage_default_origin = isset($_POST['mj_mileage_default_origin_id']) ? intval($_POST['mj_mileage_default_origin_id']) : 0;
+        update_option('mj_mileage_cost_per_km', $mileage_cost);
+        update_option('mj_mileage_disclaimer', $mileage_disclaimer);
+        update_option('mj_mileage_default_origin_id', $mileage_default_origin);
+
         // Document d'inscription header/footer
         $regdoc_header = isset($_POST['mj_regdoc_header']) ? wp_kses_post(wp_unslash($_POST['mj_regdoc_header'])) : '';
         $regdoc_footer = isset($_POST['mj_regdoc_footer']) ? wp_kses_post(wp_unslash($_POST['mj_regdoc_footer'])) : '';
@@ -486,6 +494,16 @@ function mj_settings_page() {
     $vapid_public_key_option = get_option('mj_member_vapid_public_key', '');
     $vapid_private_key_option = get_option('mj_member_vapid_private_key', '');
     $vapid_subject_option = get_option('mj_member_vapid_subject', '');
+
+    // Mileage settings
+    $mileage_cost_option = get_option('mj_mileage_cost_per_km', 0.4326);
+    $mileage_disclaimer_option = get_option('mj_mileage_disclaimer', 'Les déplacements de chez vous jusque la MJ sont déjà payés dans votre salaire.');
+    $mileage_default_origin_option = (int) get_option('mj_mileage_default_origin_id', 0);
+    $mileage_locations = array();
+    if (class_exists('Mj\\Member\\Classes\\Crud\\MjEventLocations')) {
+        $mileage_locations = \Mj\Member\Classes\Crud\MjEventLocations::get_all(array('orderby' => 'name', 'order' => 'ASC'));
+    }
+
     if (!is_string($photo_grimlins_prompt_option) || $photo_grimlins_prompt_option === '') {
         $photo_grimlins_prompt_option = __('Transforme cette personne en version "Grimlins" fun et stylisée, avec un rendu illustratif détaillé, sans éléments effrayants.', 'mj-member');
     }
@@ -569,6 +587,7 @@ function mj_settings_page() {
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-dynfields" data-tab-target="dynfields" role="tab" aria-controls="mj-tab-dynfields" aria-selected="false">🧩 Données dynamiques</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-webpush" data-tab-target="webpush" role="tab" aria-controls="mj-tab-webpush" aria-selected="false">🔔 Web Push</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-widgets" data-tab-target="widgets" role="tab" aria-controls="mj-tab-widgets" aria-selected="false">🧩 Widgets</button>
+                    <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-mileage" data-tab-target="mileage" role="tab" aria-controls="mj-tab-mileage" aria-selected="false">🚗 Frais kilométriques</button>
                 </div>
 
                 <div class="mj-settings-tabs__panels">
@@ -1775,6 +1794,50 @@ function mj_settings_page() {
                             updateCounter();
                         })();
                         </script>
+                    </div>
+
+                    <!-- Mileage Tab -->
+                    <div id="mj-tab-mileage" class="mj-settings-tabs__panel" data-tab="mileage" role="tabpanel" aria-labelledby="mj-tab-button-mileage" aria-hidden="true">
+                        <div style="background:#eff6ff; border-left:4px solid #3b82f6; padding:18px 20px; border-radius:10px; margin-bottom:24px;">
+                            <h2 style="margin:0 0 8px 0;">🚗 Frais kilométriques</h2>
+                            <p style="margin:0; color:#475569;">
+                                Configurez le remboursement kilométrique pour les trajets des animateurs et coordinateurs.
+                            </p>
+                        </div>
+
+                        <p style="margin-bottom:18px;">
+                            <label for="mj-mileage-cost"><strong>Coût par kilomètre (€)</strong></label><br>
+                            <input type="number" step="0.0001" min="0" name="mj_mileage_cost_per_km" id="mj-mileage-cost" value="<?php echo esc_attr($mileage_cost_option); ?>" class="regular-text" style="max-width:160px;">
+                            <small style="color:#6b7280; display:block; margin-top:4px;">
+                                Montant en euros par kilomètre parcouru (par défaut : 0,4326 €).
+                            </small>
+                        </p>
+
+                        <p style="margin-bottom:18px;">
+                            <label for="mj-mileage-default-origin"><strong>Lieu de départ par défaut</strong></label><br>
+                            <select name="mj_mileage_default_origin_id" id="mj-mileage-default-origin" class="regular-text">
+                                <option value="0">— Sélectionner un lieu —</option>
+                                <?php foreach ($mileage_locations as $loc) :
+                                    $loc_id = is_object($loc) ? ($loc->id ?? 0) : ($loc['id'] ?? 0);
+                                    $loc_name = is_object($loc) ? ($loc->name ?? '') : ($loc['name'] ?? '');
+                                    ?>
+                                    <option value="<?php echo esc_attr($loc_id); ?>" <?php selected($mileage_default_origin_option, $loc_id); ?>>
+                                        <?php echo esc_html($loc_name); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <small style="color:#6b7280; display:block; margin-top:4px;">
+                                Le lieu de départ pré-rempli dans le formulaire (Maison des Jeunes).
+                            </small>
+                        </p>
+
+                        <p style="margin-bottom:18px;">
+                            <label for="mj-mileage-disclaimer"><strong>Message d'avertissement</strong></label><br>
+                            <textarea name="mj_mileage_disclaimer" id="mj-mileage-disclaimer" rows="3" class="large-text"><?php echo esc_textarea($mileage_disclaimer_option); ?></textarea>
+                            <small style="color:#6b7280; display:block; margin-top:4px;">
+                                Ce message sera affiché dans le formulaire de demande de frais kilométriques.
+                            </small>
+                        </p>
                     </div>
                 </div>
             </div>

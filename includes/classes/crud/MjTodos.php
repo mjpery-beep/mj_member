@@ -318,7 +318,7 @@ class MjTodos extends MjTools implements CrudRepositoryInterface
         $idsSql = implode(',', array_map('intval', $todoIds));
 
         $results = $wpdb->get_results(
-            "SELECT a.todo_id, a.member_id, a.assigned_by, a.assigned_at, m.first_name, m.last_name, m.role
+            "SELECT a.todo_id, a.member_id, a.assigned_by, a.assigned_at, m.first_name, m.last_name, m.role, m.photo_id, m.wp_user_id
             FROM {$assignmentsTable} a
             LEFT JOIN {$membersTable} m ON m.id = a.member_id
             WHERE a.todo_id IN ({$idsSql})
@@ -347,10 +347,16 @@ class MjTodos extends MjTools implements CrudRepositoryInterface
 
             $role = isset($row['role']) ? sanitize_key((string) $row['role']) : '';
 
+            $avatar = array('url' => '', 'initials' => '', 'alt' => '');
+            if (function_exists('mj_member_todo_build_avatar_payload')) {
+                $avatar = mj_member_todo_build_avatar_payload($row, $name);
+            }
+
             $map[$todoId][] = array(
                 'id' => $memberId,
                 'name' => $name,
                 'role' => $role,
+                'avatar' => $avatar,
                 'assigned_by' => isset($row['assigned_by']) ? (int) $row['assigned_by'] : 0,
                 'assigned_at' => isset($row['assigned_at']) ? (string) $row['assigned_at'] : '',
             );
@@ -1104,5 +1110,38 @@ class MjTodos extends MjTools implements CrudRepositoryInterface
 
         global $wpdb;
         $wpdb->query($wpdb->prepare("DELETE FROM {$assignmentsTable} WHERE todo_id = %d", $todoId));
+    }
+
+    /**
+     * Retrieve open todos whose due_date falls within a Y-m-d range.
+     *
+     * @param string $date_from Y-m-d
+     * @param string $date_to   Y-m-d
+     * @return array<int,array<string,mixed>>
+     */
+    public static function get_by_date_range(string $date_from, string $date_to): array
+    {
+        global $wpdb;
+        $table = self::table_name();
+
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_to)) {
+            return array();
+        }
+
+        $sql = $wpdb->prepare(
+            "SELECT * FROM {$table} WHERE due_date IS NOT NULL AND due_date >= %s AND due_date <= %s AND status = %s ORDER BY due_date ASC, position ASC",
+            $date_from,
+            $date_to,
+            self::STATUS_OPEN
+        );
+
+        $rows = $wpdb->get_results($sql);
+        if (!is_array($rows) || empty($rows)) {
+            return array();
+        }
+
+        $todos = array_map(array(__CLASS__, 'format_row'), $rows);
+        $todos = self::attach_assignments($todos);
+        return $todos;
     }
 }

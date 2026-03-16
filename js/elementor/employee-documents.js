@@ -48,6 +48,37 @@
         return fetch(url, { method: 'POST', body: body }).then(function (r) { return r.json(); });
     }
 
+    /* Inline SVG icons (no Font Awesome dependency) */
+    function svgIcon(path, cls, size) {
+        var s = size || '1.4em';
+        return h('svg', {
+            className: cls || '',
+            xmlns: 'http://www.w3.org/2000/svg',
+            viewBox: '0 0 24 24',
+            width: s,
+            height: s,
+            fill: 'currentColor',
+            style: { verticalAlign: '-0.125em', flexShrink: 0 }
+        }, h('path', { d: path }));
+    }
+
+    var ICONS = {
+        download:           'M12 16l-5-5h3V4h4v7h3l-5 5zm-7 2h14v2H5v-2z',
+        filePdf:            'M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6H6zm7 1.5L18.5 9H13V3.5zM9.5 13.5c0 .83-.67 1.5-1.5 1.5h-.5v1.5H6V12h2c.83 0 1.5.67 1.5 1.5zm-.5 0c0-.28-.22-.5-.5-.5H8v1h.5c.28 0 .5-.22.5-.5zM13 12h-2v4.5h2a1.5 1.5 0 0 0 1.5-1.5v-1.5A1.5 1.5 0 0 0 13 12zm.5 3a.5.5 0 0 1-.5.5h-1v-2.5h1a.5.5 0 0 1 .5.5v1.5zM15 12h3v1h-2v.75h1.5v1H16V16h-1v-4z',
+        fileImage:          'M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6H6zm7 1.5L18.5 9H13V3.5zM8 12a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm-2 7l3-4 2 2.5 3-3.5 3 5H6z',
+        calendar:           'M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z',
+        folderOpen:         'M20 6h-8l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zm0 12H4V8h16v10z',
+        fileInvoiceDollar:  'M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6H6zm7 1.5L18.5 9H13V3.5zM13 13v1h-1.5a1.5 1.5 0 0 0 0 3H13v1h-2v1h2v1h1v-1h.5a1.5 1.5 0 0 0 0-3H13v-1h2v-1h-2v-1h-1z',
+        fileSignature:      'M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6H6zm7 1.5L18.5 9H13V3.5zM7 14h2.5l1.5 2 2-3 1 1H17v1h-2.5l-1.5-2-2 3-1-1H7v-1z',
+        fileAlt:            'M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6H6zm7 1.5L18.5 9H13V3.5zM8 13h8v1H8v-1zm0 3h5v1H8v-1z'
+    };
+
+    var TAB_ICONS = {
+        'fa-file-invoice-dollar': 'fileInvoiceDollar',
+        'fa-file-signature':      'fileSignature',
+        'fa-file-alt':            'fileAlt'
+    };
+
     /* ================================================================ *
      *  Tab bar (segmented control)                                      *
      * ================================================================ */
@@ -64,7 +95,7 @@
                     onClick: function () { onChange(t.key); },
                     type: 'button'
                 },
-                    h('i', { className: 'fas ' + t.icon }),
+                    svgIcon(ICONS[TAB_ICONS[t.icon] || t.icon]),
                     ' ',
                     i18n[TAB_LABELS[t.key]],
                     count > 0 ? h('span', { className: 'mj-empdocs__tab-badge' }, count) : null
@@ -94,13 +125,13 @@
 
         return h('div', { className: 'mj-empdocs__card' },
             h('div', { className: 'mj-empdocs__card-icon' },
-                h('i', { className: isPdf ? 'fas fa-file-pdf' : 'fas fa-file-image' })
+                svgIcon(isPdf ? ICONS.filePdf : ICONS.fileImage)
             ),
             h('div', { className: 'mj-empdocs__card-body' },
                 h('div', { className: 'mj-empdocs__card-title' }, doc.label || doc.originalName),
                 h('div', { className: 'mj-empdocs__card-meta' },
                     periodLabel ? h('span', { className: 'mj-empdocs__card-period' },
-                        h('i', { className: 'fas fa-calendar-alt' }), ' ', periodLabel
+                        svgIcon(ICONS.calendar), ' ', periodLabel
                     ) : null,
                     h('span', { className: 'mj-empdocs__card-size' }, formatBytes(doc.fileSize)),
                     doc.documentDate ? h('span', { className: 'mj-empdocs__card-date' }, formatDate(doc.documentDate)) : null
@@ -112,7 +143,7 @@
                     title: i18n.download || 'Télécharger',
                     onClick: handleDownload,
                     type: 'button'
-                }, h('i', { className: 'fas fa-download' }))
+                }, svgIcon(ICONS.download))
             )
         );
     }
@@ -139,7 +170,7 @@
 
         if (filtered.length === 0) {
             return h('div', { className: 'mj-empdocs__empty' },
-                h('i', { className: 'fas fa-folder-open' }),
+                svgIcon(ICONS.folderOpen),
                 h('p', null, i18n.noDocuments)
             );
         }
