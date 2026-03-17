@@ -311,13 +311,23 @@ class MjEvents implements CrudRepositoryInterface {
             return null;
         }
 
+        $cache_key = 'mj_event_' . $event_id;
+        $cached = wp_cache_get($cache_key, 'mj_events');
+        if ($cached !== false) {
+            return $cached;
+        }
+
         global $wpdb;
         $table = mj_member_get_events_table_name();
 
         $sql = $wpdb->prepare("SELECT * FROM {$table} WHERE id = %d", $event_id);
         $row = $wpdb->get_row($sql);
 
-        return $row ? EventData::fromRow($row) : null;
+        $result = $row ? EventData::fromRow($row) : null;
+        if ($result !== null) {
+            wp_cache_set($cache_key, $result, 'mj_events');
+        }
+        return $result;
     }
 
     /**
@@ -521,6 +531,8 @@ class MjEvents implements CrudRepositoryInterface {
 
         self::refresh_event_occurrences($event_id);
 
+        wp_cache_delete('mj_event_' . $event_id, 'mj_events');
+
         // Déclencher le hook si le statut passe de brouillon à actif
         if ($new_status === self::STATUS_ACTIVE && $old_status === self::STATUS_DRAFT) {
             $published_event = self::find($event_id);
@@ -614,6 +626,8 @@ class MjEvents implements CrudRepositoryInterface {
         if ($deleted === false || $deleted === 0) {
             return new WP_Error('mj_event_delete_failed', 'Suppression de l\'evenement impossible.');
         }
+
+        wp_cache_delete('mj_event_' . $event_id, 'mj_events');
 
         return true;
     }

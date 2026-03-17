@@ -92,8 +92,9 @@
         var coverRemove     = modal.querySelector('[data-ccm-cover-remove]');
         var stepperDots     = toArray(modal.querySelectorAll('[data-ccm-step-dot]'));
 
+        var descriptionInput = modal.querySelector('[data-ccm-description]');
         var coverFile       = null;
-        var stepValidated   = [false, false, false, false];
+        var stepValidated   = [false, false, false, false, false];
 
         // ---- Date picker sync ----
         if (dateInput && dateInput.type === 'date') {
@@ -115,7 +116,7 @@
         var activeTrigger   = null;
         var isSubmitting    = false;
         var selectedEmoji   = '';
-        var totalSteps      = 4;
+        var totalSteps      = 5;
         var emojiRendered   = false;
 
         // ---- Emoji picker ----
@@ -304,7 +305,8 @@
                 if (!t) { setFeedback('Le titre est requis.', 'error'); if (titleInput) titleInput.focus(); return false; }
                 if (!ty) { setFeedback('S\u00e9lectionnez un type.', 'error'); return false; }
             }
-            if (step === 2) {
+            // Step 2 (Description) – no mandatory validation
+            if (step === 3) {
                 var sv = startInput ? String(startInput.value || '').trim() : '';
                 var ev = endInput ? String(endInput.value || '').trim() : '';
                 var needDate = config.dateRequired !== false;
@@ -352,7 +354,7 @@
             if (nextButton) { nextButton.hidden = currentStep >= totalSteps; nextButton.disabled = isSubmitting; }
             if (submitButton) { submitButton.hidden = currentStep < totalSteps || config.showEditButton === false; submitButton.disabled = isSubmitting; }
             if (onlyButton) { onlyButton.hidden = currentStep < totalSteps; onlyButton.disabled = isSubmitting; }
-            if (currentStep === 3) updateSummary();
+            if (currentStep === 4) updateSummary();
         }
 
         // ---- Open / Close ----
@@ -378,6 +380,7 @@
             if (startInput) startInput.value = '14:00';
             if (endInput) endInput.value = '17:00';
             if (titleInput) titleInput.value = '';
+            if (descriptionInput) descriptionInput.value = '';
             clearCover();
             if (occurrenceChoice) occurrenceChoice.checked = false;
             if (requireValidation) requireValidation.checked = false;
@@ -392,7 +395,7 @@
             if (teamGrid) {
                 toArray(teamGrid.querySelectorAll('input[type="checkbox"]')).forEach(function (cb) { cb.checked = false; });
             }
-            stepValidated = [false, false, false, false];
+            stepValidated = [false, false, false, false, false];
 
             modal.hidden = false;
             modal.setAttribute('aria-hidden', 'false');
@@ -430,6 +433,8 @@
             if (selectedDay && ev) fd.append('end_date', buildDateTime(selectedDay, ev));
             if (selectedEmoji) fd.append('emoji', selectedEmoji);
             if (coverFile) fd.append('cover_image', coverFile);
+            var desc = descriptionInput ? String(descriptionInput.value || '').trim() : '';
+            if (desc) fd.append('description', desc);
             if (occurrenceChoice && occurrenceChoice.checked) fd.append('occurrence_choice', '1');
             if (requireValidation && requireValidation.checked) fd.append('require_validation', '1');
 
@@ -450,7 +455,7 @@
         // ---- Submit ----
         function submit(mode) {
             if (isSubmitting) return;
-            if (!validate(1) || !validate(2)) return;
+            if (!validate(1) || !validate(3)) return;
             if (!config.ajaxUrl || !config.createNonce) {
                 setFeedback('Configuration incompl\u00e8te.', 'error');
                 return;

@@ -278,6 +278,20 @@ final class AssetsManager
         }
 
         wp_enqueue_script('mj-member-push-subscribe');
+        self::localizePushSubscribe();
+    }
+
+    /**
+     * Localise le script push-subscribe une seule fois par requête.
+     */
+    private static function localizePushSubscribe(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+
         wp_localize_script('mj-member-push-subscribe', 'mjPushSubscribe', array(
             'ajaxUrl'        => admin_url('admin-ajax.php'),
             'nonce'          => wp_create_nonce('mj-push-subscribe'),
@@ -632,12 +646,7 @@ final class AssetsManager
                 // Charger aussi le push subscribe si VAPID est configuré
                 if (\Mj\Member\Core\Config::webPushIsReady() && is_user_logged_in()) {
                     wp_enqueue_script('mj-member-push-subscribe');
-                    wp_localize_script('mj-member-push-subscribe', 'mjPushSubscribe', array(
-                        'ajaxUrl'        => admin_url('admin-ajax.php'),
-                        'nonce'          => wp_create_nonce('mj-push-subscribe'),
-                        'vapidPublicKey' => \Mj\Member\Core\Config::vapidPublicKey(),
-                        'swUrl'          => home_url('/mj-sw.js'),
-                    ));
+                    self::localizePushSubscribe();
                 }
                 break;
 
@@ -645,12 +654,7 @@ final class AssetsManager
                 if (\Mj\Member\Core\Config::webPushIsReady() && is_user_logged_in()) {
                     wp_enqueue_style('mj-member-notification-bell');
                     wp_enqueue_script('mj-member-push-subscribe');
-                    wp_localize_script('mj-member-push-subscribe', 'mjPushSubscribe', array(
-                        'ajaxUrl'        => admin_url('admin-ajax.php'),
-                        'nonce'          => wp_create_nonce('mj-push-subscribe'),
-                        'vapidPublicKey' => \Mj\Member\Core\Config::vapidPublicKey(),
-                        'swUrl'          => home_url('/mj-sw.js'),
-                    ));
+                    self::localizePushSubscribe();
                 }
                 break;
 
@@ -800,8 +804,14 @@ final class AssetsManager
      * @param bool $inFooter Chargement en pied de page (par défaut true).
      * @return void
      */
-    private static function registerScript(string $handle, string $relativePath, array $deps = array(), bool $inFooter = true): void
+    private static array $DEFER_FOOTER = array('strategy' => 'defer', 'in_footer' => true);
+
+    private static function registerScript(string $handle, string $relativePath, array $deps = array(), bool|array $args = true): void
     {
+        if ($args === true) {
+            $args = self::$DEFER_FOOTER;
+        }
+
         $baseUrl = trailingslashit(Config::url());
         $basePath = trailingslashit(Config::path());
 
@@ -810,7 +820,7 @@ final class AssetsManager
         $src = $baseUrl . $relative;
         $version = file_exists($absolutePath) ? (string) filemtime($absolutePath) : Config::version();
 
-        wp_register_script($handle, $src, $deps, $version, $inFooter);
+        wp_register_script($handle, $src, $deps, $version, $args);
     }
 
     /**

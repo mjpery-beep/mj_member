@@ -210,7 +210,7 @@ class CrudQueryBuilder {
      * @param string $search
      * @return $this
      */
-    public function where_tokenized_search(array $columns, $search) {
+    public function where_tokenized_search(array $columns, $search, int $max_tokens = 4) {
         $search = sanitize_text_field((string) $search);
         if ($search === '' || empty($columns)) {
             return $this;
@@ -220,6 +220,9 @@ class CrudQueryBuilder {
         if (!is_array($tokens)) {
             return $this;
         }
+
+        // Cap the number of tokens to avoid expensive queries.
+        $tokens = array_slice($tokens, 0, $max_tokens);
 
         global $wpdb;
         $token_clauses = array();

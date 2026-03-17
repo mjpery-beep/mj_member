@@ -49,9 +49,10 @@ class CreateEventModalRenderer
         echo '<nav class="ccm__stepper" data-ccm-stepper>';
         $step_labels = [
             1 => __('Identité', 'mj-member'),
-            2 => __('Horaires', 'mj-member'),
-            3 => __('Options', 'mj-member'),
-            4 => __('Lieu & Équipe', 'mj-member'),
+            2 => __('Description', 'mj-member'),
+            3 => __('Horaires', 'mj-member'),
+            4 => __('Options', 'mj-member'),
+            5 => __('Lieu & Équipe', 'mj-member'),
         ];
         foreach ($step_labels as $sn => $sl) {
             $cls = 'ccm__step-item' . ($sn === 1 ? ' is-active' : '');
@@ -98,8 +99,16 @@ class CreateEventModalRenderer
 
         echo '</div>'; // end step 1
 
-        // ── Step 2 – Date & time ──
+        // ── Step 2 – Description ──
         echo '<div class="ccm__panel" data-ccm-panel="2" hidden>';
+        echo '<div class="ccm__field">';
+        echo '<label class="ccm__label" for="ccm-desc-input-' . esc_attr($instance_id) . '">' . esc_html__('Description de l\'événement', 'mj-member') . '</label>';
+        echo '<textarea class="ccm__input ccm__textarea" id="ccm-desc-input-' . esc_attr($instance_id) . '" data-ccm-description rows="6" placeholder="' . esc_attr__('Décrivez l\'événement, son déroulement, ce qu\'il faut prévoir…', 'mj-member') . '"></textarea>';
+        echo '</div>';
+        echo '</div>'; // end step 2
+
+        // ── Step 3 – Date & time ──
+        echo '<div class="ccm__panel" data-ccm-panel="3" hidden>';
         echo '<div class="ccm__date-display" data-ccm-date-display hidden></div>';
         echo '<div class="ccm__field">';
         echo '<label class="ccm__label" for="ccm-date-input-' . esc_attr($instance_id) . '">' . esc_html__('Date', 'mj-member') . '</label>';
@@ -116,10 +125,10 @@ class CreateEventModalRenderer
         echo '<input class="ccm__input" type="time" data-ccm-end value="17:00" />';
         echo '</div>';
         echo '</div>';
-        echo '</div>'; // end step 2
+        echo '</div>'; // end step 3
 
-        // ── Step 3 – Options & Confirmation ──
-        echo '<div class="ccm__panel" data-ccm-panel="3" hidden>';
+        // ── Step 4 – Options & Confirmation ──
+        echo '<div class="ccm__panel" data-ccm-panel="4" hidden>';
 
         echo '<div class="ccm__summary-card" data-ccm-summary></div>';
 
@@ -161,10 +170,10 @@ class CreateEventModalRenderer
 
         echo '<p class="ccm__hint">' . esc_html__('0 = illimité. Ces options sont modifiables après création.', 'mj-member') . '</p>';
         echo '</div>'; // options-section
-        echo '</div>'; // end step 3
+        echo '</div>'; // end step 4
 
-        // ── Step 4 – Lieu, Équipe & Statut ──
-        echo '<div class="ccm__panel" data-ccm-panel="4" hidden>';
+        // ── Step 5 – Lieu, Équipe & Statut ──
+        echo '<div class="ccm__panel" data-ccm-panel="5" hidden>';
 
         echo '<div class="ccm__field">';
         echo '<label class="ccm__label">' . esc_html__('Statut', 'mj-member') . '</label>';
@@ -190,7 +199,7 @@ class CreateEventModalRenderer
         echo '<div class="ccm__team-grid" data-ccm-team-grid></div>';
         echo '</div>';
 
-        echo '</div>'; // end step 4
+        echo '</div>'; // end step 5
 
         // ── Actions footer ──
         echo '<div class="ccm__actions">';

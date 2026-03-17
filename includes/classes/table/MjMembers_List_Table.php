@@ -64,6 +64,7 @@ class MjMembers_List_Table extends WP_List_Table {
         $search  = isset($_REQUEST['s']) ? sanitize_text_field(wp_unslash($_REQUEST['s'])) : '';
 
         $this->activeFilters = $this->collectFilters();
+        $this->activeFilters['extended_search'] = true;
 
         $allowed_orderby = array('last_name', 'first_name', 'age', 'birth_date', 'role', 'status', 'date_inscription', 'date_last_payement');
         if (!in_array($orderby, $allowed_orderby, true)) {

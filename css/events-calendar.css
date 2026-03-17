@@ -1324,6 +1324,16 @@ button.mj-member-events-calendar__day-add {
     border-left: 2px solid var(--mj-event-accent, #3b82f6);
     overflow: hidden;
     min-width: 0;
+    line-height: 1em;
+}
+
+.mj-cal-mobile__chip-emoji .emoji{
+    font-size: 0.4rem !important;
+}
+.mj-cal-mobile__chip-emoji{
+    font-size: 0.4rem;
+    line-height: 1;
+    flex-shrink: 0;
 }
 
 .mj-cal-mobile__chip.is-cancelled {
@@ -1451,6 +1461,30 @@ button.mj-member-events-calendar__day-add {
     font-size: 0.9rem;
 }
 
+.mj-cal-mobile__modal-create-event {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    margin-top: 12px;
+    padding: 10px 16px;
+    border: 1px dashed var(--mj-events-calendar-border, #cbd5e1);
+    border-radius: 10px;
+    background: transparent;
+    color: #64748b;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.mj-cal-mobile__modal-create-event:active {
+    background: var(--mj-events-calendar-accent, #6366f1);
+    border-color: var(--mj-events-calendar-accent, #6366f1);
+    color: #ffffff;
+}
+
 @keyframes mjCalModalFadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -1497,29 +1531,29 @@ button.mj-member-events-calendar__day-add {
 .mj-member-events-calendar__mobile-event:hover {
     transform: translateY(-1px);
 }
-
-.mj-member-events-calendar__mobile-link {
+.mj-member-events-calendar__mobile-link,
+a.mj-member-events-calendar__mobile-link {
     display: flex;
     gap: 12px;
     align-items: flex-start;
     padding: 10px 12px;
     color: var(--mj-events-calendar-event-text);
-    text-decoration: none;
+    text-decoration: none !important;
     width: 100%;
     height: 100%;
 }
 
-.mj-member-events-calendar__mobile-link:hover,
-.mj-member-events-calendar__mobile-link:focus {
+a.mj-member-events-calendar__mobile-link:hover,
+a.mj-member-events-calendar__mobile-link:focus {
     color: var(--mj-events-calendar-event-text);
     text-decoration: none;
 }
 
-.mj-member-events-calendar__mobile-link.is-static {
+a.mj-member-events-calendar__mobile-link.is-static {
     cursor: default;
 }
 
-.mj-member-events-calendar__mobile-event.is-filtered-out {
+a.mj-member-events-calendar__mobile-event.is-filtered-out {
     display: none !important;
 }
 
@@ -1537,7 +1571,7 @@ button.mj-member-events-calendar__day-add {
     letter-spacing: 0.05em;
     width: fit-content;
 }
-
+.mj-member-events-calendar__mobile-link
 .mj-member-events-calendar__mobile-title {
     display: flex;
     align-items: flex-start;

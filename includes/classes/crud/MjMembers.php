@@ -207,10 +207,11 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             $builder->where_in_int('id', array_map('intval', $filters['ids']));
         }
 
-        $builder->where_tokenized_search(
-            array('first_name', 'last_name', 'nickname', 'email', 'phone', 'city', 'postal_code'),
-            $search
-        );
+        $search_columns = !empty($filters['extended_search'])
+            ? array('first_name', 'last_name', 'nickname', 'email', 'phone', 'city', 'postal_code')
+            : array('first_name', 'last_name', 'nickname', 'email', 'phone');
+
+        $builder->where_tokenized_search($search_columns, $search);
 
         if (!empty($filters['last_name'])) {
             $builder->where_like_any(array('last_name'), $filters['last_name']);
@@ -313,12 +314,23 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
      * @return MemberData|null
      */
     public static function getById($id) {
+        $id = intval($id);
+        $cache_key = 'mj_member_' . $id;
+        $cached = wp_cache_get($cache_key, 'mj_member');
+        if ($cached !== false) {
+            return $cached;
+        }
+
         $table_name = self::getTableName(self::TABLE_NAME);
         $row = self::getWpdb()->get_row(
-            self::getWpdb()->prepare("SELECT * FROM $table_name WHERE id = %d", intval($id))
+            self::getWpdb()->prepare("SELECT * FROM $table_name WHERE id = %d", $id)
         );
 
-        return $row ? MemberData::fromRow($row) : null;
+        $result = $row ? MemberData::fromRow($row) : null;
+        if ($result !== null) {
+            wp_cache_set($cache_key, $result, 'mj_member');
+        }
+        return $result;
     }
 
     /**
@@ -687,6 +699,8 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             return new WP_Error('mj_member_update_failed', 'Impossible de mettre a jour ce membre.');
         }
 
+        wp_cache_delete('mj_member_' . $id, 'mj_member');
+
         return true;
     }
 
@@ -709,6 +723,8 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         if ((int) $deleted === 0) {
             return new WP_Error('mj_member_missing', 'Membre introuvable.');
         }
+
+        wp_cache_delete('mj_member_' . $id, 'mj_member');
 
         return true;
     }

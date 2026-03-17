@@ -242,6 +242,14 @@ button.ccm__step-item {
     font-size: 0.85rem;
 }
 
+/* Textarea */
+.ccm__textarea {
+    resize: vertical;
+    min-height: 120px;
+    font-family: inherit;
+    line-height: 1.5;
+}
+
 /* Emoji zone – centered above title */
 .ccm__emoji-zone {
     display: flex;

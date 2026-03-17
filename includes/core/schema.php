@@ -162,6 +162,12 @@ function mj_member_get_event_locations_table_name() {
 }
 
 function mj_member_ensure_event_schedule_columns_fallback() {
+    // Skip if the schema version is already current (columns handled by upgrade path).
+    $stored = get_option('mj_member_schema_version', '1.0.0');
+    if (version_compare($stored, '2.10.0', '>=')) {
+        return;
+    }
+
     global $wpdb;
 
     if (!isset($wpdb) || !is_object($wpdb)) {
@@ -216,10 +222,6 @@ function mj_member_ensure_event_schedule_columns_fallback() {
     }
 }
 add_action('plugins_loaded', 'mj_member_ensure_event_schedule_columns_fallback', 1);
-add_action('init', 'mj_member_ensure_event_schedule_columns_fallback', 4);
-if (!did_action('plugins_loaded')) {
-    mj_member_ensure_event_schedule_columns_fallback();
-}
 
 function mj_member_get_event_animateurs_table_name() {
     static $cached = null;
@@ -1136,7 +1138,7 @@ HTML
         $wpdb->insert($table, $insert_data, $insert_formats);
     }
 }
-add_action('init', 'mj_member_seed_email_templates', 15);
+add_action('admin_init', 'mj_member_seed_email_templates', 15);
 
 if (!function_exists('mj_member_get_default_badge_slugs')) {
     function mj_member_get_default_badge_slugs(): array {
@@ -1493,7 +1495,7 @@ function mj_member_seed_default_badges() {
         }
     }
 }
-add_action('init', 'mj_member_seed_default_badges', 16);
+add_action('admin_init', 'mj_member_seed_default_badges', 16);
 
 /**
  * Seed default trophies based on TROPHE.md.
@@ -1682,7 +1684,7 @@ function mj_member_seed_default_trophies() {
         );
     }
 }
-add_action('init', 'mj_member_seed_default_trophies', 17);
+add_action('admin_init', 'mj_member_seed_default_trophies', 17);
 
 function mj_member_run_schema_upgrade() {
     static $running = false;
@@ -1694,6 +1696,14 @@ function mj_member_run_schema_upgrade() {
     global $wpdb;
 
     $stored_version = get_option('mj_member_schema_version', '1.0.0');
+
+    // Fast path: if the stored version already matches the target, skip all
+    // the expensive table/column existence checks on every request.
+    if (version_compare($stored_version, Config::schemaVersion(), '>=')) {
+        $running = false;
+        return;
+    }
+
     $table_name = $wpdb->prefix . 'mj_members';
 
     $critical_columns = array('description_courte', 'description_longue', 'wp_user_id', 'card_access_key');
@@ -1910,6 +1920,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_74($wpdb);
     mj_member_upgrade_to_2_75($wpdb);
     mj_member_upgrade_to_2_76($wpdb);
+    mj_member_upgrade_to_2_77($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -4418,7 +4429,7 @@ function mj_member_seed_default_levels() {
         );
     }
 }
-add_action('init', 'mj_member_seed_default_levels', 18);
+add_action('admin_init', 'mj_member_seed_default_levels', 18);
 
 /**
  * Schema upgrade 2.51: Add coins column to badges, badge_criteria, trophies and members tables.
@@ -5979,6 +5990,76 @@ function mj_member_upgrade_to_2_76($wpdb) {
     }
 }
 
-add_action('init', 'mj_member_run_schema_upgrade', 5);
-add_action('admin_init', 'mj_check_and_add_columns');
-add_action('plugins_loaded', 'mj_member_ensure_event_location_links_table', 20);
+add_action('admin_init', 'mj_member_run_schema_upgrade', 5);
+add_action('admin_init', 'mj_check_and_add_columns', 6);
+add_action('admin_init', 'mj_member_ensure_event_location_links_table', 7);
+
+/**
+ * Migration 2.77: Add missing performance indexes.
+ */
+function mj_member_upgrade_to_2_77($wpdb) {
+    // Priority 1 — high-impact indexes
+    $registrations_table = mj_member_get_event_registrations_table_name();
+    if ($registrations_table && mj_member_table_exists($registrations_table)) {
+        if (!mj_member_index_exists($registrations_table, 'idx_event_statut')) {
+            $wpdb->query("ALTER TABLE `{$registrations_table}` ADD INDEX idx_event_statut (event_id, statut)");
+        }
+    }
+
+    $recipients_table = mj_member_get_notification_recipients_table_name();
+    if ($recipients_table && mj_member_table_exists($recipients_table)) {
+        if (!mj_member_index_exists($recipients_table, 'idx_member_status')) {
+            $wpdb->query("ALTER TABLE `{$recipients_table}` ADD INDEX idx_member_status (member_id, status)");
+        }
+    }
+
+    $payments_table = $wpdb->prefix . 'mj_payments';
+    if (mj_member_table_exists($payments_table)) {
+        if (!mj_member_index_exists($payments_table, 'idx_member_created')) {
+            $wpdb->query("ALTER TABLE `{$payments_table}` ADD INDEX idx_member_created (member_id, created_at)");
+        }
+    }
+
+    $member_badges_table = mj_member_get_member_badges_table_name();
+    if ($member_badges_table && mj_member_table_exists($member_badges_table)) {
+        if (!mj_member_index_exists($member_badges_table, 'idx_badge_member')) {
+            $wpdb->query("ALTER TABLE `{$member_badges_table}` ADD INDEX idx_badge_member (badge_id, member_id)");
+        }
+    }
+
+    $members_table = $wpdb->prefix . 'mj_members';
+    if (mj_member_table_exists($members_table)) {
+        if (!mj_member_index_exists($members_table, 'idx_status')) {
+            $wpdb->query("ALTER TABLE `{$members_table}` ADD INDEX idx_status (status)");
+        }
+    }
+
+    // Priority 2 — secondary indexes
+    $todo_notes_table = mj_member_get_todo_notes_table_name();
+    if ($todo_notes_table && mj_member_table_exists($todo_notes_table)) {
+        if (!mj_member_index_exists($todo_notes_table, 'idx_todo_created')) {
+            $wpdb->query("ALTER TABLE `{$todo_notes_table}` ADD INDEX idx_todo_created (todo_id, created_at)");
+        }
+    }
+
+    $testimonials_table = mj_member_get_testimonials_table_name();
+    if ($testimonials_table && mj_member_table_exists($testimonials_table)) {
+        if (!mj_member_index_exists($testimonials_table, 'idx_member_status_created')) {
+            $wpdb->query("ALTER TABLE `{$testimonials_table}` ADD INDEX idx_member_status_created (member_id, status, created_at)");
+        }
+    }
+
+    $mileage_table = mj_member_get_mileage_table_name();
+    if ($mileage_table && mj_member_table_exists($mileage_table)) {
+        if (!mj_member_index_exists($mileage_table, 'idx_member_mileage')) {
+            $wpdb->query("ALTER TABLE `{$mileage_table}` ADD INDEX idx_member_mileage (member_id)");
+        }
+    }
+
+    $expenses_table = mj_member_get_expenses_table_name();
+    if ($expenses_table && mj_member_table_exists($expenses_table)) {
+        if (!mj_member_index_exists($expenses_table, 'idx_member_expenses')) {
+            $wpdb->query("ALTER TABLE `{$expenses_table}` ADD INDEX idx_member_expenses (member_id)");
+        }
+    }
+}

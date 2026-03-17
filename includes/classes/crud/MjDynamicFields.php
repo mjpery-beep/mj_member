@@ -73,12 +73,19 @@ class MjDynamicFields extends MjTools
      */
     public static function getAll(): array
     {
+        $cached = wp_cache_get('mj_dynfields_all', 'mj_member');
+        if ($cached !== false) {
+            return $cached;
+        }
+
         $wpdb = self::getWpdb();
         $table = self::table_name();
 
         $results = $wpdb->get_results("SELECT * FROM {$table} ORDER BY sort_order ASC, id ASC");
 
-        return is_array($results) ? $results : array();
+        $results = is_array($results) ? $results : array();
+        wp_cache_set('mj_dynfields_all', $results, 'mj_member');
+        return $results;
     }
 
     /**
@@ -194,7 +201,19 @@ class MjDynamicFields extends MjTools
             'sort_order'           => isset($data['sort_order']) ? (int) $data['sort_order'] : $max_order + 1,
         ), array('%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%s', '%d', '%d', '%s', '%d'));
 
+        if ($inserted) {
+            self::invalidateCache();
+        }
+
         return $inserted ? (int) $wpdb->insert_id : false;
+    }
+
+    /**
+     * Invalidate the dynamic fields cache.
+     */
+    private static function invalidateCache(): void
+    {
+        wp_cache_delete('mj_dynfields_all', 'mj_member');
     }
 
     /**
@@ -290,6 +309,10 @@ class MjDynamicFields extends MjTools
 
         $result = $wpdb->update($table, $fields, array('id' => $id), $formats, array('%d'));
 
+        if ($result !== false) {
+            self::invalidateCache();
+        }
+
         return $result !== false;
     }
 
@@ -310,6 +333,10 @@ class MjDynamicFields extends MjTools
 
         $table = self::table_name();
         $result = $wpdb->delete($table, array('id' => $id), array('%d'));
+
+        if ($result !== false) {
+            self::invalidateCache();
+        }
 
         return $result !== false;
     }
@@ -334,6 +361,8 @@ class MjDynamicFields extends MjTools
                 array('%d')
             );
         }
+
+        self::invalidateCache();
     }
 
     /**
