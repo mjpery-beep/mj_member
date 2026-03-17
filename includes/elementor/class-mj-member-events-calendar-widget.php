@@ -2445,188 +2445,251 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             echo '</div>';
             echo '</div>';
 
-            if (!empty($day_list_entries)) {
-                echo '<div class="mj-member-events-calendar__mobile-list" data-calendar-mobile>';
-                foreach ($day_list_entries as $day_entry) {
-                    $day_key = isset($day_entry['day_key']) ? (string) $day_entry['day_key'] : '';
-                    $mobile_events = isset($day_entry['events']) && is_array($day_entry['events']) ? $day_entry['events'] : array();
-                    if (empty($mobile_events)) {
+            // ── Mobile compact calendar grid ──
+            echo '<div class="mj-cal-mobile" data-calendar-mobile>';
+
+            // Weekday headers
+            echo '<div class="mj-cal-mobile__weekdays">';
+            foreach ($week_days as $wd_label) {
+                echo '<span>' . esc_html($wd_label) . '</span>';
+            }
+            echo '</div>';
+
+            // Grid of weeks
+            echo '<div class="mj-cal-mobile__grid">';
+            $today_key = wp_date('Y-m-d', $now_ts, $timezone);
+            foreach ($weeks as $week_data) {
+                echo '<div class="mj-cal-mobile__week">';
+                foreach ($week_data['cells'] as $cell_entry) {
+                    if (!empty($cell_entry['is_padding'])) {
+                        echo '<div class="mj-cal-mobile__day is-padding"></div>';
                         continue;
                     }
 
-                    usort(
-                        $mobile_events,
-                        static function ($a, $b) {
-                            return (int) (isset($a['start_ts']) ? $a['start_ts'] : 0) <=> (int) (isset($b['start_ts']) ? $b['start_ts'] : 0);
-                        }
-                    );
-
-                    $mobile_day_classes = array('mj-member-events-calendar__mobile-day');
-                    if (!empty($day_entry['is_closure'])) {
-                        $mobile_day_classes[] = 'is-closure';
+                    $mobile_day_key = $cell_entry['day_key'];
+                    $mobile_day_events = isset($cell_entry['events']) && is_array($cell_entry['events']) ? $cell_entry['events'] : array();
+                    $mob_day_classes = array('mj-cal-mobile__day');
+                    if (!empty($mobile_day_events)) {
+                        $mob_day_classes[] = 'has-events';
                     }
-                    if (!empty($day_entry['is_weekend'])) {
-                        $mobile_day_classes[] = 'is-weekend';
+                    if ($mobile_day_key === $today_key) {
+                        $mob_day_classes[] = 'is-today';
                     }
-                    if ($day_key === wp_date('Y-m-d', $now_ts, $timezone)) {
-                        $mobile_day_classes[] = 'is-today';
+                    if (!empty($cell_entry['is_closure'])) {
+                        $mob_day_classes[] = 'is-closure';
+                    }
+                    if (!empty($cell_entry['is_weekend'])) {
+                        $mob_day_classes[] = 'is-weekend';
                     }
 
-                    $day_timestamp = strtotime($day_key . ' 00:00:00');
-                    if ($day_timestamp === false) {
-                        $day_timestamp = $now_ts;
-                    }
-                    $day_label = wp_date('l j F', $day_timestamp, $timezone);
-                    $events_count = count($mobile_events);
-                    $count_label = sprintf(_n('%d événement', '%d événements', $events_count, 'mj-member'), $events_count);
+                    echo '<div class="' . esc_attr(implode(' ', $mob_day_classes)) . '" data-calendar-day="' . esc_attr($mobile_day_key) . '">';
+                    echo '<span class="mj-cal-mobile__day-num">' . esc_html($cell_entry['day_number']) . '</span>';
 
-                    echo '<details class="' . esc_attr(implode(' ', $mobile_day_classes)) . '" data-calendar-day="' . esc_attr($day_key) . '" open>';
-                    echo '<summary class="mj-member-events-calendar__mobile-summary">';
-                    echo '<span>' . esc_html($day_label) . '</span>';
-                    echo '<span class="mj-member-events-calendar__mobile-count" data-calendar-day-count>' . esc_html($count_label) . '</span>';
-                    echo '</summary>';
-
-                    echo '<ul class="mj-member-events-calendar__mobile-events">';
-                    foreach ($mobile_events as $mobile_event) {
-                        if (!is_array($mobile_event) || !isset($mobile_event['id'])) {
-                            continue;
-                        }
-
-                        $event_type_key = isset($mobile_event['type_key']) ? sanitize_key((string) $mobile_event['type_key']) : '';
-                        if ($event_type_key === '') {
-                            $event_type_key = 'misc';
-                        }
-                        $is_known_type = isset($available_type_filters[$event_type_key]) || $event_type_key === 'closure';
-                        $mobile_classes = array('mj-member-events-calendar__mobile-event');
-                        $mobile_is_closure = !empty($mobile_event['is_closure']);
-                        if ($mobile_is_closure) {
-                            $mobile_classes[] = 'is-closure';
-                        }
-                        if (!empty($mobile_event['is_cancelled'])) {
-                            $mobile_classes[] = 'is-cancelled';
-                        }
-                        if (!empty($mobile_event['is_draft'])) {
-                            $mobile_classes[] = 'is-draft';
-                        }
-
-                        $mobile_style = self::build_event_style_attribute($mobile_event);
-                        $mobile_cover_sources = array();
-                        if (isset($mobile_event['cover_sources']) && is_array($mobile_event['cover_sources'])) {
-                            $mobile_cover_sources = $mobile_event['cover_sources'];
-                        }
-                        $mobile_fallback_cover = isset($mobile_event['cover']) ? (string) $mobile_event['cover'] : '';
-                        if ($mobile_fallback_cover === '' && isset($mobile_cover_sources['fallback']) && $mobile_cover_sources['fallback'] !== '') {
-                            $mobile_fallback_cover = $mobile_cover_sources['fallback'];
-                        }
-                        $has_mobile_cover = $mobile_fallback_cover !== '';
-
-                        $mobile_permalink = isset($mobile_event['permalink']) ? (string) $mobile_event['permalink'] : '';
-                        $mobile_tag = ($mobile_is_closure || $mobile_permalink === '') ? 'div' : 'a';
-                        $mobile_attributes = ' class="mj-member-events-calendar__mobile-link' . ($mobile_is_closure ? ' is-static' : '') . '"';
-                        if ($mobile_tag === 'a') {
-                            $mobile_attributes .= ' href="' . esc_url($mobile_permalink) . '"';
-                        }
-
-                        echo '<li class="' . esc_attr(implode(' ', $mobile_classes)) . '"' . $mobile_style . ' data-calendar-type-item="1" data-calendar-type="' . esc_attr($event_type_key) . '" data-calendar-type-known="' . ($is_known_type ? '1' : '0') . '">';
-
-                        echo '<' . $mobile_tag . $mobile_attributes . '>';
-
-                        if ($has_mobile_cover) {
-                            echo '<span class="mj-member-events-calendar__event-thumb mj-member-events-calendar__event-thumb--mobile">';
-                            echo '<picture>';
-                            if (!empty($mobile_cover_sources['desktop'])) {
-                                echo '<source media="(min-width: 901px)" srcset="' . esc_url($mobile_cover_sources['desktop']) . '" />';
+                    if (!empty($mobile_day_events)) {
+                        echo '<div class="mj-cal-mobile__day-events">';
+                        foreach ($mobile_day_events as $chip_event) {
+                            if (!is_array($chip_event) || !isset($chip_event['id'])) {
+                                continue;
                             }
-                            if (!empty($mobile_cover_sources['tablet'])) {
-                                echo '<source media="(min-width: 641px)" srcset="' . esc_url($mobile_cover_sources['tablet']) . '" />';
+                            $chip_type_key = isset($chip_event['type_key']) ? sanitize_key((string) $chip_event['type_key']) : 'misc';
+                            if ($chip_type_key === '') {
+                                $chip_type_key = 'misc';
                             }
-                            if (!empty($mobile_cover_sources['mobile'])) {
-                                echo '<source media="(max-width: 640px)" srcset="' . esc_url($mobile_cover_sources['mobile']) . '" />';
+                            $chip_is_known = isset($available_type_filters[$chip_type_key]) || $chip_type_key === 'closure';
+                            $chip_classes = array('mj-cal-mobile__chip');
+                            if (!empty($chip_event['is_cancelled'])) {
+                                $chip_classes[] = 'is-cancelled';
                             }
-                            echo '<img src="' . esc_url($mobile_fallback_cover) . '" alt="' . esc_attr($mobile_event['title']) . '" loading="lazy" />';
-                            echo '</picture>';
-                            echo '</span>';
-                        }
-
-                        echo '<div class="mj-member-events-calendar__mobile-body">';
-                        if (!empty($mobile_event['type_label'])) {
-                            echo '<span class="mj-member-events-calendar__mobile-pill">' . esc_html($mobile_event['type_label']) . '</span>';
-                        }
-                        $mobile_emoji = '';
-                        if (isset($mobile_event['emoji']) && $mobile_event['emoji'] !== '') {
-                            $mobile_emoji = (string) $mobile_event['emoji'];
-                            if ($mobile_emoji !== '' && function_exists('mb_substr')) {
-                                $mobile_emoji = mb_substr($mobile_emoji, 0, 8);
-                            } elseif ($mobile_emoji !== '') {
-                                $mobile_emoji = substr($mobile_emoji, 0, 8);
+                            if (!empty($chip_event['is_draft'])) {
+                                $chip_classes[] = 'is-draft';
                             }
-                        }
-                        echo '<span class="mj-member-events-calendar__mobile-title">';
-                        if ($mobile_emoji !== '') {
-                            echo '<span class="mj-member-events-calendar__event-emoji">' . esc_html($mobile_emoji) . '</span>';
-                        }
-                        echo '<span class="mj-member-events-calendar__mobile-title-text">' . esc_html($mobile_event['title']) . '</span>';
-                        echo '</span>';
-                        $mobile_meta = '';
-                        if (isset($mobile_event['schedule_label']) && $mobile_event['schedule_label'] !== '') {
-                            $mobile_meta = (string) $mobile_event['schedule_label'];
-                        } elseif (!empty($mobile_event['time'])) {
-                            $mobile_meta = (string) $mobile_event['time'];
-                        }
-                        $mobile_badges_markup = self::build_event_badges_markup($mobile_event, 'mobile');
-                        if ($mobile_meta !== '') {
-                            echo '<span class="mj-member-events-calendar__mobile-meta">' . esc_html($mobile_meta) . '</span>';
-                        }
-                        if ($mobile_badges_markup !== '') {
-                            echo $mobile_badges_markup;
-                        }
-                        if (!empty($mobile_event['is_cancelled'])) {
-                            $mobile_cancellation_reason = isset($mobile_event['cancellation_reason']) ? trim((string) $mobile_event['cancellation_reason']) : '';
-                            echo '<span class="mj-member-events-calendar__mobile-cancellation">';
-                            echo '<span class="mj-member-events-calendar__mobile-cancellation-label">' . esc_html__('Annulé', 'mj-member') . '</span>';
-                            if ($mobile_cancellation_reason !== '') {
-                                echo '<span class="mj-member-events-calendar__mobile-cancellation-reason">' . esc_html($mobile_cancellation_reason) . '</span>';
+                            $chip_style = self::build_event_style_attribute($chip_event);
+                            $chip_emoji = '';
+                            if (isset($chip_event['emoji']) && $chip_event['emoji'] !== '') {
+                                $chip_emoji = (string) $chip_event['emoji'];
+                                if (function_exists('mb_substr')) {
+                                    $chip_emoji = mb_substr($chip_emoji, 0, 8);
+                                } else {
+                                    $chip_emoji = substr($chip_emoji, 0, 8);
+                                }
                             }
-                            echo '</span>';
-                        }
-                        if (!empty($mobile_event['is_draft'])) {
-                            echo '<span class="mj-member-events-calendar__event-draft-badge">' . esc_html__('Brouillon', 'mj-member') . '</span>';
+                            echo '<div class="' . esc_attr(implode(' ', $chip_classes)) . '"' . $chip_style . ' data-calendar-type-item="1" data-calendar-type="' . esc_attr($chip_type_key) . '" data-calendar-type-known="' . ($chip_is_known ? '1' : '0') . '">';
+                            if ($chip_emoji !== '') {
+                                echo '<span class="mj-cal-mobile__chip-emoji">' . esc_html($chip_emoji) . '</span>';
+                            }
+                            echo '<span class="mj-cal-mobile__chip-label">' . esc_html($chip_event['title']) . '</span>';
+                            echo '</div>';
                         }
                         echo '</div>';
-                        echo '</' . $mobile_tag . '>';
-                        if ($can_edit_events && !$mobile_is_closure && empty($mobile_event['is_leave_request']) && !empty($mobile_event['id'])) {
-                            if (!empty($mobile_event['is_todo'])) {
-                                $mobile_todo_parts = explode(':', (string) $mobile_event['id'], 2);
-                                $mobile_todo_id = isset($mobile_todo_parts[1]) ? (int) $mobile_todo_parts[1] : 0;
-                                $todo_page_url = home_url('/mon-compte/todo/?section=todos' . ($mobile_todo_id > 0 ? '&todo_id=' . $mobile_todo_id : ''));
-                                echo '<div class="mj-member-events-calendar__event-actions mj-member-events-calendar__event-actions--mobile">';
-                                echo '<a class="mj-member-events-calendar__event-edit mj-member-events-calendar__event-edit--mobile" href="' . esc_url($todo_page_url) . '" title="' . esc_attr__('Voir la tâche', 'mj-member') . '" aria-label="' . esc_attr__('Voir la tâche', 'mj-member') . '">';
-                                echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-                                echo '</a>';
-                                echo '</div>';
-                            } else {
-                                $mobile_occ_parts = explode(':', (string) $mobile_event['id'], 2);
-                                $mobile_occ_event_id = isset($mobile_occ_parts[0]) ? (int) $mobile_occ_parts[0] : 0;
-                                $mobile_occ_start_ts = isset($mobile_occ_parts[1]) ? (int) $mobile_occ_parts[1] : 0;
-                                $edit_url = home_url('/mon-compte/gestionnaire/?event=' . $mobile_occ_event_id);
-                                echo '<div class="mj-member-events-calendar__event-actions mj-member-events-calendar__event-actions--mobile">';
-                                echo '<a class="mj-member-events-calendar__event-edit mj-member-events-calendar__event-edit--mobile" href="' . esc_url($edit_url) . '" title="' . esc_attr__('Modifier l\'événement', 'mj-member') . '" aria-label="' . esc_attr__('Modifier l\'événement', 'mj-member') . '">';
-                                echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-                                echo '</a>';
-                                echo '<button type="button" class="mj-member-events-calendar__event-delete mj-member-events-calendar__event-delete--mobile" data-delete-event="' . esc_attr($mobile_occ_event_id) . '" data-delete-ts="' . esc_attr($mobile_occ_start_ts) . '" title="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '" aria-label="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '">';
-                                echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-                                echo '</button>';
-                                echo '</div>';
-                            }
-                        }
-                        echo '</li>';
                     }
-                    echo '</ul>';
 
-                    echo '</details>';
+                    echo '</div>';
                 }
                 echo '</div>';
             }
+            echo '</div>';
+
+            // Pre-rendered day detail templates for the modal
+            foreach ($day_list_entries as $day_entry) {
+                $tpl_day_key = isset($day_entry['day_key']) ? (string) $day_entry['day_key'] : '';
+                $tpl_events = isset($day_entry['events']) && is_array($day_entry['events']) ? $day_entry['events'] : array();
+                if (empty($tpl_events)) {
+                    continue;
+                }
+
+                usort($tpl_events, static function ($a, $b) {
+                    return (int) (isset($a['start_ts']) ? $a['start_ts'] : 0) <=> (int) (isset($b['start_ts']) ? $b['start_ts'] : 0);
+                });
+
+                echo '<template data-mobile-day-events="' . esc_attr($tpl_day_key) . '">';
+                echo '<ul class="mj-member-events-calendar__mobile-events">';
+                foreach ($tpl_events as $mobile_event) {
+                    if (!is_array($mobile_event) || !isset($mobile_event['id'])) {
+                        continue;
+                    }
+
+                    $event_type_key = isset($mobile_event['type_key']) ? sanitize_key((string) $mobile_event['type_key']) : '';
+                    if ($event_type_key === '') {
+                        $event_type_key = 'misc';
+                    }
+                    $is_known_type = isset($available_type_filters[$event_type_key]) || $event_type_key === 'closure';
+                    $mobile_classes = array('mj-member-events-calendar__mobile-event');
+                    $mobile_is_closure = !empty($mobile_event['is_closure']);
+                    if ($mobile_is_closure) {
+                        $mobile_classes[] = 'is-closure';
+                    }
+                    if (!empty($mobile_event['is_cancelled'])) {
+                        $mobile_classes[] = 'is-cancelled';
+                    }
+                    if (!empty($mobile_event['is_draft'])) {
+                        $mobile_classes[] = 'is-draft';
+                    }
+
+                    $mobile_style = self::build_event_style_attribute($mobile_event);
+                    $mobile_cover_sources = array();
+                    if (isset($mobile_event['cover_sources']) && is_array($mobile_event['cover_sources'])) {
+                        $mobile_cover_sources = $mobile_event['cover_sources'];
+                    }
+                    $mobile_fallback_cover = isset($mobile_event['cover']) ? (string) $mobile_event['cover'] : '';
+                    if ($mobile_fallback_cover === '' && isset($mobile_cover_sources['fallback']) && $mobile_cover_sources['fallback'] !== '') {
+                        $mobile_fallback_cover = $mobile_cover_sources['fallback'];
+                    }
+                    $has_mobile_cover = $mobile_fallback_cover !== '';
+
+                    $mobile_permalink = isset($mobile_event['permalink']) ? (string) $mobile_event['permalink'] : '';
+                    $mobile_tag = ($mobile_is_closure || $mobile_permalink === '') ? 'div' : 'a';
+                    $mobile_attributes = ' class="mj-member-events-calendar__mobile-link' . ($mobile_is_closure ? ' is-static' : '') . '"';
+                    if ($mobile_tag === 'a') {
+                        $mobile_attributes .= ' href="' . esc_url($mobile_permalink) . '"';
+                    }
+
+                    echo '<li class="' . esc_attr(implode(' ', $mobile_classes)) . '"' . $mobile_style . ' data-calendar-type-item="1" data-calendar-type="' . esc_attr($event_type_key) . '" data-calendar-type-known="' . ($is_known_type ? '1' : '0') . '">';
+
+                    echo '<' . $mobile_tag . $mobile_attributes . '>';
+
+                    if ($has_mobile_cover) {
+                        echo '<span class="mj-member-events-calendar__event-thumb mj-member-events-calendar__event-thumb--mobile">';
+                        echo '<picture>';
+                        if (!empty($mobile_cover_sources['mobile'])) {
+                            echo '<source media="(max-width: 640px)" srcset="' . esc_url($mobile_cover_sources['mobile']) . '" />';
+                        }
+                        echo '<img src="' . esc_url($mobile_fallback_cover) . '" alt="' . esc_attr($mobile_event['title']) . '" loading="lazy" />';
+                        echo '</picture>';
+                        echo '</span>';
+                    }
+
+                    echo '<div class="mj-member-events-calendar__mobile-body">';
+                    if (!empty($mobile_event['type_label'])) {
+                        echo '<span class="mj-member-events-calendar__mobile-pill">' . esc_html($mobile_event['type_label']) . '</span>';
+                    }
+                    $mobile_emoji = '';
+                    if (isset($mobile_event['emoji']) && $mobile_event['emoji'] !== '') {
+                        $mobile_emoji = (string) $mobile_event['emoji'];
+                        if (function_exists('mb_substr')) {
+                            $mobile_emoji = mb_substr($mobile_emoji, 0, 8);
+                        } else {
+                            $mobile_emoji = substr($mobile_emoji, 0, 8);
+                        }
+                    }
+                    echo '<span class="mj-member-events-calendar__mobile-title">';
+                    if ($mobile_emoji !== '') {
+                        echo '<span class="mj-member-events-calendar__event-emoji">' . esc_html($mobile_emoji) . '</span>';
+                    }
+                    echo '<span class="mj-member-events-calendar__mobile-title-text">' . esc_html($mobile_event['title']) . '</span>';
+                    echo '</span>';
+                    $mobile_meta = '';
+                    if (isset($mobile_event['schedule_label']) && $mobile_event['schedule_label'] !== '') {
+                        $mobile_meta = (string) $mobile_event['schedule_label'];
+                    } elseif (!empty($mobile_event['time'])) {
+                        $mobile_meta = (string) $mobile_event['time'];
+                    }
+                    $mobile_badges_markup = self::build_event_badges_markup($mobile_event, 'mobile');
+                    if ($mobile_meta !== '') {
+                        echo '<span class="mj-member-events-calendar__mobile-meta">' . esc_html($mobile_meta) . '</span>';
+                    }
+                    if ($mobile_badges_markup !== '') {
+                        echo $mobile_badges_markup;
+                    }
+                    if (!empty($mobile_event['is_cancelled'])) {
+                        $mobile_cancellation_reason = isset($mobile_event['cancellation_reason']) ? trim((string) $mobile_event['cancellation_reason']) : '';
+                        echo '<span class="mj-member-events-calendar__mobile-cancellation">';
+                        echo '<span class="mj-member-events-calendar__mobile-cancellation-label">' . esc_html__('Annulé', 'mj-member') . '</span>';
+                        if ($mobile_cancellation_reason !== '') {
+                            echo '<span class="mj-member-events-calendar__mobile-cancellation-reason">' . esc_html($mobile_cancellation_reason) . '</span>';
+                        }
+                        echo '</span>';
+                    }
+                    if (!empty($mobile_event['is_draft'])) {
+                        echo '<span class="mj-member-events-calendar__event-draft-badge">' . esc_html__('Brouillon', 'mj-member') . '</span>';
+                    }
+                    echo '</div>';
+                    echo '</' . $mobile_tag . '>';
+                    if ($can_edit_events && !$mobile_is_closure && empty($mobile_event['is_leave_request']) && !empty($mobile_event['id'])) {
+                        if (!empty($mobile_event['is_todo'])) {
+                            $mobile_todo_parts = explode(':', (string) $mobile_event['id'], 2);
+                            $mobile_todo_id = isset($mobile_todo_parts[1]) ? (int) $mobile_todo_parts[1] : 0;
+                            $todo_page_url = home_url('/mon-compte/todo/?section=todos' . ($mobile_todo_id > 0 ? '&todo_id=' . $mobile_todo_id : ''));
+                            echo '<div class="mj-member-events-calendar__event-actions mj-member-events-calendar__event-actions--mobile">';
+                            echo '<a class="mj-member-events-calendar__event-edit mj-member-events-calendar__event-edit--mobile" href="' . esc_url($todo_page_url) . '" title="' . esc_attr__('Voir la tâche', 'mj-member') . '" aria-label="' . esc_attr__('Voir la tâche', 'mj-member') . '">';
+                            echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+                            echo '</a>';
+                            echo '</div>';
+                        } else {
+                            $mobile_occ_parts = explode(':', (string) $mobile_event['id'], 2);
+                            $mobile_occ_event_id = isset($mobile_occ_parts[0]) ? (int) $mobile_occ_parts[0] : 0;
+                            $mobile_occ_start_ts = isset($mobile_occ_parts[1]) ? (int) $mobile_occ_parts[1] : 0;
+                            $edit_url = home_url('/mon-compte/gestionnaire/?event=' . $mobile_occ_event_id);
+                            echo '<div class="mj-member-events-calendar__event-actions mj-member-events-calendar__event-actions--mobile">';
+                            echo '<a class="mj-member-events-calendar__event-edit mj-member-events-calendar__event-edit--mobile" href="' . esc_url($edit_url) . '" title="' . esc_attr__('Modifier l\'événement', 'mj-member') . '" aria-label="' . esc_attr__('Modifier l\'événement', 'mj-member') . '">';
+                            echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+                            echo '</a>';
+                            echo '<button type="button" class="mj-member-events-calendar__event-delete mj-member-events-calendar__event-delete--mobile" data-delete-event="' . esc_attr($mobile_occ_event_id) . '" data-delete-ts="' . esc_attr($mobile_occ_start_ts) . '" title="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '" aria-label="' . esc_attr__('Supprimer cette occurrence', 'mj-member') . '">';
+                            echo '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+                            echo '</button>';
+                            echo '</div>';
+                        }
+                    }
+                    echo '</li>';
+                }
+                echo '</ul>';
+                echo '</template>';
+            }
+
+            // Day detail modal
+            echo '<div class="mj-cal-mobile__modal" data-calendar-mobile-modal hidden>';
+            echo '<div class="mj-cal-mobile__modal-backdrop"></div>';
+            echo '<div class="mj-cal-mobile__modal-content">';
+            echo '<div class="mj-cal-mobile__modal-header">';
+            echo '<span class="mj-cal-mobile__modal-date"></span>';
+            echo '<button type="button" class="mj-cal-mobile__modal-close" aria-label="' . esc_attr__('Fermer', 'mj-member') . '">';
+            echo '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+            echo '</button>';
+            echo '</div>';
+            echo '<div class="mj-cal-mobile__modal-body"></div>';
+            echo '</div>';
+            echo '</div>';
+
+            echo '</div>';
 
             echo '</section>';
 

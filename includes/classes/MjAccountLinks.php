@@ -3,6 +3,7 @@
 namespace Mj\Member\Classes;
 
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjNotificationRecipients;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\Config;
 use WP_User;
@@ -34,6 +35,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'section_header',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'profile' => array(
                 'label' => __('Mes données personnelles', 'mj-member'),
@@ -46,6 +48,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'photos' => array(
                 'label' => __('Mes photos', 'mj-member'),
@@ -58,6 +61,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'photo_grimlins' => array(
                 'label' => __('Créer mon avatar Grimlins', 'mj-member'),
@@ -70,6 +74,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'badges' => array(
                 'label' => __('Mes badges', 'mj-member'),
@@ -82,6 +87,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'section_activities' => array(
                 'label' => __('📅 Mes activités', 'mj-member'),
@@ -94,6 +100,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'section_header',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'agenda' => array(
                 'label' => __('Agenda', 'mj-member'),
@@ -106,6 +113,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'registrations' => array(
                 'label' => __('Mes inscriptions', 'mj-member'),
@@ -118,6 +126,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'payments' => array(
                 'label' => __('Mes paiements', 'mj-member'),
@@ -130,6 +139,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'documents' => array(
                 'label' => __('Mes documents', 'mj-member'),
@@ -142,6 +152,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'testimonials' => array(
                 'label' => __('Témoignages', 'mj-member'),
@@ -154,6 +165,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'contact_messages' => array(
                 'label' => __('Messages', 'mj-member'),
@@ -167,6 +179,7 @@ class MjAccountLinks {
                 'type' => 'standard',
                 'requires_capability' => $contact_capability,
                 'icon_id' => 0,
+                'notification_types' => array('message_received'),
             ),
             'todos' => array(
                 'label' => __('Mes tâches', 'mj-member'),
@@ -180,6 +193,7 @@ class MjAccountLinks {
                 'type' => 'standard',
                 'requires_capability' => Config::todosCapability(),
                 'icon_id' => 0,
+                'notification_types' => array('todo_assigned'),
             ),
             'idea_box' => array(
                 'label' => __('Boîte à idées', 'mj-member'),
@@ -192,6 +206,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'section_team' => array(
                 'label' => __('👥 Équipe & Animateurs', 'mj-member'),
@@ -204,6 +219,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'section_header',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'animateur_events' => array(
                 'label' => __('Gestion des événements', 'mj-member'),
@@ -216,6 +232,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'hours_encode' => array(
                 'label' => __('Encodage des Heures de Travail', 'mj-member'),
@@ -229,6 +246,7 @@ class MjAccountLinks {
                 'type' => 'standard',
                 'requires_capability' => Config::hoursCapability(),
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'expenses' => array(
                 'label' => __('Notes de Frais', 'mj-member'),
@@ -241,6 +259,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'mileage' => array(
                 'label' => __('Frais Kilométriques', 'mj-member'),
@@ -253,6 +272,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'coordinator_dashboard' => array(
                 'label' => __('Coordinateur', 'mj-member'),
@@ -265,6 +285,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'human_resources' => array(
                 'label' => __('Ressources humaines', 'mj-member'),
@@ -277,6 +298,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'employee_data' => array(
                 'label' => __('Données Employé', 'mj-member'),
@@ -289,6 +311,7 @@ class MjAccountLinks {
                 'editable_label' => true,
                 'type' => 'standard',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
             'logout' => array(
                 'label' => __('Déconnexion', 'mj-member'),
@@ -301,6 +324,7 @@ class MjAccountLinks {
                 'editable_label' => false,
                 'type' => 'logout',
                 'icon_id' => 0,
+                'notification_types' => array(),
             ),
         );
 
@@ -333,6 +357,7 @@ class MjAccountLinks {
                     'editable_label' => true,
                     'type' => 'section_header',
                     'icon_id' => 0,
+                    'notification_types' => array(),
                 );
             }
         }
@@ -382,6 +407,12 @@ class MjAccountLinks {
 
             // Récupérer la position si sauvegardée, sinon utiliser l'ordre par défaut
             $defaults[$key]['position'] = isset($saved_row['position']) ? (int) $saved_row['position'] : $position;
+
+            // Récupérer les types de notification configurés
+            if (isset($saved_row['notification_types']) && is_array($saved_row['notification_types'])) {
+                $defaults[$key]['notification_types'] = array_values(array_filter(array_map('sanitize_key', $saved_row['notification_types'])));
+            }
+
             $position++;
         }
 
@@ -533,25 +564,12 @@ class MjAccountLinks {
         }
 
         $contactCapability = Config::contactCapability();
-        
-        // Calculer les compteurs séparés (contact et notifications)
-        $unreadCounts = self::computeUnreadCounts(
-            $currentUser,
-            $contactCapability,
-            $allowContactOwnerView,
-            $previewMode,
-            $currentMemberId,
-            $currentUserEmail,
-            $unreadExtraTargets,
-            $args
-        );
-        
-        // Permettre de surcharger le compte des messages de contact via les args
-        $unreadContactCount = array_key_exists('unread_contact_count', $args) 
-            ? (int) $args['unread_contact_count'] 
-            : $unreadCounts['contact'];
-        
-        $unreadNotificationCount = $unreadCounts['notifications'];
+
+        // Calculer les badges de notification par lien
+        $badgeCounts = self::computeNotificationBadges($currentMemberId, $configuredLinks, $previewMode);
+
+        // Récupérer les aperçus de notifications pour le tooltip
+        $notificationPreviews = self::fetchNotificationPreviews($currentMemberId, $configuredLinks, $previewMode);
 
         $links = array();
         foreach ($configuredLinks as $key => $config) {
@@ -665,13 +683,18 @@ class MjAccountLinks {
             }
 
             $badge = 0;
-            if ($key === 'contact_messages') {
-                $badge = $unreadContactCount;
-                $cleanLabel = trim(preg_replace('/\s*\(\d+\+?\)\s*$/', '', $label));
-                if ($cleanLabel !== '') {
-                    $label = $cleanLabel;
-                }
+            $linkKey = sanitize_key($key);
+            if (isset($badgeCounts[$linkKey])) {
+                $badge = (int) $badgeCounts[$linkKey];
             }
+
+            // Nettoyer le label si un ancien compteur était suffixé
+            $cleanLabel = trim(preg_replace('/\s*\(\d+\+?\)\s*$/', '', $label));
+            if ($cleanLabel !== '') {
+                $label = $cleanLabel;
+            }
+
+            $linkNotifications = isset($notificationPreviews[$linkKey]) ? $notificationPreviews[$linkKey] : array();
 
             $links[] = array(
                 'key' => sanitize_key($key),
@@ -680,6 +703,7 @@ class MjAccountLinks {
                 'url' => $url,
                 'is_logout' => false,
                 'badge' => $badge,
+                'notifications' => $linkNotifications,
                 'icon_id' => $icon_id,
                 'icon' => $icon_payload,
             );
@@ -696,6 +720,18 @@ class MjAccountLinks {
             if (function_exists('mj_member_account_menu_sanitize_icon_payload')) {
                 $icon_payload = \mj_member_account_menu_sanitize_icon_payload(isset($link['icon']) ? $link['icon'] : array());
             }
+            $notifications = array();
+            if (!empty($link['notifications']) && is_array($link['notifications'])) {
+                foreach ($link['notifications'] as $notif) {
+                    $notifications[] = array(
+                        'title' => isset($notif['title']) ? wp_strip_all_tags($notif['title']) : '',
+                        'excerpt' => isset($notif['excerpt']) ? wp_strip_all_tags($notif['excerpt']) : '',
+                        'url' => isset($notif['url']) ? esc_url($notif['url']) : '',
+                        'type' => isset($notif['type']) ? sanitize_key($notif['type']) : '',
+                        'created_at' => isset($notif['created_at']) ? sanitize_text_field($notif['created_at']) : '',
+                    );
+                }
+            }
             $sanitized[] = array(
                 'key' => isset($link['key']) ? sanitize_key($link['key']) : '',
                 'label' => wp_strip_all_tags($link['label']),
@@ -703,6 +739,7 @@ class MjAccountLinks {
                 'url' => esc_url($link['url']),
                 'is_logout' => !empty($link['is_logout']),
                 'badge' => isset($link['badge']) ? (int) $link['badge'] : 0,
+                'notifications' => $notifications,
                 'icon_id' => isset($link['icon_id']) ? (int) $link['icon_id'] : 0,
                 'icon' => $icon_payload,
             );
@@ -726,8 +763,147 @@ class MjAccountLinks {
     }
 
     /**
+     * Calcule les badges de notification pour chaque lien configuré.
+     *
+     * @param int   $memberId        ID du membre courant.
+     * @param array $configuredLinks Liens issus de getSettings().
+     * @param bool  $previewMode     Mode preview Elementor.
+     * @return array<string,int>     Clé du lien => nombre de notifications non lues.
+     */
+    public static function computeNotificationBadges(int $memberId, array $configuredLinks, bool $previewMode = false): array {
+        $badges = array();
+
+        // Construire les groupes de types pour la requête groupée
+        $typeGroups = array();
+        foreach ($configuredLinks as $key => $config) {
+            $types = isset($config['notification_types']) && is_array($config['notification_types'])
+                ? $config['notification_types']
+                : array();
+            $types = array_values(array_filter(array_map('sanitize_key', $types)));
+            if (empty($types)) {
+                continue;
+            }
+            $safeKey = sanitize_key($key);
+            if ($safeKey === '') {
+                continue;
+            }
+            $typeGroups[] = array('key' => $safeKey, 'types' => $types);
+        }
+
+        if (empty($typeGroups)) {
+            if ($previewMode) {
+                return (array) apply_filters('mj_member_account_links_preview_badge_counts', $badges, $configuredLinks);
+            }
+            return $badges;
+        }
+
+        if ($previewMode && $memberId <= 0) {
+            // Valeurs factices en mode preview sans membre
+            foreach ($typeGroups as $group) {
+                $badges[$group['key']] = 2;
+            }
+            return (array) apply_filters('mj_member_account_links_preview_badge_counts', $badges, $configuredLinks);
+        }
+
+        if ($memberId <= 0) {
+            return $badges;
+        }
+
+        $badges = MjNotificationRecipients::get_unread_counts_by_types_for_member($memberId, $typeGroups);
+
+        if ($previewMode) {
+            // En preview, garantir au moins des valeurs factices si rien trouvé
+            $hasAny = false;
+            foreach ($badges as $count) {
+                if ($count > 0) {
+                    $hasAny = true;
+                    break;
+                }
+            }
+            if (!$hasAny) {
+                foreach ($typeGroups as $group) {
+                    $badges[$group['key']] = 2;
+                }
+            }
+            $badges = (array) apply_filters('mj_member_account_links_preview_badge_counts', $badges, $configuredLinks);
+        }
+
+        return $badges;
+    }
+
+    /**
+     * Récupère les notifications non lues pour chaque lien configuré.
+     *
+     * @param int   $memberId
+     * @param array $configuredLinks
+     * @param bool  $previewMode
+     * @param int   $limitPerLink  Max notifications par lien
+     * @return array<string, array> Clé de lien → liste de notifications
+     */
+    public static function fetchNotificationPreviews(int $memberId, array $configuredLinks, bool $previewMode = false, int $limitPerLink = 5): array {
+        $previews = array();
+
+        $typeGroups = array();
+        foreach ($configuredLinks as $key => $config) {
+            $types = isset($config['notification_types']) && is_array($config['notification_types'])
+                ? $config['notification_types']
+                : array();
+            $types = array_values(array_filter(array_map('sanitize_key', $types)));
+            if (empty($types)) {
+                continue;
+            }
+            $safeKey = sanitize_key($key);
+            if ($safeKey === '') {
+                continue;
+            }
+            $typeGroups[] = array('key' => $safeKey, 'types' => $types);
+        }
+
+        if (empty($typeGroups)) {
+            return $previews;
+        }
+
+        if ($previewMode && $memberId <= 0) {
+            foreach ($typeGroups as $group) {
+                $previews[$group['key']] = array(
+                    array('title' => __('Exemple de notification', 'mj-member'), 'excerpt' => '', 'url' => '#', 'type' => $group['types'][0], 'created_at' => current_time('mysql', 1)),
+                    array('title' => __('Autre notification', 'mj-member'), 'excerpt' => '', 'url' => '#', 'type' => $group['types'][0], 'created_at' => current_time('mysql', 1)),
+                );
+            }
+            return $previews;
+        }
+
+        if ($memberId <= 0) {
+            return $previews;
+        }
+
+        $previews = MjNotificationRecipients::get_unread_notifications_by_types_for_member($memberId, $typeGroups, $limitPerLink);
+
+        if ($previewMode) {
+            $hasAny = false;
+            foreach ($previews as $items) {
+                if (!empty($items)) {
+                    $hasAny = true;
+                    break;
+                }
+            }
+            if (!$hasAny) {
+                foreach ($typeGroups as $group) {
+                    $previews[$group['key']] = array(
+                        array('title' => __('Exemple de notification', 'mj-member'), 'excerpt' => '', 'url' => '#', 'type' => $group['types'][0], 'created_at' => current_time('mysql', 1)),
+                        array('title' => __('Autre notification', 'mj-member'), 'excerpt' => '', 'url' => '#', 'type' => $group['types'][0], 'created_at' => current_time('mysql', 1)),
+                    );
+                }
+            }
+        }
+
+        return $previews;
+    }
+
+    /**
      * Calcule les compteurs de messages non lus (contact et notifications séparément).
      * 
+     * @deprecated Utilisez computeNotificationBadges() à la place.
      * @return array{contact: int, notifications: int, total: int}
      */
     private static function computeUnreadCounts(

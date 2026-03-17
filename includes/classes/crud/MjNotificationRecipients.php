@@ -339,9 +339,10 @@ class MjNotificationRecipients implements CrudRepositoryInterface {
 
     /**
      * @param int $member_id
+     * @param array<string,mixed> $args  Optional. Supports 'types', 'exclude_types', 'include_expired'.
      * @return int
      */
-    public static function get_unread_count_for_member($member_id) {
+    public static function get_unread_count_for_member($member_id, array $args = array()) {
         $table = self::get_table_name();
         $notifications_table = MjNotifications::get_table_name();
         if ($table === '' || $notifications_table === '') {
@@ -355,22 +356,268 @@ class MjNotificationRecipients implements CrudRepositoryInterface {
             return 0;
         }
 
-        $now = current_time('mysql', 1);
+        $defaults = array(
+            'types' => array(),
+            'exclude_types' => array(),
+            'include_expired' => false,
+        );
+        $args = wp_parse_args($args, $defaults);
+
+        $where = array(
+            $wpdb->prepare('r.member_id = %d', $member_id),
+            $wpdb->prepare('r.status = %s', self::STATUS_UNREAD),
+            $wpdb->prepare('n.status = %s', MjNotifications::STATUS_PUBLISHED),
+        );
+        $params = array();
+
+        if (empty($args['include_expired'])) {
+            $where[] = '(n.expires_at IS NULL OR n.expires_at > %s)';
+            $params[] = current_time('mysql', 1);
+        }
+
+        $types = array();
+        foreach ((array) $args['types'] as $type) {
+            $type = sanitize_title($type);
+            if ($type !== '') {
+                $types[$type] = $type;
+            }
+        }
+        if (!empty($types)) {
+            $placeholders = implode(',', array_fill(0, count($types), '%s'));
+            $where[] = sprintf('n.type IN (%s)', $placeholders);
+            $params = array_merge($params, array_values($types));
+        }
+
+        $exclude_types = array();
+        foreach ((array) $args['exclude_types'] as $type) {
+            $type = sanitize_title($type);
+            if ($type !== '') {
+                $exclude_types[$type] = $type;
+            }
+        }
+        if (!empty($exclude_types)) {
+            $placeholders = implode(',', array_fill(0, count($exclude_types), '%s'));
+            $where[] = sprintf('n.type NOT IN (%s)', $placeholders);
+            $params = array_merge($params, array_values($exclude_types));
+        }
 
         $sql = sprintf(
-            'SELECT COUNT(r.id) FROM %1$s r INNER JOIN %2$s n ON n.id = r.notification_id WHERE r.member_id = %%d AND r.status = %%s AND n.status = %%s AND (n.expires_at IS NULL OR n.expires_at > %%s)',
+            'SELECT COUNT(r.id) FROM %1$s r INNER JOIN %2$s n ON n.id = r.notification_id WHERE %3$s',
             $table,
-            $notifications_table
+            $notifications_table,
+            implode(' AND ', $where)
         );
 
-        $prepared = $wpdb->prepare($sql, $member_id, self::STATUS_UNREAD, MjNotifications::STATUS_PUBLISHED, $now);
-        return (int) $wpdb->get_var($prepared);
+        if (!empty($params)) {
+            $sql = $wpdb->prepare($sql, $params);
+        }
+
+        return (int) $wpdb->get_var($sql);
     }
 
     /**
-     * @param int $user_id
-     * @return int
+     * Count unread notifications for a member grouped by type groups in a single query.
+     *
+     * @param int   $member_id
+     * @param array $type_groups  Array of ['key' => string, 'types' => string[]].
+     * @return array<string,int>  Map of group key => unread count.
      */
+    public static function get_unread_counts_by_types_for_member(int $member_id, array $type_groups): array {
+        $result = array();
+        foreach ($type_groups as $group) {
+            $result[$group['key']] = 0;
+        }
+
+        $table = self::get_table_name();
+        $notifications_table = MjNotifications::get_table_name();
+        if ($table === '' || $notifications_table === '') {
+            return $result;
+        }
+
+        $member_id = (int) $member_id;
+        if ($member_id <= 0) {
+            return $result;
+        }
+
+        // Collect all types across groups and build a reverse map type → group keys.
+        $all_types = array();
+        $type_to_groups = array();
+        foreach ($type_groups as $group) {
+            $key = sanitize_key($group['key']);
+            if ($key === '' || empty($group['types']) || !is_array($group['types'])) {
+                continue;
+            }
+            foreach ($group['types'] as $type) {
+                $type = sanitize_title($type);
+                if ($type === '') {
+                    continue;
+                }
+                $all_types[$type] = $type;
+                if (!isset($type_to_groups[$type])) {
+                    $type_to_groups[$type] = array();
+                }
+                $type_to_groups[$type][] = $key;
+            }
+        }
+
+        if (empty($all_types)) {
+            return $result;
+        }
+
+        global $wpdb;
+
+        $now = current_time('mysql', 1);
+        $type_placeholders = implode(',', array_fill(0, count($all_types), '%s'));
+
+        $sql = sprintf(
+            'SELECT n.type, COUNT(r.id) AS cnt FROM %1$s r INNER JOIN %2$s n ON n.id = r.notification_id WHERE r.member_id = %%d AND r.status = %%s AND n.status = %%s AND (n.expires_at IS NULL OR n.expires_at > %%s) AND n.type IN (%3$s) GROUP BY n.type',
+            $table,
+            $notifications_table,
+            $type_placeholders
+        );
+
+        $params = array_merge(
+            array($member_id, self::STATUS_UNREAD, MjNotifications::STATUS_PUBLISHED, $now),
+            array_values($all_types)
+        );
+
+        $prepared = $wpdb->prepare($sql, $params);
+        $rows = $wpdb->get_results($prepared);
+
+        if (!is_array($rows)) {
+            return $result;
+        }
+
+        foreach ($rows as $row) {
+            $type = isset($row->type) ? (string) $row->type : '';
+            $cnt = isset($row->cnt) ? (int) $row->cnt : 0;
+            if ($type === '' || $cnt <= 0) {
+                continue;
+            }
+            if (!isset($type_to_groups[$type])) {
+                continue;
+            }
+            foreach ($type_to_groups[$type] as $group_key) {
+                $result[$group_key] = ($result[$group_key] ?? 0) + $cnt;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Récupère les notifications non lues d'un membre, groupées par clé de lien.
+     *
+     * @param int   $member_id
+     * @param array $type_groups Array of ['key' => string, 'types' => string[]]
+     * @param int   $limit_per_group Max notifications à retourner par groupe
+     * @return array<string, array<int, array{title:string,excerpt:string,url:string,type:string,created_at:string}>>
+     */
+    public static function get_unread_notifications_by_types_for_member(int $member_id, array $type_groups, int $limit_per_group = 5): array {
+        $result = array();
+        foreach ($type_groups as $group) {
+            $result[$group['key']] = array();
+        }
+
+        $table = self::get_table_name();
+        $notifications_table = MjNotifications::get_table_name();
+        if ($table === '' || $notifications_table === '') {
+            return $result;
+        }
+
+        if ($member_id <= 0) {
+            return $result;
+        }
+
+        $all_types = array();
+        $type_to_groups = array();
+        foreach ($type_groups as $group) {
+            $key = sanitize_key($group['key']);
+            if ($key === '' || empty($group['types']) || !is_array($group['types'])) {
+                continue;
+            }
+            foreach ($group['types'] as $type) {
+                $type = sanitize_title($type);
+                if ($type === '') {
+                    continue;
+                }
+                $all_types[$type] = $type;
+                if (!isset($type_to_groups[$type])) {
+                    $type_to_groups[$type] = array();
+                }
+                $type_to_groups[$type][] = $key;
+            }
+        }
+
+        if (empty($all_types)) {
+            return $result;
+        }
+
+        global $wpdb;
+
+        $now = current_time('mysql', 1);
+        $type_placeholders = implode(',', array_fill(0, count($all_types), '%s'));
+
+        // Récupérer les notifications non lues, triées par date décroissante
+        $total_limit = count($type_groups) * $limit_per_group;
+        $sql = sprintf(
+            'SELECT r.id AS recipient_id, n.title, n.excerpt, n.url, n.type, n.created_at
+             FROM %1$s r
+             INNER JOIN %2$s n ON n.id = r.notification_id
+             WHERE r.member_id = %%d
+             AND r.status = %%s
+             AND n.status = %%s
+             AND (n.expires_at IS NULL OR n.expires_at > %%s)
+             AND n.type IN (%3$s)
+             ORDER BY n.created_at DESC
+             LIMIT %%d',
+            $table,
+            $notifications_table,
+            $type_placeholders
+        );
+
+        $params = array_merge(
+            array($member_id, self::STATUS_UNREAD, MjNotifications::STATUS_PUBLISHED, $now),
+            array_values($all_types),
+            array($total_limit)
+        );
+
+        $rows = $wpdb->get_results($wpdb->prepare($sql, $params));
+
+        if (!is_array($rows)) {
+            return $result;
+        }
+
+        // Distribuer les notifications dans les groupes
+        $group_counts = array();
+        foreach ($rows as $row) {
+            $type = isset($row->type) ? (string) $row->type : '';
+            if ($type === '' || !isset($type_to_groups[$type])) {
+                continue;
+            }
+            $notification = array(
+                'recipient_id' => isset($row->recipient_id) ? (int) $row->recipient_id : 0,
+                'title' => isset($row->title) ? (string) $row->title : '',
+                'excerpt' => isset($row->excerpt) ? (string) $row->excerpt : '',
+                'url' => isset($row->url) ? (string) $row->url : '',
+                'type' => $type,
+                'created_at' => isset($row->created_at) ? (string) $row->created_at : '',
+            );
+            foreach ($type_to_groups[$type] as $group_key) {
+                if (!isset($group_counts[$group_key])) {
+                    $group_counts[$group_key] = 0;
+                }
+                if ($group_counts[$group_key] >= $limit_per_group) {
+                    continue;
+                }
+                $result[$group_key][] = $notification;
+                $group_counts[$group_key]++;
+            }
+        }
+
+        return $result;
+    }
+
     /**
      * @param int $user_id
      * @param array<string,mixed> $args

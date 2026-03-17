@@ -48,6 +48,48 @@ function mj_member_hour_encode_user_can_manage_others() {
     return $managerCapability !== '' && current_user_can($managerCapability);
 }
 
+/**
+ * Rename the project key inside the mj_member_fav_tasks user-meta.
+ *
+ * When $wpUserId > 0 only that user is updated; otherwise every user
+ * who has favorites under $oldKey is updated.
+ */
+function mj_member_hour_encode_rename_favorites_project(string $oldKey, string $newKey, int $wpUserId = 0): void {
+    if ($oldKey === '' || $newKey === '' || $oldKey === $newKey) {
+        return;
+    }
+
+    $metaKey = 'mj_member_fav_tasks';
+
+    if ($wpUserId > 0) {
+        $favorites = get_user_meta($wpUserId, $metaKey, true);
+        if (!is_array($favorites) || !isset($favorites[$oldKey])) {
+            return;
+        }
+        $tasks = $favorites[$oldKey];
+        unset($favorites[$oldKey]);
+        if (isset($favorites[$newKey]) && is_array($favorites[$newKey])) {
+            $favorites[$newKey] = array_merge($favorites[$newKey], $tasks);
+        } else {
+            $favorites[$newKey] = $tasks;
+        }
+        update_user_meta($wpUserId, $metaKey, $favorites);
+        return;
+    }
+
+    // No specific user — update all users who have favorites under the old key.
+    global $wpdb;
+    $userIds = $wpdb->get_col(
+        $wpdb->prepare(
+            "SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s",
+            $metaKey
+        )
+    );
+    foreach ($userIds as $uid) {
+        mj_member_hour_encode_rename_favorites_project($oldKey, $newKey, (int) $uid);
+    }
+}
+
 function mj_member_hour_encode_resolve_target_member_id($userId) {
     $userId = (int) $userId;
     if ($userId <= 0) {
@@ -399,6 +441,14 @@ function mj_member_ajax_hour_encode_rename_project() {
     $result = MjMemberHours::bulkRenameProject($oldLabel, $newLabel, array('member_id' => $memberId));
     if (is_wp_error($result)) {
         wp_send_json_error(array('message' => $result->get_error_message()));
+    }
+
+    // Update favorites: rename the project key so starred tasks follow the new name.
+    $favOldKey = $projectKey !== '' ? $projectKey : $oldLabel;
+    $targetMember = MjMembers::getById($memberId);
+    $targetWpUserId = ($targetMember && !empty($targetMember->wp_user_id)) ? (int) $targetMember->wp_user_id : 0;
+    if ($targetWpUserId > 0) {
+        mj_member_hour_encode_rename_favorites_project($favOldKey, $newLabel, $targetWpUserId);
     }
 
     wp_send_json_success(array('updated' => (int) $result));

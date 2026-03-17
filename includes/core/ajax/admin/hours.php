@@ -384,6 +384,19 @@ function mj_member_ajax_hours_rename_project() {
         wp_send_json_error(array('message' => $result->get_error_message()));
     }
 
+    // Update favorites: rename the project key so starred tasks follow the new name.
+    $favOldKey = $projectKey !== '' ? $projectKey : $oldLabelRaw;
+    if ($scopeMemberId > 0) {
+        $scopedMember = MjMembers::getById($scopeMemberId);
+        $scopedWpUserId = ($scopedMember && !empty($scopedMember->wp_user_id)) ? (int) $scopedMember->wp_user_id : 0;
+        if ($scopedWpUserId > 0) {
+            mj_member_hour_encode_rename_favorites_project($favOldKey, $newLabel, $scopedWpUserId);
+        }
+    } else {
+        // Global rename — update all users' favorites.
+        mj_member_hour_encode_rename_favorites_project($favOldKey, $newLabel);
+    }
+
     wp_send_json_success(array('updated' => (int) $result));
 }
 

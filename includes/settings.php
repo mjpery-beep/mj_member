@@ -269,6 +269,10 @@ function mj_settings_page() {
                 }
             }
 
+            $notification_types = isset($raw_row['notification_types']) && is_array($raw_row['notification_types'])
+                ? array_values(array_filter(array_map('sanitize_key', $raw_row['notification_types'])))
+                : array();
+
             $normalized_account_links[$link_key] = array(
                 'enabled' => $enabled ? 1 : 0,
                 'label' => (!empty($link_defaults['editable_label']) && $label !== '') ? $label : '',
@@ -278,6 +282,7 @@ function mj_settings_page() {
                 'icon_id' => $icon_id > 0 ? $icon_id : 0,
                 'position' => $position,
                 'visibility' => $visibility,
+                'notification_types' => $notification_types,
             );
         }
 
@@ -544,6 +549,66 @@ function mj_settings_page() {
     $account_link_defaults = function_exists('mj_member_login_component_get_default_link_settings')
         ? mj_member_login_component_get_default_link_settings()
         : array();
+
+    // Préparer les types de notification groupés par catégorie pour le multi-select
+    $notification_type_groups = array();
+    $all_labels = array();
+    if (class_exists('MjNotificationTypes')) {
+        $all_labels = MjNotificationTypes::get_labels();
+        $notification_type_groups = array(
+            __('Événements', 'mj-member') => array(
+                'event_registration_created', 'event_registration_cancelled',
+                'event_reminder', 'event_new_published',
+            ),
+            __('Paiements', 'mj-member') => array(
+                'payment_completed', 'payment_reminder',
+            ),
+            __('Tâches', 'mj-member') => array(
+                'todo_assigned', 'todo_completed', 'todo_note_added', 'todo_media_added',
+            ),
+            __('Messages', 'mj-member') => array(
+                'message_received',
+            ),
+            __('Membres', 'mj-member') => array(
+                'member_created', 'member_profile_updated',
+            ),
+            __('Photos', 'mj-member') => array(
+                'photo_uploaded', 'photo_approved',
+            ),
+            __('Idées', 'mj-member') => array(
+                'idea_published', 'idea_voted',
+            ),
+            __('Témoignages', 'mj-member') => array(
+                'testimonial_new_pending', 'testimonial_approved', 'testimonial_rejected',
+                'testimonial_comment', 'testimonial_comment_reply', 'testimonial_reaction',
+            ),
+            __('Gamification', 'mj-member') => array(
+                'trophy_earned', 'badge_earned', 'criterion_earned', 'level_up',
+            ),
+            __('Congés', 'mj-member') => array(
+                'leave_request_created', 'leave_request_approved', 'leave_request_rejected',
+            ),
+            __('Notes de frais', 'mj-member') => array(
+                'expense_created', 'expense_reimbursed', 'expense_rejected',
+            ),
+            __('Frais kilométriques', 'mj-member') => array(
+                'mileage_created', 'mileage_approved', 'mileage_reimbursed',
+            ),
+            __('Divers', 'mj-member') => array(
+                'avatar_applied', 'attendance_recorded', 'post_published',
+            ),
+        );
+        // Filtrer les types qui n'existent pas dans les labels
+        foreach ($notification_type_groups as $group_label => $types) {
+            $notification_type_groups[$group_label] = array_filter($types, function ($t) use ($all_labels) {
+                return isset($all_labels[$t]);
+            });
+            if (empty($notification_type_groups[$group_label])) {
+                unset($notification_type_groups[$group_label]);
+            }
+        }
+    }
+
     $account_base_default = function_exists('mj_member_get_account_redirect')
         ? mj_member_get_account_redirect()
         : home_url('/mon-compte');
@@ -1137,6 +1202,25 @@ function mj_settings_page() {
                                                     </div>
                                                 </div>
                                             </div>
+                                            <?php if (!$is_logout && !empty($notification_type_groups)) :
+                                                $current_notif_types = isset($link_config['notification_types']) && is_array($link_config['notification_types']) ? $link_config['notification_types'] : array();
+                                            ?>
+                                            <div class="mj-account-link-field mj-account-link-field--full">
+                                                <label for="<?php echo esc_attr($field_prefix . '-notification-types'); ?>">🔔 Types de notification (badge)</label>
+                                                <select multiple id="<?php echo esc_attr($field_prefix . '-notification-types'); ?>" name="mj_account_links[<?php echo esc_attr($link_key); ?>][notification_types][]" style="width:100%; min-height:80px;">
+                                                    <?php foreach ($notification_type_groups as $group_label => $group_types) : ?>
+                                                        <optgroup label="<?php echo esc_attr($group_label); ?>">
+                                                            <?php foreach ($group_types as $type_key) :
+                                                                $type_label = isset($all_labels[$type_key]) ? $all_labels[$type_key] : $type_key;
+                                                            ?>
+                                                                <option value="<?php echo esc_attr($type_key); ?>" <?php echo in_array($type_key, $current_notif_types, true) ? 'selected' : ''; ?>><?php echo esc_html($type_label); ?></option>
+                                                            <?php endforeach; ?>
+                                                        </optgroup>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                                <small style="color:#666;">Sélectionnez les types de notification qui afficheront un badge sur ce lien.</small>
+                                            </div>
+                                            <?php endif; ?>
                                         <?php endif; ?>
                                     </div>
                                     <?php if ($is_logout) : ?>

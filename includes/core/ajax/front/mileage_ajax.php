@@ -290,9 +290,14 @@ function mj_member_mileage_create_handler(): void
     }
 
     $row = MjMileage::get_by_id($result);
+
+    // Fire notification hook
+    $totalCost = $row ? (float) $row->total_cost : 0;
+    do_action('mj_member_mileage_created', (int) $result, $ctx['memberId'], $totalCost);
+
     wp_send_json_success(array(
         'id'          => $result,
-        'total_cost'  => $row ? (float) $row->total_cost : 0,
+        'total_cost'  => $totalCost,
         'distance_km' => $row ? (float) $row->distance_km : 0,
         'message'     => __('Trajet enregistré.', 'mj-member'),
     ));
@@ -405,6 +410,14 @@ function mj_member_mileage_update_status_handler(): void
     $result = MjMileage::update($id, $data);
     if (is_wp_error($result)) {
         wp_send_json_error(array('message' => $result->get_error_message()), 400);
+    }
+
+    // Fire notification hooks
+    $totalCost = (float) $existing->total_cost;
+    if ($newStatus === MjMileage::STATUS_APPROVED) {
+        do_action('mj_member_mileage_approved', $id, (int) $existing->member_id, $totalCost);
+    } elseif ($newStatus === MjMileage::STATUS_REIMBURSED) {
+        do_action('mj_member_mileage_reimbursed', $id, (int) $existing->member_id, $totalCost);
     }
 
     wp_send_json_success(array('message' => __('Statut mis à jour.', 'mj-member')));

@@ -120,6 +120,8 @@
                                 setTimeout(function() { mobileLi.remove(); }, 300);
                             }
                         }
+                        // Also remove corresponding chip from mobile grid
+                        removeMobileChipForEvent(eventId, startTs);
                     } else {
                         var msg = result.data && result.data.message ? result.data.message : 'Erreur lors de la suppression.';
                         alert(msg);
@@ -132,6 +134,141 @@
                     btn.classList.remove('is-loading');
                     btn.disabled = false;
                 });
+            });
+        }
+
+        // ---- Mobile compact calendar grid: day tap → modal ----
+        var mobileModal = root.querySelector('[data-calendar-mobile-modal]');
+        var mobileModalDate = mobileModal ? mobileModal.querySelector('.mj-cal-mobile__modal-date') : null;
+        var mobileModalBody = mobileModal ? mobileModal.querySelector('.mj-cal-mobile__modal-body') : null;
+        var mobileModalClose = mobileModal ? mobileModal.querySelector('.mj-cal-mobile__modal-close') : null;
+        var mobileModalBackdrop = mobileModal ? mobileModal.querySelector('.mj-cal-mobile__modal-backdrop') : null;
+
+        function openMobileModal(dayKey) {
+            if (!mobileModal || !mobileModalBody) {
+                return;
+            }
+            var tpl = root.querySelector('template[data-mobile-day-events="' + dayKey + '"]');
+            mobileModalBody.innerHTML = '';
+            if (tpl) {
+                var clone = document.importNode(tpl.content, true);
+                // Apply active filters to cloned content
+                var filterMap = getActiveFilterMap();
+                if (filterMap) {
+                    toArray(clone.querySelectorAll('[data-calendar-type-item]')).forEach(function(item) {
+                        var typeKey = item.getAttribute('data-calendar-type') || '';
+                        var isKnown = item.getAttribute('data-calendar-type-known') === '1';
+                        if (isKnown && !Object.prototype.hasOwnProperty.call(filterMap, typeKey)) {
+                            item.classList.add('is-filtered-out');
+                        }
+                    });
+                }
+                mobileModalBody.appendChild(clone);
+            } else {
+                mobileModalBody.innerHTML = '<p class="mj-cal-mobile__modal-empty">Aucun \u00e9v\u00e9nement</p>';
+            }
+            if (mobileModalDate) {
+                var dateParts = dayKey.split('-');
+                var dateObj = new Date(parseInt(dateParts[0], 10), parseInt(dateParts[1], 10) - 1, parseInt(dateParts[2], 10));
+                var dayNames = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+                var monthNames = ['janvier', 'f\u00e9vrier', 'mars', 'avril', 'mai', 'juin', 'juillet', 'ao\u00fbt', 'septembre', 'octobre', 'novembre', 'd\u00e9cembre'];
+                mobileModalDate.textContent = dayNames[dateObj.getDay()] + ' ' + dateObj.getDate() + ' ' + monthNames[dateObj.getMonth()];
+            }
+            mobileModal.hidden = false;
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeMobileModal() {
+            if (!mobileModal) {
+                return;
+            }
+            mobileModal.hidden = true;
+            mobileModalBody.innerHTML = '';
+            document.body.style.overflow = '';
+        }
+
+        function getActiveFilterMap() {
+            if (!filterInputsRef || !filterInputsRef.length) {
+                return null;
+            }
+            var map = {};
+            var hasChecked = false;
+            for (var i = 0; i < filterInputsRef.length; i++) {
+                if (filterInputsRef[i].checked) {
+                    map[filterInputsRef[i].value] = true;
+                    hasChecked = true;
+                }
+            }
+            return hasChecked ? map : null;
+        }
+
+        // Lazy ref to filterInputs (set after var declarations below)
+        var filterInputsRef = null;
+
+        function removeMobileChipForEvent(eventId, startTs) {
+            // Find and remove the chip in the mobile grid that corresponds to the deleted event
+            // Chips don't have direct event ID data, so we find the template, check its contents,
+            // and remove matching chips by counting within the day
+            var tpls = toArray(root.querySelectorAll('template[data-mobile-day-events]'));
+            tpls.forEach(function(tpl) {
+                var delBtns = tpl.content.querySelectorAll('.mj-member-events-calendar__event-delete[data-delete-event="' + eventId + '"][data-delete-ts="' + startTs + '"]');
+                if (delBtns.length > 0) {
+                    // Remove the <li> in the template
+                    toArray(delBtns).forEach(function(delBtn) {
+                        var li = delBtn.closest('li');
+                        if (li) {
+                            li.remove();
+                        }
+                    });
+                    // Also remove the chip from the visible grid (by index - find index of removed event)
+                    var dayKey = tpl.getAttribute('data-mobile-day-events');
+                    var dayCell = root.querySelector('.mj-cal-mobile__day[data-calendar-day="' + dayKey + '"]');
+                    if (dayCell) {
+                        var remainingEvents = tpl.content.querySelectorAll('.mj-member-events-calendar__mobile-event');
+                        var chips = toArray(dayCell.querySelectorAll('.mj-cal-mobile__chip'));
+                        // Rebuild chips to match remaining events
+                        if (chips.length > remainingEvents.length) {
+                            // Remove last chip (simplistic approach - works when only one deleted at a time)
+                            for (var c = chips.length - 1; c >= remainingEvents.length; c--) {
+                                chips[c].remove();
+                            }
+                        }
+                        if (!remainingEvents.length) {
+                            dayCell.classList.remove('has-events');
+                        }
+                    }
+                }
+            });
+        }
+
+        if (mobileModal) {
+            // Day cell click handler
+            root.addEventListener('click', function(e) {
+                var dayCell = e.target.closest('.mj-cal-mobile__day.has-events');
+                if (!dayCell) {
+                    return;
+                }
+                // Don't open modal if clicking inside the modal itself
+                if (e.target.closest('.mj-cal-mobile__modal')) {
+                    return;
+                }
+                var dayKey = dayCell.getAttribute('data-calendar-day');
+                if (dayKey) {
+                    openMobileModal(dayKey);
+                }
+            });
+
+            // Close handlers
+            if (mobileModalClose) {
+                mobileModalClose.addEventListener('click', closeMobileModal);
+            }
+            if (mobileModalBackdrop) {
+                mobileModalBackdrop.addEventListener('click', closeMobileModal);
+            }
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && mobileModal && !mobileModal.hidden) {
+                    closeMobileModal();
+                }
             });
         }
 
@@ -149,6 +286,7 @@
         });
 
         var filterInputs = toArray(root.querySelectorAll('[data-calendar-filter]'));
+        filterInputsRef = filterInputs;
         var typeItems = toArray(root.querySelectorAll('[data-calendar-type-item]'));
         var dayNodes = toArray(root.querySelectorAll('[data-calendar-day]'));
         var countSingular = root.getAttribute('data-calendar-count-singular') || '%d';

@@ -89,6 +89,11 @@ final class MjNotificationTypes
     const EXPENSE_REIMBURSED = 'expense_reimbursed';
     const EXPENSE_REJECTED = 'expense_rejected';
 
+    // Frais kilométriques
+    const MILEAGE_CREATED = 'mileage_created';
+    const MILEAGE_APPROVED = 'mileage_approved';
+    const MILEAGE_REIMBURSED = 'mileage_reimbursed';
+
 
     /**
      * Retourne les labels pour chaque type de notification.
@@ -133,7 +138,10 @@ final class MjNotificationTypes
             self::LEAVE_REQUEST_REJECTED => __('Demande de congé refusée', 'mj-member'),
             self::EXPENSE_CREATED => __('Nouvelle note de frais', 'mj-member'),
             self::EXPENSE_REIMBURSED => __('Note de frais remboursée', 'mj-member'),
-            self::EXPENSE_REJECTED => __('Note de frais refusée', 'mj-member')
+            self::EXPENSE_REJECTED => __('Note de frais refusée', 'mj-member'),
+            self::MILEAGE_CREATED => __('Nouveau frais kilométrique', 'mj-member'),
+            self::MILEAGE_APPROVED => __('Frais kilométrique approuvé', 'mj-member'),
+            self::MILEAGE_REIMBURSED => __('Frais kilométrique remboursé', 'mj-member'),
         );
     }
 }
@@ -1287,7 +1295,7 @@ if (!function_exists('mj_member_notification_on_todo_assigned')) {
         $recipients = array();
         foreach ($assigned_member_ids as $member_id) {
             $member_id = (int) $member_id;
-            if ($member_id > 0) {
+            if ($member_id > 0 && $member_id !== $assigned_by) {
                 $recipients[] = $member_id;
             }
         }
@@ -2131,4 +2139,164 @@ if (!function_exists('mj_member_notification_on_expense_rejected')) {
     }
 
     add_action('mj_member_expense_rejected', 'mj_member_notification_on_expense_rejected', 10, 4);
+}
+
+// ============================================================================
+// LISTENER: Nouveau frais kilométrique créé → Notifier les coordinateurs
+// ============================================================================
+
+if (!function_exists('mj_member_notification_on_mileage_created')) {
+    /**
+     * @param int   $mileage_id
+     * @param int   $member_id  Auteur de la demande
+     * @param float $total_cost
+     * @return void
+     */
+    function mj_member_notification_on_mileage_created(int $mileage_id, int $member_id, float $total_cost): void
+    {
+        if (!function_exists('mj_member_record_notification') || !class_exists(MjMembers::class) || !class_exists(MjRoles::class)) {
+            return;
+        }
+
+        $author = MjMembers::getById($member_id);
+        $author_name = mj_member_notification_get_member_name($author);
+        $formatted = number_format($total_cost, 2, ',', ' ') . ' €';
+
+        // Récupérer les coordinateurs
+        $coordinateurs = MjMembers::getByRole(MjRoles::COORDINATEUR);
+        if (empty($coordinateurs)) {
+            return;
+        }
+
+        $recipient_ids = array();
+        foreach ($coordinateurs as $c) {
+            $cid = isset($c->id) ? (int) $c->id : 0;
+            if ($cid > 0 && $cid !== $member_id) {
+                $recipient_ids[] = $cid;
+            }
+        }
+
+        if (empty($recipient_ids)) {
+            return;
+        }
+
+        $notification_data = array(
+            'type'    => MjNotificationTypes::MILEAGE_CREATED,
+            'title'   => __('Nouveau frais kilométrique', 'mj-member'),
+            'excerpt' => sprintf(__('%s a soumis un frais kilométrique de %s.', 'mj-member'), $author_name, $formatted),
+            'url'     => home_url('/mon-compte/frais-kilometrique/?section=mileage'),
+            'context' => 'mileage',
+            'source'  => 'system',
+            'payload' => array(
+                'mileage_id'  => $mileage_id,
+                'member_id'   => $member_id,
+                'total_cost'  => $total_cost,
+                'author_name' => $author_name,
+            ),
+        );
+
+        mj_member_record_notification($notification_data, $recipient_ids);
+
+        mj_member_notification_log('mileage_created', array(
+            'mileage_id'       => $mileage_id,
+            'member_id'        => $member_id,
+            'recipients_count' => count($recipient_ids),
+        ));
+    }
+
+    add_action('mj_member_mileage_created', 'mj_member_notification_on_mileage_created', 10, 3);
+}
+
+// ============================================================================
+// LISTENER: Frais kilométrique approuvé → Notifier le membre
+// ============================================================================
+
+if (!function_exists('mj_member_notification_on_mileage_approved')) {
+    /**
+     * @param int   $mileage_id
+     * @param int   $member_id  Propriétaire du trajet
+     * @param float $total_cost
+     * @return void
+     */
+    function mj_member_notification_on_mileage_approved(int $mileage_id, int $member_id, float $total_cost): void
+    {
+        if (!function_exists('mj_member_record_notification') || !class_exists(MjMembers::class)) {
+            return;
+        }
+
+        if ($member_id <= 0) {
+            return;
+        }
+
+        $formatted = number_format($total_cost, 2, ',', ' ') . ' €';
+
+        $notification_data = array(
+            'type'    => MjNotificationTypes::MILEAGE_APPROVED,
+            'title'   => __('Frais kilométrique approuvé', 'mj-member'),
+            'excerpt' => sprintf(__('Ton frais kilométrique de %s a été approuvé.', 'mj-member'), $formatted),
+            'url'     => home_url('/mon-compte/frais-kilometrique/?section=mileage'),
+            'context' => 'mileage',
+            'source'  => 'system',
+            'payload' => array(
+                'mileage_id' => $mileage_id,
+                'total_cost' => $total_cost,
+            ),
+        );
+
+        mj_member_record_notification($notification_data, array($member_id));
+
+        mj_member_notification_log('mileage_approved', array(
+            'mileage_id' => $mileage_id,
+            'member_id'  => $member_id,
+        ));
+    }
+
+    add_action('mj_member_mileage_approved', 'mj_member_notification_on_mileage_approved', 10, 3);
+}
+
+// ============================================================================
+// LISTENER: Frais kilométrique remboursé → Notifier le membre
+// ============================================================================
+
+if (!function_exists('mj_member_notification_on_mileage_reimbursed')) {
+    /**
+     * @param int   $mileage_id
+     * @param int   $member_id  Propriétaire du trajet
+     * @param float $total_cost
+     * @return void
+     */
+    function mj_member_notification_on_mileage_reimbursed(int $mileage_id, int $member_id, float $total_cost): void
+    {
+        if (!function_exists('mj_member_record_notification') || !class_exists(MjMembers::class)) {
+            return;
+        }
+
+        if ($member_id <= 0) {
+            return;
+        }
+
+        $formatted = number_format($total_cost, 2, ',', ' ') . ' €';
+
+        $notification_data = array(
+            'type'    => MjNotificationTypes::MILEAGE_REIMBURSED,
+            'title'   => __('Frais kilométrique remboursé', 'mj-member'),
+            'excerpt' => sprintf(__('Ton frais kilométrique de %s a été remboursé.', 'mj-member'), $formatted),
+            'url'     => home_url('/mon-compte/frais-kilometrique/?section=mileage'),
+            'context' => 'mileage',
+            'source'  => 'system',
+            'payload' => array(
+                'mileage_id' => $mileage_id,
+                'total_cost' => $total_cost,
+            ),
+        );
+
+        mj_member_record_notification($notification_data, array($member_id));
+
+        mj_member_notification_log('mileage_reimbursed', array(
+            'mileage_id' => $mileage_id,
+            'member_id'  => $member_id,
+        ));
+    }
+
+    add_action('mj_member_mileage_reimbursed', 'mj_member_notification_on_mileage_reimbursed', 10, 3);
 }

@@ -831,36 +831,43 @@ if (!function_exists('mj_member_render_login_modal_component')) {
             $link_args['preview_mode'] = $preview_mode;
             $account_link_sections = mj_member_login_component_get_account_links_with_sections($redirect_url, $link_args);
 
+            // Calculer le total des badges à partir de tous les liens
             if (is_array($account_link_sections)) {
-                $badge_override = null;
+                $badge_total = 0;
                 foreach ($account_link_sections as $section) {
                     if (!is_array($section) || empty($section['links']) || !is_array($section['links'])) {
                         continue;
                     }
                     foreach ($section['links'] as $link_entry) {
-                        if (!is_array($link_entry)) {
+                        if (!is_array($link_entry) || !isset($link_entry['badge'])) {
                             continue;
                         }
-                        $link_key = isset($link_entry['key']) ? $link_entry['key'] : '';
-                        if ($link_key !== 'contact_messages') {
-                            continue;
-                        }
-                        if (isset($link_entry['badge'])) {
-                            $badge_override = max(0, (int) $link_entry['badge']);
-                        }
-                        break;
-                    }
-                    if ($badge_override !== null) {
-                        break;
+                        $badge_total += max(0, (int) $link_entry['badge']);
                     }
                 }
+                $unread_counts['total'] = $badge_total;
+            }
 
-                if ($badge_override !== null) {
-                    $unread_counts['total'] = $badge_override;
-                    if (!isset($unread_counts['contact']) || $unread_counts['contact'] > $badge_override) {
-                        $unread_counts['contact'] = $badge_override;
+            // Collecter les notifications par lien pour le panneau latéral
+            $all_link_notifications = array();
+            foreach ($account_link_sections as $section_n) {
+                if (!is_array($section_n) || empty($section_n['links']) || !is_array($section_n['links'])) {
+                    continue;
+                }
+                foreach ($section_n['links'] as $le) {
+                    if (!is_array($le)) {
+                        continue;
                     }
-                    $unread_counts['notifications'] = max(0, (int) $unread_counts['total'] - (int) $unread_counts['contact']);
+                    $lk = isset($le['key']) ? sanitize_key($le['key']) : '';
+                    $lb = isset($le['badge']) ? (int) $le['badge'] : 0;
+                    $ln = isset($le['notifications']) && is_array($le['notifications']) ? $le['notifications'] : array();
+                    if ($lk !== '' && $lb > 0 && !empty($ln)) {
+                        $all_link_notifications[$lk] = array(
+                            'label' => isset($le['label']) ? $le['label'] : '',
+                            'badge' => $lb,
+                            'notifications' => $ln,
+                        );
+                    }
                 }
             }
         }
@@ -1100,6 +1107,7 @@ if (!function_exists('mj_member_render_login_modal_component')) {
                                                 }
                                                 $link_description = isset($link_entry['description']) ? trim((string) $link_entry['description']) : '';
                                                 $link_badge = isset($link_entry['badge']) ? (int) $link_entry['badge'] : 0;
+                                                $link_notifications = isset($link_entry['notifications']) && is_array($link_entry['notifications']) ? $link_entry['notifications'] : array();
                                                 $link_icon_html = '';
                                                 if (!empty($link_entry['icon']) && is_array($link_entry['icon']) && !empty($link_entry['icon']['html'])) {
                                                     $link_icon_html = $link_entry['icon']['html'];
@@ -1108,8 +1116,17 @@ if (!function_exists('mj_member_render_login_modal_component')) {
                                                 if (!empty($link_entry['is_logout'])) {
                                                     $link_classes[] = 'mj-member-login-component__account-link--logout';
                                                 }
+                                                $link_key = isset($link_entry['key']) ? sanitize_key($link_entry['key']) : '';
+                                                $item_classes = array('mj-member-login-component__account-item');
+                                                if ($link_badge > 0 && !empty($link_notifications)) {
+                                                    $item_classes[] = 'has-badge-tooltip';
+                                                }
+                                                $item_data_attr = '';
+                                                if ($link_badge > 0 && !empty($link_notifications) && $link_key !== '') {
+                                                    $item_data_attr = ' data-notif-key="' . esc_attr($link_key) . '"';
+                                                }
                                                 ?>
-                                                <li class="mj-member-login-component__account-item">
+                                                <li class="<?php echo esc_attr(implode(' ', $item_classes)); ?>"<?php echo $item_data_attr; ?>>
                                                     <a class="<?php echo esc_attr(implode(' ', $link_classes)); ?>" href="<?php echo esc_url($link_url); ?>"<?php echo !empty($link_entry['is_logout']) ? ' rel="nofollow"' : ''; ?>>
                                                         <span class="mj-member-login-component__account-main">
                                                             <?php if ($link_icon_html !== '') : ?>
@@ -1179,6 +1196,61 @@ if (!function_exists('mj_member_render_login_modal_component')) {
                         <?php endif; ?>
                     <?php endif; ?>
                 </div>
+                <?php if ($is_logged_in && !empty($all_link_notifications)) : ?>
+                    <div class="mj-member-login-component__notif-preview" aria-hidden="true"
+                         data-ajax-url="<?php echo esc_attr(admin_url('admin-ajax.php')); ?>"
+                         data-nonce="<?php echo esc_attr(wp_create_nonce('mj-notification-bell')); ?>">
+                        <?php foreach ($all_link_notifications as $notif_key => $notif_data) : ?>
+                            <div class="mj-member-login-component__notif-group" data-notif-group="<?php echo esc_attr($notif_key); ?>">
+                                <ul class="mj-member-login-component__notif-group-list">
+                                    <?php foreach ($notif_data['notifications'] as $notif) :
+                                        $n_title = isset($notif['title']) ? trim($notif['title']) : '';
+                                        if ($n_title === '') {
+                                            continue;
+                                        }
+                                        $n_time = '';
+                                        if (!empty($notif['created_at'])) {
+                                            $n_time = human_time_diff(strtotime($notif['created_at']), current_time('timestamp', 1));
+                                        }
+                                        $n_url = isset($notif['url']) ? $notif['url'] : '';
+                                        $n_recipient_id = isset($notif['recipient_id']) ? (int) $notif['recipient_id'] : 0;
+                                    ?>
+                                        <li class="mj-member-login-component__notif-item" data-recipient-id="<?php echo $n_recipient_id; ?>">
+                                            <div class="mj-member-login-component__notif-content">
+                                                <?php if ($n_url !== '') : ?>
+                                                    <a class="mj-member-login-component__notif-link" href="<?php echo esc_url($n_url); ?>">
+                                                        <span class="mj-member-login-component__notif-title"><?php echo esc_html($n_title); ?></span>
+                                                        <span class="mj-member-login-component__notif-time"><?php echo esc_html($n_time !== '' ? sprintf(__('il y a %s', 'mj-member'), $n_time) : ''); ?></span>
+                                                    </a>
+                                                <?php else : ?>
+                                                    <span class="mj-member-login-component__notif-title"><?php echo esc_html($n_title); ?></span>
+                                                    <?php if ($n_time !== '') : ?>
+                                                        <span class="mj-member-login-component__notif-time"><?php echo esc_html(sprintf(__('il y a %s', 'mj-member'), $n_time)); ?></span>
+                                                    <?php endif; ?>
+                                                <?php endif; ?>
+                                            </div>
+                                            <?php if ($n_recipient_id > 0) : ?>
+                                            <div class="mj-member-login-component__notif-actions">
+                                                <button type="button" class="mj-member-login-component__notif-action mj-member-login-component__notif-mark-read" data-recipient-id="<?php echo $n_recipient_id; ?>" title="<?php esc_attr_e('Marquer comme lu', 'mj-member'); ?>">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="12" height="12"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" /></svg>
+                                                </button>
+                                                <button type="button" class="mj-member-login-component__notif-action mj-member-login-component__notif-delete" data-recipient-id="<?php echo $n_recipient_id; ?>" title="<?php esc_attr_e('Supprimer', 'mj-member'); ?>">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="12" height="12"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.519.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd" /></svg>
+                                                </button>
+                                            </div>
+                                            <?php endif; ?>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                                <?php if ($notif_data['badge'] > count($notif_data['notifications'])) : ?>
+                                    <div class="mj-member-login-component__notif-more">
+                                        <?php echo esc_html(sprintf(__('+ %d autre(s)', 'mj-member'), $notif_data['badge'] - count($notif_data['notifications']))); ?>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
         <?php

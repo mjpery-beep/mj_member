@@ -6309,6 +6309,28 @@
                                 });
                             });
 
+                            // Optimistically rename the project key inside favorites
+                            if (targetKey !== nextKey) {
+                                setFavorites(function(prev) {
+                                    if (!prev || !prev[targetKey]) {
+                                        return prev;
+                                    }
+                                    var next = {};
+                                    Object.keys(prev).forEach(function(k) {
+                                        if (k === targetKey) {
+                                            return;
+                                        }
+                                        next[k] = prev[k];
+                                    });
+                                    var merged = next[nextKey] && typeof next[nextKey] === 'object' ? Object.assign({}, next[nextKey]) : {};
+                                    Object.keys(prev[targetKey]).forEach(function(t) {
+                                        merged[t] = true;
+                                    });
+                                    next[nextKey] = merged;
+                                    return next;
+                                });
+                            }
+
                             if (canRequest && config.ajax && config.ajax.url && config.ajax.renameProjectAction) {
                                 var renameNonce = config.ajax.renameNonce || config.ajax.nonce || '';
                                 if (renameNonce !== '') {
