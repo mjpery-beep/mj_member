@@ -59,6 +59,9 @@ class MjNotifications implements CrudRepositoryInterface {
         'testimonial_reaction' => 2,
         'idea_voted' => 2,
         'avatar_applied' => 1,
+
+        // Documents employé
+        'employee_document_uploaded' => 6,
     ];
 
     /**

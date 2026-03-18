@@ -1438,6 +1438,148 @@
     background: #6b7280;
 }
 
+/* ── Contact messages: consolidated mobile overrides ── */
+@media (max-width: 640px) {
+    .mj-contact-messages__surface {
+        padding: 0.75rem;
+        border-radius: 10px;
+    }
+
+    .mj-contact-messages__title {
+        font-size: 1.15rem;
+    }
+
+    .mj-contact-messages__toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.55rem;
+        padding: 0.5rem;
+    }
+
+    .mj-contact-messages__filters {
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+
+    .mj-contact-messages__search {
+        flex: unset;
+    }
+
+    .mj-contact-messages__search-input {
+        max-width: 100%;
+    }
+
+    .mj-contact-messages__list {
+        border-radius: 10px;
+    }
+
+    .mj-contact-messages__item {
+        padding-left: 0;
+    }
+
+    .mj-contact-messages__item.is-unread::before {
+        left: 0.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 0.45rem;
+        height: 0.45rem;
+    }
+
+    .mj-contact-messages__panel > summary {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.6rem;
+        padding: 0.7rem 0.65rem 0.65rem 1.4rem;
+    }
+
+    .mj-contact-messages__panel[open] > summary {
+        padding-bottom: 0.55rem;
+    }
+
+    .mj-contact-messages__panel-body {
+        padding: 0.6rem 0.65rem 0.85rem 1.4rem;
+    }
+
+    .mj-contact-messages__summary-heading {
+        flex-wrap: wrap;
+        gap: 0.3rem;
+    }
+
+    .mj-contact-messages__sender {
+        max-width: 100%;
+        white-space: normal;
+        font-size: 0.85rem;
+    }
+
+    .mj-contact-messages__subject {
+        white-space: normal;
+        font-size: 0.88rem;
+    }
+
+    .mj-contact-messages__preview {
+        display: none;
+    }
+
+    .mj-contact-messages__summary-meta {
+        gap: 0.3rem 0.5rem;
+        font-size: 0.72rem;
+    }
+
+    .mj-contact-messages__summary-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .mj-contact-messages__toggle-button .mj-contact-messages__toggle-text {
+        display: none;
+    }
+
+    .mj-contact-messages__toggle-button {
+        padding: 0.3rem 0.45rem !important;
+    }
+
+    .mj-contact-messages__actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .mj-contact-messages__action-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .mj-contact-messages__reply,
+    .mj-contact-messages__quick-reply {
+        padding: 0.5rem 0.65rem;
+    }
+
+    .mj-contact-messages__form-shell {
+        padding: 0.7rem;
+    }
+
+    .mj-contact-messages__pagination {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.6rem;
+    }
+
+    .mj-contact-messages__pagination-controls {
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        padding: 0.3rem 0.45rem;
+    }
+
+    .mj-contact-messages__pagination-link--prev span:not(.mj-contact-messages__pagination-icon),
+    .mj-contact-messages__pagination-link--next span:not(.mj-contact-messages__pagination-icon) {
+        display: none;
+    }
+
+    .mj-contact-messages__back-link {
+        font-size: 0.82rem;
+        padding: 0.4rem 0.8rem;
+    }
+}
+
 .mj-animateur-dashboard__quick-member {
     position: fixed;
     inset: 0;

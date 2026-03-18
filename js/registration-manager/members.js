@@ -1879,6 +1879,18 @@
         var msgType = _stMsgType[0];
         var setMsgType = _stMsgType[1];
 
+        var _stRenamingId = useState(null);
+        var renamingId = _stRenamingId[0];
+        var setRenamingId = _stRenamingId[1];
+
+        var _stRenameValue = useState('');
+        var renameValue = _stRenameValue[0];
+        var setRenameValue = _stRenameValue[1];
+
+        var _stRenameSaving = useState(false);
+        var renameSaving = _stRenameSaving[0];
+        var setRenameSaving = _stRenameSaving[1];
+
         // String helpers
         var sectionTitle      = getString(strings, 'employeeDocsTitle', 'Documents employé');
         var emptyLabel        = getString(strings, 'employeeDocsEmpty', 'Aucun document pour ce membre.');
@@ -1887,6 +1899,7 @@
         var deleteLabel       = getString(strings, 'employeeDocsDelete', 'Supprimer');
         var confirmDeleteMsg  = getString(strings, 'employeeDocsConfirmDelete', 'Êtes-vous sûr de vouloir supprimer ce document ?');
         var downloadLabel     = getString(strings, 'employeeDocsDownload', 'Télécharger');
+        var renameLabel       = getString(strings, 'employeeDocsRename', 'Renommer');
         var labelLabel        = getString(strings, 'employeeDocsLabel', 'Libellé');
         var typeLabel         = getString(strings, 'employeeDocsType', 'Type');
         var dateLabel         = getString(strings, 'employeeDocsDate', 'Date du document');
@@ -1985,6 +1998,52 @@
                 })
                 .catch(function () {
                     setIsUploading(false);
+                    setStatusMsg('Erreur de connexion');
+                    setMsgType('error');
+                });
+        }
+
+        // Rename
+        function startRename(doc) {
+            setRenamingId(doc.id);
+            setRenameValue(doc.label || doc.originalName || '');
+        }
+
+        function cancelRename() {
+            setRenamingId(null);
+            setRenameValue('');
+        }
+
+        function handleRename(docId) {
+            var trimmed = renameValue.trim();
+            if (!trimmed) return;
+            setRenameSaving(true);
+            var fd = new FormData();
+            fd.append('action', 'mj_regmgr_update_employee_document');
+            fd.append('nonce', config.nonce || '');
+            fd.append('docId', docId);
+            fd.append('label', trimmed);
+            fetch(config.ajaxUrl || '', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (resp) {
+                    setRenameSaving(false);
+                    if (resp.success && resp.data && resp.data.document) {
+                        setDocuments(function (prev) {
+                            return (prev || []).map(function (d) {
+                                return d.id === docId ? Object.assign({}, d, { label: resp.data.document.label }) : d;
+                            });
+                        });
+                        setRenamingId(null);
+                        setRenameValue('');
+                        setStatusMsg(resp.data.message || 'OK');
+                        setMsgType('success');
+                    } else {
+                        setStatusMsg(resp.data && resp.data.message ? resp.data.message : 'Erreur');
+                        setMsgType('error');
+                    }
+                })
+                .catch(function () {
+                    setRenameSaving(false);
                     setStatusMsg('Erreur de connexion');
                     setMsgType('error');
                 });
@@ -2228,7 +2287,37 @@
                     return h('div', { key: doc.id, class: 'mj-regmgr-employee-docs__card' }, [
                         h('div', { class: 'mj-regmgr-employee-docs__card-icon' }, fileIcon(doc.mimeType)),
                         h('div', { class: 'mj-regmgr-employee-docs__card-body' }, [
-                            h('div', { class: 'mj-regmgr-employee-docs__card-title' }, doc.label || doc.originalName),
+                            renamingId === doc.id
+                                ? h('div', { class: 'mj-regmgr-employee-docs__rename-form' }, [
+                                    h('input', {
+                                        type: 'text',
+                                        class: 'mj-input mj-regmgr-employee-docs__rename-input',
+                                        value: renameValue,
+                                        onInput: function (e) { setRenameValue(e.target.value); },
+                                        onKeyDown: function (e) {
+                                            if (e.key === 'Enter') { e.preventDefault(); handleRename(doc.id); }
+                                            if (e.key === 'Escape') { cancelRename(); }
+                                        },
+                                        disabled: renameSaving,
+                                        autofocus: true,
+                                    }),
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                                        onClick: function () { handleRename(doc.id); },
+                                        disabled: renameSaving || !renameValue.trim(),
+                                    }, renameSaving
+                                        ? h('span', { class: 'mj-btn__icon mj-spinner' })
+                                        : h('span', { class: 'mj-btn__icon', dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' } })
+                                    ),
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                        onClick: cancelRename,
+                                        disabled: renameSaving,
+                                    }, h('span', { class: 'mj-btn__icon', dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' } })),
+                                  ])
+                                : h('div', { class: 'mj-regmgr-employee-docs__card-title' }, doc.label || doc.originalName),
                             h('div', { class: 'mj-regmgr-employee-docs__card-meta' }, [
                                 h('span', { class: 'mj-regmgr-employee-docs__card-type' }, typeStr),
                                 period && h('span', { class: 'mj-regmgr-employee-docs__card-period' }, period),
@@ -2237,6 +2326,15 @@
                             ]),
                         ]),
                         h('div', { class: 'mj-regmgr-employee-docs__card-actions' }, [
+                            renamingId !== doc.id && h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                onClick: function () { startRename(doc); },
+                                title: renameLabel,
+                            }, [
+                                h('span', { class: 'mj-btn__icon', dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' } }),
+                                renameLabel,
+                            ]),
                             h('a', {
                                 href: downloadUrl(doc.id),
                                 target: '_blank',

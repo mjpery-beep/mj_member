@@ -128,18 +128,20 @@
     function initNotifPreview(panel) {
         var preview = panel.querySelector('.mj-member-login-component__notif-preview');
         if (!preview) {
+            console.log('[MJ notif-preview] No preview element found in', panel.className);
             return;
         }
 
         var items = panel.querySelectorAll('.mj-member-login-component__account-item[data-notif-key]');
         if (!items || items.length === 0) {
+            console.log('[MJ notif-preview] No items with data-notif-key found in', panel.className);
             return;
         }
 
+        console.log('[MJ notif-preview] Initialized on', panel.className, 'with', items.length, 'items');
+
         var groups = preview.querySelectorAll('.mj-member-login-component__notif-group');
         var hideTimer = null;
-
-        var panelInner = panel.querySelector('.mj-member-login-component__panel-inner');
 
         function showGroup(key, hoveredItem) {
             if (hideTimer) {
@@ -151,7 +153,7 @@
                 groups[g].classList.toggle('is-active', groupKey === key);
             }
             // Position preview at the level of the hovered link
-            if (hoveredItem && panelInner) {
+            if (hoveredItem) {
                 var panelRect = panel.getBoundingClientRect();
                 var itemRect = hoveredItem.getBoundingClientRect();
                 var topOffset = itemRect.top - panelRect.top;
@@ -263,12 +265,12 @@
         .then(function (response) {
             if (response.success) {
                 if (item) {
+                    // Capture group reference BEFORE removing the item from DOM
+                    var group = item.closest('.mj-member-login-component__notif-group');
+                    var groupKey = group ? group.getAttribute('data-notif-group') : '';
                     setTimeout(function () {
                         item.remove();
-                        // Update badge count on the associated account link
-                        var group = item.closest('.mj-member-login-component__notif-group');
-                        if (group) {
-                            var groupKey = group.getAttribute('data-notif-group');
+                        if (group && groupKey) {
                             updateBadgeCount(groupKey, group);
                         }
                     }, 250);
@@ -293,22 +295,22 @@
         if (!groupKey) {
             return;
         }
-        // Find the associated account link item and decrement its badge
-        var accountItem = document.querySelector('.mj-member-login-component__account-item[data-notif-key="' + groupKey + '"]');
-        if (!accountItem) {
-            return;
-        }
-        var badge = accountItem.querySelector('.mj-member-login-component__account-badge');
-        if (!badge) {
-            return;
-        }
-        var currentCount = parseInt(badge.textContent, 10) || 0;
-        var newCount = Math.max(0, currentCount - 1);
-        if (newCount > 0) {
-            badge.textContent = newCount;
-        } else {
-            badge.style.display = 'none';
-            accountItem.classList.remove('has-badge-tooltip');
+        // Find ALL associated account link items across widgets and decrement their badge
+        var accountItems = document.querySelectorAll('.mj-member-login-component__account-item[data-notif-key="' + groupKey + '"]');
+        for (var i = 0; i < accountItems.length; i += 1) {
+            var badge = accountItems[i].querySelector('.mj-member-login-component__account-badge');
+            if (!badge) {
+                continue;
+            }
+            var currentCount = parseInt(badge.textContent, 10) || 0;
+            var newCount = Math.max(0, currentCount - 1);
+            if (newCount > 0) {
+                badge.textContent = newCount;
+                badge.setAttribute('aria-label', newCount + ' notification' + (newCount > 1 ? 's' : ''));
+            } else {
+                badge.style.display = 'none';
+                accountItems[i].classList.remove('has-badge-tooltip');
+            }
         }
 
         // Update the "more" text
@@ -496,6 +498,13 @@
         for (var i = 0; i < wrappers.length; i += 1) {
             initComponent(wrappers[i]);
         }
+
+        // Init notification preview on account-links widgets (standalone, outside login modal)
+        var accountLinksWidgets = document.querySelectorAll('.mj-member-account-links');
+        console.log('[MJ notif-preview] Found', accountLinksWidgets.length, 'account-links widgets');
+        for (var j = 0; j < accountLinksWidgets.length; j += 1) {
+            initNotifPreview(accountLinksWidgets[j]);
+        }
     }
 
     function hookElementorIntegration() {
@@ -523,6 +532,22 @@
             var wrappers = root.querySelectorAll('[data-mj-member-login]');
             for (var i = 0; i < wrappers.length; i += 1) {
                 initComponent(wrappers[i]);
+            }
+        });
+
+        window.elementorFrontend.hooks.addAction('frontend/element_ready/mj-member-account-links.default', function (scope) {
+            if (!scope || !scope.length) {
+                return;
+            }
+
+            var root = scope[0];
+            if (!root) {
+                return;
+            }
+
+            var widgets = root.querySelectorAll('.mj-member-account-links');
+            for (var i = 0; i < widgets.length; i += 1) {
+                initNotifPreview(widgets[i]);
             }
         });
     }

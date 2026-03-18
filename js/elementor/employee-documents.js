@@ -63,6 +63,8 @@
     }
 
     var ICONS = {
+        eye:                'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
+        close:              'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
         download:           'M12 16l-5-5h3V4h4v7h3l-5 5zm-7 2h14v2H5v-2z',
         filePdf:            'M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6H6zm7 1.5L18.5 9H13V3.5zM9.5 13.5c0 .83-.67 1.5-1.5 1.5h-.5v1.5H6V12h2c.83 0 1.5.67 1.5 1.5zm-.5 0c0-.28-.22-.5-.5-.5H8v1h.5c.28 0 .5-.22.5-.5zM13 12h-2v4.5h2a1.5 1.5 0 0 0 1.5-1.5v-1.5A1.5 1.5 0 0 0 13 12zm.5 3a.5.5 0 0 1-.5.5h-1v-2.5h1a.5.5 0 0 1 .5.5v1.5zM15 12h3v1h-2v.75h1.5v1H16V16h-1v-4z',
         fileImage:          'M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6H6zm7 1.5L18.5 9H13V3.5zM8 12a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm-2 7l3-4 2 2.5 3-3.5 3 5H6z',
@@ -105,16 +107,73 @@
     }
 
     /* ================================================================ *
+     *  Preview modal                                                    *
+     * ================================================================ */
+
+    function PreviewModal(_ref) {
+        var doc = _ref.doc, cfg = _ref.cfg, i18n = _ref.i18n, onClose = _ref.onClose;
+
+        var previewUrl = cfg.ajaxUrl + '?action=mj_empdocs_download&doc_id=' + doc.id + '&nonce=' + encodeURIComponent(cfg.nonce);
+
+        var isPdf = doc.mimeType === 'application/pdf';
+        var isImage = doc.mimeType && doc.mimeType.indexOf('image/') === 0;
+        var canPreview = isPdf || isImage;
+
+        // Close on Escape
+        useEffect(function () {
+            function onKey(e) { if (e.key === 'Escape') onClose(); }
+            document.addEventListener('keydown', onKey);
+            return function () { document.removeEventListener('keydown', onKey); };
+        }, [onClose]);
+
+        return h('div', { className: 'mj-empdocs__preview-overlay', onClick: function (e) { if (e.target === e.currentTarget) onClose(); } },
+            h('div', { className: 'mj-empdocs__preview-modal' },
+                h('div', { className: 'mj-empdocs__preview-header' },
+                    h('span', { className: 'mj-empdocs__preview-title' }, doc.label || doc.originalName),
+                    h('button', {
+                        className: 'mj-empdocs__preview-close',
+                        onClick: onClose,
+                        type: 'button',
+                        title: i18n.close || 'Fermer'
+                    }, svgIcon(ICONS.close))
+                ),
+                h('div', { className: 'mj-empdocs__preview-body' },
+                    canPreview
+                        ? (isPdf
+                            ? h('iframe', { className: 'mj-empdocs__preview-iframe', src: previewUrl })
+                            : h('img', { className: 'mj-empdocs__preview-img', src: previewUrl, alt: doc.label || doc.originalName })
+                        )
+                        : h('div', { className: 'mj-empdocs__preview-unavailable' },
+                            svgIcon(ICONS.fileAlt, '', '3em'),
+                            h('p', null, i18n.previewUnavailable || 'Aperçu non disponible pour ce type de fichier.')
+                        )
+                )
+            )
+        );
+    }
+
+    /* ================================================================ *
      *  Document card                                                    *
      * ================================================================ */
 
     function DocumentCard(_ref) {
         var doc = _ref.doc, i18n = _ref.i18n, cfg = _ref.cfg;
 
+        var _pv = useState(false);
+        var showPreview = _pv[0], setShowPreview = _pv[1];
+
         var handleDownload = useCallback(function () {
             var url = cfg.ajaxUrl + '?action=mj_empdocs_download&doc_id=' + doc.id + '&nonce=' + encodeURIComponent(cfg.nonce);
             window.open(url, '_blank');
         }, [doc.id, cfg]);
+
+        var handlePreview = useCallback(function () {
+            setShowPreview(true);
+        }, []);
+
+        var handleClosePreview = useCallback(function () {
+            setShowPreview(false);
+        }, []);
 
         var periodLabel = '';
         if (doc.payslipMonth && doc.payslipYear) {
@@ -139,12 +198,19 @@
             ),
             h('div', { className: 'mj-empdocs__card-actions' },
                 h('button', {
+                    className: 'mj-empdocs__btn mj-empdocs__btn--preview',
+                    title: i18n.preview || 'Aperçu',
+                    onClick: handlePreview,
+                    type: 'button'
+                }, svgIcon(ICONS.eye)),
+                h('button', {
                     className: 'mj-empdocs__btn mj-empdocs__btn--download',
                     title: i18n.download || 'Télécharger',
                     onClick: handleDownload,
                     type: 'button'
                 }, svgIcon(ICONS.download))
-            )
+            ),
+            showPreview ? h(PreviewModal, { doc: doc, cfg: cfg, i18n: i18n, onClose: handleClosePreview }) : null
         );
     }
 

@@ -214,6 +214,22 @@
     box-shadow: 0 2px 6px rgba(37, 99, 235, 0.18);
 }
 
+.mj-empdocs__btn--preview {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: #e0e7ff;
+    color: #4f46e5;
+    font-size: 0.92rem;
+}
+
+.mj-empdocs__btn--preview:hover {
+    background: #c7d2fe;
+    color: #4338ca;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(79, 70, 229, 0.18);
+}
+
 .mj-empdocs__btn--delete {
     width: 36px;
     height: 36px;
@@ -396,6 +412,104 @@
 
 @keyframes mj-empdocs-spin {
     to { transform: rotate(360deg); }
+}
+
+/* ---- Preview modal ---- */
+.mj-empdocs__preview-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.55);
+    animation: mj-empdocs-fadeIn 0.15s ease;
+}
+
+.mj-empdocs__preview-modal {
+    background: #fff;
+    border-radius: 14px;
+    max-width: 90vw;
+    max-height: 90vh;
+    width: 850px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+}
+
+.mj-empdocs__preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1.25rem;
+    border-bottom: 1px solid #e2e8f0;
+    gap: 1rem;
+}
+
+.mj-empdocs__preview-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #1e293b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.mj-empdocs__preview-close {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 8px;
+    background: #f1f5f9;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.mj-empdocs__preview-close:hover {
+    background: #e2e8f0;
+    color: #1e293b;
+}
+
+.mj-empdocs__preview-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    background: #f8fafc;
+}
+
+.mj-empdocs__preview-iframe {
+    width: 100%;
+    height: 75vh;
+    border: none;
+}
+
+.mj-empdocs__preview-img {
+    max-width: 100%;
+    max-height: 75vh;
+    object-fit: contain;
+    display: block;
+    margin: 1rem auto;
+}
+
+.mj-empdocs__preview-unavailable {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: #94a3b8;
+}
+
+.mj-empdocs__preview-unavailable p {
+    margin: 0.75rem 0 0;
+    font-size: 0.9rem;
 }
 
 /* ================================================================ *

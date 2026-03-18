@@ -1130,16 +1130,12 @@ if (!function_exists('mj_member_render_login_modal_component')) {
                                                     <a class="<?php echo esc_attr(implode(' ', $link_classes)); ?>" href="<?php echo esc_url($link_url); ?>"<?php echo !empty($link_entry['is_logout']) ? ' rel="nofollow"' : ''; ?>>
                                                         <span class="mj-member-login-component__account-main">
                                                             <?php if ($link_icon_html !== '') : ?>
-                                                                <span class="mj-member-account-menu__item-icon"><?php echo $link_icon_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
-                                                            <?php endif; ?>
-                                                            <span class="mj-member-login-component__account-label"><?php echo esc_html($link_label); ?></span>
-                                                            <?php if ($link_badge > 0) : ?>
-                                                                <?php
+                                                                <span class="mj-member-account-menu__item-icon"><?php echo $link_icon_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><?php if ($link_badge > 0) : ?><?php
                                                                 $badge_display = $link_badge > 99 ? '99+' : number_format_i18n($link_badge);
                                                                 $badge_label = sprintf(_n('%d notification', '%d notifications', $link_badge, 'mj-member'), $link_badge);
-                                                                ?>
-                                                                <span class="mj-member-login-component__account-badge" aria-label="<?php echo esc_attr($badge_label); ?>"><?php echo esc_html($badge_display); ?></span>
+                                                                ?><span class="mj-member-login-component__account-badge" aria-label="<?php echo esc_attr($badge_label); ?>"><?php echo esc_html($badge_display); ?></span><?php endif; ?></span>
                                                             <?php endif; ?>
+                                                            <span class="mj-member-login-component__account-label"><?php echo esc_html($link_label); ?></span>
                                                         </span>
                                                         <span class="mj-member-login-component__account-icon" aria-hidden="true">&rsaquo;</span>
                                                         <?php if ($link_description !== '') : ?>

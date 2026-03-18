@@ -583,7 +583,7 @@ function mj_settings_page() {
                 'testimonial_comment', 'testimonial_comment_reply', 'testimonial_reaction',
             ),
             __('Gamification', 'mj-member') => array(
-                'trophy_earned', 'badge_earned', 'criterion_earned', 'level_up',
+                'trophy_earned', 'badge_earned', 'criterion_earned', 'level_up', 'action_awarded',
             ),
             __('Congés', 'mj-member') => array(
                 'leave_request_created', 'leave_request_approved', 'leave_request_rejected',
@@ -593,6 +593,9 @@ function mj_settings_page() {
             ),
             __('Frais kilométriques', 'mj-member') => array(
                 'mileage_created', 'mileage_approved', 'mileage_reimbursed',
+            ),
+            __('Documents employé', 'mj-member') => array(
+                'employee_document_uploaded',
             ),
             __('Divers', 'mj-member') => array(
                 'avatar_applied', 'attendance_recorded', 'post_published',

@@ -1781,10 +1781,11 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             if ($show_toolbar_left) {
                 echo '<div class="mj-member-events-calendar__toolbar-left">';
                 echo '<div class="mj-member-events-calendar__nav-group">';
-                echo '<button type="button" class="mj-member-events-calendar__nav-button" data-calendar-nav="prev" aria-label="' . esc_attr__('Mois précédent', 'mj-member') . '"><span aria-hidden="true">&lsaquo;</span></button>';
+                echo '<button type="button" class="mj-member-events-calendar__nav-button" data-calendar-nav="prev" aria-label="' . esc_attr__('Mois précédent', 'mj-member') . '"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>';
                 echo '<span class="mj-member-events-calendar__month-chip" data-calendar-active-label aria-live="polite" aria-atomic="true">' . esc_html($initial_month_label) . '</span>';
-                echo '<button type="button" class="mj-member-events-calendar__nav-button" data-calendar-nav="next" aria-label="' . esc_attr__('Mois suivant', 'mj-member') . '"><span aria-hidden="true">&rsaquo;</span></button>';
+                echo '<button type="button" class="mj-member-events-calendar__nav-button" data-calendar-nav="next" aria-label="' . esc_attr__('Mois suivant', 'mj-member') . '"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>';
                 echo '</div>';
+                echo '<button type="button" class="mj-member-events-calendar__today-button" data-calendar-action="today">' . esc_html__('Aujourd\'hui', 'mj-member') . '</button>';
                 echo '</div>';
             }
             if ($show_toolbar_actions) {
@@ -1800,7 +1801,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                     }
                     echo '</div>';
                 }
-                echo '<button type="button" class="mj-member-events-calendar__today-button" data-calendar-action="today">' . esc_html__('Aujourd\'hui', 'mj-member') . '</button>';
                 echo '</div>';
             }
             echo '</div>';
@@ -2504,21 +2504,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
                                 $chip_classes[] = 'is-draft';
                             }
                             $chip_style = self::build_event_style_attribute($chip_event);
-                            $chip_emoji = '';
-                            if (isset($chip_event['emoji']) && $chip_event['emoji'] !== '') {
-                                $chip_emoji = (string) $chip_event['emoji'];
-                                if (function_exists('mb_substr')) {
-                                    $chip_emoji = mb_substr($chip_emoji, 0, 8);
-                                } else {
-                                    $chip_emoji = substr($chip_emoji, 0, 8);
-                                }
-                            }
-                            echo '<div class="' . esc_attr(implode(' ', $chip_classes)) . '"' . $chip_style . ' data-calendar-type-item="1" data-calendar-type="' . esc_attr($chip_type_key) . '" data-calendar-type-known="' . ($chip_is_known ? '1' : '0') . '">';
-                            if ($chip_emoji !== '') {
-                                echo '<span class="mj-cal-mobile__chip-emoji">' . esc_html($chip_emoji) . '</span>';
-                            }
-                            echo '<span class="mj-cal-mobile__chip-label">' . esc_html($chip_event['title']) . '</span>';
-                            echo '</div>';
+                            echo '<div class="' . esc_attr(implode(' ', $chip_classes)) . '"' . $chip_style . ' data-calendar-type-item="1" data-calendar-type="' . esc_attr($chip_type_key) . '" data-calendar-type-known="' . ($chip_is_known ? '1' : '0') . '"></div>';
                         }
                         echo '</div>';
                     }

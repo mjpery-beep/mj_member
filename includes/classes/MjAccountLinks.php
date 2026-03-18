@@ -729,6 +729,7 @@ class MjAccountLinks {
                         'url' => isset($notif['url']) ? esc_url($notif['url']) : '',
                         'type' => isset($notif['type']) ? sanitize_key($notif['type']) : '',
                         'created_at' => isset($notif['created_at']) ? sanitize_text_field($notif['created_at']) : '',
+                        'recipient_id' => isset($notif['recipient_id']) ? absint($notif['recipient_id']) : 0,
                     );
                 }
             }

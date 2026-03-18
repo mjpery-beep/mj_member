@@ -12,6 +12,7 @@ use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\Crud\MjNotifications;
 use Mj\Member\Classes\Crud\MjIdeas;
+use Mj\Member\Classes\Crud\MjEmployeeDocuments;
 use Mj\Member\Classes\MjNotificationManager;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\Value\MemberData;
@@ -52,6 +53,7 @@ final class MjNotificationTypes
     const BADGE_EARNED = 'badge_earned';
     const CRITERION_EARNED = 'criterion_earned';
     const LEVEL_UP = 'level_up';
+    const ACTION_AWARDED = 'action_awarded';
 
     // Avatar
     const AVATAR_APPLIED = 'avatar_applied';
@@ -94,6 +96,9 @@ final class MjNotificationTypes
     const MILEAGE_APPROVED = 'mileage_approved';
     const MILEAGE_REIMBURSED = 'mileage_reimbursed';
 
+    // Documents employé
+    const EMPLOYEE_DOCUMENT_UPLOADED = 'employee_document_uploaded';
+
 
     /**
      * Retourne les labels pour chaque type de notification.
@@ -119,6 +124,7 @@ final class MjNotificationTypes
             self::BADGE_EARNED => __('Badge débloqué', 'mj-member'),
             self::CRITERION_EARNED => __('Critère validé', 'mj-member'),
             self::LEVEL_UP => __('Niveau supérieur', 'mj-member'),
+            self::ACTION_AWARDED => __('Action attribuée', 'mj-member'),
             self::AVATAR_APPLIED => __('Nouvel avatar', 'mj-member'),
             self::ATTENDANCE_RECORDED => __('Présence enregistrée', 'mj-member'),
             self::MESSAGE_RECEIVED => __('Message reçu', 'mj-member'),
@@ -142,6 +148,7 @@ final class MjNotificationTypes
             self::MILEAGE_CREATED => __('Nouveau frais kilométrique', 'mj-member'),
             self::MILEAGE_APPROVED => __('Frais kilométrique approuvé', 'mj-member'),
             self::MILEAGE_REIMBURSED => __('Frais kilométrique remboursé', 'mj-member'),
+            self::EMPLOYEE_DOCUMENT_UPLOADED => __('Nouveau document employé', 'mj-member'),
         );
     }
 }
@@ -2299,4 +2306,93 @@ if (!function_exists('mj_member_notification_on_mileage_reimbursed')) {
     }
 
     add_action('mj_member_mileage_reimbursed', 'mj_member_notification_on_mileage_reimbursed', 10, 3);
+}
+
+// ============================================================================
+// LISTENER: Document employé ajouté
+// ============================================================================
+
+if (!function_exists('mj_member_notification_on_employee_document_uploaded')) {
+    /**
+     * Notifie le membre lorsqu'un document est ajouté à son dossier employé.
+     *
+     * @param int    $doc_id      ID du document créé.
+     * @param int    $member_id   ID du membre destinataire.
+     * @param string $doc_type    Type du document (payslip, contract, misc).
+     * @param string $label       Libellé du document.
+     * @param int    $uploaded_by ID du membre qui a uploadé (coordinateur).
+     */
+    function mj_member_notification_on_employee_document_uploaded(
+        int $doc_id,
+        int $member_id,
+        string $doc_type,
+        string $label,
+        int $uploaded_by
+    ): void {
+        if (!class_exists(MjNotifications::class) || !class_exists(MjMembers::class)) {
+            return;
+        }
+
+        // Ne pas notifier si le coordinateur s'ajoute un document à lui-même
+        if ($member_id === $uploaded_by) {
+            return;
+        }
+
+        // Build a descriptive string depending on the document type
+        $doc = MjEmployeeDocuments::get_by_id($doc_id);
+        $months = array(
+            1 => 'janvier', 2 => 'février', 3 => 'mars', 4 => 'avril',
+            5 => 'mai', 6 => 'juin', 7 => 'juillet', 8 => 'août',
+            9 => 'septembre', 10 => 'octobre', 11 => 'novembre', 12 => 'décembre',
+        );
+
+        if ($doc_type === MjEmployeeDocuments::TYPE_PAYSLIP && $doc) {
+            $m = isset($doc->payslip_month) ? (int) $doc->payslip_month : 0;
+            $y = isset($doc->payslip_year)  ? (int) $doc->payslip_year  : 0;
+            $period = ($m && $y) ? ($months[$m] ?? $m) . ' ' . $y : '';
+            $description = $period
+                ? sprintf(__('Fiche de paie (%s)', 'mj-member'), $period)
+                : __('Fiche de paie', 'mj-member');
+        } elseif ($doc_type === MjEmployeeDocuments::TYPE_CONTRACT) {
+            $file_name = $doc ? ($doc->original_name ?? '') : '';
+            $description = $file_name
+                ? sprintf(__('Emploi (%s)', 'mj-member'), $file_name)
+                : __('Emploi', 'mj-member');
+        } else {
+            $file_name = $doc ? ($doc->original_name ?? '') : '';
+            $description = $file_name
+                ? sprintf(__('Divers (%s)', 'mj-member'), $file_name)
+                : __('Divers', 'mj-member');
+        }
+
+        $notification_data = array(
+            'type'    => MjNotificationTypes::EMPLOYEE_DOCUMENT_UPLOADED,
+            'title'   => __('📄 Nouveau document', 'mj-member'),
+            'excerpt' => sprintf(
+                __('Un nouveau document a été ajouté à ton dossier : %s.', 'mj-member'),
+                $description
+            ),
+            'url'     => home_url('/mon-compte/documents-employe/'),
+            'context' => 'employee_documents',
+            'source'  => 'system',
+            'payload' => array(
+                'doc_id'      => $doc_id,
+                'member_id'   => $member_id,
+                'doc_type'    => $doc_type,
+                'label'       => $label,
+                'uploaded_by' => $uploaded_by,
+            ),
+        );
+
+        mj_member_record_notification($notification_data, array($member_id));
+
+        mj_member_notification_log('employee_document_uploaded', array(
+            'doc_id'      => $doc_id,
+            'member_id'   => $member_id,
+            'doc_type'    => $doc_type,
+            'uploaded_by' => $uploaded_by,
+        ));
+    }
+
+    add_action('mj_member_employee_document_uploaded', 'mj_member_notification_on_employee_document_uploaded', 10, 5);
 }

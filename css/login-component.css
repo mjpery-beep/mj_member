@@ -129,6 +129,7 @@
 }
 
 .mj-member-account-menu__item-icon {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1122,34 +1123,36 @@ body .mj-member-login-component__actions button.mj-member-login-component__submi
 }
 
 .mj-member-login-component__account-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 1.8rem;
-    height: 1.8rem;
-    padding: 0 0.5rem;
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    min-width: 1rem;
+    height: 1rem;
+    padding: 0 0.2rem;
     border-radius: 999px;
-    background: linear-gradient(135deg, #FF6B6B 0%, #EE5A6F 100%);
+    background: #3b82f6;
     color: #ffffff;
-    font-size: 0.8rem;
+    font-size: 0.56rem;
     font-weight: 700;
     line-height: 1;
-    box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
-    border: 2px solid rgba(255, 255, 255, 0.8);
-    transition: all 0.2s ease;
+    border: 1.5px solid #ffffff;
+    pointer-events: none;
+    transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .mj-member-login-component__account-link:hover .mj-member-login-component__account-badge {
+    background: #2563eb;
     transform: scale(1.1);
-    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
 }
 
 .mj-member-login-component__account-item.is-current .mj-member-login-component__account-badge,
 .mj-member-login-component__account-link.is-current .mj-member-login-component__account-badge {
-    background: linear-gradient(135deg, #FFB6B6 0%, #FF9AA5 100%);
-    color: #ffffff;
-    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.35);
-    border-color: rgba(255, 255, 255, 0.95);
+    background: #ffffff;
+    color: #3b82f6;
+    border-color: rgba(255, 255, 255, 0.5);
 }
 
 /* ─── Side notification preview panel (left, absolute) ─── */
@@ -1266,15 +1269,9 @@ body .mj-member-login-component__actions button.mj-member-login-component__submi
 .mj-member-login-component__notif-actions {
     flex-shrink: 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
     gap: 2px;
-    margin-top: 0.1rem;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-}
-
-.mj-member-login-component__notif-item:hover .mj-member-login-component__notif-actions {
-    opacity: 1;
 }
 
 .mj-member-login-component__notif-action {
@@ -1287,36 +1284,53 @@ body .mj-member-login-component__actions button.mj-member-login-component__submi
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    transition: background 0.12s ease, transform 0.12s ease;
+    transition: background 0.12s ease, color 0.12s ease;
     line-height: 1;
 }
 
-.mj-member-login-component__notif-action svg {
+button.mj-member-login-component__notif-action svg {
     width: 12px;
     height: 12px;
     display: block;
 }
 
 .mj-member-login-component__notif-mark-read {
-    background: rgba(59, 130, 246, 0.15);
-    color: #60a5fa;
+    background: #dbeafe;
+    color: #3b82f6;
 }
 
 .mj-member-login-component__notif-mark-read:hover {
-    background: rgba(59, 130, 246, 0.3);
-    color: #93bbfd;
-    transform: scale(1.1);
+    background: #bfdbfe;
+    color: #2563eb;
 }
 
 .mj-member-login-component__notif-delete {
-    background: rgba(239, 68, 68, 0.15);
-    color: #f87171;
+    background: #fee2e2;
+    color: #ef4444;
 }
 
 .mj-member-login-component__notif-delete:hover {
-    background: rgba(239, 68, 68, 0.3);
-    color: #fca5a5;
-    transform: scale(1.1);
+    background: #fecaca;
+    color: #dc2626;
+}
+
+/* ─── Right-side notification preview (account-links widget) ─── */
+
+.mj-member-account-links {
+    position: relative;
+}
+
+.mj-member-login-component__notif-preview--right {
+    right: auto;
+    left: 100%;
+    margin-right: 0;
+    margin-left: 6px;
+    transform: translateX(-8px);
+    box-shadow: 6px 4px 20px rgba(0, 0, 0, 0.18);
+}
+
+.mj-member-login-component__notif-preview--right.is-visible {
+    transform: translateX(0);
 }
 
 .mj-member-login-component__member {

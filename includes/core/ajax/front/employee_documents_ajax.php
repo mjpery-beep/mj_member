@@ -248,6 +248,18 @@ function mj_empdocs_upload(): void
     }
 
     $doc = MjEmployeeDocuments::get_by_id($insertId);
+
+    /**
+     * Fires after an employee document is successfully uploaded.
+     *
+     * @param int    $insertId  The new document ID.
+     * @param int    $memberId  The member the document belongs to.
+     * @param string $docType   Document type (payslip, contract, misc).
+     * @param string $label     Document label.
+     * @param int    $uploadedBy Member ID of the uploader (coordinator).
+     */
+    do_action('mj_member_employee_document_uploaded', $insertId, $memberId, $docType, $label, $ctx['memberId']);
+
     wp_send_json_success(array(
         'message'  => __('Document téléversé avec succès.', 'mj-member'),
         'document' => mj_empdocs_format($doc),
