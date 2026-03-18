@@ -286,7 +286,7 @@ if (!function_exists('current_time')) {
         }
 
         if ($type === 'mysql') {
-            return gmdate('Y-m-d H:i:s', $now);
+            return date('Y-m-d H:i:s', $now);
         }
 
         return $now;
@@ -314,6 +314,28 @@ if (!class_exists('WP_Session_Tokens')) {
     }
 }
 
+if (!function_exists('wp_cache_get')) {
+    function wp_cache_get($key, $group = '', $force = false, &$found = null)
+    {
+        $found = false;
+        return false;
+    }
+}
+
+if (!function_exists('wp_cache_set')) {
+    function wp_cache_set($key, $data, $group = '', $expire = 0)
+    {
+        return true;
+    }
+}
+
+if (!function_exists('wp_cache_delete')) {
+    function wp_cache_delete($key, $group = '')
+    {
+        return true;
+    }
+}
+
 if (!isset($GLOBALS['wpdb'])) {
     $GLOBALS['wpdb'] = new class {
         public $prefix = 'wp_';
@@ -327,5 +349,10 @@ if (!isset($GLOBALS['wpdb'])) {
 
 require_once dirname(__DIR__) . '/includes/classes/value/MemberData.php';
 require_once dirname(__DIR__) . '/includes/classes/MjTools.php';
+require_once dirname(__DIR__) . '/includes/classes/MjRoles.php';
 require_once dirname(__DIR__) . '/includes/classes/crud/CrudQueryBuilder.php';
+// Required explicitly: PSR-4 autoloader fails on case-sensitive Linux filesystems
+// because the namespace Mj\Member\Classes\Crud maps to includes/Classes/Crud (capital C)
+// while the actual directories are lowercase (includes/classes/crud).
+require_once dirname(__DIR__) . '/includes/classes/crud/CrudRepositoryInterface.php';
 require_once dirname(__DIR__) . '/includes/classes/crud/MjMembers.php';
