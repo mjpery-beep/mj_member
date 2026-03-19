@@ -1363,3 +1363,31 @@ if (!function_exists('mj_member_bootstrap_elementor_login_widget')) {
     }
     add_action('plugins_loaded', 'mj_member_bootstrap_elementor_login_widget');
 }
+
+if (!function_exists('mj_member_render_login_shortcode')) {
+    function mj_member_render_login_shortcode($atts = array()) {
+        $atts = shortcode_atts(array(
+            'login_label'             => '',
+            'account_label'           => '',
+            'modal_title'             => '',
+            'modal_description'       => '',
+            'modal_button_label'      => '',
+            'redirect'                => '',
+            'alignment'               => '',
+            'class'                   => '',
+            'registration_link_label' => '',
+        ), $atts, 'mj_member_login');
+
+        return mj_member_render_login_modal_component(array(
+            'button_label_logged_out'  => sanitize_text_field($atts['login_label']),
+            'button_label_logged_in'   => sanitize_text_field($atts['account_label']),
+            'modal_title'              => sanitize_text_field($atts['modal_title']),
+            'modal_description'        => sanitize_textarea_field($atts['modal_description']),
+            'modal_button_label'       => sanitize_text_field($atts['modal_button_label']),
+            'redirect'                 => esc_url_raw($atts['redirect']),
+            'alignment'                => sanitize_key($atts['alignment']),
+            'extra_class'              => $atts['class'],
+            'registration_link_label'  => sanitize_text_field($atts['registration_link_label']),
+        ));
+    }
+}
