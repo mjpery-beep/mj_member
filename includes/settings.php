@@ -1,5 +1,6 @@
 <?php
 
+use Mj\Member\Classes\MjDatabaseBackup;
 use Mj\Member\Classes\MjGoogleDrive;
 use Mj\Member\Core\Config;
 
@@ -63,7 +64,7 @@ function mj_settings_page() {
     }
 
     // Handle save
-    if ((isset($_POST['mj_save_settings']) || isset($_POST['mj_events_google_sync_regenerate']) || isset($_POST['mj_events_google_sync_force'])) && check_admin_referer('mj_settings_nonce')) {
+    if ((isset($_POST['mj_save_settings']) || isset($_POST['mj_events_google_sync_regenerate']) || isset($_POST['mj_events_google_sync_force']) || isset($_POST['mj_backup_run_now'])) && check_admin_referer('mj_settings_nonce')) {
         $notices = array();
         $notify_email = isset($_POST['mj_notify_email']) ? sanitize_email($_POST['mj_notify_email']) : '';
         $smtp = array(
@@ -207,6 +208,24 @@ function mj_settings_page() {
             update_option('mj_member_nextcloud_password', $nc_password);
         }
         update_option('mj_member_nextcloud_root_folder', $nc_root_folder);
+
+        $backup_enabled = isset($_POST['mj_backup_enabled']) ? '1' : '0';
+        $backup_frequency_raw = isset($_POST['mj_backup_frequency']) ? sanitize_key(wp_unslash($_POST['mj_backup_frequency'])) : 'daily';
+        $backup_frequency = in_array($backup_frequency_raw, array('daily', 'twicedaily', 'weekly'), true)
+            ? $backup_frequency_raw
+            : 'daily';
+        $backup_retention = isset($_POST['mj_backup_retention']) ? max(1, (int) $_POST['mj_backup_retention']) : 7;
+        $backup_folder = isset($_POST['mj_backup_nextcloud_folder'])
+            ? trim(sanitize_text_field(wp_unslash($_POST['mj_backup_nextcloud_folder'])), "/\\ \t\n\r\0\x0B")
+            : 'backups/database';
+        if ($backup_folder === '') {
+            $backup_folder = 'backups/database';
+        }
+
+        update_option('mj_backup_enabled', $backup_enabled);
+        update_option('mj_backup_frequency', $backup_frequency);
+        update_option('mj_backup_retention', $backup_retention);
+        update_option('mj_backup_nextcloud_folder', $backup_folder);
 
         $google_sync_enabled = isset($_POST['mj_events_google_sync_enabled']) ? '1' : '0';
         update_option('mj_events_google_sync_enabled', $google_sync_enabled);
@@ -355,8 +374,28 @@ function mj_settings_page() {
         } else {
             update_option('mj_annual_fee_manual', '');
         }
-        if (isset($_POST['mj_save_settings']) || isset($_POST['mj_events_google_sync_regenerate']) || isset($_POST['mj_events_google_sync_force'])) {
+        if (isset($_POST['mj_save_settings']) || isset($_POST['mj_events_google_sync_regenerate']) || isset($_POST['mj_events_google_sync_force']) || isset($_POST['mj_backup_run_now'])) {
             $notices[] = array('type' => 'success', 'message' => '✅ Paramètres sauvegardés avec succès');
+        }
+
+        if (isset($_POST['mj_backup_run_now'])) {
+            if (!class_exists(MjDatabaseBackup::class)) {
+                $notices[] = array('type' => 'error', 'message' => '❌ Module de sauvegarde introuvable.');
+            } else {
+                $backup_result = MjDatabaseBackup::run();
+
+                if (is_wp_error($backup_result)) {
+                    $notices[] = array('type' => 'error', 'message' => '❌ Sauvegarde impossible : ' . esc_html($backup_result->get_error_message()));
+                } else {
+                    $backup_status = MjDatabaseBackup::getLastStatus();
+                    $backup_filename = isset($backup_status['filename']) ? (string) $backup_status['filename'] : '';
+                    $success_message = '✅ Sauvegarde exécutée avec succès.';
+                    if ($backup_filename !== '') {
+                        $success_message = sprintf('✅ Sauvegarde exécutée avec succès : %s', $backup_filename);
+                    }
+                    $notices[] = array('type' => 'success', 'message' => $success_message);
+                }
+            }
         }
 
         if (isset($_POST['mj_events_google_sync_force']) && class_exists('MjEventGoogleCalendar')) {
@@ -526,6 +565,26 @@ function mj_settings_page() {
     $nc_root_folder_option = get_option('mj_member_nextcloud_root_folder', '');
     $nc_is_ready = Config::nextcloudIsReady();
 
+    $backup_enabled_option = get_option('mj_backup_enabled', '0') === '1';
+    $backup_frequency_option = get_option('mj_backup_frequency', 'daily');
+    if (!in_array($backup_frequency_option, array('daily', 'twicedaily', 'weekly'), true)) {
+        $backup_frequency_option = 'daily';
+    }
+    $backup_retention_option = max(1, (int) get_option('mj_backup_retention', 7));
+    $backup_folder_option = class_exists(MjDatabaseBackup::class)
+        ? MjDatabaseBackup::getBackupFolder()
+        : trim((string) get_option('mj_backup_nextcloud_folder', 'backups/database'), '/');
+    if ($backup_folder_option === '') {
+        $backup_folder_option = 'backups/database';
+    }
+    $backup_last_status = class_exists(MjDatabaseBackup::class) ? MjDatabaseBackup::getLastStatus() : array();
+    $backup_last_run = class_exists(MjDatabaseBackup::class) ? MjDatabaseBackup::getLastRun() : 0;
+    $backup_last_run_display = $backup_last_run > 0 ? wp_date('d/m/Y H:i:s', $backup_last_run) : 'Jamais';
+    $backup_last_filename = isset($backup_last_status['filename']) ? (string) $backup_last_status['filename'] : '';
+    $backup_last_message = isset($backup_last_status['message']) ? (string) $backup_last_status['message'] : 'Aucune exécution enregistrée.';
+    $backup_last_success = !empty($backup_last_status['success']);
+    $backup_table_count = class_exists(MjDatabaseBackup::class) ? count(MjDatabaseBackup::getMjTables()) : 0;
+
     $google_sync_enabled_flag = get_option('mj_events_google_sync_enabled', '0') === '1';
     $google_sync_token_display = '';
     $google_sync_feed_url = '';
@@ -647,6 +706,7 @@ function mj_settings_page() {
                 <div class="mj-settings-tabs__nav" role="tablist">
                     <button type="button" class="mj-settings-tabs__nav-btn is-active" id="mj-tab-button-stripe" data-tab-target="stripe" role="tab" aria-controls="mj-tab-stripe" aria-selected="true">💳 Paiements Stripe</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-calendar" data-tab-target="calendar" role="tab" aria-controls="mj-tab-calendar" aria-selected="false">📅 Agenda & Google</button>
+                    <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-backup" data-tab-target="backup" role="tab" aria-controls="mj-tab-backup" aria-selected="false">🗄️ Sauvegardes</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-account" data-tab-target="account" role="tab" aria-controls="mj-tab-account" aria-selected="false">👤 Espace membre</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-account-links" data-tab-target="account-links" role="tab" aria-controls="mj-tab-account-links" aria-selected="false">🔗 Liens Mon compte</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-messaging" data-tab-target="messaging" role="tab" aria-controls="mj-tab-messaging" aria-selected="false">✉️ Notifications &amp; envois</button>
@@ -930,6 +990,78 @@ function mj_settings_page() {
                                     <input type="text" id="mj-nc-root" name="mj_member_nextcloud_root_folder" value="<?php echo esc_attr($nc_root_folder_option); ?>" class="regular-text" placeholder="Documents/MJ" />
                                     <small style="color:#64748b; display:block; margin-top:4px;">Chemin relatif dans Nextcloud depuis la racine de l'utilisateur. Laissez vide pour utiliser le dossier racine complet.</small>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="mj-tab-backup" class="mj-settings-tabs__panel" data-tab="backup" role="tabpanel" aria-labelledby="mj-tab-button-backup" aria-hidden="true">
+                        <div style="background:#f8fafc; padding:20px; margin:20px 0; border-radius:8px; border-left:4px solid #334155;">
+                            <h2 style="margin-top:0;">🗄️ Sauvegardes de la base MJ</h2>
+                            <p style="color:#475569; font-size:14px; margin-top:0;">Exporte automatiquement toutes les tables <code>mj_*</code> au format SQL vers votre espace Nextcloud.</p>
+
+                            <div style="display:flex; flex-wrap:wrap; gap:20px; align-items:flex-start;">
+                                <div style="flex:1 1 320px; background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:16px;">
+                                    <h3 style="margin-top:0;">Paramètres</h3>
+
+                                    <p style="margin-bottom:16px;">
+                                        <label>
+                                            <input type="checkbox" name="mj_backup_enabled" value="1" <?php checked($backup_enabled_option); ?> />
+                                            Activer les sauvegardes automatiques via WP-Cron
+                                        </label><br>
+                                        <small style="color:#64748b;">Le plugin planifie un export SQL périodique et conserve un historique sur Nextcloud.</small>
+                                    </p>
+
+                                    <p style="margin-bottom:16px;">
+                                        <label for="mj-backup-frequency"><strong>Fréquence</strong></label><br>
+                                        <select name="mj_backup_frequency" id="mj-backup-frequency" class="regular-text">
+                                            <option value="daily" <?php selected($backup_frequency_option, 'daily'); ?>>Tous les jours</option>
+                                            <option value="twicedaily" <?php selected($backup_frequency_option, 'twicedaily'); ?>>Deux fois par jour</option>
+                                            <option value="weekly" <?php selected($backup_frequency_option, 'weekly'); ?>>Une fois par semaine</option>
+                                        </select>
+                                    </p>
+
+                                    <p style="margin-bottom:16px;">
+                                        <label for="mj-backup-retention"><strong>Nombre de sauvegardes à conserver</strong></label><br>
+                                        <input type="number" min="1" step="1" name="mj_backup_retention" id="mj-backup-retention" value="<?php echo esc_attr($backup_retention_option); ?>" class="small-text" />
+                                        <small style="color:#64748b; display:block; margin-top:4px;">Les fichiers SQL plus anciens seront supprimés automatiquement.</small>
+                                    </p>
+
+                                    <p style="margin-bottom:0;">
+                                        <label for="mj-backup-folder"><strong>Sous-dossier Nextcloud</strong></label><br>
+                                        <input type="text" name="mj_backup_nextcloud_folder" id="mj-backup-folder" value="<?php echo esc_attr($backup_folder_option); ?>" class="regular-text" placeholder="backups/database" />
+                                        <small style="color:#64748b; display:block; margin-top:4px;">Chemin relatif à l'intérieur du dossier racine Nextcloud configuré dans l'onglet Agenda & Google.</small>
+                                    </p>
+                                </div>
+
+                                <div style="flex:1 1 320px; background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:16px;">
+                                    <h3 style="margin-top:0;">État</h3>
+                                    <p style="margin:0 0 8px 0; color:<?php echo $nc_is_ready ? '#15803d' : '#b91c1c'; ?>;">
+                                        <strong>Nextcloud :</strong> <?php echo $nc_is_ready ? 'configuré' : 'non configuré'; ?>
+                                    </p>
+                                    <p style="margin:0 0 8px 0;"><strong>Tables mj_* détectées :</strong> <?php echo esc_html((string) $backup_table_count); ?></p>
+                                    <p style="margin:0 0 8px 0;"><strong>Dernière exécution :</strong> <?php echo esc_html($backup_last_run_display); ?></p>
+                                    <p style="margin:0 0 8px 0;"><strong>Dernier fichier :</strong> <?php echo esc_html($backup_last_filename !== '' ? $backup_last_filename : 'Aucun'); ?></p>
+                                    <p style="margin:0 0 14px 0; color:<?php echo $backup_last_success ? '#15803d' : '#475569'; ?>;">
+                                        <strong>Dernier statut :</strong> <?php echo esc_html($backup_last_message); ?>
+                                    </p>
+
+                                    <button type="submit" name="mj_backup_run_now" value="1" class="button button-secondary" <?php echo $nc_is_ready ? '' : 'disabled'; ?>>▶ Lancer une sauvegarde maintenant</button>
+
+                                    <?php if (!$nc_is_ready) : ?>
+                                        <p style="margin:10px 0 0 0; color:#b91c1c; font-size:13px;">Complétez d'abord la configuration Nextcloud dans l'onglet Agenda & Google.</p>
+                                    <?php else : ?>
+                                        <p style="margin:10px 0 0 0; color:#64748b; font-size:13px;">Le bouton exécute immédiatement l'export SQL et l'envoi vers Nextcloud.</p>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+
+                            <div style="margin-top:20px; padding:16px; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px;">
+                                <h3 style="margin-top:0;">Fonctionnement</h3>
+                                <ol style="margin:0 0 0 18px; color:#475569; font-size:13px;">
+                                    <li>Le plugin exporte toutes les tables commençant par <code>mj_</code>.</li>
+                                    <li>Un fichier <code>.sql</code> horodaté est envoyé dans le sous-dossier indiqué sur Nextcloud.</li>
+                                    <li>Seules les <?php echo esc_html((string) $backup_retention_option); ?> sauvegardes les plus récentes sont conservées.</li>
+                                </ol>
                             </div>
                         </div>
                     </div>

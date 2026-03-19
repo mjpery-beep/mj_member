@@ -27,6 +27,7 @@ final class Bootstrap
         // Core infrastructure
         'includes/security.php',
         'includes/data_retention.php',
+        'includes/backup.php',
         'includes/core/capabilities.php',
         'includes/core/assets.php',
         'includes/core/schema.php',
