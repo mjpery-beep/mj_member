@@ -286,7 +286,7 @@ if (!function_exists('current_time')) {
         }
 
         if ($type === 'mysql') {
-            return date('Y-m-d H:i:s', $now);
+            return gmdate('Y-m-d H:i:s', $now);
         }
 
         return $now;

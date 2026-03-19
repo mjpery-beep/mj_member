@@ -51,7 +51,7 @@ final class MjMembersAnonymizeTest extends TestCase
         $member = (object) array('id' => $member_id, 'role' => MjRoles::JEUNE);
         $wpdb = $this->createWpdbStub($member);
         $GLOBALS['wpdb'] = $wpdb;
-        $GLOBALS['__mj_current_time'] = strtotime('2025-12-05 09:10:11');
+        $GLOBALS['__mj_current_time'] = gmmktime(9, 10, 11, 12, 5, 2025);
 
         $result = MjMembers::anonymizePersonalData($member_id);
         $this->assertTrue($result);
