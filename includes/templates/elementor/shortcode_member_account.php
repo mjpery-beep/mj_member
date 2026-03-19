@@ -3375,3 +3375,5 @@ img.wp-smiley, img.emoji {
         return ob_get_clean();
     }
 }
+
+add_shortcode('mj_member_login', 'mj_member_render_login_shortcode');
