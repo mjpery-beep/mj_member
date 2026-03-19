@@ -47,6 +47,7 @@ final class CriticalHooksTest extends TestCase
         require_once $this->pluginPath('includes/templates/elementor/shortcode_member_account.php');
         $this->assertArrayHasKey('mj_member_login', $GLOBALS['__mj_test_shortcodes']);
     }
+    
 
     public function testPaymentConfirmationHookAndSuccessFlow(): void
     {
