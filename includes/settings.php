@@ -920,6 +920,7 @@ function mj_settings_page() {
                                     <input type="text" id="mj-nc-root" name="mj_member_nextcloud_root_folder" value="<?php echo esc_attr($nc_root_folder_option); ?>" class="regular-text" placeholder="Documents/MJ" />
                                     <small style="color:#64748b; display:block; margin-top:4px;">Chemin relatif dans Nextcloud depuis la racine de l'utilisateur. Laissez vide pour utiliser le dossier racine complet.</small>
                             </div>
+                                </div>
                         </div>
                     </div>
 
