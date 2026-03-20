@@ -26,6 +26,29 @@
 
     var TAB_LABELS = { payslip: 'tabPayslip', contract: 'tabContract', misc: 'tabMisc' };
 
+    function getInitialTab() {
+        try {
+            var search = new URLSearchParams(window.location.search || '');
+            var rawTab = (search.get('tab') || '').toLowerCase().trim();
+
+            if (rawTab === 'payslip' || rawTab === 'fiche-de-paie' || rawTab === 'fiche-de-paie') {
+                return 'payslip';
+            }
+
+            if (rawTab === 'contract' || rawTab === 'emploi' || rawTab === 'emploie') {
+                return 'contract';
+            }
+
+            if (rawTab === 'misc' || rawTab === 'divers') {
+                return 'misc';
+            }
+        } catch (e) {
+            // Ignore invalid URL parsing and keep default tab.
+        }
+
+        return 'payslip';
+    }
+
     function formatBytes(bytes) {
         if (bytes < 1024) return bytes + ' o';
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' Ko';
@@ -258,7 +281,7 @@
         var cfg = config;
         var i18n = cfg.i18n;
 
-        var _t = useState('payslip');
+        var _t = useState(getInitialTab());
         var activeTab = _t[0], setActiveTab = _t[1];
 
         var _d = useState(cfg.documents || []);

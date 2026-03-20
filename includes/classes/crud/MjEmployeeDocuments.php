@@ -189,7 +189,34 @@ class MjEmployeeDocuments extends MjTools implements CrudRepositoryInterface
         if ($result === false) {
             return false;
         }
-        return (int) $wpdb->insert_id;
+
+        $insertId = (int) $wpdb->insert_id;
+
+        if ($insertId > 0 && $insert['member_id'] > 0) {
+            /**
+             * Fires after an employee document is successfully created.
+             *
+             * Centralizing this hook here keeps notification behavior aligned
+             * across the registration manager and the dedicated employee
+             * documents widget.
+             *
+             * @param int    $insertId   The new document ID.
+             * @param int    $memberId   The member the document belongs to.
+             * @param string $docType    Document type (payslip, contract, misc).
+             * @param string $label      Document label.
+             * @param int    $uploadedBy Member ID of the uploader.
+             */
+            do_action(
+                'mj_member_employee_document_uploaded',
+                $insertId,
+                (int) $insert['member_id'],
+                (string) $insert['doc_type'],
+                (string) $insert['label'],
+                (int) $insert['uploaded_by']
+            );
+        }
+
+        return $insertId;
     }
 
     /* ------------------------------------------------------------------ *

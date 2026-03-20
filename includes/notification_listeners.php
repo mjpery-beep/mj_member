@@ -2365,6 +2365,13 @@ if (!function_exists('mj_member_notification_on_employee_document_uploaded')) {
                 : __('Divers', 'mj-member');
         }
 
+        $tab = 'divers';
+        if ($doc_type === MjEmployeeDocuments::TYPE_PAYSLIP) {
+            $tab = 'fiche-de-paie';
+        } elseif ($doc_type === MjEmployeeDocuments::TYPE_CONTRACT) {
+            $tab = 'emploi';
+        }
+
         $notification_data = array(
             'type'    => MjNotificationTypes::EMPLOYEE_DOCUMENT_UPLOADED,
             'title'   => __('📄 Nouveau document', 'mj-member'),
@@ -2372,7 +2379,7 @@ if (!function_exists('mj_member_notification_on_employee_document_uploaded')) {
                 __('Un nouveau document a été ajouté à ton dossier : %s.', 'mj-member'),
                 $description
             ),
-            'url'     => home_url('/mon-compte/documents-employe/'),
+            'url'     => add_query_arg('tab', $tab, home_url('/mon-compte/documents-employe/')),
             'context' => 'employee_documents',
             'source'  => 'system',
             'payload' => array(
