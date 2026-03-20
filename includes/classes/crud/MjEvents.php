@@ -340,6 +340,19 @@ class MjEvents implements CrudRepositoryInterface {
             return new WP_Error('mj_event_invalid_payload', 'Format de donnees invalide pour l\'evenement.');
         }
 
+        if (self::supports_created_by_member_column()) {
+            $created_by_member_id = array_key_exists('created_by_member_id', $data)
+                ? (int) $data['created_by_member_id']
+                : 0;
+
+            if ($created_by_member_id <= 0) {
+                $resolved_member_id = self::resolve_current_member_id();
+                if ($resolved_member_id > 0) {
+                    $data['created_by_member_id'] = $resolved_member_id;
+                }
+            }
+        }
+
         global $wpdb;
         $table = self::table_name();
 
@@ -398,6 +411,33 @@ class MjEvents implements CrudRepositoryInterface {
         }
 
         return $event_id;
+    }
+
+    /**
+     * @return int
+     */
+    private static function resolve_current_member_id() {
+        if (function_exists('mj_member_get_current_member')) {
+            $member = mj_member_get_current_member();
+            if (is_object($member) && isset($member->id)) {
+                return (int) $member->id;
+            }
+            if (is_array($member) && isset($member['id'])) {
+                return (int) $member['id'];
+            }
+        }
+
+        $wp_user_id = get_current_user_id();
+        if ($wp_user_id <= 0 || !class_exists(MjMembers::class)) {
+            return 0;
+        }
+
+        $member = MjMembers::getByWpUserId($wp_user_id);
+        if (!$member || !isset($member->id)) {
+            return 0;
+        }
+
+        return (int) $member->id;
     }
 
     /**
