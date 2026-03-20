@@ -1891,6 +1891,10 @@
         var renameSaving = _stRenameSaving[0];
         var setRenameSaving = _stRenameSaving[1];
 
+        var _stPreviewDoc = useState(null);
+        var previewDoc = _stPreviewDoc[0];
+        var setPreviewDoc = _stPreviewDoc[1];
+
         // String helpers
         var sectionTitle      = getString(strings, 'employeeDocsTitle', 'Documents employé');
         var emptyLabel        = getString(strings, 'employeeDocsEmpty', 'Aucun document pour ce membre.');
@@ -1899,7 +1903,10 @@
         var deleteLabel       = getString(strings, 'employeeDocsDelete', 'Supprimer');
         var confirmDeleteMsg  = getString(strings, 'employeeDocsConfirmDelete', 'Êtes-vous sûr de vouloir supprimer ce document ?');
         var downloadLabel     = getString(strings, 'employeeDocsDownload', 'Télécharger');
+        var previewLabel      = getString(strings, 'employeeDocsPreview', 'Aperçu');
         var renameLabel       = getString(strings, 'employeeDocsRename', 'Renommer');
+        var previewTitleLabel = getString(strings, 'employeeDocsPreviewTitle', 'Aperçu du document');
+        var previewUnavailableLabel = getString(strings, 'employeeDocsPreviewUnavailable', 'Ce format ne peut pas être prévisualisé.');
         var labelLabel        = getString(strings, 'employeeDocsLabel', 'Libellé');
         var typeLabel         = getString(strings, 'employeeDocsType', 'Type');
         var dateLabel         = getString(strings, 'employeeDocsDate', 'Date du document');
@@ -2107,6 +2114,38 @@
             if (mime.indexOf('image') !== -1) return '\uD83D\uDDBC\uFE0F';
             return '\uD83D\uDCC3';
         }
+
+        function isImageMime(mime) {
+            return !!mime && mime.indexOf('image/') === 0;
+        }
+
+        function isPdfMime(mime) {
+            return !!mime && mime.indexOf('pdf') !== -1;
+        }
+
+        function canPreview(doc) {
+            var mime = doc && doc.mimeType ? String(doc.mimeType).toLowerCase() : '';
+            return isImageMime(mime) || isPdfMime(mime);
+        }
+
+        function closePreview() {
+            setPreviewDoc(null);
+        }
+
+        function handlePreviewBackdropClick(e) {
+            if (e && e.target === e.currentTarget) {
+                closePreview();
+            }
+        }
+
+        useEffect(function () {
+            if (previewDoc) {
+                document.body.style.overflow = 'hidden';
+            }
+            return function () {
+                document.body.style.overflow = '';
+            };
+        }, [previewDoc]);
 
         // Build payslip period label
         function payslipPeriod(doc) {
@@ -2335,6 +2374,15 @@
                                 h('span', { class: 'mj-btn__icon', dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' } }),
                                 renameLabel,
                             ]),
+                            h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                onClick: function () { setPreviewDoc(doc); },
+                                title: previewLabel,
+                            }, [
+                                h('span', { class: 'mj-btn__icon', dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>' } }),
+                                previewLabel,
+                            ]),
                             h('a', {
                                 href: downloadUrl(doc.id),
                                 target: '_blank',
@@ -2358,6 +2406,54 @@
                     ]);
                 })
             ),
+
+            previewDoc && h('div', {
+                class: 'mj-regmgr-modal-backdrop',
+                onClick: handlePreviewBackdropClick,
+            }, [
+                h('div', { class: 'mj-regmgr-modal mj-regmgr-modal--small mj-regmgr-employee-docs__preview-modal' }, [
+                    h('div', { class: 'mj-regmgr-modal__header' }, [
+                        h('h2', { class: 'mj-regmgr-modal__title' }, previewTitleLabel),
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-regmgr-modal__close',
+                            onClick: closePreview,
+                            'aria-label': getString(strings, 'close', 'Fermer'),
+                        }, [
+                            h('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                h('line', { x1: 18, y1: 6, x2: 6, y2: 18 }),
+                                h('line', { x1: 6, y1: 6, x2: 18, y2: 18 }),
+                            ]),
+                        ]),
+                    ]),
+                    h('div', { class: 'mj-regmgr-modal__body mj-regmgr-employee-docs__preview-body' }, [
+                        h('p', { class: 'mj-regmgr-employee-docs__preview-name' }, previewDoc.label || previewDoc.originalName || ''),
+                        canPreview(previewDoc)
+                            ? h('div', { class: 'mj-regmgr-employee-docs__preview-frame-wrap' }, [
+                                isImageMime(String(previewDoc.mimeType || '').toLowerCase())
+                                    ? h('img', {
+                                        class: 'mj-regmgr-employee-docs__preview-image',
+                                        src: downloadUrl(previewDoc.id),
+                                        alt: previewDoc.label || previewDoc.originalName || previewTitleLabel,
+                                    })
+                                    : h('iframe', {
+                                        class: 'mj-regmgr-employee-docs__preview-frame',
+                                        src: downloadUrl(previewDoc.id),
+                                        title: previewDoc.label || previewDoc.originalName || previewTitleLabel,
+                                    }),
+                            ])
+                            : h('p', { class: 'mj-regmgr-member-detail__empty' }, previewUnavailableLabel),
+                        h('div', { class: 'mj-regmgr-employee-docs__preview-actions' }, [
+                            h('a', {
+                                href: downloadUrl(previewDoc.id),
+                                target: '_blank',
+                                rel: 'noopener noreferrer',
+                                class: 'mj-btn mj-btn--primary mj-btn--small',
+                            }, downloadLabel),
+                        ]),
+                    ]),
+                ]),
+            ]),
         ]);
     }
 

@@ -15,6 +15,7 @@ $isPreview = function_exists('is_elementor_preview') && is_elementor_preview();
 // Resolve member and check coordinator role
 $hasAccess = false;
 $memberRole = '';
+$currentMemberId = 0;
 
 if (!$isPreview) {
     $currentUserId = get_current_user_id();
@@ -22,6 +23,7 @@ if (!$isPreview) {
         $memberObj = MjMembers::getByWpUserId($currentUserId);
         if ($memberObj && !empty($memberObj->role)) {
             $memberRole = (string) $memberObj->role;
+            $currentMemberId = isset($memberObj->id) ? (int) $memberObj->id : 0;
             $hasAccess = MjRoles::isCoordinateur($memberRole)
                 || current_user_can('manage_options');
         }
@@ -38,9 +40,11 @@ if (!$hasAccess && !$isPreview) {
 AssetsManager::requirePackage('hours-dashboard');
 
 $showEditTab = true;
+$onlyCurrentMember = false;
 if (isset($widget) && method_exists($widget, 'get_settings_for_display')) {
     $widgetSettings = $widget->get_settings_for_display();
     $showEditTab = !empty($widgetSettings['show_edit_tab']) && $widgetSettings['show_edit_tab'] === 'yes';
+    $onlyCurrentMember = !empty($widgetSettings['only_current_member']) && $widgetSettings['only_current_member'] === 'yes';
 }
 
 // Build the dashboard config using the same logic as the admin page
@@ -165,8 +169,18 @@ if ($isPreview) {
     );
 } else {
     // Real data – reuse HoursPage's preparation logic
-    $config = HoursPage::prepareFrontDashboardConfig($showEditTab);
+    $targetMemberId = ($onlyCurrentMember && $currentMemberId > 0) ? $currentMemberId : null;
+    $config = HoursPage::prepareFrontDashboardConfig($showEditTab, $targetMemberId);
 }
+
+if ($onlyCurrentMember && $isPreview) {
+    $previewMemberId = isset($config['data']['members'][0]['id']) ? (int) $config['data']['members'][0]['id'] : 0;
+    if ($previewMemberId > 0) {
+        $config = HoursPage::filterDashboardConfigForMember($config, $previewMemberId);
+    }
+}
+
+$config['onlyCurrentMember'] = $onlyCurrentMember;
 
 $configJson = wp_json_encode($config);
 if (!is_string($configJson)) {

@@ -1,7 +1,6 @@
 <?php
 
 use Mj\Member\Classes\MjDatabaseBackup;
-use Mj\Member\Classes\MjGoogleDrive;
 use Mj\Member\Core\Config;
 
 // Register TinyMCE table plugin from CDN
@@ -159,34 +158,6 @@ function mj_settings_page() {
         $regdoc_footer = isset($_POST['mj_regdoc_footer']) ? wp_kses_post(wp_unslash($_POST['mj_regdoc_footer'])) : '';
         update_option('mj_regdoc_header', $regdoc_header);
         update_option('mj_regdoc_footer', $regdoc_footer);
-
-        $drive_root_folder = isset($_POST['mj_documents_google_root_folder_id'])
-            ? sanitize_text_field(wp_unslash($_POST['mj_documents_google_root_folder_id']))
-            : '';
-        $drive_service_account_json = isset($_POST['mj_documents_google_service_account_json'])
-            ? trim((string) wp_unslash($_POST['mj_documents_google_service_account_json']))
-            : '';
-        $drive_impersonated_user = isset($_POST['mj_documents_google_impersonate_user'])
-            ? sanitize_email(wp_unslash($_POST['mj_documents_google_impersonate_user']))
-            : '';
-
-        $drive_credentials_valid = true;
-        if ($drive_service_account_json !== '') {
-            $decoded_drive_credentials = json_decode($drive_service_account_json, true);
-            if (!is_array($decoded_drive_credentials) || empty($decoded_drive_credentials['client_email']) || empty($decoded_drive_credentials['private_key'])) {
-                $notices[] = array(
-                    'type' => 'error',
-                    'message' => '[Erreur] Le JSON du compte de service Google Drive est invalide. Vérifiez la syntaxe et collez le fichier complet.',
-                );
-                $drive_credentials_valid = false;
-            }
-        }
-
-        update_option('mj_documents_google_root_folder_id', $drive_root_folder);
-        update_option('mj_documents_google_impersonate_user', $drive_impersonated_user);
-        if ($drive_credentials_valid) {
-            update_option('mj_documents_google_service_account_json', $drive_service_account_json);
-        }
 
         // --- Nextcloud settings ---
         $nc_url = isset($_POST['mj_member_nextcloud_url'])
@@ -552,12 +523,6 @@ function mj_settings_page() {
         $photo_grimlins_prompt_option = __('Transforme cette personne en version "Grimlins" fun et stylisée, avec un rendu illustratif détaillé, sans éléments effrayants.', 'mj-member');
     }
 
-    $drive_root_folder_option = get_option('mj_documents_google_root_folder_id', '');
-    $drive_service_account_option = get_option('mj_documents_google_service_account_json', '');
-    $drive_impersonated_user_option = get_option('mj_documents_google_impersonate_user', '');
-    $drive_sdk_available = MjGoogleDrive::isAvailable();
-    $drive_configuration_ready = Config::googleDriveIsReady() && $drive_root_folder_option !== '' && $drive_sdk_available;
-
     // Nextcloud options
     $nc_url_option = get_option('mj_member_nextcloud_url', '');
     $nc_user_option = get_option('mj_member_nextcloud_user', '');
@@ -705,7 +670,8 @@ function mj_settings_page() {
             <div class="mj-settings-tabs">
                 <div class="mj-settings-tabs__nav" role="tablist">
                     <button type="button" class="mj-settings-tabs__nav-btn is-active" id="mj-tab-button-stripe" data-tab-target="stripe" role="tab" aria-controls="mj-tab-stripe" aria-selected="true">💳 Paiements Stripe</button>
-                    <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-calendar" data-tab-target="calendar" role="tab" aria-controls="mj-tab-calendar" aria-selected="false">📅 Agenda & Google</button>
+                    <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-calendar" data-tab-target="calendar" role="tab" aria-controls="mj-tab-calendar" aria-selected="false">📅 Agenda</button>
+                    <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-nextcloud" data-tab-target="nextcloud" role="tab" aria-controls="mj-tab-nextcloud" aria-selected="false">☁️ Nextcloud</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-backup" data-tab-target="backup" role="tab" aria-controls="mj-tab-backup" aria-selected="false">🗄️ Sauvegardes</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-account" data-tab-target="account" role="tab" aria-controls="mj-tab-account" aria-selected="false">👤 Espace membre</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-account-links" data-tab-target="account-links" role="tab" aria-controls="mj-tab-account-links" aria-selected="false">🔗 Liens Mon compte</button>
@@ -909,50 +875,14 @@ function mj_settings_page() {
                                 </div>
                             </div>
 
-                            <div style="margin-top:20px; padding:16px; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px;">
-                                <h3 style="margin-top:0; margin-bottom:10px; color:#0f172a;">📁 Google Drive – Gestion des documents</h3>
-                                <p style="margin-top:0; color:#475569; font-size:13px;">Ces paramètres alimentent le widget «&nbsp;Documents&nbsp;» et l'intégration Google Drive. Ils nécessitent la bibliothèque PHP <code>google/apiclient</code> (Google API Client) préinstallée sur votre hébergement.</p>
+                        </div>
+                    </div>
 
-                                <?php if (!$drive_sdk_available) : ?>
-                                    <p style="margin:0 0 12px 0; color:#b91c1c; font-weight:600;">
-                                        <?php esc_html_e('Le SDK Google Drive n’est pas chargé. Installez le package composer "google/apiclient" et assurez-vous que vendor/autoload.php est inclus.', 'mj-member'); ?>
-                                    </p>
-                                <?php elseif ($drive_configuration_ready) : ?>
-                                    <p style="margin:0 0 12px 0; color:#15803d; font-weight:600;">Configuration Google Drive opérationnelle.</p>
-                                <?php else : ?>
-                                    <p style="margin:0 0 12px 0; color:#b91c1c; font-weight:600;">Configuration Google Drive incomplète. Complétez les champs ci-dessous.</p>
-                                <?php endif; ?>
-
-                                <ol style="margin:0 0 16px 18px; color:#475569; font-size:13px;">
-                                    <li>Dans Google Cloud Console : créez un projet, activez l'API Drive puis générez un <strong>compte de service</strong> (format JSON).</li>
-                                    <li>Partagez le dossier Google Drive cible avec l'adresse e-mail du compte de service en lui accordant au minimum un accès «&nbsp;Contributeur&nbsp;».</li>
-                                    <li>Copiez l'identifiant du dossier (la partie après <code>/folders/</code> dans l'URL) et collez-le ci-dessous.</li>
-                                    <li>Collez le fichier JSON du compte de service (contenu complet) et, si nécessaire, indiquez une adresse e-mail à impersoner (compte Google Workspace autorisé).</li>
-                                </ol>
-
-                                <div style="display:flex; flex-wrap:wrap; gap:16px;">
-                                    <div style="flex:1 1 260px;">
-                                        <label for="mj-documents-google-root" style="font-weight:600; display:block; margin-bottom:4px;">ID du dossier racine</label>
-                                        <input type="text" id="mj-documents-google-root" name="mj_documents_google_root_folder_id" value="<?php echo esc_attr($drive_root_folder_option); ?>" class="regular-text" placeholder="1AbCDeFGhijkLmNop" />
-                                        <small style="color:#64748b; display:block; margin-top:4px;">Copiez l'identifiant figurant dans l'URL <code>https://drive.google.com/drive/folders/&lt;ID&gt;</code>.</small>
-                                    </div>
-                                    <div style="flex:1 1 260px;">
-                                        <label for="mj-documents-google-impersonate" style="font-weight:600; display:block; margin-bottom:4px;">Utilisateur Google à impersoner (facultatif)</label>
-                                        <input type="email" id="mj-documents-google-impersonate" name="mj_documents_google_impersonate_user" value="<?php echo esc_attr($drive_impersonated_user_option); ?>" class="regular-text" placeholder="animateur@votre-domaine.be" />
-                                        <small style="color:#64748b; display:block; margin-top:4px;">Uniquement requis si votre Drive est géré par Google Workspace et que le compte de service doit agir au nom d'un utilisateur.</small>
-                                    </div>
-                                </div>
-
-                                <div style="margin-top:16px;">
-                                    <label for="mj-documents-google-json" style="font-weight:600; display:block; margin-bottom:4px;">JSON du compte de service</label>
-                                    <textarea id="mj-documents-google-json" name="mj_documents_google_service_account_json" rows="8" class="large-text code" placeholder="{&#10;  &quot;type&quot;: &quot;service_account&quot;,&#10;  ...&#10;}"><?php echo esc_textarea($drive_service_account_option); ?></textarea>
-                                    <small style="color:#64748b; display:block; margin-top:4px;">Collez le contenu complet du fichier <code>*.json</code> téléchargé depuis Google Cloud. Enregistré tel quel (sécurisé en base de données).</small>
-                                </div>
-                            </div>
-
-                            <div style="margin-top:20px; padding:16px; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px;">
+                    <div id="mj-tab-nextcloud" class="mj-settings-tabs__panel" data-tab="nextcloud" role="tabpanel" aria-labelledby="mj-tab-button-nextcloud" aria-hidden="true">
+                        <div style="background:#f1f5f9; padding:20px; margin:20px 0; border-radius:8px; border-left:4px solid #16a34a;">
+                            <div style="padding:16px; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px;">
                                 <h3 style="margin-top:0; margin-bottom:10px; color:#0f172a;">☁️ Nextcloud – Drive de documents</h3>
-                                <p style="margin-top:0; color:#475569; font-size:13px;">Ces paramètres connectent le widget «&nbsp;Documents&nbsp;» à votre instance Nextcloud auto-hébergée. Si Nextcloud est configuré, il remplace Google Drive comme backend de stockage. L'édition de documents fonctionne via Collabora Online ou OnlyOffice (à installer sur Nextcloud).</p>
+                                <p style="margin-top:0; color:#475569; font-size:13px;">Ces paramètres connectent le widget «&nbsp;Documents&nbsp;» à votre instance Nextcloud auto-hébergée. L'édition de documents fonctionne via Collabora Online ou OnlyOffice, à installer côté Nextcloud.</p>
 
                                 <?php if ($nc_is_ready) : ?>
                                     <p style="margin:0 0 12px 0; color:#15803d; font-weight:600;">✅ Connexion Nextcloud opérationnelle.</p>
@@ -989,7 +919,6 @@ function mj_settings_page() {
                                     <label for="mj-nc-root" style="font-weight:600; display:block; margin-bottom:4px;">Dossier racine (facultatif)</label>
                                     <input type="text" id="mj-nc-root" name="mj_member_nextcloud_root_folder" value="<?php echo esc_attr($nc_root_folder_option); ?>" class="regular-text" placeholder="Documents/MJ" />
                                     <small style="color:#64748b; display:block; margin-top:4px;">Chemin relatif dans Nextcloud depuis la racine de l'utilisateur. Laissez vide pour utiliser le dossier racine complet.</small>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -1029,7 +958,7 @@ function mj_settings_page() {
                                     <p style="margin-bottom:0;">
                                         <label for="mj-backup-folder"><strong>Sous-dossier Nextcloud</strong></label><br>
                                         <input type="text" name="mj_backup_nextcloud_folder" id="mj-backup-folder" value="<?php echo esc_attr($backup_folder_option); ?>" class="regular-text" placeholder="backups/database" />
-                                        <small style="color:#64748b; display:block; margin-top:4px;">Chemin relatif à l'intérieur du dossier racine Nextcloud configuré dans l'onglet Agenda & Google.</small>
+                                        <small style="color:#64748b; display:block; margin-top:4px;">Chemin relatif à l'intérieur du dossier racine Nextcloud configuré dans l'onglet Nextcloud.</small>
                                     </p>
                                 </div>
 
@@ -1048,7 +977,7 @@ function mj_settings_page() {
                                     <button type="submit" name="mj_backup_run_now" value="1" class="button button-secondary" <?php echo $nc_is_ready ? '' : 'disabled'; ?>>▶ Lancer une sauvegarde maintenant</button>
 
                                     <?php if (!$nc_is_ready) : ?>
-                                        <p style="margin:10px 0 0 0; color:#b91c1c; font-size:13px;">Complétez d'abord la configuration Nextcloud dans l'onglet Agenda & Google.</p>
+                                        <p style="margin:10px 0 0 0; color:#b91c1c; font-size:13px;">Complétez d'abord la configuration Nextcloud dans l'onglet Nextcloud.</p>
                                     <?php else : ?>
                                         <p style="margin:10px 0 0 0; color:#64748b; font-size:13px;">Le bouton exécute immédiatement l'export SQL et l'envoi vers Nextcloud.</p>
                                     <?php endif; ?>

@@ -51,6 +51,18 @@ class Mj_Member_Elementor_Hours_Dashboard_Widget extends Widget_Base {
             )
         );
 
+        $this->add_control(
+            'only_current_member',
+            array(
+                'label' => __('N\'afficher que les données du membre connecté', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => '',
+            )
+        );
+
         $this->end_controls_section();
 
         $this->register_visibility_controls();

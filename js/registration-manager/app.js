@@ -72,6 +72,7 @@
 
     var EventsSidebar = EventsComps.EventsSidebar;
     var RegistrationsList = RegComps.RegistrationsList;
+    var MemberAvatar = RegComps.MemberAvatar;
     var AttendanceSheet = AttendanceComps.AttendanceSheet;
     var AddParticipantModal = Modals.AddParticipantModal;
     var CreateEventModal = Modals.CreateEventModal;
@@ -99,6 +100,7 @@
         var loading = props.loading;
         var deletingEvent = props.deletingEvent;
         var onDeleteEvent = props.onDeleteEvent;
+        var onOpenMember = typeof props.onOpenMember === 'function' ? props.onOpenMember : null;
         var canDeleteEvent = props.canDeleteEvent !== undefined ? props.canDeleteEvent : (config && config.canDeleteEvent);
 
         if (!event || loading) {
@@ -192,6 +194,7 @@
         }, [registrations, attendanceMap, occurrences]);
 
         var emoji = typeof event.emoji === 'string' ? event.emoji : '';
+        var creator = event && event.creator ? event.creator : null;
         var fallbackTitle = getString(strings, 'eventUntitled', 'Sans titre');
         var displayTitle = event.title && event.title !== '' ? event.title : fallbackTitle;
         var detailTitleLabel = emoji ? (emoji + ' ' + displayTitle).trim() : displayTitle;
@@ -244,6 +247,27 @@
                             h('circle', { cx: 12, cy: 10, r: 3 }),
                         ]),
                         h('span', null, event.location.name),
+                    ]),
+
+                    // Créateur
+                    creator && h('div', { class: 'mj-regmgr-event-detail__row mj-regmgr-event-detail__row--creator' }, [
+                        h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                            h('path', { d: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' }),
+                            h('circle', { cx: 12, cy: 7, r: 4 }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-event-detail__creator' }, [
+                            MemberAvatar && h(MemberAvatar, { member: creator, size: 'small' }),
+                            h('div', { class: 'mj-regmgr-event-detail__creator-meta' }, [
+                                h('span', { class: 'mj-regmgr-event-detail__creator-label' }, getString(strings, 'eventCreatedBy', 'Créé par')),
+                                h('span', { class: 'mj-regmgr-event-detail__creator-name' }, creator.name || getString(strings, 'unknownMember', 'Membre inconnu')),
+                            ]),
+                            onOpenMember && creator.id && h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                onClick: function () { onOpenMember({ id: creator.id }); },
+                                title: getString(strings, 'viewMemberProfile', 'Ouvrir la fiche membre'),
+                            }, getString(strings, 'openMember', 'Fiche')),
+                        ]),
                     ]),
 
                     // Capacité
@@ -7556,6 +7580,7 @@
                                 strings: strings,
                                 config: config,
                                 loading: registrationsLoading || !eventDetails,
+                                onOpenMember: handleViewMemberFromRegistration,
                                 onDeleteEvent: handleDeleteEvent,
                                 canDeleteEvent: config.canDeleteEvent,
                                 deletingEvent: deletingEvent,

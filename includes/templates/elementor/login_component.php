@@ -1391,3 +1391,7 @@ if (!function_exists('mj_member_render_login_shortcode')) {
         ));
     }
 }
+
+if (function_exists('add_shortcode') && function_exists('mj_member_render_login_shortcode')) {
+    add_shortcode('mj_member_login', 'mj_member_render_login_shortcode');
+}

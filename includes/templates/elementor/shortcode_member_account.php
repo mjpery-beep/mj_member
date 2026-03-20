@@ -6,6 +6,8 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+require_once __DIR__ . '/login_component.php';
+
 if (!function_exists('mj_member_get_account_redirect')) {
     /**
      * Détermine l'URL de redirection par défaut vers l'espace membre.
@@ -45,7 +47,7 @@ if (!function_exists('mj_member_get_account_redirect')) {
             if (empty($profile_permalink) && !empty($profile_link['slug'])) {
                 $slug = ltrim((string) $profile_link['slug'], '/');
                 if ($slug !== '') {
-                    $candidates[] = home_url('/' + $slug);
+                    $candidates[] = home_url('/' . $slug);
                 }
             }
         }
@@ -262,13 +264,14 @@ if (!function_exists('mj_member_account_normalize_birth_date')) {
             return '';
         }
 
+        // Keep canonical ISO dates unchanged to avoid timezone shifts.
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw)) {
+            return $raw;
+        }
+
         $timestamp = strtotime($raw);
         if ($timestamp) {
             return gmdate('Y-m-d', $timestamp);
-        }
-
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw)) {
-            return $raw;
         }
 
         return '';
@@ -1870,6 +1873,10 @@ if (!function_exists('mj_member_render_account_component')) {
     padding: 48px 24px;
 }
 
+if (function_exists('add_shortcode') && function_exists('mj_member_render_account_component')) {
+    add_shortcode('mj_member_account', 'mj_member_render_account_component');
+}
+
             .mj-hidden {
                 display: none !important;
             }
@@ -3375,5 +3382,3 @@ img.wp-smiley, img.emoji {
         return ob_get_clean();
     }
 }
-
-add_shortcode('mj_member_login', 'mj_member_render_login_shortcode');

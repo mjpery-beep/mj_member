@@ -1731,7 +1731,8 @@ function mj_member_run_schema_upgrade() {
             'requires_validation',
             'free_participation',
             'registration_payload',
-            'emoji'
+            'emoji',
+            'created_by_member_id'
         );
 
         foreach ($event_critical_columns as $column) {
@@ -1921,6 +1922,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_75($wpdb);
     mj_member_upgrade_to_2_76($wpdb);
     mj_member_upgrade_to_2_77($wpdb);
+    mj_member_upgrade_to_2_78($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -2489,6 +2491,7 @@ function mj_member_upgrade_to_2_2($wpdb) {
         registration_payload longtext DEFAULT NULL,
         location_id bigint(20) unsigned DEFAULT NULL,
         animateur_id bigint(20) unsigned DEFAULT NULL,
+        created_by_member_id bigint(20) unsigned DEFAULT NULL,
         article_id bigint(20) unsigned DEFAULT NULL,
         schedule_mode varchar(20) NOT NULL DEFAULT 'fixed',
         schedule_payload longtext DEFAULT NULL,
@@ -2506,6 +2509,7 @@ function mj_member_upgrade_to_2_2($wpdb) {
         KEY idx_date_debut (date_debut),
         KEY idx_location (location_id),
         KEY idx_animateur (animateur_id),
+        KEY idx_created_by_member (created_by_member_id),
         KEY idx_article (article_id)
     ) $charset_collate;";
 
@@ -6061,5 +6065,25 @@ function mj_member_upgrade_to_2_77($wpdb) {
         if (!mj_member_index_exists($expenses_table, 'idx_member_expenses')) {
             $wpdb->query("ALTER TABLE `{$expenses_table}` ADD INDEX idx_member_expenses (member_id)");
         }
+    }
+}
+
+/**
+ * Migration 2.78: Track event creator member id.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_78($wpdb) {
+    $events_table = mj_member_get_events_table_name();
+    if (!$events_table || !mj_member_table_exists($events_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($events_table, 'created_by_member_id')) {
+        $wpdb->query("ALTER TABLE {$events_table} ADD COLUMN created_by_member_id bigint(20) unsigned DEFAULT NULL AFTER animateur_id");
+    }
+
+    if (!mj_member_index_exists($events_table, 'idx_created_by_member')) {
+        $wpdb->query("ALTER TABLE {$events_table} ADD INDEX idx_created_by_member (created_by_member_id)");
     }
 }

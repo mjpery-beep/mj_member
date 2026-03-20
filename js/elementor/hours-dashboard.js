@@ -429,6 +429,7 @@
         var monthlyByM  = ts.months_by_member || {};
         var weeklyByM   = ts.weeks_by_member  || {};
         var showEdit = cfg.showEditTab !== false;
+        var onlyCurrentMember = cfg.onlyCurrentMember === true;
 
         /* state */
         var selArr = _p.useState(members.length > 0 ? members[0].id : 0);
@@ -506,13 +507,13 @@
         return h('div', { className: 'mj-hd__content' },
 
             /* KPI strip */
-            h(KpiStrip, { totals: totals, i18n: i18n }),
+            !onlyCurrentMember ? h(KpiStrip, { totals: totals, i18n: i18n }) : null,
 
             /* Member selector */
-            h(MemberSelector, {
+            !onlyCurrentMember ? h(MemberSelector, {
                 members: members, selectedId: selId, onChange: setSelId,
                 label: i18n.memberSelectLabel, helper: i18n.memberSelectHelper,
-            }),
+            }) : null,
 
             /* Tabs */
             canEdit ? h('div', { className: 'mj-hd__tabs', role: 'tablist' },

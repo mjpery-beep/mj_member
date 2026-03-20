@@ -36,6 +36,7 @@ class MjEvents implements CrudRepositoryInterface {
         'cover_id' => '%d',
         'location_id' => '%d',
         'animateur_id' => '%d',
+        'created_by_member_id' => '%d',
         'article_id' => '%d',
         'allow_guardian_registration' => '%d',
         'requires_validation' => '%d',
@@ -469,6 +470,12 @@ class MjEvents implements CrudRepositoryInterface {
             $nullable_columns[] = 'animateur_id';
             unset($data['animateur_id']);
         }
+        if (!self::supports_created_by_member_column()) {
+            unset($data['created_by_member_id']);
+        } elseif (array_key_exists('created_by_member_id', $data) && (int) $data['created_by_member_id'] <= 0) {
+            $nullable_columns[] = 'created_by_member_id';
+            unset($data['created_by_member_id']);
+        }
         if (array_key_exists('article_id', $data) && (int) $data['article_id'] <= 0) {
             $nullable_columns[] = 'article_id';
             unset($data['article_id']);
@@ -707,6 +714,7 @@ class MjEvents implements CrudRepositoryInterface {
             'free_participation' => 0,
             'registration_payload' => array(),
             'animateur_id' => 0,
+            'created_by_member_id' => 0,
             'animateur_ids' => array(),
             'description' => '',
             'age_min' => 12,
@@ -744,6 +752,10 @@ class MjEvents implements CrudRepositoryInterface {
                 continue;
             }
 
+            if ($column === 'created_by_member_id' && !self::supports_created_by_member_column()) {
+                continue;
+            }
+
             if ($column === 'emoji' && !self::supports_emoji_column()) {
                 continue;
             }
@@ -766,13 +778,14 @@ class MjEvents implements CrudRepositoryInterface {
                 case 'cover_id':
                 case 'location_id':
                 case 'animateur_id':
+                case 'created_by_member_id':
                 case 'article_id':
                 case 'age_min':
                 case 'age_max':
                 case 'allow_guardian_registration':
                 case 'requires_validation':
                     $value = (int) $value;
-                    if ($value <= 0 && in_array($column, array('cover_id', 'location_id', 'animateur_id'), true)) {
+                    if ($value <= 0 && in_array($column, array('cover_id', 'location_id', 'animateur_id', 'created_by_member_id'), true)) {
                         continue 2;
                     }
                     if ($column === 'article_id' && $value <= 0) {
@@ -1135,6 +1148,23 @@ class MjEvents implements CrudRepositoryInterface {
 
         $table = mj_member_get_events_table_name();
         $supported = mj_member_column_exists($table, 'animateur_id');
+        return $supported;
+    }
+
+    private static function supports_created_by_member_column() {
+        static $supported = null;
+
+        if ($supported !== null) {
+            return $supported;
+        }
+
+        if (!function_exists('mj_member_column_exists')) {
+            $supported = false;
+            return $supported;
+        }
+
+        $table = mj_member_get_events_table_name();
+        $supported = mj_member_column_exists($table, 'created_by_member_id');
         return $supported;
     }
 }

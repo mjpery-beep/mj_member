@@ -1572,6 +1572,29 @@ function mj_regmgr_get_event_details() {
         }
     }
 
+    $creator = null;
+    $creator_member_id = isset($event->created_by_member_id) ? (int) $event->created_by_member_id : 0;
+    if ($creator_member_id <= 0) {
+        $creator_member_id = isset($event->animateur_id) ? (int) $event->animateur_id : 0;
+    }
+    if ($creator_member_id > 0) {
+        $creator_member = MjMembers::getById($creator_member_id);
+        if ($creator_member) {
+            $creator_name = trim(($creator_member->first_name ?? '') . ' ' . ($creator_member->last_name ?? ''));
+            if ($creator_name === '') {
+                $creator_name = sprintf(__('Membre #%d', 'mj-member'), $creator_member_id);
+            }
+
+            $creator = array(
+                'id' => $creator_member_id,
+                'firstName' => isset($creator_member->first_name) ? (string) $creator_member->first_name : '',
+                'lastName' => isset($creator_member->last_name) ? (string) $creator_member->last_name : '',
+                'name' => $creator_name,
+                'avatarUrl' => mj_regmgr_get_member_avatar_url($creator_member_id),
+            );
+        }
+    }
+
     $registrations_count = MjEventRegistrations::count(array('event_id' => $event_id));
 
     $type_labels = MjEvents::get_type_labels();
@@ -1630,6 +1653,7 @@ function mj_regmgr_get_event_details() {
             'location' => $location,
             'locationLinks' => $location_links,
             'animateurs' => $animateurs,
+            'creator' => $creator,
             'frontUrl' => $front_url ?: null,
             'eventPageUrl' => !empty($event_page_url) ? $event_page_url : null,
             'articleId' => !empty($event->article_id) ? (int) $event->article_id : null,
@@ -1934,6 +1958,7 @@ function mj_regmgr_create_event() {
 
     if (!empty($auth['member_id'])) {
         $defaults['animateur_id'] = (int) $auth['member_id'];
+        $defaults['created_by_member_id'] = (int) $auth['member_id'];
     }
 
     $event_id = MjEvents::create($defaults);

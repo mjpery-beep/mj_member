@@ -2377,11 +2377,17 @@ final class HoursPage
      * Mirrors prepareDashboardConfig() but is public and adds the showEditTab flag.
      *
      * @param bool $showEditTab Whether to include the hour-encode editor tab.
+     * @param int|null $memberId Restrict the payload to one member when provided.
      * @return array<string,mixed>
      */
-    public static function prepareFrontDashboardConfig(bool $showEditTab = true): array
+    public static function prepareFrontDashboardConfig(bool $showEditTab = true, ?int $memberId = null): array
     {
         $config = self::prepareDashboardConfig();
+
+        if (is_int($memberId) && $memberId > 0) {
+            $config = self::filterDashboardConfigForMember($config, $memberId);
+        }
+
         $config['showEditTab'] = $showEditTab;
 
         // Add extra i18n keys used by the front widget
@@ -2391,6 +2397,143 @@ final class HoursPage
         if (!isset($config['i18n']['editTabLabel'])) {
             $config['i18n']['editTabLabel'] = __('Éditer les heures', 'mj-member');
         }
+
+        return $config;
+    }
+
+    /**
+     * Restrict a dashboard config payload to one member.
+     *
+     * @param array<string,mixed> $config
+     * @param int $memberId
+     * @return array<string,mixed>
+     */
+    public static function filterDashboardConfigForMember(array $config, int $memberId): array
+    {
+        if ($memberId <= 0) {
+            return $config;
+        }
+
+        $data = isset($config['data']) && is_array($config['data']) ? $config['data'] : array();
+        $members = isset($data['members']) && is_array($data['members']) ? $data['members'] : array();
+
+        $selectedMember = null;
+        foreach ($members as $memberRow) {
+            if (!is_array($memberRow)) {
+                continue;
+            }
+
+            $candidateId = isset($memberRow['id']) ? (int) $memberRow['id'] : 0;
+            if ($candidateId === $memberId) {
+                $selectedMember = $memberRow;
+                break;
+            }
+        }
+
+        if (!is_array($selectedMember)) {
+            return $config;
+        }
+
+        $memberProjects = isset($selectedMember['projects']) && is_array($selectedMember['projects'])
+            ? $selectedMember['projects']
+            : array();
+
+        $unassignedMinutes = 0;
+        foreach ($memberProjects as $projectRow) {
+            if (!is_array($projectRow)) {
+                continue;
+            }
+
+            $isUnassigned = !empty($projectRow['is_unassigned']);
+            if (!$isUnassigned) {
+                continue;
+            }
+
+            $unassignedMinutes += isset($projectRow['minutes']) ? (int) $projectRow['minutes'] : 0;
+        }
+
+        $timeseries = isset($data['timeseries']) && is_array($data['timeseries']) ? $data['timeseries'] : array();
+        $monthsByMember = isset($timeseries['months_by_member']) && is_array($timeseries['months_by_member'])
+            ? $timeseries['months_by_member']
+            : array();
+        $weeksByMember = isset($timeseries['weeks_by_member']) && is_array($timeseries['weeks_by_member'])
+            ? $timeseries['weeks_by_member']
+            : array();
+
+        $memberMonths = isset($monthsByMember[$memberId]) && is_array($monthsByMember[$memberId])
+            ? $monthsByMember[$memberId]
+            : array();
+        $memberWeeks = isset($weeksByMember[$memberId]) && is_array($weeksByMember[$memberId])
+            ? $weeksByMember[$memberId]
+            : array();
+
+        $weeklyAverageWeeks = count($memberWeeks);
+        $sumWeeklyMinutes = 0;
+        $weeklyExtraRecentMinutes = 0;
+        foreach ($memberWeeks as $weekRow) {
+            if (!is_array($weekRow)) {
+                continue;
+            }
+
+            $sumWeeklyMinutes += isset($weekRow['minutes']) ? (int) $weekRow['minutes'] : 0;
+            $weeklyExtraRecentMinutes += isset($weekRow['extra_minutes']) ? (int) $weekRow['extra_minutes'] : 0;
+        }
+
+        $weeklyAverageMinutes = $weeklyAverageWeeks > 0
+            ? (int) round($sumWeeklyMinutes / $weeklyAverageWeeks)
+            : 0;
+
+        $weeklyAverageMeta = '';
+        if ($weeklyAverageWeeks > 0) {
+            $weeklyAverageMeta = sprintf(
+                _n(
+                    'Moyenne calculée sur %d semaine récente',
+                    'Moyenne calculée sur %d semaines récentes',
+                    $weeklyAverageWeeks,
+                    'mj-member'
+                ),
+                $weeklyAverageWeeks
+            );
+        }
+
+        $memberMinutes = isset($selectedMember['minutes']) ? (int) $selectedMember['minutes'] : 0;
+        $memberEntries = isset($selectedMember['entries']) ? (int) $selectedMember['entries'] : 0;
+        $memberWeeklyContractMinutes = isset($selectedMember['weekly_contract_minutes'])
+            ? (int) $selectedMember['weekly_contract_minutes']
+            : 0;
+        $memberWeeklyBalanceMinutes = isset($selectedMember['weekly_balance_minutes'])
+            ? (int) $selectedMember['weekly_balance_minutes']
+            : 0;
+
+        $data['projects'] = $memberProjects;
+        $data['members'] = array($selectedMember);
+        $data['totals'] = array(
+            'minutes' => $memberMinutes,
+            'human' => self::formatDuration($memberMinutes),
+            'entries' => $memberEntries,
+            'member_count' => 1,
+            'project_count' => count($memberProjects),
+            'unassigned_minutes' => $unassignedMinutes,
+            'unassigned_human' => self::formatDuration($unassignedMinutes),
+            'weekly_average_minutes' => $weeklyAverageMinutes,
+            'weekly_average_human' => self::formatDuration($weeklyAverageMinutes),
+            'weekly_average_weeks' => $weeklyAverageWeeks,
+            'weekly_average_meta' => $weeklyAverageMeta,
+            'weekly_contract_minutes' => $memberWeeklyContractMinutes,
+            'weekly_contract_human' => self::formatDuration($memberWeeklyContractMinutes),
+            'weekly_extra_recent_minutes' => $weeklyExtraRecentMinutes,
+            'weekly_extra_recent_human' => self::formatDuration($weeklyExtraRecentMinutes),
+            'weekly_balance_minutes' => $memberWeeklyBalanceMinutes,
+            'weekly_balance_human' => self::formatSignedDuration($memberWeeklyBalanceMinutes),
+        );
+        $data['timeseries'] = array(
+            'months' => $memberMonths,
+            'weeks' => $memberWeeks,
+            'months_by_member' => array($memberId => $memberMonths),
+            'weeks_by_member' => array($memberId => $memberWeeks),
+        );
+
+        $config['data'] = $data;
 
         return $config;
     }
