@@ -219,6 +219,22 @@
             },
 
             /**
+             * Génère un texte via IA (description ou document d'inscription)
+             * @param {number} eventId - ID de l'événement
+             * @param {string} type - 'description' ou 'regdoc'
+             * @param {string} [hint] - Contexte supplémentaire optionnel
+             */
+            generateAiText: function (eventId, type, hint, includedFields, contextData) {
+                return post('mj_regmgr_generate_ai_text', {
+                    eventId: eventId,
+                    type: type,
+                    hint: hint || '',
+                    includedFields: Array.isArray(includedFields) ? includedFields : [],
+                    contextData: contextData && typeof contextData === 'object' ? contextData : {},
+                });
+            },
+
+            /**
              * Sauvegarde les occurrences d'un événement
              */
             saveEventOccurrences: function (eventId, occurrences, scheduleSummary, generatorPlan, options) {
@@ -555,6 +571,39 @@
                 return post('mj_link_member_user', data, {
                     nonce: config.accountLinkNonce || '',
                     abortKey: 'member-account-' + memberId,
+                });
+            },
+
+            /**
+             * Crée un login Nextcloud pour un membre
+             */
+            createMemberNextcloudLogin: function (memberId, payload) {
+                if (!memberId) {
+                    return Promise.reject(new Error('memberId is required'));
+                }
+
+                var data = {
+                    memberId: memberId,
+                };
+
+                if (payload && typeof payload.login === 'string') {
+                    data.login = payload.login;
+                }
+
+                if (payload && typeof payload.password === 'string') {
+                    data.password = payload.password;
+                }
+
+                if (payload && Array.isArray(payload.groups)) {
+                    data.groups = payload.groups;
+                }
+
+                if (payload && typeof payload.isAdmin !== 'undefined') {
+                    data.is_admin = payload.isAdmin ? 1 : 0;
+                }
+
+                return post('mj_regmgr_create_member_nextcloud_login', data, {
+                    abortKey: 'member-nextcloud-' + memberId,
                 });
             },
 

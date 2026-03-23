@@ -2484,6 +2484,10 @@
         var jobDescription = _stDesc[0];
         var setJobDescription = _stDesc[1];
 
+        var _stSignature = useState(member && member.signatureMessage || '');
+        var signatureMessage = _stSignature[0];
+        var setSignatureMessage = _stSignature[1];
+
         var _stSaving = useState(false);
         var isSaving = _stSaving[0];
         var setIsSaving = _stSaving[1];
@@ -2500,12 +2504,20 @@
         var isDirty = _stDirty[0];
         var setIsDirty = _stDirty[1];
 
+        var _stPreviewCopyMsg = useState('');
+        var previewCopyMsg = _stPreviewCopyMsg[0];
+        var setPreviewCopyMsg = _stPreviewCopyMsg[1];
+
         // WYSIWYG ref – managed outside Preact VDOM to avoid cursor resets.
         var editorRef = preact.createRef ? preact.createRef() : { current: null };
+        var signatureEditorRef = preact.createRef ? preact.createRef() : { current: null };
         // Keep a snapshot so we can repopulate the editor after re-renders.
         var _stServerDesc = useState(member && member.jobDescription || '');
         var serverDesc = _stServerDesc[0];
         var setServerDesc = _stServerDesc[1];
+        var _stServerSignature = useState(member && member.signatureMessage || '');
+        var serverSignature = _stServerSignature[0];
+        var setServerSignature = _stServerSignature[1];
 
         // Sync from member when it changes
         useEffect(function () {
@@ -2514,12 +2526,18 @@
             setWorkRegime(member.workRegime || '');
             setFundingSource(member.fundingSource || '');
             var desc = member.jobDescription || '';
+            var signature = member.signatureMessage || '';
             setJobDescription(desc);
+            setSignatureMessage(signature);
             setServerDesc(desc);
+            setServerSignature(signature);
             setIsDirty(false);
             // Re-inject into the editor DOM node
             if (editorRef.current) {
                 editorRef.current.innerHTML = desc;
+            }
+            if (signatureEditorRef.current) {
+                signatureEditorRef.current.innerHTML = signature;
             }
         }, [member && member.id]);
 
@@ -2529,6 +2547,11 @@
         var regimeLabel = getString(strings, 'jobProfileWorkRegime', 'Régime de travail');
         var fundingLabel = getString(strings, 'jobProfileFundingSource', 'Origine du financement');
         var descLabel = getString(strings, 'jobProfileDescription', 'Description du poste');
+        var signatureLabel = getString(strings, 'jobProfileSignatureMessage', 'Signature Message');
+        var signaturePreviewLabel = getString(strings, 'jobProfileSignaturePreview', 'Aperçu de la signature');
+        var signaturePreviewCopyLabel = getString(strings, 'jobProfileSignaturePreviewCopy', 'Copier l\'aperçu');
+        var signaturePreviewCopiedLabel = getString(strings, 'jobProfileSignaturePreviewCopied', 'Aperçu copié.');
+        var signaturePreviewCopyErrorLabel = getString(strings, 'jobProfileSignaturePreviewCopyError', 'Impossible de copier l\'aperçu.');
         var saveLabel = getString(strings, 'jobProfileSave', 'Enregistrer');
         var savedLabel = getString(strings, 'jobProfileSaved', 'Profil de fonction enregistré.');
         var savingLabel = getString(strings, 'jobProfileSaving', 'Enregistrement…');
@@ -2560,19 +2583,157 @@
                     editorRef.current.innerHTML = jobDescription || serverDesc || '';
                 }
             }
+
+            if (signatureEditorRef.current) {
+                var signatureCurrent = signatureEditorRef.current.innerHTML;
+                if (!signatureCurrent || signatureCurrent === '<br>') {
+                    signatureEditorRef.current.innerHTML = signatureMessage || serverSignature || '';
+                }
+            }
         });
 
-        function onEditorInput() {
+        function onDescriptionEditorInput() {
             if (editorRef.current) {
                 setJobDescription(editorRef.current.innerHTML);
                 markDirty();
             }
         }
 
-        function execCmd(cmd, val) {
-            editorRef.current && editorRef.current.focus();
+        function onSignatureEditorInput() {
+            if (signatureEditorRef.current) {
+                setSignatureMessage(signatureEditorRef.current.innerHTML);
+                markDirty();
+            }
+        }
+
+        function buildSignatureReplacements(memberData) {
+            if (!memberData) {
+                return {};
+            }
+
+            var firstName = memberData.firstName || '';
+            var lastName = memberData.lastName || '';
+            var fullName = (firstName + ' ' + lastName).replace(/\s+/g, ' ').trim() || (memberData.nickname || '');
+            var phone = memberData.phone || memberData.phoneSecondary || '';
+            var birthDate = memberData.birthDate || '';
+            var addressLine = memberData.addressLine || '';
+            var postalCode = memberData.postalCode || '';
+            var city = memberData.city || '';
+            var roleKey = memberData.jobTitle || '';
+            var roleLabel = roleKey && titleOptions && titleOptions[roleKey] ? titleOptions[roleKey] : roleKey;
+
+            var cityLine = [postalCode, city].filter(Boolean).join(' ').trim();
+            var fullAddress = [addressLine, cityLine].filter(Boolean).join(', ').trim();
+
+            return {
+                '[member_name]': fullName,
+                '[member_first_name]': firstName,
+                '[member_last_name]': lastName,
+                '[member_email]': memberData.email || '',
+                '[member_role]': roleLabel,
+                '[member_phone]': phone,
+                '[member_birth_date]': birthDate,
+                '[member_address]': fullAddress,
+                '[member_address_line]': addressLine,
+                '[member_postal_code]': postalCode,
+                '[member_city]': city,
+            };
+        }
+
+        function applySignatureTemplateVariables(html, replacements) {
+            var output = String(html || '');
+            Object.keys(replacements || {}).forEach(function (token) {
+                output = output.split(token).join(replacements[token] || '');
+            });
+            return output;
+        }
+
+        function signaturePreviewHtml() {
+            return applySignatureTemplateVariables(signatureMessage || '', buildSignatureReplacements(member));
+        }
+
+        function copySignaturePreview() {
+            var html = signaturePreviewHtml();
+            var container = document.createElement('div');
+            container.innerHTML = html;
+            var plain = (container.textContent || container.innerText || '').trim();
+
+            function onSuccess() {
+                setPreviewCopyMsg(signaturePreviewCopiedLabel);
+                setTimeout(function () { setPreviewCopyMsg(''); }, 2200);
+            }
+
+            function onFailure() {
+                setPreviewCopyMsg(signaturePreviewCopyErrorLabel);
+                setTimeout(function () { setPreviewCopyMsg(''); }, 2600);
+            }
+
+            if (navigator.clipboard && typeof navigator.clipboard.write === 'function' && typeof window.ClipboardItem === 'function') {
+                var payload = new window.ClipboardItem({
+                    'text/html': new Blob([html], { type: 'text/html' }),
+                    'text/plain': new Blob([plain], { type: 'text/plain' }),
+                });
+
+                navigator.clipboard.write([payload]).then(onSuccess).catch(function () {
+                    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                        navigator.clipboard.writeText(plain).then(onSuccess).catch(onFailure);
+                    } else {
+                        onFailure();
+                    }
+                });
+                return;
+            }
+
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                navigator.clipboard.writeText(plain).then(onSuccess).catch(onFailure);
+                return;
+            }
+
+            onFailure();
+        }
+
+        function execCmd(targetRef, inputHandler, cmd, val) {
+            targetRef.current && targetRef.current.focus();
             document.execCommand(cmd, false, val || null);
-            onEditorInput();
+            inputHandler();
+        }
+
+        function execSignatureCmd(cmd, val) {
+            if (!signatureEditorRef.current) {
+                return;
+            }
+
+            signatureEditorRef.current.focus();
+
+            if (cmd === 'createLink') {
+                var currentUrl = window.prompt('URL du lien', 'https://');
+                if (!currentUrl) {
+                    return;
+                }
+                var trimmed = String(currentUrl).trim();
+                if (!/^https?:\/\//i.test(trimmed) && !/^mailto:/i.test(trimmed)) {
+                    trimmed = 'https://' + trimmed;
+                }
+                document.execCommand('createLink', false, trimmed);
+                onSignatureEditorInput();
+                return;
+            }
+
+            if (cmd === 'insertTable') {
+                var tableHtml = '<table style="width:100%;border-collapse:collapse;"><tbody><tr><td style="border:1px solid #d1d5db;padding:6px;">&nbsp;</td><td style="border:1px solid #d1d5db;padding:6px;">&nbsp;</td></tr></tbody></table>';
+                document.execCommand('insertHTML', false, tableHtml);
+                onSignatureEditorInput();
+                return;
+            }
+
+            if (cmd === 'insertHorizontalRule') {
+                document.execCommand('insertHorizontalRule', false, null);
+                onSignatureEditorInput();
+                return;
+            }
+
+            document.execCommand(cmd, false, val || null);
+            onSignatureEditorInput();
         }
 
         function handleSave() {
@@ -2588,6 +2749,7 @@
             fd.append('workRegime', workRegime);
             fd.append('fundingSource', fundingSource);
             fd.append('jobDescription', jobDescription);
+            fd.append('signatureMessage', signatureMessage);
 
             fetch(config.ajaxUrl || '', { method: 'POST', body: fd, credentials: 'same-origin' })
                 .then(function (r) { return r.json(); })
@@ -2599,8 +2761,12 @@
                         setIsDirty(false);
                         // Update snapshot so editor keeps content after re-render
                         setServerDesc(jobDescription);
+                        setServerSignature(signatureMessage);
                         if (editorRef.current && !editorRef.current.innerHTML) {
                             editorRef.current.innerHTML = jobDescription || '';
+                        }
+                        if (signatureEditorRef.current && !signatureEditorRef.current.innerHTML) {
+                            signatureEditorRef.current.innerHTML = signatureMessage || '';
                         }
                         if (onRefresh) onRefresh();
                     } else {
@@ -2674,16 +2840,16 @@
                     h('div', { class: 'mj-regmgr-job-profile__editor-wrap' }, [
                         // Toolbar
                         h('div', { class: 'mj-regmgr-job-profile__toolbar' }, [
-                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Gras', onClick: function () { execCmd('bold'); } },
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Gras', onClick: function () { execCmd(editorRef, onDescriptionEditorInput, 'bold'); } },
                                 h('strong', null, 'B')),
-                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Italique', onClick: function () { execCmd('italic'); } },
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Italique', onClick: function () { execCmd(editorRef, onDescriptionEditorInput, 'italic'); } },
                                 h('em', null, 'I')),
-                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Souligné', onClick: function () { execCmd('underline'); } },
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Souligné', onClick: function () { execCmd(editorRef, onDescriptionEditorInput, 'underline'); } },
                                 h('u', null, 'U')),
                             h('span', { class: 'mj-regmgr-job-profile__toolbar-sep' }),
-                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Liste à puces', onClick: function () { execCmd('insertUnorderedList'); } },
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Liste à puces', onClick: function () { execCmd(editorRef, onDescriptionEditorInput, 'insertUnorderedList'); } },
                                 h('span', { dangerouslySetInnerHTML: { __html: '&#8226;' } })),
-                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Liste numérotée', onClick: function () { execCmd('insertOrderedList'); } },
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Liste numérotée', onClick: function () { execCmd(editorRef, onDescriptionEditorInput, 'insertOrderedList'); } },
                                 h('span', null, '1.')),
                         ]),
                         // Editable area
@@ -2691,9 +2857,75 @@
                             ref: editorRef,
                             class: 'mj-regmgr-job-profile__wysiwyg',
                             contentEditable: 'true',
-                            onInput: onEditorInput,
-                            onBlur: onEditorInput,
+                            onInput: onDescriptionEditorInput,
+                            onBlur: onDescriptionEditorInput,
                         }),
+                    ]),
+                ]),
+
+                // Row: Signature Message (WYSIWYG)
+                h('div', { class: 'mj-regmgr-job-profile__field' }, [
+                    h('label', null, signatureLabel),
+                    h('div', { class: 'mj-regmgr-job-profile__editor-wrap' }, [
+                        h('div', { class: 'mj-regmgr-job-profile__toolbar' }, [
+                            h('select', {
+                                class: 'mj-regmgr-job-profile__toolbar-select',
+                                title: 'Format',
+                                defaultValue: 'P',
+                                onChange: function (e) {
+                                    var tag = e.target.value || 'P';
+                                    execSignatureCmd('formatBlock', tag);
+                                },
+                            }, [
+                                h('option', { value: 'P' }, 'Paragraphe'),
+                                h('option', { value: 'H3' }, 'Titre 3'),
+                                h('option', { value: 'H4' }, 'Titre 4'),
+                            ]),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Gras', onClick: function () { execSignatureCmd('bold'); } },
+                                h('strong', null, 'B')),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Italique', onClick: function () { execSignatureCmd('italic'); } },
+                                h('em', null, 'I')),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Souligné', onClick: function () { execSignatureCmd('underline'); } },
+                                h('u', null, 'U')),
+                            h('span', { class: 'mj-regmgr-job-profile__toolbar-sep' }),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Liste à puces', onClick: function () { execSignatureCmd('insertUnorderedList'); } },
+                                h('span', { dangerouslySetInnerHTML: { __html: '&#8226;' } })),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Liste numérotée', onClick: function () { execSignatureCmd('insertOrderedList'); } },
+                                h('span', null, '1.')),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Aligner à gauche', onClick: function () { execSignatureCmd('justifyLeft'); } }, 'L'),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Centrer', onClick: function () { execSignatureCmd('justifyCenter'); } }, 'C'),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Aligner à droite', onClick: function () { execSignatureCmd('justifyRight'); } }, 'R'),
+                            h('span', { class: 'mj-regmgr-job-profile__toolbar-sep' }),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Ajouter un lien', onClick: function () { execSignatureCmd('createLink'); } }, 'Link'),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Supprimer le lien', onClick: function () { execSignatureCmd('unlink'); } }, 'Unlink'),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Insérer un tableau', onClick: function () { execSignatureCmd('insertTable'); } }, 'Tbl'),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Ligne horizontale', onClick: function () { execSignatureCmd('insertHorizontalRule'); } }, 'HR'),
+                            h('span', { class: 'mj-regmgr-job-profile__toolbar-sep' }),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Annuler', onClick: function () { execSignatureCmd('undo'); } }, 'Undo'),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Refaire', onClick: function () { execSignatureCmd('redo'); } }, 'Redo'),
+                        ]),
+                        h('div', {
+                            ref: signatureEditorRef,
+                            class: 'mj-regmgr-job-profile__wysiwyg',
+                            contentEditable: 'true',
+                            onInput: onSignatureEditorInput,
+                            onBlur: onSignatureEditorInput,
+                        }),
+                    ]),
+                    h('div', { class: 'mj-regmgr-job-profile__preview-wrap' }, [
+                        h('div', { class: 'mj-regmgr-job-profile__preview-head' }, [
+                            h('span', { class: 'mj-regmgr-job-profile__preview-title' }, signaturePreviewLabel),
+                            h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                onClick: copySignaturePreview,
+                            }, signaturePreviewCopyLabel),
+                        ]),
+                        h('div', {
+                            class: 'mj-regmgr-job-profile__preview-body',
+                            dangerouslySetInnerHTML: { __html: signaturePreviewHtml() || '&nbsp;' },
+                        }),
+                        previewCopyMsg && h('div', { class: 'mj-regmgr-job-profile__preview-feedback' }, previewCopyMsg),
                     ]),
                 ]),
 
@@ -3026,6 +3258,7 @@
         var onUpdateTestimonialStatus = typeof props.onUpdateTestimonialStatus === 'function' ? props.onUpdateTestimonialStatus : null;
         var onToggleFeatured = typeof props.onToggleFeatured === 'function' ? props.onToggleFeatured : null;
         var onManageAccount = typeof props.onManageAccount === 'function' ? props.onManageAccount : null;
+        var onCreateNextcloudLogin = typeof props.onCreateNextcloudLogin === 'function' ? props.onCreateNextcloudLogin : null;
         var onDeleteMember = typeof props.onDeleteMember === 'function' ? props.onDeleteMember : null;
         var onDeleteRegistration = typeof props.onDeleteRegistration === 'function' ? props.onDeleteRegistration : null;
         var onUpdateRegistrationOccurrences = typeof props.onUpdateRegistrationOccurrences === 'function' ? props.onUpdateRegistrationOccurrences : null;
@@ -3171,6 +3404,14 @@
         var _useStateDeletingMember = useState(false);
         var deletingMember = _useStateDeletingMember[0];
         var setDeletingMember = _useStateDeletingMember[1];
+
+        var _useStateCreatingNextcloud = useState(false);
+        var creatingNextcloud = _useStateCreatingNextcloud[0];
+        var setCreatingNextcloud = _useStateCreatingNextcloud[1];
+
+        var _useStateNextcloudModal = useState(false);
+        var nextcloudModalOpen = _useStateNextcloudModal[0];
+        var setNextcloudModalOpen = _useStateNextcloudModal[1];
 
         var _useStatePaymentProcessing = useState(false);
         var paymentProcessing = _useStatePaymentProcessing[0];
@@ -4413,6 +4654,10 @@
 
         var memberId = member && member.id ? member.id : null;
         var hasLinkedAccount = member && member.userId ? true : false;
+        var nextcloudLogin = member && typeof member.nextcloudLogin === 'string'
+            ? member.nextcloudLogin
+            : '';
+        var hasNextcloudLogin = !!nextcloudLogin;
 
         var handleOpenAccountModal = useCallback(function () {
             if (!onManageAccount || !member) {
@@ -4420,6 +4665,21 @@
             }
             onManageAccount(member);
         }, [onManageAccount, member]);
+
+        var handleCreateNextcloudLogin = useCallback(function () {
+            if (!onCreateNextcloudLogin || !member || !member.id || creatingNextcloud) {
+                return;
+            }
+            setNextcloudModalOpen(true);
+        }, [onCreateNextcloudLogin, member, creatingNextcloud, setNextcloudModalOpen]);
+
+        var handleNextcloudLoginSubmit = useCallback(function (payload) {
+            setCreatingNextcloud(true);
+            return Promise.resolve(onCreateNextcloudLogin(member.id, payload || {}))
+                .finally(function () {
+                    setCreatingNextcloud(false);
+                });
+        }, [onCreateNextcloudLogin, member]);
 
         // Calculate age
         var age = null;
@@ -4557,6 +4817,11 @@
         var accountButtonUnlinked = getString(strings, 'memberAccountUnlinked', 'Lier un compte WordPress');
         var accountStatusLinked = getString(strings, 'memberAccountStatusLinked', 'Un compte WordPress est lié à ce membre.');
         var accountStatusUnlinked = getString(strings, 'memberAccountStatusUnlinked', 'Aucun compte WordPress n\'est encore lié.');
+        var nextcloudCreateLabel = getString(strings, 'memberNextcloudCreate', 'Créer un login Nextcloud');
+        var nextcloudExistsLabel = getString(strings, 'memberNextcloudExists', 'Login Nextcloud déjà créé');
+        var nextcloudMissingStatus = getString(strings, 'memberNextcloudStatusMissing', 'Aucun login Nextcloud n\'est associé à ce membre.');
+        var nextcloudReadyStatus = getString(strings, 'memberNextcloudStatusReady', 'Un login Nextcloud est associé à ce membre.');
+        var nextcloudCreatingLabel = getString(strings, 'memberNextcloudCreating', 'Création du login Nextcloud...');
 
         var messageStatusLabels = {
             'nouveau': 'Nouveau',
@@ -5041,6 +5306,28 @@
                             h('path', { d: 'M15 7.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0z' }),
                             h('path', { d: 'M17.5 10v2' }),
                             h('path', { d: 'M16 15l2 2 3-3' }),
+                        ]),
+                    ]),
+                    onCreateNextcloudLogin && config && config.canManageNextcloud && h('button', {
+                        type: 'button',
+                        class: classNames('mj-btn', 'mj-btn--icon', {
+                            'mj-btn--warning': hasNextcloudLogin,
+                            'mj-btn--secondary': !hasNextcloudLogin,
+                        }),
+                        onClick: handleCreateNextcloudLogin,
+                        disabled: creatingNextcloud,
+                        title: hasNextcloudLogin ? nextcloudExistsLabel : nextcloudCreateLabel,
+                        'aria-label': hasNextcloudLogin ? nextcloudExistsLabel : nextcloudCreateLabel,
+                        'data-status': hasNextcloudLogin ? 'linked' : 'unlinked',
+                        'data-tooltip': creatingNextcloud
+                            ? nextcloudCreatingLabel
+                            : (hasNextcloudLogin ? nextcloudReadyStatus : nextcloudMissingStatus),
+                    }, [
+                        h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, [
+                            h('path', { d: 'M3 3h18v18H3z' }),
+                            h('path', { d: 'M7 8h10' }),
+                            h('path', { d: 'M7 12h10' }),
+                            h('path', { d: 'M7 16h6' }),
                         ]),
                     ]),
                     canDeleteMember && h('button', {
@@ -6647,6 +6934,15 @@
                             setShowPaymentModal(false);
                         });
                 },
+            }),
+
+            // Modal création login Nextcloud
+            nextcloudModalOpen && global.MjRegMgrModals && global.MjRegMgrModals.NextcloudLoginModal && h(global.MjRegMgrModals.NextcloudLoginModal, {
+                isOpen: nextcloudModalOpen,
+                onClose: function () { setNextcloudModalOpen(false); },
+                onSubmit: handleNextcloudLoginSubmit,
+                member: member,
+                availableGroups: (config && Array.isArray(config.nextcloudGroups)) ? config.nextcloudGroups : [],
             }),
         ]);
     }

@@ -355,6 +355,36 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
             }
         }
 
+        if ($is_logged_in && $member_id <= 0 && class_exists('MjMembers')) {
+            $fallback_member = null;
+
+            if ($current_user_id > 0 && method_exists('MjMembers', 'getByWpUserId')) {
+                $fallback_member = MjMembers::getByWpUserId($current_user_id);
+            }
+
+            if (!$fallback_member && $current_user_email !== '' && method_exists('MjMembers', 'getByEmail')) {
+                $fallback_member = MjMembers::getByEmail($current_user_email);
+            }
+
+            if ($fallback_member && isset($fallback_member->id)) {
+                $member = $fallback_member;
+                $member_id = (int) $fallback_member->id;
+
+                if (isset($fallback_member->role)) {
+                    $member_role = sanitize_key((string) $fallback_member->role);
+                }
+
+                if ($current_user_name === '') {
+                    $first = isset($fallback_member->first_name) ? trim((string) $fallback_member->first_name) : '';
+                    $last = isset($fallback_member->last_name) ? trim((string) $fallback_member->last_name) : '';
+                    $composed = trim($first . ' ' . $last);
+                    if ($composed !== '') {
+                        $current_user_name = sanitize_text_field($composed);
+                    }
+                }
+            }
+        }
+
         $recipient_target_specs = $this->build_recipient_target_queries($member_id, $member_role, $can_moderate);
 
         $sanitized_targets = array();
@@ -523,6 +553,21 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
 
         $redirect_base = $pagination_url_builder($current_page);
 
+        $owner_reply_signature = '';
+        if ($member_id > 0) {
+            if (function_exists('mj_member_contact_get_member_signature')) {
+                $owner_reply_signature = mj_member_contact_get_member_signature($member_id);
+            }
+
+            if ($owner_reply_signature === '' && function_exists('mj_member_contact_get_default_signature_template')) {
+                $owner_reply_signature = mj_member_contact_get_default_signature_template();
+            }
+
+            if ($owner_reply_signature !== '' && function_exists('mj_member_contact_apply_signature_variables')) {
+                $owner_reply_signature = mj_member_contact_apply_signature_variables($owner_reply_signature, $member_id);
+            }
+        }
+
         $owner_reply = array(
             'enabled' => $owner_view_active && !$is_preview,
             'can_send' => $current_user_email !== '',
@@ -532,6 +577,7 @@ class Mj_Member_Elementor_Contact_Messages_Widget extends Widget_Base {
             'sender_email' => $current_user_email,
             'member_id' => $member_id,
             'source' => $redirect_base,
+            'signature_html' => $owner_reply_signature,
         );
 
         $pagination_links = array();

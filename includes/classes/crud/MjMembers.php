@@ -400,6 +400,14 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             return new WP_Error('mj_member_email_required', 'Une adresse e-mail est requise pour ce role.');
         }
 
+        $signature_message = self::sanitizeNotes($data['signature_message'] ?? '');
+        if ($signature_message === '') {
+            $default_signature_template = get_option('mj_member_contact_default_signature', '');
+            if (is_string($default_signature_template) && trim($default_signature_template) !== '') {
+                $signature_message = self::sanitizeNotes($default_signature_template);
+            }
+        }
+
         $insert = array(
             'first_name' => $first_name,
             'nickname' => self::sanitizeOptionalText($data['nickname'] ?? ''),
@@ -432,6 +440,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             'whatsapp_opt_in' => array_key_exists('whatsapp_opt_in', $data) ? (!empty($data['whatsapp_opt_in']) ? 1 : 0) : 1,
             'wp_user_id' => self::sanitizeUserId($data['wp_user_id'] ?? null),
             'is_volunteer' => $is_volunteer,
+            'signature_message' => $signature_message,
         );
 
         $insert['notification_preferences'] = self::sanitizeNotificationPreferences($data['notification_preferences'] ?? null, $insert);
@@ -550,7 +559,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         $updates = array();
 
         $allowed_fields = array(
-            'first_name','last_name','nickname','email','phone','phone_secondary','birth_date','role','guardian_id','is_autonomous','is_volunteer', 'is_trusted_member','requires_payment','address','city','postal_code','school','birth_country','nationality','notes','description_courte','description_longue','why_mj','how_mj','work_schedule','leave_quota_paid','leave_quota_unpaid','leave_quota_exceptional','leave_quota_recovery','status','date_inscription','date_last_payement','photo_id','photo_usage_consent','newsletter_opt_in','sms_opt_in','whatsapp_opt_in','notification_preferences','wp_user_id','card_access_key','anonymized_at','last_login_at','last_activity_at','job_title','work_regime','funding_source','job_description'
+            'first_name','last_name','nickname','email','phone','phone_secondary','birth_date','role','guardian_id','is_autonomous','is_volunteer', 'is_trusted_member','requires_payment','address','city','postal_code','school','birth_country','nationality','notes','description_courte','description_longue','why_mj','how_mj','work_schedule','leave_quota_paid','leave_quota_unpaid','leave_quota_exceptional','leave_quota_recovery','status','date_inscription','date_last_payement','photo_id','photo_usage_consent','newsletter_opt_in','sms_opt_in','whatsapp_opt_in','notification_preferences','wp_user_id','card_access_key','anonymized_at','last_login_at','last_activity_at','job_title','work_regime','funding_source','job_description','signature_message'
         );
 
         foreach ($data as $field => $value) {
@@ -649,6 +658,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
                     $updates[$field] = self::sanitizeOptionalText($value);
                     break;
                 case 'job_description':
+                case 'signature_message':
                     $updates[$field] = self::sanitizeNotes($value);
                     break;
                 default:

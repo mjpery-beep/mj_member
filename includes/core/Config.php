@@ -20,7 +20,7 @@ final class Config
         self::$pluginFile = $pluginFile;
 
         self::defineIfMissing('MJ_MEMBER_VERSION', '2.22.0');
-        self::defineIfMissing('MJ_MEMBER_SCHEMA_VERSION', '2.78.0');
+        self::defineIfMissing('MJ_MEMBER_SCHEMA_VERSION', '2.81.0');
         self::defineIfMissing('MJ_MEMBER_PATH', plugin_dir_path($pluginFile));
         self::defineIfMissing('MJ_MEMBER_URL', plugin_dir_url($pluginFile));
         self::defineIfMissing('MJ_MEMBER_CAPABILITY', 'mj_manage_members');
@@ -35,9 +35,11 @@ final class Config
         self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_USER', '');
         self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_PASSWORD', '');
         self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_ROOT_FOLDER', '');
+        self::defineIfMissing('MJ_MEMBER_NEXTCLOUD_GROUPS', '');
         self::defineIfMissing('MJ_MEMBER_PAYMENT_EXPIRATION_DAYS', self::DEFAULT_PAYMENT_EXPIRATION);
         self::defineIfMissing('MJ_MEMBER_DATA_RETENTION_DAYS', 1095);
         self::defineIfMissing('MJ_MEMBER_OPENAI_API_KEY', '');
+        self::defineIfMissing('MJ_MEMBER_GOOGLE_MAPS_API_KEY', '');
         self::defineIfMissing('MJ_MEMBER_VAPID_PUBLIC_KEY', '');
         self::defineIfMissing('MJ_MEMBER_VAPID_PRIVATE_KEY', '');
     }
@@ -110,6 +112,21 @@ final class Config
         }
 
         $option = \get_option('mj_member_openai_api_key', '');
+        if (!is_string($option) || $option === '') {
+            return '';
+        }
+
+        return \sanitize_text_field($option);
+    }
+
+    public static function googleMapsApiKey(): string
+    {
+        $defined = (string) constant('MJ_MEMBER_GOOGLE_MAPS_API_KEY');
+        if ($defined !== '') {
+            return \sanitize_text_field($defined);
+        }
+
+        $option = \get_option('mj_member_google_maps_api_key', '');
         if (!is_string($option) || $option === '') {
             return '';
         }
@@ -249,6 +266,45 @@ final class Config
 
         $option = \get_option('mj_member_nextcloud_root_folder', '');
         return is_string($option) && $option !== '' ? trim(\sanitize_text_field($option), '/') : '';
+    }
+
+    /**
+     * @return array<int,string>
+     */
+    public static function nextcloudGroups(): array
+    {
+        $raw = '';
+
+        if (defined('MJ_MEMBER_NEXTCLOUD_GROUPS')) {
+            $raw = (string) constant('MJ_MEMBER_NEXTCLOUD_GROUPS');
+        }
+
+        if ($raw === '') {
+            $option = \get_option('mj_member_nextcloud_groups', '');
+            if (is_string($option)) {
+                $raw = $option;
+            }
+        }
+
+        if ($raw === '') {
+            return array();
+        }
+
+        $parts = preg_split('/[\r\n,;]+/', $raw);
+        if (!is_array($parts)) {
+            return array();
+        }
+
+        $groups = array();
+        foreach ($parts as $part) {
+            // Keep original group identifier (case-sensitive) for Nextcloud API.
+            $value = trim(sanitize_text_field((string) $part));
+            if ($value !== '') {
+                $groups[] = $value;
+            }
+        }
+
+        return array_values(array_unique($groups));
     }
 
     public static function nextcloudIsReady(): bool

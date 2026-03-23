@@ -362,6 +362,91 @@
         });
     }
 
+    function normalizeEditorHtml(html) {
+        if (!html) {
+            return '';
+        }
+
+        var normalized = String(html)
+            .replace(/&nbsp;/g, ' ')
+            .replace(/<p><br\s*\/?>\s*<\/p>/gi, '<p><br></p>')
+            .trim();
+
+        return normalized;
+    }
+
+    function extractEditorPayload($form) {
+        var $editor = $form.find('[data-mj-role="reply-editor"]').first();
+        var $textarea = $form.find('textarea[name="reply_body"]').first();
+
+        if (!$editor.length) {
+            var plainValue = $.trim($textarea.val());
+            return {
+                html: plainValue,
+                hasMessageBody: plainValue.length > 0
+            };
+        }
+
+        var htmlValue = normalizeEditorHtml($editor.html());
+        var $tmp = $('<div></div>').html(htmlValue);
+
+        $tmp.find('.mj-contact-message-signature').remove();
+        $tmp.find('hr').last().remove();
+
+        var textualBody = $tmp.text().replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+        var hasMessageBody = textualBody.length > 0;
+
+        if ($textarea.length) {
+            $textarea.val(htmlValue);
+        }
+
+        return {
+            html: htmlValue,
+            hasMessageBody: hasMessageBody
+        };
+    }
+
+    function resetReplyEditor($form) {
+        var $editor = $form.find('[data-mj-role="reply-editor"]').first();
+        var $textarea = $form.find('textarea[name="reply_body"]').first();
+
+        if (!$editor.length) {
+            if ($textarea.length) {
+                $textarea.val('');
+            }
+            return;
+        }
+
+        var initialHtml = $editor.data('initialHtml');
+        if (typeof initialHtml !== 'string') {
+            initialHtml = '';
+        }
+
+        $editor.html(initialHtml);
+        if ($textarea.length) {
+            $textarea.val(initialHtml);
+        }
+    }
+
+    function initializeReplyEditors($scope) {
+        var $context = $scope ? $($scope) : $(document);
+        $context.find('[data-mj-role="reply-editor"]').each(function () {
+            var $editor = $(this);
+            if ($editor.data('mjEditorReady')) {
+                return;
+            }
+
+            $editor.data('mjEditorReady', true);
+            $editor.data('initialHtml', normalizeEditorHtml($editor.html()));
+
+            var $form = $editor.closest('form');
+            var $textarea = $form.find('textarea[name="reply_body"]').first();
+            if ($textarea.length) {
+                $textarea.val($editor.data('initialHtml'));
+            }
+        });
+    }
+
     function handleSubmit(event) {
         event.preventDefault();
 
@@ -381,7 +466,8 @@
         var source = $form.data('source') || '';
 
         var $textarea = $form.find('textarea[name="reply_body"]');
-        var messageValue = $.trim($textarea.val());
+        var payload = extractEditorPayload($form);
+        var messageValue = payload.html;
         var $feedback = $form.find('.mj-contact-messages__quick-reply-feedback');
         var $submit = $form.find('button[type="submit"]');
 
@@ -390,9 +476,14 @@
             return;
         }
 
-        if (!messageValue) {
+        if (!payload.hasMessageBody) {
             $feedback.text(label('required', 'Merci de saisir un message.')).addClass('is-error').removeClass('is-success');
-            $textarea.trigger('focus');
+            var $editor = $form.find('[data-mj-role="reply-editor"]').first();
+            if ($editor.length) {
+                $editor.trigger('focus');
+            } else {
+                $textarea.trigger('focus');
+            }
             return;
         }
 
@@ -426,7 +517,7 @@
                 var responseData = response.data || {};
                 var successMessage = responseData.message ? responseData.message : label('success', 'Votre réponse a bien été envoyée.');
                 $feedback.text(successMessage).addClass('is-success').removeClass('is-error');
-                $textarea.val('');
+                resetReplyEditor($form);
 
                 if (responseData.activity) {
                     renderActivity($form, responseData.activity);
@@ -502,11 +593,44 @@
 
     scheduleInit(function () {
         initializeFilters($('.mj-contact-messages[data-mj-component="mj-contact-messages"]'));
+        initializeReplyEditors($('.mj-contact-messages[data-mj-component="mj-contact-messages"]'));
     });
 
     $(document).on('mj-contact-messages:refresh', function (event, context) {
         var $context = context ? $(context) : $('.mj-contact-messages[data-mj-component="mj-contact-messages"]');
         initializeFilters($context);
+        initializeReplyEditors($context);
+    });
+
+    $(document).on('click', '.mj-contact-messages__editor-tool', function (event) {
+        event.preventDefault();
+
+        var $button = $(this);
+        var command = $button.data('command');
+        var $editor = $button.closest('[data-mj-reply-editor-wrap]').find('[data-mj-role="reply-editor"]').first();
+        if (!command || !$editor.length) {
+            return;
+        }
+
+        $editor.trigger('focus');
+
+        var value = null;
+        if (command === 'createLink') {
+            value = window.prompt(label('linkPrompt', 'Entrez l\'URL du lien :'), 'https://');
+            if (!value) {
+                return;
+            }
+        }
+
+        if (typeof document.execCommand === 'function') {
+            document.execCommand(command, false, value);
+        }
+
+        extractEditorPayload($button.closest('form'));
+    });
+
+    $(document).on('input blur', '[data-mj-role="reply-editor"]', function () {
+        extractEditorPayload($(this).closest('form'));
     });
 
     $(document).on('submit', '.mj-contact-messages__delete-form', function (event) {

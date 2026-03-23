@@ -659,6 +659,63 @@
     gap: 0.75rem;
 }
 
+.mj-contact-messages__rich-editor {
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    border-radius: 12px;
+    background: #fff;
+    overflow: hidden;
+}
+
+.mj-contact-messages__editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.45rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(248, 250, 255, 0.7);
+}
+
+.mj-contact-messages__editor-tool {
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    background: #fff;
+    color: rgba(30, 41, 59, 0.9);
+    border-radius: 8px;
+    min-width: 2.1rem;
+    height: 2.1rem;
+    padding: 0 0.45rem;
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.mj-contact-messages__editor-tool:hover,
+.mj-contact-messages__editor-tool:focus-visible {
+    border-color: rgba(79, 70, 229, 0.45);
+    background: rgba(79, 70, 229, 0.08);
+    outline: none;
+}
+
+.mj-contact-messages__editor-surface {
+    min-height: 9rem;
+    padding: 0.75rem 0.85rem;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.mj-contact-messages__editor-surface:focus {
+    outline: none;
+}
+
+.mj-contact-messages__editor-surface:empty::before {
+    content: attr(data-placeholder);
+    color: rgba(100, 116, 139, 0.85);
+}
+
+.mj-contact-messages__editor-surface .mj-contact-message-signature {
+    color: rgba(71, 85, 105, 0.92);
+}
+
 .mj-contact-messages__quick-reply-controls {
     display: flex;
     flex-wrap: wrap;
@@ -4090,6 +4147,27 @@ textarea.mj-contact-form__textarea {
     color: var(--mj-animateur-accent, #2563eb);
     border-color: var(--mj-animateur-accent, #2563eb);
     outline: none;
+}
+
+.mj-animateur-dashboard__message-ai-generate {
+    min-width: 120px;
+    padding: 8px 18px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s ease, opacity 0.15s ease;
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+    color: #ffffff;
+}
+
+.mj-animateur-dashboard__message-ai-generate:hover:not(:disabled) {
+    background: linear-gradient(135deg, #6d28d9, #9333ea);
+}
+
+.mj-animateur-dashboard__message-ai-generate:disabled {
+    opacity: 0.6;
+    cursor: wait;
 }
 
 .mj-animateur-dashboard__participant-message.is-loading .mj-animateur-dashboard__message-send,

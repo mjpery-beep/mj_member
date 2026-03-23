@@ -85,6 +85,8 @@
     var OccurrencesModal = Modals.OccurrencesModal;
     var LocationModal = Modals.LocationModal;
     var AvatarCaptureModal = Modals.AvatarCaptureModal;
+    var RegistrationDocumentPreviewModal = Modals.RegistrationDocumentPreviewModal;
+    var GenerateAiModal = Modals.GenerateAiModal;
 
     // ============================================
     // EVENT DETAIL PANEL
@@ -3504,6 +3506,10 @@
                 };
             }
 
+            if (typeof service.post !== 'function') {
+                service.post = fallbackPost;
+            }
+
             return service;
         }, [config.ajaxUrl, config.nonce]);
 
@@ -3745,6 +3751,10 @@
         var descriptionError = _descriptionError[0];
         var setDescriptionError = _descriptionError[1];
 
+        var _aiDescriptionGenerating = useState(false);
+        var aiDescriptionGenerating = _aiDescriptionGenerating[0];
+        var setAiDescriptionGenerating = _aiDescriptionGenerating[1];
+
         // Registration document state
         var _regDocState = useState({
             base: '',
@@ -3761,6 +3771,51 @@
         var _regDocError = useState('');
         var regDocError = _regDocError[0];
         var setRegDocError = _regDocError[1];
+
+        var _aiRegDocGenerating = useState(false);
+        var aiRegDocGenerating = _aiRegDocGenerating[0];
+        var setAiRegDocGenerating = _aiRegDocGenerating[1];
+
+        var _publishDescription = useState('');
+        var publishDescription = _publishDescription[0];
+        var setPublishDescription = _publishDescription[1];
+
+        var _publishDescriptionBase = useState('');
+        var publishDescriptionBase = _publishDescriptionBase[0];
+        var setPublishDescriptionBase = _publishDescriptionBase[1];
+
+        var _publishDescriptionSaving = useState(false);
+        var publishDescriptionSaving = _publishDescriptionSaving[0];
+        var setPublishDescriptionSaving = _publishDescriptionSaving[1];
+
+        var _publishDescriptionError = useState('');
+        var publishDescriptionError = _publishDescriptionError[0];
+        var setPublishDescriptionError = _publishDescriptionError[1];
+
+        var _aiPublishDescriptionGenerating = useState(false);
+        var aiPublishDescriptionGenerating = _aiPublishDescriptionGenerating[0];
+        var setAiPublishDescriptionGenerating = _aiPublishDescriptionGenerating[1];
+
+        // Generate AI Modal state
+        var _aiGenerateModalOpen = useState(false);
+        var aiGenerateModalOpen = _aiGenerateModalOpen[0];
+        var setAiGenerateModalOpen = _aiGenerateModalOpen[1];
+
+        var _aiGenerateModalType = useState('description');
+        var aiGenerateModalType = _aiGenerateModalType[0];
+        var setAiGenerateModalType = _aiGenerateModalType[1];
+
+        var _aiGenerateModalContext = useState({});
+        var aiGenerateModalContext = _aiGenerateModalContext[0];
+        var setAiGenerateModalContext = _aiGenerateModalContext[1];
+
+        var _regDocPreviewState = useState({
+            isOpen: false,
+            title: '',
+            html: '',
+        });
+        var regDocPreviewState = _regDocPreviewState[0];
+        var setRegDocPreviewState = _regDocPreviewState[1];
 
         // Event photos state
         var _eventPhotos = useState([]);
@@ -3793,6 +3848,20 @@
             descriptionFieldIdRef.current = 'mj-regmgr-description-' + Math.random().toString(36).slice(2);
         }
         var descriptionFieldId = descriptionFieldIdRef.current;
+
+        var publishDescriptionFieldIdRef = useRef(null);
+        if (!publishDescriptionFieldIdRef.current) {
+            publishDescriptionFieldIdRef.current = 'mj-regmgr-publish-description-' + Math.random().toString(36).slice(2);
+        }
+        var publishDescriptionFieldId = publishDescriptionFieldIdRef.current;
+
+        var _publishSubmitting = useState(false);
+        var publishSubmitting = _publishSubmitting[0];
+        var setPublishSubmitting = _publishSubmitting[1];
+
+        var _publishRequestError = useState('');
+        var publishRequestError = _publishRequestError[0];
+        var setPublishRequestError = _publishRequestError[1];
 
         var _pagination = useState({ page: 1, totalPages: 1 });
         var pagination = _pagination[0];
@@ -3922,6 +3991,22 @@
                 });
             });
         }, [eventDetails ? eventDetails.id : null, eventDetails ? eventDetails.registrationDocument : '', setRegDocState]);
+
+        useEffect(function () {
+            var nextValue = '';
+
+            if (eventDetails && typeof eventDetails.socialPublishDescription === 'string') {
+                nextValue = eventDetails.socialPublishDescription;
+            } else if (eventDetails && typeof eventDetails.description === 'string' && eventDetails.description !== '') {
+                var parser = document.createElement('div');
+                parser.innerHTML = eventDetails.description;
+                nextValue = (parser.textContent || parser.innerText || '').trim();
+            }
+
+            setPublishDescription(nextValue);
+            setPublishDescriptionBase(nextValue);
+            setPublishDescriptionError('');
+        }, [eventDetails ? eventDetails.id : null, eventDetails ? eventDetails.socialPublishDescription : '', eventDetails ? eventDetails.description : '']);
 
         useEffect(function () {
             if (!locationModal.isOpen) {
@@ -4176,6 +4261,89 @@
             setDescriptionError('');
         }, [setDescriptionState, setDescriptionError]);
 
+        var buildAiContextData = useCallback(function () {
+            var details = eventDetails || {};
+            var eventLocation = details.location && typeof details.location === 'object' ? details.location : {};
+            var occurrencesSource = Array.isArray(details.occurrences) ? details.occurrences : [];
+            var animateursSource = Array.isArray(details.animateurs) ? details.animateurs : [];
+
+            var occurrenceLines = occurrencesSource
+                .map(function (occurrence) {
+                    if (!occurrence || typeof occurrence !== 'object') {
+                        return '';
+                    }
+
+                    var startLabel = typeof occurrence.startFormatted === 'string' && occurrence.startFormatted !== ''
+                        ? occurrence.startFormatted
+                        : (typeof occurrence.start === 'string' ? occurrence.start : '');
+                    var endLabel = typeof occurrence.endFormatted === 'string' && occurrence.endFormatted !== ''
+                        ? occurrence.endFormatted
+                        : '';
+                    var statusLabel = typeof occurrence.status === 'string' && occurrence.status !== ''
+                        ? occurrence.status
+                        : '';
+
+                    var line = startLabel;
+                    if (endLabel && endLabel !== startLabel) {
+                        line += ' - ' + endLabel;
+                    }
+                    if (statusLabel) {
+                        line += ' (' + statusLabel + ')';
+                    }
+                    return line;
+                })
+                .filter(function (line) { return line !== ''; });
+
+            var animateurLines = animateursSource
+                .map(function (member) {
+                    if (!member || typeof member !== 'object') {
+                        return '';
+                    }
+
+                    var name = typeof member.name === 'string' ? member.name.trim() : '';
+                    if (name !== '') {
+                        return name;
+                    }
+
+                    var fallback = [member.firstName || '', member.lastName || ''].join(' ').trim();
+                    return fallback;
+                })
+                .filter(function (line) { return line !== ''; });
+
+            return {
+                event_name: (details.title || selectedEvent.name || '').toString(),
+                event_type: (details.typeLabel || details.type || selectedEvent.type_label || '').toString(),
+                event_status: (details.statusLabel || details.status || selectedEvent.status_label || selectedEvent.status || '').toString(),
+                event_date_start: (details.dateDebutFormatted || details.dateDebut || selectedEvent.date_formatted || selectedEvent.start_date || '').toString(),
+                event_date_end: (details.dateFinFormatted || details.dateFin || selectedEvent.end_date || '').toString(),
+                event_date_deadline: (details.dateFinInscription || '').toString(),
+                event_price: ((details.prix !== undefined && details.prix !== null) ? details.prix : (selectedEvent.fee || '0')).toString(),
+                event_location: (eventLocation.name || details.locationName || selectedEvent.location_name || '').toString(),
+                event_location_address: (eventLocation.address || details.locationAddress || '').toString(),
+                event_age_min: ((details.ageMin !== undefined && details.ageMin !== null) ? details.ageMin : '').toString(),
+                event_age_max: ((details.ageMax !== undefined && details.ageMax !== null) ? details.ageMax : '').toString(),
+                event_capacity: ((details.capacityTotal !== undefined && details.capacityTotal !== null) ? details.capacityTotal : '').toString(),
+                event_occurrences: occurrenceLines,
+                event_animateurs: animateurLines,
+            };
+        }, [selectedEvent, eventDetails]);
+
+        var handleGenerateAiDescription = useCallback(function () {
+            if (!selectedEvent || !selectedEvent.id) return;
+
+            setAiGenerateModalContext(buildAiContextData());
+            setAiGenerateModalType('description');
+            setAiGenerateModalOpen(true);
+        }, [selectedEvent, buildAiContextData]);
+
+        var handleGenerateAiRegDoc = useCallback(function () {
+            if (!selectedEvent || !selectedEvent.id) return;
+
+            setAiGenerateModalContext(buildAiContextData());
+            setAiGenerateModalType('regdoc');
+            setAiGenerateModalOpen(true);
+        }, [selectedEvent, buildAiContextData]);
+
         var handleSaveDescription = useCallback(function () {
             if (!selectedEvent || !selectedEvent.id) {
                 return Promise.resolve();
@@ -4278,14 +4446,6 @@
             }
 
             var eventId = selectedEvent.id;
-
-            // DEBUG
-            console.log('[MjRegMgr] Saving registration document:', {
-                eventId: eventId,
-                draftValue: draftValue,
-                draftLength: draftValue.length,
-                base: regDocState.base,
-            });
 
             setRegDocSaving(true);
             setRegDocError('');
@@ -4671,19 +4831,12 @@
                 (processedFooter ? '<div class="regdoc-footer">' + processedFooter + '</div>' : '') +
                 '</body></html>';
 
-            // Open print dialog in new window
-            var printWindow = window.open('', '_blank', 'width=800,height=600');
-            if (printWindow) {
-                printWindow.document.write(htmlDoc);
-                printWindow.document.close();
-                printWindow.focus();
-                setTimeout(function() {
-                    printWindow.print();
-                }, 250);
-            } else {
-                showError('Impossible d\'ouvrir la fenêtre d\'impression. Vérifiez que les popups ne sont pas bloqués.');
-            }
-        }, [selectedEvent, eventDetails, regDocState, config, strings, showError]);
+            setRegDocPreviewState({
+                isOpen: true,
+                title: getString(strings, 'registrationDocPreviewTitle', "Aperçu du document d'inscription"),
+                html: htmlDoc,
+            });
+        }, [selectedEvent, eventDetails, regDocState, config, strings, showError, setRegDocPreviewState]);
 
         var loadEventEditor = useCallback(function (eventId) {
             if (!EventEditor) {
@@ -4958,6 +5111,62 @@
             }
             showSuccess(data && data.message ? data.message : getString(strings, 'createEventSuccess', 'Brouillon créé.'));
         };
+
+        // Handler for AI generation modal callback
+        var handleAiGenerateFromModal = useCallback(function (payload) {
+            if (!selectedEvent || !selectedEvent.id) {
+                return Promise.reject(new Error('Aucun événement sélectionné'));
+            }
+
+            var type = aiGenerateModalType;
+            var eventId = selectedEvent.id;
+            var hint = '';
+            var includedFields = [];
+            var contextData = aiGenerateModalContext && typeof aiGenerateModalContext === 'object' ? aiGenerateModalContext : {};
+
+            if (typeof payload === 'string') {
+                hint = payload;
+            } else if (payload && typeof payload === 'object') {
+                hint = typeof payload.hint === 'string' ? payload.hint : '';
+                includedFields = Array.isArray(payload.includedFields) ? payload.includedFields : [];
+            }
+
+            // Set appropriate generating flag
+            if (type === 'description') {
+                setAiDescriptionGenerating(true);
+                setDescriptionError('');
+            } else if (type === 'regdoc') {
+                setAiRegDocGenerating(true);
+                setRegDocError('');
+            }
+
+            return api.generateAiText(eventId, type, hint, includedFields, contextData)
+                .then(function (result) {
+                    if (type === 'description') {
+                        setAiDescriptionGenerating(false);
+                        if (result && result.text) {
+                            handleDescriptionChange(result.text);
+                        }
+                    } else if (type === 'regdoc') {
+                        setAiRegDocGenerating(false);
+                        if (result && result.text) {
+                            handleRegDocChange(result.text);
+                        }
+                    }
+                })
+                .catch(function (err) {
+                    if (type === 'description') {
+                        setAiDescriptionGenerating(false);
+                        var msg = (err && err.message) ? err.message : getString(strings, 'aiGenerateError', 'Impossible de générer le texte.');
+                        setDescriptionError(msg);
+                    } else if (type === 'regdoc') {
+                        setAiRegDocGenerating(false);
+                        var msgRegDoc = (err && err.message) ? err.message : getString(strings, 'aiGenerateError', 'Impossible de générer le texte.');
+                        setRegDocError(msgRegDoc);
+                    }
+                    return Promise.reject(err);
+                });
+        }, [selectedEvent, aiGenerateModalType, aiGenerateModalContext, api, handleDescriptionChange, handleRegDocChange, strings]);
 
         var handleDeleteEvent = useCallback(function (target) {
             if (deletingEvent) {
@@ -5310,7 +5519,7 @@
             urlTabHandledRef.current = true;
 
             // Liste des onglets valides
-            var validTabs = ['registrations', 'attendance', 'description', 'regdoc', 'photos', 'details', 'editor', OCCURRENCE_TAB_KEY];
+            var validTabs = ['registrations', 'attendance', 'description', 'regdoc', 'publish', 'photos', 'details', 'editor', OCCURRENCE_TAB_KEY];
             if (validTabs.indexOf(urlTab) !== -1) {
                 setActiveTab(urlTab);
             }
@@ -6270,6 +6479,43 @@
             accountModal.open({ member: targetMember });
         }, [config.canManageAccounts, memberDetails, accountModal]);
 
+        var handleCreateMemberNextcloudLogin = useCallback(function (memberId, payload) {
+            if (!memberId) {
+                return Promise.reject(new Error('memberId is required'));
+            }
+
+            if (!config.canManageNextcloud) {
+                return Promise.reject(new Error('Accès refusé.'));
+            }
+
+            return api.createMemberNextcloudLogin(memberId, payload || {})
+                .then(function (result) {
+                    loadMemberDetails(memberId);
+                    loadMembers(membersPagination.page);
+
+                    var successMessage = getString(strings, 'memberNextcloudSuccess', 'Login Nextcloud créé avec succès.');
+                    if (result && result.message) {
+                        successMessage = result.message;
+                    }
+
+                    if (result && result.login) {
+                        successMessage += ' Login: ' + result.login + '.';
+                    }
+
+                    if (result && result.generated_password) {
+                        successMessage += ' Mot de passe: ' + result.generated_password + '.';
+                    }
+
+                    showSuccess(successMessage);
+                    return result;
+                })
+                .catch(function (err) {
+                    var errorMessage = err && err.message ? err.message : 'Erreur lors de la création du login Nextcloud.';
+                    showError(errorMessage);
+                    throw err;
+                });
+        }, [api, config.canManageNextcloud, loadMemberDetails, loadMembers, membersPagination.page, showSuccess, showError, strings]);
+
         // Payer la cotisation via Stripe - retourne le résultat complet avec qrUrl
         var handlePayMembershipOnline = useCallback(function (memberId) {
             return api.createMembershipPaymentLink(memberId)
@@ -6920,6 +7166,7 @@
         var registrationsTabLabel = getString(strings, 'tabRegistrations', 'Inscriptions');
         var descriptionDirty = descriptionState.draft !== descriptionState.base;
         var regDocDirty = regDocState.draft !== regDocState.base;
+        var publishDescriptionDirty = publishDescription !== publishDescriptionBase;
 
         var occurrenceTab = createOccurrenceTab
             ? createOccurrenceTab(strings)
@@ -6935,11 +7182,203 @@
             attendance: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 12l2 2 4-4"></path><line x1="7" y1="8" x2="17" y2="8"></line></svg>',
             description: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg>',
             regdoc: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>',
+            publish: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"></line><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"></line></svg>',
             details: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><circle cx="12" cy="8" r="1"></circle></svg>',
             occurrences: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>',
             editor: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5l4 4-11 11H5.5v-6.5z"></path></svg>',
             photos: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>',
         };
+
+        var socialPublishConfig = config && typeof config.socialPublish === 'object' && config.socialPublish
+            ? config.socialPublish
+            : {};
+
+        var eventShareUrl = useMemo(function () {
+            if (eventDetails && typeof eventDetails.eventPageUrl === 'string' && eventDetails.eventPageUrl !== '') {
+                return eventDetails.eventPageUrl;
+            }
+            if (eventDetails && typeof eventDetails.frontUrl === 'string' && eventDetails.frontUrl !== '') {
+                return eventDetails.frontUrl;
+            }
+            return '';
+        }, [eventDetails ? eventDetails.eventPageUrl : '', eventDetails ? eventDetails.frontUrl : '']);
+
+        var publishMessage = useMemo(function () {
+            var parts = [];
+            var trimmedDescription = typeof publishDescription === 'string' ? publishDescription.trim() : '';
+            var trimmedUrl = typeof eventShareUrl === 'string' ? eventShareUrl.trim() : '';
+            if (trimmedDescription !== '') {
+                parts.push(trimmedDescription);
+            }
+            if (trimmedUrl !== '') {
+                parts.push(trimmedUrl);
+            }
+            return parts.join('\n\n');
+        }, [publishDescription, eventShareUrl]);
+
+        var handleGenerateAiPublishDescription = useCallback(function () {
+            if (!selectedEvent || !selectedEvent.id || !config.aiEnabled) {
+                return;
+            }
+
+            var eventId = selectedEvent.id;
+            var contextData = buildAiContextData();
+
+            setAiPublishDescriptionGenerating(true);
+            setPublishDescriptionError('');
+
+            api.generateAiText(eventId, 'social_description', '', [], contextData)
+                .then(function (result) {
+                    setAiPublishDescriptionGenerating(false);
+                    var generated = result && typeof result.text === 'string' ? result.text : '';
+                    setPublishDescription(generated);
+                })
+                .catch(function (err) {
+                    setAiPublishDescriptionGenerating(false);
+                    var fallback = getString(strings, 'aiGenerateError', 'Impossible de générer le texte.');
+                    var messages = collectErrorMessages(err, fallback);
+                    var message = messages && messages.length > 0 ? messages[0] : fallback;
+                    setPublishDescriptionError(message);
+                    showError(message);
+                });
+        }, [selectedEvent, config.aiEnabled, buildAiContextData, api, strings, collectErrorMessages, showError]);
+
+        var handleSavePublishDescription = useCallback(function () {
+            if (!selectedEvent || !selectedEvent.id) {
+                return Promise.resolve();
+            }
+
+            if (!publishDescriptionDirty) {
+                return Promise.resolve();
+            }
+
+            var eventId = selectedEvent.id;
+            var safeDescription = typeof publishDescription === 'string' ? publishDescription : '';
+            var currentPayload = eventDetails && eventDetails.registrationPayload && typeof eventDetails.registrationPayload === 'object'
+                ? eventDetails.registrationPayload
+                : {};
+            var nextPayload = Object.assign({}, currentPayload, {
+                social_publish_description: safeDescription,
+            });
+
+            setPublishDescriptionSaving(true);
+            setPublishDescriptionError('');
+
+            return api.updateEvent(eventId, {}, { registrationPayload: nextPayload })
+                .then(function (data) {
+                    setPublishDescriptionSaving(false);
+                    setPublishDescriptionBase(safeDescription);
+                    setPublishDescriptionError('');
+                    showSuccess(data && data.message ? data.message : getString(strings, 'publishDescriptionSaved', 'Description de partage enregistrée.'));
+
+                    setEventDetails(function (prev) {
+                        if (!prev || prev.id !== eventId) {
+                            return prev;
+                        }
+                        return Object.assign({}, prev, {
+                            socialPublishDescription: safeDescription,
+                            registrationPayload: nextPayload,
+                        });
+                    });
+
+                    return data;
+                })
+                .catch(function (error) {
+                    setPublishDescriptionSaving(false);
+                    if (error && error.aborted) {
+                        return Promise.reject(error);
+                    }
+                    var fallback = getString(strings, 'publishDescriptionSaveError', 'Impossible d\'enregistrer la description de partage.');
+                    var messages = collectErrorMessages(error, fallback);
+                    var message = messages && messages.length > 0 ? messages[0] : fallback;
+                    setPublishDescriptionError(message);
+                    showError(message);
+                    return Promise.reject(error);
+                });
+        }, [selectedEvent, publishDescriptionDirty, publishDescription, eventDetails, api, showSuccess, strings, setEventDetails, collectErrorMessages, showError]);
+
+        var handleCopyPublishMessage = useCallback(function () {
+            var textToCopy = publishMessage;
+            if (!textToCopy) {
+                showError(getString(strings, 'publishNoEventLink', 'Aucun lien événement disponible pour le moment.'));
+                return;
+            }
+
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                navigator.clipboard.writeText(textToCopy)
+                    .then(function () {
+                        showSuccess(getString(strings, 'publishMessageCopied', 'Message copié dans le presse-papiers.'));
+                    })
+                    .catch(function () {
+                        showError(getString(strings, 'publishCopyError', 'Impossible de copier automatiquement. Copiez le texte manuellement.'));
+                    });
+                return;
+            }
+
+            try {
+                var textarea = document.createElement('textarea');
+                textarea.value = textToCopy;
+                textarea.setAttribute('readonly', 'readonly');
+                textarea.style.position = 'absolute';
+                textarea.style.left = '-9999px';
+                document.body.appendChild(textarea);
+                textarea.select();
+                var copied = document.execCommand('copy');
+                document.body.removeChild(textarea);
+                if (copied) {
+                    showSuccess(getString(strings, 'publishMessageCopied', 'Message copié dans le presse-papiers.'));
+                } else {
+                    showError(getString(strings, 'publishCopyError', 'Impossible de copier automatiquement. Copiez le texte manuellement.'));
+                }
+            } catch (error) {
+                showError(getString(strings, 'publishCopyError', 'Impossible de copier automatiquement. Copiez le texte manuellement.'));
+            }
+        }, [publishMessage, showSuccess, showError, strings]);
+
+        var handleOpenExternalPublishTarget = useCallback(function (url) {
+            if (!url) {
+                return;
+            }
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }, []);
+
+        var handleShareFacebook = useCallback(function () {
+            if (!eventShareUrl) {
+                showError(getString(strings, 'publishNoEventLink', 'Aucun lien événement disponible pour le moment.'));
+                return;
+            }
+            var shareUrl = 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(eventShareUrl);
+            if (publishMessage) {
+                shareUrl += '&quote=' + encodeURIComponent(publishMessage);
+            }
+            window.open(shareUrl, '_blank', 'noopener,noreferrer');
+        }, [eventShareUrl, publishMessage, showError, strings]);
+
+        var handlePublishToN8n = useCallback(function () {
+            if (!selectedEvent || !selectedEvent.id) return;
+
+            setPublishSubmitting(true);
+            setPublishRequestError('');
+
+            api.post('mj_regmgr_publish_event', {
+                eventId: selectedEvent.id,
+                message: publishDescription,
+            }).then(function (response) {
+                setPublishSubmitting(false);
+                if (response && response.success) {
+                    showSuccess((response.data && response.data.message) || getString(strings, 'publishActionSuccess', 'Publication envoyée au workflow n8n.'));
+                } else {
+                    var msg = (response && response.data && response.data.message) || getString(strings, 'publishError', 'Erreur lors de la publication.');
+                    setPublishRequestError(msg);
+                    showError(msg);
+                }
+            }).catch(function (err) {
+                setPublishSubmitting(false);
+                var msg = (err && err.message) || getString(strings, 'publishError', 'Erreur lors de la publication.');
+                setPublishRequestError(msg);
+                showError(msg);
+            });
+        }, [selectedEvent, publishDescription, api, showSuccess, showError, strings]);
 
         // Compteur de photos en attente pour l'événement
         var eventPendingPhotosCount = useMemo(function () {
@@ -6967,6 +7406,11 @@
                 key: 'regdoc',
                 label: getString(strings, 'tabRegDoc', 'Document'),
                 icon: tabIcons.regdoc,
+            },
+            {
+                key: 'publish',
+                label: getString(strings, 'tabPublish', 'Publier'),
+                icon: tabIcons.publish,
             },
             {
                 key: 'photos',
@@ -7270,6 +7714,14 @@
                                             }),
                                         ]),
                                         h('div', { class: 'mj-regmgr-description-actions' }, [
+                                            config.aiEnabled && h('button', {
+                                                type: 'button',
+                                                class: 'mj-btn mj-btn--ai',
+                                                disabled: aiDescriptionGenerating || descriptionSaving,
+                                                onClick: function () { handleGenerateAiDescription(); },
+                                            }, aiDescriptionGenerating
+                                                ? getString(strings, 'aiGenerating', 'Génération en cours...')
+                                                : getString(strings, 'aiGenerateDescription', '✨ Générer avec l\'IA')),
                                             h('button', {
                                                 type: 'button',
                                                 class: 'mj-btn mj-btn--primary',
@@ -7373,6 +7825,14 @@
                                         ]),
                                         // Actions
                                         h('div', { class: 'mj-regmgr-regdoc-actions' }, [
+                                            config.aiEnabled && h('button', {
+                                                type: 'button',
+                                                class: 'mj-btn mj-btn--ai',
+                                                disabled: aiRegDocGenerating || regDocSaving,
+                                                onClick: function () { handleGenerateAiRegDoc(); },
+                                            }, aiRegDocGenerating
+                                                ? getString(strings, 'aiGenerating', 'Génération en cours...')
+                                                : getString(strings, 'aiGenerateRegDoc', '✨ Générer avec l\'IA')),
                                             h('button', {
                                                 type: 'button',
                                                 class: 'mj-btn mj-btn--primary',
@@ -7404,6 +7864,79 @@
                                             regDocError && h('p', { class: 'mj-regmgr-regdoc-error' }, regDocError),
                                         ]),
                                     ]),
+                            ]),
+
+                            activeTab === 'publish' && h('div', { class: 'mj-regmgr-publish-tab' }, [
+                                h('div', { class: 'mj-regmgr-publish-tab__intro' }, [
+                                    h('h3', { class: 'mj-regmgr-publish-tab__title' }, getString(strings, 'publishTitle', 'Publier cet événement')),
+                                ]),
+                                h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
+                                    h('label', { class: 'mj-regmgr-form-label', htmlFor: publishDescriptionFieldId }, getString(strings, 'publishDescriptionLabel', 'Description à partager')),
+                                    h('textarea', {
+                                        id: publishDescriptionFieldId,
+                                        class: 'mj-regmgr-publish-tab__textarea',
+                                        rows: 5,
+                                        value: publishDescription,
+                                        placeholder: getString(strings, 'publishDescriptionPlaceholder', 'Ex: Rejoins-nous pour cet événement ! Toutes les infos via le lien ci-dessous.'),
+                                        onInput: function (event) {
+                                            var nextValue = event && event.target ? event.target.value : '';
+                                            setPublishDescription(nextValue);
+                                            if (publishDescriptionError) {
+                                                setPublishDescriptionError('');
+                                            }
+                                        },
+                                    }),
+                                    h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'publishDescriptionHelp', 'Le message est réutilisé pour les boutons de partage ci-dessous.')),
+                                    h('div', { class: 'mj-regmgr-publish-tab__editor-actions' }, [
+                                        config.aiEnabled && h('button', {
+                                            type: 'button',
+                                            class: 'mj-btn mj-btn--ai',
+                                            disabled: aiPublishDescriptionGenerating || publishDescriptionSaving,
+                                            onClick: handleGenerateAiPublishDescription,
+                                        }, aiPublishDescriptionGenerating
+                                            ? getString(strings, 'aiGenerating', 'Génération en cours...')
+                                            : getString(strings, 'aiGeneratePublishDescription', '✨ Générer avec l\'IA')),
+                                        h('button', {
+                                            type: 'button',
+                                            class: 'mj-btn mj-btn--primary',
+                                            disabled: publishDescriptionSaving || !publishDescriptionDirty,
+                                            onClick: handleSavePublishDescription,
+                                        }, publishDescriptionSaving
+                                            ? getString(strings, 'publishDescriptionSaving', 'Enregistrement...')
+                                            : getString(strings, 'publishDescriptionSaveButton', 'Enregistrer la description')),
+                                        publishDescriptionDirty && !publishDescriptionSaving && h('span', { class: 'mj-regmgr-regdoc-status' }, getString(strings, 'publishDescriptionUnsavedChanges', 'Modifications non enregistrées')),
+                                        publishDescriptionError && h('p', { class: 'mj-regmgr-regdoc-error' }, publishDescriptionError),
+                                    ]),
+                                ]),
+                                h('div', { class: 'mj-regmgr-publish-tab__link' }, [
+                                    h('strong', null, getString(strings, 'publishEventLinkLabel', 'Lien de l\'événement')),
+                                    eventShareUrl
+                                        ? h('a', {
+                                            href: eventShareUrl,
+                                            target: '_blank',
+                                            rel: 'noopener noreferrer',
+                                        }, eventShareUrl)
+                                        : h('span', { class: 'mj-regmgr-publish-tab__missing' }, getString(strings, 'publishNoEventLink', 'Aucun lien événement disponible pour le moment.')),
+                                ]),
+                                h('div', { class: 'mj-regmgr-publish-tab__actions' }, [
+                                    h('div', { class: 'mj-regmgr-publish-card' }, [
+                                        h('h4', null, getString(strings, 'publishActionTitle', 'Workflow n8n')),
+                                        h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'publishActionHint', 'Envoie le message et les données de l\'événement au webhook n8n configuré.')),
+                                        config.socialPublish && config.socialPublish.n8nConfigured
+                                            ? h(Fragment, null, [
+                                                h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--primary' + (publishSubmitting ? ' running' : ''),
+                                                    onClick: handlePublishToN8n,
+                                                    disabled: publishSubmitting,
+                                                }, publishSubmitting
+                                                    ? getString(strings, 'publishing', 'Publication en cours...')
+                                                    : getString(strings, 'publishActionButton', 'Publier via n8n')),
+                                                publishRequestError && h('p', { class: 'mj-regmgr-alert mj-regmgr-alert--error' }, publishRequestError),
+                                            ])
+                                            : h('p', { class: 'mj-regmgr-publish-tab__missing' }, getString(strings, 'publishNotConfigured', 'Non configuré dans l\'onglet module « Publier sur les réseaux ».')),
+                                    ]),
+                                ]),
                             ]),
 
                             activeTab === 'photos' && h('div', { class: 'mj-regmgr-photos-tab' }, [
@@ -7636,6 +8169,7 @@
                             onPayMembershipOnline: handlePayMembershipOnline,
                             onMarkMembershipPaid: handleMarkMembershipPaid,
                             onManageAccount: config.canManageAccounts ? handleOpenAccountModal : null,
+                            onCreateNextcloudLogin: config.canManageNextcloud ? handleCreateMemberNextcloudLogin : null,
                             onUpdateIdea: handleUpdateMemberIdea,
                             onDeleteIdea: handleDeleteMemberIdea,
                             onUpdatePhoto: handleUpdateMemberPhoto,
@@ -7793,6 +8327,35 @@
                 })(),
                 strings: strings,
                 onCapture: handleConfirmAvatarCapture,
+            }),
+
+            RegistrationDocumentPreviewModal && h(RegistrationDocumentPreviewModal, {
+                isOpen: regDocPreviewState.isOpen,
+                onClose: function () {
+                    setRegDocPreviewState(function (prev) {
+                        if (!prev || !prev.isOpen) {
+                            return prev;
+                        }
+                        return {
+                            isOpen: false,
+                            title: '',
+                            html: '',
+                        };
+                    });
+                },
+                title: regDocPreviewState.title,
+                htmlContent: regDocPreviewState.html,
+                strings: strings,
+            }),
+
+            GenerateAiModal && h(GenerateAiModal, {
+                isOpen: aiGenerateModalOpen,
+                onClose: function () { setAiGenerateModalOpen(false); },
+                onGenerate: handleAiGenerateFromModal,
+                type: aiGenerateModalType,
+                contextData: aiGenerateModalContext,
+                strings: strings,
+                config: config,
             }),
 
             // Toasts

@@ -3,6 +3,7 @@
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\AssetsManager;
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\MjOpenAIClient;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -1086,6 +1087,95 @@ if (!function_exists('mj_member_prepare_animateur_event_data')) {
     }
 }
 
+if (!function_exists('mj_member_ensure_preview_animateur_occurrences')) {
+    function mj_member_ensure_preview_animateur_occurrences($event_data, $minimum = 3) {
+        if (!is_array($event_data)) {
+            return $event_data;
+        }
+
+        $minimum = max(2, (int) $minimum);
+        $occurrences = isset($event_data['occurrences']) && is_array($event_data['occurrences'])
+            ? array_values($event_data['occurrences'])
+            : array();
+
+        if (count($occurrences) >= $minimum) {
+            return $event_data;
+        }
+
+        $base_occurrence = !empty($occurrences[0]) && is_array($occurrences[0]) ? $occurrences[0] : null;
+        if (!$base_occurrence) {
+            return $event_data;
+        }
+
+        $base_start = isset($base_occurrence['start']) ? (string) $base_occurrence['start'] : '';
+        $base_timestamp = isset($base_occurrence['timestamp']) ? (int) $base_occurrence['timestamp'] : 0;
+        if ($base_timestamp <= 0 && $base_start !== '') {
+            $parsed_timestamp = strtotime($base_start);
+            $base_timestamp = $parsed_timestamp ? (int) $parsed_timestamp : 0;
+        }
+
+        if ($base_timestamp <= 0) {
+            $base_timestamp = current_time('timestamp');
+        }
+
+        $base_end = isset($base_occurrence['end']) ? (string) $base_occurrence['end'] : $base_start;
+        $base_end_timestamp = $base_end !== '' ? strtotime($base_end) : false;
+        $duration = ($base_end_timestamp && $base_end_timestamp > $base_timestamp)
+            ? ((int) $base_end_timestamp - $base_timestamp)
+            : 0;
+
+        $label_format = get_option('date_format', 'd/m/Y') . ' ' . get_option('time_format', 'H:i');
+
+        while (count($occurrences) < $minimum) {
+            $offset_index = count($occurrences);
+            $occurrence_timestamp = $base_timestamp + ($offset_index * WEEK_IN_SECONDS);
+            $occurrence_start = wp_date('Y-m-d H:i:s', $occurrence_timestamp);
+            $occurrence_end = $duration > 0
+                ? wp_date('Y-m-d H:i:s', $occurrence_timestamp + $duration)
+                : $occurrence_start;
+
+            $occurrences[] = array(
+                'start' => $occurrence_start,
+                'end' => $occurrence_end,
+                'label' => wp_date($label_format, $occurrence_timestamp),
+                'timestamp' => $occurrence_timestamp,
+                'isPast' => false,
+                'isToday' => false,
+                'isNext' => false,
+                'counts' => array(
+                    'present' => 0,
+                    'absent' => 0,
+                    'pending' => 0,
+                ),
+                'summary' => '',
+            );
+        }
+
+        $event_data['occurrences'] = $occurrences;
+        $event_data['occurrenceCount'] = count($occurrences);
+
+        if (empty($event_data['defaultOccurrence']) && !empty($occurrences[0]['start'])) {
+            $event_data['defaultOccurrence'] = (string) $occurrences[0]['start'];
+        }
+
+        if (empty($event_data['defaultOccurrenceLabel']) && !empty($occurrences[0]['label'])) {
+            $event_data['defaultOccurrenceLabel'] = (string) $occurrences[0]['label'];
+        }
+
+        if (isset($event_data['counts']) && is_array($event_data['counts'])) {
+            $event_data['counts']['occurrences'] = count($occurrences);
+        }
+
+        if (isset($event_data['meta']) && is_array($event_data['meta'])) {
+            $event_data['meta']['nextOccurrenceLabel'] = !empty($event_data['defaultOccurrenceLabel'])
+                ? (string) $event_data['defaultOccurrenceLabel']
+                : (!empty($occurrences[0]['label']) ? (string) $occurrences[0]['label'] : '');
+        }
+
+        return $event_data;
+    }
+}
+
 if (!function_exists('mj_member_get_all_events_summary')) {
     function mj_member_get_all_events_summary($args = array()) {
         if (!class_exists('MjEvents')) {
@@ -1610,6 +1700,7 @@ if (!function_exists(function: 'mj_member_render_animateur_component')) {
                     );
 
                     if (!empty($prepared_event)) {
+                        $prepared_event = mj_member_ensure_preview_animateur_occurrences($prepared_event, 3);
                         $prepared_event['isAssigned'] = true;
                         $preview_events[] = $prepared_event;
                     }
@@ -1623,6 +1714,16 @@ if (!function_exists(function: 'mj_member_render_animateur_component')) {
                         $all_events = $preview_summary;
                     }
                 }
+            }
+        }
+
+        if ($is_elementor_preview && !empty($events)) {
+            foreach ($events as $event_index => $event_entry) {
+                if (!is_array($event_entry)) {
+                    continue;
+                }
+
+                $events[$event_index] = mj_member_ensure_preview_animateur_occurrences($event_entry, 3);
             }
         }
 
@@ -1810,7 +1911,9 @@ if (!function_exists(function: 'mj_member_render_animateur_component')) {
                     'memberAdd' => 'mj_member_animateur_add_members',
                     'memberQuickCreate' => 'mj_member_animateur_quick_create_member',
                     'registrationRemove' => 'mj_member_animateur_remove_registration',
+                    'generateAiMessage' => 'mj_member_animateur_generate_ai_message',
                 ),
+                'aiEnabled' => (new MjOpenAIClient())->isEnabled(),
             )
         );
 
@@ -3921,3 +4024,111 @@ add_action('wp_ajax_mj_member_animateur_search_members', 'mj_member_ajax_animate
 add_action('wp_ajax_mj_member_animateur_quick_create_member', 'mj_member_ajax_animateur_quick_create_member');
 add_action('wp_ajax_mj_member_animateur_add_members', 'mj_member_ajax_animateur_add_members');
 add_action('wp_ajax_mj_member_animateur_remove_registration', 'mj_member_ajax_animateur_remove_registration');
+add_action('wp_ajax_mj_member_animateur_generate_ai_message', 'mj_member_ajax_animateur_generate_ai_message');
+
+if (!function_exists('mj_member_ajax_animateur_generate_ai_message')) {
+    /**
+     * Generate an AI-drafted SMS/message for a participant.
+     *
+     * POST params:
+     *   event_id  (int)    - ID of the event.
+     *   member_id (int)    - ID of the target participant member.
+     *   hint      (string) - Optional extra context from the animateur.
+     */
+    function mj_member_ajax_animateur_generate_ai_message() {
+        check_ajax_referer('mj_member_animateur', 'nonce');
+
+        if (!is_user_logged_in()) {
+            wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 401);
+        }
+
+        $ai_client = new MjOpenAIClient();
+        if (!$ai_client->isEnabled()) {
+            wp_send_json_error(array('message' => __('La génération IA est désactivée (clé API manquante).', 'mj-member')), 503);
+        }
+
+        if (!class_exists('MjEventAnimateurs') || !class_exists('MjMembers')) {
+            wp_send_json_error(array('message' => __('Modules requis indisponibles.', 'mj-member')), 500);
+        }
+
+        $animateur = mj_member_get_current_animateur_member();
+        if (!$animateur) {
+            wp_send_json_error(array('message' => __('Seuls les animateurs peuvent utiliser cette fonctionnalité.', 'mj-member')), 403);
+        }
+
+        $event_id = isset($_POST['event_id']) ? (int) $_POST['event_id'] : 0;
+        if ($event_id <= 0) {
+            wp_send_json_error(array('message' => __('Événement invalide.', 'mj-member')), 400);
+        }
+
+        if (!MjEventAnimateurs::member_is_assigned($event_id, (int) $animateur->id)) {
+            wp_send_json_error(array('message' => __('Vous ne gérez pas cet événement.', 'mj-member')), 403);
+        }
+
+        $member_id = isset($_POST['member_id']) ? (int) $_POST['member_id'] : 0;
+
+        $hint_raw = isset($_POST['hint']) ? wp_unslash((string) $_POST['hint']) : '';
+        $hint = sanitize_textarea_field($hint_raw);
+
+        $event = class_exists('MjEvents') ? MjEvents::find($event_id) : null;
+        $event_title = $event && !empty($event->title)
+            ? sanitize_text_field((string) $event->title)
+            : sprintf(__('Événement #%d', 'mj-member'), $event_id);
+        $event_date = $event && !empty($event->date_start)
+            ? sanitize_text_field((string) $event->date_start)
+            : '';
+
+        $participant_first_name = '';
+        if ($member_id > 0) {
+            $target_member = MjMembers::getById($member_id);
+            if ($target_member && !empty($target_member->first_name)) {
+                $participant_first_name = sanitize_text_field((string) $target_member->first_name);
+            }
+        }
+
+        $site_name = get_bloginfo('name');
+        $animateur_first_name = !empty($animateur->first_name)
+            ? sanitize_text_field((string) $animateur->first_name)
+            : '';
+
+            $default_sms_prompt = get_option('mj_member_ai_sms_prompt', '');
+            if ($default_sms_prompt === '') {
+                $default_sms_prompt = sprintf(
+                    'Tu es un animateur de l\'association %s qui envoie un message court et chaleureux à un participant. Rédige en français, sois concis (moins de 160 caractères si possible), utilise un ton amical et adapté aux jeunes. Ne mets pas de sujet. Réponds uniquement avec le texte du message.',
+                    $site_name
+                );
+            }
+            $system_prompt = apply_filters('mj_member_ai_sms_system_prompt', $default_sms_prompt);
+
+        $context_parts = array(
+            sprintf('Événement : %s', $event_title),
+        );
+        if ($event_date !== '') {
+            $context_parts[] = sprintf('Date : %s', $event_date);
+        }
+        if ($participant_first_name !== '') {
+            $context_parts[] = sprintf('Prénom du participant : %s', $participant_first_name);
+        }
+        if ($animateur_first_name !== '') {
+            $context_parts[] = sprintf('Prénom de l\'animateur : %s', $animateur_first_name);
+        }
+        if ($hint !== '') {
+            $context_parts[] = sprintf('Contexte supplémentaire : %s', $hint);
+        }
+
+        $user_prompt = sprintf(
+            "Rédige un message à envoyer à un participant pour l'événement suivant :\n\n%s",
+            implode("\n", $context_parts)
+        );
+
+        $result = $ai_client->generateText($system_prompt, $user_prompt, array('max_tokens' => 300));
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()), 503);
+            return;
+        }
+
+        wp_send_json_success(array(
+            'text' => $result['text'],
+        ));
+    }
+}

@@ -9,7 +9,57 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 function mj_check_and_add_columns() {
     mj_member_run_schema_upgrade();
+    mj_member_ensure_nextcloud_credentials_columns();
+    mj_member_ensure_nextcloud_tracking_columns();
     mj_member_ensure_auxiliary_tables();
+}
+
+/**
+ * Ensure Nextcloud credentials columns exist even if schema version was already bumped.
+ */
+function mj_member_ensure_nextcloud_credentials_columns() {
+    global $wpdb;
+
+    if (!isset($wpdb) || !is_object($wpdb)) {
+        return;
+    }
+
+    $members_table = $wpdb->prefix . 'mj_members';
+    if (!$members_table || !mj_member_table_exists($members_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($members_table, 'member_nextcloud_login')) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN member_nextcloud_login VARCHAR(191) DEFAULT NULL AFTER member_account_login");
+    }
+
+    if (!mj_member_column_exists($members_table, 'member_nextcloud_password')) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN member_nextcloud_password VARCHAR(255) DEFAULT NULL AFTER member_nextcloud_login");
+    }
+}
+
+/**
+ * Ensure Nextcloud tracking columns exist even if schema version was already bumped.
+ */
+function mj_member_ensure_nextcloud_tracking_columns() {
+    global $wpdb;
+
+    if (!isset($wpdb) || !is_object($wpdb)) {
+        return;
+    }
+
+    $members_table = $wpdb->prefix . 'mj_members';
+    if (!$members_table || !mj_member_table_exists($members_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($members_table, 'nextcloud_last_creation_date')) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN nextcloud_last_creation_date DATETIME DEFAULT NULL AFTER member_nextcloud_password");
+    }
+
+    if (!mj_member_column_exists($members_table, 'nextcloud_last_connexion_date')) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN nextcloud_last_connexion_date DATETIME DEFAULT NULL AFTER nextcloud_last_creation_date");
+    }
 }
 
 function mj_member_table_exists($table_name) {
@@ -1923,6 +1973,9 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_76($wpdb);
     mj_member_upgrade_to_2_77($wpdb);
     mj_member_upgrade_to_2_78($wpdb);
+    mj_member_upgrade_to_2_79($wpdb);
+    mj_member_upgrade_to_2_80($wpdb);
+    mj_member_upgrade_to_2_81($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -3696,8 +3749,7 @@ function mj_member_upgrade_to_2_43($wpdb) {
         KEY idx_notification (notification_id),
         KEY idx_member_status (member_id, status),
         KEY idx_user_status (user_id, status),
-        KEY idx_role_status (role, status),
-        CONSTRAINT fk_mj_notification_recipient FOREIGN KEY (notification_id) REFERENCES {$notifications_table} (id) ON DELETE CASCADE
+        KEY idx_role_status (role, status)
     ) {$charset_collate};";
 
     dbDelta($sql_recipients);
@@ -6085,5 +6137,61 @@ function mj_member_upgrade_to_2_78($wpdb) {
 
     if (!mj_member_index_exists($events_table, 'idx_created_by_member')) {
         $wpdb->query("ALTER TABLE {$events_table} ADD INDEX idx_created_by_member (created_by_member_id)");
+    }
+}
+
+/**
+ * Migration 2.79: Add signature message column to mj_members.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_79($wpdb) {
+    $members_table = $wpdb->prefix . 'mj_members';
+    if (!$members_table || !mj_member_table_exists($members_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($members_table, 'signature_message')) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN signature_message LONGTEXT DEFAULT NULL AFTER job_description");
+    }
+}
+
+/**
+ * Migration 2.80: Add dedicated Nextcloud credentials columns to mj_members.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_80($wpdb) {
+    $members_table = $wpdb->prefix . 'mj_members';
+    if (!$members_table || !mj_member_table_exists($members_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($members_table, 'member_nextcloud_login')) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN member_nextcloud_login VARCHAR(191) DEFAULT NULL AFTER member_account_login");
+    }
+
+    if (!mj_member_column_exists($members_table, 'member_nextcloud_password')) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN member_nextcloud_password VARCHAR(255) DEFAULT NULL AFTER member_nextcloud_login");
+    }
+}
+
+/**
+ * Migration 2.81: Track Nextcloud account lifecycle dates on mj_members.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_81($wpdb) {
+    $members_table = $wpdb->prefix . 'mj_members';
+    if (!$members_table || !mj_member_table_exists($members_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($members_table, 'nextcloud_last_creation_date')) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN nextcloud_last_creation_date DATETIME DEFAULT NULL AFTER member_nextcloud_password");
+    }
+
+    if (!mj_member_column_exists($members_table, 'nextcloud_last_connexion_date')) {
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN nextcloud_last_connexion_date DATETIME DEFAULT NULL AFTER nextcloud_last_creation_date");
     }
 }

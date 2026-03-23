@@ -15,9 +15,11 @@ use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Crud\MjEventAttendance;
 use Mj\Member\Classes\Crud\MjLeaveTypes;
 use Mj\Member\Classes\MjRoles;
+use Mj\Member\Classes\MjNextcloud;
 use Mj\Member\Classes\View\CreateEventModalRenderer;
 use Mj\Member\Core\AssetsManager;
 use Mj\Member\Core\Config;
+use Mj\Member\Classes\MjOpenAIClient;
 
 $settings = $this->get_settings_for_display();
 $widget_id = 'mj-registration-manager-' . $this->get_id();
@@ -44,6 +46,8 @@ $allow_delete_registration = !empty($settings['allow_delete_registration']) && $
 $allow_create_member = !empty($settings['allow_create_member']) && $settings['allow_create_member'] === 'yes';
 
 $can_manage_accounts = current_user_can(Config::capability()) && (current_user_can('create_users') || current_user_can('promote_users'));
+$nextcloud_available = MjNextcloud::isAvailable();
+$can_manage_nextcloud = (current_user_can(Config::capability()) || $is_coordinateur) && $nextcloud_available;
 $account_roles = array();
 if ($can_manage_accounts && function_exists('get_editable_roles')) {
     $editable_roles = get_editable_roles();
@@ -360,6 +364,9 @@ $admin_edit_url = admin_url('admin.php?page=mj_events&action=edit&event=');
 $admin_add_url = admin_url('admin.php?page=mj_events&action=add');
 $admin_member_url = admin_url('admin.php?page=mj_members&action=edit&id=');
 
+$social_n8n_enabled = get_option('mj_social_n8n_enabled', '0') === '1';
+$social_n8n_webhook_url = esc_url_raw((string) get_option('mj_social_n8n_webhook_url', ''));
+
 // Prix de la cotisation
 $membership_price = (float) get_option('mj_annual_fee', '2.00');
 $membership_price_manual = get_option('mj_annual_fee_manual', '');
@@ -412,6 +419,9 @@ $config_json = wp_json_encode(array(
     'allowCreateChild' => $allow_create_child,
     'allowAttachChild' => $allow_attach_child,
     'canManageAccounts' => $can_manage_accounts,
+    'canManageNextcloud' => $can_manage_nextcloud,
+    'hasNextcloudIntegration' => $nextcloud_available,
+    'nextcloudGroups' => $can_manage_nextcloud ? Config::nextcloudGroups() : [],
     'accountLinkNonce' => $can_manage_accounts ? wp_create_nonce('mj_link_member_user') : '',
     'accountRoles' => $account_roles,
     'canChangeMemberAvatar' => current_user_can(Config::capability()) || $is_coordinateur,
@@ -441,6 +451,15 @@ $config_json = wp_json_encode(array(
     'urlTab' => $url_tab !== '' ? $url_tab : null,
     'regDocHeader' => wpautop(get_option('mj_regdoc_header', '')),
     'regDocFooter' => wpautop(get_option('mj_regdoc_footer', '')),
+    'socialPublish' => array(
+        'n8nEnabled' => $social_n8n_enabled,
+        'n8nConfigured' => $social_n8n_enabled && $social_n8n_webhook_url !== '',
+    ),
+    'aiEnabled' => (new MjOpenAIClient())->isEnabled(),
+    'aiSiteName' => get_bloginfo('name'),
+    'aiDescriptionPrompt' => (string) get_option('mj_member_ai_description_prompt', get_option('mj_ai_description_prompt', '')),
+    'aiSocialDescriptionPrompt' => (string) get_option('mj_member_ai_social_description_prompt', get_option('mj_ai_social_description_prompt', '')),
+    'aiRegDocPrompt' => (string) get_option('mj_member_ai_regdoc_prompt', get_option('mj_ai_regdoc_prompt', '')),
     'strings' => array(
         // Général
         'loading' => __('Chargement...', 'mj-member'),
@@ -560,6 +579,13 @@ $config_json = wp_json_encode(array(
         'memberAccountClaimLinkHelp' => __('Partagez ce lien avec le membre pour qu\'il crée son accès à partir de ses informations existantes.', 'mj-member'),
         'memberAccountCopyLink' => __('Copier le lien', 'mj-member'),
         'memberAccountLinkCopied' => __('Lien copié dans le presse-papiers.', 'mj-member'),
+        'memberNextcloudCreate' => __('Créer un login Nextcloud', 'mj-member'),
+        'memberNextcloudExists' => __('Login Nextcloud déjà créé', 'mj-member'),
+        'memberNextcloudStatusMissing' => __('Aucun login Nextcloud n\'est associé à ce membre.', 'mj-member'),
+        'memberNextcloudStatusReady' => __('Un login Nextcloud est associé à ce membre.', 'mj-member'),
+        'memberNextcloudCreating' => __('Création du login Nextcloud...', 'mj-member'),
+        'memberNextcloudSuccess' => __('Login Nextcloud créé avec succès.', 'mj-member'),
+        'memberNextcloudCopyPassword' => __('Mot de passe Nextcloud: %s', 'mj-member'),
         'memberAvatarChange' => __('Changer la photo de profil', 'mj-member'),
         'memberAvatarRemove' => __('Retirer la photo', 'mj-member'),
         'memberAvatarRemoveConfirm' => __('Retirer la photo actuelle de ce membre ?', 'mj-member'),
@@ -671,6 +697,11 @@ $config_json = wp_json_encode(array(
         'jobProfileWorkRegime' => __('Régime de travail', 'mj-member'),
         'jobProfileFundingSource' => __('Origine du financement', 'mj-member'),
         'jobProfileDescription' => __('Description du poste', 'mj-member'),
+        'jobProfileSignatureMessage' => __('Signature Message', 'mj-member'),
+        'jobProfileSignaturePreview' => __('Aperçu de la signature', 'mj-member'),
+        'jobProfileSignaturePreviewCopy' => __('Copier l’aperçu', 'mj-member'),
+        'jobProfileSignaturePreviewCopied' => __('Aperçu copié.', 'mj-member'),
+        'jobProfileSignaturePreviewCopyError' => __('Impossible de copier l’aperçu.', 'mj-member'),
         'jobProfileSave' => __('Enregistrer', 'mj-member'),
         'jobProfileSaved' => __('Profil de fonction enregistré.', 'mj-member'),
         'jobProfileSaving' => __('Enregistrement…', 'mj-member'),
@@ -810,8 +841,32 @@ $config_json = wp_json_encode(array(
         'tabAttendance' => __('Présence', 'mj-member'),
         'tabDescription' => __('Description', 'mj-member'),
         'tabDetails' => __('Détails', 'mj-member'),
+        'tabPublish' => __('Publier', 'mj-member'),
         'tabEditor' => __('Éditer', 'mj-member'),
         'tabOccurrenceEncoder' => __('Occurence de date', 'mj-member'),
+
+        // Publication réseaux
+        'publishTitle' => __('Publier cet événement', 'mj-member'),
+        'publishDescriptionLabel' => __('Description à partager', 'mj-member'),
+        'publishDescriptionPlaceholder' => __('Ex: Rejoins-nous pour cet événement ! Toutes les infos via le lien ci-dessous.', 'mj-member'),
+        'publishDescriptionHelp' => __('Le message est envoyé au workflow n8n avec le lien de l\'événement.', 'mj-member'),
+        'publishDescriptionSaveButton' => __('Enregistrer la description', 'mj-member'),
+        'publishDescriptionSaving' => __('Enregistrement...', 'mj-member'),
+        'publishDescriptionSaved' => __('Description de partage enregistrée.', 'mj-member'),
+        'publishDescriptionSaveError' => __('Impossible d\'enregistrer la description de partage.', 'mj-member'),
+        'publishDescriptionUnsavedChanges' => __('Modifications non enregistrées', 'mj-member'),
+        'aiGeneratePublishDescription' => __('✨ Générer avec l\'IA', 'mj-member'),
+        'publishEventLinkLabel' => __('Lien de l\'événement', 'mj-member'),
+        'publishNoEventLink' => __('Aucun lien événement disponible pour le moment.', 'mj-member'),
+        'publishNotConfigured' => __('Configurez n8n dans l\'onglet module « Publier sur les réseaux ».', 'mj-member'),
+        'publishActionTitle' => __('Workflow n8n', 'mj-member'),
+        'publishActionHint' => __('Envoie le message et les données de l\'événement au webhook n8n configuré.', 'mj-member'),
+        'publishActionButton' => __('Publier via n8n', 'mj-member'),
+        'publishActionSuccess' => __('Publication envoyée au workflow n8n.', 'mj-member'),
+        'publishCopyMessage' => __('Copier le message', 'mj-member'),
+        'publishMessageCopied' => __('Message copié dans le presse-papiers.', 'mj-member'),
+        'publishCopyError' => __('Impossible de copier automatiquement. Copiez le texte manuellement.', 'mj-member'),
+        'publishError' => __('Erreur lors de la publication.', 'mj-member'),
 
         // Description
         'descriptionLabel' => __('Description de l\'événement', 'mj-member'),
@@ -884,6 +939,16 @@ $config_json = wp_json_encode(array(
         'occurrenceDaySat' => __('Sam', 'mj-member'),
         'occurrenceDaySun' => __('Dim', 'mj-member'),
         'occurrenceNoEventSelected' => __('Sélectionnez un événement pour gérer ses occurrences.', 'mj-member'),
+        // AI Generate Modal
+        'aiModalDescriptionTitle' => __('Générer une description', 'mj-member'),
+        'aiModalRegDocTitle' => __('Générer un document d\'inscription', 'mj-member'),
+        'aiContextLabel' => __('Données injectées dans le prompt', 'mj-member'),
+        'aiNotePlaceholder' => __('Instruction complémentaire (optionnelle)', 'mj-member'),
+        'aiNoteHint' => __('Ex: Mettez l\'accent sur les activités en plein air...', 'mj-member'),
+        'aiGenerate' => __('Générer', 'mj-member'),
+        'aiPromptPreviewLabel' => __('Aperçu du prompt envoyé', 'mj-member'),
+        'aiSystemPromptLabel' => __('Instructions système', 'mj-member'),
+        'aiUserPromptLabel' => __('Requête utilisateur', 'mj-member'),
     ),
 ) + CreateEventModalRenderer::buildConfig());
 ?>

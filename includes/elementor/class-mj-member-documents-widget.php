@@ -76,42 +76,6 @@ class Mj_Member_Elementor_Documents_Widget extends Widget_Base
             )
         );
 
-        $this->add_control(
-            'allow_upload',
-            array(
-                'label' => __('Autoriser le téléversement', 'mj-member'),
-                'type' => Controls_Manager::SWITCHER,
-                'label_on' => __('Oui', 'mj-member'),
-                'label_off' => __('Non', 'mj-member'),
-                'return_value' => 'yes',
-                'default' => 'yes',
-            )
-        );
-
-        $this->add_control(
-            'allow_create_folder',
-            array(
-                'label' => __('Autoriser la création de dossier', 'mj-member'),
-                'type' => Controls_Manager::SWITCHER,
-                'label_on' => __('Oui', 'mj-member'),
-                'label_off' => __('Non', 'mj-member'),
-                'return_value' => 'yes',
-                'default' => 'yes',
-            )
-        );
-
-        $this->add_control(
-            'allow_rename',
-            array(
-                'label' => __('Autoriser le renommage', 'mj-member'),
-                'type' => Controls_Manager::SWITCHER,
-                'label_on' => __('Oui', 'mj-member'),
-                'label_off' => __('Non', 'mj-member'),
-                'return_value' => 'yes',
-                'default' => 'yes',
-            )
-        );
-
         $this->end_controls_section();
 
         $this->register_visibility_controls();
@@ -125,9 +89,6 @@ class Mj_Member_Elementor_Documents_Widget extends Widget_Base
         $title = isset($settings['title']) ? sanitize_text_field((string) $settings['title']) : '';
         $intro = isset($settings['intro_text']) ? (string) $settings['intro_text'] : '';
         $defaultFolderId = isset($settings['default_folder_id']) ? sanitize_text_field((string) $settings['default_folder_id']) : '';
-        $allowUpload = isset($settings['allow_upload']) ? $settings['allow_upload'] === 'yes' : true;
-        $allowCreateFolder = isset($settings['allow_create_folder']) ? $settings['allow_create_folder'] === 'yes' : true;
-        $allowRename = isset($settings['allow_rename']) ? $settings['allow_rename'] === 'yes' : true;
 
         $template = Config::path() . 'includes/templates/elementor/documents_manager.php';
         if (is_readable($template)) {

@@ -15,6 +15,16 @@ if (!function_exists('mj_member_documents_user_has_access')) {
             return false;
         }
 
+        // Extra guard: a JEUNE should never access the documents manager,
+        // even if a capability was accidentally granted on the WP role.
+        if (function_exists('mj_member_get_current_member') && class_exists('Mj\Member\Classes\MjRoles')) {
+            $member = mj_member_get_current_member();
+            $role = (is_object($member) && isset($member->role)) ? (string) $member->role : '';
+            if ($role !== '' && \Mj\Member\Classes\MjRoles::isJeune($role)) {
+                return false;
+            }
+        }
+
         $capability = Config::documentsCapability();
         if ($capability === '') {
             return false;
@@ -50,6 +60,93 @@ if (!function_exists('mj_member_documents_backend')) {
             return 'google';
         }
         return '';
+    }
+}
+
+if (!function_exists('mj_member_documents_get_current_member_nextcloud_credentials')) {
+    /**
+     * @return array{login:string,password:string}
+     */
+    function mj_member_documents_get_current_member_nextcloud_credentials(): array
+    {
+        if (!function_exists('mj_member_get_current_member')) {
+            return array('login' => '', 'password' => '');
+        }
+
+        $member = mj_member_get_current_member();
+        if (!is_object($member)) {
+            return array('login' => '', 'password' => '');
+        }
+
+        $login = isset($member->member_nextcloud_login)
+            ? sanitize_user((string) $member->member_nextcloud_login, true)
+            : '';
+        $password = isset($member->member_nextcloud_password)
+            ? trim((string) $member->member_nextcloud_password)
+            : '';
+
+        return array(
+            'login' => $login,
+            'password' => $password,
+        );
+    }
+}
+
+if (!function_exists('mj_member_documents_make_nextcloud_client')) {
+    /**
+     * Prefer member-specific Nextcloud credentials when available.
+     *
+     * @return MjNextcloud|\WP_Error
+     */
+    function mj_member_documents_make_nextcloud_client()
+    {
+        $creds = mj_member_documents_get_current_member_nextcloud_credentials();
+        if ($creds['login'] !== '' && $creds['password'] !== '') {
+            return MjNextcloud::makeWithCredentials($creds['login'], $creds['password']);
+        }
+
+        // Fallback to the service account from plugin settings.
+        return MjNextcloud::make();
+    }
+}
+
+if (!function_exists('mj_member_documents_nextcloud_auth_mode')) {
+    /**
+     * @return 'member'|'service'
+     */
+    function mj_member_documents_nextcloud_auth_mode(): string
+    {
+        $creds = mj_member_documents_get_current_member_nextcloud_credentials();
+        return ($creds['login'] !== '' && $creds['password'] !== '') ? 'member' : 'service';
+    }
+}
+
+if (!function_exists('mj_member_documents_touch_nextcloud_last_connection')) {
+    function mj_member_documents_touch_nextcloud_last_connection(): void
+    {
+        if (!function_exists('mj_member_get_current_member') || !class_exists('MjMembers')) {
+            return;
+        }
+
+        $member = mj_member_get_current_member();
+        if (!is_object($member) || empty($member->id)) {
+            return;
+        }
+
+        global $wpdb;
+        $table_name = MjMembers::getTableName(MjMembers::TABLE_NAME);
+        $columns = $wpdb->get_col("SHOW COLUMNS FROM {$table_name}");
+        if (!is_array($columns) || !in_array('nextcloud_last_connexion_date', $columns, true)) {
+            return;
+        }
+
+        $wpdb->update(
+            $table_name,
+            array('nextcloud_last_connexion_date' => current_time('mysql')),
+            array('id' => (int) $member->id),
+            array('%s'),
+            array('%d')
+        );
     }
 }
 
@@ -141,7 +238,7 @@ if (!function_exists('mj_member_documents_handle_list')) {
                 $folderPath = Config::nextcloudRootFolder();
             }
 
-            $nc = MjNextcloud::make();
+            $nc = mj_member_documents_make_nextcloud_client();
             if (is_wp_error($nc)) {
                 wp_send_json_error(array('message' => $nc->get_error_message()), 500);
             }
@@ -150,6 +247,8 @@ if (!function_exists('mj_member_documents_handle_list')) {
             if (is_wp_error($result)) {
                 wp_send_json_error(array('message' => $result->get_error_message()), 500);
             }
+
+            mj_member_documents_touch_nextcloud_last_connection();
 
             wp_send_json_success($result);
         }
@@ -189,7 +288,7 @@ if (!function_exists('mj_member_documents_handle_rename')) {
         $backend = mj_member_documents_backend();
 
         if ($backend === 'nextcloud') {
-            $nc = MjNextcloud::make();
+            $nc = mj_member_documents_make_nextcloud_client();
             if (is_wp_error($nc)) {
                 wp_send_json_error(array('message' => $nc->get_error_message()), 500);
             }
@@ -236,7 +335,7 @@ if (!function_exists('mj_member_documents_handle_create_folder')) {
             if ($parentId === '') {
                 $parentId = Config::nextcloudRootFolder();
             }
-            $nc = MjNextcloud::make();
+            $nc = mj_member_documents_make_nextcloud_client();
             if (is_wp_error($nc)) {
                 wp_send_json_error(array('message' => $nc->get_error_message()), 500);
             }
@@ -310,7 +409,7 @@ if (!function_exists('mj_member_documents_handle_upload')) {
             if ($parentId === '') {
                 $parentId = Config::nextcloudRootFolder();
             }
-            $nc = MjNextcloud::make();
+            $nc = mj_member_documents_make_nextcloud_client();
             if (is_wp_error($nc)) {
                 wp_send_json_error(array('message' => $nc->get_error_message()), 500);
             }
@@ -362,7 +461,7 @@ if (!function_exists('mj_member_documents_handle_delete')) {
             wp_send_json_error(array('message' => __('Suppression non disponible avec ce backend.', 'mj-member')), 400);
         }
 
-        $nc = MjNextcloud::make();
+        $nc = mj_member_documents_make_nextcloud_client();
         if (is_wp_error($nc)) {
             wp_send_json_error(array('message' => $nc->get_error_message()), 500);
         }
@@ -396,7 +495,7 @@ if (!function_exists('mj_member_documents_handle_direct_edit')) {
             wp_send_json_error(array('message' => __('L\'édition directe n\'est disponible qu\'avec Nextcloud.', 'mj-member')), 400);
         }
 
-        $nc = MjNextcloud::make();
+        $nc = mj_member_documents_make_nextcloud_client();
         if (is_wp_error($nc)) {
             wp_send_json_error(array('message' => $nc->get_error_message()), 500);
         }
@@ -437,7 +536,7 @@ if (!function_exists('mj_member_documents_handle_create_document')) {
             $parentId = Config::nextcloudRootFolder();
         }
 
-        $nc = MjNextcloud::make();
+        $nc = mj_member_documents_make_nextcloud_client();
         if (is_wp_error($nc)) {
             wp_send_json_error(array('message' => $nc->get_error_message()), 500);
         }
@@ -485,6 +584,9 @@ if (!function_exists('mj_member_documents_localize')) {
             'rootFolderId' => mj_member_documents_backend() === 'nextcloud'
                 ? Config::nextcloudRootFolder()
                 : Config::googleDriveRootFolderId(),
+            'nextcloudAuthMode' => mj_member_documents_backend() === 'nextcloud'
+                ? mj_member_documents_nextcloud_auth_mode()
+                : '',
             'maxUploadSize' => wp_max_upload_size(),
             'i18n' => array(
                 'loading' => __('Chargement des documents...', 'mj-member'),
@@ -526,5 +628,144 @@ if (!function_exists('mj_member_documents_localize')) {
 
         wp_localize_script('mj-member-documents-manager', 'mjMemberDocuments', $config);
         $localized = true;
+    }
+}
+
+/* ------------------------------------------------------------------ *
+ * Status bar helpers                                                  *
+ * ------------------------------------------------------------------ */
+
+if (!function_exists('mj_member_documents_get_nc_current_status')) {
+    /**
+     * Get Nextcloud connection status for the current logged-in member.
+     *
+     * `apiCredentialsValid` only reflects server-side API auth validity,
+     * not browser iframe session state.
+     *
+    * @return array{login:string,lastConnection:string|null,authMode:string,apiCredentialsValid:bool,apiStatusMessage:string,browserSessionVerified:bool}
+     */
+    function mj_member_documents_get_nc_current_status(): array
+    {
+        $creds = mj_member_documents_get_current_member_nextcloud_credentials();
+        $lastConnection = null;
+        $apiCredentialsValid = false;
+        $apiStatusMessage = '';
+
+        if ($creds['login'] !== '' && $creds['password'] !== '') {
+            $ncClient = mj_member_documents_make_nextcloud_client();
+            if (is_wp_error($ncClient)) {
+                $apiStatusMessage = $ncClient->get_error_message();
+            } else {
+                $validation = $ncClient->validateCurrentCredentials();
+                $apiCredentialsValid = !empty($validation['valid']);
+                if (!$apiCredentialsValid && !empty($validation['message'])) {
+                    $apiStatusMessage = (string) $validation['message'];
+                }
+            }
+        } elseif (Config::nextcloudIsReady()) {
+            // Service account fallback (plugin-level credentials)
+            $serviceClient = MjNextcloud::make();
+            if (!is_wp_error($serviceClient)) {
+                $validation = $serviceClient->validateCurrentCredentials();
+                $apiCredentialsValid = !empty($validation['valid']);
+                if (!$apiCredentialsValid && !empty($validation['message'])) {
+                    $apiStatusMessage = (string) $validation['message'];
+                }
+            }
+        }
+
+        if (is_user_logged_in() && function_exists('mj_member_get_current_member')) {
+            $member = mj_member_get_current_member();
+            if (is_object($member) && !empty($member->nextcloud_last_connexion_date)) {
+                $lastConnection = (string) $member->nextcloud_last_connexion_date;
+            }
+        }
+
+        return array(
+            'login'          => $creds['login'],
+            'lastConnection' => $lastConnection,
+            'authMode'       => ($creds['login'] !== '' && $creds['password'] !== '') ? 'member' : 'service',
+            'apiCredentialsValid' => $apiCredentialsValid,
+            'apiStatusMessage' => $apiStatusMessage,
+            'browserSessionVerified' => false,
+        );
+    }
+}
+
+if (!function_exists('mj_member_documents_get_nc_members_list')) {
+    /**
+     * Return all members that have a Nextcloud login assigned.
+     * Intended for admin member-switcher UI only.
+     *
+     * @return array<int,array{id:int,name:string,login:string,lastConnection:string|null}>
+     */
+    function mj_member_documents_get_nc_members_list(): array
+    {
+        global $wpdb;
+        $table = MjMembers::getTableName(MjMembers::TABLE_NAME);
+
+        // Older schemas may not yet have Nextcloud tracking columns.
+        $columns = $wpdb->get_col("SHOW COLUMNS FROM {$table}");
+        if (!is_array($columns) || !in_array('member_nextcloud_login', $columns, true)) {
+            return array();
+        }
+
+        $firstNameColumn = in_array('first_name', $columns, true) ? 'first_name' : '';
+        $lastNameColumn = in_array('last_name', $columns, true) ? 'last_name' : '';
+        $hasLastConnection = in_array('nextcloud_last_connexion_date', $columns, true);
+
+        $selectParts = array('id', 'member_nextcloud_login');
+        if ($firstNameColumn !== '') {
+            $selectParts[] = $firstNameColumn;
+        }
+        if ($lastNameColumn !== '') {
+            $selectParts[] = $lastNameColumn;
+        }
+        if ($hasLastConnection) {
+            $selectParts[] = 'nextcloud_last_connexion_date';
+        }
+
+        $orderParts = array();
+        if ($lastNameColumn !== '') {
+            $orderParts[] = $lastNameColumn . ' ASC';
+        }
+        if ($firstNameColumn !== '') {
+            $orderParts[] = $firstNameColumn . ' ASC';
+        }
+        $orderParts[] = 'id ASC';
+
+        $rows = $wpdb->get_results(
+            sprintf(
+                'SELECT %s FROM %s WHERE member_nextcloud_login IS NOT NULL AND member_nextcloud_login != "" ORDER BY %s LIMIT 300',
+                implode(', ', $selectParts),
+                $table,
+                implode(', ', $orderParts)
+            ),
+            ARRAY_A
+        );
+
+        if (!is_array($rows)) {
+            return array();
+        }
+
+        $list = array();
+        foreach ($rows as $row) {
+            $first = trim((string) ($row['first_name'] ?? ''));
+            $last  = trim((string) ($row['last_name'] ?? ''));
+            $name  = trim($first . ' ' . $last);
+            if ($name === '') {
+                $name = (string) $row['member_nextcloud_login'];
+            }
+            $list[] = array(
+                'id'             => (int) $row['id'],
+                'name'           => $name,
+                'login'          => (string) $row['member_nextcloud_login'],
+                'lastConnection' => isset($row['nextcloud_last_connexion_date']) && $row['nextcloud_last_connexion_date'] !== ''
+                    ? (string) $row['nextcloud_last_connexion_date']
+                    : null,
+            );
+        }
+
+        return $list;
     }
 }

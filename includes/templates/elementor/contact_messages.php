@@ -81,6 +81,7 @@ $owner_reply_sender_name = isset($owner_reply_config['sender_name']) ? (string) 
 $owner_reply_sender_email = isset($owner_reply_config['sender_email']) ? (string) $owner_reply_config['sender_email'] : '';
 $owner_reply_member_id = isset($owner_reply_config['member_id']) ? (int) $owner_reply_config['member_id'] : 0;
 $owner_reply_source = isset($owner_reply_config['source']) ? (string) $owner_reply_config['source'] : '';
+$owner_reply_signature_html = isset($owner_reply_config['signature_html']) ? trim((string) $owner_reply_config['signature_html']) : '';
 $owner_reply_ready = $owner_reply_enabled && $owner_reply_can_send && $owner_reply_ajax_url !== '' && $owner_reply_nonce !== '';
 $search_input_id = function_exists('wp_unique_id') ? wp_unique_id('mj-contact-messages-search-') : 'mj-contact-messages-search-' . uniqid();
 
@@ -386,6 +387,10 @@ if ($notice_message !== '' && $notice_detail !== '') {
                     $recipient_choice = isset($message['recipient_choice']) ? (string) $message['recipient_choice'] : '';
                     $quick_reply_subject = isset($message['quick_reply_subject']) ? (string) $message['quick_reply_subject'] : '';
                     $quick_reply_available = $message_owner_view && $owner_reply_ready && $recipient_choice !== '';
+                    $quick_reply_editor_html = '';
+                    if ($owner_reply_signature_html !== '') {
+                        $quick_reply_editor_html = '<p><br></p><hr><div class="mj-contact-message-signature">' . $owner_reply_signature_html . '</div>';
+                    }
                     $panel_open = $is_single_view;
                     ?>
                     <li class="<?php echo esc_attr($item_classes); ?>" data-message-id="<?php echo esc_attr($message_id); ?>" data-status-key="<?php echo esc_attr($status_key); ?>" data-is-unread="<?php echo $is_unread ? '1' : '0'; ?>" data-is-archived="<?php echo $is_archived ? '1' : '0'; ?>" data-search="<?php echo esc_attr($search_terms); ?>">
@@ -510,7 +515,23 @@ if ($notice_message !== '' && $notice_detail !== '') {
                                             >
                                                 <div class="mj-contact-messages__field">
                                                     <label for="mj-contact-quick-reply-body-<?php echo esc_attr($message_id); ?>"><?php esc_html_e('Votre réponse', 'mj-member'); ?></label>
-                                                    <textarea id="mj-contact-quick-reply-body-<?php echo esc_attr($message_id); ?>" name="reply_body" rows="4" required placeholder="<?php esc_attr_e('Écrivez votre réponse...', 'mj-member'); ?>"></textarea>
+                                                    <div class="mj-contact-messages__rich-editor" data-mj-reply-editor-wrap>
+                                                        <div class="mj-contact-messages__editor-toolbar" role="toolbar" aria-label="<?php esc_attr_e('Mise en forme du message', 'mj-member'); ?>">
+                                                            <button type="button" class="mj-contact-messages__editor-tool" data-command="bold" title="<?php esc_attr_e('Gras', 'mj-member'); ?>" aria-label="<?php esc_attr_e('Gras', 'mj-member'); ?>"><strong>B</strong></button>
+                                                            <button type="button" class="mj-contact-messages__editor-tool" data-command="italic" title="<?php esc_attr_e('Italique', 'mj-member'); ?>" aria-label="<?php esc_attr_e('Italique', 'mj-member'); ?>"><em>I</em></button>
+                                                            <button type="button" class="mj-contact-messages__editor-tool" data-command="insertUnorderedList" title="<?php esc_attr_e('Liste à puces', 'mj-member'); ?>" aria-label="<?php esc_attr_e('Liste à puces', 'mj-member'); ?>">List</button>
+                                                            <button type="button" class="mj-contact-messages__editor-tool" data-command="createLink" title="<?php esc_attr_e('Ajouter un lien', 'mj-member'); ?>" aria-label="<?php esc_attr_e('Ajouter un lien', 'mj-member'); ?>">Link</button>
+                                                        </div>
+                                                        <div id="mj-contact-quick-reply-body-<?php echo esc_attr($message_id); ?>"
+                                                            class="mj-contact-messages__editor-surface"
+                                                            data-mj-role="reply-editor"
+                                                            data-placeholder="<?php esc_attr_e('Écrivez votre réponse...', 'mj-member'); ?>"
+                                                            contenteditable="true"
+                                                            role="textbox"
+                                                            aria-multiline="true"
+                                                        ><?php echo wp_kses_post($quick_reply_editor_html); ?></div>
+                                                        <textarea name="reply_body" class="mj-contact-messages__reply-body" rows="4" required hidden><?php echo esc_textarea($quick_reply_editor_html); ?></textarea>
+                                                    </div>
                                                 </div>
                                                 <div class="mj-contact-messages__quick-reply-controls">
                                                     <button type="submit" class="mj-contact-messages__action-btn mj-contact-messages__action-btn--reply"><?php esc_html_e('Envoyer', 'mj-member'); ?></button>

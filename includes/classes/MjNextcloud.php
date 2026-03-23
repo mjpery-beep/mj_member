@@ -71,6 +71,416 @@ final class MjNextcloud
             && Config::nextcloudPassword() !== '';
     }
 
+    /**
+     * Validate that current credentials are accepted by Nextcloud.
+     *
+     * @return array{valid:bool,userId:string,message:string,httpCode:int}
+     */
+    public function validateCurrentCredentials(): array
+    {
+        $url = $this->baseUrl . '/ocs/v1.php/cloud/user';
+        $response = $this->request('GET', $url, array(
+            'headers' => array(
+                'OCS-APIREQUEST' => 'true',
+                'Accept' => 'application/xml',
+            ),
+        ));
+
+        if (is_wp_error($response)) {
+            return array(
+                'valid' => false,
+                'userId' => '',
+                'message' => $response->get_error_message(),
+                'httpCode' => 0,
+            );
+        }
+
+        $httpCode = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $meta = $this->parseOcsMeta($body);
+
+        if ($httpCode >= 200 && $httpCode < 400 && $meta['statuscode'] === 100) {
+            $userId = $this->extractXmlValue($body, 'id');
+            if ($userId === '') {
+                $userId = $this->extractXmlValue($body, 'userid');
+            }
+
+            return array(
+                'valid' => true,
+                'userId' => sanitize_user($userId, true),
+                'message' => '',
+                'httpCode' => $httpCode,
+            );
+        }
+
+        $message = $meta['message'] !== ''
+            ? $meta['message']
+            : sprintf(__('Authentification Nextcloud invalide (HTTP %d).', 'mj-member'), (int) $httpCode);
+
+        return array(
+            'valid' => false,
+            'userId' => '',
+            'message' => $message,
+            'httpCode' => (int) $httpCode,
+        );
+    }
+
+    /**
+     * Build a client with explicit user credentials and the configured server URL.
+     *
+     * Useful when requests must be executed on behalf of a member account.
+     *
+     * @return self|WP_Error
+     */
+    public static function makeWithCredentials(string $user, string $password)
+    {
+        $url = Config::nextcloudUrl();
+        $user = sanitize_user($user, true);
+        $password = trim($password);
+
+        if ($url === '') {
+            return new WP_Error(
+                'mj_nextcloud_not_configured',
+                __('L\'URL Nextcloud n\'est pas configurée.', 'mj-member')
+            );
+        }
+
+        if ($user === '' || $password === '') {
+            return new WP_Error(
+                'mj_nextcloud_invalid_credentials',
+                __('Identifiant ou mot de passe Nextcloud invalide.', 'mj-member')
+            );
+        }
+
+        return new self($url, $user, $password);
+    }
+
+    /* ------------------------------------------------------------------
+     * Users provisioning (OCS)
+     * ----------------------------------------------------------------*/
+
+    /**
+     * Check whether a Nextcloud user exists.
+     */
+    public function userExists(string $userId): bool
+    {
+        $userId = sanitize_user($userId, true);
+        if ($userId === '') {
+            return false;
+        }
+
+        $url = $this->baseUrl . '/ocs/v1.php/cloud/users/' . rawurlencode($userId);
+        $response = $this->request('GET', $url, array(
+            'headers' => array(
+                'OCS-APIREQUEST' => 'true',
+            ),
+        ));
+
+        if (is_wp_error($response)) {
+            return false;
+        }
+
+        $httpCode = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $meta = $this->parseOcsMeta($body);
+
+        // OCS success statuscode is typically 100.
+        if ($meta['statuscode'] === 100) {
+            return true;
+        }
+
+        // Some instances may only expose HTTP-level errors.
+        if ($httpCode === 200 && $meta['statuscode'] === 0) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Create a Nextcloud user via OCS provisioning API.
+     *
+     * @return array{userId:string,displayName:string,email:string}|WP_Error
+     */
+    public function createUser(string $userId, string $password, string $displayName = '', string $email = '')
+    {
+        $userId = sanitize_user($userId, true);
+        $password = trim($password);
+        $displayName = sanitize_text_field($displayName);
+        $email = sanitize_email($email);
+
+        if ($userId === '') {
+            return new WP_Error('mj_nextcloud_user_invalid', __('Identifiant Nextcloud invalide.', 'mj-member'));
+        }
+
+        if ($password === '') {
+            return new WP_Error('mj_nextcloud_password_invalid', __('Mot de passe Nextcloud manquant.', 'mj-member'));
+        }
+
+        if ($this->userExists($userId)) {
+            return new WP_Error('mj_nextcloud_user_exists', __('Cet identifiant Nextcloud existe déjà.', 'mj-member'));
+        }
+
+        $payload = array(
+            'userid' => $userId,
+            'password' => $password,
+        );
+
+        if ($displayName !== '') {
+            $payload['displayName'] = $displayName;
+        }
+
+        if ($email !== '') {
+            $payload['email'] = $email;
+        }
+
+        $url = $this->baseUrl . '/ocs/v1.php/cloud/users';
+        $response = $this->request('POST', $url, array(
+            'headers' => array(
+                'OCS-APIREQUEST' => 'true',
+                'Content-Type' => 'application/x-www-form-urlencoded',
+            ),
+            'body' => $payload,
+        ));
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $httpCode = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $meta = $this->parseOcsMeta($body);
+
+        if ($httpCode >= 400) {
+            $message = $meta['message'] !== ''
+                ? $meta['message']
+                : sprintf(__('Impossible de créer le compte Nextcloud (HTTP %d).', 'mj-member'), $httpCode);
+            return new WP_Error('mj_nextcloud_user_create_failed', $message);
+        }
+
+        if ($meta['statuscode'] !== 100) {
+            $message = $meta['message'] !== ''
+                ? $meta['message']
+                : __('La création du compte Nextcloud a échoué.', 'mj-member');
+            return new WP_Error('mj_nextcloud_user_create_failed', $message);
+        }
+
+        return array(
+            'userId' => $userId,
+            'displayName' => $displayName,
+            'email' => $email,
+        );
+    }
+
+    /**
+     * Add a Nextcloud user to an existing group via OCS provisioning API.
+     *
+     * @return true|WP_Error
+     */
+    public function addUserToGroup(string $userId, string $groupId)
+    {
+        $userId = sanitize_user($userId, true);
+        $groupId = trim(sanitize_text_field($groupId));
+
+        if ($userId === '') {
+            return new WP_Error('mj_nextcloud_user_invalid', __('Identifiant Nextcloud invalide.', 'mj-member'));
+        }
+
+        if ($groupId === '') {
+            return new WP_Error('mj_nextcloud_group_invalid', __('Groupe Nextcloud invalide.', 'mj-member'));
+        }
+
+        $url = $this->baseUrl . '/ocs/v1.php/cloud/users/' . rawurlencode($userId) . '/groups';
+        $response = $this->request('POST', $url, array(
+            'headers' => array(
+                'OCS-APIREQUEST' => 'true',
+                'Content-Type' => 'application/x-www-form-urlencoded',
+            ),
+            'body' => array(
+                'groupid' => $groupId,
+            ),
+        ));
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $httpCode = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $meta = $this->parseOcsMeta($body);
+
+        if ($httpCode >= 400) {
+            $message = $meta['message'] !== ''
+                ? $meta['message']
+                : sprintf(__('Impossible d\'ajouter l\'utilisateur au groupe "%s" (HTTP %d).', 'mj-member'), $groupId, $httpCode);
+            return new WP_Error('mj_nextcloud_group_assign_failed', $message);
+        }
+
+        if ($meta['statuscode'] !== 100) {
+            $message = $meta['message'] !== ''
+                ? $meta['message']
+                : sprintf(__('Impossible d\'ajouter l\'utilisateur au groupe "%s".', 'mj-member'), $groupId);
+            return new WP_Error('mj_nextcloud_group_assign_failed', $message);
+        }
+
+        return true;
+    }
+
+    /**
+     * Update password of an existing Nextcloud user via OCS provisioning API.
+     *
+     * @return true|WP_Error
+     */
+    public function setUserPassword(string $userId, string $password)
+    {
+        $userId = sanitize_user($userId, true);
+        $password = trim($password);
+
+        if ($userId === '') {
+            return new WP_Error('mj_nextcloud_user_invalid', __('Identifiant Nextcloud invalide.', 'mj-member'));
+        }
+
+        if ($password === '') {
+            return new WP_Error('mj_nextcloud_password_invalid', __('Mot de passe Nextcloud manquant.', 'mj-member'));
+        }
+
+        $url = $this->baseUrl . '/ocs/v1.php/cloud/users/' . rawurlencode($userId);
+        $response = $this->request('PUT', $url, array(
+            'headers' => array(
+                'OCS-APIREQUEST' => 'true',
+                'Content-Type' => 'application/x-www-form-urlencoded',
+            ),
+            'body' => array(
+                'key' => 'password',
+                'value' => $password,
+            ),
+        ));
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $httpCode = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $meta = $this->parseOcsMeta($body);
+
+        if ($httpCode >= 400) {
+            $message = $meta['message'] !== ''
+                ? $meta['message']
+                : sprintf(__('Impossible de mettre à jour le mot de passe Nextcloud (HTTP %d).', 'mj-member'), $httpCode);
+            return new WP_Error('mj_nextcloud_password_update_failed', $message);
+        }
+
+        if ($meta['statuscode'] !== 100) {
+            $message = $meta['message'] !== ''
+                ? $meta['message']
+                : __('Impossible de mettre à jour le mot de passe Nextcloud.', 'mj-member');
+            return new WP_Error('mj_nextcloud_password_update_failed', $message);
+        }
+
+        return true;
+    }
+
+    /**
+     * Update avatar of an existing Nextcloud user via OCS provisioning API.
+     *
+     * @return true|WP_Error
+     */
+    public function setUserAvatar(string $userId, string $avatarBinary, string $mimeType = 'image/png')
+    {
+        $userId = sanitize_user($userId, true);
+        if ($userId === '') {
+            return new WP_Error('mj_nextcloud_user_invalid', __('Identifiant Nextcloud invalide.', 'mj-member'));
+        }
+
+        if ($avatarBinary === '') {
+            return new WP_Error('mj_nextcloud_avatar_invalid', __('Avatar Nextcloud invalide.', 'mj-member'));
+        }
+
+        $resolvedMime = trim($mimeType) !== '' ? trim($mimeType) : 'image/png';
+        $endpoints = array(
+            $this->baseUrl . '/ocs/v1.php/cloud/users/' . rawurlencode($userId) . '/avatar',
+            $this->baseUrl . '/ocs/v2.php/cloud/users/' . rawurlencode($userId) . '/avatar',
+        );
+        $methods = array('POST', 'PUT');
+
+        $lastHttpCode = 0;
+        $lastMessage = '';
+        $attemptLogs = array();
+
+        $tryRequest = function (string $method, string $url, array $headers, string $body, string $modeLabel) use (&$lastHttpCode, &$lastMessage, &$attemptLogs) {
+            $response = $this->request($method, $url, array(
+                'headers' => $headers,
+                'body' => $body,
+            ));
+
+            if (is_wp_error($response)) {
+                $lastMessage = $response->get_error_message();
+                $attemptLogs[] = $modeLabel . ' ' . $method . ' ' . $url . ' => WP_Error: ' . $lastMessage;
+                return false;
+            }
+
+            $lastHttpCode = wp_remote_retrieve_response_code($response);
+            $respBody = wp_remote_retrieve_body($response);
+            $meta = $this->parseOcsMeta($respBody);
+            if ($meta['message'] !== '') {
+                $lastMessage = $meta['message'];
+            }
+
+             $attemptLogs[] = $modeLabel . ' ' . $method . ' ' . $url . ' => HTTP ' . $lastHttpCode
+                . ($lastMessage !== '' ? (' (' . $lastMessage . ')') : '');
+
+            // Some instances return OCS statuscode=100, others just HTTP 2xx.
+            if ($lastHttpCode < 400 && ($meta['statuscode'] === 100 || $meta['statuscode'] === 0)) {
+                return true;
+            }
+
+            return false;
+        };
+
+        foreach ($endpoints as $url) {
+            foreach ($methods as $method) {
+                if ($tryRequest($method, $url, array(
+                    'OCS-APIREQUEST' => 'true',
+                    'Content-Type' => $resolvedMime,
+                ), $avatarBinary, 'raw')) {
+                    return true;
+                }
+            }
+        }
+
+        $boundary = '----MJMemberBoundary' . wp_generate_password(12, false, false);
+        $multipartBody = "--{$boundary}\r\n"
+            . "Content-Disposition: form-data; name=\"files\"; filename=\"avatar\"\r\n"
+            . "Content-Type: {$resolvedMime}\r\n\r\n"
+            . $avatarBinary . "\r\n"
+            . "--{$boundary}--\r\n";
+
+        // Only try POST for multipart (PUT + multipart combination causes 429 rate limiting).
+        foreach ($endpoints as $url) {
+            if ($tryRequest('POST', $url, array(
+                'OCS-APIREQUEST' => 'true',
+                'Content-Type' => 'multipart/form-data; boundary=' . $boundary,
+            ), $multipartBody, 'multipart')) {
+                return true;
+            }
+        }
+
+        $baseMessage = $lastMessage !== ''
+            ? $lastMessage
+            : ($lastHttpCode > 0
+                ? sprintf(__('Impossible de mettre à jour l\'avatar Nextcloud (HTTP %d).', 'mj-member'), $lastHttpCode)
+                : __('Impossible de mettre à jour l\'avatar Nextcloud.', 'mj-member'));
+
+        $debugSuffix = !empty($attemptLogs)
+            ? ' [' . implode(' | ', array_slice($attemptLogs, -4)) . ']'
+            : '';
+
+        $message = $baseMessage . $debugSuffix;
+
+        return new WP_Error('mj_nextcloud_avatar_update_failed', $message);
+    }
+
     /* ------------------------------------------------------------------
      * List folder (PROPFIND depth 1)
      * ----------------------------------------------------------------*/
@@ -291,6 +701,88 @@ final class MjNextcloud
         }
 
         return $uploaded;
+    }
+
+    /**
+     * Upload raw content as a file to Nextcloud.
+     *
+     * @return array<string,mixed>|WP_Error
+     */
+    public function uploadContent(string $parentPath, string $fileName, string $content, string $mimeType = 'application/octet-stream')
+    {
+        $parentPath = $this->sanitizePath($parentPath);
+        $safeName = $this->sanitizeName($fileName);
+
+        if ($safeName === '') {
+            return new WP_Error('mj_nextcloud_upload_invalid_name', __('Nom de fichier invalide.', 'mj-member'));
+        }
+
+        $remotePath = rtrim($parentPath, '/') . '/' . rawurlencode($safeName);
+        $url = $this->davUrl . '/' . ltrim($remotePath, '/');
+
+        $resolvedMime = $mimeType !== '' ? $mimeType : 'application/octet-stream';
+
+        // 1) Try with provided MIME type.
+        $response = $this->request('PUT', $url, array(
+            'headers' => array(
+                'Content-Type' => $resolvedMime,
+            ),
+            'body' => $content,
+        ));
+
+        if (!is_wp_error($response)) {
+            $code = wp_remote_retrieve_response_code($response);
+
+            // 2) Some reverse proxies / security layers reject specific image types with 415.
+            if ($code === 415) {
+                $response = $this->request('PUT', $url, array(
+                    'headers' => array(
+                        'Content-Type' => 'application/octet-stream',
+                    ),
+                    'body' => $content,
+                ));
+
+                if (!is_wp_error($response)) {
+                    $code = wp_remote_retrieve_response_code($response);
+                }
+            }
+
+            // 3) Last attempt without explicit Content-Type.
+            if (!is_wp_error($response) && $code === 415) {
+                $response = $this->request('PUT', $url, array(
+                    'body' => $content,
+                ));
+
+                if (!is_wp_error($response)) {
+                    $code = wp_remote_retrieve_response_code($response);
+                }
+            }
+        }
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code >= 400) {
+            return new WP_Error('mj_nextcloud_upload_failed', sprintf(
+                __('Échec upload de "%s" (HTTP %d).', 'mj-member'),
+                $safeName,
+                $code
+            ));
+        }
+
+        return array(
+            'id' => $remotePath,
+            'name' => $safeName,
+            'type' => 'file',
+            'mimeType' => $mimeType,
+            'modifiedTime' => current_time('c'),
+            'size' => strlen($content),
+            'webViewLink' => $this->buildWebLink($remotePath),
+            'iconLink' => '',
+            'parents' => array($parentPath),
+        );
     }
 
     /* ------------------------------------------------------------------
@@ -705,6 +1197,54 @@ final class MjNextcloud
             'md'    => 'text/markdown',
             default => 'application/octet-stream',
         };
+    }
+
+    /**
+     * Parse the OCS XML metadata block.
+     *
+     * @return array{statuscode:int,message:string}
+     */
+    private function parseOcsMeta(string $xml): array
+    {
+        $statusCode = 0;
+        $message = '';
+
+        if ($xml === '') {
+            return array('statuscode' => $statusCode, 'message' => $message);
+        }
+
+        libxml_use_internal_errors(true);
+        $doc = simplexml_load_string($xml);
+        if ($doc === false) {
+            return array('statuscode' => $statusCode, 'message' => $message);
+        }
+
+        $doc->registerXPathNamespace('ocs', 'http://open-collaboration-services.org/ns');
+
+        $statusNodes = $doc->xpath('//ocs:meta/ocs:statuscode');
+        if (is_array($statusNodes) && !empty($statusNodes)) {
+            $statusCode = (int) $statusNodes[0];
+        } else {
+            $fallbackStatus = $doc->xpath('//statuscode');
+            if (is_array($fallbackStatus) && !empty($fallbackStatus)) {
+                $statusCode = (int) $fallbackStatus[0];
+            }
+        }
+
+        $messageNodes = $doc->xpath('//ocs:meta/ocs:message');
+        if (is_array($messageNodes) && !empty($messageNodes)) {
+            $message = (string) $messageNodes[0];
+        } else {
+            $fallbackMessage = $doc->xpath('//message');
+            if (is_array($fallbackMessage) && !empty($fallbackMessage)) {
+                $message = (string) $fallbackMessage[0];
+            }
+        }
+
+        return array(
+            'statuscode' => $statusCode,
+            'message' => trim($message),
+        );
     }
 
     /**

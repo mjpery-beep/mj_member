@@ -371,7 +371,114 @@ function mj_regmgr_build_event_schedule_info($event, $mode = '') {
                 }
                 $detail_parts[] = $detail;
             }
+
+            // If a generated occurrences payload exists, prefer it over the legacy fixed-date label.
+            $payload_plan = mj_regmgr_extract_occurrence_generator_from_payload($schedule_payload);
+            $payload_occurrences = isset($schedule_payload['occurrences']) && is_array($schedule_payload['occurrences'])
+                ? $schedule_payload['occurrences']
+                : array();
+            if (empty($payload_occurrences) && isset($schedule_payload['items']) && is_array($schedule_payload['items'])) {
+                $payload_occurrences = $schedule_payload['items'];
+            }
+
+            $has_payload_occurrences = !empty($payload_occurrences);
+            $has_payload_plan = !empty($payload_plan);
+
+            if ($has_payload_plan || $has_payload_occurrences) {
+                $payload_detail_parts = array();
+
+                if ($has_payload_occurrences) {
+                    $payload_detail_parts[] = sprintf(
+                        _n('%d date', '%d dates', count($payload_occurrences), 'mj-member'),
+                        count($payload_occurrences)
+                    );
+                }
+
+                $plan_mode = isset($payload_plan['mode']) ? sanitize_key((string) $payload_plan['mode']) : '';
+                $plan_frequency = isset($payload_plan['frequency']) ? sanitize_key((string) $payload_plan['frequency']) : '';
+                $plan_days = isset($payload_plan['days']) && is_array($payload_plan['days']) ? $payload_plan['days'] : array();
+                $plan_start_date = isset($payload_plan['startDate']) ? (string) $payload_plan['startDate'] : '';
+                $plan_end_date = isset($payload_plan['endDate']) ? (string) $payload_plan['endDate'] : '';
+                $plan_start_time = isset($payload_plan['startTime']) ? (string) $payload_plan['startTime'] : '';
+                $plan_end_time = isset($payload_plan['endTime']) ? (string) $payload_plan['endTime'] : '';
+
+                if ($plan_mode === 'weekly') {
+                    $weekday_labels = array(
+                        'mon' => __('Lundi', 'mj-member'),
+                        'tue' => __('Mardi', 'mj-member'),
+                        'wed' => __('Mercredi', 'mj-member'),
+                        'thu' => __('Jeudi', 'mj-member'),
+                        'fri' => __('Vendredi', 'mj-member'),
+                        'sat' => __('Samedi', 'mj-member'),
+                        'sun' => __('Dimanche', 'mj-member'),
+                    );
+
+                    $active_days = array();
+                    foreach (array('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun') as $weekday_key) {
+                        if (!empty($plan_days[$weekday_key]) && isset($weekday_labels[$weekday_key])) {
+                            $active_days[] = $weekday_labels[$weekday_key];
+                        }
+                    }
+
+                    if (!empty($active_days)) {
+                        $payload_detail_parts[] = implode(', ', $active_days);
+                    }
+
+                    if ($plan_frequency === 'every_two_weeks') {
+                        $payload_detail_parts[] = __('Toutes les 2 semaines', 'mj-member');
+                    } elseif ($plan_frequency === 'every_week') {
+                        $payload_detail_parts[] = __('Chaque semaine', 'mj-member');
+                    }
+                } elseif ($plan_mode === 'monthly') {
+                    $month_ordinals = mj_regmgr_get_schedule_month_ordinals();
+                    $ordinal_key = isset($payload_plan['monthlyOrdinal']) ? sanitize_key((string) $payload_plan['monthlyOrdinal']) : '';
+                    $weekday_key = isset($payload_plan['monthlyWeekday']) ? sanitize_key((string) $payload_plan['monthlyWeekday']) : '';
+
+                    $weekday_labels = array(
+                        'mon' => __('Lundi', 'mj-member'),
+                        'tue' => __('Mardi', 'mj-member'),
+                        'wed' => __('Mercredi', 'mj-member'),
+                        'thu' => __('Jeudi', 'mj-member'),
+                        'fri' => __('Vendredi', 'mj-member'),
+                        'sat' => __('Samedi', 'mj-member'),
+                        'sun' => __('Dimanche', 'mj-member'),
+                    );
+
+                    if (isset($month_ordinals[$ordinal_key]) && isset($weekday_labels[$weekday_key])) {
+                        $payload_detail_parts[] = trim($month_ordinals[$ordinal_key] . ' ' . $weekday_labels[$weekday_key]);
+                    }
+                }
+
+                if ($plan_start_date !== '' || $plan_end_date !== '') {
+                    $start_date_compact = $plan_start_date !== '' ? mj_regmgr_format_date_compact($plan_start_date . ' 00:00:00') : '';
+                    $end_date_compact = $plan_end_date !== '' ? mj_regmgr_format_date_compact($plan_end_date . ' 00:00:00') : '';
+
+                    if ($start_date_compact !== '' && $end_date_compact !== '') {
+                        $payload_detail_parts[] = $start_date_compact . ' → ' . $end_date_compact;
+                    } elseif ($start_date_compact !== '') {
+                        $payload_detail_parts[] = $start_date_compact;
+                    }
+                }
+
+                if ($plan_start_time !== '' && $plan_end_time !== '') {
+                    $payload_detail_parts[] = $plan_start_time . ' → ' . $plan_end_time;
+                } elseif ($plan_start_time !== '') {
+                    $payload_detail_parts[] = $plan_start_time;
+                }
+
+                if (!empty($payload_detail_parts)) {
+                    $summary = __('Occurrences générées', 'mj-member');
+                    $detail_parts = $payload_detail_parts;
+                }
+            }
             break;
+    }
+
+    if (is_array($schedule_payload) && isset($schedule_payload['occurrence_summary'])) {
+        $custom_summary = trim((string) $schedule_payload['occurrence_summary']);
+        if ($custom_summary !== '') {
+            $summary = $custom_summary;
+        }
     }
 
     return array(

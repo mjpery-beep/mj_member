@@ -1,4 +1,4 @@
-/**
+﻿/**
  * MJ Member Admin Dashboard Charts
  * 
  * Uses Chart.js for rendering dashboard charts with dynamic loading.
@@ -11,10 +11,7 @@
     var CHART_JS_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js';
     var chartJsReadyPromise = null;
     var scriptPromises = {};
-    var LEAFLET_SCRIPT_ID = 'mj-member-leaflet';
-    var LEAFLET_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';
-    var LEAFLET_STYLESHEET_ID = 'mj-member-leaflet-css';
-    var LEAFLET_STYLESHEET_URL = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';
+    var GOOGLE_MAPS_CALLBACK_NAME = '__mj_google_maps_ready';
 
     var COLOR_PALETTE = [
         '#6366f1', // indigo
@@ -89,76 +86,51 @@
         return chartJsReadyPromise;
     }
 
-    function ensureLeaflet() {
-        if (typeof window !== 'undefined' && window.L && typeof window.L.map === 'function') {
-            return Promise.resolve(window.L);
+    function ensureGoogleMaps(apiKey) {
+        if (typeof window !== 'undefined' && window.google && window.google.maps && typeof window.google.maps.Map === 'function') {
+            return Promise.resolve(window.google.maps);
         }
 
-        if (scriptPromises.leaflet) {
-            return scriptPromises.leaflet;
+        if (scriptPromises.googleMaps) {
+            return scriptPromises.googleMaps;
         }
 
-        scriptPromises.leaflet = new Promise(function(resolve, reject) {
-            if (typeof document === 'undefined') {
-                reject(new Error('document unavailable'));
+        scriptPromises.googleMaps = new Promise(function(resolve, reject) {
+            if (!apiKey) {
+                reject(new Error('Google Maps API key missing'));
                 return;
             }
 
-            var existingStylesheet = document.getElementById(LEAFLET_STYLESHEET_ID);
-            if (!existingStylesheet) {
-                var link = document.createElement('link');
-                link.id = LEAFLET_STYLESHEET_ID;
-                link.rel = 'stylesheet';
-                link.href = LEAFLET_STYLESHEET_URL;
-                document.head.appendChild(link);
-            }
-
-            function resolveLeaflet() {
-                if (window.L && typeof window.L.map === 'function') {
-                    resolve(window.L);
+            window[GOOGLE_MAPS_CALLBACK_NAME] = function() {
+                try { delete window[GOOGLE_MAPS_CALLBACK_NAME]; } catch (e) { /* noop */ }
+                if (window.google && window.google.maps) {
+                    resolve(window.google.maps);
                 } else {
-                    reject(new Error('Leaflet namespace unavailable'));
+                    reject(new Error('Google Maps namespace unavailable'));
                 }
-            }
-
-            var existingScript = document.getElementById(LEAFLET_SCRIPT_ID);
-            if (existingScript) {
-                if (existingScript.getAttribute('data-loaded') === 'true') {
-                    resolveLeaflet();
-                    return;
-                }
-
-                existingScript.addEventListener('load', function handleLoad() {
-                    existingScript.removeEventListener('load', handleLoad);
-                    resolveLeaflet();
-                });
-                existingScript.addEventListener('error', function handleError() {
-                    existingScript.removeEventListener('error', handleError);
-                    reject(new Error('Unable to load Leaflet script'));
-                });
-                return;
-            }
+            };
 
             var script = document.createElement('script');
-            script.id = LEAFLET_SCRIPT_ID;
-            script.src = LEAFLET_SCRIPT_URL;
+            script.src = 'https://maps.googleapis.com/maps/api/js'
+                + '?key=' + encodeURIComponent(apiKey)
+                + '&callback=' + GOOGLE_MAPS_CALLBACK_NAME
+                + '&loading=async';
             script.async = true;
-            script.onload = function() {
-                script.setAttribute('data-loaded', 'true');
-                resolveLeaflet();
-            };
+            script.defer = true;
             script.onerror = function() {
-                reject(new Error('Unable to load Leaflet script'));
+                try { delete window[GOOGLE_MAPS_CALLBACK_NAME]; } catch (e) { /* noop */ }
+                delete scriptPromises.googleMaps;
+                reject(new Error('Unable to load Google Maps script'));
             };
             document.head.appendChild(script);
         });
 
-        scriptPromises.leaflet = scriptPromises.leaflet.catch(function(error) {
-            delete scriptPromises.leaflet;
+        scriptPromises.googleMaps = scriptPromises.googleMaps.catch(function(error) {
+            delete scriptPromises.googleMaps;
             throw error;
         });
 
-        return scriptPromises.leaflet;
+        return scriptPromises.googleMaps;
     }
 
     function parseNumber(value) {
@@ -530,7 +502,7 @@
     }
 
     /**
-     * Initialize map for member markers
+     * Initialize map for member markers using Google Maps
      */
     function initMembersMap() {
         var container = document.getElementById('mj-dashboard-members-map');
@@ -544,77 +516,65 @@
         }
 
         var markersData = Array.isArray(config.markers) ? config.markers : [];
+        var strings = config.strings && typeof config.strings === 'object' ? config.strings : {};
+        var settings = config.settings && typeof config.settings === 'object' ? config.settings : {};
+        var googleMapsApiKey = typeof config.googleMapsApiKey === 'string' ? config.googleMapsApiKey : '';
+        var messageEl = container.parentElement ? container.parentElement.querySelector('.mj-members-map__message') : null;
+
         if (markersData.length === 0) {
+            if (messageEl) {
+                messageEl.textContent = strings.noMarkers || 'Aucun membre geolocalisable pour le moment.';
+                messageEl.classList.remove('is-hidden');
+            }
             return;
         }
 
-        var strings = config.strings && typeof config.strings === 'object' ? config.strings : {};
-        var settings = config.settings && typeof config.settings === 'object' ? config.settings : {};
-        var tileLayerConfig = config.tileLayer && typeof config.tileLayer === 'object' ? config.tileLayer : {};
-        var geocodeConfig = config.geocode && typeof config.geocode === 'object' ? config.geocode : {};
-        var messageEl = container.parentElement ? container.parentElement.querySelector('.mj-members-map__message') : null;
+        if (!googleMapsApiKey) {
+            if (messageEl) {
+                messageEl.textContent = strings.noApiKey || 'Cle API Google Maps manquante.';
+                messageEl.classList.remove('is-hidden');
+            }
+            return;
+        }
+
         if (messageEl && strings.loading) {
             messageEl.textContent = strings.loading;
             messageEl.classList.remove('is-hidden');
         }
 
-        ensureLeaflet().then(function(L) {
-            var mapOptions = config.options && typeof config.options === 'object' ? config.options : {};
-            var allowedOptionKeys = ['preferCanvas', 'zoomControl', 'boxZoom', 'doubleClickZoom', 'dragging', 'scrollWheelZoom', 'zoomSnap', 'zoomDelta', 'trackResize', 'touchZoom'];
-            var leafletOptions = {};
-            allowedOptionKeys.forEach(function(key) {
-                if (Object.prototype.hasOwnProperty.call(mapOptions, key)) {
-                    leafletOptions[key] = mapOptions[key];
-                }
-            });
-
-            var fitPadding = parseInt(settings.fitPadding, 10);
-            if (!Number.isFinite(fitPadding) || fitPadding < 0) {
-                fitPadding = 32;
-            }
+        ensureGoogleMaps(googleMapsApiKey).then(function(maps) {
             var maxAutoZoom = parseInt(settings.autoFitMaxZoom, 10);
             if (!Number.isFinite(maxAutoZoom) || maxAutoZoom <= 0) {
                 maxAutoZoom = 14;
             }
 
-            var map = L.map(container, leafletOptions);
+            var configOptions = config.options && typeof config.options === 'object' ? config.options : {};
+            var gmOptions = {
+                center: { lat: 50.5, lng: 4.5 },
+                zoom: 7,
+                mapTypeId: maps.MapTypeId.ROADMAP,
+            };
 
-            function scheduleInvalidate(delay) {
-                var wait = Number.isFinite(delay) && delay >= 0 ? delay : 0;
-                setTimeout(function() {
-                    if (map && typeof map.invalidateSize === 'function') {
-                        map.invalidateSize();
-                    }
-                }, wait);
+            var centerOpt = configOptions.center && typeof configOptions.center === 'object' ? configOptions.center : null;
+            if (centerOpt) {
+                var cLat = parseNumber(centerOpt.lat);
+                var cLng = parseNumber(centerOpt.lng);
+                if (cLat !== null && cLng !== null) {
+                    gmOptions.center = { lat: cLat, lng: cLng };
+                }
+            }
+            if (configOptions.zoom !== undefined) {
+                var z = parseInt(configOptions.zoom, 10);
+                if (Number.isFinite(z)) {
+                    gmOptions.zoom = z;
+                }
             }
 
-            var initialCenter = mapOptions.center && typeof mapOptions.center === 'object' ? mapOptions.center : null;
-            var initialLat = initialCenter ? parseNumber(initialCenter.lat) : null;
-            var initialLng = initialCenter ? parseNumber(initialCenter.lng) : null;
-            var initialZoom = mapOptions.zoom !== undefined ? parseInt(mapOptions.zoom, 10) : null;
-            if (initialLat !== null && initialLng !== null) {
-                map.setView([initialLat, initialLng], Number.isFinite(initialZoom) ? initialZoom : 5);
-            } else {
-                map.setView([20, 0], 2);
-            }
-
-            scheduleInvalidate(80);
-            map.whenReady(function() {
-                scheduleInvalidate(0);
-                scheduleInvalidate(300);
-            });
-
-            var tileUrl = typeof tileLayerConfig.url === 'string' && tileLayerConfig.url !== '' ? tileLayerConfig.url : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-            var tileOptions = tileLayerConfig.options && typeof tileLayerConfig.options === 'object' ? tileLayerConfig.options : {};
-            if (typeof tileLayerConfig.attribution === 'string' && tileLayerConfig.attribution !== '') {
-                tileOptions = Object.assign({}, tileOptions, { attribution: tileLayerConfig.attribution });
-            }
-            var tileLayer = L.tileLayer(tileUrl, tileOptions).addTo(map);
-
-            var markersLayer = L.layerGroup().addTo(map);
-            var bounds = null;
-            var hasVisibleMarker = false;
-            var fatalStatus = null;
+            var map = new maps.Map(container, gmOptions);
+            var bounds = new maps.LatLngBounds();
+            var markerCount = 0;
+            var infoWindow = new maps.InfoWindow();
+            var geocoder = new maps.Geocoder();
 
             function hideMessage() {
                 if (messageEl) {
@@ -631,44 +591,26 @@
                 }
             }
 
-            function extendBounds(lat, lng) {
-                if (!bounds) {
-                    bounds = L.latLngBounds([lat, lng], [lat, lng]);
-                } else {
-                    bounds.extend([lat, lng]);
-                }
-            }
-
-            var singleMarkerZoom = parseInt(mapOptions.singleMarkerZoom, 10);
-            if (!Number.isFinite(singleMarkerZoom) || singleMarkerZoom <= 0) {
-                singleMarkerZoom = maxAutoZoom;
-            }
-            if (!Number.isFinite(singleMarkerZoom) || singleMarkerZoom <= 0) {
-                singleMarkerZoom = 14;
-            }
-
-            function attachMarker(item, position) {
-                var lat = parseNumber(position.lat);
-                var lng = parseNumber(position.lng);
-                if (lat === null || lng === null) {
-                    return;
-                }
-
-                var marker = L.marker([lat, lng], { title: item.label || '' });
-                var infoContent = createInfoContent(item, strings);
-                var popupHtml = '';
-                if (infoContent) {
-                    popupHtml = typeof infoContent.outerHTML === 'string' ? infoContent.outerHTML : (infoContent.innerHTML || '');
-                }
-                if (popupHtml) {
-                    marker.bindPopup(popupHtml);
-                }
-                marker.addTo(markersLayer);
-                extendBounds(lat, lng);
-                hasVisibleMarker = true;
+            function attachMarker(item, latLng) {
+                var marker = new maps.Marker({
+                    position: latLng,
+                    map: map,
+                    title: item.label || '',
+                });
+                bounds.extend(latLng);
+                markerCount++;
                 hideMessage();
-                scheduleInvalidate(0);
-                scheduleInvalidate(250);
+
+                var infoContent = createInfoContent(item, strings);
+                if (infoContent) {
+                    var html = infoContent.outerHTML || infoContent.innerHTML || '';
+                    if (html) {
+                        marker.addListener('click', function() {
+                            infoWindow.setContent(html);
+                            infoWindow.open(map, marker);
+                        });
+                    }
+                }
             }
 
             var geocodeQueue = [];
@@ -678,91 +620,38 @@
                 var lng = parseNumber(item.longitude);
 
                 if (lat !== null && lng !== null) {
-                    attachMarker(item, { lat: lat, lng: lng });
+                    attachMarker(item, new maps.LatLng(lat, lng));
                 } else if (typeof item.query === 'string' && item.query !== '') {
                     geocodeQueue.push(item);
                 }
             });
 
-            var geocodeEndpoint = typeof geocodeConfig.endpoint === 'string' && geocodeConfig.endpoint !== '' ? geocodeConfig.endpoint : 'https://nominatim.openstreetmap.org/search';
-            var baseParamsObject = geocodeConfig.params && typeof geocodeConfig.params === 'object' ? geocodeConfig.params : {};
-            var geocodeEmail = typeof geocodeConfig.email === 'string' && geocodeConfig.email !== '' ? geocodeConfig.email : '';
-            var baseParams = {};
-            Object.keys(baseParamsObject).forEach(function(key) {
-                var value = baseParamsObject[key];
-                if (value !== undefined && value !== null) {
-                    baseParams[key] = String(value);
-                }
-            });
-            if (!baseParams.format) {
-                baseParams.format = 'json';
+            var geocodeDelay = parseInt(settings.geocodeDelay, 10);
+            if (!Number.isFinite(geocodeDelay) || geocodeDelay < 0) {
+                geocodeDelay = 200;
             }
-            if (!baseParams.limit) {
-                baseParams.limit = '1';
-            }
-            if (!baseParams.addressdetails) {
-                baseParams.addressdetails = '0';
-            }
-            if (geocodeEmail) {
-                baseParams.email = geocodeEmail;
-            }
-
-            function buildGeocodeUrl(query) {
-                var parts = [];
-                Object.keys(baseParams).forEach(function(key) {
-                    parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(baseParams[key]));
-                });
-                parts.push('q=' + encodeURIComponent(query));
-                var delimiter = geocodeEndpoint.indexOf('?') === -1 ? '?' : '&';
-                return geocodeEndpoint + delimiter + parts.join('&');
-            }
-
-            function geocodeItem(item) {
-                return fetch(buildGeocodeUrl(item.query), {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json'
-                    }
-                }).then(function(response) {
-                    if (!response.ok) {
-                        if (response.status === 403 || response.status === 429 || response.status === 503) {
-                            fatalStatus = 'limit';
-                        }
-                        throw new Error('Geocode request failed with status ' + response.status);
-                    }
-                    return response.json();
-                }).then(function(results) {
-                    if (!Array.isArray(results) || results.length === 0) {
-                        console.warn('MJ Member Map: no geocode results for', item);
-                        return;
-                    }
-                    var location = results[0];
-                    var lat = parseNumber(location.lat);
-                    var lng = parseNumber(location.lon);
-                    if (lat === null || lng === null) {
-                        console.warn('MJ Member Map: invalid coordinates for', item);
-                        return;
-                    }
-                    attachMarker(item, { lat: lat, lng: lng });
-                }).catch(function(error) {
-                    console.warn('MJ Member Map: geocode failed', error);
-                });
-            }
-
             var batchSize = parseInt(settings.geocodeBatchSize, 10);
             if (!Number.isFinite(batchSize) || batchSize < 1) {
                 batchSize = 1;
             }
-            var delay = parseInt(settings.geocodeDelay, 10);
-            if (!Number.isFinite(delay) || delay < 0) {
-                delay = 1200;
+
+            function geocodeItem(item) {
+                return new Promise(function(resolve) {
+                    geocoder.geocode({ address: item.query }, function(results, status) {
+                        if (status === maps.GeocoderStatus.OK && results && results.length > 0) {
+                            attachMarker(item, results[0].geometry.location);
+                        } else {
+                            console.warn('MJ Member Map: geocode failed for', item.query, status);
+                        }
+                        resolve();
+                    });
+                });
             }
 
             function processQueue() {
                 if (geocodeQueue.length === 0) {
                     return Promise.resolve();
                 }
-
                 var batch = geocodeQueue.splice(0, batchSize);
                 return Promise.all(batch.map(geocodeItem)).then(function() {
                     if (geocodeQueue.length === 0) {
@@ -771,56 +660,39 @@
                     return new Promise(function(resolve) {
                         setTimeout(function() {
                             resolve(processQueue());
-                        }, delay);
+                        }, geocodeDelay);
                     });
                 });
             }
 
-            processQueue().catch(function(queueError) {
-                console.warn('MJ Member Map: geocode queue error', queueError);
-            }).then(function() {
-                if (fatalStatus && !hasVisibleMarker) {
-                    showMessage(strings.loadError || 'Carte indisponible.');
-                    return;
-                }
-
-                if (hasVisibleMarker && bounds && typeof bounds.isValid === 'function' && bounds.isValid()) {
-                    if (typeof bounds.getSouthWest === 'function' && typeof bounds.getNorthEast === 'function' && bounds.getSouthWest().equals(bounds.getNorthEast())) {
-                        var center = bounds.getCenter();
-                        map.setView(center, singleMarkerZoom);
+            processQueue().then(function() {
+                if (markerCount > 0 && !bounds.isEmpty()) {
+                    if (markerCount === 1) {
+                        map.setCenter(bounds.getCenter());
+                        map.setZoom(Math.min(maxAutoZoom, 14));
                     } else {
-                        map.fitBounds(bounds, { padding: [fitPadding, fitPadding], maxZoom: maxAutoZoom });
+                        map.fitBounds(bounds);
+                        maps.event.addListenerOnce(map, 'idle', function() {
+                            if (map.getZoom() > maxAutoZoom) {
+                                map.setZoom(maxAutoZoom);
+                            }
+                        });
                     }
-                    scheduleInvalidate(0);
-                    scheduleInvalidate(250);
-                    hideMessage();
-                } else if (hasVisibleMarker && bounds) {
-                    map.fitBounds(bounds, { padding: [fitPadding, fitPadding], maxZoom: maxAutoZoom });
-                    scheduleInvalidate(0);
-                    scheduleInvalidate(250);
                     hideMessage();
                 } else {
-                    showMessage(strings.noMarkers || 'Aucun membre géolocalisable.');
+                    showMessage(strings.noMarkers || 'Aucun membre geolocalisable pour le moment.');
                 }
             });
 
-            tileLayer.on('load', function() {
-                scheduleInvalidate(0);
-                scheduleInvalidate(250);
-                if (hasVisibleMarker) {
-                    hideMessage();
-                }
-            });
         }).catch(function(error) {
-            console.error('MJ Member Dashboard failed to load the map library', error);
-            var fallbackMessage = strings.loadError || 'Carte indisponible.';
+            console.error('MJ Member Dashboard failed to load Google Maps', error);
+            var fallbackMessage = strings && strings.loadError ? strings.loadError : 'Impossible de charger la carte Google Maps.';
             if (messageEl) {
                 messageEl.textContent = fallbackMessage;
                 messageEl.classList.remove('is-hidden');
             }
         });
     }
-
     /**
      * Initialize all dashboard charts
      */

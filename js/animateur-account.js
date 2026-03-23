@@ -525,6 +525,11 @@
 	 			self.onMessageCancelClick($(this));
 	 		});
 
+	 		this.$tableBody.on('click', '[data-role="message-ai-generate"]', function (event) {
+	 			event.preventDefault();
+	 			self.onAiGenerateMessageClick($(this));
+	 		});
+
 			this.$tableBody.on('click', '[data-role="registration-remove"]', function (event) {
 				event.preventDefault();
 				self.onRegistrationRemoveClick($(this));
@@ -2608,6 +2613,7 @@
 		var sendLabel = this.translate('messageSend', 'Envoyer');
 		var cancelLabel = this.translate('messageCancel', 'Annuler');
 		var noRecipient = this.translate('messageNoRecipient', 'Ce participant ne peut pas recevoir de SMS.');
+		var aiLabel = this.translate('messageAiGenerate', '✨ Générer avec l\'IA');
 
 		var attrs = ' class="mj-animateur-dashboard__participant-message" data-role="participant-message" data-member-id="' + escapeHtml(memberId) + '" data-can-message="' + (canMessage ? '1' : '0') + '"';
 
@@ -2615,11 +2621,13 @@
 			'<button type="button" class="mj-animateur-dashboard__message-toggle" data-role="message-toggle"' + (canMessage ? '' : ' disabled') + '>' + escapeHtml(toggleLabel) + '</button>';
 
 		if (canMessage) {
+			var showAiBtn = this.global && this.global.aiEnabled && this.global.actions && this.global.actions.generateAiMessage;
 			html += '<div class="mj-animateur-dashboard__message-editor" data-role="message-editor" style="display:none;">' +
 				'<textarea class="mj-animateur-dashboard__message-input" data-role="message-input" rows="3" placeholder="' + escapeHtml(placeholder) + '"></textarea>' +
 				'<div class="mj-animateur-dashboard__message-actions">' +
 					'<button type="button" class="mj-animateur-dashboard__message-send" data-role="message-send">' + escapeHtml(sendLabel) + '</button>' +
 					'<button type="button" class="mj-animateur-dashboard__message-cancel" data-role="message-cancel">' + escapeHtml(cancelLabel) + '</button>' +
+					(showAiBtn ? '<button type="button" class="mj-animateur-dashboard__message-ai-generate" data-role="message-ai-generate">' + escapeHtml(aiLabel) + '</button>' : '') +
 				'</div>' +
 				'<span class="mj-animateur-dashboard__message-feedback" data-role="message-feedback"></span>' +
 			'</div>';
@@ -2842,6 +2850,60 @@
 		}
 
 		this.closeParticipantMessage($container, false);
+	};
+
+	Dashboard.prototype.onAiGenerateMessageClick = function ($button) {
+		if (!$button || !$button.length) {
+			return;
+		}
+		if (!this.global || !this.global.aiEnabled || !this.global.actions || !this.global.actions.generateAiMessage) {
+			return;
+		}
+
+		var $container = $button.closest('[data-role="participant-message"]');
+		if (!$container.length || $container.attr('data-can-message') !== '1') {
+			return;
+		}
+
+		var memberId = toInt($container.attr('data-member-id'));
+		var event = this.getCurrentEvent();
+		if (!event) {
+			return;
+		}
+
+		var aiGeneratingLabel = this.translate('messageAiGenerating', 'Génération en cours...');
+		var originalLabel = $button.text();
+		$button.prop('disabled', true).text(aiGeneratingLabel);
+
+		var self = this;
+		$.ajax({
+			url: this.global.ajaxUrl,
+			method: 'POST',
+			dataType: 'json',
+			data: {
+				action: this.global.actions.generateAiMessage,
+				nonce: this.global.nonce || '',
+				event_id: event.id,
+				member_id: memberId || 0,
+				hint: ''
+			}
+		}).done(function (response) {
+			if (response && response.success && response.data && response.data.text) {
+				var $textarea = $container.find('[data-role="message-input"]').first();
+				if ($textarea.length) {
+					$textarea.val(response.data.text).focus();
+				}
+			} else {
+				var errMsg = (response && response.data && response.data.message)
+					? response.data.message
+					: self.translate('messageAiError', 'Impossible de générer le message.');
+				self.showMessageFeedback($container, 'error', errMsg);
+			}
+		}).fail(function () {
+			self.showMessageFeedback($container, 'error', self.translate('messageAiError', 'Impossible de générer le message.'));
+		}).always(function () {
+			$button.prop('disabled', false).text(originalLabel);
+		});
 	};
 
 	Dashboard.prototype.buildContactCell = function (participant) {

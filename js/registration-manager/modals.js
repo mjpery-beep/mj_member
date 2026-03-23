@@ -184,6 +184,60 @@
     }
 
     // ============================================
+    // REGISTRATION DOCUMENT PREVIEW MODAL
+    // ============================================
+
+    function RegistrationDocumentPreviewModal(props) {
+        var isOpen = !!props.isOpen;
+        var onClose = typeof props.onClose === 'function' ? props.onClose : function () {};
+        var htmlContent = typeof props.htmlContent === 'string' ? props.htmlContent : '';
+        var title = props.title || 'Apercu du document';
+        var strings = props.strings || {};
+
+        var iframeRef = useRef(null);
+
+        function handlePrint() {
+            if (!iframeRef.current || !iframeRef.current.contentWindow) {
+                return;
+            }
+
+            try {
+                iframeRef.current.contentWindow.focus();
+                iframeRef.current.contentWindow.print();
+            } catch (_error) {
+                if (global && global.console && typeof global.console.warn === 'function') {
+                    global.console.warn('[MjRegMgr] Impossible de lancer l\'impression de l\'apercu.');
+                }
+            }
+        }
+
+        return h(Modal, {
+            isOpen: isOpen,
+            onClose: onClose,
+            title: title,
+            size: 'large',
+        }, [
+            h('div', { class: 'mj-regmgr-doc-preview' }, [
+                h('div', { class: 'mj-regmgr-doc-preview__actions' }, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                        onClick: handlePrint,
+                    }, getString(strings, 'print', 'Imprimer')),
+                ]),
+                h('div', { class: 'mj-regmgr-doc-preview__frame-wrap' }, [
+                    h('iframe', {
+                        ref: iframeRef,
+                        class: 'mj-regmgr-doc-preview__frame',
+                        srcdoc: htmlContent,
+                        title: title,
+                    }),
+                ]),
+            ]),
+        ]);
+    }
+
+    // ============================================
     // ADD PARTICIPANT MODAL
     // ============================================
 
@@ -3435,6 +3489,304 @@
         ]);
     }
 
+    // ============================================
+    // NEXTCLOUD LOGIN MODAL
+    // ============================================
+
+    function ncGeneratePassword() {
+        var chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#%^&*';
+        var result = '';
+        var array = new Uint8Array(14);
+        if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+            crypto.getRandomValues(array);
+        } else {
+            for (var i = 0; i < 14; i++) { array[i] = Math.floor(Math.random() * 256); }
+        }
+        for (var j = 0; j < 14; j++) {
+            result += chars[array[j] % chars.length];
+        }
+        return result;
+    }
+
+    function NextcloudLoginModal(props) {
+        var isOpen = props.isOpen;
+        var onClose = props.onClose;
+        var onSubmit = props.onSubmit;
+        var member = props.member;
+        var availableGroups = Array.isArray(props.availableGroups) ? props.availableGroups : [];
+
+        var _loginState = useState('');
+        var login = _loginState[0];
+        var setLogin = _loginState[1];
+
+        var _passwordState = useState('');
+        var password = _passwordState[0];
+        var setPassword = _passwordState[1];
+
+        var _showPasswordState = useState(false);
+        var showPassword = _showPasswordState[0];
+        var setShowPassword = _showPasswordState[1];
+
+        var _selectedGroupsState = useState([]);
+        var selectedGroups = _selectedGroupsState[0];
+        var setSelectedGroups = _selectedGroupsState[1];
+
+        var _loadingState = useState(false);
+        var loading = _loadingState[0];
+        var setLoading = _loadingState[1];
+
+        var _isAdminState = useState(false);
+        var isAdmin = _isAdminState[0];
+        var setIsAdmin = _isAdminState[1];
+
+        var _operationsState = useState([]);
+        var operations = _operationsState[0];
+        var setOperations = _operationsState[1];
+
+        var _resultMessageState = useState('');
+        var resultMessage = _resultMessageState[0];
+        var setResultMessage = _resultMessageState[1];
+
+        // Mode mise à jour si un login Nextcloud est déjà enregistré pour ce membre
+        var isUpdateMode = !!(member && member.nextcloudLogin);
+
+        // Login courant ou suggestion (login WP) pour la création
+        var existingLogin = member && member.nextcloudLogin ? member.nextcloudLogin : '';
+        var existingPassword = member && typeof member.nextcloudPassword === 'string' ? member.nextcloudPassword : '';
+        var suggestedLogin = existingLogin
+            ? existingLogin
+            : ((member && typeof member.accountLogin === 'string' && member.accountLogin)
+                ? member.accountLogin
+                : '');
+
+        // Initialise les champs à l'ouverture du modal
+        useEffect(function () {
+            if (isOpen) {
+                setLogin(suggestedLogin);
+                // En mode mise à jour : mot de passe vide par défaut (optionnel)
+                setPassword(isUpdateMode ? '' : ncGeneratePassword());
+                setShowPassword(false);
+                setSelectedGroups(availableGroups.slice());
+                setLoading(false);
+                setIsAdmin(false);
+                setOperations([]);
+                setResultMessage('');
+            }
+        }, [isOpen]);
+
+        var handleGroupToggle = useCallback(function (groupId) {
+            setSelectedGroups(function (prev) {
+                var idx = prev.indexOf(groupId);
+                if (idx >= 0) {
+                    return prev.filter(function (g) { return g !== groupId; });
+                }
+                return prev.concat([groupId]);
+            });
+        }, []);
+
+        var handleSubmit = useCallback(function (e) {
+            e.preventDefault();
+            if (loading) { return; }
+            setLoading(true);
+            setResultMessage('');
+            setOperations(function (prev) {
+                var next = Array.isArray(prev) ? prev.slice() : [];
+                next.push('[' + new Date().toLocaleTimeString() + '] Début de la requête AJAX');
+                return next;
+            });
+
+            var payload = { groups: selectedGroups, isAdmin: isAdmin };
+            if (login.trim()) { payload.login = login.trim(); }
+            if (password.trim()) { payload.password = password.trim(); }
+            Promise.resolve(onSubmit(payload))
+                .then(function (result) {
+                    var ops = result && Array.isArray(result.operations) ? result.operations : [];
+                    setOperations(function (prev) {
+                        var next = Array.isArray(prev) ? prev.slice() : [];
+                        if (ops.length > 0) {
+                            next = next.concat(ops);
+                        } else {
+                            next.push('[' + new Date().toLocaleTimeString() + '] Réponse reçue (sans journal backend)');
+                        }
+                        return next;
+                    });
+                    setResultMessage(result && result.message ? result.message : 'Opération terminée.');
+                })
+                .catch(function (error) {
+                    var message = error && error.message ? error.message : 'Erreur pendant l\'opération.';
+                    setOperations(function (prev) {
+                        var next = Array.isArray(prev) ? prev.slice() : [];
+                        var backendOps = [];
+                        if (error && Array.isArray(error.operations) && error.operations.length > 0) {
+                            backendOps = error.operations;
+                        } else if (error && error.data && Array.isArray(error.data.operations) && error.data.operations.length > 0) {
+                            backendOps = error.data.operations;
+                        }
+                        if (backendOps.length > 0) {
+                            next = next.concat(backendOps);
+                        }
+                        next.push('[' + new Date().toLocaleTimeString() + '] ' + message);
+                        return next;
+                    });
+                    setResultMessage(message);
+                })
+                .finally(function () {
+                    setLoading(false);
+                });
+        }, [loading, selectedGroups, isAdmin, login, password, onSubmit]);
+
+        var footer = h(Fragment, null, [
+            h('button', {
+                key: 'cancel',
+                type: 'button',
+                class: 'mj-btn mj-btn--secondary',
+                onClick: onClose,
+                disabled: loading,
+            }, 'Annuler'),
+            h('button', {
+                key: 'submit',
+                type: 'submit',
+                form: 'mj-nextcloud-login-form',
+                class: 'mj-btn mj-btn--primary',
+                disabled: loading,
+            }, loading
+                ? (isUpdateMode ? 'Mise à jour...' : 'Création...')
+                : (isUpdateMode ? 'Mettre à jour' : 'Créer')
+            ),
+        ]);
+
+        return h(Modal, {
+            isOpen: isOpen,
+            onClose: onClose,
+            title: isUpdateMode ? 'Modifier le login Nextcloud' : 'Créer un login Nextcloud',
+            size: 'small',
+            footer: footer,
+        }, [
+            h('form', { id: 'mj-nextcloud-login-form', onSubmit: handleSubmit }, [
+                h('div', { class: 'mj-regmgr-form__group' }, [
+                    h('label', { class: 'mj-regmgr-form__label', for: 'nc-login' }, 'Login'),
+                    h('input', {
+                        type: 'text',
+                        id: 'nc-login',
+                        class: 'mj-regmgr-form__input',
+                        value: login,
+                        onInput: function (e) { setLogin(e.target.value); },
+                        placeholder: suggestedLogin || 'Généré automatiquement',
+                        disabled: loading,
+                        autocomplete: 'off',
+                    }),
+                    isUpdateMode && existingLogin && h('p', { class: 'mj-regmgr-form__hint' },
+                        'Login actuel : « ' + existingLogin + ' »'
+                    ),
+                    !isUpdateMode && suggestedLogin && h('p', { class: 'mj-regmgr-form__hint' },
+                        'Suggestion : login WordPress « ' + suggestedLogin + ' »'
+                    ),
+                ]),
+                h('div', { class: 'mj-regmgr-form__group' }, [
+                    h('label', { class: 'mj-regmgr-form__label', for: 'nc-password' }, 'Mot de passe'),
+                    h('div', { class: 'mj-regmgr-form__input-row' }, [
+                        h('input', {
+                            type: showPassword ? 'text' : 'password',
+                            id: 'nc-password',
+                            class: 'mj-regmgr-form__input',
+                            value: password,
+                            onInput: function (e) { setPassword(e.target.value); },
+                            placeholder: 'Généré automatiquement',
+                            disabled: loading,
+                            autocomplete: 'new-password',
+                        }),
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--icon mj-btn--ghost',
+                            onClick: function () { setShowPassword(function (v) { return !v; }); },
+                            title: showPassword ? 'Masquer' : 'Afficher',
+                            disabled: loading,
+                        }, showPassword
+                            ? h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                h('path', { d: 'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24' }),
+                                h('line', { x1: 1, y1: 1, x2: 23, y2: 23 }),
+                            ])
+                            : h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                h('path', { d: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z' }),
+                                h('circle', { cx: 12, cy: 12, r: 3 }),
+                            ])
+                        ),
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--icon mj-btn--ghost',
+                            onClick: function () { setPassword(ncGeneratePassword()); },
+                            title: 'Générer un nouveau mot de passe',
+                            disabled: loading,
+                        }, h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                            h('polyline', { points: '23 4 23 10 17 10' }),
+                            h('polyline', { points: '1 20 1 14 7 14' }),
+                            h('path', { d: 'M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15' }),
+                        ])),
+                    ]),
+                    h('p', { class: 'mj-regmgr-form__hint' }, isUpdateMode
+                        ? 'Laissez vide pour conserver le mot de passe actuel.'
+                        : 'Mot de passe généré automatiquement. Modifiez-le si besoin.'
+                    ),
+                    existingPassword && h('p', { class: 'mj-regmgr-form__hint' },
+                        'Mot de passe enregistré : ' + existingPassword
+                    ),
+                ]),
+                h('div', { class: 'mj-regmgr-form__group' }, [
+                    h('label', {
+                        class: 'mj-regmgr-form__label',
+                        style: 'display:flex;align-items:center;gap:8px;cursor:pointer;',
+                    }, [
+                        h('input', {
+                            type: 'checkbox',
+                            checked: isAdmin,
+                            onChange: function (e) { setIsAdmin(!!(e && e.target && e.target.checked)); },
+                            disabled: loading,
+                        }),
+                        h('span', null, 'Donner les droits admin (groupe "admin")'),
+                    ]),
+                ]),
+                availableGroups.length > 0 && h('div', { class: 'mj-regmgr-form__group' }, [
+                    h('label', { class: 'mj-regmgr-form__label' }, 'Groupes'),
+                    h('div', { class: 'mj-regmgr-nextcloud-groups' },
+                        availableGroups.map(function (groupId) {
+                            var checked = selectedGroups.indexOf(groupId) >= 0;
+                            return h('label', {
+                                key: groupId,
+                                class: 'mj-regmgr-nextcloud-groups__item',
+                            }, [
+                                h('input', {
+                                    type: 'checkbox',
+                                    checked: checked,
+                                    onChange: function () { handleGroupToggle(groupId); },
+                                    disabled: loading,
+                                }),
+                                h('span', null, groupId),
+                            ]);
+                        })
+                    ),
+                ]),
+                h('div', { class: 'mj-regmgr-form__group' }, [
+                    h('label', { class: 'mj-regmgr-form__label', for: 'nc-ops' }, 'Opérations API (AJAX / Nextcloud)'),
+                    h('textarea', {
+                        id: 'nc-ops',
+                        class: 'mj-regmgr-form__input',
+                        rows: 8,
+                        readOnly: true,
+                        value: Array.isArray(operations) ? operations.join('\n') : '',
+                        placeholder: 'Les opérations apparaîtront ici après création / mise à jour...',
+                        style: 'font-family:Consolas,Monaco,monospace;white-space:pre;'
+                    }),
+                    resultMessage && h('p', { class: 'mj-regmgr-form__hint' }, resultMessage),
+                ]),
+            ]),
+        ]);
+    }
+
+    // ============================================
+    // GENERATE AI MODAL
+    // ============================================
+    var GenerateAiModal = global.MjRegMgrGenerateAiModal || function () { return null; };
+
     global.MjRegMgrModals = {
         Modal: Modal,
         AddParticipantModal: AddParticipantModal,
@@ -3448,6 +3800,9 @@
         OccurrencesModal: OccurrencesModal,
         LocationModal: LocationModal,
         AvatarCaptureModal: AvatarCaptureModal,
+        RegistrationDocumentPreviewModal: RegistrationDocumentPreviewModal,
+        GenerateAiModal: GenerateAiModal,
+        NextcloudLoginModal: NextcloudLoginModal,
     };
 
 })(window);

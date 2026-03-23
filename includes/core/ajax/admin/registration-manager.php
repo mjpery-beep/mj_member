@@ -38,16 +38,22 @@ use Mj\Member\Classes\Crud\MjEmployeeDocuments;
 use Mj\Member\Classes\Forms\EventFormDataMapper;
 use Mj\Member\Classes\Forms\EventFormOptionsBuilder;
 use Mj\Member\Classes\MjEventSchedule;
+use Mj\Member\Classes\MjNextcloud;
 use Mj\Member\Classes\MjPayments;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\MjStripeConfig;
 use Mj\Member\Classes\MjTrophyService;
 use Mj\Member\Core\Config;
 use Mj\Member\Classes\Value\EventLocationData;
+use Mj\Member\Classes\MjOpenAIClient;
+use Mj\Member\Classes\MjSocialMediaPublisher;
 
 if (!defined('ABSPATH')) {
     exit;
 }
+
+// Include social media publishing handler
+require_once __DIR__ . '/publish-event.php';
 
 // Register AJAX actions
 add_action('wp_ajax_mj_regmgr_get_events', 'mj_regmgr_get_events');
@@ -94,6 +100,7 @@ add_action('wp_ajax_mj_regmgr_capture_member_photo', 'mj_regmgr_capture_member_p
 add_action('wp_ajax_mj_regmgr_create_member_message', 'mj_regmgr_create_member_message');
 add_action('wp_ajax_mj_regmgr_delete_member_message', 'mj_regmgr_delete_member_message');
 add_action('wp_ajax_mj_regmgr_reset_member_password', 'mj_regmgr_reset_member_password');
+add_action('wp_ajax_mj_regmgr_create_member_nextcloud_login', 'mj_regmgr_create_member_nextcloud_login');
 add_action('wp_ajax_mj_regmgr_delete_member', 'mj_regmgr_delete_member');
 add_action('wp_ajax_mj_regmgr_sync_member_badge', 'mj_regmgr_sync_member_badge');
 add_action('wp_ajax_mj_regmgr_adjust_member_xp', 'mj_regmgr_adjust_member_xp');
@@ -127,6 +134,12 @@ add_action('wp_ajax_mj_regmgr_save_job_profile', 'mj_regmgr_save_job_profile');
 // Favorites actions
 add_action('wp_ajax_mj_regmgr_get_favorites', 'mj_regmgr_get_favorites');
 add_action('wp_ajax_mj_regmgr_toggle_favorite', 'mj_regmgr_toggle_favorite');
+
+// AI text generation
+add_action('wp_ajax_mj_regmgr_generate_ai_text', 'mj_regmgr_generate_ai_text');
+
+// Social media publishing
+add_action('wp_ajax_mj_regmgr_publish_event', 'mj_regmgr_publish_event');
 
 /**
  * Verify nonce and check user permissions
@@ -1260,6 +1273,106 @@ function mj_regmgr_build_event_schedule_info($event, $mode = '') {
                 }
                 $detail_parts[] = $detail;
             }
+
+            // If a generated occurrences payload exists, prefer it over the legacy fixed-date label.
+            $payload_plan = mj_regmgr_extract_occurrence_generator_from_payload($schedule_payload);
+            $payload_occurrences = isset($schedule_payload['occurrences']) && is_array($schedule_payload['occurrences'])
+                ? $schedule_payload['occurrences']
+                : array();
+            if (empty($payload_occurrences) && isset($schedule_payload['items']) && is_array($schedule_payload['items'])) {
+                $payload_occurrences = $schedule_payload['items'];
+            }
+
+            $has_payload_occurrences = !empty($payload_occurrences);
+            $has_payload_plan = !empty($payload_plan);
+
+            if ($has_payload_plan || $has_payload_occurrences) {
+                $payload_detail_parts = array();
+
+                if ($has_payload_occurrences) {
+                    $payload_detail_parts[] = sprintf(
+                        _n('%d date', '%d dates', count($payload_occurrences), 'mj-member'),
+                        count($payload_occurrences)
+                    );
+                }
+
+                $plan_mode = isset($payload_plan['mode']) ? sanitize_key((string) $payload_plan['mode']) : '';
+                $plan_frequency = isset($payload_plan['frequency']) ? sanitize_key((string) $payload_plan['frequency']) : '';
+                $plan_days = isset($payload_plan['days']) && is_array($payload_plan['days']) ? $payload_plan['days'] : array();
+                $plan_start_date = isset($payload_plan['startDate']) ? (string) $payload_plan['startDate'] : '';
+                $plan_end_date = isset($payload_plan['endDate']) ? (string) $payload_plan['endDate'] : '';
+                $plan_start_time = isset($payload_plan['startTime']) ? (string) $payload_plan['startTime'] : '';
+                $plan_end_time = isset($payload_plan['endTime']) ? (string) $payload_plan['endTime'] : '';
+
+                if ($plan_mode === 'weekly') {
+                    $weekday_labels = array(
+                        'mon' => __('Lundi', 'mj-member'),
+                        'tue' => __('Mardi', 'mj-member'),
+                        'wed' => __('Mercredi', 'mj-member'),
+                        'thu' => __('Jeudi', 'mj-member'),
+                        'fri' => __('Vendredi', 'mj-member'),
+                        'sat' => __('Samedi', 'mj-member'),
+                        'sun' => __('Dimanche', 'mj-member'),
+                    );
+
+                    $active_days = array();
+                    foreach (array('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun') as $weekday_key) {
+                        if (!empty($plan_days[$weekday_key]) && isset($weekday_labels[$weekday_key])) {
+                            $active_days[] = $weekday_labels[$weekday_key];
+                        }
+                    }
+
+                    if (!empty($active_days)) {
+                        $payload_detail_parts[] = implode(', ', $active_days);
+                    }
+
+                    if ($plan_frequency === 'every_two_weeks') {
+                        $payload_detail_parts[] = __('Toutes les 2 semaines', 'mj-member');
+                    } elseif ($plan_frequency === 'every_week') {
+                        $payload_detail_parts[] = __('Chaque semaine', 'mj-member');
+                    }
+                } elseif ($plan_mode === 'monthly') {
+                    $month_ordinals = mj_regmgr_get_schedule_month_ordinals();
+                    $ordinal_key = isset($payload_plan['monthlyOrdinal']) ? sanitize_key((string) $payload_plan['monthlyOrdinal']) : '';
+                    $weekday_key = isset($payload_plan['monthlyWeekday']) ? sanitize_key((string) $payload_plan['monthlyWeekday']) : '';
+
+                    $weekday_labels = array(
+                        'mon' => __('Lundi', 'mj-member'),
+                        'tue' => __('Mardi', 'mj-member'),
+                        'wed' => __('Mercredi', 'mj-member'),
+                        'thu' => __('Jeudi', 'mj-member'),
+                        'fri' => __('Vendredi', 'mj-member'),
+                        'sat' => __('Samedi', 'mj-member'),
+                        'sun' => __('Dimanche', 'mj-member'),
+                    );
+
+                    if (isset($month_ordinals[$ordinal_key]) && isset($weekday_labels[$weekday_key])) {
+                        $payload_detail_parts[] = trim($month_ordinals[$ordinal_key] . ' ' . $weekday_labels[$weekday_key]);
+                    }
+                }
+
+                if ($plan_start_date !== '' || $plan_end_date !== '') {
+                    $start_date_compact = $plan_start_date !== '' ? mj_regmgr_format_date_compact($plan_start_date . ' 00:00:00') : '';
+                    $end_date_compact = $plan_end_date !== '' ? mj_regmgr_format_date_compact($plan_end_date . ' 00:00:00') : '';
+
+                    if ($start_date_compact !== '' && $end_date_compact !== '') {
+                        $payload_detail_parts[] = $start_date_compact . ' → ' . $end_date_compact;
+                    } elseif ($start_date_compact !== '') {
+                        $payload_detail_parts[] = $start_date_compact;
+                    }
+                }
+
+                if ($plan_start_time !== '' && $plan_end_time !== '') {
+                    $payload_detail_parts[] = $plan_start_time . ' → ' . $plan_end_time;
+                } elseif ($plan_start_time !== '') {
+                    $payload_detail_parts[] = $plan_start_time;
+                }
+
+                if (!empty($payload_detail_parts)) {
+                    $summary = __('Occurrences générées', 'mj-member');
+                    $detail_parts = $payload_detail_parts;
+                }
+            }
             break;
     }
 
@@ -1628,6 +1741,8 @@ function mj_regmgr_get_event_details() {
             'statusLabel' => isset($status_labels[$event->status]) ? $status_labels[$event->status] : $event->status,
             'description' => $event->description,
             'registrationDocument' => isset($event->registration_document) ? $event->registration_document : '',
+            'socialPublishDescription' => isset($registration_payload['social_publish_description']) ? (string) $registration_payload['social_publish_description'] : '',
+            'registrationPayload' => $registration_payload,
             'dateDebut' => $event->date_debut,
             'dateFin' => $event->date_fin,
             'dateDebutFormatted' => mj_regmgr_format_date($event->date_debut, true),
@@ -1939,51 +2054,45 @@ function mj_regmgr_create_event() {
     $title = sanitize_text_field($raw_title);
     $title = trim($title);
 
-    if ($title === '') {
-        wp_send_json_error(array('message' => __('Le titre est requis.', 'mj-member')), 400);
+    if ($type === 'description') {
+        $default_description_prompt = (string) get_option('mj_member_ai_description_prompt', get_option('mj_ai_description_prompt', ''));
+        if ($default_description_prompt === '') {
+            $default_description_prompt = sprintf(
+                'Tu es un assistant rédacteur pour une association jeunesse (%s). Tu rédiges des descriptions d\'événements en français, de manière claire, engageante et adaptée à un public familial. Réponds uniquement avec le texte de la description, sans titre ni introduction.',
+                $site_name
+            );
+        }
+
+        $system_prompt = apply_filters('mj_member_ai_description_system_prompt', $default_description_prompt);
+        $user_prompt = sprintf(
+            "Rédige une description attrayante pour l'événement suivant :\n\n%s",
+            $event_context
+        );
+    } else {
+        $default_regdoc_prompt = (string) get_option('mj_member_ai_regdoc_prompt', get_option('mj_ai_regdoc_prompt', ''));
+        if ($default_regdoc_prompt === '') {
+            $default_regdoc_prompt = sprintf(
+                'Tu es un assistant pour une association jeunesse (%s). Tu rédiges des documents d\'inscription en français. Le document doit contenir les informations essentielles sur l\'événement et les instructions pour les participants. Utilise les variables entre crochets (ex : [member_name], [event_name]) pour personnaliser le document. Réponds uniquement avec le contenu du document.',
+                $site_name
+            );
+        }
+
+        $system_prompt = apply_filters('mj_member_ai_regdoc_system_prompt', $default_regdoc_prompt);
+        $user_prompt = sprintf(
+            "Rédige un document d'inscription complet pour l'événement suivant :\n\n%s",
+            $event_context
+        );
+    }
+
+    $result = $client->generateText($system_prompt, $user_prompt, array('max_tokens' => 1200));
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()), 503);
         return;
     }
-
-    $type = isset($_POST['type']) ? sanitize_key(wp_unslash($_POST['type'])) : '';
-    $type_labels = MjEvents::get_type_labels();
-    if ($type === '' || !isset($type_labels[$type])) {
-        $type = MjEvents::TYPE_STAGE;
-    }
-
-    $defaults = MjEvents::get_default_values();
-    $defaults['title'] = $title;
-    $defaults['type'] = $type;
-    $defaults['status'] = MjEvents::STATUS_DRAFT;
-    $defaults['accent_color'] = MjEvents::get_default_color_for_type($type);
-
-    if (!empty($auth['member_id'])) {
-        $defaults['animateur_id'] = (int) $auth['member_id'];
-        $defaults['created_by_member_id'] = (int) $auth['member_id'];
-    }
-
-    $event_id = MjEvents::create($defaults);
-    if (is_wp_error($event_id)) {
-        wp_send_json_error(array('message' => $event_id->get_error_message()), 500);
-        return;
-    }
-
-    $member_id = isset($auth['member_id']) ? (int) $auth['member_id'] : 0;
-    if ($member_id > 0 && class_exists(MjEventAnimateurs::class)) {
-        MjEventAnimateurs::sync_for_event($event_id, array($member_id));
-    }
-
-    $event = MjEvents::find($event_id);
-    if (!$event) {
-        wp_send_json_error(array('message' => __('Événement introuvable après création.', 'mj-member')), 500);
-        return;
-    }
-
-    $status_labels = MjEvents::get_status_labels();
-    $event_data = mj_regmgr_build_event_sidebar_item($event, $type_labels, $status_labels);
 
     wp_send_json_success(array(
-        'event' => $event_data,
-        'message' => __('Événement brouillon créé. Complétez les informations avant publication.', 'mj-member'),
+        'text' => $result['text'],
+        'type' => $type,
     ));
 }
 
@@ -5931,6 +6040,8 @@ function mj_regmgr_get_member_details() {
         'userId' => $memberData->wp_user_id ?? null,
         'hasLinkedAccount' => !empty($memberData->wp_user_id),
         'accountLogin' => isset($memberData->member_account_login) ? (string) $memberData->member_account_login : '',
+        'nextcloudLogin' => isset($memberData->member_nextcloud_login) ? (string) $memberData->member_nextcloud_login : '',
+        'nextcloudPassword' => isset($memberData->member_nextcloud_password) ? (string) $memberData->member_nextcloud_password : '',
         'accountEmail' => '',
         'accountRole' => '',
         'accountRoleLabel' => '',
@@ -5964,6 +6075,7 @@ function mj_regmgr_get_member_details() {
         'workRegime' => $memberData->get('work_regime', ''),
         'fundingSource' => $memberData->get('funding_source', ''),
         'jobDescription' => $memberData->get('job_description', ''),
+        'signatureMessage' => $memberData->get('signature_message', ''),
     );
 
     if ($member['hasLinkedAccount']) {
@@ -5973,7 +6085,6 @@ function mj_regmgr_get_member_details() {
             if ($member['accountLogin'] === '') {
                 $member['accountLogin'] = $user_object->user_login;
             }
-
             if (!empty($user_object->roles) && is_array($user_object->roles)) {
                 $primary_role = reset($user_object->roles);
                 if (is_string($primary_role) && $primary_role !== '') {
@@ -7034,6 +7145,395 @@ function mj_regmgr_delete_member() {
 }
 
 /**
+ * Create a Nextcloud login for a member.
+ */
+function mj_regmgr_create_member_nextcloud_login() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) {
+        return;
+    }
+
+    $operations = array();
+    $log_op = static function (string $message) use (&$operations): void {
+        $operations[] = '[' . current_time('H:i:s') . '] ' . $message;
+    };
+
+    $send_error = static function (string $message, int $status = 200) use (&$operations): void {
+        wp_send_json_error(array(
+            'message' => $message,
+            'operations' => $operations,
+        ), $status);
+    };
+
+    $log_op('Validation de la requête');
+
+    if (!current_user_can(Config::capability()) && empty($auth['is_coordinateur'])) {
+        $log_op('Permissions insuffisantes');
+        $send_error(__('Permissions insuffisantes.', 'mj-member'), 403);
+        return;
+    }
+
+    if (!MjNextcloud::isAvailable()) {
+        $log_op('Configuration Nextcloud incomplète');
+        $send_error(__('La configuration Nextcloud est incomplète.', 'mj-member'));
+        return;
+    }
+
+    $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+    if ($member_id <= 0) {
+        $log_op('memberId invalide');
+        $send_error(__('Identifiant de membre invalide.', 'mj-member'));
+        return;
+    }
+
+    $member = MjMembers::getById($member_id);
+    if (!$member) {
+        $log_op('Membre introuvable');
+        $send_error(__('Membre introuvable.', 'mj-member'));
+        return;
+    }
+
+    $log_op('Membre chargé: #' . $member_id);
+
+    $requested_login_raw = isset($_POST['login']) ? wp_unslash($_POST['login']) : '';
+    $requested_login = sanitize_user($requested_login_raw, true);
+
+    if ($requested_login_raw !== '' && $requested_login === '') {
+        $log_op('Login demandé invalide');
+        $send_error(__('Identifiant Nextcloud invalide.', 'mj-member'));
+        return;
+    }
+
+    $candidate_logins = array();
+    if ($requested_login !== '') {
+        $candidate_logins[] = $requested_login;
+    }
+
+    $stored_login = isset($member->member_nextcloud_login) ? sanitize_user((string) $member->member_nextcloud_login, true) : '';
+    if ($stored_login !== '') {
+        $candidate_logins[] = $stored_login;
+    }
+
+    if (!empty($member->wp_user_id)) {
+        $wp_user = get_user_by('id', (int) $member->wp_user_id);
+        if ($wp_user && !empty($wp_user->user_login)) {
+            $candidate_logins[] = sanitize_user((string) $wp_user->user_login, true);
+        }
+    }
+
+    if (!empty($member->email) && is_email($member->email)) {
+        $from_email = sanitize_user((string) current(explode('@', (string) $member->email)), true);
+        if ($from_email !== '') {
+            $candidate_logins[] = $from_email;
+        }
+    }
+
+    $name_login = sanitize_user(trim((($member->first_name ?? '') . '.' . ($member->last_name ?? ''))), true);
+    if ($name_login !== '') {
+        $candidate_logins[] = $name_login;
+    }
+
+    $candidate_logins[] = sanitize_user('member' . (int) $member->id, true);
+
+    $nextcloud = MjNextcloud::make();
+    if (is_wp_error($nextcloud)) {
+        $log_op('Client Nextcloud indisponible: ' . $nextcloud->get_error_message());
+        $send_error($nextcloud->get_error_message());
+        return;
+    }
+
+    $log_op('Client Nextcloud initialisé');
+
+    $stored_nextcloud_login = sanitize_user(trim((string) ($member->member_nextcloud_login ?? '')), true);
+    if ($stored_nextcloud_login !== '') {
+        array_unshift($candidate_logins, $stored_nextcloud_login);
+    }
+
+    $candidate_logins = array_values(array_unique(array_filter(array_map(
+        static function ($candidate) {
+            return sanitize_user((string) $candidate, true);
+        },
+        $candidate_logins
+    ))));
+
+    $nextcloud_login = '';
+    $login_exists = false;
+
+    foreach ($candidate_logins as $candidate) {
+        if ($candidate === '') {
+            continue;
+        }
+
+        $exists = $nextcloud->userExists($candidate);
+        if ($exists && $stored_nextcloud_login !== '' && $candidate === $stored_nextcloud_login) {
+            $nextcloud_login = $candidate;
+            $login_exists = true;
+            break;
+        }
+
+        if (!$exists) {
+            $nextcloud_login = $candidate;
+            $login_exists = false;
+            break;
+        }
+    }
+
+    if ($nextcloud_login === '') {
+        $log_op('Aucun login Nextcloud disponible');
+        $send_error(__('Impossible de trouver un identifiant Nextcloud disponible.', 'mj-member'));
+        return;
+    }
+
+    $log_op($login_exists
+        ? 'Login existant détecté: ' . $nextcloud_login
+        : 'Login disponible sélectionné: ' . $nextcloud_login
+    );
+
+    $manual_password = isset($_POST['password']) ? trim((string) wp_unslash($_POST['password'])) : '';
+    if ($manual_password !== '' && strlen($manual_password) < 8) {
+        $log_op('Mot de passe refusé (< 8 caractères)');
+        $send_error(__('Le mot de passe doit contenir au moins 8 caractères.', 'mj-member'));
+        return;
+    }
+
+    $is_admin = isset($_POST['is_admin']) && in_array(strtolower(trim((string) wp_unslash($_POST['is_admin']))), array('1', 'true', 'yes', 'on'), true);
+    if ($is_admin) {
+        $log_op('Option admin activée');
+    }
+
+    $password_to_store = '';
+    if ($manual_password !== '') {
+        $password_to_store = $manual_password;
+    } elseif (!$login_exists) {
+        $password_to_store = wp_generate_password(14, true, false);
+    }
+
+    $display_name = trim((string) (($member->first_name ?? '') . ' ' . ($member->last_name ?? '')));
+    $email = !empty($member->email) && is_email($member->email) ? (string) $member->email : '';
+
+    global $wpdb;
+    $table_name = MjMembers::getTableName(MjMembers::TABLE_NAME);
+    $columns = $wpdb->get_col("SHOW COLUMNS FROM {$table_name}");
+
+    if ($login_exists) {
+        if ($manual_password !== '') {
+            $log_op('Mise à jour du mot de passe Nextcloud');
+            $password_updated = $nextcloud->setUserPassword($nextcloud_login, $manual_password);
+            if (is_wp_error($password_updated)) {
+                $log_op('Échec mise à jour mot de passe: ' . $password_updated->get_error_message());
+                $send_error($password_updated->get_error_message());
+                return;
+            }
+            $log_op('Mot de passe Nextcloud mis à jour');
+        }
+    } else {
+        $log_op('Création du compte Nextcloud');
+        $created = $nextcloud->createUser($nextcloud_login, $password_to_store, $display_name, $email);
+        if (is_wp_error($created)) {
+            $log_op('Échec création du compte: ' . $created->get_error_message());
+            $send_error($created->get_error_message());
+            return;
+        }
+        $log_op('Compte Nextcloud créé');
+    }
+
+    // Utilise les groupes envoyés par le client, sinon repli sur la configuration par défaut
+    $configured_groups = Config::nextcloudGroups();
+    if (isset($_POST['groups']) && is_array($_POST['groups'])) {
+        $configured_groups = array_values(array_filter(array_map(
+            function ($g) {
+                return trim(sanitize_text_field((string) wp_unslash($g)));
+            },
+            (array) $_POST['groups']
+        )));
+    }
+
+    if ($is_admin && !in_array('admin', $configured_groups, true)) {
+        $configured_groups[] = 'admin';
+    }
+
+    $configured_groups = array_values(array_unique(array_filter($configured_groups)));
+    $log_op('Attribution des groupes: ' . (!empty($configured_groups) ? implode(', ', $configured_groups) : '(aucun)'));
+
+    $assigned_groups = array();
+    $group_errors = array();
+
+    foreach ($configured_groups as $group_id) {
+        $assign_result = $nextcloud->addUserToGroup($nextcloud_login, $group_id);
+        if (is_wp_error($assign_result)) {
+            $group_errors[] = sprintf('%s: %s', $group_id, $assign_result->get_error_message());
+            $log_op('Échec groupe ' . $group_id . ': ' . $assign_result->get_error_message());
+            continue;
+        }
+        $assigned_groups[] = $group_id;
+        $log_op('Groupe ajouté: ' . $group_id);
+    }
+
+    // Synchronise l'avatar du profil MJ vers l'avatar du compte Nextcloud (API OCS)
+    $avatar_attachment_id = isset($member->photo_id) ? (int) $member->photo_id : 0;
+    if ($avatar_attachment_id <= 0 && isset($member->avatar_id)) {
+        $avatar_attachment_id = (int) $member->avatar_id;
+    }
+
+    if ($avatar_attachment_id > 0) {
+        $avatar_file = get_attached_file($avatar_attachment_id);
+        if (is_string($avatar_file) && $avatar_file !== '' && file_exists($avatar_file) && is_readable($avatar_file)) {
+            $avatar_content = file_get_contents($avatar_file);
+            if ($avatar_content !== false) {
+                $avatar_size = strlen($avatar_content);
+                if ($avatar_size <= 0) {
+                    $log_op('Avatar non synchronisé: contenu source vide');
+                    $avatar_content = false;
+                }
+
+            }
+
+            if ($avatar_content !== false) {
+                $avatar_ext = strtolower((string) pathinfo($avatar_file, PATHINFO_EXTENSION));
+                if ($avatar_ext === '') {
+                    $avatar_ext = 'jpg';
+                }
+                $avatar_mime = (string) get_post_mime_type($avatar_attachment_id);
+                if ($avatar_mime === '') {
+                    $avatar_mime = $avatar_ext === 'png' ? 'image/png' : 'image/jpeg';
+                }
+
+                // Normalise l'image en JPEG 512px max pour éviter certains échecs serveur (500/415).
+                if (function_exists('wp_get_image_editor')) {
+                    $image_editor = wp_get_image_editor($avatar_file);
+                    if (!is_wp_error($image_editor)) {
+                        $image_editor->resize(512, 512, false);
+                        if (method_exists($image_editor, 'set_quality')) {
+                            $image_editor->set_quality(85);
+                        }
+
+                        // wp_tempnam() creates a file without a proper extension; the image editor
+                        // may save to a different path (appending .jpg). We must use $saved['path']
+                        // to read the actual output file instead of the original empty temp file.
+                        $tmp_avatar_file = wp_tempnam('mj-nc-av-' . (int) $member_id);
+                        if (is_string($tmp_avatar_file) && $tmp_avatar_file !== '') {
+                            $saved = $image_editor->save($tmp_avatar_file, 'image/jpeg');
+                            if (!is_wp_error($saved)) {
+                                $actual_saved_path = (isset($saved['path']) && $saved['path'] !== '') ? $saved['path'] : $tmp_avatar_file;
+                                if (file_exists($actual_saved_path) && is_readable($actual_saved_path)) {
+                                    $normalized_content = file_get_contents($actual_saved_path);
+                                    if ($normalized_content !== false && strlen($normalized_content) > 0) {
+                                        $avatar_content = $normalized_content;
+                                        $avatar_mime = 'image/jpeg';
+                                        $log_op('Avatar normalisé en JPEG (512px, ' . strlen($normalized_content) . ' bytes, path: ' . basename($actual_saved_path) . ')');
+                                    } else {
+                                        $log_op('Normalisation JPEG ignorée: fichier normalisé vide à ' . $actual_saved_path);
+                                    }
+                                } else {
+                                    $log_op('Normalisation JPEG ignorée: chemin introuvable: ' . $actual_saved_path);
+                                }
+                                if ($actual_saved_path !== $tmp_avatar_file) {
+                                    @unlink($actual_saved_path);
+                                }
+                            } else {
+                                $log_op('Normalisation JPEG ignorée: save() erreur: ' . $saved->get_error_message());
+                            }
+                            @unlink($tmp_avatar_file);
+                        }
+                    }
+                }
+
+                if (!is_string($avatar_content) || strlen($avatar_content) <= 0) {
+                    $log_op('Avatar non synchronisé: contenu final vide');
+                } else {
+                    $log_op('Tentative mise à jour avatar Nextcloud (' . strlen($avatar_content) . ' bytes, ' . $avatar_mime . ')');
+                }
+
+                if (is_string($avatar_content) && strlen($avatar_content) > 0) {
+                    $avatar_updated = $nextcloud->setUserAvatar($nextcloud_login, $avatar_content, $avatar_mime);
+                    if (is_wp_error($avatar_updated)) {
+                        $log_op('Échec mise à jour avatar Nextcloud: ' . $avatar_updated->get_error_message());
+
+                        // Fallback: persist avatar as a regular file in Nextcloud when avatar API is unsupported.
+                        $fallback_filename = 'mj-member-avatar-' . sanitize_title($nextcloud_login) . '.dat';
+                        $fallback_parent = Config::nextcloudRootFolder();
+                        // Use .dat extension + octet-stream to bypass server-side image MIME sniffing (415).
+                        $fallback_upload = $nextcloud->uploadContent($fallback_parent, $fallback_filename, $avatar_content, 'application/octet-stream');
+
+                        if (is_wp_error($fallback_upload)) {
+                            $log_op('Fallback upload avatar (fichier) échoué: ' . $fallback_upload->get_error_message());
+                        } else {
+                            $log_op('Fallback upload avatar (fichier) réussi: ' . $fallback_filename);
+                        }
+                    } else {
+                        $log_op('Avatar du compte Nextcloud mis à jour');
+                    }
+                }
+            } else {
+                $log_op('Avatar non synchronisé: lecture fichier impossible');
+            }
+        } else {
+            $log_op('Avatar non synchronisé: fichier avatar introuvable');
+        }
+    } else {
+        $log_op('Avatar non synchronisé: aucun avatar membre');
+    }
+
+    $updates = array();
+    $formats = array();
+
+    if (is_array($columns) && in_array('member_nextcloud_login', $columns, true)) {
+        $updates['member_nextcloud_login'] = $nextcloud_login;
+        $formats[] = '%s';
+    }
+
+    if ($password_to_store !== '' && is_array($columns) && in_array('member_nextcloud_password', $columns, true)) {
+        $updates['member_nextcloud_password'] = $password_to_store;
+        $formats[] = '%s';
+    }
+
+    $now = current_time('mysql');
+    if (!$login_exists && is_array($columns) && in_array('nextcloud_last_creation_date', $columns, true)) {
+        $updates['nextcloud_last_creation_date'] = $now;
+        $formats[] = '%s';
+    }
+    if (is_array($columns) && in_array('nextcloud_last_connexion_date', $columns, true)) {
+        $updates['nextcloud_last_connexion_date'] = $now;
+        $formats[] = '%s';
+    }
+
+    if (!empty($updates)) {
+        $wpdb->update(
+            $table_name,
+            $updates,
+            array('id' => $member_id),
+            $formats,
+            array('%d')
+        );
+        $log_op('Métadonnées membre mises à jour en base');
+    }
+
+    $response = array(
+        'message' => $login_exists
+            ? __('Login Nextcloud mis à jour avec succès.', 'mj-member')
+            : __('Login Nextcloud créé avec succès.', 'mj-member'),
+        'login' => $nextcloud_login,
+        'groups_assigned' => $assigned_groups,
+        'login_exists' => $login_exists,
+        'operations' => $operations,
+    );
+
+    if (!empty($group_errors)) {
+        $response['groups_errors'] = $group_errors;
+        $response['message'] .= ' ' . __('Certains groupes n\'ont pas pu être attribués.', 'mj-member');
+    }
+
+    if (!$login_exists && $manual_password === '') {
+        $response['generated_password'] = $password_to_store;
+    }
+
+    $log_op('Opération terminée avec succès');
+    $response['operations'] = $operations;
+
+    wp_send_json_success($response);
+}
+
+/**
  * Trigger a password reset email for a member's linked WordPress account
  */
 function mj_regmgr_reset_member_password() {
@@ -7890,6 +8390,15 @@ function mj_regmgr_get_member_registrations() {
     wp_send_json_success(array('registrations' => $registrations));
 }
 
+/**
+ * Publish an event to Facebook, Instagram, or WhatsApp
+ *
+ * POST params:
+ *   eventId    (int)    – ID of the event.
+ *   platform   (string) – 'facebook', 'instagram', or 'whatsapp'.
+ *   message    (string) – Message/caption to publish.
+ *   imageUrl   (string) – Optional image URL for Instagram.
+ */
 /**
  * Mark member's membership as paid
  */
@@ -9026,12 +9535,14 @@ function mj_regmgr_save_job_profile() {
 
     $funding_source = isset($_POST['fundingSource']) ? sanitize_text_field($_POST['fundingSource']) : '';
     $job_description = isset($_POST['jobDescription']) ? wp_kses_post(wp_unslash($_POST['jobDescription'])) : '';
+    $signature_message = isset($_POST['signatureMessage']) ? wp_kses_post(wp_unslash($_POST['signatureMessage'])) : '';
 
     $result = MjMembers::update($member_id, array(
         'job_title'       => $job_title,
         'work_regime'     => $work_regime,
         'funding_source'  => $funding_source,
         'job_description' => $job_description,
+        'signature_message' => $signature_message,
     ));
 
     if (is_wp_error($result)) {
@@ -9045,5 +9556,314 @@ function mj_regmgr_save_job_profile() {
         'workRegime'    => $work_regime,
         'fundingSource' => $funding_source,
         'jobDescription'=> $job_description,
+        'signatureMessage' => $signature_message,
+    ));
+}
+
+/* ================================================================== *
+ * AI Text Generation                                                  *
+ * ================================================================== */
+
+/**
+ * Generate text (event description or registration document) using OpenAI.
+ *
+ * POST params:
+ *   eventId  (int)    – ID of the event.
+ *   type     (string) – 'description' or 'regdoc'.
+ *   hint     (string) – Optional user-provided context hint.
+ *   includedFields (array|string) – Optional selected context field keys.
+ *   contextData (json|string) – Optional context values sent by the modal.
+ */
+function mj_regmgr_generate_ai_text() {
+    $auth = mj_regmgr_verify_request();
+    if (!$auth) return;
+
+    if (!$auth['is_coordinateur']) {
+        wp_send_json_error(array('message' => __('Permissions insuffisantes pour utiliser la génération IA.', 'mj-member')), 403);
+        return;
+    }
+
+    $client = new MjOpenAIClient();
+    if (!$client->isEnabled()) {
+        wp_send_json_error(array('message' => __('La clé API OpenAI est manquante.', 'mj-member')), 503);
+        return;
+    }
+
+    $event_id = isset($_POST['eventId']) ? absint($_POST['eventId']) : 0;
+    if ($event_id <= 0) {
+        wp_send_json_error(array('message' => __('Identifiant événement invalide.', 'mj-member')), 400);
+        return;
+    }
+
+    $type = isset($_POST['type']) ? sanitize_key((string) $_POST['type']) : '';
+    if (!in_array($type, array('description', 'regdoc', 'social_description'), true)) {
+        wp_send_json_error(array('message' => __('Type de génération invalide.', 'mj-member')), 400);
+        return;
+    }
+
+    $hint_raw = isset($_POST['hint']) ? wp_unslash((string) $_POST['hint']) : '';
+    $hint = sanitize_textarea_field($hint_raw);
+
+    $allowed_context_keys = array(
+        'event_name',
+        'event_type',
+        'event_status',
+        'event_date_start',
+        'event_date_end',
+        'event_date_deadline',
+        'event_price',
+        'event_location',
+        'event_location_address',
+        'event_age_min',
+        'event_age_max',
+        'event_capacity',
+        'event_occurrences',
+        'event_animateurs',
+    );
+
+    $included_fields = array();
+    if (isset($_POST['includedFields'])) {
+        $raw_included = wp_unslash($_POST['includedFields']);
+
+        if (is_array($raw_included)) {
+            foreach ($raw_included as $field_key) {
+                $candidate = sanitize_key((string) $field_key);
+                if ($candidate !== '' && in_array($candidate, $allowed_context_keys, true)) {
+                    $included_fields[] = $candidate;
+                }
+            }
+        } elseif (is_string($raw_included) && $raw_included !== '') {
+            $decoded_included = json_decode($raw_included, true);
+            if (is_array($decoded_included)) {
+                foreach ($decoded_included as $field_key) {
+                    $candidate = sanitize_key((string) $field_key);
+                    if ($candidate !== '' && in_array($candidate, $allowed_context_keys, true)) {
+                        $included_fields[] = $candidate;
+                    }
+                }
+            }
+        }
+    }
+    $included_fields = array_values(array_unique($included_fields));
+
+    $context_data = array();
+    if (isset($_POST['contextData'])) {
+        $raw_context = wp_unslash((string) $_POST['contextData']);
+        if ($raw_context !== '') {
+            $decoded_context = json_decode($raw_context, true);
+            if (is_array($decoded_context)) {
+                $context_data = $decoded_context;
+            }
+        }
+    }
+
+    $event = MjEvents::find($event_id);
+    if (!$event) {
+        wp_send_json_error(array('message' => __('Événement introuvable.', 'mj-member')), 404);
+        return;
+    }
+
+    $site_name = get_bloginfo('name');
+
+    $event_location_name = '';
+    $event_location_address = '';
+    if (!empty($event->location_id) && class_exists(MjEventLocations::class)) {
+        $location = MjEventLocations::find((int) $event->location_id);
+        if ($location) {
+            $event_location_name = isset($location->name) ? sanitize_text_field((string) $location->name) : '';
+            $event_location_address = isset($location->address) ? sanitize_text_field((string) $location->address) : '';
+        }
+    }
+
+    $normalize_scalar = static function ($value) {
+        if ($value === null || $value === false) {
+            return '';
+        }
+        if (is_array($value) || is_object($value)) {
+            return '';
+        }
+        $text = sanitize_text_field((string) $value);
+        return trim($text);
+    };
+
+    $normalize_list = static function ($value) use ($normalize_scalar) {
+        $items = array();
+
+        if (is_array($value)) {
+            foreach ($value as $entry) {
+                $normalized = $normalize_scalar($entry);
+                if ($normalized !== '') {
+                    $items[] = $normalized;
+                }
+            }
+        } elseif (is_string($value)) {
+            $normalized = $normalize_scalar($value);
+            if ($normalized !== '') {
+                $items[] = $normalized;
+            }
+        }
+
+        return array_values(array_unique($items));
+    };
+
+    $defaults = array(
+        'event_name' => $normalize_scalar(isset($event->title) ? $event->title : ''),
+        'event_type' => $normalize_scalar(isset($event->type) ? $event->type : ''),
+        'event_status' => $normalize_scalar(isset($event->status) ? $event->status : ''),
+        'event_date_start' => $normalize_scalar(isset($event->date_debut) ? $event->date_debut : (isset($event->date_start) ? $event->date_start : '')),
+        'event_date_end' => $normalize_scalar(isset($event->date_fin) ? $event->date_fin : (isset($event->date_end) ? $event->date_end : '')),
+        'event_date_deadline' => $normalize_scalar(isset($event->date_fin_inscription) ? $event->date_fin_inscription : ''),
+        'event_price' => $normalize_scalar(isset($event->prix) ? $event->prix : (isset($event->price) ? $event->price : '')),
+        'event_location' => $event_location_name,
+        'event_location_address' => $event_location_address,
+        'event_age_min' => $normalize_scalar(isset($event->age_min) ? $event->age_min : ''),
+        'event_age_max' => $normalize_scalar(isset($event->age_max) ? $event->age_max : ''),
+        'event_capacity' => $normalize_scalar(isset($event->capacity_total) ? $event->capacity_total : ''),
+        'event_occurrences' => array(),
+        'event_animateurs' => array(),
+    );
+
+    $context_labels = array(
+        'event_name' => 'Nom de l\'événement',
+        'event_type' => 'Type',
+        'event_status' => 'Statut',
+        'event_date_start' => 'Date de début',
+        'event_date_end' => 'Date de fin',
+        'event_date_deadline' => 'Date limite d\'inscription',
+        'event_price' => 'Tarif',
+        'event_location' => 'Lieu',
+        'event_location_address' => 'Adresse du lieu',
+        'event_age_min' => 'Âge minimum',
+        'event_age_max' => 'Âge maximum',
+        'event_capacity' => 'Capacité totale',
+        'event_occurrences' => 'Occurrences',
+        'event_animateurs' => 'Animateurs associés',
+    );
+
+    $context_is_list = array(
+        'event_occurrences' => true,
+        'event_animateurs' => true,
+    );
+
+    $context_values = array();
+    foreach ($allowed_context_keys as $key) {
+        $is_list = isset($context_is_list[$key]) && $context_is_list[$key] === true;
+        $raw_value = array_key_exists($key, $context_data) ? $context_data[$key] : (isset($defaults[$key]) ? $defaults[$key] : '');
+        $context_values[$key] = $is_list ? $normalize_list($raw_value) : $normalize_scalar($raw_value);
+    }
+
+    $keys_to_use = $included_fields;
+    if (empty($keys_to_use)) {
+        foreach ($allowed_context_keys as $key) {
+            $value = isset($context_values[$key]) ? $context_values[$key] : '';
+            if (is_array($value)) {
+                if (!empty($value)) {
+                    $keys_to_use[] = $key;
+                }
+            } elseif ($value !== '') {
+                $keys_to_use[] = $key;
+            }
+        }
+    }
+
+    $context_parts = array();
+    foreach ($keys_to_use as $key) {
+        if (!in_array($key, $allowed_context_keys, true)) {
+            continue;
+        }
+
+        $label = isset($context_labels[$key]) ? $context_labels[$key] : $key;
+        $is_list = isset($context_is_list[$key]) && $context_is_list[$key] === true;
+        $value = isset($context_values[$key]) ? $context_values[$key] : '';
+
+        if ($is_list) {
+            if (!is_array($value) || empty($value)) {
+                continue;
+            }
+            $context_parts[] = $label . ' :';
+            foreach ($value as $entry) {
+                $context_parts[] = '- ' . $entry;
+            }
+            continue;
+        }
+
+        if ($value === '') {
+            continue;
+        }
+
+        if ($key === 'event_price' && $value !== '0' && $value !== '0.00' && strpos($value, '€') === false) {
+            $value .= ' €';
+        }
+
+        $context_parts[] = sprintf('%s : %s', $label, $value);
+    }
+
+    if ($hint !== '') {
+        $context_parts[] = sprintf('Informations complémentaires fournies par l\'organisateur : %s', $hint);
+    }
+
+    $event_context = implode("\n", $context_parts);
+
+    if ($type === 'description') {
+        $default_description_prompt = (string) get_option('mj_member_ai_description_prompt', get_option('mj_ai_description_prompt', ''));
+        if ($default_description_prompt === '') {
+            $default_description_prompt = sprintf(
+                'Tu es un assistant rédacteur pour une association jeunesse (%s). Tu rédiges des descriptions d\'événements en français, de manière claire, engageante et adaptée à un public familial. Réponds uniquement avec le texte de la description, sans titre ni introduction.',
+                $site_name
+            );
+        }
+        $system_prompt = apply_filters('mj_member_ai_description_system_prompt', $default_description_prompt);
+        $system_prompt .= "\n\n" . 'Format de sortie obligatoire: retourne uniquement du HTML valide (pas de Markdown, pas de triple backticks). Utilise des balises simples adaptées au rendu web (ex: <p>, <strong>, <ul>, <li>).';
+        $user_prompt = sprintf(
+            "Rédige une description attrayante en HTML pour l'événement suivant:\n\n%s",
+            $event_context
+        );
+    } elseif ($type === 'regdoc') {
+        $default_regdoc_prompt = (string) get_option('mj_member_ai_regdoc_prompt', get_option('mj_ai_regdoc_prompt', ''));
+        if ($default_regdoc_prompt === '') {
+            $default_regdoc_prompt = sprintf(
+                'Tu es un assistant pour une association jeunesse (%s). Tu rédiges des documents d\'inscription en français. Le document doit contenir les informations essentielles sur l\'événement et les instructions pour les participants. Utilise les variables entre crochets (ex : [member_name], [event_name]) pour personnaliser le document. Réponds uniquement avec le contenu du document.',
+                $site_name
+            );
+        }
+        $system_prompt = apply_filters('mj_member_ai_regdoc_system_prompt', $default_regdoc_prompt);
+        $system_prompt .= "\n\n" . 'Format de sortie obligatoire: retourne uniquement du HTML valide (pas de Markdown, pas de triple backticks). Structure le document avec des balises HTML (<h2>, <p>, <ul>, <li>, <strong>) sans code fence.';
+        $user_prompt = sprintf(
+            "Rédige un document d'inscription en HTML pour l'événement suivant:\n\n%s",
+            $event_context
+        );
+    } else {
+        $default_social_prompt = (string) get_option('mj_member_ai_social_description_prompt', get_option('mj_ai_social_description_prompt', ''));
+        if ($default_social_prompt === '') {
+            $default_social_prompt = sprintf(
+                'Tu es community manager pour une association jeunesse (%s). Rédige un texte court, engageant et naturel pour promouvoir un événement sur les réseaux sociaux. Utilise un ton chaleureux, concret et orienté action. Réponds uniquement avec le message final en texte brut, sans HTML ni markdown.',
+                $site_name
+            );
+        }
+
+        $system_prompt = apply_filters('mj_member_ai_social_description_system_prompt', $default_social_prompt);
+        $system_prompt .= "\n\n" . 'Format de sortie obligatoire: texte brut uniquement (pas de HTML, pas de Markdown, pas de guillemets autour du texte). 2 à 5 phrases maximum.';
+        $user_prompt = sprintf(
+            "Rédige une description de publication réseaux sociaux pour l'événement suivant:\n\n%s",
+            $event_context
+        );
+    }
+
+    $result = $client->generateText($system_prompt, $user_prompt);
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => $result->get_error_message()), 503);
+        return;
+    }
+
+    $generated_text = isset($result['text']) ? trim((string) $result['text']) : '';
+
+    // Defensive cleanup: if the model still wraps HTML in markdown fences, unwrap it.
+    if (preg_match('/^```(?:html)?\s*([\s\S]*?)\s*```$/i', $generated_text, $matches)) {
+        $generated_text = trim((string) $matches[1]);
+    }
+
+    wp_send_json_success(array(
+        'text' => $generated_text,
+        'type' => $type,
     ));
 }

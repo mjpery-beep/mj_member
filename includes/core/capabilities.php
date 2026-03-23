@@ -114,6 +114,19 @@ function mj_member_ensure_capabilities()
                 $role->add_cap($documentsCapability);
             }
         }
+
+        // Remove documents capability from all other roles (e.g. jeune, tuteur, subscriber).
+        if (!empty($allRoleNames)) {
+            foreach ($allRoleNames as $role_name) {
+                if (in_array($role_name, $documentRoles, true)) {
+                    continue;
+                }
+                $role = get_role($role_name);
+                if ($role && $role->has_cap($documentsCapability)) {
+                    $role->remove_cap($documentsCapability);
+                }
+            }
+        }
     }
 }
 add_action('init', 'mj_member_ensure_capabilities', 3);
