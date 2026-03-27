@@ -519,6 +519,7 @@
         var strings = config.strings && typeof config.strings === 'object' ? config.strings : {};
         var settings = config.settings && typeof config.settings === 'object' ? config.settings : {};
         var googleMapsApiKey = typeof config.googleMapsApiKey === 'string' ? config.googleMapsApiKey : '';
+        var ajaxConfig = config.ajax && typeof config.ajax === 'object' ? config.ajax : {};
         var messageEl = container.parentElement ? container.parentElement.querySelector('.mj-members-map__message') : null;
 
         if (markersData.length === 0) {
@@ -635,11 +636,28 @@
                 batchSize = 1;
             }
 
+            function saveGeocodeResult(item, lat, lng) {
+                if (!ajaxConfig.url || !ajaxConfig.nonce || !item.id || !item.hash) {
+                    return;
+                }
+                var data = new URLSearchParams();
+                data.append('action', 'mj_save_geocode_result');
+                data.append('nonce', ajaxConfig.nonce);
+                data.append('member_id', item.id);
+                data.append('lat', lat);
+                data.append('lng', lng);
+                data.append('hash', item.hash);
+                fetch(ajaxConfig.url, { method: 'POST', body: data, credentials: 'same-origin' })
+                    .catch(function(err) { console.warn('MJ Member Map: failed to save geocode result', err); });
+            }
+
             function geocodeItem(item) {
                 return new Promise(function(resolve) {
                     geocoder.geocode({ address: item.query }, function(results, status) {
                         if (status === maps.GeocoderStatus.OK && results && results.length > 0) {
-                            attachMarker(item, results[0].geometry.location);
+                            var location = results[0].geometry.location;
+                            attachMarker(item, location);
+                            saveGeocodeResult(item, location.lat(), location.lng());
                         } else {
                             console.warn('MJ Member Map: geocode failed for', item.query, status);
                         }

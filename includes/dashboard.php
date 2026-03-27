@@ -65,8 +65,18 @@ function mj_member_dashboard_page() {
     }
     $geocode_email = (string) apply_filters('mj_member_dashboard_map_geocode_email', '');
 
+    $google_maps_api_key = Config::googleMapsApiKey();
+    if ($google_maps_api_key === '') {
+        $google_maps_api_key = (string) get_option('elementor_google_maps_api_key', '');
+    }
+
     $member_map_config = array(
         'markers' => $member_map_markers,
+        'googleMapsApiKey' => $google_maps_api_key,
+        'ajax' => array(
+            'url'   => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('mj_save_geocode_result'),
+        ),
         'options' => $member_map_options,
         'settings' => array(
             'geocodeBatchSize' => $member_map_geocode_batch,
@@ -1516,6 +1526,11 @@ function mj_member_get_member_map_markers() {
         return array();
     }
 
+    $geocode_cache = get_option('mj_member_geocode_cache', array());
+    if (!is_array($geocode_cache)) {
+        $geocode_cache = array();
+    }
+
     $markers = array();
     foreach ($rows as $row) {
         $id = isset($row->id) ? (int) $row->id : 0;
@@ -1566,6 +1581,20 @@ function mj_member_get_member_map_markers() {
         $role = isset($row->role) ? sanitize_key((string) $row->role) : '';
         $status = isset($row->status) ? sanitize_key((string) $row->status) : '';
 
+        $cached_lat = null;
+        $cached_lng = null;
+        $address_hash = md5($geocode_query);
+        if (isset($geocode_cache[$id]) && is_array($geocode_cache[$id])) {
+            $entry = $geocode_cache[$id];
+            if (isset($entry['hash']) && $entry['hash'] === $address_hash
+                && isset($entry['lat'], $entry['lng'])
+                && is_numeric($entry['lat']) && is_numeric($entry['lng'])
+            ) {
+                $cached_lat = (float) $entry['lat'];
+                $cached_lng = (float) $entry['lng'];
+            }
+        }
+
         $markers[] = array(
             'id' => $id,
             'label' => $label,
@@ -1576,8 +1605,9 @@ function mj_member_get_member_map_markers() {
             'status' => $status,
             'role' => $role,
             'query' => $geocode_query,
-            'latitude' => null,
-            'longitude' => null,
+            'hash' => $address_hash,
+            'latitude' => $cached_lat,
+            'longitude' => $cached_lng,
         );
     }
 

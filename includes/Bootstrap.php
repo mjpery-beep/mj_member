@@ -104,6 +104,7 @@ final class Bootstrap
         'includes/core/ajax/admin/testimonials.php',
         'includes/core/ajax/admin/leave-requests.php',
         'includes/core/ajax/admin/dynamic-fields.php',
+        'includes/core/ajax/admin/geocode-cache.php',
     );
 
     /** @var bool */
