@@ -23,10 +23,8 @@ if ($isNextcloudIframe) {
 }
 
 $isPreview = function_exists('is_elementor_preview') && is_elementor_preview();
-$hasAccess = $isPreview;
-if (!$hasAccess && function_exists('mj_member_documents_user_has_access')) {
-    $hasAccess = mj_member_documents_user_has_access();
-}
+// Widget is now intentionally visible to all audiences (jeune, animateur, etc.).
+$hasAccess = true;
 
 $isConfigured = function_exists('mj_member_documents_is_configured') ? mj_member_documents_is_configured() : false;
 
@@ -39,12 +37,14 @@ $nextcloudAutoLoginUser = '';
 $nextcloudAutoLoginPassword = '';
 $nextcloudLoginPostUrl = '';
 $nextcloudSessionCheckUrl = '';
+$nextcloudSessionLoginUrl = '';
 if ($isNextcloudIframe) {
     $nextcloudBaseUrl = Config::nextcloudUrl();
     if ($nextcloudBaseUrl !== '') {
         $nextcloudIframeUrl = trailingslashit($nextcloudBaseUrl) . 'apps/files/';
         $nextcloudLoginPostUrl = trailingslashit($nextcloudBaseUrl) . 'login';
         $nextcloudSessionCheckUrl = trailingslashit($nextcloudBaseUrl) . 'apps/mj_session_check/session';
+        $nextcloudSessionLoginUrl = trailingslashit($nextcloudBaseUrl) . 'apps/mj_session_check/login';
 
         $nextcloudRootFolder = trim((string) Config::nextcloudRootFolder(), '/');
         if ($nextcloudRootFolder !== '') {
@@ -223,7 +223,8 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                             <?php if ($ncCurrentPassword !== '') : ?>
                                 <button type="button"
                                         id="<?php echo esc_attr($ncSbUid . '-show-password'); ?>"
-                                        class="mj-documents-status-bar__connect-btn">
+                                        class="mj-documents-status-bar__connect-btn"
+                                        <?php echo !empty($ncCurrStatus['browserSessionVerified']) ? 'hidden' : ''; ?>>
                                     <?php esc_html_e('Afficher le password', 'mj-member'); ?>
                                 </button>
                                 <code id="<?php echo esc_attr($ncSbUid . '-password-value'); ?>"
@@ -235,7 +236,8 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                             <?php endif; ?>
                             <button type="button"
                                     id="<?php echo esc_attr($ncSbUid . '-connect'); ?>"
-                                    class="mj-documents-status-bar__connect-btn">
+                                    class="mj-documents-status-bar__connect-btn"
+                                    <?php echo !empty($ncCurrStatus['browserSessionVerified']) ? 'hidden' : ''; ?>>
                                 <?php esc_html_e('Connect', 'mj-member'); ?>
                             </button>
                         <?php else : ?>
@@ -263,27 +265,6 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                 </div>
 
                 <div class="mj-documents-status-bar__actions">
-                    <div class="mj-documents-status-bar__view-switch" role="group" aria-label="<?php esc_attr_e('Mode d\'affichage', 'mj-member'); ?>">
-                        <span class="mj-documents-status-bar__view-label"><?php esc_html_e('Affichage', 'mj-member'); ?></span>
-                        <button type="button"
-                                class="mj-documents-status-bar__view-btn is-active"
-                                id="<?php echo esc_attr($ncSbUid . '-view-normal'); ?>"
-                                aria-pressed="true">
-                            <?php esc_html_e('Normal', 'mj-member'); ?>
-                        </button>
-                        <button type="button"
-                                class="mj-documents-status-bar__view-btn"
-                                id="<?php echo esc_attr($ncSbUid . '-view-below'); ?>"
-                                aria-pressed="false">
-                            <?php esc_html_e('Sous bannière', 'mj-member'); ?>
-                        </button>
-                        <button type="button"
-                                class="mj-documents-status-bar__view-btn"
-                                id="<?php echo esc_attr($ncSbUid . '-view-over'); ?>"
-                                aria-pressed="false">
-                            <?php esc_html_e('Sur header', 'mj-member'); ?>
-                        </button>
-                    </div>
                     <a href="<?php echo esc_url($nextcloudIframeUrl); ?>"
                        id="<?php echo esc_attr($ncSbUid . '-open-page'); ?>"
                        class="mj-documents-status-bar__connect-btn mj-documents-status-bar__open-link"
@@ -296,18 +277,17 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                         </svg>
                         <?php esc_html_e('Ouvrir dans une autre page', 'mj-member'); ?>
                     </a>
-                </div>
-
-                <div id="<?php echo esc_attr($ncSbUid . '-session-prompt'); ?>"
-                     class="mj-documents-widget__session-prompt"
-                     hidden>
-                    <p class="mj-documents-widget__notice mj-documents-widget__notice--session">
-                        <?php esc_html_e('Votre session Nextcloud n’est pas connectée. Cliquez sur le bouton pour ouvrir l’écran de connexion.', 'mj-member'); ?>
-                    </p>
                     <button type="button"
-                            id="<?php echo esc_attr($ncSbUid . '-session-connect'); ?>"
-                            class="mj-documents-status-bar__connect-btn mj-documents-widget__session-connect-btn">
-                        <?php esc_html_e('Se connecter à Nextcloud', 'mj-member'); ?>
+                            id="<?php echo esc_attr($ncSbUid . '-fullscreen'); ?>"
+                            class="mj-documents-status-bar__fullscreen-btn"
+                            aria-pressed="false">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                            <path d="M5 2.5H2.5V5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M9 2.5H11.5V5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M5 11.5H2.5V9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M9 11.5H11.5V9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span id="<?php echo esc_attr($ncSbUid . '-fullscreen-label'); ?>"><?php esc_html_e('Plein écran', 'mj-member'); ?></span>
                     </button>
                 </div>
 
@@ -315,16 +295,13 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                 (function() {
                     var UID     = <?php echo wp_json_encode($ncSbUid); ?>;
                     var sessionCheckUrl = <?php echo wp_json_encode(esc_url_raw($nextcloudSessionCheckUrl)); ?>;
+                    var sessionLoginUrl = <?php echo wp_json_encode(esc_url_raw($nextcloudSessionLoginUrl)); ?>;
 
                     var $ = function(id) { return document.getElementById(id); };
-                    var viewNormalBtn = $(UID + '-view-normal');
-                    var viewBelowBtn  = $(UID + '-view-below');
-                    var viewOverBtn   = $(UID + '-view-over');
-                    var rootWidget = viewNormalBtn ? viewNormalBtn.closest('.mj-documents-widget') : null;
                     var statusDot = $(UID + '-status-dot');
                     var statusPrimary = $(UID + '-status-primary');
-                    var iframeEl = $(UID + '-iframe');
-                    var immersiveMode = '';
+                    var iframeEl = null;
+                    var rootWidget = statusDot ? statusDot.closest('.mj-documents-widget') : null;
                     var currentLogin = <?php echo wp_json_encode((string) ($ncCurrStatus['login'] ?? '')); ?>;
                     var apiCredentialsValid = <?php echo !empty($ncCurrStatus['apiCredentialsValid']) ? 'true' : 'false'; ?>;
                     var initialStatusPrimaryHtml = statusPrimary ? statusPrimary.innerHTML : '';
@@ -333,11 +310,16 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                     var showPasswordBtn = $(UID + '-show-password');
                     var inlinePasswordEl = $(UID + '-password-value');
                     var connectBtn = $(UID + '-connect');
+                    var fullscreenBtn = $(UID + '-fullscreen');
+                    var fullscreenLabel = $(UID + '-fullscreen-label');
                     var openPageBtn = $(UID + '-open-page');
                     var sessionPrompt = $(UID + '-session-prompt');
                     var sessionConnectBtn = $(UID + '-session-connect');
                     var sessionCheckTimer = null;
                     var manualLoginRequested = false;
+                    var endpointAuthenticated = false;
+                    var keepIframeVisibleAfterConnect = false;
+                    var initialBrowserSessionVerified = <?php echo !empty($ncCurrStatus['browserSessionVerified']) ? 'true' : 'false'; ?>;
 
                     function escHtml(s) {
                         var d = document.createElement('div');
@@ -345,12 +327,29 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                         return d.innerHTML;
                     }
 
-                    function setIframeVisible(visible) {
+                    function getSafeSessionStorage() {
+                        try {
+                            return window.sessionStorage || null;
+                        } catch (_err) {
+                            return null;
+                        }
+                    }
+
+                    function ensureIframeEl() {
                         if (!iframeEl) {
+                            iframeEl = $(UID + '-iframe');
+                        }
+                        return iframeEl;
+                    }
+
+                    function setIframeVisible(visible) {
+                        var frame = ensureIframeEl();
+                        if (!frame) {
                             return;
                         }
 
-                        iframeEl.hidden = !visible;
+                        frame.hidden = !visible;
+                        refreshCredentialButtonsVisibility();
                     }
 
                     function setSessionPromptVisible(visible) {
@@ -384,6 +383,41 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                         statusPrimary.innerHTML = html;
                     }
 
+                    function isSessionConnectedForUi() {
+                        if (lastKnownBrowserState === 'connected') {
+                            return true;
+                        }
+
+                        return lastKnownBrowserState === 'unknown' && initialBrowserSessionVerified;
+                    }
+
+                    function refreshCredentialButtonsVisibility() {
+                        var frame = ensureIframeEl();
+                        var iframeVisible = !!(frame && !frame.hidden);
+                        var hideCredentialsActions = isSessionConnectedForUi() || iframeVisible;
+
+                        if (connectBtn) {
+                            connectBtn.hidden = hideCredentialsActions;
+                            connectBtn.style.display = hideCredentialsActions ? 'none' : '';
+                            connectBtn.setAttribute('aria-hidden', hideCredentialsActions ? 'true' : 'false');
+                        }
+
+                        if (showPasswordBtn) {
+                            showPasswordBtn.hidden = hideCredentialsActions;
+                            showPasswordBtn.style.display = hideCredentialsActions ? 'none' : '';
+                            showPasswordBtn.setAttribute('aria-hidden', hideCredentialsActions ? 'true' : 'false');
+                        }
+
+                        if (inlinePasswordEl && hideCredentialsActions) {
+                            inlinePasswordEl.hidden = true;
+                            inlinePasswordEl.style.display = 'none';
+                            inlinePasswordEl.setAttribute('aria-hidden', 'true');
+                        }
+                    }
+
+                    // Keep initial server-side visibility consistent before async checks run.
+                    refreshCredentialButtonsVisibility();
+
                     function renderConnectedStatus(detectedUser) {
                         var label = detectedUser || currentLogin || '';
                         var html = 'Session navigateur Nextcloud active';
@@ -395,6 +429,7 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                         lastKnownBrowserState = 'connected';
                         setStatusDotMode('active');
                         setStatusPrimaryHtml(html);
+                        refreshCredentialButtonsVisibility();
                         setSessionPromptVisible(false);
                         setIframeVisible(true);
                     }
@@ -411,8 +446,9 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                         lastKnownBrowserState = 'disconnected';
                         setStatusDotMode('warning');
                         setStatusPrimaryHtml(html);
+                        refreshCredentialButtonsVisibility();
 
-                        if (manualLoginRequested) {
+                        if (manualLoginRequested || keepIframeVisibleAfterConnect) {
                             setSessionPromptVisible(false);
                             setIframeVisible(true);
                         } else {
@@ -429,6 +465,7 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
 
                         setStatusDotMode('warning');
                         setStatusPrimaryHtml(html);
+                        refreshCredentialButtonsVisibility();
                         setSessionPromptVisible(false);
                         setIframeVisible(true);
                     }
@@ -442,6 +479,8 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                             statusDot.className = initialStatusDotClassName;
                         }
                         setStatusPrimaryHtml(initialStatusPrimaryHtml);
+                        // Do not re-show connect controls if initial server state already confirmed a live session.
+                        refreshCredentialButtonsVisibility();
                         setSessionPromptVisible(false);
                         setIframeVisible(true);
                     }
@@ -460,13 +499,14 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                     }
 
                     function resolveIframeExternalUrl() {
-                        if (!iframeEl) {
+                        var frame = ensureIframeEl();
+                        if (!frame) {
                             return '';
                         }
 
                         try {
-                            if (iframeEl.contentWindow && iframeEl.contentWindow.location) {
-                                var liveHref = String(iframeEl.contentWindow.location.href || '');
+                            if (frame.contentWindow && frame.contentWindow.location) {
+                                var liveHref = String(frame.contentWindow.location.href || '');
                                 if (liveHref && liveHref !== 'about:blank') {
                                     return liveHref;
                                 }
@@ -475,7 +515,27 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                             // Ignore cross-origin access errors and fall back to known source URL.
                         }
 
-                        return iframeEl.getAttribute('src') || iframeEl.dataset.baseSrc || '';
+                        return frame.getAttribute('src') || frame.dataset.baseSrc || '';
+                    }
+
+                    function buildInternalRedirectPath(targetUrl) {
+                        if (!targetUrl) {
+                            return '/apps/files/';
+                        }
+
+                        try {
+                            var parsed = new URL(targetUrl, window.location.href);
+                            var path = parsed.pathname || '/apps/files/';
+                            var search = parsed.search || '';
+                            var hash = parsed.hash || '';
+                            return path + search + hash;
+                        } catch (_err) {
+                            // Fallback when URL parsing fails: use raw value if it already looks like a path.
+                            if (targetUrl.charAt(0) === '/') {
+                                return targetUrl;
+                            }
+                            return '/apps/files/';
+                        }
                     }
 
                     function updateOpenPageHref() {
@@ -486,6 +546,50 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                         var nextHref = resolveIframeExternalUrl();
                         if (nextHref) {
                             openPageBtn.href = nextHref;
+                        }
+                    }
+
+                    function isWidgetFullscreen() {
+                        if (!rootWidget) {
+                            return false;
+                        }
+
+                        var fsEl = document.fullscreenElement || document.webkitFullscreenElement || null;
+                        return fsEl === rootWidget;
+                    }
+
+                    function updateFullscreenButtonState() {
+                        if (!fullscreenBtn) {
+                            return;
+                        }
+
+                        var active = isWidgetFullscreen();
+                        fullscreenBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+                        if (fullscreenLabel) {
+                            fullscreenLabel.textContent = active ? 'Quitter plein écran' : 'Plein écran';
+                        }
+                    }
+
+                    function toggleWidgetFullscreen() {
+                        if (!rootWidget) {
+                            return;
+                        }
+
+                        if (isWidgetFullscreen()) {
+                            if (document.exitFullscreen) {
+                                document.exitFullscreen().catch(function() {});
+                            } else if (document.webkitExitFullscreen) {
+                                document.webkitExitFullscreen();
+                            }
+                            return;
+                        }
+
+                        if (rootWidget.requestFullscreen) {
+                            rootWidget.requestFullscreen().catch(function(err) {
+                                console.error('[mj-member] Fullscreen failed:', err);
+                            });
+                        } else if (rootWidget.webkitRequestFullscreen) {
+                            rootWidget.webkitRequestFullscreen();
                         }
                     }
 
@@ -654,17 +758,20 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                         var baseSrc = iframeEl.dataset.baseSrc || iframeEl.getAttribute('src') || '';
                         var autoSrc = iframeEl.dataset.autologinSrc || '';
                         var autoKey = iframeEl.dataset.autologinKey || '';
+                        var storage = getSafeSessionStorage();
 
-                        if (!baseSrc || !autoSrc || !autoKey || !window.sessionStorage) {
+                        if (!baseSrc || !autoSrc || !autoKey) {
                             return;
                         }
 
                         var storageKey = 'mj_member_nc_autologin_' + autoKey;
-                        if (sessionStorage.getItem(storageKey) === '1') {
+                        if (storage && storage.getItem(storageKey) === '1') {
                             return;
                         }
 
-                        sessionStorage.setItem(storageKey, '1');
+                        if (storage) {
+                            storage.setItem(storageKey, '1');
+                        }
                         iframeEl.setAttribute('src', autoSrc);
 
                         // Ensure we return to the clean URL after the initial login attempt.
@@ -674,19 +781,20 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                     }
 
                     function attemptIframeLoginFormAutoFillOnce() {
-                        if (!iframeEl || !window.sessionStorage) {
+                        if (!iframeEl) {
                             return;
                         }
 
                         var autoKey = iframeEl.dataset.autologinKey || '';
                         var loginValue = iframeEl.dataset.autologinUser || '';
                         var passwordValue = iframeEl.dataset.autologinPassword || '';
+                        var storage = getSafeSessionStorage();
                         if (!autoKey || !loginValue || !passwordValue) {
                             return;
                         }
 
                         var storageKey = 'mj_member_nc_iframe_form_autofill_' + autoKey;
-                        if (sessionStorage.getItem(storageKey) === '1') {
+                        if (storage && storage.getItem(storageKey) === '1') {
                             return;
                         }
 
@@ -734,7 +842,9 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                             }
 
                             var submitBtn = form.querySelector('button[data-login-form-submit], button[type="submit"], input[type="submit"]');
-                            sessionStorage.setItem(storageKey, '1');
+                            if (storage) {
+                                storage.setItem(storageKey, '1');
+                            }
 
                             try {
                                 if (submitBtn && typeof submitBtn.click === 'function') {
@@ -756,7 +866,7 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                             var delays = [0, 200, 600, 1200, 1800];
                             delays.forEach(function(delay) {
                                 setTimeout(function() {
-                                    if (sessionStorage.getItem(storageKey) === '1') {
+                                    if (storage && storage.getItem(storageKey) === '1') {
                                         return;
                                     }
                                     tryFillAndSubmit();
@@ -768,202 +878,200 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                         onLoad();
                     }
 
-                    function attemptIframeLoginPostFallbackOnce() {
-                        if (!iframeEl || !window.sessionStorage) {
-                            return;
-                        }
-
-                        var autoKey = iframeEl.dataset.autologinKey || '';
-                        var loginValue = iframeEl.dataset.autologinUser || '';
-                        var passwordValue = iframeEl.dataset.autologinPassword || '';
-                        var loginUrl = iframeEl.dataset.loginPostUrl || '';
-                        var redirectUrl = iframeEl.dataset.baseSrc || iframeEl.getAttribute('src') || '';
-                        if (!autoKey || !loginValue || !passwordValue || !loginUrl || !redirectUrl) {
-                            return;
-                        }
-
-                        var storageKey = 'mj_member_nc_iframe_login_post_' + autoKey;
-                        if (sessionStorage.getItem(storageKey) === '1') {
-                            return;
-                        }
-
-                        if (!iframeEl.name) {
-                            iframeEl.name = 'mjNcFrame_' + autoKey.replace(/[^a-zA-Z0-9_\-]/g, '_');
-                        }
-
-                        var form = document.createElement('form');
-                        form.method = 'POST';
-                        form.action = loginUrl;
-                        form.target = iframeEl.name;
-                        form.style.display = 'none';
-
-                        var addField = function(name, value) {
-                            var input = document.createElement('input');
-                            input.type = 'hidden';
-                            input.name = name;
-                            input.value = value;
-                            form.appendChild(input);
-                        };
-
-                        addField('user', loginValue);
-                        addField('password', passwordValue);
-                        addField('redirect_url', redirectUrl);
-                        addField('timezone', (Intl && Intl.DateTimeFormat ? Intl.DateTimeFormat().resolvedOptions().timeZone : '') || 'Europe/Brussels');
-                        addField('timezone_offset', String(new Date().getTimezoneOffset() / -60));
-
-                        document.body.appendChild(form);
-                        sessionStorage.setItem(storageKey, '1');
-                        form.submit();
-
-                        setTimeout(function() {
-                            if (form && form.parentNode) {
-                                form.parentNode.removeChild(form);
-                            }
-                        }, 1000);
-                    }
-
                     function forceConnectNow() {
-                        if (!iframeEl || !window.sessionStorage) {
+                        var frame = ensureIframeEl();
+                        if (!frame) {
                             return;
                         }
 
-                        var autoKey = iframeEl.dataset.autologinKey || '';
+                        var loginUser = frame.dataset.autologinUser || '';
+                        var loginPassword = frame.dataset.autologinPassword || '';
+                        var loginUrl = frame.dataset.loginPostUrl || '';
+                        var baseSrc = frame.dataset.baseSrc || frame.getAttribute('src') || '';
                         manualLoginRequested = true;
                         lastKnownBrowserState = 'unknown';
                         renderConnectingStatus();
 
-                        if (autoKey) {
-                            sessionStorage.removeItem('mj_member_nc_autologin_' + autoKey);
-                            sessionStorage.removeItem('mj_member_nc_iframe_form_autofill_' + autoKey);
-                            sessionStorage.removeItem('mj_member_nc_iframe_login_post_' + autoKey);
-                        }
-
-                        var loginUrl = iframeEl.dataset.loginPostUrl || '';
-                        var baseSrc = iframeEl.dataset.baseSrc || iframeEl.getAttribute('src') || '';
-
-                        // Manual connect: open login form first, then autofill + submit.
-                        if (loginUrl) {
-                            var loginPageUrl = loginUrl;
-                            if (baseSrc) {
-                                var sep = loginPageUrl.indexOf('?') === -1 ? '?' : '&';
-                                loginPageUrl = loginPageUrl + sep + 'redirect_url=' + encodeURIComponent(baseSrc);
-                            }
-                            iframeEl.setAttribute('src', loginPageUrl);
-                            updateOpenPageHref();
-                        }
-
-                        // Wait a bit for iframe navigation, then try DOM autofill and POST fallback.
-                        setTimeout(function() {
-                            attemptIframeLoginFormAutoFillOnce();
-                        }, 120);
-                        setTimeout(function() {
-                            attemptIframeLoginPostFallbackOnce();
-                        }, 500);
-                        setTimeout(function() {
-                            fetchEndpointSessionStatus('manual-connect');
-                        }, 1500);
-                    }
-
-                    function getImmersiveTopOffset() {
-                        var top = 0;
-                        var adminBar = document.getElementById('wpadminbar');
-                        if (adminBar && window.getComputedStyle(adminBar).position === 'fixed') {
-                            top += adminBar.offsetHeight;
-                        }
-
-                        var banner = document.querySelector('.main-banner, .hero-banner, .elementor-location-header, #masthead, .site-header, header');
-                        if (banner) {
-                            var rect = banner.getBoundingClientRect();
-                            if (rect.bottom > top && rect.bottom < window.innerHeight) {
-                                top = Math.max(top, Math.round(rect.bottom));
-                            }
-                        }
-
-                        return Math.max(0, top);
-                    }
-
-                    function updateViewButtons(mode) {
-                        if (!viewNormalBtn || !viewBelowBtn || !viewOverBtn) {
+                        if (!sessionLoginUrl) {
+                            endpointAuthenticated = false;
+                            setStatusDotMode('warning');
+                            setStatusPrimaryHtml('Endpoint de connexion Nextcloud indisponible.');
+                            setSessionPromptVisible(true);
+                            setIframeVisible(false);
                             return;
                         }
 
-                        var normalActive = mode === '';
-                        var belowActive = mode === 'below-header';
-                        var overActive = mode === 'over-header';
-
-                        viewNormalBtn.classList.toggle('is-active', normalActive);
-                        viewBelowBtn.classList.toggle('is-active', belowActive);
-                        viewOverBtn.classList.toggle('is-active', overActive);
-
-                        viewNormalBtn.setAttribute('aria-pressed', normalActive ? 'true' : 'false');
-                        viewBelowBtn.setAttribute('aria-pressed', belowActive ? 'true' : 'false');
-                        viewOverBtn.setAttribute('aria-pressed', overActive ? 'true' : 'false');
-                    }
-
-                    function setImmersiveMode(mode) {
-                        if (!rootWidget) {
+                        if (!loginUser || !loginPassword) {
+                            endpointAuthenticated = false;
+                            setStatusDotMode('warning');
+                            setStatusPrimaryHtml('Identifiants Nextcloud manquants. Contactez un gestionnaire.');
+                            setSessionPromptVisible(true);
+                            setIframeVisible(false);
                             return;
                         }
 
-                        if (mode === 'below-header' || mode === 'over-header') {
-                            var topOffset = (mode === 'below-header') ? getImmersiveTopOffset() : (function() {
-                                var top = 0;
-                                var adminBar = document.getElementById('wpadminbar');
-                                if (adminBar && window.getComputedStyle(adminBar).position === 'fixed') {
-                                    top = adminBar.offsetHeight;
+                        fetch(sessionLoginUrl, {
+                            method: 'POST',
+                            credentials: 'include',
+                            mode: 'cors',
+                            headers: {
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json'
+                            },
+                            cache: 'no-store',
+                            body: JSON.stringify({
+                                user: loginUser,
+                                password: loginPassword
+                            })
+                        }).then(function(response) {
+                            return response.json().catch(function() {
+                                return { success: false, message: 'Invalid JSON response' };
+                            }).then(function(payload) {
+                                return {
+                                    ok: response.ok,
+                                    status: response.status,
+                                    payload: payload || {}
+                                };
+                            });
+                        }).then(function(result) {
+                            var payload = result.payload || {};
+
+                            if (payload.success === true && payload.authenticated === true) {
+                                var connectedLabel = payload.displayName || payload.userId || loginUser;
+                                endpointAuthenticated = false;
+                                setStatusDotMode('warning');
+                                setStatusPrimaryHtml('Login API valide : <strong>' + escHtml(connectedLabel) + '</strong>. Ouverture de la session navigateur Nextcloud...');
+                                setSessionPromptVisible(false);
+                                setIframeVisible(true);
+
+                                if (loginUrl) {
+                                    var loginPageUrl = loginUrl;
+                                    if (baseSrc) {
+                                        var redirectPath = buildInternalRedirectPath(baseSrc);
+                                        var sep = loginPageUrl.indexOf('?') === -1 ? '?' : '&';
+                                        loginPageUrl = loginPageUrl + sep + 'redirect_url=' + encodeURIComponent(redirectPath);
+                                    }
+                                    if (loginUser) {
+                                        var sepUser = loginPageUrl.indexOf('?') === -1 ? '?' : '&';
+                                        loginPageUrl = loginPageUrl + sepUser + 'user=' + encodeURIComponent(loginUser);
+                                    }
+
+                                    frame.setAttribute('src', loginPageUrl);
+                                    setTimeout(function() {
+                                        attemptIframeLoginFormAutoFillOnce();
+                                    }, 120);
+                                } else if (baseSrc) {
+                                    frame.setAttribute('src', baseSrc);
                                 }
-                                return top;
-                            })();
 
-                            rootWidget.style.setProperty('--mj-documents-immersive-top', String(topOffset) + 'px');
-                            rootWidget.classList.add('mj-documents-widget--immersive');
-                            rootWidget.classList.toggle('mj-documents-widget--immersive-over-header', mode === 'over-header');
-                            document.body.classList.add('mj-documents-immersive-open');
-                            immersiveMode = mode;
-                        } else {
-                            rootWidget.classList.remove('mj-documents-widget--immersive');
-                            rootWidget.classList.remove('mj-documents-widget--immersive-over-header');
-                            rootWidget.style.removeProperty('--mj-documents-immersive-top');
-                            document.body.classList.remove('mj-documents-immersive-open');
-                            immersiveMode = '';
+                                updateOpenPageHref();
+
+                                // Verify that a real Nextcloud browser session is established.
+                                setTimeout(function() {
+                                    fetchEndpointSessionStatus('manual-connect-verify-1').then(function(ok) {
+                                        if (ok && endpointAuthenticated) {
+                                            keepIframeVisibleAfterConnect = true;
+                                            if (baseSrc) {
+                                                frame.setAttribute('src', baseSrc);
+                                                updateOpenPageHref();
+                                            }
+                                            return;
+                                        }
+
+                                        // One more delayed check in case cookie propagation lags behind.
+                                        setTimeout(function() {
+                                            fetchEndpointSessionStatus('manual-connect-verify-2').then(function(ok2) {
+                                                if (ok2 && endpointAuthenticated) {
+                                                    keepIframeVisibleAfterConnect = true;
+                                                    if (baseSrc) {
+                                                        frame.setAttribute('src', baseSrc);
+                                                        updateOpenPageHref();
+                                                    }
+                                                    return;
+                                                }
+
+                                                // Endpoint check can be a false negative in embedded contexts.
+                                                // If iframe UI already looks authenticated, trust that state.
+                                                var iframeState = inspectIframeBrowserSession();
+                                                if (iframeState.state === 'connected') {
+                                                    endpointAuthenticated = true;
+                                                    keepIframeVisibleAfterConnect = true;
+                                                    renderConnectedStatus(iframeState.user || payload.displayName || payload.userId || loginUser);
+                                                    if (baseSrc) {
+                                                        frame.setAttribute('src', baseSrc);
+                                                        updateOpenPageHref();
+                                                    }
+                                                    return;
+                                                }
+
+                                                if (iframeState.state === 'unknown') {
+                                                    keepIframeVisibleAfterConnect = true;
+                                                    setStatusDotMode('warning');
+                                                    setStatusPrimaryHtml('Login API valide. Vérification de session navigateur indisponible dans cet affichage, mais l’iframe reste active.');
+                                                    setSessionPromptVisible(false);
+                                                    setIframeVisible(true);
+                                                    return;
+                                                }
+
+                                                setStatusDotMode('warning');
+                                                setStatusPrimaryHtml('Identifiants valides, mais session navigateur non établie. Ouvrez Nextcloud dans une autre page puis revenez ici.');
+                                                setSessionPromptVisible(false);
+                                                setIframeVisible(true);
+                                            });
+                                        }, 1300);
+                                    });
+                                }, 900);
+
+                                return;
+                            }
+
+                            endpointAuthenticated = false;
+                            setStatusDotMode('warning');
+
+                            if (payload.success === true && payload.authenticated === false) {
+                                setStatusPrimaryHtml('Identifiants Nextcloud invalides.');
+                            } else if (typeof payload.message === 'string' && payload.message !== '') {
+                                setStatusPrimaryHtml(escHtml(payload.message));
+                            } else if (!result.ok) {
+                                setStatusPrimaryHtml('Connexion Nextcloud impossible (HTTP ' + result.status + ').');
+                            } else {
+                                setStatusPrimaryHtml('Connexion Nextcloud impossible.');
+                            }
+
+                            setSessionPromptVisible(true);
+                            setIframeVisible(false);
+                        }).catch(function(error) {
+                            endpointAuthenticated = false;
+                            console.error('[mj-member] Nextcloud login failed:', error);
+                            setStatusDotMode('warning');
+                            setStatusPrimaryHtml('Erreur technique lors de la connexion Nextcloud.');
+                            setSessionPromptVisible(true);
+                            setIframeVisible(false);
+                        });
+                    }
+
+                    function initIframeRuntimeBindings() {
+                        var frame = ensureIframeEl();
+                        if (!frame || frame.dataset.mjRuntimeBound === '1') {
+                            return !!frame;
                         }
 
-                        updateViewButtons(immersiveMode);
-                    }
-
-                    if (viewNormalBtn && viewBelowBtn && viewOverBtn && rootWidget) {
-                        viewNormalBtn.addEventListener('click', function() { setImmersiveMode(''); });
-                        viewBelowBtn.addEventListener('click', function() { setImmersiveMode('below-header'); });
-                        viewOverBtn.addEventListener('click', function() { setImmersiveMode('over-header'); });
-
-                        updateViewButtons('');
-
-                        window.addEventListener('resize', function() {
-                            if (immersiveMode) {
-                                setImmersiveMode(immersiveMode);
-                            }
-                        });
-
-                        window.addEventListener('scroll', function() {
-                            if (immersiveMode) {
-                                setImmersiveMode(immersiveMode);
-                            }
-                        }, { passive: true });
-
-                        document.addEventListener('keydown', function(e) {
-                            if (e.key === 'Escape' && immersiveMode) {
-                                setImmersiveMode('');
-                            }
-                        });
-                    }
-
-                    if (iframeEl) {
-                        iframeEl.addEventListener('load', function() {
+                        frame.addEventListener('load', function() {
                             updateOpenPageHref();
                             scheduleIframeBrowserSessionChecks();
                             fetchEndpointSessionStatus('iframe-load');
                         });
+                        frame.dataset.mjRuntimeBound = '1';
                         updateOpenPageHref();
+                        return true;
+                    }
+
+                    if (!initIframeRuntimeBindings()) {
+                        [100, 350, 900].forEach(function(delay) {
+                            setTimeout(function() {
+                                initIframeRuntimeBindings();
+                            }, delay);
+                        });
                     }
 
                     window.addEventListener('message', function(event) {
@@ -981,6 +1089,19 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
 
                     fetchEndpointSessionStatus('initial');
                     startEndpointSessionPolling();
+
+                    if (fullscreenBtn) {
+                        fullscreenBtn.addEventListener('click', function() {
+                            toggleWidgetFullscreen();
+                        });
+                    }
+
+                    ['fullscreenchange', 'webkitfullscreenchange'].forEach(function(evtName) {
+                        document.addEventListener(evtName, function() {
+                            updateFullscreenButtonState();
+                        });
+                    });
+                    updateFullscreenButtonState();
 
                     if (connectBtn) {
                         connectBtn.addEventListener('click', function() {

@@ -473,6 +473,9 @@ final class AssetsManager
         // Mileage Widget
         self::registerScript('mj-member-mileage', 'js/elementor/mileage.js', array('mj-member-utils'));
         self::registerStyle('mj-member-mileage', 'css/mileage.css', array('mj-member-components'));
+
+        // Team Hierarchy Widget
+        self::registerStyle('mj-member-team-hierarchy', 'css/team-hierarchy.css', array('mj-member-components'));
     }
 
     /**
@@ -761,6 +764,11 @@ final class AssetsManager
                 if (function_exists('mj_member_mileage_localize')) {
                     mj_member_mileage_localize();
                 }
+                break;
+
+            case 'team-hierarchy':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-team-hierarchy');
                 break;
 
             default:

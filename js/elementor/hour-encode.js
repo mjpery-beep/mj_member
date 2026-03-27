@@ -1937,7 +1937,8 @@
                             return rangeStart + raw;
                         }
 
-                        function buildSlot(day, slotId, startMinutes, endMinutes, preserveForm, excludeEntry) {
+                        function buildSlot(day, slotId, startMinutes, endMinutes, preserveForm, excludeEntry, options) {
+                            var lockDuration = Boolean(options && options.lockDuration);
                             var intervals = getEntryIntervals(day, excludeEntry);
                             var start = clampStartMinutes(startMinutes);
                             start = snapStartToNextFreeMinute(start, intervals);
@@ -1946,8 +1947,14 @@
                             }
                             var desiredEnd = clampEndMinutes(start, endMinutes);
                             var end = limitEndToNextInterval(start, desiredEnd, intervals);
+                            if (lockDuration && end < desiredEnd) {
+                                return null;
+                            }
+                            // Do not force a 15-minute fallback when crossing a blocked boundary.
+                            // Returning null lets the drag logic keep the previous valid slot, effectively
+                            // clamping at the allowed edge instead of collapsing to 15 minutes.
                             if (end <= start) {
-                                end = limitEndToNextInterval(start, start + SLOT_STEP_MINUTES, intervals);
+                                return null;
                             }
                             end = clampEndMinutes(start, end);
                             if (end <= start) {
@@ -2262,7 +2269,8 @@
                             var candidateEnd = drag.endMinutes;
 
                             if (drag.mode === 'move') {
-                                candidateStart = pointerMinutes - drag.offsetMinutes;
+                                var maxStart = Math.max(rangeStart, rangeEnd - drag.duration);
+                                candidateStart = clamp(pointerMinutes - drag.offsetMinutes, rangeStart, maxStart);
                                 candidateEnd = candidateStart + drag.duration;
                             } else if (drag.mode === 'resize-start') {
                                 candidateStart = pointerMinutes;
@@ -2275,7 +2283,15 @@
                                 candidateEnd = pointerMinutes;
                             }
 
-                            var slot = buildSlot(day, drag.slotId, candidateStart, candidateEnd, true, drag.excludeEntry);
+                            var slot = buildSlot(
+                                day,
+                                drag.slotId,
+                                candidateStart,
+                                candidateEnd,
+                                true,
+                                drag.excludeEntry,
+                                drag.mode === 'move' ? { lockDuration: true } : null
+                            );
                             if (!slot) {
                                 return;
                             }
@@ -2285,15 +2301,20 @@
                             drag.activeDayIso = day.iso;
                             drag.lastSlot = slot;
 
-                            var slotStartDate = parseDateTime(slot.startIso);
-                            var slotEndDate = parseDateTime(slot.endIso);
-                            if (isValidDate(slotStartDate)) {
-                                drag.startMinutes = clamp(minutesSinceMidnight(slotStartDate), rangeStart, rangeEnd);
-                            }
-                            if (isValidDate(slotEndDate)) {
-                                drag.endMinutes = clamp(minutesSinceMidnight(slotEndDate), rangeStart, rangeEnd);
+                            if (slot.position) {
+                                drag.startMinutes = clamp(rangeStart + Math.round(slot.position.top * MINUTES_PER_PIXEL), rangeStart, rangeEnd);
+                                drag.endMinutes = clamp(drag.startMinutes + slot.durationMinutes, rangeStart, rangeEnd);
                             } else {
-                                drag.endMinutes = drag.startMinutes + slot.durationMinutes;
+                                var slotStartDate = parseDateTime(slot.startIso);
+                                var slotEndDate = parseDateTime(slot.endIso);
+                                if (isValidDate(slotStartDate)) {
+                                    drag.startMinutes = clamp(minutesSinceMidnight(slotStartDate), rangeStart, rangeEnd);
+                                }
+                                if (isValidDate(slotEndDate)) {
+                                    drag.endMinutes = clamp(minutesSinceMidnight(slotEndDate), rangeStart, rangeEnd);
+                                } else {
+                                    drag.endMinutes = drag.startMinutes + slot.durationMinutes;
+                                }
                             }
                             drag.duration = Math.max(drag.endMinutes - drag.startMinutes, SLOT_STEP_MINUTES);
 

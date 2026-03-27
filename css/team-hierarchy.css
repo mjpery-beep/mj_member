@@ -1,0 +1,424 @@
+.mj-team-hierarchy {
+    --mj-team-bg-start: #0f172a;
+    --mj-team-bg-end: #1e293b;
+    --mj-team-accent: #2dd4bf;
+    --mj-team-text: #f8fafc;
+    --mj-team-muted: #cbd5e1;
+    --mj-team-connector: rgba(148, 163, 184, 0.55);
+    --mj-team-connector-width: 2px;
+
+    --mj-team-card-bg: #0b1224;
+    --mj-team-card-bg-start: rgba(15, 23, 42, 0.94);
+    --mj-team-card-text: #f8fafc;
+    --mj-team-card-muted: #cbd5e1;
+    --mj-team-card-radius: 20px;
+    --mj-team-card-height: 430px;
+
+    --mj-team-badge-bg: rgba(45, 212, 191, 0.2);
+    --mj-team-badge-text: #99f6e4;
+
+    --mj-team-stat-bg: rgba(56, 189, 248, 0.18);
+    --mj-team-stat-text: #e0f2fe;
+
+    --mj-team-contact-bg: rgba(255, 255, 255, 0.12);
+    --mj-team-contact-color: #ffffff;
+    --mj-team-contact-bg-hover: #2dd4bf;
+    --mj-team-contact-color-hover: #0f172a;
+
+    --mj-team-contact-size: 36px;
+    --mj-team-contact-icon-size: 17px;
+    --mj-team-contact-radius: 999px;
+
+    --mj-team-photo-size: 132px;
+    --mj-team-photo-radius: 22px;
+    --mj-team-gap: 22px;
+    --mj-team-card-min-width: 250px;
+    --mj-team-bio-lines: 3;
+
+    position: relative;
+    overflow: hidden;
+    padding: 32px;
+    border-radius: 24px;
+    background: linear-gradient(140deg, var(--mj-team-bg-start), var(--mj-team-bg-end));
+    color: var(--mj-team-text);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+}
+
+.mj-team-hierarchy,
+.mj-team-hierarchy * {
+    box-sizing: border-box;
+}
+
+.mj-team-hierarchy__title,
+.mj-team-hierarchy__subtitle,
+.mj-team-hierarchy__section-title,
+.mj-team-hierarchy__name,
+.mj-team-hierarchy__job,
+.mj-team-hierarchy__bio,
+.mj-team-hierarchy__level-title {
+    margin: 0;
+}
+
+.mj-team-hierarchy__title {
+    font-size: clamp(1.35rem, 2.1vw, 2rem);
+    line-height: 1.2;
+    color: var(--mj-team-text);
+}
+
+.mj-team-hierarchy__subtitle {
+    margin-top: 10px;
+    max-width: 72ch;
+    color: var(--mj-team-muted);
+    font-size: 0.96rem;
+    line-height: 1.55;
+}
+
+.mj-team-hierarchy__section {
+    margin-top: 28px;
+}
+
+.mj-team-hierarchy__section-title {
+    margin-bottom: 12px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #e2e8f0;
+}
+
+.mj-team-hierarchy__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(var(--mj-team-card-min-width), 1fr));
+    gap: var(--mj-team-gap);
+    align-items: stretch;
+}
+
+.mj-team-hierarchy__grid--coordinators {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.mj-team-hierarchy__grid.is-single-card {
+    grid-template-columns: minmax(260px, 420px);
+    justify-content: center;
+    justify-items: stretch;
+}
+
+.mj-team-hierarchy__grid.is-single-card .mj-team-hierarchy__card {
+    width: 100%;
+    max-width: none;
+}
+
+.mj-team-hierarchy__grid--grid-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mj-team-hierarchy__grid--grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mj-team-hierarchy__grid--grid-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.mj-team-hierarchy__connector {
+    position: relative;
+    height: 40px;
+    margin: 8px 0;
+}
+
+.mj-team-hierarchy__connector::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: var(--mj-team-connector-width);
+    height: 22px;
+    transform: translateX(-50%);
+    background: var(--mj-team-connector);
+}
+
+.mj-team-hierarchy__connector::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 10px;
+    width: min(70%, 860px);
+    height: var(--mj-team-connector-width);
+    transform: translateX(-50%);
+    background: var(--mj-team-connector);
+}
+
+.mj-team-hierarchy__card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 18px;
+    height: auto;
+    min-height: var(--mj-team-card-height);
+    border-radius: var(--mj-team-card-radius);
+    background: linear-gradient(180deg, var(--mj-team-card-bg-start), var(--mj-team-card-bg));
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    color: var(--mj-team-card-text);
+    box-shadow: 0 8px 18px rgba(2, 6, 23, 0.35);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.mj-team-hierarchy__card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 18px 26px rgba(2, 6, 23, 0.5);
+}
+
+.mj-team-hierarchy__card.is-inactive {
+    opacity: 0.68;
+}
+
+.mj-team-hierarchy__avatar-wrap {
+    width: var(--mj-team-photo-size);
+    height: var(--mj-team-photo-size);
+    border-radius: 0;
+    overflow: visible;
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+}
+
+.mj-team-hierarchy__avatar,
+.mj-team-hierarchy__avatar-fallback {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.mj-team-hierarchy__avatar {
+    object-fit: cover;
+    border-radius: 0;
+}
+
+.mj-team-hierarchy__avatar-fallback {
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: #ffffff;
+    background: linear-gradient(135deg, #2563eb, #0ea5e9);
+}
+
+.mj-team-hierarchy__body {
+    min-width: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.mj-team-hierarchy__meta-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.mj-team-hierarchy__role-pill,
+.mj-team-hierarchy__inactive-pill,
+.mj-team-hierarchy__stat-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 9px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    line-height: 1;
+}
+
+.mj-team-hierarchy__role-pill {
+    background: var(--mj-team-badge-bg);
+    color: var(--mj-team-badge-text);
+}
+
+.mj-team-hierarchy__inactive-pill {
+    background: rgba(148, 163, 184, 0.2);
+    color: #e2e8f0;
+}
+
+.mj-team-hierarchy__name {
+    margin-top: 8px;
+    font-size: 1.04rem;
+    line-height: 1.25;
+    color: var(--mj-team-card-text);
+    text-align: center;
+}
+
+.mj-team-hierarchy__job {
+    margin-top: 3px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--mj-team-card-muted);
+    text-align: center;
+}
+
+.mj-team-hierarchy__bio {
+    margin-top: 8px;
+    font-size: 0.88rem;
+    line-height: 1.45;
+    color: var(--mj-team-card-muted);
+    text-align: center;
+    display: -webkit-box;
+    -webkit-line-clamp: var(--mj-team-bio-lines);
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: calc(1.45em * var(--mj-team-bio-lines));
+}
+
+.mj-team-hierarchy__stats {
+    display: flex;
+    gap: 7px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    justify-content: center;
+}
+
+.mj-team-hierarchy__stat-chip {
+    background: var(--mj-team-stat-bg);
+    color: var(--mj-team-stat-text);
+    gap: 6px;
+}
+
+.mj-team-hierarchy__stat-icon {
+    width: 16px;
+    height: 16px;
+    display: inline-block;
+    object-fit: contain;
+    border-radius: 4px;
+}
+
+.mj-team-hierarchy__stat-icon--level {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #f59e0b;
+}
+
+.mj-team-hierarchy__stat-icon--level svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    fill: currentColor;
+}
+
+.mj-team-hierarchy__level-title {
+    margin-top: 6px;
+    color: var(--mj-team-card-muted);
+    font-size: 0.8rem;
+    text-align: center;
+}
+.mj-team-hierarchy__progress {
+    width: 100%;
+    height: 7px;
+    margin-top: 7px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.25);
+    overflow: hidden;
+}
+
+.mj-team-hierarchy__progress-bar {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--mj-team-accent), #38bdf8);
+}
+
+.mj-team-hierarchy__contacts {
+    margin-top: auto;
+    padding-top: 10px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+}
+
+.mj-team-hierarchy__contact-btn {
+    width: var(--mj-team-contact-size);
+    height: var(--mj-team-contact-size);
+    border-radius: var(--mj-team-contact-radius);
+    display: inline-grid;
+    place-items: center;
+    text-decoration: none;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    background: var(--mj-team-contact-bg);
+    color: var(--mj-team-contact-color);
+    transition: transform 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+}
+
+.mj-team-hierarchy__contact-btn:hover,
+.mj-team-hierarchy__contact-btn:focus-visible {
+    transform: translateY(-1px);
+    background: var(--mj-team-contact-bg-hover);
+    color: var(--mj-team-contact-color-hover);
+    outline: none;
+}
+
+.mj-team-hierarchy__contact-btn svg {
+    width: var(--mj-team-contact-icon-size);
+    height: var(--mj-team-contact-icon-size);
+    fill: currentColor;
+}
+
+.mj-team-hierarchy__empty {
+    margin-top: 14px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    color: var(--mj-team-muted);
+    border: 1px dashed rgba(148, 163, 184, 0.35);
+    background: rgba(15, 23, 42, 0.35);
+}
+
+@media (max-width: 900px) {
+    .mj-team-hierarchy {
+        padding: 24px;
+    }
+
+    .mj-team-hierarchy__grid--grid-3,
+    .mj-team-hierarchy__grid--grid-4 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .mj-team-hierarchy__connector {
+        height: 20px;
+    }
+
+    .mj-team-hierarchy__connector::before,
+    .mj-team-hierarchy__connector::after {
+        display: none;
+    }
+}
+
+@media (max-width: 767px) {
+    .mj-team-hierarchy {
+        padding: 16px;
+        border-radius: 16px;
+    }
+
+    .mj-team-hierarchy__grid,
+    .mj-team-hierarchy__grid--coordinators,
+    .mj-team-hierarchy__grid--grid-2,
+    .mj-team-hierarchy__grid--grid-3,
+    .mj-team-hierarchy__grid--grid-4 {
+        grid-template-columns: 1fr;
+    }
+
+    .mj-team-hierarchy__card {
+        height: auto;
+        min-height: 0;
+        gap: 10px;
+    }
+
+    .mj-team-hierarchy__avatar-wrap {
+        width: min(var(--mj-team-photo-size), 112px);
+        height: min(var(--mj-team-photo-size), 112px);
+    }
+}

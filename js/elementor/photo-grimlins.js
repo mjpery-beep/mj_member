@@ -95,10 +95,19 @@
             cameraVideo: root.querySelector('[data-photo-grimlins="camera-video"]'),
             cameraCaptureBtn: root.querySelector('[data-photo-grimlins="camera-capture"]'),
             cameraCancelBtn: root.querySelector('[data-photo-grimlins="camera-cancel"]'),
+            openYoungSearchBtn: root.querySelector('[data-photo-grimlins="open-young-search"]'),
+            youngSearchModal: root.querySelector('[data-photo-grimlins="young-search-modal"]'),
+            youngSearchCloseBtn: root.querySelector('[data-photo-grimlins="close-young-search"]'),
+            youngSearchForm: root.querySelector('[data-photo-grimlins="young-search-form"]'),
+            youngSearchInput: root.querySelector('[data-photo-grimlins="young-search-input"]'),
+            youngSearchSubmit: root.querySelector('[data-photo-grimlins="young-search-submit"]'),
+            youngSearchStatus: root.querySelector('[data-photo-grimlins="young-search-status"]'),
+            youngSearchResults: root.querySelector('[data-photo-grimlins="young-search-results"]'),
             historySection: root.querySelector('[data-photo-grimlins="history"]'),
             historyList: root.querySelector('[data-photo-grimlins="history-list"]'),
             historyEmpty: root.querySelector('[data-photo-grimlins="history-empty"]'),
             historyLimit: root.querySelector('[data-photo-grimlins="history-limit"]'),
+            historyTitle: root.querySelector('[data-photo-grimlins="history-title"]'),
             mosaic: root.querySelector('.mj-photo-grimlins__mosaic')
         };
 
@@ -110,9 +119,16 @@
         this.isApplyingAvatar = false;
         this.isPreviewLoading = false;
         this.history = [];
+        this.historyByMember = globalConfig && globalConfig.historiesByMember && typeof globalConfig.historiesByMember === 'object'
+            ? Object.assign({}, globalConfig.historiesByMember)
+            : {};
+        this.activeTargetMemberId = this.config && this.config.targetMemberId !== undefined
+            ? (parseInt(this.config.targetMemberId, 10) || 0)
+            : 0;
         this.historyLimit = 0;
         this.historyCount = 0;
         this.limitReached = false;
+        this.isYoungSearchLoading = false;
         this.initialHistory = {
             items: globalConfig && Array.isArray(globalConfig.history) ? globalConfig.history.slice() : [],
             count: globalConfig && typeof globalConfig.historyCount === 'number' ? globalConfig.historyCount : null,
@@ -201,7 +217,12 @@
 
         this.bindEvents();
         if (this.initialHistory) {
-            this.setHistory(this.initialHistory.items, {
+            var initialItems = this.getHistoryForMember(this.activeTargetMemberId);
+            if (!Array.isArray(initialItems)) {
+                initialItems = this.initialHistory.items;
+            }
+
+            this.setHistory(initialItems, {
                 historyCount: this.initialHistory.count,
                 memberLimit: this.initialHistory.limit,
                 limitReached: this.initialHistory.reached
@@ -332,6 +353,57 @@
             });
         }
 
+        if (this.dom.openYoungSearchBtn) {
+            this.dom.openYoungSearchBtn.addEventListener('click', function(event) {
+                event.preventDefault();
+                self.openYoungSearchModal();
+            });
+        }
+
+        if (this.dom.youngSearchCloseBtn) {
+            this.dom.youngSearchCloseBtn.addEventListener('click', function(event) {
+                event.preventDefault();
+                self.closeYoungSearchModal();
+            });
+        }
+
+        if (this.dom.youngSearchModal) {
+            this.dom.youngSearchModal.addEventListener('click', function(event) {
+                if (event.target === self.dom.youngSearchModal) {
+                    event.preventDefault();
+                    self.closeYoungSearchModal();
+                }
+            });
+        }
+
+        if (this.dom.youngSearchForm) {
+            this.dom.youngSearchForm.addEventListener('submit', function(event) {
+                event.preventDefault();
+                var query = self.dom.youngSearchInput ? self.dom.youngSearchInput.value : '';
+                self.performYoungSearch(query);
+            });
+        }
+
+        if (this.dom.youngSearchResults) {
+            this.dom.youngSearchResults.addEventListener('click', function(event) {
+                var target = event.target;
+                if (!target || typeof target.closest !== 'function') {
+                    return;
+                }
+                var pickBtn = target.closest('[data-photo-grimlins-select-young]');
+                if (!pickBtn) {
+                    return;
+                }
+                event.preventDefault();
+                var pickedId = parseInt(pickBtn.getAttribute('data-member-id'), 10);
+                var pickedLabel = pickBtn.getAttribute('data-member-label') || '';
+                if (!pickedId || Number.isNaN(pickedId)) {
+                    return;
+                }
+                self.selectTargetMemberFromSearch(pickedId, pickedLabel);
+            });
+        }
+
         this.root.addEventListener('click', function(event) {
             var target = event.target;
             if (!target) {
@@ -357,7 +429,8 @@
             });
         }
 
-        if (this.dom.mosaic) {
+        var canToggleFullscreenOnDblClick = !(this.config && this.config.fullscreenDblClick === false);
+        if (this.dom.mosaic && canToggleFullscreenOnDblClick) {
             this.dom.mosaic.addEventListener('dblclick', function(event) {
                 event.preventDefault();
                 self.toggleFullscreen();
@@ -370,6 +443,27 @@
                 if (!target || typeof target.closest !== 'function') {
                     return;
                 }
+
+                var deleteTarget = target.closest('[data-photo-grimlins-history-delete]');
+                if (deleteTarget) {
+                    event.preventDefault();
+                    if (deleteTarget.disabled || self.isSubmitting || self.isApplyingAvatar) {
+                        return;
+                    }
+                    var deleteId = parseInt(deleteTarget.getAttribute('data-attachment-id'), 10);
+                    if (!deleteId || Number.isNaN(deleteId)) {
+                        return;
+                    }
+                    var confirmMessage = globalConfig && globalConfig.i18n && globalConfig.i18n.historyDeleteConfirm
+                        ? globalConfig.i18n.historyDeleteConfirm
+                        : 'Supprimer définitivement cet avatar Grimlins ?';
+                    if (!window.confirm(confirmMessage)) {
+                        return;
+                    }
+                    self.deleteHistoryAvatar(deleteId);
+                    return;
+                }
+
                 var applyTarget = target.closest('[data-photo-grimlins-history-apply]');
                 if (!applyTarget) {
                     return;
@@ -705,6 +799,76 @@
         }
     };
 
+    PhotoGrimlins.prototype.getHistoryForMember = function(targetMemberId) {
+        var memberKey = String(parseInt(targetMemberId, 10) || 0);
+        if (!this.historyByMember || typeof this.historyByMember !== 'object') {
+            return null;
+        }
+        var candidate = this.historyByMember[memberKey];
+        return Array.isArray(candidate) ? candidate : null;
+    };
+
+    PhotoGrimlins.prototype.switchTargetMember = function(targetMemberId, memberLabel) {
+        var normalizedTarget = parseInt(targetMemberId, 10);
+        if (Number.isNaN(normalizedTarget) || normalizedTarget < 0) {
+            normalizedTarget = 0;
+        }
+
+        this.activeTargetMemberId = normalizedTarget;
+        if (this.config) {
+            this.config.targetMemberId = normalizedTarget;
+        }
+
+        var activeLabel = typeof memberLabel === 'string' ? memberLabel : null;
+        if (!activeLabel && this.root) {
+            var activeTab = this.root.querySelector('[data-mj-pg-tab-btn][aria-selected="true"]');
+            if (activeTab) {
+                activeLabel = activeTab.getAttribute('data-mj-pg-member-label');
+            }
+        }
+        this.updateHistoryTitle(normalizedTarget, activeLabel);
+
+        var memberHistory = this.getHistoryForMember(normalizedTarget);
+        if (!Array.isArray(memberHistory) && normalizedTarget <= 0) {
+            memberHistory = this.getHistoryForMember(0);
+        }
+        if (!Array.isArray(memberHistory)) {
+            memberHistory = [];
+        }
+
+        this.setHistory(memberHistory, {
+            historyCount: memberHistory.length,
+            memberLimit: this.historyLimit,
+            limitReached: this.historyLimit > 0 && memberHistory.length >= this.historyLimit && !this.config.isPreview
+        });
+    };
+
+    PhotoGrimlins.prototype.updateHistoryTitle = function(targetMemberId, memberLabel) {
+        if (!this.dom.historyTitle) {
+            return;
+        }
+
+        var defaultTitle = this.dom.historyTitle.getAttribute('data-history-title-default') || 'Mes avatars Grimlins';
+        var normalizedTarget = parseInt(targetMemberId, 10) || 0;
+
+        if (normalizedTarget <= 0) {
+            this.dom.historyTitle.textContent = defaultTitle;
+            return;
+        }
+
+        var label = (memberLabel || '').trim();
+        if (!label) {
+            this.dom.historyTitle.textContent = defaultTitle;
+            return;
+        }
+
+        var template = globalConfig && globalConfig.i18n && globalConfig.i18n.historyForMember
+            ? globalConfig.i18n.historyForMember
+            : 'Avatars de %name%';
+
+        this.dom.historyTitle.textContent = template.replace(/%name%/g, label);
+    };
+
     PhotoGrimlins.prototype.renderHistory = function() {
         if (!this.dom.historyList) {
             return;
@@ -809,6 +973,7 @@
         }
 
         var allowApply = !!(globalConfig && globalConfig.canApplyAvatar) && !!(this.config && this.config.canApplyAvatar);
+        var allowDelete = !!(globalConfig && globalConfig.canDeleteAvatar) && !!(this.config && this.config.canDeleteAvatar);
         if (allowApply && item.canApply !== false) {
             var applyButton = document.createElement('button');
             applyButton.type = 'button';
@@ -819,6 +984,19 @@
                 ? globalConfig.i18n.historyApply
                 : 'Utiliser cet avatar';
             actions.appendChild(applyButton);
+        }
+
+        if (allowDelete) {
+            var deleteButton = document.createElement('button');
+            deleteButton.type = 'button';
+            deleteButton.className = 'mj-photo-grimlins__history-delete';
+            deleteButton.setAttribute('data-photo-grimlins-history-delete', '1');
+            deleteButton.setAttribute('data-attachment-id', String(item.id));
+            deleteButton.disabled = !!item.isCurrent;
+            deleteButton.textContent = globalConfig && globalConfig.i18n && globalConfig.i18n.historyDelete
+                ? globalConfig.i18n.historyDelete
+                : 'Supprimer';
+            actions.appendChild(deleteButton);
         }
 
         if (actions.children.length > 0) {
@@ -895,6 +1073,11 @@
             }
         }
         globalConfig.history = exported;
+        if (!globalConfig.historiesByMember || typeof globalConfig.historiesByMember !== 'object') {
+            globalConfig.historiesByMember = {};
+        }
+        globalConfig.historiesByMember[String(this.activeTargetMemberId || 0)] = exported;
+        this.historyByMember[String(this.activeTargetMemberId || 0)] = exported;
         globalConfig.historyCount = this.historyCount;
         globalConfig.memberLimit = this.historyLimit;
         globalConfig.limitReached = this.limitReached;
@@ -927,6 +1110,31 @@
             }
             button.disabled = !allowed || this.isApplyingAvatar || isCurrent;
             button.classList.toggle('is-current', isCurrent);
+        }
+
+        var deleteButtons = this.dom.historyList.querySelectorAll('[data-photo-grimlins-history-delete]');
+        if (!deleteButtons || !deleteButtons.length) {
+            return;
+        }
+        var deleteAllowed = !!(globalConfig && globalConfig.canDeleteAvatar) && !!(this.config && this.config.canDeleteAvatar);
+        for (var k = 0; k < deleteButtons.length; k += 1) {
+            var deleteButton = deleteButtons[k];
+            var deleteAttachmentId = parseInt(deleteButton.getAttribute('data-attachment-id'), 10);
+            if (!deleteAttachmentId || Number.isNaN(deleteAttachmentId)) {
+                deleteButton.disabled = true;
+                continue;
+            }
+            var isDeleteCurrent = false;
+            var deleteEntries = Array.isArray(this.history) ? this.history : [];
+            for (var l = 0; l < deleteEntries.length; l += 1) {
+                var deleteEntry = deleteEntries[l];
+                if (deleteEntry && deleteEntry.id === deleteAttachmentId) {
+                    isDeleteCurrent = !!deleteEntry.isCurrent;
+                    break;
+                }
+            }
+            deleteButton.disabled = !deleteAllowed || this.isSubmitting || this.isApplyingAvatar || isDeleteCurrent;
+            deleteButton.classList.toggle('is-current', isDeleteCurrent);
         }
     };
 
@@ -1064,17 +1272,12 @@
         if (this.dom.cameraBtn) {
             this.dom.cameraBtn.classList.add('is-hidden');
         }
-        this.boundEscHandler = this.boundEscHandler || this.handleEscape.bind(this);
-        document.addEventListener('keydown', this.boundEscHandler);
+        this.updateEscapeBinding();
     };
 
     PhotoGrimlins.prototype.hideCameraModal = function(silent) {
         if (!this.dom.cameraModal) {
             return;
-        }
-        if (this.boundEscHandler) {
-            document.removeEventListener('keydown', this.boundEscHandler);
-            this.boundEscHandler = null;
         }
         this.dom.cameraModal.classList.remove('is-visible');
         this.dom.cameraModal.setAttribute('aria-hidden', 'true');
@@ -1091,6 +1294,43 @@
         if (this.dom.cameraCaptureBtn) {
             this.dom.cameraCaptureBtn.disabled = false;
         }
+        this.updateEscapeBinding();
+    };
+
+    PhotoGrimlins.prototype.openYoungSearchModal = function() {
+        if (!this.dom.youngSearchModal || !(this.config && this.config.canSearchYoung)) {
+            return;
+        }
+        this.dom.youngSearchModal.hidden = false;
+        this.dom.youngSearchModal.setAttribute('aria-hidden', 'false');
+        this.updateEscapeBinding();
+        if (this.dom.youngSearchInput) {
+            this.dom.youngSearchInput.focus();
+        }
+        this.performYoungSearch(this.dom.youngSearchInput ? this.dom.youngSearchInput.value : '');
+    };
+
+    PhotoGrimlins.prototype.closeYoungSearchModal = function() {
+        if (!this.dom.youngSearchModal) {
+            return;
+        }
+        this.dom.youngSearchModal.setAttribute('aria-hidden', 'true');
+        this.dom.youngSearchModal.hidden = true;
+        this.updateEscapeBinding();
+    };
+
+    PhotoGrimlins.prototype.updateEscapeBinding = function() {
+        var hasOpenCamera = !!(this.dom.cameraModal && !this.dom.cameraModal.hidden);
+        var hasOpenSearch = !!(this.dom.youngSearchModal && !this.dom.youngSearchModal.hidden);
+        if (hasOpenCamera || hasOpenSearch) {
+            this.boundEscHandler = this.boundEscHandler || this.handleEscape.bind(this);
+            document.addEventListener('keydown', this.boundEscHandler);
+            return;
+        }
+        if (this.boundEscHandler) {
+            document.removeEventListener('keydown', this.boundEscHandler);
+            this.boundEscHandler = null;
+        }
     };
 
     PhotoGrimlins.prototype.handleEscape = function(event) {
@@ -1101,8 +1341,164 @@
             if (this.dom.cameraModal && !this.dom.cameraModal.hidden) {
                 event.preventDefault();
                 this.hideCameraModal();
+                return;
+            }
+            if (this.dom.youngSearchModal && !this.dom.youngSearchModal.hidden) {
+                event.preventDefault();
+                this.closeYoungSearchModal();
             }
         }
+    };
+
+    PhotoGrimlins.prototype.performYoungSearch = function(query) {
+        var _this = this;
+        if (!this.dom.youngSearchResults || !globalConfig || !globalConfig.ajaxUrl || !(this.config && this.config.canSearchYoung)) {
+            return;
+        }
+
+        var message = globalConfig && globalConfig.i18n && globalConfig.i18n.youngSearchLoading
+            ? globalConfig.i18n.youngSearchLoading
+            : 'Recherche des jeunes…';
+        if (this.dom.youngSearchStatus) {
+            this.dom.youngSearchStatus.textContent = message;
+        }
+        this.isYoungSearchLoading = true;
+        if (this.dom.youngSearchSubmit) {
+            this.dom.youngSearchSubmit.disabled = true;
+        }
+
+        var formData = new FormData();
+        formData.append('action', 'mj_member_photo_grimlins_search_young');
+        formData.append('nonce', globalConfig.searchYoungNonce || '');
+        formData.append('search', (query || '').trim());
+        formData.append('limit', '20');
+
+        fetch(globalConfig.ajaxUrl, {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin'
+        })
+            .then(function(response) {
+                if (!response.ok) {
+                    throw response;
+                }
+                return response.json();
+            })
+            .then(function(payload) {
+                if (!payload || !payload.success || !payload.data) {
+                    throw new Error('Réponse invalide');
+                }
+                _this.renderYoungSearchResults(Array.isArray(payload.data.items) ? payload.data.items : []);
+            })
+            .catch(function() {
+                _this.renderYoungSearchResults([]);
+                if (_this.dom.youngSearchStatus) {
+                    _this.dom.youngSearchStatus.textContent = globalConfig && globalConfig.i18n && globalConfig.i18n.youngSearchError
+                        ? globalConfig.i18n.youngSearchError
+                        : 'Impossible de charger la recherche des jeunes.';
+                }
+            })
+            .finally(function() {
+                _this.isYoungSearchLoading = false;
+                if (_this.dom.youngSearchSubmit) {
+                    _this.dom.youngSearchSubmit.disabled = false;
+                }
+            });
+    };
+
+    PhotoGrimlins.prototype.renderYoungSearchResults = function(items) {
+        if (!this.dom.youngSearchResults) {
+            return;
+        }
+        while (this.dom.youngSearchResults.firstChild) {
+            this.dom.youngSearchResults.removeChild(this.dom.youngSearchResults.firstChild);
+        }
+
+        if (!items.length) {
+            if (this.dom.youngSearchStatus) {
+                this.dom.youngSearchStatus.textContent = globalConfig && globalConfig.i18n && globalConfig.i18n.youngSearchNoResult
+                    ? globalConfig.i18n.youngSearchNoResult
+                    : 'Aucun jeune trouvé.';
+            }
+            return;
+        }
+
+        if (this.dom.youngSearchStatus) {
+            this.dom.youngSearchStatus.textContent = '';
+        }
+
+        for (var i = 0; i < items.length; i += 1) {
+            var item = items[i] || {};
+            var memberId = parseInt(item.id, 10);
+            if (!memberId || Number.isNaN(memberId)) {
+                continue;
+            }
+
+            var row = document.createElement('div');
+            row.className = 'mj-photo-grimlins-young-search__item';
+            row.setAttribute('role', 'listitem');
+
+            var avatar = document.createElement('span');
+            avatar.className = 'mj-photo-grimlins-young-search__avatar';
+            if (item.photoUrl) {
+                var img = document.createElement('img');
+                img.src = item.photoUrl;
+                img.alt = '';
+                img.loading = 'lazy';
+                avatar.appendChild(img);
+            } else {
+                var fallback = document.createElement('span');
+                fallback.className = 'mj-photo-grimlins-young-search__avatar-fallback';
+                fallback.textContent = item.initials || 'J';
+                avatar.appendChild(fallback);
+            }
+
+            var meta = document.createElement('div');
+            meta.className = 'mj-photo-grimlins-young-search__meta';
+            var label = document.createElement('p');
+            label.className = 'mj-photo-grimlins-young-search__label';
+            label.textContent = item.label || ('Jeune #' + memberId);
+            meta.appendChild(label);
+
+            var pick = document.createElement('button');
+            pick.type = 'button';
+            pick.className = 'mj-photo-grimlins-young-search__pick';
+            pick.setAttribute('data-photo-grimlins-select-young', '1');
+            pick.setAttribute('data-member-id', String(memberId));
+            pick.setAttribute('data-member-label', item.label || ('Jeune #' + memberId));
+            pick.textContent = globalConfig && globalConfig.i18n && globalConfig.i18n.youngSearchPick
+                ? globalConfig.i18n.youngSearchPick
+                : 'Choisir';
+
+            row.appendChild(avatar);
+            row.appendChild(meta);
+            row.appendChild(pick);
+            this.dom.youngSearchResults.appendChild(row);
+        }
+    };
+
+    PhotoGrimlins.prototype.selectTargetMemberFromSearch = function(memberId, memberLabel) {
+        var normalizedId = parseInt(memberId, 10);
+        if (!normalizedId || Number.isNaN(normalizedId)) {
+            return;
+        }
+
+        var tab = this.root ? this.root.querySelector('[data-mj-pg-tab-btn][data-mj-pg-target-member="' + String(normalizedId) + '"]') : null;
+        if (tab) {
+            tab.click();
+        } else {
+            this.activeTargetMemberId = normalizedId;
+            if (this.config) {
+                this.config.targetMemberId = normalizedId;
+            }
+            this.switchTargetMember(normalizedId, memberLabel || '');
+        }
+
+        if (this.dom.openYoungSearchBtn && memberLabel) {
+            this.dom.openYoungSearchBtn.textContent = memberLabel;
+        }
+
+        this.closeYoungSearchModal();
     };
 
     PhotoGrimlins.prototype.triggerCameraInput = function() {
@@ -1324,6 +1720,10 @@
         formData.append('action', 'mj_member_generate_grimlins');
         formData.append('nonce', globalConfig.nonce || '');
         formData.append('source', this.file, this.file.name);
+        var submitTargetMemberId = parseInt((this.config && this.config.targetMemberId) || this.activeTargetMemberId || 0, 10);
+        if (submitTargetMemberId && !Number.isNaN(submitTargetMemberId) && submitTargetMemberId > 0) {
+            formData.append('targetMemberId', String(submitTargetMemberId));
+        }
         var scope = this.accessScope === 'public' ? 'public' : 'members';
         formData.append('accessScope', scope);
         if (this.accessNonce) {
@@ -1445,6 +1845,23 @@
         formData.append('nonce', globalConfig.applyAvatarNonce);
         formData.append('attachmentId', String(targetId));
 
+        var targetMemberId = 0;
+        if (this.config && this.config.targetMemberId !== undefined && this.config.targetMemberId !== null) {
+            targetMemberId = parseInt(this.config.targetMemberId, 10);
+            if (!targetMemberId || Number.isNaN(targetMemberId)) {
+                targetMemberId = 0;
+            }
+        }
+        if (!targetMemberId && this.root) {
+            var rootTargetMemberId = parseInt(this.root.getAttribute('data-target-member-id'), 10);
+            if (rootTargetMemberId && !Number.isNaN(rootTargetMemberId)) {
+                targetMemberId = rootTargetMemberId;
+            }
+        }
+        if (targetMemberId > 0) {
+            formData.append('targetMemberId', String(targetMemberId));
+        }
+
         var _this = this;
 
         fetch(globalConfig.ajaxUrl, {
@@ -1517,6 +1934,138 @@
             });
     };
 
+    PhotoGrimlins.prototype.deleteHistoryAvatar = function(attachmentId) {
+        if (!globalConfig || !globalConfig.ajaxUrl) {
+            this.updateStatus('Configuration AJAX manquante.', 'error');
+            return;
+        }
+
+        if (!globalConfig.canDeleteAvatar || !(this.config && this.config.canDeleteAvatar)) {
+            var unauthorizedMessage = globalConfig.i18n && globalConfig.i18n.historyDeleteError
+                ? globalConfig.i18n.historyDeleteError
+                : 'Impossible de supprimer cet avatar.';
+            this.updateStatus(unauthorizedMessage, 'error');
+            return;
+        }
+
+        var targetId = parseInt(attachmentId, 10);
+        if (!targetId || Number.isNaN(targetId)) {
+            this.updateStatus(globalConfig.i18n && globalConfig.i18n.historyDeleteError
+                ? globalConfig.i18n.historyDeleteError
+                : 'Impossible de supprimer cet avatar.', 'error');
+            return;
+        }
+
+        if (!globalConfig.deleteAvatarNonce) {
+            this.updateStatus(globalConfig.i18n && globalConfig.i18n.historyDeleteError
+                ? globalConfig.i18n.historyDeleteError
+                : 'Impossible de supprimer cet avatar.', 'error');
+            return;
+        }
+
+        if (this.isSubmitting || this.isApplyingAvatar) {
+            return;
+        }
+
+        this.isApplyingAvatar = true;
+        this.refreshUi();
+        this.updateStatus(globalConfig.i18n && globalConfig.i18n.historyDeletePending
+            ? globalConfig.i18n.historyDeletePending
+            : 'Suppression en cours…', 'info');
+
+        var formData = new FormData();
+        formData.append('action', 'mj_member_delete_grimlins_avatar');
+        formData.append('nonce', globalConfig.deleteAvatarNonce);
+        formData.append('attachmentId', String(targetId));
+
+        var _this = this;
+
+        fetch(globalConfig.ajaxUrl, {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin'
+        })
+            .then(function(response) {
+                if (!response.ok) {
+                    throw response;
+                }
+                return response.json();
+            })
+            .then(function(payload) {
+                if (!payload || typeof payload !== 'object') {
+                    throw new Error('Payload vide');
+                }
+                if (!payload.success) {
+                    var errorMessage = payload.data && payload.data.message
+                        ? payload.data.message
+                        : (globalConfig.i18n ? globalConfig.i18n.historyDeleteError : 'Impossible de supprimer cet avatar.');
+                    throw new Error(errorMessage);
+                }
+
+                if (payload.data && payload.data.nonce) {
+                    globalConfig.deleteAvatarNonce = payload.data.nonce;
+                }
+
+                var deletedAttachmentId = payload.data && payload.data.attachmentId
+                    ? parseInt(payload.data.attachmentId, 10)
+                    : targetId;
+                if (deletedAttachmentId && !Number.isNaN(deletedAttachmentId)) {
+                    _this.removeHistoryItem(deletedAttachmentId);
+                }
+
+                var successMessage = payload.data && payload.data.message
+                    ? payload.data.message
+                    : (globalConfig.i18n ? globalConfig.i18n.historyDeleteSuccess : 'Avatar supprimé.');
+                _this.updateStatus(successMessage, 'success');
+            })
+            .catch(function(error) {
+                if (error && typeof error.json === 'function') {
+                    error.json().then(function(details) {
+                        var message = details && details.data && details.data.message
+                            ? details.data.message
+                            : (globalConfig.i18n ? globalConfig.i18n.historyDeleteError : 'Impossible de supprimer cet avatar.');
+                        _this.updateStatus(message, 'error');
+                    }).catch(function() {
+                        _this.updateStatus(error.message || (globalConfig.i18n ? globalConfig.i18n.historyDeleteError : 'Impossible de supprimer cet avatar.'), 'error');
+                    });
+                    return;
+                }
+                var message = error && error.message
+                    ? error.message
+                    : (globalConfig.i18n ? globalConfig.i18n.historyDeleteError : 'Impossible de supprimer cet avatar.');
+                _this.updateStatus(message, 'error');
+            })
+            .finally(function() {
+                _this.isApplyingAvatar = false;
+                _this.refreshUi();
+            });
+    };
+
+    PhotoGrimlins.prototype.removeHistoryItem = function(attachmentId) {
+        var targetId = parseInt(attachmentId, 10);
+        if (!targetId || Number.isNaN(targetId) || !Array.isArray(this.history)) {
+            return;
+        }
+
+        var nextHistory = [];
+        for (var i = 0; i < this.history.length; i += 1) {
+            var entry = this.history[i];
+            if (!entry || typeof entry !== 'object') {
+                continue;
+            }
+            if (entry.id === targetId) {
+                continue;
+            }
+            nextHistory.push(entry);
+        }
+
+        this.setHistory(nextHistory, {
+            historyCount: nextHistory.length,
+            memberLimit: this.historyLimit,
+            limitReached: this.historyLimit > 0 && nextHistory.length >= this.historyLimit && !this.config.isPreview
+        });
+    };
+
     PhotoGrimlins.prototype.renderResult = function(data) {
         this.setPreviewLoading(false);
         this.lastResult = (data && typeof data === 'object') ? data : null;
@@ -1576,13 +2125,114 @@
         nodes.forEach(mount);
     }
 
+    function initWizardTabs(context) {
+        var containers = (context || document).querySelectorAll('.mj-photo-grimlins-nsub--tabs');
+        var inlineTablists = (context || document).querySelectorAll('[data-mj-photo-grimlins] .mj-photo-grimlins-tabs');
+        var allContainers = [];
+
+        if (containers && containers.length) {
+            containers.forEach(function(container) {
+                allContainers.push(container);
+            });
+        }
+        if (inlineTablists && inlineTablists.length) {
+            inlineTablists.forEach(function(tablist) {
+                allContainers.push(tablist);
+            });
+        }
+        if (!allContainers.length) {
+            return;
+        }
+
+        allContainers.forEach(function(container) {
+            var buttons = container.querySelectorAll('[data-mj-pg-tab-btn]');
+            if (!buttons || !buttons.length) {
+                return;
+            }
+
+            var widgetRoot = container.closest('[data-mj-photo-grimlins]');
+            var widgetInstance = widgetRoot ? instances.get(widgetRoot) : null;
+
+            var setActiveButton = function(btn) {
+                var panelId = btn.getAttribute('aria-controls');
+                var targetMemberAttr = btn.getAttribute('data-mj-pg-target-member');
+                var targetMemberLabel = btn.getAttribute('data-mj-pg-member-label');
+                var targetMemberId = parseInt(targetMemberAttr, 10);
+                if (Number.isNaN(targetMemberId)) {
+                    targetMemberId = 0;
+                }
+
+                buttons.forEach(function(b) {
+                    b.classList.remove('mj-photo-grimlins-tabs__btn--active');
+                    b.setAttribute('aria-selected', 'false');
+                    b.setAttribute('tabindex', '-1');
+                });
+                btn.classList.add('mj-photo-grimlins-tabs__btn--active');
+                btn.setAttribute('aria-selected', 'true');
+                btn.removeAttribute('tabindex');
+
+                if (panelId) {
+                    var panels = container.querySelectorAll('[role="tabpanel"]');
+                    panels.forEach(function(panel) {
+                        panel.hidden = panel.id !== panelId;
+                    });
+                }
+
+                if (widgetRoot) {
+                    widgetRoot.setAttribute('data-target-member-id', String(targetMemberId));
+                }
+                if (widgetInstance && widgetInstance.config) {
+                    widgetInstance.config.targetMemberId = targetMemberId;
+                }
+                if (widgetInstance && typeof widgetInstance.switchTargetMember === 'function') {
+                    widgetInstance.switchTargetMember(targetMemberId, targetMemberLabel);
+                }
+            };
+
+            buttons.forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    setActiveButton(btn);
+                });
+            });
+
+            // Keyboard navigation (arrows)
+            buttons.forEach(function(btn, idx) {
+                btn.addEventListener('keydown', function(event) {
+                    var key = event.key;
+                    var nextIdx = -1;
+                    if (key === 'ArrowRight' || key === 'ArrowDown') {
+                        nextIdx = (idx + 1) % buttons.length;
+                    } else if (key === 'ArrowLeft' || key === 'ArrowUp') {
+                        nextIdx = (idx - 1 + buttons.length) % buttons.length;
+                    } else if (key === 'Home') {
+                        nextIdx = 0;
+                    } else if (key === 'End') {
+                        nextIdx = buttons.length - 1;
+                    }
+                    if (nextIdx >= 0) {
+                        event.preventDefault();
+                        buttons[nextIdx].click();
+                        buttons[nextIdx].focus();
+                    }
+                });
+            });
+
+            var initial = container.querySelector('[data-mj-pg-tab-btn][aria-selected="true"]') || buttons[0];
+            if (initial) {
+                setActiveButton(initial);
+            }
+        });
+    }
+
     domReady(function() {
         scan(document);
+        initWizardTabs(document);
     });
 
     if (window.elementorFrontend && window.elementorFrontend.hooks && typeof window.elementorFrontend.hooks.addAction === 'function') {
         window.elementorFrontend.hooks.addAction('frontend/element_ready/mj-member-photo-grimlins.default', function(scope) {
             scan(scope);
+            initWizardTabs(scope);
         });
     }
 })();

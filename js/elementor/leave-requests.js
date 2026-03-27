@@ -218,11 +218,12 @@
             const isPending = reserved?.status === 'pending';
 
             // Determine if day is disabled
-            const isDisabled = isPast || !isWorkingDay || !inSchedulePeriod || isReserved;
+            const isDisabled = !isWorkingDay || !inSchedulePeriod || isReserved;
 
             let className = 'mj-leave-requests__calendar-day';
             if (isSelected) className += ' mj-leave-requests__calendar-day--selected';
             if (isToday) className += ' mj-leave-requests__calendar-day--today';
+            if (isPast && !isSelected) className += ' mj-leave-requests__calendar-day--past';
             if (weekend) className += ' mj-leave-requests__calendar-day--weekend';
             if (!isWorkingDay && !weekend) className += ' mj-leave-requests__calendar-day--not-working';
             if (isReserved) className += ' mj-leave-requests__calendar-day--reserved';

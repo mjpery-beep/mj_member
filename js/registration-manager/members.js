@@ -2468,9 +2468,10 @@
         var onRefresh = props.onRefresh;
 
         // State
-        var _stTitle = useState(member && member.jobTitle || '');
+        var _stTitle = useState(String(member && member.jobTitle || ''));
         var jobTitle = _stTitle[0];
         var setJobTitle = _stTitle[1];
+        var jobTitleInputRef = preact.createRef ? preact.createRef() : { current: null };
 
         var _stRegime = useState(member && member.workRegime || '');
         var workRegime = _stRegime[0];
@@ -2522,7 +2523,7 @@
         // Sync from member when it changes
         useEffect(function () {
             if (!member) return;
-            setJobTitle(member.jobTitle || '');
+            setJobTitle(String(member.jobTitle || ''));
             setWorkRegime(member.workRegime || '');
             setFundingSource(member.fundingSource || '');
             var desc = member.jobDescription || '';
@@ -2532,6 +2533,9 @@
             setServerDesc(desc);
             setServerSignature(signature);
             setIsDirty(false);
+            if (jobTitleInputRef.current) {
+                jobTitleInputRef.current.value = String(member.jobTitle || '');
+            }
             // Re-inject into the editor DOM node
             if (editorRef.current) {
                 editorRef.current.innerHTML = desc;
@@ -2555,13 +2559,6 @@
         var saveLabel = getString(strings, 'jobProfileSave', 'Enregistrer');
         var savedLabel = getString(strings, 'jobProfileSaved', 'Profil de fonction enregistré.');
         var savingLabel = getString(strings, 'jobProfileSaving', 'Enregistrement…');
-
-        var titleOptions = strings.jobProfileTitles || {
-            coordination: 'Coordination',
-            animateur: 'Animateur',
-            communication: 'Communication',
-            autre: 'Autre',
-        };
 
         var regimeOptions = strings.jobProfileRegimes || {
             'mi-temps': 'Mi-temps (19h)',
@@ -2619,8 +2616,7 @@
             var addressLine = memberData.addressLine || '';
             var postalCode = memberData.postalCode || '';
             var city = memberData.city || '';
-            var roleKey = memberData.jobTitle || '';
-            var roleLabel = roleKey && titleOptions && titleOptions[roleKey] ? titleOptions[roleKey] : roleKey;
+            var roleLabel = String(memberData.jobTitle || '').trim();
 
             var cityLine = [postalCode, city].filter(Boolean).join(' ').trim();
             var fullAddress = [addressLine, cityLine].filter(Boolean).join(', ').trim();
@@ -2741,11 +2737,14 @@
             setIsSaving(true);
             setStatusMsg('');
 
+            var currentJobTitle = jobTitleInputRef.current ? String(jobTitleInputRef.current.value || '') : jobTitle;
+            setJobTitle(currentJobTitle);
+
             var fd = new FormData();
             fd.append('action', 'mj_regmgr_save_job_profile');
             fd.append('nonce', config.nonce || '');
             fd.append('memberId', member.id);
-            fd.append('jobTitle', jobTitle);
+            fd.append('jobTitle', currentJobTitle);
             fd.append('workRegime', workRegime);
             fd.append('fundingSource', fundingSource);
             fd.append('jobDescription', jobDescription);
@@ -2794,17 +2793,16 @@
                 h('div', { class: 'mj-regmgr-job-profile__field-row' }, [
                     h('div', { class: 'mj-regmgr-job-profile__field mj-regmgr-job-profile__field--half' }, [
                         h('label', null, titleLabel),
-                        h('select', {
-                            class: 'mj-regmgr-select',
-                            value: jobTitle,
+                        h('input', {
+                            type: 'text',
+                            class: 'mj-regmgr-input',
+                            ref: jobTitleInputRef,
+                            defaultValue: jobTitle,
+                            onInput: handleTitleChange,
                             onChange: handleTitleChange,
-                        }, [
-                            h('option', { value: '' }, '— ' + titleLabel + ' —'),
-                        ].concat(
-                            Object.keys(titleOptions).map(function (key) {
-                                return h('option', { value: key }, titleOptions[key]);
-                            })
-                        )),
+                            placeholder: titleLabel,
+                            autocomplete: 'off',
+                        }),
                     ]),
                     h('div', { class: 'mj-regmgr-job-profile__field mj-regmgr-job-profile__field--half' }, [
                         h('label', null, regimeLabel),
@@ -3254,6 +3252,8 @@
         var onCaptureAvatar = typeof props.onCaptureAvatar === 'function' ? props.onCaptureAvatar : null;
         var onCreateMessage = typeof props.onCreateMessage === 'function' ? props.onCreateMessage : null;
         var onDeleteMessage = typeof props.onDeleteMessage === 'function' ? props.onDeleteMessage : null;
+        var onUpdateNotification = typeof props.onUpdateNotification === 'function' ? props.onUpdateNotification : null;
+        var onDeleteNotification = typeof props.onDeleteNotification === 'function' ? props.onDeleteNotification : null;
         var onDeleteTestimonial = typeof props.onDeleteTestimonial === 'function' ? props.onDeleteTestimonial : null;
         var onUpdateTestimonialStatus = typeof props.onUpdateTestimonialStatus === 'function' ? props.onUpdateTestimonialStatus : null;
         var onToggleFeatured = typeof props.onToggleFeatured === 'function' ? props.onToggleFeatured : null;
@@ -3293,7 +3293,7 @@
         var memberId = member && member.id ? member.id : null;
 
         // Onglets valides pour les membres
-        var validMemberTabs = ['information', 'dyndata', 'membership', 'badges', 'photos', 'ideas', 'messages', 'testimonials', 'notes', 'history', 'quotas'];
+        var validMemberTabs = ['information', 'dyndata', 'membership', 'badges', 'photos', 'ideas', 'messages', 'notifications', 'testimonials', 'notes', 'history', 'quotas'];
         var resolvedInitialTab = initialTab && validMemberTabs.indexOf(initialTab) !== -1 ? initialTab : 'information';
         var initialTabAppliedRef = useRef(false);
 
@@ -3396,6 +3396,46 @@
         var _useStateNewMessageSaving = useState(false);
         var newMessageSaving = _useStateNewMessageSaving[0];
         var setNewMessageSaving = _useStateNewMessageSaving[1];
+
+        var _useStateNotificationSearch = useState('');
+        var notificationSearch = _useStateNotificationSearch[0];
+        var setNotificationSearch = _useStateNotificationSearch[1];
+
+        var _useStateNotificationTypeFilter = useState('all');
+        var notificationTypeFilter = _useStateNotificationTypeFilter[0];
+        var setNotificationTypeFilter = _useStateNotificationTypeFilter[1];
+
+        var _useStateNotificationEmojiFilter = useState('all');
+        var notificationEmojiFilter = _useStateNotificationEmojiFilter[0];
+        var setNotificationEmojiFilter = _useStateNotificationEmojiFilter[1];
+
+        var _useStateNotificationReadFilter = useState('all');
+        var notificationReadFilter = _useStateNotificationReadFilter[0];
+        var setNotificationReadFilter = _useStateNotificationReadFilter[1];
+
+        var _useStateEditingNotificationId = useState(null);
+        var editingNotificationId = _useStateEditingNotificationId[0];
+        var setEditingNotificationId = _useStateEditingNotificationId[1];
+
+        var _useStateNotificationDraft = useState({ text: '', url: '', status: 'unread' });
+        var notificationDraft = _useStateNotificationDraft[0];
+        var setNotificationDraft = _useStateNotificationDraft[1];
+
+        var _useStateNotificationSaving = useState(false);
+        var notificationSaving = _useStateNotificationSaving[0];
+        var setNotificationSaving = _useStateNotificationSaving[1];
+
+        var _useStateNotificationDeletingId = useState(null);
+        var notificationDeletingId = _useStateNotificationDeletingId[0];
+        var setNotificationDeletingId = _useStateNotificationDeletingId[1];
+
+        var _useStateSelectedNotificationIds = useState({});
+        var selectedNotificationIds = _useStateSelectedNotificationIds[0];
+        var setSelectedNotificationIds = _useStateSelectedNotificationIds[1];
+
+        var _useStateNotificationBulkDeleting = useState(false);
+        var notificationBulkDeleting = _useStateNotificationBulkDeleting[0];
+        var setNotificationBulkDeleting = _useStateNotificationBulkDeleting[1];
 
         var _useStateAvatarSaving = useState(false);
         var avatarSaving = _useStateAvatarSaving[0];
@@ -3525,6 +3565,16 @@
             setNewMessageSubject('');
             setNewMessageBody('');
             setNewMessageSaving(false);
+            setNotificationSearch('');
+            setNotificationTypeFilter('all');
+            setNotificationEmojiFilter('all');
+            setNotificationReadFilter('all');
+            setEditingNotificationId(null);
+            setNotificationDraft({ text: '', url: '', status: 'unread' });
+            setNotificationSaving(false);
+            setNotificationDeletingId(null);
+            setSelectedNotificationIds({});
+            setNotificationBulkDeleting(false);
             setPaymentProcessing(false);
             setShowPaymentModal(false);
             setAccountStatusDraft(member && member.status ? member.status : 'active');
@@ -4349,6 +4399,148 @@
                 });
         };
 
+        var handleNotificationEditStart = function (notification) {
+            if (!notification || !notification.notificationId) {
+                return;
+            }
+
+            setEditingNotificationId(notification.notificationId);
+            setNotificationDraft({
+                text: notification.text || notification.title || notification.excerpt || '',
+                url: notification.url || '',
+                status: (notification.status || 'unread').toLowerCase(),
+            });
+        };
+
+        var handleNotificationEditCancel = function () {
+            setEditingNotificationId(null);
+            setNotificationDraft({ text: '', url: '', status: 'unread' });
+            setNotificationSaving(false);
+        };
+
+        var getNotificationNumericId = function (notification) {
+            if (!notification) {
+                return 0;
+            }
+
+            var rawId = notification.notificationId || notification.id || 0;
+            var numericId = parseInt(rawId, 10);
+            return isNaN(numericId) ? 0 : numericId;
+        };
+
+        var handleNotificationSave = function (notification) {
+            if (!onUpdateNotification || !member || !member.id || !notification || !notification.notificationId) {
+                return;
+            }
+
+            var nextText = (notificationDraft.text || '').trim();
+            var nextUrl = (notificationDraft.url || '').trim();
+            var nextStatus = (notificationDraft.status || '').toLowerCase();
+
+            if (!nextText) {
+                return;
+            }
+
+            setNotificationSaving(true);
+            Promise.resolve(onUpdateNotification(member.id, notification.notificationId, {
+                text: nextText,
+                url: nextUrl,
+                status: nextStatus,
+            }))
+                .then(function () {
+                    handleNotificationEditCancel();
+                })
+                .finally(function () {
+                    setNotificationSaving(false);
+                });
+        };
+
+        var handleNotificationDelete = function (notification) {
+            if (!onDeleteNotification || !member || !member.id || !notification || !notification.notificationId) {
+                return;
+            }
+
+            if (!window.confirm(getString(strings, 'memberNotificationsDeleteConfirm', 'Supprimer cette notification ?'))) {
+                return;
+            }
+
+            setNotificationDeletingId(notification.notificationId);
+            Promise.resolve(onDeleteNotification(member.id, notification.notificationId))
+                .finally(function () {
+                    setNotificationDeletingId(null);
+                });
+        };
+
+        var handleNotificationSelectionToggle = function (notificationId) {
+            if (!notificationId) {
+                return;
+            }
+
+            setSelectedNotificationIds(function (prev) {
+                var next = Object.assign({}, prev);
+                if (next[notificationId]) {
+                    delete next[notificationId];
+                } else {
+                    next[notificationId] = true;
+                }
+                return next;
+            });
+        };
+
+        var handleNotificationSelectAllVisible = function () {
+            setSelectedNotificationIds(function (prev) {
+                var next = Object.assign({}, prev);
+                filteredNotifications.forEach(function (notification) {
+                    var notificationId = getNotificationNumericId(notification);
+                    if (notificationId > 0) {
+                        next[notificationId] = true;
+                    }
+                });
+                return next;
+            });
+        };
+
+        var handleNotificationClearSelection = function () {
+            setSelectedNotificationIds({});
+        };
+
+        var handleDeleteSelectedNotifications = function () {
+            if (!onDeleteNotification || !member || !member.id || notificationBulkDeleting) {
+                return;
+            }
+
+            var ids = Object.keys(selectedNotificationIds)
+                .map(function (rawId) { return parseInt(rawId, 10); })
+                .filter(function (id) { return !isNaN(id) && id > 0; });
+
+            if (!ids.length) {
+                return;
+            }
+
+            if (!window.confirm(getString(strings, 'memberNotificationsDeleteSelectionConfirm', 'Supprimer les notifications sélectionnées ?'))) {
+                return;
+            }
+
+            setNotificationBulkDeleting(true);
+
+            var sequence = Promise.resolve();
+            ids.forEach(function (id) {
+                sequence = sequence.then(function () {
+                    return Promise.resolve(onDeleteNotification(member.id, id)).catch(function () {
+                        return null;
+                    });
+                });
+            });
+
+            sequence.finally(function () {
+                setNotificationBulkDeleting(false);
+                setSelectedNotificationIds({});
+                if (editingNotificationId && ids.indexOf(editingNotificationId) !== -1) {
+                    handleNotificationEditCancel();
+                }
+            });
+        };
+
         var handleToggleBadgeCriterion = function (badgeId, criterionId, checked) {
             if (!onSyncBadgeCriteria || !memberId) {
                 return;
@@ -4727,6 +4919,7 @@
         var tabPhotosLabel = getString(strings, 'tabMemberPhotos', 'Photos');
         var tabIdeasLabel = getString(strings, 'tabMemberIdeas', 'Idées');
         var tabMessagesLabel = getString(strings, 'tabMemberMessages', 'Messages');
+        var tabNotificationsLabel = getString(strings, 'tabMemberNotifications', 'Notifications');
         var tabTestimonialsLabel = getString(strings, 'tabMemberTestimonials', 'Témoignages');
         var tabNotesLabel = getString(strings, 'tabMemberNotes', 'Notes');
         var tabHistoryLabel = getString(strings, 'tabMemberHistory', 'Historique');
@@ -4739,6 +4932,8 @@
         var pendingPhotosCount = memberPhotos.filter(function (p) { return p.status === 'pending'; }).length;
         var ideasCount = memberIdeas.length;
         var messagesCount = memberMessages.length;
+        var memberNotifications = Array.isArray(member.notifications) ? member.notifications : [];
+        var notificationsCount = memberNotifications.length;
         var notesCount = notes.length;
         var registrationsTitle = getString(strings, 'memberRegistrationsHistoryTitle', 'Inscriptions');
         var registrationsEmptyLabel = getString(strings, 'memberNoRegistrations', 'Aucune inscription enregistrée.');
@@ -4778,6 +4973,7 @@
             photos: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h3l2-2h6l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>',
             ideas: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"></path><path d="M10 22h4"></path><path d="M12 2a7 7 0 0 0-4 12.9V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.1A7 7 0 0 0 12 2z"></path></svg>',
             messages: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.5A8.38 8.38 0 0 1 3 11.5 8.38 8.38 0 0 1 12 3a8.38 8.38 0 0 1 9 8.5z"></path><polyline points="8 11 12 15 16 11"></polyline></svg>',
+            notifications: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>',
             notes: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"></path><polyline points="15 2 15 7 20 7"></polyline><line x1="9" y1="12" x2="15" y2="12"></line><line x1="9" y1="16" x2="13" y2="16"></line></svg>',
             history: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>',
             testimonials: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><line x1="9" y1="9" x2="15" y2="9"></line><line x1="9" y1="13" x2="13" y2="13"></line></svg>',
@@ -4796,6 +4992,7 @@
             { key: 'badges', label: tabBadgesLabel, badge: badgesCompletedCount > 0 ? badgesCompletedCount : undefined, icon: tabIcons.badges },
             { key: 'ideas', label: tabIdeasLabel, badge: ideasCount > 0 ? ideasCount : undefined, icon: tabIcons.ideas },
             { key: 'messages', label: tabMessagesLabel, badge: messagesCount > 0 ? messagesCount : undefined, icon: tabIcons.messages },
+            { key: 'notifications', label: tabNotificationsLabel, badge: notificationsCount > 0 ? notificationsCount : undefined, icon: tabIcons.notifications },
             { key: 'testimonials', label: tabTestimonialsLabel, badge: pendingTestimonialsCount > 0 ? pendingTestimonialsCount : undefined, badgeType: pendingTestimonialsCount > 0 ? 'warning' : undefined, icon: tabIcons.testimonials },
             { key: 'notes', label: tabNotesLabel, badge: notesCount > 0 ? notesCount : undefined, icon: tabIcons.notes },
             { key: 'history', label: tabHistoryLabel, badge: registrations.length > 0 ? registrations.length : undefined, icon: tabIcons.history },
@@ -4852,6 +5049,89 @@
 
         var contactMessageViewUrl = typeof config.contactMessageViewUrl === 'string' ? config.contactMessageViewUrl : '';
         var contactMessageListUrl = typeof config.contactMessageListUrl === 'string' ? config.contactMessageListUrl : '';
+
+        var notificationTypes = [];
+        var notificationTypeMap = {};
+        var notificationEmojis = [];
+        var notificationEmojiMap = {};
+
+        memberNotifications.forEach(function (notification) {
+            if (!notification) {
+                return;
+            }
+
+            var typeValue = (notification.type || '').trim();
+            var typeLabel = (notification.typeLabel || typeValue || getString(strings, 'memberNotificationsTypeUnknown', 'Autre')).trim();
+            if (typeValue && !notificationTypeMap[typeValue]) {
+                notificationTypeMap[typeValue] = true;
+                notificationTypes.push({ value: typeValue, label: typeLabel });
+            }
+
+            var emojiValue = (notification.emoji || '').trim();
+            if (emojiValue && !notificationEmojiMap[emojiValue]) {
+                notificationEmojiMap[emojiValue] = true;
+                notificationEmojis.push(emojiValue);
+            }
+        });
+
+        notificationTypes.sort(function (a, b) {
+            return a.label.localeCompare(b.label);
+        });
+        notificationEmojis.sort(function (a, b) {
+            return a.localeCompare(b);
+        });
+
+        var normalizedNotificationSearch = (notificationSearch || '').trim().toLowerCase();
+        var filteredNotifications = memberNotifications.filter(function (notification) {
+            if (!notification) {
+                return false;
+            }
+
+            var readStatusValue = (notification.status || '').toLowerCase();
+            if (notificationReadFilter !== 'all' && readStatusValue !== notificationReadFilter) {
+                return false;
+            }
+
+            if (notificationTypeFilter !== 'all' && notification.type !== notificationTypeFilter) {
+                return false;
+            }
+
+            var emojiValue = (notification.emoji || '').trim();
+            if (notificationEmojiFilter !== 'all' && emojiValue !== notificationEmojiFilter) {
+                return false;
+            }
+
+            if (!normalizedNotificationSearch) {
+                return true;
+            }
+
+            var haystack = [
+                notification.text || '',
+                notification.title || '',
+                notification.excerpt || '',
+                notification.url || '',
+                notification.typeLabel || '',
+                notification.type || '',
+                emojiValue,
+            ].join(' ').toLowerCase();
+
+            return haystack.indexOf(normalizedNotificationSearch) !== -1;
+        });
+
+        var notificationStatusLabels = {
+            unread: getString(strings, 'memberNotificationUnread', 'Non lu'),
+            read: getString(strings, 'memberNotificationRead', 'Lu'),
+            archived: getString(strings, 'memberNotificationArchived', 'Archivé'),
+        };
+
+        var selectedNotificationsCount = Object.keys(selectedNotificationIds).filter(function (rawId) {
+            return !!selectedNotificationIds[rawId];
+        }).length;
+
+        var allVisibleNotificationsSelected = filteredNotifications.length > 0 && filteredNotifications.every(function (notification) {
+            var notificationId = getNotificationNumericId(notification);
+            return notificationId > 0 && !!selectedNotificationIds[notificationId];
+        });
 
         var hasMemberBio = (member.descriptionShort && member.descriptionShort.trim() !== '') || (member.descriptionLong && member.descriptionLong.trim() !== '');
         var profileTitle = getString(strings, 'memberProfile', 'Profil');
@@ -6197,6 +6477,212 @@
                                     ]);
                                 }))
                                 : !newMessageOpen && h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoMessages', 'Aucun échange trouvé pour ce membre.')),
+                        ]),
+                    ]),
+                    activeTab === 'notifications' && h(Fragment, null, [
+                        h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                            h('div', { class: 'mj-regmgr-member-detail__section-header' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberNotificationsTitle', 'Notifications') + ' (' + memberNotifications.length + ')'),
+                                h('div', { class: 'mj-regmgr-member-detail__section-actions' }, [
+                                    h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--secondary' },
+                                        getString(strings, 'memberNotificationsFilteredCount', 'Affichées') + ': ' + filteredNotifications.length
+                                    ),
+                                    h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--info' },
+                                        getString(strings, 'memberNotificationsSelectedCount', 'Sélectionnées') + ': ' + selectedNotificationsCount
+                                    ),
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                        onClick: handleNotificationSelectAllVisible,
+                                        disabled: !filteredNotifications.length || allVisibleNotificationsSelected,
+                                    }, getString(strings, 'memberNotificationsSelectAll', 'Sélectionner tout')),
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                        onClick: handleNotificationClearSelection,
+                                        disabled: !selectedNotificationsCount,
+                                    }, getString(strings, 'memberNotificationsSelectNone', 'Aucun')),
+                                    onDeleteNotification && h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--ghost mj-btn--danger mj-btn--small',
+                                        onClick: handleDeleteSelectedNotifications,
+                                        disabled: !selectedNotificationsCount || notificationBulkDeleting,
+                                    }, notificationBulkDeleting
+                                        ? getString(strings, 'deleting', 'Suppression...')
+                                        : getString(strings, 'memberNotificationsDeleteSelection', 'Supprimer la sélection')),
+                                ]),
+                            ]),
+                            h('div', { class: 'mj-regmgr-member-detail__add-message' }, [
+                                h('div', { class: 'mj-regmgr-member-detail__add-message-field' }, [
+                                    h('label', { class: 'mj-regmgr-member-detail__add-message-label' }, getString(strings, 'memberNotificationsSearchLabel', 'Recherche')),
+                                    h('input', {
+                                        type: 'search',
+                                        class: 'mj-regmgr-input',
+                                        value: notificationSearch,
+                                        placeholder: getString(strings, 'memberNotificationsSearchPlaceholder', 'Rechercher une notification...'),
+                                        onInput: function (e) { setNotificationSearch(e.target.value); },
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-member-detail__add-message-field' }, [
+                                    h('label', { class: 'mj-regmgr-member-detail__add-message-label' }, getString(strings, 'memberNotificationsTypeLabel', 'Type')),
+                                    h('select', {
+                                        class: 'mj-regmgr-select',
+                                        value: notificationTypeFilter,
+                                        onChange: function (e) { setNotificationTypeFilter(e.target.value); },
+                                    }, [
+                                        h('option', { value: 'all' }, getString(strings, 'memberNotificationsAllTypes', 'Tous les types')),
+                                    ].concat(notificationTypes.map(function (entry) {
+                                        return h('option', { key: entry.value, value: entry.value }, entry.label);
+                                    }))),
+                                ]),
+                                h('div', { class: 'mj-regmgr-member-detail__add-message-field' }, [
+                                    h('label', { class: 'mj-regmgr-member-detail__add-message-label' }, getString(strings, 'memberNotificationsEmojiLabel', 'Emoji')),
+                                    h('select', {
+                                        class: 'mj-regmgr-select',
+                                        value: notificationEmojiFilter,
+                                        onChange: function (e) { setNotificationEmojiFilter(e.target.value); },
+                                    }, [
+                                        h('option', { value: 'all' }, getString(strings, 'memberNotificationsAllEmojis', 'Tous les emojis')),
+                                    ].concat(notificationEmojis.map(function (emoji) {
+                                        return h('option', { key: emoji, value: emoji }, emoji);
+                                    }))),
+                                ]),
+                                h('div', { class: 'mj-regmgr-member-detail__add-message-field' }, [
+                                    h('label', { class: 'mj-regmgr-member-detail__add-message-label' }, getString(strings, 'memberNotificationsReadFilterLabel', 'Statut')),
+                                    h('select', {
+                                        class: 'mj-regmgr-select',
+                                        value: notificationReadFilter,
+                                        onChange: function (e) { setNotificationReadFilter(e.target.value); },
+                                    }, [
+                                        h('option', { value: 'all' }, getString(strings, 'memberNotificationsAllReadStatuses', 'Tous les statuts')),
+                                        h('option', { value: 'unread' }, getString(strings, 'memberNotificationUnread', 'Non lu')),
+                                        h('option', { value: 'read' }, getString(strings, 'memberNotificationRead', 'Lu')),
+                                        h('option', { value: 'archived' }, getString(strings, 'memberNotificationArchived', 'Archivé')),
+                                    ]),
+                                ]),
+                            ]),
+                            filteredNotifications.length > 0
+                                ? h('div', {
+                                    class: 'mj-regmgr-member-detail__messages mj-regmgr-member-notifications-grid',
+                                }, filteredNotifications.map(function (notification) {
+                                    var notificationId = getNotificationNumericId(notification);
+                                    var notificationItemKey = 'notif-' + String(notification.recipientId || notification.id || notificationId);
+                                    var isEditingNotification = editingNotificationId === notificationId;
+                                    var isDeletingNotification = notificationDeletingId === notificationId;
+                                    var isSelectedNotification = !!selectedNotificationIds[notificationId];
+                                    var textValue = notification.text || notification.title || notification.excerpt || '';
+                                    var urlValue = notification.url || '';
+                                    var statusValue = (notification.status || '').toLowerCase();
+                                    var statusLabel = notificationStatusLabels[statusValue] || (notification.status || getString(strings, 'memberNotificationsStatusUnknown', 'Inconnu'));
+                                    var statusBadgeClass = 'mj-regmgr-badge--secondary';
+                                    if (statusValue === 'unread') {
+                                        statusBadgeClass = 'mj-regmgr-badge--warning';
+                                    } else if (statusValue === 'read') {
+                                        statusBadgeClass = 'mj-regmgr-badge--success';
+                                    }
+
+                                    return h('article', {
+                                        key: notificationItemKey,
+                                        class: classNames('mj-regmgr-member-message', 'mj-regmgr-member-notification-card', {
+                                            'mj-regmgr-member-notification-card--selected': isSelectedNotification,
+                                            'mj-regmgr-member-notification-card--editing': isEditingNotification,
+                                        }),
+                                    }, [
+                                        h('header', { class: 'mj-regmgr-member-message__header mj-regmgr-member-notification-card__header' }, [
+                                            isEditingNotification
+                                                ? h('div', { class: 'mj-regmgr-member-notification-card__subject-inline' }, [
+                                                    notification.emoji && h('span', { class: 'mj-regmgr-note-card__event-emoji' }, notification.emoji),
+                                                    h('input', {
+                                                        type: 'text',
+                                                        class: 'mj-regmgr-input mj-regmgr-member-notification-card__subject-input',
+                                                        value: notificationDraft.text,
+                                                        onInput: function (e) {
+                                                            setNotificationDraft(function (prev) {
+                                                                return Object.assign({}, prev, { text: e.target.value });
+                                                            });
+                                                        },
+                                                        disabled: notificationSaving,
+                                                    }),
+                                                ])
+                                                : h('h3', { class: 'mj-regmgr-member-notification-card__subject' }, [
+                                                    notification.emoji && h('span', { class: 'mj-regmgr-note-card__event-emoji' }, notification.emoji),
+                                                    h('span', { class: 'mj-regmgr-member-notification-card__subject-text' }, textValue || getString(strings, 'memberNotificationsNoText', 'Sans texte')),
+                                                ]),
+                                            h('div', { class: 'mj-regmgr-member-notification-card__meta' }, [
+                                                h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--secondary' }, notification.typeLabel || notification.type || getString(strings, 'memberNotificationsTypeUnknown', 'Autre')),
+                                                isEditingNotification
+                                                    ? h('select', {
+                                                        class: 'mj-regmgr-select mj-regmgr-select--small mj-regmgr-member-notification-card__status-select',
+                                                        value: notificationDraft.status || 'unread',
+                                                        onChange: function (e) {
+                                                            setNotificationDraft(function (prev) {
+                                                                return Object.assign({}, prev, { status: e.target.value });
+                                                            });
+                                                        },
+                                                        disabled: notificationSaving,
+                                                    }, [
+                                                        h('option', { value: 'unread' }, getString(strings, 'memberNotificationUnread', 'Non lu')),
+                                                        h('option', { value: 'read' }, getString(strings, 'memberNotificationRead', 'Lu')),
+                                                        h('option', { value: 'archived' }, getString(strings, 'memberNotificationArchived', 'Archivé')),
+                                                    ])
+                                                    : h('span', { class: 'mj-regmgr-badge ' + statusBadgeClass }, statusLabel),
+                                            ]),
+                                        ]),
+                                        h('p', { class: 'mj-regmgr-member-message__meta mj-regmgr-member-notification-card__date' }, [
+                                            notification.createdAt ? formatDate(notification.createdAt) : getString(strings, 'unknownDate', 'Date inconnue'),
+                                        ]),
+                                        h('label', {
+                                            class: 'mj-regmgr-checkbox mj-regmgr-member-notification-card__select',
+                                        }, [
+                                            h('input', {
+                                                type: 'checkbox',
+                                                checked: isSelectedNotification,
+                                                onChange: function () { handleNotificationSelectionToggle(notificationId); },
+                                            }),
+                                            h('span', null, getString(strings, 'memberNotificationsSelectItem', 'Sélectionner')),
+                                        ]),
+                                        h('div', { class: 'mj-regmgr-member-message__actions' }, [
+                                                !isEditingNotification && onUpdateNotification && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                                    onClick: function () { handleNotificationEditStart(notification); },
+                                                }, getString(strings, 'edit', 'Éditer')),
+                                                isEditingNotification && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                                    onClick: handleNotificationEditCancel,
+                                                    disabled: notificationSaving,
+                                                }, getString(strings, 'cancel', 'Annuler')),
+                                                isEditingNotification && onUpdateNotification && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--primary mj-btn--small',
+                                                    onClick: function () { handleNotificationSave(notification); },
+                                                    disabled: notificationSaving || !(notificationDraft.text || '').trim(),
+                                                }, notificationSaving ? getString(strings, 'saving', 'Enregistrement...') : getString(strings, 'save', 'Enregistrer')),
+                                                onDeleteNotification && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--ghost mj-btn--danger mj-btn--small',
+                                                    onClick: function () { handleNotificationDelete(notification); },
+                                                    disabled: isDeletingNotification || notificationBulkDeleting,
+                                                }, isDeletingNotification ? getString(strings, 'deleting', 'Suppression...') : getString(strings, 'delete', 'Supprimer')),
+                                        ]),
+                                            h('div', { class: 'mj-regmgr-member-message__content mj-regmgr-member-notification-card__content' }, [
+                                            urlValue
+                                                ? h('a', {
+                                                    href: urlValue,
+                                                    target: '_blank',
+                                                    rel: 'noopener noreferrer',
+                                                    class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                                }, getString(strings, 'memberNotificationsOpenUrl', 'Ouvrir le lien'))
+                                                : h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                                    disabled: true,
+                                                }, getString(strings, 'memberNotificationsNoUrlButton', 'Pas de lien')),
+                                        ]),
+                                    ]);
+                                }))
+                                : h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNotificationsEmpty', 'Aucune notification trouvée pour ce filtre.')),
                         ]),
                     ]),
                     activeTab === 'notes' && h(Fragment, null, [

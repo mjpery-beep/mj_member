@@ -227,6 +227,37 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
         );
 
         $this->add_control(
+            'nextcloud_button_heading',
+            array(
+                'label' => __('Bouton Accès a Nextcloud', 'mj-member'),
+                'type' => Controls_Manager::HEADING,
+                'separator' => 'before',
+            )
+        );
+
+        $this->add_control(
+            'nextcloud_button_image',
+            array(
+                'label' => __('Icône du bouton', 'mj-member'),
+                'type' => Controls_Manager::MEDIA,
+                'dynamic' => array('active' => true),
+                'description' => __('Téléversez une icône personnalisée pour le lien Accès a Nextcloud.', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
+            'nextcloud_button_url',
+            array(
+                'label' => __('Lien Accès a Nextcloud', 'mj-member'),
+                'type' => Controls_Manager::URL,
+                'placeholder' => 'https://nextcloud.example.com/',
+                'show_external' => false,
+                'dynamic' => array('active' => true),
+                'description' => __('Laissez vide pour utiliser l’URL Nextcloud configurée.', 'mj-member'),
+            )
+        );
+
+        $this->add_control(
             'event_button_url',
             array(
                 'label' => __('Lien de la page Événements', 'mj-member'),
@@ -713,7 +744,7 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
                     'rem' => array('min' => 1, 'max' => 6),
                 ),
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button, {{WRAPPER}} .mj-member-account-menu__nextcloud-button' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
                 ),
             )
         );
@@ -725,7 +756,7 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
                 'type' => Controls_Manager::DIMENSIONS,
                 'size_units' => array('px', 'em', 'rem', '%'),
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button' => 'margin: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button, {{WRAPPER}} .mj-member-account-menu__nextcloud-button' => 'margin: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
                 ),
             )
         );
@@ -741,8 +772,8 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
                     'rem' => array('min' => 0.5, 'max' => 4.5),
                 ),
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button-icon' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
-                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button-image' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button-icon, {{WRAPPER}} .mj-member-account-menu__nextcloud-button-icon' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button-image, {{WRAPPER}} .mj-member-account-menu__nextcloud-button-image' => 'width: {{SIZE}}{{UNIT}}; height: {{SIZE}}{{UNIT}};',
                 ),
             )
         );
@@ -753,7 +784,7 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
                 'label' => __('Couleur', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button' => 'color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button, {{WRAPPER}} .mj-member-account-menu__nextcloud-button' => 'color: {{VALUE}};',
                 ),
             )
         );
@@ -764,7 +795,7 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
                 'label' => __('Couleur au survol', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button:hover, {{WRAPPER}} .mj-member-account-menu__manage-events-button:focus-visible' => 'color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button:hover, {{WRAPPER}} .mj-member-account-menu__manage-events-button:focus-visible, {{WRAPPER}} .mj-member-account-menu__nextcloud-button:hover, {{WRAPPER}} .mj-member-account-menu__nextcloud-button:focus-visible' => 'color: {{VALUE}};',
                 ),
             )
         );
@@ -775,7 +806,7 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
                 'label' => __('Arrière-plan', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button' => 'background-color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button, {{WRAPPER}} .mj-member-account-menu__nextcloud-button' => 'background-color: {{VALUE}};',
                 ),
             )
         );
@@ -786,7 +817,7 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
                 'label' => __('Arrière-plan au survol', 'mj-member'),
                 'type' => Controls_Manager::COLOR,
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button:hover, {{WRAPPER}} .mj-member-account-menu__manage-events-button:focus-visible' => 'background-color: {{VALUE}};',
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button:hover, {{WRAPPER}} .mj-member-account-menu__manage-events-button:focus-visible, {{WRAPPER}} .mj-member-account-menu__nextcloud-button:hover, {{WRAPPER}} .mj-member-account-menu__nextcloud-button:focus-visible' => 'background-color: {{VALUE}};',
                 ),
             )
         );
@@ -796,7 +827,7 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
                 Group_Control_Border::get_type(),
                 array(
                     'name' => 'manage_events_button_border',
-                    'selector' => '{{WRAPPER}} .mj-member-account-menu__manage-events-button',
+                    'selector' => '{{WRAPPER}} .mj-member-account-menu__manage-events-button, {{WRAPPER}} .mj-member-account-menu__nextcloud-button',
                 )
             );
         }
@@ -808,7 +839,7 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
                 'type' => Controls_Manager::DIMENSIONS,
                 'size_units' => array('px', '%'),
                 'selectors' => array(
-                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button' => 'border-radius: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                    '{{WRAPPER}} .mj-member-account-menu__manage-events-button, {{WRAPPER}} .mj-member-account-menu__nextcloud-button' => 'border-radius: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
                 ),
             )
         );
@@ -818,7 +849,7 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
                 Group_Control_Box_Shadow::get_type(),
                 array(
                     'name' => 'manage_events_button_shadow',
-                    'selector' => '{{WRAPPER}} .mj-member-account-menu__manage-events-button',
+                    'selector' => '{{WRAPPER}} .mj-member-account-menu__manage-events-button, {{WRAPPER}} .mj-member-account-menu__nextcloud-button',
                 )
             );
         }
@@ -837,7 +868,8 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
 
         $mobile_only = !isset($settings['mobile_only']) || $settings['mobile_only'] === 'yes';
         $event_button = $this->prepare_event_button_settings($settings);
-    $manage_events_button = $this->prepare_manage_events_button_settings($settings);
+        $manage_events_button = $this->prepare_manage_events_button_settings($settings);
+        $nextcloud_button = $this->prepare_nextcloud_button_settings($settings);
 
         $base_args = array(
             'menu_id' => isset($settings['menu_id']) ? (int) $settings['menu_id'] : 0,
@@ -850,6 +882,7 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
             'show_submenus' => !isset($settings['show_submenus']) || $settings['show_submenus'] !== 'no',
             'event_button' => $event_button,
             'manage_events_button' => $manage_events_button,
+            'nextcloud_button' => $nextcloud_button,
         );
 
         if (function_exists('mj_member_render_account_menu_component')) {
@@ -952,6 +985,39 @@ class Mj_Member_Elementor_Account_Menu_Widget extends Widget_Base {
         $button_url = '';
         if (!empty($settings['manage_events_button_url']) && is_array($settings['manage_events_button_url'])) {
             $url_data = $settings['manage_events_button_url'];
+            if (!empty($url_data['url']) && is_string($url_data['url'])) {
+                $button_url = esc_url_raw($url_data['url']);
+            }
+        }
+
+        return array(
+            'icon_id' => $icon_id,
+            'icon_url' => $icon_url,
+            'url' => $button_url,
+        );
+    }
+
+    private function prepare_nextcloud_button_settings(array $settings) {
+        $icon_url = '';
+        $icon_id = 0;
+
+        if (!empty($settings['nextcloud_button_image']) && is_array($settings['nextcloud_button_image'])) {
+            $media = $settings['nextcloud_button_image'];
+            if (!empty($media['id'])) {
+                $icon_id = (int) $media['id'];
+                $icon_url = wp_get_attachment_image_url($icon_id, 'full');
+            } elseif (!empty($media['url']) && is_string($media['url'])) {
+                $icon_url = esc_url_raw($media['url']);
+            }
+        }
+
+        if (!is_string($icon_url)) {
+            $icon_url = '';
+        }
+
+        $button_url = '';
+        if (!empty($settings['nextcloud_button_url']) && is_array($settings['nextcloud_button_url'])) {
+            $url_data = $settings['nextcloud_button_url'];
             if (!empty($url_data['url']) && is_string($url_data['url'])) {
                 $button_url = esc_url_raw($url_data['url']);
             }

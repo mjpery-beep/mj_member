@@ -394,6 +394,34 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
         $settings = $this->get_settings_for_display();
         $this->apply_visibility_to_wrapper($settings, 'mj-member-events-calendar');
 
+        self::render_widget($settings);
+    }
+
+    public static function render_widget(array $settings = array(), array $options = array()) {
+        $settings = wp_parse_args($settings, self::get_default_render_settings());
+        $options = wp_parse_args(
+            $options,
+            array(
+                'additional_classes' => array(),
+                'force_mobile' => false,
+            )
+        );
+
+        $calendar_root_classes = array('mj-member-events-calendar');
+        $additional_classes = isset($options['additional_classes']) ? (array) $options['additional_classes'] : array();
+        foreach ($additional_classes as $additional_class) {
+            $additional_class = sanitize_html_class((string) $additional_class);
+            if ($additional_class === '') {
+                continue;
+            }
+
+            $calendar_root_classes[] = $additional_class;
+        }
+
+        if (!empty($options['force_mobile'])) {
+            $calendar_root_classes[] = 'mj-member-events-calendar--force-mobile';
+        }
+
         $status_filter = array();
         if (!empty($settings['statuses']) && is_array($settings['statuses'])) {
             foreach ($settings['statuses'] as $status_candidate) {
@@ -1750,7 +1778,7 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
         $preferred_attribute_value = $preferred_index >= 0 ? (string) $preferred_index : '0';
         $calendar_attributes = array(
-            'class="mj-member-events-calendar"',
+            'class="' . esc_attr(implode(' ', array_values(array_unique($calendar_root_classes)))) . '"',
             'id="' . esc_attr($instance_id) . '"',
             'data-calendar-preferred="' . esc_attr($preferred_attribute_value) . '"',
             'data-calendar-today="' . esc_attr($today_month_key) . '"',
@@ -2709,6 +2737,28 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
 
         echo '<script>window.mjMemberEventsCalendarQueue = window.mjMemberEventsCalendarQueue || [];window.mjMemberEventsCalendarQueue.push({id:' . wp_json_encode($instance_id) . ',config:' . wp_json_encode($instance_config) . '});</script>';
+    }
+
+    private static function get_default_render_settings() {
+        return array(
+            'title' => __('Calendrier des événements', 'mj-member'),
+            'statuses' => array(MjEvents::STATUS_ACTIVE),
+            'types' => array(),
+            'months_before' => 0,
+            'months_after' => 3,
+            'highlight_next_event' => 'yes',
+            'highlight_closure_days' => '',
+            'hide_closure_occurrences' => 'yes',
+            'show_toolbar_left' => 'yes',
+            'show_toolbar_actions' => 'yes',
+            'current_week_only' => '',
+            'week_display_mode' => 'current',
+            'week_custom_reference' => '',
+            'week_show_weekend' => 'yes',
+            'empty_message' => __('Aucun événement à afficher pour le moment.', 'mj-member'),
+            'show_leave_requests' => 'yes',
+            'show_todos' => 'yes',
+        );
     }
 
     /**

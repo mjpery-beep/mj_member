@@ -1,5 +1,6 @@
 <?php
 
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\AssetsManager;
 
 if (!defined('ABSPATH')) {
@@ -17,7 +18,8 @@ $placeholder_result = isset($template_data['result_image']) ? esc_url($template_
 $feature_enabled = function_exists('mj_member_photo_grimlins_is_enabled') ? mj_member_photo_grimlins_is_enabled() : false;
 $members_only = !empty($template_data['members_only']);
 $can_apply_avatar = false;
-$show_history = $members_only && !$is_preview && is_user_logged_in();
+$can_delete_avatar = false;
+$show_history = false;
 $cta_register_enabled = !empty($template_data['cta_register_enabled']);
 $cta_register_label = isset($template_data['cta_register_label']) ? (string) $template_data['cta_register_label'] : __('Utiliser cet avatar pour devenir membre', 'mj-member');
 $cta_register_url = isset($template_data['cta_register_url']) ? (string) $template_data['cta_register_url'] : '/mon-compte/inscription';
@@ -25,14 +27,102 @@ $cta_register_url = isset($template_data['cta_register_url']) ? (string) $templa
 $access_scope = $members_only ? 'members' : 'public';
 $access_nonce = wp_create_nonce('mj_member_photo_grimlins_scope_' . $access_scope);
 
-if ($members_only && !$is_preview && is_user_logged_in() && function_exists('mj_member_get_current_member')) {
+if (!$is_preview && is_user_logged_in() && function_exists('mj_member_get_current_member')) {
     $member_candidate = mj_member_get_current_member();
     $can_apply_avatar = $member_candidate && !empty($member_candidate->id);
+    if ($can_apply_avatar) {
+        $candidate_role = isset($member_candidate->role) ? (string) $member_candidate->role : '';
+        $can_delete_avatar = MjRoles::isAnimateurOrCoordinateur($candidate_role);
+        $show_history = true;
+    }
 }
 
 if ($members_only && !is_user_logged_in() && !$is_preview) {
     echo '<div class="mj-member-account-warning" role="alert">' . esc_html__('Cette fonctionnalité est réservée aux membres connectés.', 'mj-member') . '</div>';
     return;
+}
+
+$fullscreen_dblclick = !array_key_exists('fullscreen_dblclick', $template_data) || !empty($template_data['fullscreen_dblclick']);
+
+$show_avatar_tabs = false;
+$allow_young_search = false;
+$avatar_tabs = array();
+if ($members_only && !$is_preview && is_user_logged_in() && function_exists('mj_member_get_current_member') && function_exists('mj_member_get_guardian_children')) {
+    $tabs_member = mj_member_get_current_member();
+    if ($tabs_member && !empty($tabs_member->id)) {
+        $tabs_role = isset($tabs_member->role) ? (string) $tabs_member->role : '';
+        $is_staff_tabs_role = MjRoles::isAnimateurOrCoordinateur($tabs_role);
+        $is_tabs_role = MjRoles::isTuteur($tabs_role) || $is_staff_tabs_role;
+        $allow_young_search = $is_staff_tabs_role;
+
+        if ($is_tabs_role) {
+            $self_photo_id = max((int) ($tabs_member->photo_id ?? 0), (int) ($tabs_member->avatar_id ?? 0));
+            $self_photo_url = '';
+            if ($self_photo_id > 0) {
+                $self_photo_url = wp_get_attachment_image_url($self_photo_id, 'thumbnail');
+                if (!$self_photo_url) {
+                    $self_photo_url = wp_get_attachment_url($self_photo_id);
+                }
+            }
+            if ($self_photo_url === '' && !empty($tabs_member->email)) {
+                $self_photo_url = (string) get_avatar_url((string) $tabs_member->email, array('size' => 64));
+            }
+            $self_initials = strtoupper(substr((string) ($tabs_member->first_name ?? ''), 0, 1));
+            if ($self_initials === '') {
+                $self_initials = 'M';
+            }
+
+            $avatar_tabs[] = array(
+                'member_id' => 0,
+                'label' => __('Mon avatar', 'mj-member'),
+                'photo_url' => is_string($self_photo_url) ? $self_photo_url : '',
+                'initials' => $self_initials,
+            );
+
+            $tabs_children = mj_member_get_guardian_children($tabs_member);
+            if (!empty($tabs_children) && is_array($tabs_children)) {
+                foreach ($tabs_children as $tabs_child) {
+                    if (!$tabs_child || !is_object($tabs_child) || empty($tabs_child->id)) {
+                        continue;
+                    }
+
+                    $tabs_child_name = trim(sprintf('%s %s', (string) ($tabs_child->first_name ?? ''), (string) ($tabs_child->last_name ?? '')));
+                    if ($tabs_child_name === '') {
+                        $tabs_child_name = sprintf(__('Enfant #%d', 'mj-member'), (int) $tabs_child->id);
+                    }
+
+                    $tabs_child_photo_id = max((int) ($tabs_child->photo_id ?? 0), (int) ($tabs_child->avatar_id ?? 0));
+                    $tabs_child_photo_url = '';
+                    if ($tabs_child_photo_id > 0) {
+                        $tabs_child_photo_url = wp_get_attachment_image_url($tabs_child_photo_id, 'thumbnail');
+                        if (!$tabs_child_photo_url) {
+                            $tabs_child_photo_url = wp_get_attachment_url($tabs_child_photo_id);
+                        }
+                    }
+                    if ($tabs_child_photo_url === '' && !empty($tabs_child->email)) {
+                        $tabs_child_photo_url = (string) get_avatar_url((string) $tabs_child->email, array('size' => 64));
+                    }
+
+                    $tabs_initials = strtoupper(substr((string) ($tabs_child->first_name ?? ''), 0, 1));
+                    if ($tabs_initials === '') {
+                        $tabs_initials = strtoupper(substr((string) ($tabs_child->last_name ?? ''), 0, 1));
+                    }
+                    if ($tabs_initials === '') {
+                        $tabs_initials = 'J';
+                    }
+
+                    $avatar_tabs[] = array(
+                        'member_id' => (int) $tabs_child->id,
+                        'label' => $tabs_child_name,
+                        'photo_url' => is_string($tabs_child_photo_url) ? $tabs_child_photo_url : '',
+                        'initials' => $tabs_initials,
+                    );
+                }
+            }
+
+            $show_avatar_tabs = (count($avatar_tabs) >= 2) || $allow_young_search;
+        }
+    }
 }
 
 $config = array(
@@ -41,8 +131,11 @@ $config = array(
     'accessScope' => $access_scope,
     'accessNonce' => $access_nonce,
     'canApplyAvatar' => $can_apply_avatar,
+    'canDeleteAvatar' => $can_delete_avatar,
     'ctaRegister' => $cta_register_enabled,
     'ctaRegisterUrl' => $cta_register_url,
+    'fullscreenDblClick' => $fullscreen_dblclick,
+    'canSearchYoung' => $allow_young_search,
 );
 
 $config_json = wp_json_encode($config);
@@ -106,6 +199,58 @@ if ($fullscreen) {
             <p class="mj-photo-grimlins__description"><?php echo esc_html($description); ?></p>
         <?php endif; ?>
     </header>
+
+    <?php if ($show_avatar_tabs) : ?>
+        <nav class="mj-photo-grimlins-tabs" role="tablist" aria-label="<?php esc_attr_e('Choisir la personne', 'mj-member'); ?>">
+            <?php foreach ($avatar_tabs as $tab_index => $avatar_tab) : ?>
+                <button
+                    type="button"
+                    class="mj-photo-grimlins-tabs__btn<?php echo $tab_index === 0 ? ' mj-photo-grimlins-tabs__btn--active' : ''; ?>"
+                    role="tab"
+                    aria-selected="<?php echo $tab_index === 0 ? 'true' : 'false'; ?>"
+                    data-mj-pg-tab-btn
+                    data-mj-pg-target-member="<?php echo esc_attr((string) $avatar_tab['member_id']); ?>"
+                    data-mj-pg-member-label="<?php echo esc_attr((string) $avatar_tab['label']); ?>"
+                    <?php if ($tab_index > 0) : ?>tabindex="-1"<?php endif; ?>
+                >
+                    <span class="mj-photo-grimlins-tabs__avatar" aria-hidden="true">
+                        <?php if (!empty($avatar_tab['photo_url'])) : ?>
+                            <img src="<?php echo esc_url((string) $avatar_tab['photo_url']); ?>" alt="" loading="lazy" />
+                        <?php else : ?>
+                            <span class="mj-photo-grimlins-tabs__avatar-fallback"><?php echo esc_html((string) ($avatar_tab['initials'] ?? 'M')); ?></span>
+                        <?php endif; ?>
+                    </span>
+                    <?php echo esc_html((string) $avatar_tab['label']); ?>
+                </button>
+            <?php endforeach; ?>
+            <?php if ($allow_young_search) : ?>
+                <button
+                    type="button"
+                    class="mj-photo-grimlins-tabs__search-btn"
+                    data-photo-grimlins="open-young-search"
+                >
+                    <?php esc_html_e('Chercher un jeune +', 'mj-member'); ?>
+                </button>
+            <?php endif; ?>
+        </nav>
+
+        <?php if ($allow_young_search) : ?>
+            <div class="mj-photo-grimlins-young-search" data-photo-grimlins="young-search-modal" role="dialog" aria-modal="true" aria-labelledby="<?php echo esc_attr($component_id); ?>-young-search-title" hidden>
+                <div class="mj-photo-grimlins-young-search__content" role="document">
+                    <header class="mj-photo-grimlins-young-search__header">
+                        <h3 id="<?php echo esc_attr($component_id); ?>-young-search-title" class="mj-photo-grimlins-young-search__title"><?php esc_html_e('Chercher un jeune', 'mj-member'); ?></h3>
+                        <button type="button" class="mj-photo-grimlins-young-search__close" data-photo-grimlins="close-young-search" aria-label="<?php esc_attr_e('Fermer', 'mj-member'); ?>">&times;</button>
+                    </header>
+                    <form class="mj-photo-grimlins-young-search__form" data-photo-grimlins="young-search-form">
+                        <input type="search" data-photo-grimlins="young-search-input" placeholder="<?php esc_attr_e('Nom, prénom ou email du jeune', 'mj-member'); ?>" autocomplete="off" />
+                        <button type="submit" data-photo-grimlins="young-search-submit"><?php esc_html_e('Rechercher', 'mj-member'); ?></button>
+                    </form>
+                    <p class="mj-photo-grimlins-young-search__status" data-photo-grimlins="young-search-status" aria-live="polite"></p>
+                    <div class="mj-photo-grimlins-young-search__results" data-photo-grimlins="young-search-results" role="list"></div>
+                </div>
+            </div>
+        <?php endif; ?>
+    <?php endif; ?>
 
     <?php if (!$feature_enabled && !$is_preview) : ?>
         <div class="mj-member-account-warning" role="alert">
@@ -181,7 +326,7 @@ if ($fullscreen) {
     <?php if ($show_history) : ?>
         <section class="mj-photo-grimlins__history" data-photo-grimlins="history">
             <header class="mj-photo-grimlins__history-header">
-                <h3 class="mj-photo-grimlins__history-title">
+                <h3 class="mj-photo-grimlins__history-title" data-photo-grimlins="history-title" data-history-title-default="<?php esc_attr_e('Mes avatars Grimlins', 'mj-member'); ?>">
                     <?php esc_html_e('Mes avatars Grimlins', 'mj-member'); ?>
                 </h3>
                 <p class="mj-photo-grimlins__history-limit" data-photo-grimlins="history-limit" hidden></p>

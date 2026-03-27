@@ -1488,6 +1488,37 @@ button.mj-member-events-calendar__day-add {
     color: #ffffff;
 }
 
+.mj-member-events-calendar--force-mobile {
+    gap: 12px;
+}
+
+.mj-member-events-calendar--force-mobile .mj-member-events-calendar__grid-wrapper {
+    display: none;
+}
+
+.mj-member-events-calendar--force-mobile .mj-cal-mobile {
+    display: block;
+}
+
+.mj-member-events-calendar--force-mobile .mj-member-events-calendar__toolbar {
+    border-radius: 12px;
+}
+
+.mj-member-events-calendar--force-mobile .mj-member-events-calendar__toolbar-left {
+    padding: 8px 10px;
+    gap: 6px;
+}
+
+.mj-member-events-calendar--force-mobile .mj-member-events-calendar__month-chip {
+    font-size: 0.88rem;
+    padding: 0 6px;
+}
+
+.mj-member-events-calendar--force-mobile button.mj-member-events-calendar__nav-button {
+    width: 30px;
+    height: 30px;
+}
+
 @keyframes mjCalModalFadeIn {
     from { opacity: 0; }
     to { opacity: 1; }

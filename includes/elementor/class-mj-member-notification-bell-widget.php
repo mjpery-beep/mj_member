@@ -31,7 +31,7 @@ class Mj_Member_Elementor_Notification_Bell_Widget extends Widget_Base {
     }
 
     public function get_icon() {
-        return 'eicon-bell';
+        return 'eicon-notification';
     }
 
     public function get_categories() {

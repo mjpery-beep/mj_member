@@ -1,6 +1,9 @@
 ﻿<?php
 
+use Mj\Member\Classes\MjBackupProfile;
 use Mj\Member\Classes\MjDatabaseBackup;
+use Mj\Member\Classes\MjManualActionLog;
+use Mj\Member\Classes\MjMediaBackup;
 use Mj\Member\Core\Config;
 
 require_once __DIR__ . '/settings/editor-tools.php';
@@ -17,8 +20,158 @@ function mj_settings_page() {
         mj_member_account_menu_icon_enqueue_assets();
     }
 
+    // -----------------------------------------------------------------------
+    // Handle backup profile CRUD and media backup actions (separate forms)
+    // -----------------------------------------------------------------------
+    $backup_notices = array();
+
+    $is_main_settings_submit = isset($_POST['mj_save_settings']) || isset($_POST['mj_events_google_sync_regenerate']) || isset($_POST['mj_events_google_sync_force']) || isset($_POST['mj_backup_run_now']);
+
+    if (!$is_main_settings_submit && isset($_POST['mj_backup_profile_action']) && current_user_can('manage_options')) {
+        $bpa = sanitize_key(wp_unslash($_POST['mj_backup_profile_action']));
+
+        if ($bpa === 'add' && check_admin_referer('mj_backup_profile_add')) {
+            $raw_tables_add = isset($_POST['mj_bp_tables']) && is_array($_POST['mj_bp_tables'])
+                ? array_map('sanitize_text_field', array_map('wp_unslash', $_POST['mj_bp_tables']))
+                : [];
+            $bp_filter_add  = !empty($raw_tables_add) ? implode(',', $raw_tables_add) : 'all';
+            $newProfile = MjBackupProfile::make([
+                'name'         => sanitize_text_field(wp_unslash($_POST['mj_bp_name'] ?? '')),
+                'table_filter' => $bp_filter_add,
+                'frequency'    => sanitize_key(wp_unslash($_POST['mj_bp_frequency'] ?? 'daily')),
+                'daily_hour'   => isset($_POST['mj_bp_daily_hour']) ? (int) $_POST['mj_bp_daily_hour'] : 4,
+                'twicedaily_second_hour' => isset($_POST['mj_bp_twicedaily_second_hour']) ? (int) $_POST['mj_bp_twicedaily_second_hour'] : 18,
+                'weekly_day'   => isset($_POST['mj_bp_weekly_day']) ? (int) $_POST['mj_bp_weekly_day'] : 4,
+                'weekly_hour'  => isset($_POST['mj_bp_weekly_hour']) ? (int) $_POST['mj_bp_weekly_hour'] : 4,
+                'retention'    => (int) ($_POST['mj_bp_retention'] ?? 7),
+                'folder'       => sanitize_text_field(wp_unslash($_POST['mj_bp_folder'] ?? 'backups/database')),
+                'enabled'      => isset($_POST['mj_bp_enabled']),
+            ]);
+            $profiles   = MjBackupProfile::getAll();
+            $profiles[] = $newProfile;
+            MjBackupProfile::saveAll($profiles);
+            $backup_notices[] = array('type' => 'success', 'message' => '✅ Profil de sauvegarde ajouté.');
+
+        } elseif ($bpa === 'update') {
+            $pid = sanitize_text_field(wp_unslash($_POST['mj_bp_id'] ?? ''));
+            if ($pid !== '' && check_admin_referer('mj_backup_profile_update_' . $pid)) {
+                $profiles = MjBackupProfile::getAll();
+                foreach ($profiles as &$p) {
+                    if ($p->id !== $pid) {
+                        continue;
+                    }
+                    $p->name            = sanitize_text_field(wp_unslash($_POST['mj_bp_name'] ?? $p->name));
+                    $raw_tables_upd     = isset($_POST['mj_bp_tables']) && is_array($_POST['mj_bp_tables'])
+                        ? array_map('sanitize_text_field', array_map('wp_unslash', $_POST['mj_bp_tables']))
+                        : null;
+                    if ($raw_tables_upd !== null) {
+                        $p->tableFilter = !empty($raw_tables_upd) ? implode(',', $raw_tables_upd) : 'all';
+                    }
+                    $freq           = sanitize_key(wp_unslash($_POST['mj_bp_frequency'] ?? $p->frequency));
+                    $p->frequency   = in_array($freq, ['daily', 'twicedaily', 'weekly'], true) ? $freq : $p->frequency;
+                    $p->dailyHour   = isset($_POST['mj_bp_daily_hour']) ? min(23, max(0, (int) $_POST['mj_bp_daily_hour'])) : $p->dailyHour;
+                    $p->twiceDailySecondHour = isset($_POST['mj_bp_twicedaily_second_hour'])
+                        ? min(23, max(0, (int) $_POST['mj_bp_twicedaily_second_hour']))
+                        : $p->twiceDailySecondHour;
+                    $p->weeklyDay   = isset($_POST['mj_bp_weekly_day']) ? min(6, max(0, (int) $_POST['mj_bp_weekly_day'])) : $p->weeklyDay;
+                    $p->weeklyHour  = isset($_POST['mj_bp_weekly_hour']) ? min(23, max(0, (int) $_POST['mj_bp_weekly_hour'])) : $p->weeklyHour;
+                    $p->retention   = max(1, (int) ($_POST['mj_bp_retention'] ?? $p->retention));
+                    $folder         = trim(sanitize_text_field(wp_unslash($_POST['mj_bp_folder'] ?? $p->folder)), '/');
+                    $p->folder      = $folder !== '' ? $folder : $p->folder;
+                    $p->enabled     = isset($_POST['mj_bp_enabled']);
+                    break;
+                }
+                unset($p);
+                MjBackupProfile::saveAll($profiles);
+                $backup_notices[] = array('type' => 'success', 'message' => '✅ Profil mis à jour.');
+            }
+
+        } elseif ($bpa === 'delete') {
+            $pid = sanitize_text_field(wp_unslash($_POST['mj_bp_id'] ?? ''));
+            if ($pid !== '' && check_admin_referer('mj_backup_profile_delete_' . $pid)) {
+                wp_clear_scheduled_hook('mj_backup_run_profile', array($pid));
+                $profiles = array_values(array_filter(MjBackupProfile::getAll(), fn($p) => $p->id !== $pid));
+                MjBackupProfile::saveAll($profiles);
+                $backup_notices[] = array('type' => 'success', 'message' => '✅ Profil supprimé.');
+            }
+
+        } elseif ($bpa === 'run') {
+            $pid = sanitize_text_field(wp_unslash($_POST['mj_bp_id'] ?? ''));
+            if ($pid !== '' && check_admin_referer('mj_backup_profile_run_' . $pid)) {
+                $profile = MjBackupProfile::getById($pid);
+                if ($profile && class_exists(MjDatabaseBackup::class)) {
+                    $result = MjDatabaseBackup::runProfile($profile);
+                    if (is_wp_error($result)) {
+                        if (class_exists(MjManualActionLog::class)) {
+                            MjManualActionLog::add(
+                                'db_backup_profile',
+                                false,
+                                $result->get_error_message(),
+                                array('profile_id' => $pid, 'profile_name' => $profile->name)
+                            );
+                        }
+                        $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($result->get_error_message()));
+                    } else {
+                        $st = $profile->getLastStatus();
+                        if (class_exists(MjManualActionLog::class)) {
+                            MjManualActionLog::add(
+                                'db_backup_profile',
+                                true,
+                                (string) ($st['filename'] ?? 'Sauvegarde exécutée'),
+                                array('profile_id' => $pid, 'profile_name' => $profile->name)
+                            );
+                        }
+                        $backup_notices[] = array('type' => 'success', 'message' => '✅ Sauvegarde exécutée : ' . esc_html($st['filename'] ?? ''));
+                    }
+                }
+            }
+
+        } elseif ($bpa === 'run_media') {
+            if (check_admin_referer('mj_backup_media_run') && class_exists(MjMediaBackup::class)) {
+                $result = MjMediaBackup::run();
+                if (is_wp_error($result)) {
+                    if (class_exists(MjManualActionLog::class)) {
+                        MjManualActionLog::add('media_sync', false, $result->get_error_message());
+                    }
+                    $backup_notices[] = array('type' => 'error', 'message' => '❌ ' . esc_html($result->get_error_message()));
+                } else {
+                    $st = MjMediaBackup::getLastStatus();
+                    if (class_exists(MjManualActionLog::class)) {
+                        MjManualActionLog::add('media_sync', true, (string) ($st['message'] ?? 'OK'));
+                    }
+                    $backup_notices[] = array('type' => 'success', 'message' => '✅ Synchronisation médias : ' . esc_html($st['message'] ?? 'OK'));
+                }
+            }
+
+        } elseif ($bpa === 'clear_media_cache') {
+            if (check_admin_referer('mj_backup_media_clear_cache') && class_exists(MjMediaBackup::class)) {
+                MjMediaBackup::clearCache();
+                $backup_notices[] = array('type' => 'success', 'message' => '✅ Cache médias vidé — la prochaine synchro renverra tous les fichiers.');
+            }
+        } elseif ($bpa === 'clear_manual_logs') {
+            if (check_admin_referer('mj_manual_action_logs_clear') && class_exists(MjManualActionLog::class)) {
+                MjManualActionLog::clear();
+                $backup_notices[] = array('type' => 'success', 'message' => '✅ Journal des actions de sauvegarde vidé.');
+            }
+        }
+    }
+
     // Handle save
-    if ((isset($_POST['mj_save_settings']) || isset($_POST['mj_events_google_sync_regenerate']) || isset($_POST['mj_events_google_sync_force']) || isset($_POST['mj_backup_run_now'])) && check_admin_referer('mj_settings_nonce')) {
+    $main_settings_nonce_valid = true;
+
+    if ($is_main_settings_submit) {
+        $submitted_nonce = isset($_POST['mj_settings_nonce_token']) ? sanitize_text_field(wp_unslash($_POST['mj_settings_nonce_token'])) : '';
+        if ($submitted_nonce === '') {
+            // Backward compatibility in case an old cached page still posts _wpnonce.
+            $submitted_nonce = isset($_POST['_wpnonce']) ? sanitize_text_field(wp_unslash($_POST['_wpnonce'])) : '';
+        }
+        $main_settings_nonce_valid = ($submitted_nonce !== '') && wp_verify_nonce($submitted_nonce, 'mj_settings_nonce');
+        if (!$main_settings_nonce_valid) {
+            $backup_notices[] = array('type' => 'error', 'message' => '❌ Vérification de sécurité expirée. Rechargez la page de configuration puis réessayez.');
+        }
+    }
+
+    if ($is_main_settings_submit && $main_settings_nonce_valid) {
         $notices = array();
         $notify_email = isset($_POST['mj_notify_email']) ? sanitize_email($_POST['mj_notify_email']) : '';
         $smtp = array(
@@ -193,6 +346,37 @@ function mj_settings_page() {
         update_option('mj_backup_retention', $backup_retention);
         update_option('mj_backup_nextcloud_folder', $backup_folder);
 
+        // --- Media backup settings ---
+        $media_backup_enabled = isset($_POST['mj_media_backup_enabled']) ? '1' : '0';
+        $media_backup_freq_raw = isset($_POST['mj_media_backup_frequency'])
+            ? sanitize_key(wp_unslash($_POST['mj_media_backup_frequency']))
+            : 'daily';
+        $media_backup_frequency = in_array($media_backup_freq_raw, ['daily', 'twicedaily', 'weekly'], true)
+            ? $media_backup_freq_raw
+            : 'daily';
+        $media_backup_folder = isset($_POST['mj_media_backup_folder'])
+            ? trim(sanitize_text_field(wp_unslash($_POST['mj_media_backup_folder'])), "/\\ \t\n\r\0\x0B")
+            : 'backups/uploads';
+        if ($media_backup_folder === '') {
+            $media_backup_folder = 'backups/uploads';
+        }
+        $media_backup_rclone_binary = isset($_POST['mj_media_backup_rclone_binary'])
+            ? sanitize_text_field(wp_unslash($_POST['mj_media_backup_rclone_binary']))
+            : '';
+        $media_backup_max_runtime_seconds = isset($_POST['mj_media_backup_max_runtime_seconds'])
+            ? min(120, max(5, (int) $_POST['mj_media_backup_max_runtime_seconds']))
+            : 20;
+        $media_backup_pause_ms = isset($_POST['mj_media_backup_pause_ms'])
+            ? min(2000, max(0, (int) $_POST['mj_media_backup_pause_ms']))
+            : 120;
+
+        update_option('mj_media_backup_enabled', $media_backup_enabled);
+        update_option('mj_media_backup_frequency', $media_backup_frequency);
+        update_option('mj_media_backup_folder', $media_backup_folder);
+        update_option('mj_media_backup_rclone_binary', $media_backup_rclone_binary);
+        update_option('mj_media_backup_max_runtime_seconds', $media_backup_max_runtime_seconds);
+        update_option('mj_media_backup_pause_ms', $media_backup_pause_ms);
+
         $google_sync_enabled = isset($_POST['mj_events_google_sync_enabled']) ? '1' : '0';
         update_option('mj_events_google_sync_enabled', $google_sync_enabled);
 
@@ -346,11 +530,17 @@ function mj_settings_page() {
 
         if (isset($_POST['mj_backup_run_now'])) {
             if (!class_exists(MjDatabaseBackup::class)) {
+                if (class_exists(MjManualActionLog::class)) {
+                    MjManualActionLog::add('db_backup_default', false, 'Module de sauvegarde introuvable.');
+                }
                 $notices[] = array('type' => 'error', 'message' => '❌ Module de sauvegarde introuvable.');
             } else {
                 $backup_result = MjDatabaseBackup::run();
 
                 if (is_wp_error($backup_result)) {
+                    if (class_exists(MjManualActionLog::class)) {
+                        MjManualActionLog::add('db_backup_default', false, $backup_result->get_error_message());
+                    }
                     $notices[] = array('type' => 'error', 'message' => '❌ Sauvegarde impossible : ' . esc_html($backup_result->get_error_message()));
                 } else {
                     $backup_status = MjDatabaseBackup::getLastStatus();
@@ -358,6 +548,9 @@ function mj_settings_page() {
                     $success_message = '✅ Sauvegarde exécutée avec succès.';
                     if ($backup_filename !== '') {
                         $success_message = sprintf('✅ Sauvegarde exécutée avec succès : %s', $backup_filename);
+                    }
+                    if (class_exists(MjManualActionLog::class)) {
+                        MjManualActionLog::add('db_backup_default', true, $backup_filename !== '' ? $backup_filename : 'Sauvegarde exécutée');
                     }
                     $notices[] = array('type' => 'success', 'message' => $success_message);
                 }
@@ -369,6 +562,9 @@ function mj_settings_page() {
             $access_token_option = get_option('mj_events_google_access_token', '');
 
             if ($calendar_id_option === '' || $access_token_option === '') {
+                if (class_exists(MjManualActionLog::class)) {
+                    MjManualActionLog::add('google_sync', false, 'Configuration incomplète (ID calendrier ou jeton manquant).');
+                }
                 $notices[] = array('type' => 'error', 'message' => '⚠️ Renseignez l’ID du calendrier et le jeton d’accès avant de lancer la synchronisation.');
             } else {
                 $sync_args = array(
@@ -377,8 +573,18 @@ function mj_settings_page() {
                 $sync_result = MjEventGoogleCalendar::sync_with_google_calendar($calendar_id_option, $access_token_option, $sync_args);
 
                 if (is_wp_error($sync_result)) {
+                    if (class_exists(MjManualActionLog::class)) {
+                        MjManualActionLog::add('google_sync', false, $sync_result->get_error_message());
+                    }
                     $notices[] = array('type' => 'error', 'message' => '❌ Synchronisation Google : ' . esc_html($sync_result->get_error_message()));
                 } else {
+                    if (class_exists(MjManualActionLog::class)) {
+                        MjManualActionLog::add(
+                            'google_sync',
+                            true,
+                            sprintf('Synced=%d, skipped=%d', (int) $sync_result['synced'], (int) $sync_result['skipped'])
+                        );
+                    }
                     $notices[] = array('type' => 'success', 'message' => sprintf('✅ Synchronisation Google effectuée — %d envoyés, %d ignorés.', (int) $sync_result['synced'], (int) $sync_result['skipped']));
                     if (!empty($sync_result['errors'])) {
                         $notices[] = array('type' => 'warning', 'message' => '⚠️ Détails : ' . esc_html(implode(' | ', array_map('wp_strip_all_tags', $sync_result['errors']))));
@@ -566,6 +772,27 @@ function mj_settings_page() {
         $nc_missing_fields[] = __('Mot de passe d\'application', 'mj-member');
     }
 
+    // DB backup profiles
+    $backup_profiles   = class_exists(MjBackupProfile::class) ? MjBackupProfile::getAll() : array();
+    $backup_all_tables = class_exists(MjDatabaseBackup::class) ? MjDatabaseBackup::getAllTables() : array();
+    $backup_mj_tables  = class_exists(MjDatabaseBackup::class) ? MjDatabaseBackup::getMjTables() : array();
+
+    // Media backup settings
+    $media_backup_enabled_option  = get_option('mj_media_backup_enabled', '0') === '1';
+    $media_backup_frequency_opt   = get_option('mj_media_backup_frequency', 'daily');
+    if (!in_array($media_backup_frequency_opt, array('daily', 'twicedaily', 'weekly'), true)) {
+        $media_backup_frequency_opt = 'daily';
+    }
+    $media_backup_folder_opt         = class_exists(MjMediaBackup::class) ? MjMediaBackup::getRemoteFolder() : 'backups/uploads';
+    $media_backup_rclone_binary_opt  = class_exists(MjMediaBackup::class) ? MjMediaBackup::getRcloneBinary() : '';
+    $media_backup_max_runtime_seconds_opt = class_exists(MjMediaBackup::class) ? MjMediaBackup::getMaxRuntimeSeconds() : 20;
+    $media_backup_pause_ms_opt       = class_exists(MjMediaBackup::class) ? MjMediaBackup::getPauseMs() : 120;
+    $media_backup_last_status        = class_exists(MjMediaBackup::class) ? MjMediaBackup::getLastStatus() : array();
+    $media_backup_last_run           = class_exists(MjMediaBackup::class) ? MjMediaBackup::getLastRun() : 0;
+    $media_backup_last_run_display   = $media_backup_last_run > 0 ? wp_date('d/m/Y H:i:s', $media_backup_last_run) : 'Jamais';
+    $media_backup_mode               = (class_exists(MjMediaBackup::class) && MjMediaBackup::isRcloneMode()) ? 'rclone' : 'webdav';
+
+    // Legacy single-profile vars (kept for backward compat – no longer displayed in new UI)
     $backup_enabled_option = get_option('mj_backup_enabled', '0') === '1';
     $backup_frequency_option = get_option('mj_backup_frequency', 'daily');
     if (!in_array($backup_frequency_option, array('daily', 'twicedaily', 'weekly'), true)) {
@@ -585,6 +812,7 @@ function mj_settings_page() {
     $backup_last_message = isset($backup_last_status['message']) ? (string) $backup_last_status['message'] : 'Aucune exécution enregistrée.';
     $backup_last_success = !empty($backup_last_status['success']);
     $backup_table_count = class_exists(MjDatabaseBackup::class) ? count(MjDatabaseBackup::getMjTables()) : 0;
+    $manual_action_logs = class_exists(MjManualActionLog::class) ? MjManualActionLog::getAll(50) : array();
 
     $google_sync_enabled_flag = get_option('mj_events_google_sync_enabled', '0') === '1';
     $google_sync_token_display = '';
@@ -711,4 +939,167 @@ function mj_settings_page() {
     echo '</p></div>';
     echo '</div>';
 }
+
+/**
+ * AJAX: launch manual backup/sync actions from settings page and return step logs.
+ */
+function mj_member_ajax_run_manual_backup_action(): void
+{
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
+    }
+
+    check_ajax_referer('mj_member_backup_manual_ajax', 'nonce');
+
+    $runType = isset($_POST['runType']) ? sanitize_key(wp_unslash($_POST['runType'])) : '';
+    $steps = array();
+    $progress = static function (string $message) use (&$steps): void {
+        $steps[] = sanitize_text_field($message);
+    };
+
+    if ($runType === 'db_profile') {
+        $profileId = isset($_POST['profileId']) ? sanitize_text_field(wp_unslash($_POST['profileId'])) : '';
+        if ($profileId === '') {
+            wp_send_json_error(array('message' => 'Profil de sauvegarde manquant.'));
+        }
+
+        if (!class_exists(MjDatabaseBackup::class)) {
+            wp_send_json_error(array('message' => 'Module de sauvegarde indisponible.', 'steps' => $steps));
+        }
+
+        $profile = class_exists(MjBackupProfile::class) ? MjBackupProfile::getById($profileId) : null;
+        if (!$profile) {
+            wp_send_json_error(array('message' => 'Profil introuvable.', 'steps' => $steps));
+        }
+
+        $progress(sprintf('Démarrage du profil "%s"...', (string) $profile->name));
+        $tables = $profile->getTableList();
+        $result = MjDatabaseBackup::run(
+            !empty($tables) ? $tables : null,
+            $profile->folder,
+            $profile->retention,
+            fn(bool $ok, string $fn, string $msg) => $profile->saveStatus($ok, $fn, $msg),
+            $progress
+        );
+
+        if (is_wp_error($result)) {
+            if (class_exists(MjManualActionLog::class)) {
+                MjManualActionLog::add(
+                    'db_backup_profile',
+                    false,
+                    $result->get_error_message(),
+                    array('profile_id' => $profileId, 'profile_name' => $profile->name)
+                );
+            }
+
+            wp_send_json_error(array(
+                'message' => $result->get_error_message(),
+                'steps' => $steps,
+            ));
+        }
+
+        $st = $profile->getLastStatus();
+        $filename = isset($st['filename']) ? (string) $st['filename'] : '';
+
+        if (class_exists(MjManualActionLog::class)) {
+            MjManualActionLog::add(
+                'db_backup_profile',
+                true,
+                $filename !== '' ? $filename : 'Sauvegarde exécutée',
+                array('profile_id' => $profileId, 'profile_name' => $profile->name)
+            );
+        }
+
+        wp_send_json_success(array(
+            'message' => $filename !== '' ? ('Sauvegarde exécutée : ' . $filename) : 'Sauvegarde exécutée avec succès.',
+            'steps' => $steps,
+        ));
+    }
+
+    if ($runType === 'media_sync') {
+        if (!class_exists(MjMediaBackup::class)) {
+            wp_send_json_error(array('message' => 'Module de sauvegarde médias indisponible.', 'steps' => $steps));
+        }
+
+        $progress('Démarrage de la synchronisation des médias...');
+        $result = MjMediaBackup::run($progress);
+
+        if (is_wp_error($result)) {
+            if (class_exists(MjManualActionLog::class)) {
+                MjManualActionLog::add('media_sync', false, $result->get_error_message());
+            }
+
+            wp_send_json_error(array(
+                'message' => $result->get_error_message(),
+                'steps' => $steps,
+            ));
+        }
+
+        $st = MjMediaBackup::getLastStatus();
+        $msg = (string) ($st['message'] ?? 'Synchronisation médias terminée.');
+
+        if (class_exists(MjManualActionLog::class)) {
+            MjManualActionLog::add('media_sync', true, $msg);
+        }
+
+        wp_send_json_success(array(
+            'message' => $msg,
+            'steps' => $steps,
+        ));
+    }
+
+    wp_send_json_error(array('message' => 'Type d\'action non supporté.'));
+}
+add_action('wp_ajax_mj_member_run_manual_backup_action', 'mj_member_ajax_run_manual_backup_action');
+
+/**
+ * AJAX: save media backup settings from backup panel (avoids nonce issues from nested forms).
+ */
+function mj_member_save_media_backup_settings_ajax(): void
+{
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(array('message' => 'Permissions insuffisantes.'));
+    }
+
+    if (!check_ajax_referer('mj_member_media_settings_ajax', 'nonce', false)) {
+        wp_send_json_error(array('message' => 'Nonce invalide, rechargez la page.'));
+    }
+
+    $media_backup_enabled = isset($_POST['mj_media_backup_enabled']) && (string) $_POST['mj_media_backup_enabled'] === '1' ? '1' : '0';
+
+    $media_backup_freq_raw = isset($_POST['mj_media_backup_frequency'])
+        ? sanitize_key(wp_unslash($_POST['mj_media_backup_frequency']))
+        : 'daily';
+    $media_backup_frequency = in_array($media_backup_freq_raw, ['daily', 'twicedaily', 'weekly'], true)
+        ? $media_backup_freq_raw
+        : 'daily';
+
+    $media_backup_folder = isset($_POST['mj_media_backup_folder'])
+        ? trim(sanitize_text_field(wp_unslash($_POST['mj_media_backup_folder'])), "/\\ \t\n\r\0\x0B")
+        : 'backups/uploads';
+    if ($media_backup_folder === '') {
+        $media_backup_folder = 'backups/uploads';
+    }
+
+    $media_backup_rclone_binary = isset($_POST['mj_media_backup_rclone_binary'])
+        ? sanitize_text_field(wp_unslash($_POST['mj_media_backup_rclone_binary']))
+        : '';
+
+    $media_backup_max_runtime_seconds = isset($_POST['mj_media_backup_max_runtime_seconds'])
+        ? min(120, max(5, (int) $_POST['mj_media_backup_max_runtime_seconds']))
+        : 20;
+    $media_backup_pause_ms = isset($_POST['mj_media_backup_pause_ms'])
+        ? min(2000, max(0, (int) $_POST['mj_media_backup_pause_ms']))
+        : 120;
+
+    update_option('mj_media_backup_enabled', $media_backup_enabled);
+    update_option('mj_media_backup_frequency', $media_backup_frequency);
+    update_option('mj_media_backup_folder', $media_backup_folder);
+    update_option('mj_media_backup_rclone_binary', $media_backup_rclone_binary);
+    update_option('mj_media_backup_max_runtime_seconds', $media_backup_max_runtime_seconds);
+    update_option('mj_media_backup_pause_ms', $media_backup_pause_ms);
+
+    wp_send_json_success(array('message' => 'Options médias enregistrées.'));
+}
+add_action('wp_ajax_mj_member_save_media_backup_settings_ajax', 'mj_member_save_media_backup_settings_ajax');
 

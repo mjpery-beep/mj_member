@@ -262,6 +262,19 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
             )
         );
 
+        $this->add_control(
+            'fullscreen_dblclick',
+            array(
+                'label' => __('Double clique pour être en mode plein écran', 'mj-member'),
+                'type' => Controls_Manager::SWITCHER,
+                'label_on' => __('Oui', 'mj-member'),
+                'label_off' => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default' => 'yes',
+                'description' => __('Active le basculement plein écran au double-clic sur la mosaïque.', 'mj-member'),
+            )
+        );
+
         $this->end_controls_section();
 
         /* ── Style : Container contenu ── */
@@ -461,6 +474,170 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
 
         $this->end_controls_section();
 
+        /* ── Style : Historique (titre + vide) ── */
+
+        $this->start_controls_section(
+            'section_style_history_texts',
+            array(
+                'label' => __('Historique', 'mj-member'),
+                'tab' => Controls_Manager::TAB_STYLE,
+            )
+        );
+
+        $this->add_control(
+            'history_title_heading',
+            array(
+                'label' => __('Titre de l\'historique', 'mj-member'),
+                'type' => Controls_Manager::HEADING,
+                'separator' => 'before',
+            )
+        );
+
+        $this->add_group_control(
+            Group_Control_Typography::get_type(),
+            array(
+                'name' => 'history_title_typography',
+                'label' => __('Typographie', 'mj-member'),
+                'selector' => '{{WRAPPER}} .mj-photo-grimlins__history-title',
+            )
+        );
+
+        $this->add_control(
+            'history_title_color',
+            array(
+                'label' => __('Couleur', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-photo-grimlins__history-title' => 'color: {{VALUE}} !important;',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'history_title_align',
+            array(
+                'label' => __('Alignement', 'mj-member'),
+                'type' => Controls_Manager::CHOOSE,
+                'options' => array(
+                    'left' => array(
+                        'title' => __('Gauche', 'mj-member'),
+                        'icon' => 'eicon-text-align-left',
+                    ),
+                    'center' => array(
+                        'title' => __('Centre', 'mj-member'),
+                        'icon' => 'eicon-text-align-center',
+                    ),
+                    'right' => array(
+                        'title' => __('Droite', 'mj-member'),
+                        'icon' => 'eicon-text-align-right',
+                    ),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-photo-grimlins__history-title' => 'text-align: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_group_control(
+            Group_Control_Text_Shadow::get_type(),
+            array(
+                'name' => 'history_title_text_shadow',
+                'label' => __('Ombre du texte', 'mj-member'),
+                'selector' => '{{WRAPPER}} .mj-photo-grimlins__history-title',
+            )
+        );
+
+        $this->add_control(
+            'history_empty_heading',
+            array(
+                'label' => __('Texte vide de l\'historique', 'mj-member'),
+                'type' => Controls_Manager::HEADING,
+                'separator' => 'before',
+            )
+        );
+
+        $this->add_group_control(
+            Group_Control_Typography::get_type(),
+            array(
+                'name' => 'history_empty_typography',
+                'label' => __('Typographie', 'mj-member'),
+                'selector' => '{{WRAPPER}} .mj-photo-grimlins__history-empty',
+            )
+        );
+
+        $this->add_control(
+            'history_empty_color',
+            array(
+                'label' => __('Couleur du texte', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-photo-grimlins__history-empty' => 'color: {{VALUE}} !important;',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'history_empty_align',
+            array(
+                'label' => __('Alignement du texte', 'mj-member'),
+                'type' => Controls_Manager::CHOOSE,
+                'options' => array(
+                    'left' => array(
+                        'title' => __('Gauche', 'mj-member'),
+                        'icon' => 'eicon-text-align-left',
+                    ),
+                    'center' => array(
+                        'title' => __('Centre', 'mj-member'),
+                        'icon' => 'eicon-text-align-center',
+                    ),
+                    'right' => array(
+                        'title' => __('Droite', 'mj-member'),
+                        'icon' => 'eicon-text-align-right',
+                    ),
+                ),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-photo-grimlins__history-empty' => 'text-align: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_control(
+            'history_empty_background_color',
+            array(
+                'label' => __('Arrière-plan', 'mj-member'),
+                'type' => Controls_Manager::COLOR,
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-photo-grimlins__history-empty' => 'background-color: {{VALUE}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'history_empty_padding',
+            array(
+                'label' => __('Marge interne', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', 'em', '%'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-photo-grimlins__history-empty' => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->add_responsive_control(
+            'history_empty_border_radius',
+            array(
+                'label' => __('Rayon des angles', 'mj-member'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => array('px', '%'),
+                'selectors' => array(
+                    '{{WRAPPER}} .mj-photo-grimlins__history-empty' => 'border-radius: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};',
+                ),
+            )
+        );
+
+        $this->end_controls_section();
+
         /* ── Style : Bouton « Devenir membre » ── */
 
         $this->start_controls_section(
@@ -648,6 +825,7 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
             : 'hover';
         $mosaic_speed = isset($settings['mosaic_speed']['size']) ? (float) $settings['mosaic_speed']['size'] : 5;
         $fullscreen = !empty($settings['fullscreen']) && $settings['fullscreen'] === 'yes';
+        $fullscreen_dblclick = !array_key_exists('fullscreen_dblclick', $settings) || $settings['fullscreen_dblclick'] === 'yes';
 
         $mosaic_sessions = array();
         if ($mosaic_enabled) {
@@ -682,6 +860,7 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
             'mosaic_transition' => $mosaic_transition,
             'mosaic_speed' => $mosaic_speed,
             'fullscreen' => $fullscreen,
+            'fullscreen_dblclick' => $fullscreen_dblclick,
             'cta_register_enabled' => $cta_register_enabled,
             'cta_register_label' => $cta_register_label,
             'cta_register_url' => $cta_register_url,

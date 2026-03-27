@@ -69,28 +69,8 @@ class Mj_Member_Elementor_Registration_Widget extends Widget_Base {
             array(
                 'label' => __('Image du titre', 'mj-member'),
                 'type' => Controls_Manager::MEDIA,
-                'condition' => array('show_title' => 'yes'),
                 'dynamic' => array('active' => true),
-            )
-        );
-
-        $this->add_control(
-            'title_image_position',
-            array(
-                'label' => __('Position de l\'image', 'mj-member'),
-                'type' => Controls_Manager::SELECT,
-                'options' => array(
-                    'inline-right' => __('À droite du titre', 'mj-member'),
-                    'inline-left' => __('À gauche du titre', 'mj-member'),
-                    'above-center' => __('Au-dessus, centré', 'mj-member'),
-                    'above-left' => __('Au-dessus, aligné à gauche', 'mj-member'),
-                    'above-right' => __('Au-dessus, aligné à droite', 'mj-member'),
-                ),
-                'default' => 'inline-right',
-                'condition' => array(
-                    'show_title' => 'yes',
-                    'title_image[id]!' => '',
-                ),
+                'condition' => array('show_title' => 'yes'),
             )
         );
 
@@ -121,6 +101,18 @@ class Mj_Member_Elementor_Registration_Widget extends Widget_Base {
                 'type' => Controls_Manager::TEXT,
                 'default' => __('Tu es déjà inscrit.', 'mj-member'),
                 'label_block' => true,
+            )
+        );
+
+        $this->add_control(
+            'account_page_url',
+            array(
+                'label'       => __('URL de la page "Mon compte"', 'mj-member'),
+                'description' => __('Après inscription, l\'utilisateur sera redirigé vers cette page (+ ?new_subscription=1).', 'mj-member'),
+                'type'        => Controls_Manager::URL,
+                'placeholder' => home_url('/mon-compte'),
+                'label_block' => true,
+                'default'     => array('url' => ''),
             )
         );
 
@@ -253,6 +245,69 @@ class Mj_Member_Elementor_Registration_Widget extends Widget_Base {
                 'type' => Controls_Manager::TEXT,
                 'label_block' => true,
                 'condition' => array('login_show_title' => 'yes'),
+            )
+        );
+
+        $this->add_control(
+            'registration_type_options_heading',
+            array(
+                'label' => __('Options du type d\'inscription', 'mj-member'),
+                'type' => Controls_Manager::HEADING,
+                'separator' => 'before',
+            )
+        );
+
+        $this->add_control(
+            'registration_type_guardian_image',
+            array(
+                'label' => __('Image option tuteur', 'mj-member'),
+                'type' => Controls_Manager::MEDIA,
+                'dynamic' => array('active' => true),
+            )
+        );
+
+        $this->add_control(
+            'registration_type_guardian_image_alt',
+            array(
+                'label' => __('Texte alternatif (option tuteur)', 'mj-member'),
+                'type' => Controls_Manager::TEXT,
+                'label_block' => true,
+            )
+        );
+
+        $this->add_control(
+            'registration_type_member_image',
+            array(
+                'label' => __('Image option jeune autonome', 'mj-member'),
+                'type' => Controls_Manager::MEDIA,
+                'dynamic' => array('active' => true),
+            )
+        );
+
+        $this->add_control(
+            'registration_type_member_image_alt',
+            array(
+                'label' => __('Texte alternatif (option jeune autonome)', 'mj-member'),
+                'type' => Controls_Manager::TEXT,
+                'label_block' => true,
+            )
+        );
+
+        $this->add_control(
+            'registration_complementary_icon',
+            array(
+                'label' => __('Icône données complémentaires', 'mj-member'),
+                'type' => Controls_Manager::MEDIA,
+                'dynamic' => array('active' => true),
+            )
+        );
+
+        $this->add_control(
+            'registration_complementary_icon_alt',
+            array(
+                'label' => __('Texte alternatif (icône données complémentaires)', 'mj-member'),
+                'type' => Controls_Manager::TEXT,
+                'label_block' => true,
             )
         );
 
@@ -851,6 +906,24 @@ class Mj_Member_Elementor_Registration_Widget extends Widget_Base {
             'title' => $title_settings,
             'login_title' => $login_title_settings,
             'regulation' => $regulation_data,
+            'registration_options' => array(
+                'guardian' => array(
+                    'image_id' => !empty($settings['registration_type_guardian_image']['id']) ? (int) $settings['registration_type_guardian_image']['id'] : 0,
+                    'image_url' => !empty($settings['registration_type_guardian_image']['url']) ? (string) $settings['registration_type_guardian_image']['url'] : '',
+                    'image_alt' => !empty($settings['registration_type_guardian_image_alt']) ? (string) $settings['registration_type_guardian_image_alt'] : '',
+                ),
+                'member' => array(
+                    'image_id' => !empty($settings['registration_type_member_image']['id']) ? (int) $settings['registration_type_member_image']['id'] : 0,
+                    'image_url' => !empty($settings['registration_type_member_image']['url']) ? (string) $settings['registration_type_member_image']['url'] : '',
+                    'image_alt' => !empty($settings['registration_type_member_image_alt']) ? (string) $settings['registration_type_member_image_alt'] : '',
+                ),
+            ),
+            'complementary_data' => array(
+                'icon_id' => !empty($settings['registration_complementary_icon']['id']) ? (int) $settings['registration_complementary_icon']['id'] : 0,
+                'icon_url' => !empty($settings['registration_complementary_icon']['url']) ? (string) $settings['registration_complementary_icon']['url'] : '',
+                'icon_alt' => !empty($settings['registration_complementary_icon_alt']) ? (string) $settings['registration_complementary_icon_alt'] : '',
+            ),
+                'account_url' => !empty($settings['account_page_url']['url']) ? esc_url_raw($settings['account_page_url']['url']) : '',
         );
 
         echo mj_member_render_registration_form($args);

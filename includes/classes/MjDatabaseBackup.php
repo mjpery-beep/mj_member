@@ -26,6 +26,21 @@ final class MjDatabaseBackup
      * ----------------------------------------------------------------*/
 
     /**
+     * Returns all tables in the database.
+     *
+     * @return string[]
+     */
+    public static function getAllTables(): array
+    {
+        global $wpdb;
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+        $tables = $wpdb->get_col('SHOW TABLES');
+
+        return is_array($tables) ? $tables : [];
+    }
+
+    /**
      * Returns all tables whose name begins with {$wpdb->prefix}mj_.
      *
      * @return string[]
@@ -41,13 +56,15 @@ final class MjDatabaseBackup
     }
 
     /**
-     * Generates a SQL dump string for all mj_ tables.
+     * Generates a SQL dump string for the given tables (defaults to all mj_* tables).
+     *
+     * @param string[]|null $tables Specific tables to dump; null = all mj_* tables.
      */
-    public static function generateSqlDump(): string
+    public static function generateSqlDump(?array $tables = null): string
     {
         global $wpdb;
 
-        $tables = self::getMjTables();
+        $tables = $tables ?? self::getMjTables();
         if (empty($tables)) {
             return '';
         }
@@ -88,15 +105,32 @@ final class MjDatabaseBackup
     /**
      * Runs the full backup: generates SQL, uploads to Nextcloud, prunes old files.
      *
+     * @param string[]|null  $tables    Specific tables to back up; null = all mj_* tables.
+     * @param string|null    $folder    Nextcloud folder; null = use stored option.
+     * @param int|null       $retention Number of backups to keep; null = use stored option.
+     * @param callable|null  $saveStatusFn  fn(bool, string, string) - overrides the default status storage.
      * @return true|WP_Error
      */
-    public static function run(): true|WP_Error
-    {
+    public static function run(
+        ?array $tables = null,
+        ?string $folder = null,
+        ?int $retention = null,
+        ?callable $saveStatusFn = null,
+        ?callable $progressFn = null
+    ): true|WP_Error {
+        if ($progressFn) {
+            $progressFn('Validation de la configuration Nextcloud...');
+        }
+
         if (!Config::nextcloudIsReady()) {
             return new WP_Error(
                 'nextcloud_not_ready',
-                'Nextcloud n\'est pas configuré. Renseignez les paramètres dans l\'onglet Agenda & Google.'
+                'Nextcloud n\'est pas configuré. Renseignez les paramètres dans l\'onglet Nextcloud.'
             );
+        }
+
+        if ($progressFn) {
+            $progressFn('Connexion au service Nextcloud...');
         }
 
         $nextcloud = MjNextcloud::make();
@@ -104,33 +138,84 @@ final class MjDatabaseBackup
             return $nextcloud;
         }
 
-        $sql = self::generateSqlDump();
+        if ($progressFn) {
+            $progressFn('Génération du dump SQL...');
+        }
+
+        $sql = self::generateSqlDump($tables);
         if ($sql === '') {
             return new WP_Error('no_tables', 'Aucune table mj_ trouvée dans la base de données.');
         }
 
-        $backupFolder = self::getBackupFolder();
+        $backupFolder = $folder ?? self::getBackupFolder();
+        $keepCount    = $retention ?? max(1, (int) get_option('mj_backup_retention', 7));
+
+        if ($progressFn) {
+            $progressFn('Préparation du dossier distant : ' . $backupFolder);
+        }
 
         $ensure = self::ensureFolder($nextcloud, $backupFolder);
         if (is_wp_error($ensure)) {
-            self::saveStatus(false, '', $ensure->get_error_message());
+            $msg = $ensure->get_error_message();
+            if ($saveStatusFn) {
+                ($saveStatusFn)(false, '', $msg);
+            } else {
+                self::saveStatus(false, '', $msg);
+            }
             return $ensure;
         }
 
         $filename = 'mj-member-backup-' . current_time('Y-m-d_H-i-s') . '.sql';
 
-        $upload = $nextcloud->putContent($backupFolder, $filename, $sql, 'application/sql');
+        if ($progressFn) {
+            $progressFn('Envoi du fichier SQL vers Nextcloud : ' . $filename);
+        }
+
+        $upload = $nextcloud->uploadContent($backupFolder, $filename, $sql, 'application/sql');
         if (is_wp_error($upload)) {
-            self::saveStatus(false, $filename, $upload->get_error_message());
+            $msg = $upload->get_error_message();
+            if ($saveStatusFn) {
+                ($saveStatusFn)(false, $filename, $msg);
+            } else {
+                self::saveStatus(false, $filename, $msg);
+            }
             return $upload;
         }
 
-        self::pruneOldBackups($nextcloud, $backupFolder);
+        if ($progressFn) {
+            $progressFn('Nettoyage des anciennes sauvegardes...');
+        }
 
-        update_option(self::OPTION_LAST_RUN, time());
-        self::saveStatus(true, $filename, 'OK');
+        self::pruneOldBackups($nextcloud, $backupFolder, $keepCount);
+
+        if ($saveStatusFn) {
+            ($saveStatusFn)(true, $filename, 'OK');
+        } else {
+            update_option(self::OPTION_LAST_RUN, time());
+            self::saveStatus(true, $filename, 'OK');
+        }
+
+        if ($progressFn) {
+            $progressFn('Sauvegarde terminée avec succès.');
+        }
 
         return true;
+    }
+
+    /**
+     * Runs a backup using a named profile's settings (tables, folder, retention).
+     *
+     * @return true|WP_Error
+     */
+    public static function runProfile(MjBackupProfile $profile): true|WP_Error
+    {
+        $tables = $profile->getTableList();
+        return self::run(
+            !empty($tables) ? $tables : null,
+            $profile->folder,
+            $profile->retention,
+            fn(bool $ok, string $fn, string $msg) => $profile->saveStatus($ok, $fn, $msg)
+        );
     }
 
     /**
@@ -200,9 +285,11 @@ final class MjDatabaseBackup
     /**
      * Keeps only the $keep most recent .sql files in $folderPath, deletes the rest.
      */
-    private static function pruneOldBackups(MjNextcloud $nc, string $folderPath): void
+    private static function pruneOldBackups(MjNextcloud $nc, string $folderPath, int $keep = 0): void
     {
-        $keep = max(1, (int) get_option('mj_backup_retention', 7));
+        if ($keep <= 0) {
+            $keep = max(1, (int) get_option('mj_backup_retention', 7));
+        }
         $list = $nc->listFolder($folderPath);
 
         if (is_wp_error($list) || empty($list['items'])) {

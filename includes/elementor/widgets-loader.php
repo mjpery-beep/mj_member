@@ -53,6 +53,7 @@ if (!function_exists('mj_member_get_elementor_widgets_map')) {
             'Mj_Member_Elementor_Hours_Dashboard_Widget' => 'includes/elementor/class-mj-member-hours-dashboard-widget.php',
             'Mj_Member_Elementor_Admin_Dashboard_Widget' => 'includes/elementor/class-mj-member-admin-dashboard-widget.php',
             'Mj_Member_Elementor_Mileage_Widget' => 'includes/elementor/class-mj-member-mileage-widget.php',
+            'Mj_Member_Elementor_Team_Hierarchy_Widget' => 'includes/elementor/class-mj-member-team-hierarchy-widget.php',
         );
     }
 }

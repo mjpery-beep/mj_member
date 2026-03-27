@@ -6,9 +6,17 @@ if (!defined('ABSPATH')) {
 ?>
 <div class="wrap">
         <h1>⚙️ Configuration MJ Péry</h1>
-        
+
+        <?php if (!empty($backup_notices)) : ?>
+            <?php foreach ($backup_notices as $bn) : ?>
+                <div class="notice <?php echo esc_attr($bn['type'] === 'error' ? 'notice-error' : 'notice-success'); ?>">
+                    <p><?php echo wp_kses_post($bn['message']); ?></p>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
+
         <form method="post" id="mj-settings-form" novalidate>
-            <?php wp_nonce_field('mj_settings_nonce'); ?>
+            <?php wp_nonce_field('mj_settings_nonce', 'mj_settings_nonce_token'); ?>
 
             <div class="mj-settings-tabs">
                 <div class="mj-settings-tabs__nav" role="tablist">
@@ -244,75 +252,666 @@ if (!defined('ABSPATH')) {
                     </div>
 
                     <div id="mj-tab-backup" class="mj-settings-tabs__panel" data-tab="backup" role="tabpanel" aria-labelledby="mj-tab-button-backup" aria-hidden="true">
+                        <?php
+                        /**
+                         * Renders a grouped checkbox list for table selection.
+                         *
+                         * @param string   $formId      Unique id for this form ('new' or profile id).
+                         * @param string[] $allTables   All tables available in the database.
+                         * @param string[] $mjTables    Tables starting with mj_.
+                         * @param string   $tableFilter Current stored filter ('all' = all mj_*, or CSV of exact names).
+                         */
+                        $mj_bp_table_picker = function (string $formId, array $allTables, array $mjTables, string $tableFilter) use ($backup_mj_tables): void {
+                            $isAll         = ($tableFilter === 'all');
+                            $selectedNames = $isAll
+                                ? $backup_mj_tables
+                                : array_filter(array_map('trim', explode(',', $tableFilter)));
+                            $otherTables   = array_values(array_diff($allTables, $mjTables));
+                            ?>
+                            <div style="margin-top:6px;">
+                                <div style="margin-bottom:6px; display:flex; gap:6px; flex-wrap:wrap;">
+                                    <button type="button" class="button button-small"
+                                        onclick="mjBpSelectGroup('<?php echo esc_js($formId); ?>',true,true)">Tout mj_*</button>
+                                    <button type="button" class="button button-small"
+                                        onclick="mjBpSelectGroup('<?php echo esc_js($formId); ?>',false,true)">Aucun mj_*</button>
+                                    <button type="button" class="button button-small"
+                                        onclick="mjBpSelectGroup('<?php echo esc_js($formId); ?>',true,false)">Tout sélectionner</button>
+                                    <button type="button" class="button button-small"
+                                        onclick="mjBpSelectGroup('<?php echo esc_js($formId); ?>',false,false)">Tout désélectionner</button>
+                                </div>
+                                <?php if (!empty($mjTables)) : ?>
+                                <p style="margin:4px 0 3px; font-weight:600; font-size:11px; color:#334155; text-transform:uppercase; letter-spacing:.04em;">
+                                    Tables mj_* (<?php echo count($mjTables); ?>)
+                                </p>
+                                <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:2px 10px; padding:8px; background:#f1f5f9; border-radius:4px; margin-bottom:8px;">
+                                    <?php foreach ($mjTables as $tbl) : ?>
+                                    <label style="display:flex; align-items:center; gap:5px; font-size:13px; cursor:pointer; overflow:hidden;" title="<?php echo esc_attr($tbl); ?>">
+                                        <input type="checkbox"
+                                               name="mj_bp_tables[]"
+                                               value="<?php echo esc_attr($tbl); ?>"
+                                               class="mj-bp-cb-<?php echo esc_attr($formId); ?> mj-bp-cb-mj-<?php echo esc_attr($formId); ?>"
+                                               <?php checked(in_array($tbl, (array) $selectedNames, true)); ?>>
+                                        <code style="font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><?php echo esc_html($tbl); ?></code>
+                                    </label>
+                                    <?php endforeach; ?>
+                                </div>
+                                <?php endif; ?>
+                                <?php if (!empty($otherTables)) : ?>
+                                <details>
+                                    <summary style="cursor:pointer; font-weight:600; font-size:11px; color:#475569; text-transform:uppercase; letter-spacing:.04em; user-select:none; margin-bottom:4px;">
+                                        Autres tables (<?php echo count($otherTables); ?>)
+                                    </summary>
+                                    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:2px 10px; padding:8px; background:#fafafa; border:1px solid #e2e8f0; border-radius:4px; margin-top:4px;">
+                                        <?php foreach ($otherTables as $tbl) : ?>
+                                        <label style="display:flex; align-items:center; gap:5px; font-size:13px; cursor:pointer; overflow:hidden;" title="<?php echo esc_attr($tbl); ?>">
+                                            <input type="checkbox"
+                                                   name="mj_bp_tables[]"
+                                                   value="<?php echo esc_attr($tbl); ?>"
+                                                   class="mj-bp-cb-<?php echo esc_attr($formId); ?>"
+                                                   <?php checked(in_array($tbl, (array) $selectedNames, true)); ?>>
+                                            <code style="font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><?php echo esc_html($tbl); ?></code>
+                                        </label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </details>
+                                <?php endif; ?>
+                            </div>
+                            <?php
+                        };
+                        ?>
+
                         <div style="background:#f8fafc; padding:20px; margin:20px 0; border-radius:8px; border-left:4px solid #334155;">
-                            <h2 style="margin-top:0;">🗄️ Sauvegardes de la base MJ</h2>
-                            <p style="color:#475569; font-size:14px; margin-top:0;">Exporte automatiquement toutes les tables <code>mj_*</code> au format SQL vers votre espace Nextcloud.</p>
+                            <h2 style="margin-top:0;">🗄️ Sauvegardes</h2>
+                            <p style="color:#475569; font-size:14px; margin-top:0;">
+                                Nextcloud :
+                                <strong style="color:<?php echo $nc_is_ready ? '#15803d' : '#b91c1c'; ?>">
+                                    <?php echo $nc_is_ready ? 'configuré ✓' : 'non configuré — complétez l\'onglet Nextcloud'; ?>
+                                </strong>
+                                &nbsp;·&nbsp; Tables <code>mj_*</code> : <strong><?php echo esc_html((string) $backup_table_count); ?></strong>
+                                &nbsp;·&nbsp; Total tables DB : <strong><?php echo esc_html((string) count($backup_all_tables)); ?></strong>
+                            </p>
 
-                            <div style="display:flex; flex-wrap:wrap; gap:20px; align-items:flex-start;">
-                                <div style="flex:1 1 320px; background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:16px;">
-                                    <h3 style="margin-top:0;">Paramètres</h3>
+                            <?php /* ---- Section 1: Types de sauvegarde DB ---- */ ?>
+                            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:20px; margin-bottom:20px;">
+                                <h3 style="margin-top:0;">Types de sauvegarde base de données</h3>
+                                <p style="color:#475569; font-size:13px; margin-top:0;">
+                                    Chaque type exporte un sous-ensemble de tables vers Nextcloud selon sa fréquence et son dossier propres.
+                                </p>
 
-                                    <p style="margin-bottom:16px;">
-                                        <label>
-                                            <input type="checkbox" name="mj_backup_enabled" value="1" <?php checked($backup_enabled_option); ?> />
-                                            Activer les sauvegardes automatiques via WP-Cron
-                                        </label><br>
-                                        <small style="color:#64748b;">Le plugin planifie un export SQL périodique et conserve un historique sur Nextcloud.</small>
-                                    </p>
+                                <?php if (empty($backup_profiles)) : ?>
+                                    <p style="color:#64748b; font-style:italic;">Aucun profil configuré.</p>
+                                <?php else : ?>
+                                <?php
+                                    $bp_week_days = array(
+                                        0 => 'dimanche',
+                                        1 => 'lundi',
+                                        2 => 'mardi',
+                                        3 => 'mercredi',
+                                        4 => 'jeudi',
+                                        5 => 'vendredi',
+                                        6 => 'samedi',
+                                    );
+                                ?>
+                                <table class="widefat fixed striped" style="margin-bottom:16px;">
+                                    <thead><tr>
+                                        <th style="width:18%">Nom</th>
+                                        <th style="width:20%">Tables</th>
+                                        <th style="width:12%">Fréquence</th>
+                                        <th style="width:7%">Rétention</th>
+                                        <th style="width:16%">Dossier</th>
+                                        <th style="width:7%">Actif</th>
+                                        <th style="width:12%">Prochaine sauvegarde auto</th>
+                                        <th style="width:12%">Dernier run</th>
+                                        <th style="width:10%">Actions</th>
+                                    </tr></thead>
+                                    <tbody>
+                                    <?php foreach ($backup_profiles as $bp) :
+                                        $bp_status   = $bp->getLastStatus();
+                                        $bp_last_run = $bp->getLastRun();
+                                        $bp_run_disp = $bp_last_run > 0 ? wp_date('d/m/Y H:i', $bp_last_run) : 'Jamais';
+                                        $bp_ok       = !empty($bp_status['success']);
+                                        $bp_freq_lbl = ['daily' => 'Quotidien', 'twicedaily' => '2×/jour', 'weekly' => 'Hebdo'][$bp->frequency] ?? $bp->frequency;
+                                        $bp_next_ts  = $bp->enabled ? wp_next_scheduled($bp->getCronHook(), array($bp->id)) : false;
+                                        $bp_next_disp = ($bp->enabled && $bp_next_ts)
+                                            ? wp_date('d/m/Y H:i', (int) $bp_next_ts)
+                                            : 'Non planifiée';
+                                        $bp_h1 = str_pad((string) ((int) $bp->dailyHour), 2, '0', STR_PAD_LEFT) . ':00';
+                                        $bp_h2 = str_pad((string) ((int) $bp->twiceDailySecondHour), 2, '0', STR_PAD_LEFT) . ':00';
+                                        $bp_wh = str_pad((string) ((int) $bp->weeklyHour), 2, '0', STR_PAD_LEFT) . ':00';
+                                        $bp_wd = $bp_week_days[(int) $bp->weeklyDay] ?? 'jeudi';
+                                        if ($bp->frequency === 'twicedaily') {
+                                            $bp_freq_with_time = $bp_freq_lbl . ' à ' . $bp_h1 . ' / ' . $bp_h2;
+                                        } elseif ($bp->frequency === 'weekly') {
+                                            $bp_freq_with_time = $bp_freq_lbl . ' ' . $bp_wd . ' à ' . $bp_wh;
+                                        } else {
+                                            $bp_freq_with_time = $bp_freq_lbl . ' à ' . $bp_h1;
+                                        }
+                                        // Build table summary label
+                                        if ($bp->tableFilter === 'all') {
+                                            $bp_tbl_label = '<em>Toutes mj_*</em>';
+                                        } else {
+                                            $tbl_list = array_filter(array_map('trim', explode(',', $bp->tableFilter)));
+                                            $bp_tbl_label = count($tbl_list) . ' table' . (count($tbl_list) > 1 ? 's' : '');
+                                        }
+                                    ?>
+                                        <tr id="mj-bp-row-<?php echo esc_attr($bp->id); ?>">
+                                            <td><strong><?php echo esc_html($bp->name); ?></strong></td>
+                                            <td style="font-size:12px;"><?php echo $bp_tbl_label; ?></td>
+                                            <td><?php echo esc_html($bp_freq_with_time); ?></td>
+                                            <td><?php echo esc_html((string) $bp->retention); ?></td>
+                                            <td style="font-size:12px;"><code><?php echo esc_html($bp->folder); ?></code></td>
+                                            <td><?php echo $bp->enabled ? '✅' : '—'; ?></td>
+                                            <td style="font-size:12px;"><?php echo esc_html($bp_next_disp); ?></td>
+                                            <td style="font-size:12px; color:<?php echo $bp_ok ? '#15803d' : '#475569'; ?>">
+                                                <?php echo esc_html($bp_run_disp); ?>
+                                            </td>
+                                            <td style="white-space:nowrap;">
+                                                <form method="post" style="display:inline;" class="mj-bp-run-profile-form" data-profile-id="<?php echo esc_attr($bp->id); ?>">
+                                                    <?php wp_nonce_field('mj_backup_profile_run_' . $bp->id); ?>
+                                                    <input type="hidden" name="mj_backup_profile_action" value="run">
+                                                    <input type="hidden" name="mj_bp_id" value="<?php echo esc_attr($bp->id); ?>">
+                                                    <button type="button" class="button button-small mj-bp-run-btn" <?php echo $nc_is_ready ? '' : 'disabled'; ?> title="Lancer">▶</button>
+                                                </form>
+                                                <button type="button" class="button button-small" onclick="mjBpToggleEdit('<?php echo esc_js($bp->id); ?>')" title="Modifier">✏️</button>
+                                                <form method="post" style="display:inline;" onsubmit="return confirm('Supprimer ce profil ?');">
+                                                    <?php wp_nonce_field('mj_backup_profile_delete_' . $bp->id); ?>
+                                                    <input type="hidden" name="mj_backup_profile_action" value="delete">
+                                                    <input type="hidden" name="mj_bp_id" value="<?php echo esc_attr($bp->id); ?>">
+                                                    <button type="submit" class="button button-small button-link-delete" title="Supprimer">🗑</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                        <!-- Inline edit row -->
+                                        <tr id="mj-bp-edit-<?php echo esc_attr($bp->id); ?>" style="display:none; background:#f1f5f9;">
+                                            <td colspan="9" style="padding:16px;">
+                                                <form method="post" class="mj-bp-profile-form">
+                                                    <?php wp_nonce_field('mj_backup_profile_update_' . $bp->id); ?>
+                                                    <input type="hidden" name="mj_backup_profile_action" value="update">
+                                                    <input type="hidden" name="mj_bp_id" value="<?php echo esc_attr($bp->id); ?>">
+                                                    <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; margin-bottom:14px;">
+                                                        <div>
+                                                            <label style="display:block; font-weight:600; margin-bottom:4px;">Nom</label>
+                                                            <input type="text" name="mj_bp_name" value="<?php echo esc_attr($bp->name); ?>" class="regular-text" required>
+                                                        </div>
+                                                        <div>
+                                                            <label style="display:block; font-weight:600; margin-bottom:4px;">Fréquence</label>
+                                                            <select name="mj_bp_frequency" class="mj-bp-frequency">
+                                                                <option value="daily" <?php selected($bp->frequency, 'daily'); ?>>Quotidien</option>
+                                                                <option value="twicedaily" <?php selected($bp->frequency, 'twicedaily'); ?>>2× par jour</option>
+                                                                <option value="weekly" <?php selected($bp->frequency, 'weekly'); ?>>Hebdomadaire</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="mj-bp-field-daily">
+                                                            <label style="display:block; font-weight:600; margin-bottom:4px;">Heure (quotidien)</label>
+                                                            <input type="number" name="mj_bp_daily_hour" value="<?php echo esc_attr((string) $bp->dailyHour); ?>" min="0" max="23" class="small-text"> h
+                                                        </div>
+                                                        <div class="mj-bp-field-twicedaily">
+                                                            <label style="display:block; font-weight:600; margin-bottom:4px;">2e heure (2×/jour)</label>
+                                                            <input type="number" name="mj_bp_twicedaily_second_hour" value="<?php echo esc_attr((string) $bp->twiceDailySecondHour); ?>" min="0" max="23" class="small-text"> h
+                                                        </div>
+                                                        <div class="mj-bp-field-weekly">
+                                                            <label style="display:block; font-weight:600; margin-bottom:4px;">Jour hebdo</label>
+                                                            <select name="mj_bp_weekly_day">
+                                                                <?php foreach ($bp_week_days as $dayIndex => $dayLabel) : ?>
+                                                                    <option value="<?php echo esc_attr((string) $dayIndex); ?>" <?php selected((int) $bp->weeklyDay, (int) $dayIndex); ?>><?php echo esc_html(ucfirst($dayLabel)); ?></option>
+                                                                <?php endforeach; ?>
+                                                            </select>
+                                                        </div>
+                                                        <div class="mj-bp-field-weekly">
+                                                            <label style="display:block; font-weight:600; margin-bottom:4px;">Heure hebdo</label>
+                                                            <input type="number" name="mj_bp_weekly_hour" value="<?php echo esc_attr((string) $bp->weeklyHour); ?>" min="0" max="23" class="small-text"> h
+                                                        </div>
+                                                        <div>
+                                                            <label style="display:block; font-weight:600; margin-bottom:4px;">Rétention</label>
+                                                            <input type="number" name="mj_bp_retention" value="<?php echo esc_attr((string) $bp->retention); ?>" min="1" class="small-text">
+                                                        </div>
+                                                        <div>
+                                                            <label style="display:block; font-weight:600; margin-bottom:4px;">Dossier Nextcloud</label>
+                                                            <input type="text" name="mj_bp_folder" value="<?php echo esc_attr($bp->folder); ?>" class="regular-text" placeholder="backups/database">
+                                                        </div>
+                                                        <div>
+                                                            <label style="display:block; font-weight:600; margin-bottom:4px;">Actif</label>
+                                                            <label><input type="checkbox" name="mj_bp_enabled" value="1" <?php checked($bp->enabled); ?>> Oui</label>
+                                                        </div>
+                                                        <div>
+                                                            <button type="submit" class="button button-primary">💾 Enregistrer</button>
+                                                            <button type="button" class="button" onclick="mjBpToggleEdit('<?php echo esc_js($bp->id); ?>')">Annuler</button>
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <label style="display:block; font-weight:600; margin-bottom:4px;">Tables à sauvegarder</label>
+                                                        <?php $mj_bp_table_picker($bp->id, $backup_all_tables, $backup_mj_tables, $bp->tableFilter); ?>
+                                                    </div>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                                <?php endif; ?>
 
-                                    <p style="margin-bottom:16px;">
-                                        <label for="mj-backup-frequency"><strong>Fréquence</strong></label><br>
-                                        <select name="mj_backup_frequency" id="mj-backup-frequency" class="regular-text">
-                                            <option value="daily" <?php selected($backup_frequency_option, 'daily'); ?>>Tous les jours</option>
-                                            <option value="twicedaily" <?php selected($backup_frequency_option, 'twicedaily'); ?>>Deux fois par jour</option>
-                                            <option value="weekly" <?php selected($backup_frequency_option, 'weekly'); ?>>Une fois par semaine</option>
-                                        </select>
-                                    </p>
-
-                                    <p style="margin-bottom:16px;">
-                                        <label for="mj-backup-retention"><strong>Nombre de sauvegardes à conserver</strong></label><br>
-                                        <input type="number" min="1" step="1" name="mj_backup_retention" id="mj-backup-retention" value="<?php echo esc_attr($backup_retention_option); ?>" class="small-text" />
-                                        <small style="color:#64748b; display:block; margin-top:4px;">Les fichiers SQL plus anciens seront supprimés automatiquement.</small>
-                                    </p>
-
-                                    <p style="margin-bottom:0;">
-                                        <label for="mj-backup-folder"><strong>Sous-dossier Nextcloud</strong></label><br>
-                                        <input type="text" name="mj_backup_nextcloud_folder" id="mj-backup-folder" value="<?php echo esc_attr($backup_folder_option); ?>" class="regular-text" placeholder="backups/database" />
-                                        <small style="color:#64748b; display:block; margin-top:4px;">Chemin relatif à l'intérieur du dossier racine Nextcloud configuré dans l'onglet Nextcloud.</small>
-                                    </p>
-                                </div>
-
-                                <div style="flex:1 1 320px; background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:16px;">
-                                    <h3 style="margin-top:0;">État</h3>
-                                    <p style="margin:0 0 8px 0; color:<?php echo $nc_is_ready ? '#15803d' : '#b91c1c'; ?>;">
-                                        <strong>Nextcloud :</strong> <?php echo $nc_is_ready ? 'configuré' : 'non configuré'; ?>
-                                    </p>
-                                    <p style="margin:0 0 8px 0;"><strong>Tables mj_* détectées :</strong> <?php echo esc_html((string) $backup_table_count); ?></p>
-                                    <p style="margin:0 0 8px 0;"><strong>Derniére exécution :</strong> <?php echo esc_html($backup_last_run_display); ?></p>
-                                    <p style="margin:0 0 8px 0;"><strong>Dernier fichier :</strong> <?php echo esc_html($backup_last_filename !== '' ? $backup_last_filename : 'Aucun'); ?></p>
-                                    <p style="margin:0 0 14px 0; color:<?php echo $backup_last_success ? '#15803d' : '#475569'; ?>;">
-                                        <strong>Dernier statut :</strong> <?php echo esc_html($backup_last_message); ?>
-                                    </p>
-
-                                    <button type="submit" name="mj_backup_run_now" value="1" class="button button-secondary" <?php echo $nc_is_ready ? '' : 'disabled'; ?>>▶ Lancer une sauvegarde maintenant</button>
-
-                                    <?php if (!$nc_is_ready) : ?>
-                                        <p style="margin:10px 0 0 0; color:#b91c1c; font-size:13px;">Complétez d'abord la configuration Nextcloud dans l'onglet Nextcloud.</p>
-                                    <?php else : ?>
-                                        <p style="margin:10px 0 0 0; color:#64748b; font-size:13px;">Le bouton exécute immédiatement l'export SQL et l'envoi vers Nextcloud.</p>
-                                    <?php endif; ?>
+                                <button type="button" class="button" onclick="mjBpToggleNew()" id="mj-bp-add-btn">+ Ajouter un type de sauvegarde</button>
+                                <div id="mj-bp-add-form" style="display:none; margin-top:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:16px;">
+                                    <h4 style="margin-top:0;">Nouveau type de sauvegarde</h4>
+                                    <form method="post" class="mj-bp-profile-form">
+                                        <?php wp_nonce_field('mj_backup_profile_add'); ?>
+                                        <input type="hidden" name="mj_backup_profile_action" value="add">
+                                        <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; margin-bottom:14px;">
+                                            <div>
+                                                <label style="display:block; font-weight:600; margin-bottom:4px;">Nom *</label>
+                                                <input type="text" name="mj_bp_name" class="regular-text" required placeholder="ex: Membres uniquement">
+                                            </div>
+                                            <div>
+                                                <label style="display:block; font-weight:600; margin-bottom:4px;">Fréquence</label>
+                                                <select name="mj_bp_frequency" class="mj-bp-frequency">
+                                                    <option value="daily">Quotidien</option>
+                                                    <option value="twicedaily">2× par jour</option>
+                                                    <option value="weekly">Hebdomadaire</option>
+                                                </select>
+                                            </div>
+                                            <div class="mj-bp-field-daily">
+                                                <label style="display:block; font-weight:600; margin-bottom:4px;">Heure (quotidien)</label>
+                                                <input type="number" name="mj_bp_daily_hour" value="4" min="0" max="23" class="small-text"> h
+                                            </div>
+                                            <div class="mj-bp-field-twicedaily">
+                                                <label style="display:block; font-weight:600; margin-bottom:4px;">2e heure (2×/jour)</label>
+                                                <input type="number" name="mj_bp_twicedaily_second_hour" value="18" min="0" max="23" class="small-text"> h
+                                            </div>
+                                            <div class="mj-bp-field-weekly">
+                                                <label style="display:block; font-weight:600; margin-bottom:4px;">Jour hebdo</label>
+                                                <select name="mj_bp_weekly_day">
+                                                    <option value="0">Dimanche</option>
+                                                    <option value="1">Lundi</option>
+                                                    <option value="2">Mardi</option>
+                                                    <option value="3">Mercredi</option>
+                                                    <option value="4" selected>Jeudi</option>
+                                                    <option value="5">Vendredi</option>
+                                                    <option value="6">Samedi</option>
+                                                </select>
+                                            </div>
+                                            <div class="mj-bp-field-weekly">
+                                                <label style="display:block; font-weight:600; margin-bottom:4px;">Heure hebdo</label>
+                                                <input type="number" name="mj_bp_weekly_hour" value="4" min="0" max="23" class="small-text"> h
+                                            </div>
+                                            <div>
+                                                <label style="display:block; font-weight:600; margin-bottom:4px;">Rétention</label>
+                                                <input type="number" name="mj_bp_retention" value="7" min="1" class="small-text">
+                                            </div>
+                                            <div>
+                                                <label style="display:block; font-weight:600; margin-bottom:4px;">Dossier Nextcloud</label>
+                                                <input type="text" name="mj_bp_folder" class="regular-text" placeholder="backups/database">
+                                            </div>
+                                            <div>
+                                                <label style="display:block; font-weight:600; margin-bottom:4px;">Actif</label>
+                                                <label><input type="checkbox" name="mj_bp_enabled" value="1" checked> Oui</label>
+                                            </div>
+                                            <div>
+                                                <button type="submit" class="button button-primary">+ Créer</button>
+                                                <button type="button" class="button" onclick="mjBpToggleNew()">Annuler</button>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label style="display:block; font-weight:600; margin-bottom:4px;">Tables à sauvegarder</label>
+                                            <?php $mj_bp_table_picker('new', $backup_all_tables, $backup_mj_tables, 'all'); ?>
+                                        </div>
+                                    </form>
                                 </div>
                             </div>
 
-                            <div style="margin-top:20px; padding:16px; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px;">
-                                <h3 style="margin-top:0;">Fonctionnement</h3>
-                                <ol style="margin:0 0 0 18px; color:#475569; font-size:13px;">
-                                    <li>Le plugin exporte toutes les tables commençant par <code>mj_</code>.</li>
-                                    <li>Un fichier <code>.sql</code> horodaté est envoyé dans le sous-dossier indiqué sur Nextcloud.</li>
-                                    <li>Seules les <?php echo esc_html((string) $backup_retention_option); ?> sauvegardes les plus récentes sont conservées.</li>
-                                </ol>
+                            <?php /* ---- Section 2: Backup médias ---- */ ?>
+                            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:20px;">
+                                <h3 style="margin-top:0;">Sauvegarde des médias (wp-content/uploads)</h3>
+                                <p style="color:#475569; font-size:13px; margin-top:0;">
+                                    Synchronise le dossier <code>uploads</code> vers Nextcloud de façon incrémentale (seuls les fichiers nouveaux ou modifiés sont envoyés).<br>
+                                    Mode actif : <strong><?php echo $media_backup_mode === 'rclone' ? 'rclone ✓' : 'PHP WebDAV (fichiers ≤ 50 MB)'; ?></strong>
+                                </p>
+                                <div style="display:flex; flex-wrap:wrap; gap:20px;">
+                                    <div style="flex:1 1 340px;">
+                                        <p style="margin-bottom:14px;">
+                                            <label>
+                                                <input type="checkbox" name="mj_media_backup_enabled" value="1" <?php checked($media_backup_enabled_option); ?>>
+                                                Activer la synchronisation automatique via WP-Cron
+                                            </label>
+                                        </p>
+                                        <p style="margin-bottom:14px;">
+                                            <label for="mj-media-freq"><strong>Fréquence</strong></label><br>
+                                            <select name="mj_media_backup_frequency" id="mj-media-freq">
+                                                <option value="daily" <?php selected($media_backup_frequency_opt, 'daily'); ?>>Tous les jours</option>
+                                                <option value="twicedaily" <?php selected($media_backup_frequency_opt, 'twicedaily'); ?>>Deux fois par jour</option>
+                                                <option value="weekly" <?php selected($media_backup_frequency_opt, 'weekly'); ?>>Une fois par semaine</option>
+                                            </select>
+                                        </p>
+                                        <p style="margin-bottom:14px;">
+                                            <label for="mj-media-folder"><strong>Sous-dossier Nextcloud</strong></label><br>
+                                            <input type="text" name="mj_media_backup_folder" id="mj-media-folder" value="<?php echo esc_attr($media_backup_folder_opt); ?>" class="regular-text" placeholder="backups/uploads">
+                                        </p>
+                                        <p style="margin-bottom:0;">
+                                            <label for="mj-media-rclone"><strong>Chemin rclone (optionnel)</strong></label><br>
+                                            <input type="text" name="mj_media_backup_rclone_binary" id="mj-media-rclone" value="<?php echo esc_attr($media_backup_rclone_binary_opt); ?>" class="regular-text" placeholder="/usr/bin/rclone">
+                                            <small style="color:#64748b; display:block; margin-top:3px;">
+                                                Laissez vide pour le mode PHP WebDAV intégré.<br>
+                                                Si rclone est installé sur le serveur, indiquez son chemin pour gérer les gros volumes.
+                                            </small>
+                                        </p>
+                                        <p style="margin-top:14px; margin-bottom:14px;">
+                                            <label for="mj-media-runtime"><strong>Durée max par lot (secondes)</strong></label><br>
+                                            <input type="number" name="mj_media_backup_max_runtime_seconds" id="mj-media-runtime" value="<?php echo esc_attr((string) $media_backup_max_runtime_seconds_opt); ?>" min="5" max="120" class="small-text"> s
+                                            <small style="color:#64748b; display:block; margin-top:3px;">
+                                                En mode WebDAV, la synchro s'arrête proprement après cette durée pour éviter les timeouts serveur.
+                                            </small>
+                                        </p>
+                                        <p style="margin-bottom:0;">
+                                            <label for="mj-media-pause"><strong>Pause entre uploads (ms)</strong></label><br>
+                                            <input type="number" name="mj_media_backup_pause_ms" id="mj-media-pause" value="<?php echo esc_attr((string) $media_backup_pause_ms_opt); ?>" min="0" max="2000" class="small-text"> ms
+                                            <small style="color:#64748b; display:block; margin-top:3px;">
+                                                Ajoute une micro-temporisation après chaque fichier envoyé (WebDAV). Augmentez si le serveur sature.
+                                            </small>
+                                        </p>
+                                        <p style="margin-top:14px; margin-bottom:0;">
+                                            <button type="button" class="button button-primary" id="mj-media-settings-save-btn">💾 Enregistrer ces options médias</button>
+                                            <span id="mj-media-settings-save-status" style="margin-left:8px; color:#475569; font-size:12px;"></span>
+                                        </p>
+                                    </div>
+                                    <div style="flex:1 1 260px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px;">
+                                        <h4 style="margin-top:0;">État</h4>
+                                        <p style="margin:0 0 8px;"><strong>Dernier run :</strong> <?php echo esc_html($media_backup_last_run_display); ?></p>
+                                        <p style="margin:0 0 14px; font-size:13px; color:<?php echo !empty($media_backup_last_status['success']) ? '#15803d' : '#475569'; ?>">
+                                            <strong>Statut :</strong> <?php echo esc_html($media_backup_last_status['message'] ?? 'Aucune exécution.'); ?>
+                                        </p>
+                                        <form method="post" style="display:inline;" id="mj-media-sync-form">
+                                            <?php wp_nonce_field('mj_backup_media_run'); ?>
+                                            <input type="hidden" name="mj_backup_profile_action" value="run_media">
+                                            <button type="submit" class="button button-secondary" <?php echo $nc_is_ready ? '' : 'disabled'; ?>>▶ Synchroniser maintenant</button>
+                                        </form>
+                                        <form method="post" style="display:inline; margin-left:6px;">
+                                            <?php wp_nonce_field('mj_backup_media_clear_cache'); ?>
+                                            <input type="hidden" name="mj_backup_profile_action" value="clear_media_cache">
+                                            <button type="submit" class="button button-small" title="Vider le cache — force le renvoi de tous les fichiers">↺ Vider cache</button>
+                                        </form>
+                                        <?php if (!$nc_is_ready) : ?>
+                                            <p style="margin:8px 0 0; color:#b91c1c; font-size:13px;">Configurez d'abord Nextcloud.</p>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
                             </div>
+
+                            <div style="background:#0b1220; color:#dbeafe; border:1px solid #1e293b; border-radius:8px; padding:14px; margin-top:20px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px;">
+                                    <h3 style="margin:0; color:#e2e8f0;">Console sauvegardes (AJAX)</h3>
+                                    <button type="button" class="button button-small" id="mj-backup-console-clear">Effacer</button>
+                                </div>
+                                <div id="mj-backup-console" style="background:#020617; border:1px solid #334155; border-radius:6px; padding:10px; min-height:120px; max-height:260px; overflow:auto; font-family:Consolas, Menlo, Monaco, monospace; font-size:12px; line-height:1.45;"></div>
+                            </div>
+
+                            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:20px; margin-top:20px;">
+                                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
+                                    <h3 style="margin:0;">Journal des actions de sauvegarde</h3>
+                                    <form method="post" onsubmit="return confirm('Vider le journal des actions de sauvegarde ?');" style="margin:0;">
+                                        <?php wp_nonce_field('mj_manual_action_logs_clear'); ?>
+                                        <input type="hidden" name="mj_backup_profile_action" value="clear_manual_logs">
+                                        <button type="submit" class="button button-small">🧹 Vider le journal</button>
+                                    </form>
+                                </div>
+                                <p style="color:#475569; font-size:13px; margin-top:0;">
+                                    Historique des sauvegardes et synchronisations lancées manuellement (base de données, médias et Google Agenda).
+                                </p>
+
+                                <?php if (empty($manual_action_logs)) : ?>
+                                    <p style="color:#64748b; font-style:italic; margin-bottom:0;">Aucune action manuelle enregistrée.</p>
+                                <?php else : ?>
+                                    <div style="overflow:auto;">
+                                        <table class="widefat striped" style="margin-bottom:0; min-width:780px;">
+                                            <thead>
+                                                <tr>
+                                                    <th style="width:160px;">Date</th>
+                                                    <th style="width:180px;">Action</th>
+                                                    <th style="width:90px;">Statut</th>
+                                                    <th>Détails</th>
+                                                    <th style="width:140px;">Utilisateur</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                            <?php foreach ($manual_action_logs as $entry) :
+                                                $entryTime = isset($entry['time']) ? (int) $entry['time'] : 0;
+                                                $entryAction = isset($entry['action']) ? (string) $entry['action'] : '';
+                                                $actionLabels = array(
+                                                    'db_backup_profile' => 'Sauvegarde DB (profil)',
+                                                    'db_backup_default' => 'Sauvegarde DB (globale)',
+                                                    'media_sync' => 'Synchronisation médias',
+                                                    'google_sync' => 'Synchronisation Google',
+                                                );
+                                                $entryActionLabel = $actionLabels[$entryAction] ?? $entryAction;
+                                                $entrySuccess = !empty($entry['success']);
+                                                $entryMessage = isset($entry['message']) ? (string) $entry['message'] : '';
+                                                $entryUser = isset($entry['user_login']) ? (string) $entry['user_login'] : '';
+                                                $entryContext = (isset($entry['context']) && is_array($entry['context'])) ? $entry['context'] : array();
+                                                $contextParts = array();
+                                                foreach ($entryContext as $ctxKey => $ctxValue) {
+                                                    $contextParts[] = sprintf('%s: %s', (string) $ctxKey, (string) $ctxValue);
+                                                }
+                                            ?>
+                                                <tr>
+                                                    <td><?php echo esc_html($entryTime > 0 ? wp_date('d/m/Y H:i:s', $entryTime) : '—'); ?></td>
+                                                    <td><?php echo esc_html($entryActionLabel); ?></td>
+                                                    <td style="color:<?php echo $entrySuccess ? '#15803d' : '#b91c1c'; ?>; font-weight:600;">
+                                                        <?php echo $entrySuccess ? 'OK' : 'Échec'; ?>
+                                                    </td>
+                                                    <td>
+                                                        <?php echo esc_html($entryMessage !== '' ? $entryMessage : '—'); ?>
+                                                        <?php if (!empty($contextParts)) : ?>
+                                                            <div style="margin-top:4px; color:#64748b; font-size:12px;">
+                                                                <?php echo esc_html(implode(' | ', $contextParts)); ?>
+                                                            </div>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td><?php echo esc_html($entryUser !== '' ? $entryUser : 'système'); ?></td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+
                         </div>
+
+                        <script>
+                        (function($){
+                            var ajaxNonce = <?php echo wp_json_encode(wp_create_nonce('mj_member_backup_manual_ajax')); ?>;
+                            var mediaSettingsNonce = <?php echo wp_json_encode(wp_create_nonce('mj_member_media_settings_ajax')); ?>;
+                            var isRunning = false;
+
+                            function nowLabel() {
+                                return new Date().toLocaleTimeString('fr-BE', { hour12: false });
+                            }
+
+                            function appendConsole(message, type) {
+                                var $console = $('#mj-backup-console');
+                                if (!$console.length) {
+                                    return;
+                                }
+                                var color = '#cbd5e1';
+                                if (type === 'error') {
+                                    color = '#fca5a5';
+                                } else if (type === 'success') {
+                                    color = '#86efac';
+                                } else if (type === 'info') {
+                                    color = '#93c5fd';
+                                }
+                                $console.append('<div style="color:' + color + ';">[' + nowLabel() + '] ' + $('<div/>').text(message).html() + '</div>');
+                                $console.scrollTop($console[0].scrollHeight);
+                            }
+
+                            function setButtonsDisabled(disabled) {
+                                $('.mj-bp-run-profile-form .mj-bp-run-btn, #mj-media-sync-form button[type="submit"]').prop('disabled', disabled);
+                            }
+
+                            function startPulse(label) {
+                                var dots = 0;
+                                appendConsole(label, 'info');
+                                return window.setInterval(function(){
+                                    dots = (dots + 1) % 4;
+                                    appendConsole('... ' + '.'.repeat(dots || 1), 'info');
+                                }, 2500);
+                            }
+
+                            function runManualAction(runType, payload, startLabel) {
+                                if (isRunning) {
+                                    appendConsole('Une autre opération est déjà en cours, merci de patienter.', 'error');
+                                    return;
+                                }
+
+                                isRunning = true;
+                                setButtonsDisabled(true);
+                                var pulseTimer = startPulse(startLabel);
+
+                                $.ajax({
+                                    url: (typeof ajaxurl !== 'undefined' ? ajaxurl : ''),
+                                    method: 'POST',
+                                    dataType: 'json',
+                                    data: $.extend({
+                                        action: 'mj_member_run_manual_backup_action',
+                                        nonce: ajaxNonce,
+                                        runType: runType
+                                    }, payload || {})
+                                }).done(function(response){
+                                    var data = response && response.data ? response.data : {};
+                                    var steps = $.isArray(data.steps) ? data.steps : [];
+                                    steps.forEach(function(step){ appendConsole(step, 'info'); });
+
+                                    if (response && response.success) {
+                                        appendConsole(data.message || 'Opération terminée.', 'success');
+                                    } else {
+                                        appendConsole(data.message || 'Erreur inconnue.', 'error');
+                                    }
+                                }).fail(function(xhr){
+                                    var msg = 'Échec de la requête AJAX.';
+                                    if (xhr && xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+                                        msg = xhr.responseJSON.data.message;
+                                    }
+                                    appendConsole(msg, 'error');
+                                }).always(function(){
+                                    window.clearInterval(pulseTimer);
+                                    isRunning = false;
+                                    setButtonsDisabled(false);
+                                });
+                            }
+
+                            function runDbProfileFromForm($form) {
+                                var profileId = String($form.data('profile-id') || '');
+                                if (!profileId) {
+                                    appendConsole('Profil invalide.', 'error');
+                                    return;
+                                }
+                                runManualAction('db_profile', { profileId: profileId }, 'Lancement de la sauvegarde base de données...');
+                            }
+
+                            // Click explicite sur le bouton "Lancer" (tableau profils DB)
+                            $(document).on('click', '.mj-bp-run-profile-form .mj-bp-run-btn', function(evt){
+                                evt.preventDefault();
+                                runDbProfileFromForm($(this).closest('form'));
+                            });
+
+                            // Fallback: intercepte aussi un submit éventuel du form
+                            $(document).on('submit', '.mj-bp-run-profile-form', function(evt){
+                                evt.preventDefault();
+                                runDbProfileFromForm($(this));
+                            });
+
+                            $('#mj-media-sync-form').on('submit', function(evt){
+                                evt.preventDefault();
+                                runManualAction('media_sync', {}, 'Lancement de la synchronisation du dossier uploads...');
+                            });
+
+                            $('#mj-backup-console-clear').on('click', function(){
+                                $('#mj-backup-console').empty();
+                            });
+
+                            $('#mj-media-settings-save-btn').on('click', function(){
+                                var $btn = $(this);
+                                var $status = $('#mj-media-settings-save-status');
+
+                                $btn.prop('disabled', true);
+                                $status.text('Enregistrement...').css('color', '#475569');
+
+                                $.ajax({
+                                    url: (typeof ajaxurl !== 'undefined' ? ajaxurl : ''),
+                                    method: 'POST',
+                                    dataType: 'json',
+                                    data: {
+                                        action: 'mj_member_save_media_backup_settings_ajax',
+                                        nonce: mediaSettingsNonce,
+                                        mj_media_backup_enabled: $('input[name="mj_media_backup_enabled"]').is(':checked') ? '1' : '0',
+                                        mj_media_backup_frequency: String($('#mj-media-freq').val() || 'daily'),
+                                        mj_media_backup_folder: String($('#mj-media-folder').val() || ''),
+                                        mj_media_backup_rclone_binary: String($('#mj-media-rclone').val() || ''),
+                                        mj_media_backup_max_runtime_seconds: String($('#mj-media-runtime').val() || '20'),
+                                        mj_media_backup_pause_ms: String($('#mj-media-pause').val() || '120')
+                                    }
+                                }).done(function(response){
+                                    var ok = !!(response && response.success);
+                                    var msg = (response && response.data && response.data.message)
+                                        ? String(response.data.message)
+                                        : (ok ? 'Options médias enregistrées.' : 'Échec de l\'enregistrement.');
+                                    $status.text(msg).css('color', ok ? '#15803d' : '#b91c1c');
+                                }).fail(function(){
+                                    $status.text('Erreur AJAX lors de l\'enregistrement.').css('color', '#b91c1c');
+                                }).always(function(){
+                                    $btn.prop('disabled', false);
+                                });
+                            });
+
+                            function toggleScheduleFields($form) {
+                                if (!$form || !$form.length) {
+                                    return;
+                                }
+                                var frequency = String($form.find('select[name="mj_bp_frequency"]').val() || 'daily');
+                                var showDaily = (frequency === 'daily' || frequency === 'twicedaily');
+                                var showTwiceDaily = (frequency === 'twicedaily');
+                                var showWeekly = (frequency === 'weekly');
+
+                                var $daily = $form.find('.mj-bp-field-daily');
+                                var $twiceDaily = $form.find('.mj-bp-field-twicedaily');
+                                var $weekly = $form.find('.mj-bp-field-weekly');
+
+                                $daily.toggle(showDaily);
+                                $twiceDaily.toggle(showTwiceDaily);
+                                $weekly.toggle(showWeekly);
+
+                                $daily.find('input, select').prop('disabled', !showDaily);
+                                $twiceDaily.find('input, select').prop('disabled', !showTwiceDaily);
+                                $weekly.find('input, select').prop('disabled', !showWeekly);
+                            }
+
+                            $(document).on('change', '.mj-bp-profile-form select[name="mj_bp_frequency"]', function(){
+                                toggleScheduleFields($(this).closest('.mj-bp-profile-form'));
+                            });
+
+                            $('.mj-bp-profile-form').each(function(){
+                                toggleScheduleFields($(this));
+                            });
+
+                            appendConsole('Console prête. Lancez une sauvegarde pour voir le suivi.', 'info');
+                        })(jQuery);
+
+                        function mjBpToggleEdit(id) {
+                            var row = document.getElementById('mj-bp-edit-' + id);
+                            if (row) row.style.display = (row.style.display === 'none' || row.style.display === '') ? 'table-row' : 'none';
+                        }
+                        function mjBpToggleNew() {
+                            var form = document.getElementById('mj-bp-add-form');
+                            if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+                        }
+                        /**
+                         * @param {string}  fid      Profile id ('new' or uuid).
+                         * @param {boolean} checked  true = check, false = uncheck.
+                         * @param {boolean} mjOnly   true = only mj_* checkboxes.
+                         */
+                        function mjBpSelectGroup(fid, checked, mjOnly) {
+                            var cls = mjOnly ? '.mj-bp-cb-mj-' + fid : '.mj-bp-cb-' + fid;
+                            document.querySelectorAll(cls).forEach(function(cb) { cb.checked = checked; });
+                        }
+                        </script>
                     </div>
 
                     <div id="mj-tab-account" class="mj-settings-tabs__panel" data-tab="account" role="tabpanel" aria-labelledby="mj-tab-button-account" aria-hidden="true">
@@ -1441,8 +2040,8 @@ if (!defined('ABSPATH')) {
                 </div>
             </div>
 
-            <p style="margin-top: 30px;">
-                <button class="button button-primary button-large" type="submit" name="mj_save_settings">💾 Enregistrer les paramètres</button>
+            <p id="mj-settings-save-actions" style="margin-top: 30px;">
+                <button class="button button-primary button-large" type="submit" form="mj-settings-form" name="mj_save_settings">💾 Enregistrer les paramètres</button>
             </p>
         </form>
 
@@ -1764,6 +2363,7 @@ if (!defined('ABSPATH')) {
             var storageKey = 'mjMemberSettingsActiveTab';
             var navButtons = Array.prototype.slice.call(container.querySelectorAll('.mj-settings-tabs__nav-btn'));
             var panels = Array.prototype.slice.call(container.querySelectorAll('.mj-settings-tabs__panel'));
+            var saveActions = document.getElementById('mj-settings-save-actions');
 
             if (!navButtons.length || !panels.length) {
                 return;
@@ -1786,6 +2386,11 @@ if (!defined('ABSPATH')) {
                     panel.classList.toggle('is-active', isTarget);
                     panel.setAttribute('aria-hidden', isTarget ? 'false' : 'true');
                 });
+
+                if (saveActions) {
+                    // Backup tab already has dedicated action forms; hide the global save there.
+                    saveActions.style.display = tabName === 'backup' ? 'none' : '';
+                }
 
                 if (matched && !skipPersist && window.localStorage) {
                     try {

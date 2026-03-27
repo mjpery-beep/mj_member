@@ -400,6 +400,7 @@ if (isset($_GET['event'])) {
 $url_event_id = $prefill_event_id > 0 ? $prefill_event_id : null;
 $url_tab = isset($_GET['tab']) ? sanitize_key(wp_unslash($_GET['tab'])) : null;
 $url_member_id = isset($_GET['member']) ? absint(wp_unslash($_GET['member'])) : null;
+$url_main_tab = isset($_GET['main-tab']) ? sanitize_key(wp_unslash($_GET['main-tab'])) : null;
 
 $config_json = wp_json_encode(array(
     'widgetId' => $widget_id,
@@ -449,6 +450,7 @@ $config_json = wp_json_encode(array(
     'urlEventId' => $url_event_id,
     'urlMemberId' => $url_member_id > 0 ? $url_member_id : null,
     'urlTab' => $url_tab !== '' ? $url_tab : null,
+    'urlMainTab' => $url_main_tab !== '' ? $url_main_tab : null,
     'regDocHeader' => wpautop(get_option('mj_regdoc_header', '')),
     'regDocFooter' => wpautop(get_option('mj_regdoc_footer', '')),
     'socialPublish' => array(
@@ -705,11 +707,10 @@ $config_json = wp_json_encode(array(
         'jobProfileSave' => __('Enregistrer', 'mj-member'),
         'jobProfileSaved' => __('Profil de fonction enregistré.', 'mj-member'),
         'jobProfileSaving' => __('Enregistrement…', 'mj-member'),
-        'jobProfileTitles' => [
-            'coordination' => __('Coordination', 'mj-member'),
-            'animateur' => __('Animateur', 'mj-member'),
-            'communication' => __('Communication', 'mj-member'),
-            'autre' => __('Autre', 'mj-member'),
+        'jobProfileTitleSuggestions' => [
+            __('Animateur', 'mj-member'),
+            __('Coordinateur', 'mj-member'),
+            __('Employé', 'mj-member'),
         ],
         'jobProfileRegimes' => [
             'mi-temps' => __('Mi-temps (19h)', 'mj-member'),

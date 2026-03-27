@@ -671,6 +671,29 @@
             },
 
             /**
+             * Met à jour une notification liée au membre
+             */
+            updateMemberNotification: function (memberId, notificationId, text, url, status) {
+                return post('mj_regmgr_update_member_notification', {
+                    memberId: memberId,
+                    notificationId: notificationId,
+                    text: text || '',
+                    url: url || '',
+                    status: status || '',
+                });
+            },
+
+            /**
+             * Supprime une notification liée au membre
+             */
+            deleteMemberNotification: function (memberId, notificationId) {
+                return post('mj_regmgr_delete_member_notification', {
+                    memberId: memberId,
+                    notificationId: notificationId,
+                });
+            },
+
+            /**
              * Supprime un témoignage d'un membre
              */
             deleteMemberTestimonial: function (testimonialId) {

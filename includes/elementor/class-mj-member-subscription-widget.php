@@ -295,8 +295,6 @@ class Mj_Member_Elementor_Subscription_Widget extends Widget_Base {
         }
 
         if (!is_user_logged_in()) {
-            $login_url = wp_login_url(mj_member_get_current_url());
-            echo '<div class="mj-member-account-warning">' . esc_html__('Connectez-vous pour consulter votre statut de cotisation.', 'mj-member') . ' <a href="' . esc_url($login_url) . '">' . esc_html__('Se connecter', 'mj-member') . '</a></div>';
             return;
         }
 

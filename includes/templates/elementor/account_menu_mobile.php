@@ -1,7 +1,10 @@
 <?php
 
 use Mj\Member\Classes\MjRoles;
+use Mj\Member\Classes\Crud\MjEvents;
+use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Core\AssetsManager;
+use Mj\Member\Core\Config;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -540,6 +543,11 @@ if (!function_exists('mj_member_render_account_menu_component')) {
             $manage_events_button_settings = $args['manage_events_button'];
         }
 
+        $nextcloud_button_settings = array();
+        if (isset($args['nextcloud_button']) && is_array($args['nextcloud_button'])) {
+            $nextcloud_button_settings = $args['nextcloud_button'];
+        }
+
         $event_button_label = isset($event_button_settings['label']) ? trim((string) $event_button_settings['label']) : '';
         $event_button_url = isset($event_button_settings['url']) ? esc_url_raw((string) $event_button_settings['url']) : '';
         $event_button_is_external = !empty($event_button_settings['is_external']);
@@ -561,6 +569,16 @@ if (!function_exists('mj_member_render_account_menu_component')) {
         $manage_events_url_setting = '';
         if (!empty($manage_events_button_settings['url'])) {
             $manage_events_url_setting = esc_url_raw((string) $manage_events_button_settings['url']);
+        }
+
+        $nextcloud_icon_url_setting = '';
+        if (!empty($nextcloud_button_settings['icon_url'])) {
+            $nextcloud_icon_url_setting = esc_url_raw((string) $nextcloud_button_settings['icon_url']);
+        }
+
+        $nextcloud_url_setting = '';
+        if (!empty($nextcloud_button_settings['url'])) {
+            $nextcloud_url_setting = esc_url_raw((string) $nextcloud_button_settings['url']);
         }
 
         $layout = $args['layout'] === 'desktop' ? 'desktop' : 'modal';
@@ -588,9 +606,13 @@ if (!function_exists('mj_member_render_account_menu_component')) {
         $event_button_rel = '';
         $event_button_markup = '';
         $has_event_button = $event_button_label !== '' && $event_button_href !== '';
+        $has_event_calendar_dropdown = false;
+        $event_calendar_dropdown_markup = '';
 
         $has_manage_events_button = false;
         $manage_events_button_markup = '';
+        $has_nextcloud_button = false;
+        $nextcloud_button_markup = '';
 
         $manage_events_roles = array(
             MjRoles::ANIMATEUR,
@@ -599,12 +621,19 @@ if (!function_exists('mj_member_render_account_menu_component')) {
         );
 
         $current_member_role = '';
+        $current_member_nextcloud_login = '';
         if (function_exists('mj_member_get_current_member')) {
             $current_member = mj_member_get_current_member();
             if (is_object($current_member) && isset($current_member->role)) {
                 $current_member_role = sanitize_key((string) $current_member->role);
             } elseif (is_array($current_member) && isset($current_member['role'])) {
                 $current_member_role = sanitize_key((string) $current_member['role']);
+            }
+
+            if (is_object($current_member) && isset($current_member->member_nextcloud_login)) {
+                $current_member_nextcloud_login = sanitize_user((string) $current_member->member_nextcloud_login, true);
+            } elseif (is_array($current_member) && isset($current_member['member_nextcloud_login'])) {
+                $current_member_nextcloud_login = sanitize_user((string) $current_member['member_nextcloud_login'], true);
             }
         }
 
@@ -617,6 +646,10 @@ if (!function_exists('mj_member_render_account_menu_component')) {
 
         if ($is_preview) {
             $has_manage_events_button = true;
+        }
+
+        if ($current_member_nextcloud_login !== '' || $is_preview) {
+            $has_nextcloud_button = true;
         }
 
         if ($has_event_button) {
@@ -632,28 +665,68 @@ if (!function_exists('mj_member_render_account_menu_component')) {
                 $event_button_rel = implode(' ', array_unique($rel_parts));
             }
 
+            if (
+                $event_button_icon_type === 'image'
+                && class_exists('Mj_Member_Elementor_Events_Calendar_Widget')
+                && method_exists('Mj_Member_Elementor_Events_Calendar_Widget', 'render_widget')
+            ) {
+                ob_start();
+                ?>
+                <div class="mj-member-account-menu__event-calendar-dropdown" aria-label="<?php echo esc_attr__('Calendrier des événements', 'mj-member'); ?>">
+                    <?php
+                    Mj_Member_Elementor_Events_Calendar_Widget::render_widget(
+                        array(
+                            'title' => '',
+                            'statuses' => array(MjEvents::STATUS_ACTIVE),
+                            'months_before' => 0,
+                            'months_after' => 1,
+                            'highlight_next_event' => 'yes',
+                            'highlight_closure_days' => 'yes',
+                            'hide_closure_occurrences' => 'yes',
+                            'show_toolbar_left' => 'yes',
+                            'show_toolbar_actions' => '',
+                            'show_leave_requests' => 'yes',
+                            'show_todos' => 'yes',
+                        ),
+                        array(
+                            'force_mobile' => true,
+                            'additional_classes' => array('mj-member-account-menu__event-calendar-widget'),
+                        )
+                    );
+                    ?>
+                </div>
+                <?php
+                $event_calendar_dropdown_markup = trim((string) ob_get_clean());
+                $has_event_calendar_dropdown = $event_calendar_dropdown_markup !== '';
+            }
+
             ob_start();
             ?>
-            <a
-                class="mj-member-account-menu__event-button"
-                href="<?php echo esc_url($event_button_href); ?>"
-                <?php if ($event_button_is_external) : ?>target="_blank"<?php endif; ?>
-                <?php if ($event_button_rel !== '') : ?>rel="<?php echo esc_attr($event_button_rel); ?>"<?php endif; ?>
-                aria-label="<?php echo esc_attr($event_button_label); ?>"
-            >
-                <?php if ($event_button_icon_html !== '') : ?>
-                    <?php
-                    $event_button_icon_classes = array('mj-member-account-menu__event-button-icon');
-                    if ($event_button_icon_type === 'image') {
-                        $event_button_icon_classes[] = 'mj-member-account-menu__event-button-icon--image';
-                    }
-                    ?>
-                    <span class="<?php echo esc_attr(implode(' ', $event_button_icon_classes)); ?>"<?php if ($event_button_icon_type !== 'image') : ?> aria-hidden="true"<?php endif; ?>>
-                        <?php echo $event_button_icon_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-                    </span>
+            <div class="mj-member-account-menu__event-calendar-wrap<?php echo $has_event_calendar_dropdown ? ' has-calendar-dropdown' : ''; ?>">
+                <a
+                    class="mj-member-account-menu__event-button"
+                    href="<?php echo esc_url($event_button_href); ?>"
+                    <?php if ($event_button_is_external) : ?>target="_blank"<?php endif; ?>
+                    <?php if ($event_button_rel !== '') : ?>rel="<?php echo esc_attr($event_button_rel); ?>"<?php endif; ?>
+                    aria-label="<?php echo esc_attr($event_button_label); ?>"
+                >
+                    <?php if ($event_button_icon_html !== '') : ?>
+                        <?php
+                        $event_button_icon_classes = array('mj-member-account-menu__event-button-icon');
+                        if ($event_button_icon_type === 'image') {
+                            $event_button_icon_classes[] = 'mj-member-account-menu__event-button-icon--image';
+                        }
+                        ?>
+                        <span class="<?php echo esc_attr(implode(' ', $event_button_icon_classes)); ?>"<?php if ($event_button_icon_type !== 'image') : ?> aria-hidden="true"<?php endif; ?>>
+                            <?php echo $event_button_icon_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                        </span>
+                    <?php endif; ?>
+                    <span class="mj-member-account-menu__event-button-label"><?php echo esc_html($event_button_label); ?></span>
+                </a>
+                <?php if ($has_event_calendar_dropdown) : ?>
+                    <?php echo $event_calendar_dropdown_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
                 <?php endif; ?>
-                <span class="mj-member-account-menu__event-button-label"><?php echo esc_html($event_button_label); ?></span>
-            </a>
+            </div>
             <?php
             $event_button_markup = trim((string) ob_get_clean());
 
@@ -679,28 +752,324 @@ if (!function_exists('mj_member_render_account_menu_component')) {
                     ? $manage_events_icon_url_setting
                     : (string) apply_filters('mj_member_account_menu_manage_events_icon_url', 'https://upload.wikimedia.org/wikipedia/commons/a/ac/Windows_Settings_icon.svg');
 
+                $favorite_member_ids = array();
+                $favorite_event_ids = array();
+                $favorite_member_items = array();
+                $favorite_event_items = array();
+
+                $wp_user_id = get_current_user_id();
+                if ($wp_user_id > 0) {
+                    $raw_favorite_members = get_user_meta($wp_user_id, '_mj_regmgr_fav_members', true);
+                    $raw_favorite_events = get_user_meta($wp_user_id, '_mj_regmgr_fav_events', true);
+
+                    if (is_array($raw_favorite_members)) {
+                        $favorite_member_ids = array_values(array_unique(array_filter(array_map('intval', $raw_favorite_members), static function ($id) {
+                            return $id > 0;
+                        })));
+                    }
+
+                    if (is_array($raw_favorite_events)) {
+                        $favorite_event_ids = array_values(array_unique(array_filter(array_map('intval', $raw_favorite_events), static function ($id) {
+                            return $id > 0;
+                        })));
+                    }
+                }
+
+                if ($is_preview && empty($favorite_member_ids) && empty($favorite_event_ids)) {
+                    $favorite_member_items = array(
+                        array(
+                            'label' => __('Membre exemple 1', 'mj-member'),
+                            'url' => '#',
+                            'avatar_url' => '',
+                                'initials' => 'ME',
+                                'tab_urls' => array('info' => '#', 'edit' => '#', 'badge' => '#'),
+                            ),
+                        array(
+                            'label' => __('Membre exemple 2', 'mj-member'),
+                            'url' => '#',
+                            'avatar_url' => '',
+                                'initials' => 'ME',
+                                'tab_urls' => array('info' => '#', 'edit' => '#', 'badge' => '#'),
+                            ),
+                    );
+
+                    $favorite_event_items = array(
+                        array(
+                            'label' => __('Événement exemple 1', 'mj-member'),
+                            'url' => '#',
+                                'emoji' => '🎯',
+                                'tab_urls' => array('inscription' => '#', 'presence' => '#', 'edit' => '#'),
+                            ),
+                        array(
+                            'label' => __('Événement exemple 2', 'mj-member'),
+                            'url' => '#',
+                                'emoji' => '🎨',
+                                'tab_urls' => array('inscription' => '#', 'presence' => '#', 'edit' => '#'),
+                            ),
+                    );
+                }
+
+                if (empty($favorite_member_items) && !empty($favorite_member_ids)) {
+                    foreach (array_slice($favorite_member_ids, 0, 8) as $favorite_member_id) {
+                        $favorite_member = MjMembers::getById($favorite_member_id);
+                        if (!$favorite_member) {
+                            continue;
+                        }
+
+                        $first_name = trim((string) $favorite_member->get('first_name', ''));
+                        $last_name = trim((string) $favorite_member->get('last_name', ''));
+                        $member_label = trim($first_name . ' ' . $last_name);
+                        if ($member_label === '') {
+                            $member_label = (string) $favorite_member->get('nickname', '');
+                        }
+                        if ($member_label === '') {
+                            $member_label = sprintf(__('Membre #%d', 'mj-member'), (int) $favorite_member_id);
+                        }
+
+                        $avatar_url = '';
+                        $avatar_id = (int) $favorite_member->get('photo_id', 0);
+                        if ($avatar_id > 0) {
+                            $avatar_candidate = wp_get_attachment_image_url($avatar_id, 'thumbnail');
+                            if (is_string($avatar_candidate) && $avatar_candidate !== '') {
+                                $avatar_url = esc_url_raw($avatar_candidate);
+                            }
+                        }
+
+                        $initials_source = $member_label;
+                        $initials = '';
+                        if ($initials_source !== '') {
+                            $parts = preg_split('/\s+/', $initials_source);
+                            if (is_array($parts)) {
+                                foreach ($parts as $part) {
+                                    $part = trim((string) $part);
+                                    if ($part === '') {
+                                        continue;
+                                    }
+                                    $initials .= strtoupper(substr($part, 0, 1));
+                                    if (strlen($initials) >= 2) {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if ($initials === '') {
+                            $initials = 'M';
+                        }
+
+                        $favorite_member_items[] = array(
+                            'label' => $member_label,
+                            'url' => add_query_arg(
+                                array(
+                                    'main-tab' => 'member',
+                                    'member_id' => (int) $favorite_member_id,
+                                ),
+                                $manage_events_url
+                            ),
+                                'avatar_url' => $avatar_url,
+                                'initials' => $initials,
+                                'tab_urls' => array(
+                                    'info'  => add_query_arg(array('main-tab' => 'member', 'member_id' => (int) $favorite_member_id, 'tab' => 'info'), $manage_events_url),
+                                    'edit'  => add_query_arg(array('main-tab' => 'member', 'member_id' => (int) $favorite_member_id, 'tab' => 'edit'), $manage_events_url),
+                                    'badge' => add_query_arg(array('main-tab' => 'member', 'member_id' => (int) $favorite_member_id, 'tab' => 'badge'), $manage_events_url),
+                                ),
+                            );
+                    }
+                }
+
+                if (empty($favorite_event_items) && !empty($favorite_event_ids)) {
+                    foreach (array_slice($favorite_event_ids, 0, 8) as $favorite_event_id) {
+                        $favorite_event = MjEvents::find($favorite_event_id);
+                        if (!$favorite_event) {
+                            continue;
+                        }
+
+                        $event_label = trim((string) $favorite_event->get('title', ''));
+                        if ($event_label === '') {
+                            $event_label = sprintf(__('Événement #%d', 'mj-member'), (int) $favorite_event_id);
+                        }
+
+                        $event_emoji = trim((string) $favorite_event->get('emoji', ''));
+                        if ($event_emoji === '') {
+                            $event_emoji = '📅';
+                        }
+
+                        $favorite_event_items[] = array(
+                            'label' => $event_label,
+                            'url' => add_query_arg(
+                                array(
+                                    'main-tab' => 'event',
+                                    'event_id' => (int) $favorite_event_id,
+                                ),
+                                $manage_events_url
+                            ),
+                                'emoji' => $event_emoji,
+                                'tab_urls' => array(
+                                    'inscription' => add_query_arg(array('main-tab' => 'event', 'event_id' => (int) $favorite_event_id, 'tab' => 'inscription'), $manage_events_url),
+                                    'presence'    => add_query_arg(array('main-tab' => 'event', 'event_id' => (int) $favorite_event_id, 'tab' => 'presence'), $manage_events_url),
+                                    'edit'        => add_query_arg(array('main-tab' => 'event', 'event_id' => (int) $favorite_event_id, 'tab' => 'edit'), $manage_events_url),
+                                ),
+                            );
+                    }
+                }
+
+                $manage_events_members_url = add_query_arg('main-tab', 'member', $manage_events_url);
+                $manage_events_events_url = add_query_arg('main-tab', 'event', $manage_events_url);
+
                 if (!is_string($manage_events_icon_url)) {
                     $manage_events_icon_url = '';
                 }
 
                 ob_start();
                 ?>
-                <a
-                    class="mj-member-account-menu__manage-events-button"
-                    href="<?php echo esc_url($manage_events_url); ?>"
-                    aria-label="<?php echo esc_attr($manage_events_label); ?>"
-                >
-                    <?php if ($manage_events_icon_url !== '') : ?>
-                        <span class="mj-member-account-menu__manage-events-button-icon" aria-hidden="true">
-                            <img src="<?php echo esc_url($manage_events_icon_url); ?>" alt="" class="mj-member-account-menu__manage-events-button-image" loading="lazy" decoding="async" />
-                        </span>
-                    <?php endif; ?>
-                </a>
+                <div class="mj-member-account-menu__manage-events-wrap">
+                    <a
+                        class="mj-member-account-menu__manage-events-button"
+                        href="<?php echo esc_url($manage_events_url); ?>"
+                        aria-label="<?php echo esc_attr($manage_events_label); ?>"
+                    >
+                        <?php if ($manage_events_icon_url !== '') : ?>
+                            <span class="mj-member-account-menu__manage-events-button-icon" aria-hidden="true">
+                                <img src="<?php echo esc_url($manage_events_icon_url); ?>" alt="" class="mj-member-account-menu__manage-events-button-image" loading="lazy" decoding="async" />
+                            </span>
+                        <?php endif; ?>
+                    </a>
+                    <div class="mj-member-account-menu__manage-events-dropdown" aria-label="<?php echo esc_attr__('Navigation gestionnaire', 'mj-member'); ?>">
+                        <div class="mj-member-account-menu__manage-events-favorites-grid">
+                            <section class="mj-member-account-menu__manage-events-favorites-column" aria-label="<?php echo esc_attr__('Membres', 'mj-member'); ?>">
+                                <a class="mj-member-account-menu__manage-events-section-link" href="<?php echo esc_url($manage_events_members_url); ?>"><?php esc_html_e('Membres', 'mj-member'); ?></a>
+                                <?php if (!empty($favorite_member_items)) : ?>
+                                    <ul class="mj-member-account-menu__manage-events-favorites-list">
+                                        <?php foreach ($favorite_member_items as $favorite_member_item) : ?>
+                                                <li class="mj-member-account-menu__favorites-item">
+                                                    <a class="mj-member-account-menu__manage-events-favorites-link" href="<?php echo esc_url((string) $favorite_member_item['url']); ?>">
+                                                        <span class="mj-member-account-menu__favorite-avatar" aria-hidden="true">
+                                                            <?php if (!empty($favorite_member_item['avatar_url'])) : ?>
+                                                                <img src="<?php echo esc_url((string) $favorite_member_item['avatar_url']); ?>" alt="" class="mj-member-account-menu__favorite-avatar-image" loading="lazy" decoding="async" />
+                                                            <?php else : ?>
+                                                                <span class="mj-member-account-menu__favorite-avatar-fallback"><?php echo esc_html((string) ($favorite_member_item['initials'] ?? 'M')); ?></span>
+                                                            <?php endif; ?>
+                                                        </span>
+                                                        <span class="mj-member-account-menu__favorite-label"><?php echo esc_html((string) $favorite_member_item['label']); ?></span>
+                                                    </a>
+                                                    <?php if (!empty($favorite_member_item['tab_urls'])) : ?>
+                                                    <span class="mj-member-account-menu__favorites-actions">
+                                                        <?php if (!empty($favorite_member_item['tab_urls']['info'])) : ?>
+                                                        <a class="mj-member-account-menu__favorites-action" href="<?php echo esc_url((string) $favorite_member_item['tab_urls']['info']); ?>" title="<?php esc_attr_e('Informations', 'mj-member'); ?>">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                                                        </a>
+                                                        <?php endif; ?>
+                                                        <?php if (!empty($favorite_member_item['tab_urls']['edit'])) : ?>
+                                                        <a class="mj-member-account-menu__favorites-action" href="<?php echo esc_url((string) $favorite_member_item['tab_urls']['edit']); ?>" title="<?php esc_attr_e('Éditer', 'mj-member'); ?>">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                                        </a>
+                                                        <?php endif; ?>
+                                                        <?php if (!empty($favorite_member_item['tab_urls']['badge'])) : ?>
+                                                        <a class="mj-member-account-menu__favorites-action" href="<?php echo esc_url((string) $favorite_member_item['tab_urls']['badge']); ?>" title="<?php esc_attr_e('Badges', 'mj-member'); ?>">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                                                        </a>
+                                                        <?php endif; ?>
+                                                    </span>
+                                                    <?php endif; ?>
+                                                </li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                <?php else : ?>
+                                    <p class="mj-member-account-menu__manage-events-empty"><?php esc_html_e('Aucun membre', 'mj-member'); ?></p>
+                                <?php endif; ?>
+                            </section>
+                            <section class="mj-member-account-menu__manage-events-favorites-column" aria-label="<?php echo esc_attr__('Événements', 'mj-member'); ?>">
+                                <a class="mj-member-account-menu__manage-events-section-link" href="<?php echo esc_url($manage_events_events_url); ?>"><?php esc_html_e('Événements', 'mj-member'); ?></a>
+                                <?php if (!empty($favorite_event_items)) : ?>
+                                    <ul class="mj-member-account-menu__manage-events-favorites-list">
+                                        <?php foreach ($favorite_event_items as $favorite_event_item) : ?>
+                                                <li class="mj-member-account-menu__favorites-item">
+                                                    <a class="mj-member-account-menu__manage-events-favorites-link" href="<?php echo esc_url((string) $favorite_event_item['url']); ?>">
+                                                        <span class="mj-member-account-menu__favorite-event-emoji" aria-hidden="true"><?php echo esc_html((string) ($favorite_event_item['emoji'] ?? '📅')); ?></span>
+                                                        <span class="mj-member-account-menu__favorite-label"><?php echo esc_html((string) $favorite_event_item['label']); ?></span>
+                                                    </a>
+                                                    <?php if (!empty($favorite_event_item['tab_urls'])) : ?>
+                                                    <span class="mj-member-account-menu__favorites-actions">
+                                                        <?php if (!empty($favorite_event_item['tab_urls']['inscription'])) : ?>
+                                                        <a class="mj-member-account-menu__favorites-action" href="<?php echo esc_url((string) $favorite_event_item['tab_urls']['inscription']); ?>" title="<?php esc_attr_e('Inscriptions', 'mj-member'); ?>">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="12" y2="16"/></svg>
+                                                        </a>
+                                                        <?php endif; ?>
+                                                        <?php if (!empty($favorite_event_item['tab_urls']['presence'])) : ?>
+                                                        <a class="mj-member-account-menu__favorites-action" href="<?php echo esc_url((string) $favorite_event_item['tab_urls']['presence']); ?>" title="<?php esc_attr_e('Présences', 'mj-member'); ?>">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                                                        </a>
+                                                        <?php endif; ?>
+                                                        <?php if (!empty($favorite_event_item['tab_urls']['edit'])) : ?>
+                                                        <a class="mj-member-account-menu__favorites-action" href="<?php echo esc_url((string) $favorite_event_item['tab_urls']['edit']); ?>" title="<?php esc_attr_e('Éditer', 'mj-member'); ?>">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                                        </a>
+                                                        <?php endif; ?>
+                                                    </span>
+                                                    <?php endif; ?>
+                                                </li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                <?php else : ?>
+                                    <p class="mj-member-account-menu__manage-events-empty"><?php esc_html_e('Aucun événement', 'mj-member'); ?></p>
+                                <?php endif; ?>
+                            </section>
+                        </div>
+                    </div>
+                </div>
                 <?php
                 $manage_events_button_markup = trim((string) ob_get_clean());
 
                 if ($manage_events_button_markup === '') {
                     $has_manage_events_button = false;
+                }
+            }
+        }
+
+        if ($has_nextcloud_button) {
+            $configured_nextcloud_url = Config::nextcloudUrl();
+            $default_nextcloud_url = $nextcloud_url_setting !== ''
+                ? $nextcloud_url_setting
+                : $configured_nextcloud_url;
+
+            $nextcloud_url = (string) apply_filters('mj_member_account_menu_nextcloud_url', $default_nextcloud_url);
+            if ($nextcloud_url === '') {
+                $nextcloud_url = $is_preview ? '#' : '';
+            }
+
+            if ($nextcloud_url === '') {
+                $has_nextcloud_button = false;
+            } elseif ($nextcloud_url === '#' && !$is_preview) {
+                $has_nextcloud_button = false;
+            }
+
+            if ($has_nextcloud_button) {
+                $nextcloud_label = (string) apply_filters('mj_member_account_menu_nextcloud_label', __('Accès a Nextcloud', 'mj-member'));
+                $nextcloud_icon_url = $nextcloud_icon_url_setting !== ''
+                    ? $nextcloud_icon_url_setting
+                    : (string) apply_filters('mj_member_account_menu_nextcloud_icon_url', 'https://upload.wikimedia.org/wikipedia/commons/6/60/Nextcloud_Logo.svg');
+
+                if (!is_string($nextcloud_icon_url)) {
+                    $nextcloud_icon_url = '';
+                }
+
+                ob_start();
+                ?>
+                <a
+                    class="mj-member-account-menu__nextcloud-button"
+                    href="<?php echo esc_url($nextcloud_url); ?>"
+                    aria-label="<?php echo esc_attr($nextcloud_label); ?>"
+                >
+                    <?php if ($nextcloud_icon_url !== '') : ?>
+                        <span class="mj-member-account-menu__nextcloud-button-icon" aria-hidden="true">
+                            <img src="<?php echo esc_url($nextcloud_icon_url); ?>" alt="" class="mj-member-account-menu__nextcloud-button-image" loading="lazy" decoding="async" />
+                        </span>
+                    <?php endif; ?>
+                </a>
+                <?php
+                $nextcloud_button_markup = trim((string) ob_get_clean());
+
+                if ($nextcloud_button_markup === '') {
+                    $has_nextcloud_button = false;
                 }
             }
         }
@@ -719,6 +1088,9 @@ if (!function_exists('mj_member_render_account_menu_component')) {
         }
         if ($has_manage_events_button) {
             $wrapper_classes[] = 'mj-member-account-menu--has-manage-events-button';
+        }
+        if ($has_nextcloud_button) {
+            $wrapper_classes[] = 'mj-member-account-menu--has-nextcloud-button';
         }
         $wrapper_attributes = array();
 
@@ -748,6 +1120,7 @@ if (!function_exists('mj_member_render_account_menu_component')) {
         $wrapper_attributes[] = 'data-show-submenus="' . ($show_submenus ? '1' : '0') . '"';
         $wrapper_attributes[] = 'data-has-event-button="' . ($has_event_button ? '1' : '0') . '"';
         $wrapper_attributes[] = 'data-has-manage-events-button="' . ($has_manage_events_button ? '1' : '0') . '"';
+        $wrapper_attributes[] = 'data-has-nextcloud-button="' . ($has_nextcloud_button ? '1' : '0') . '"';
 
         if ($layout === 'desktop') {
             $nav_classes = array(
@@ -773,6 +1146,9 @@ if (!function_exists('mj_member_render_account_menu_component')) {
                     <?php endif; ?>
                     <?php if ($has_manage_events_button && $manage_events_button_markup !== '') : ?>
                         <?php echo $manage_events_button_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                    <?php endif; ?>
+                    <?php if ($has_nextcloud_button && $nextcloud_button_markup !== '') : ?>
+                        <?php echo $nextcloud_button_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
                     <?php endif; ?>
                 </div>
             </div>
@@ -834,6 +1210,9 @@ if (!function_exists('mj_member_render_account_menu_component')) {
                 <?php endif; ?>
                 <?php if ($has_manage_events_button && $manage_events_button_markup !== '') : ?>
                     <?php echo $manage_events_button_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                <?php endif; ?>
+                <?php if ($has_nextcloud_button && $nextcloud_button_markup !== '') : ?>
+                    <?php echo $nextcloud_button_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
                 <?php endif; ?>
             </div>
             <div

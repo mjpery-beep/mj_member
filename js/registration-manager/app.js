@@ -934,7 +934,7 @@
                 ]),
             ]),
             h('div', { class: 'mj-regmgr-occurrence__card' }, [
-                h('h2', null, getString(strings, 'occurrenceGeneratorTitle', 'Générer des occurrences')),
+                h('h2', null, getString(strings, 'occurrenceGeneratorTitle', 'Horaire habituel')),
                 h('p', { class: 'mj-regmgr-occurrence__description' },
                     getString(strings, 'occurrenceGeneratorDescription', 'Planifiez la récurrence automatique de cet événement.')
                 ),
@@ -950,37 +950,90 @@
                         h('option', { value: 'range' }, getString(strings, 'occurrenceGeneratorModeRange', 'Plage de dates')),
                     ]),
                 ]),
-                generatorMode === 'weekly' && h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                    h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorFrequencyLabel', 'Fréquence')),
-                    h('select', {
-                        class: 'mj-regmgr-occurrence__input',
-                        value: generatorFrequency,
-                        onInput: function (event) { handleGeneratorChange('frequency', event.currentTarget.value); },
-                    }, [
-                        h('option', { value: 'every_week' }, getString(strings, 'occurrenceGeneratorEveryWeek', 'Chaque semaine')),
-                        h('option', { value: 'every_two_weeks' }, getString(strings, 'occurrenceGeneratorEveryTwoWeeks', 'Toutes les deux semaines')),
-                    ]),
-                ]),
-                generatorMode === 'monthly' && h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
-                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorMonthlyOrdinalLabel', 'Ordre dans le mois')),
+                h('div', { class: 'mj-regmgr-occurrence__mode-options' }, [
+                    generatorMode === 'weekly' && h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorFrequencyLabel', 'Fréquence')),
                         h('select', {
                             class: 'mj-regmgr-occurrence__input',
-                            value: generatorMonthlyOrdinal,
-                            onInput: function (event) { handleGeneratorChange('monthlyOrdinal', event.currentTarget.value); },
-                        }, monthlyOrdinalOptions.map(function (option) {
-                            return h('option', { key: option.value, value: option.value }, option.label);
-                        })),
+                            value: generatorFrequency,
+                            onInput: function (event) { handleGeneratorChange('frequency', event.currentTarget.value); },
+                        }, [
+                            h('option', { value: 'every_week' }, getString(strings, 'occurrenceGeneratorEveryWeek', 'Chaque semaine')),
+                            h('option', { value: 'every_two_weeks' }, getString(strings, 'occurrenceGeneratorEveryTwoWeeks', 'Toutes les deux semaines')),
+                        ]),
                     ]),
-                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorMonthlyWeekdayLabel', 'Jour de la semaine')),
-                        h('select', {
-                            class: 'mj-regmgr-occurrence__input',
-                            value: generatorMonthlyWeekday,
-                            onInput: function (event) { handleGeneratorChange('monthlyWeekday', event.currentTarget.value); },
-                        }, OCCURRENCE_WEEKDAY_KEYS.map(function (dayKey, index) {
-                            return h('option', { key: dayKey, value: dayKey }, weekdayFullLabels[index] || weekdayLabels[index]);
-                        })),
+                    generatorMode === 'monthly' && h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
+                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorMonthlyOrdinalLabel', 'Ordre dans le mois')),
+                            h('select', {
+                                class: 'mj-regmgr-occurrence__input',
+                                value: generatorMonthlyOrdinal,
+                                onInput: function (event) { handleGeneratorChange('monthlyOrdinal', event.currentTarget.value); },
+                            }, monthlyOrdinalOptions.map(function (option) {
+                                return h('option', { key: option.value, value: option.value }, option.label);
+                            })),
+                        ]),
+                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorMonthlyWeekdayLabel', 'Jour de la semaine')),
+                            h('select', {
+                                class: 'mj-regmgr-occurrence__input',
+                                value: generatorMonthlyWeekday,
+                                onInput: function (event) { handleGeneratorChange('monthlyWeekday', event.currentTarget.value); },
+                            }, OCCURRENCE_WEEKDAY_KEYS.map(function (dayKey, index) {
+                                return h('option', { key: dayKey, value: dayKey }, weekdayFullLabels[index] || weekdayLabels[index]);
+                            })),
+                        ]),
+                    ]),
+                    generatorMode === 'weekly' && h('div', { class: 'mj-regmgr-occurrence__days' }, OCCURRENCE_WEEKDAY_KEYS.map(function (dayKey, index) {
+                        var isActive = !!generatorDays[dayKey];
+                        var override = generatorOverrides[dayKey] || null;
+                        var startValue = override && override.start ? override.start : generatorStartTime;
+                        var endValue = override && override.end ? override.end : generatorEndTime;
+                        var hasOverride = !!(override && (override.start || override.end));
+                        return h('label', {
+                            key: dayKey,
+                            class: classNames('mj-regmgr-occurrence__day-row', {
+                                'mj-regmgr-occurrence__day-row--active': isActive,
+                                'mj-regmgr-occurrence__day-row--override': hasOverride,
+                            }),
+                        }, [
+                            h('input', {
+                                type: 'checkbox',
+                                class: 'mj-regmgr-occurrence__day-row-checkbox',
+                                checked: isActive,
+                                onChange: function () { handleGeneratorDayToggle(dayKey); },
+                            }),
+                            h('span', { class: 'mj-regmgr-occurrence__day-row-label' }, weekdayLabels[index]),
+                            h('span', { class: 'mj-regmgr-occurrence__day-row-times' }, [
+                                h('input', {
+                                    type: 'time',
+                                    class: classNames('mj-regmgr-occurrence__day-row-input', 'mj-regmgr-occurrence__day-row-input--start', {
+                                        'mj-regmgr-occurrence__day-row-input--override': hasOverride && !!(override && override.start),
+                                    }),
+                                    value: startValue || '',
+                                    disabled: !isActive,
+                                    onInput: function (event) { handleGeneratorTimeChange(dayKey, 'start', event.currentTarget.value); },
+                                }),
+                                h('span', { class: 'mj-regmgr-occurrence__day-row-separator' }, ' - '),
+                                h('input', {
+                                    type: 'time',
+                                    class: classNames('mj-regmgr-occurrence__day-row-input', 'mj-regmgr-occurrence__day-row-input--end', {
+                                        'mj-regmgr-occurrence__day-row-input--override': hasOverride && !!(override && override.end),
+                                    }),
+                                    value: endValue || '',
+                                    disabled: !isActive,
+                                    onInput: function (event) { handleGeneratorTimeChange(dayKey, 'end', event.currentTarget.value); },
+                                }),
+                            ]),
+                        ]);
+                    })),
+                    h('div', { class: 'mj-regmgr-occurrence__save-schedule-actions' }, [
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--secondary',
+                            onClick: function (e) { handleSaveSchedule(e); },
+                            disabled: isPersisting,
+                        }, getString(strings, 'occurrenceGeneratorSaveButton', 'Sauvegarder l\'horaire')),
                     ]),
                 ]),
                 h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
@@ -1024,56 +1077,13 @@
                         }),
                     ]),
                 ]),
-                generatorMode === 'weekly' && h('div', { class: 'mj-regmgr-occurrence__days' }, OCCURRENCE_WEEKDAY_KEYS.map(function (dayKey, index) {
-                    var isActive = !!generatorDays[dayKey];
-                    var override = generatorOverrides[dayKey] || null;
-                    var startValue = override && override.start ? override.start : generatorStartTime;
-                    var endValue = override && override.end ? override.end : generatorEndTime;
-                    var hasOverride = !!(override && (override.start || override.end));
-                    return h('label', {
-                        key: dayKey,
-                        class: classNames('mj-regmgr-occurrence__day-row', {
-                            'mj-regmgr-occurrence__day-row--active': isActive,
-                            'mj-regmgr-occurrence__day-row--override': hasOverride,
-                        }),
-                    }, [
-                        h('input', {
-                            type: 'checkbox',
-                            class: 'mj-regmgr-occurrence__day-row-checkbox',
-                            checked: isActive,
-                            onChange: function () { handleGeneratorDayToggle(dayKey); },
-                        }),
-                        h('span', { class: 'mj-regmgr-occurrence__day-row-label' }, weekdayLabels[index]),
-                        h('span', { class: 'mj-regmgr-occurrence__day-row-times' }, [
-                            h('input', {
-                                type: 'time',
-                                class: classNames('mj-regmgr-occurrence__day-row-input', 'mj-regmgr-occurrence__day-row-input--start', {
-                                    'mj-regmgr-occurrence__day-row-input--override': hasOverride && !!(override && override.start),
-                                }),
-                                value: startValue || '',
-                                disabled: !isActive,
-                                onInput: function (event) { handleGeneratorTimeChange(dayKey, 'start', event.currentTarget.value); },
-                            }),
-                            h('span', { class: 'mj-regmgr-occurrence__day-row-separator' }, ' - '),
-                            h('input', {
-                                type: 'time',
-                                class: classNames('mj-regmgr-occurrence__day-row-input', 'mj-regmgr-occurrence__day-row-input--end', {
-                                    'mj-regmgr-occurrence__day-row-input--override': hasOverride && !!(override && override.end),
-                                }),
-                                value: endValue || '',
-                                disabled: !isActive,
-                                onInput: function (event) { handleGeneratorTimeChange(dayKey, 'end', event.currentTarget.value); },
-                            }),
-                        ]),
-                    ]);
-                })),
                 h('div', { class: 'mj-regmgr-occurrence__generator-actions' }, [
                     h('button', {
                         type: 'button',
                         class: 'mj-btn mj-btn--primary',
                         onClick: function (e) { handleAddOccurrences(e); },
                         disabled: isPersisting,
-                    }, getString(strings, 'occurrenceGeneratorAddButton', 'Ajouter les occurrences')),
+                    }, getString(strings, 'occurrenceGeneratorAddButton', 'Générer les occurrences')),
                     h('button', {
                         type: 'button',
                         class: 'mj-btn mj-btn--secondary',
@@ -1119,6 +1129,12 @@
             setSchedulePreviewVisible(true);
             setSchedulePreviewAutoSync(true);
         }, [buildGeneratorPlan, computeSchedulePreview]);
+
+        var handleSaveSchedule = useCallback(function () {
+            persistOccurrences(localOccurrences, null).catch(function () {
+                // Error handled by parent notifications
+            });
+        }, [localOccurrences, persistOccurrences]);
 
         var persistOccurrences = useCallback(function (nextList, rollback, previewOverride) {
             if (!onPersistOccurrences) {
@@ -3337,6 +3353,13 @@
             return config.urlTab;
         }, [config.urlTab]);
 
+        var urlMainTab = useMemo(function () {
+            if (!config || !config.urlMainTab || typeof config.urlMainTab !== 'string') {
+                return null;
+            }
+            return config.urlMainTab;
+        }, [config.urlMainTab]);
+
         var prefillEventId = useMemo(function () {
             // URL param est prioritaire
             if (urlEventId) {
@@ -4020,10 +4043,16 @@
         }, [locationModal.isOpen, setLocationModalState]);
 
         // Sidebar mode state (events or members)
-        // Si urlMemberId est présent, démarrer en mode membres
+        // Priority: urlMainTab > urlMemberId > default (events)
         var initialSidebarMode = useMemo(function () {
+            if (urlMainTab === 'member') {
+                return 'members';
+            }
+            if (urlMainTab === 'event') {
+                return 'events';
+            }
             return urlMemberId ? 'members' : 'events';
-        }, []);
+        }, [urlMainTab, urlMemberId]);
         var _sidebarMode = useState(initialSidebarMode);
         var sidebarMode = _sidebarMode[0];
         var setSidebarMode = _sidebarMode[1];
@@ -5873,6 +5902,36 @@
             return api.deleteMemberMessage(messageId, memberId)
                 .then(function (result) {
                     showSuccess(result.message || 'Message supprimé');
+                    loadMemberDetails(memberId);
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err.message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails]);
+
+        var handleUpdateMemberNotification = useCallback(function (memberId, notificationId, data) {
+            var text = data && typeof data.text === 'string' ? data.text : '';
+            var url = data && typeof data.url === 'string' ? data.url : '';
+            var status = data && typeof data.status === 'string' ? data.status : '';
+
+            return api.updateMemberNotification(memberId, notificationId, text, url, status)
+                .then(function (result) {
+                    showSuccess(result.message || 'Notification mise à jour');
+                    loadMemberDetails(memberId);
+                    return result;
+                })
+                .catch(function (err) {
+                    showError(err.message);
+                    throw err;
+                });
+        }, [api, showSuccess, showError, loadMemberDetails]);
+
+        var handleDeleteMemberNotification = useCallback(function (memberId, notificationId) {
+            return api.deleteMemberNotification(memberId, notificationId)
+                .then(function (result) {
+                    showSuccess(result.message || 'Notification supprimée');
                     loadMemberDetails(memberId);
                     return result;
                 })
@@ -8184,6 +8243,8 @@
                             onPendingEditHandled: handleConsumePendingMemberEdit,
                             onCreateMessage: handleCreateMemberMessage,
                             onDeleteMessage: handleDeleteMemberMessage,
+                            onUpdateNotification: handleUpdateMemberNotification,
+                            onDeleteNotification: handleDeleteMemberNotification,
                             onMemberUpdated: function (updatedMember) {
                                 // Recharger les détails du membre pour voir les mises à jour
                                 if (updatedMember && updatedMember.id) {

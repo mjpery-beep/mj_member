@@ -21,6 +21,8 @@ use Mj\Member\Classes\Crud\MjTestimonials;
 use Mj\Member\Classes\Crud\MjTestimonialComments;
 use Mj\Member\Classes\Crud\MjTestimonialReactions;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjNotifications;
+use Mj\Member\Classes\Crud\MjNotificationRecipients;
 use Mj\Member\Classes\Crud\MjBadges;
 use Mj\Member\Classes\Crud\MjMemberBadges;
 use Mj\Member\Classes\Crud\MjBadgeCriteria;
@@ -99,6 +101,8 @@ add_action('wp_ajax_mj_regmgr_delete_member_photo', 'mj_regmgr_delete_member_pho
 add_action('wp_ajax_mj_regmgr_capture_member_photo', 'mj_regmgr_capture_member_photo');
 add_action('wp_ajax_mj_regmgr_create_member_message', 'mj_regmgr_create_member_message');
 add_action('wp_ajax_mj_regmgr_delete_member_message', 'mj_regmgr_delete_member_message');
+add_action('wp_ajax_mj_regmgr_update_member_notification', 'mj_regmgr_update_member_notification');
+add_action('wp_ajax_mj_regmgr_delete_member_notification', 'mj_regmgr_delete_member_notification');
 add_action('wp_ajax_mj_regmgr_reset_member_password', 'mj_regmgr_reset_member_password');
 add_action('wp_ajax_mj_regmgr_create_member_nextcloud_login', 'mj_regmgr_create_member_nextcloud_login');
 add_action('wp_ajax_mj_regmgr_delete_member', 'mj_regmgr_delete_member');
@@ -5964,6 +5968,195 @@ function mj_regmgr_prepare_member_badge_entry($badge, $member_id, $assignment_ma
     );
 }
 
+if (!function_exists('mj_regmgr_extract_notification_emoji')) {
+    /**
+     * Normalise une clé de type notification pour assurer une forme stable.
+     * Exemple: "avatar applied" => "avatar_applied".
+     *
+     * @param string $type
+     * @return string
+     */
+    function mj_regmgr_normalize_notification_type_key($type) {
+        $type = strtolower(trim((string) $type));
+        if ($type === '') {
+            return '';
+        }
+
+        $type = preg_replace('/[\s\-]+/', '_', $type);
+        if (!is_string($type)) {
+            return '';
+        }
+
+        $type = preg_replace('/[^a-z0-9_]/', '', $type);
+        if (!is_string($type)) {
+            return '';
+        }
+
+        $type = preg_replace('/_+/', '_', $type);
+        if (!is_string($type)) {
+            return '';
+        }
+
+        return trim($type, '_');
+    }
+
+    /**
+     * Retourne un emoji par défaut selon le type de notification.
+     *
+     * @param string $type
+     * @return string
+     */
+    function mj_regmgr_get_notification_type_emoji($type) {
+        $type_key = mj_regmgr_normalize_notification_type_key((string) $type);
+        if ($type_key === '') {
+            return '';
+        }
+
+        static $emoji_by_type = array(
+            'payment_completed' => '💰',
+            'payment_reminder' => '💳',
+            'member_created' => '👤',
+            'member_profile_updated' => '✏️',
+            'profile_updated' => '✏️',
+            'photo_uploaded' => '📷',
+            'photo_approved' => '✅',
+            'idea_published' => '💡',
+            'idea_voted' => '👍',
+            'trophy_earned' => '🏆',
+            'badge_earned' => '🎖️',
+            'criterion_earned' => '✓',
+            'level_up' => '🚀',
+            'avatar_applied' => '🎭',
+            'attendance_recorded' => '⏱️',
+            'message_received' => '💬',
+            'todo_assigned' => '📋',
+            'todo_note_added' => '📝',
+            'todo_media_added' => '📎',
+            'todo_completed' => '✅',
+            'testimonial_approved' => '✅',
+            'testimonial_rejected' => '❌',
+            'testimonial_reaction' => '👍',
+            'testimonial_comment' => '💬',
+            'testimonial_comment_reply' => '↩️',
+            'testimonial_new_pending' => '📝',
+            'leave_request_created' => '⛵',
+            'leave_request_approved' => '🏖️',
+            'leave_request_rejected' => '🚫',
+            'info' => 'ℹ️',
+        );
+
+        return isset($emoji_by_type[$type_key]) ? $emoji_by_type[$type_key] : '';
+    }
+
+    /**
+     * Extrait un emoji pertinent depuis une notification format feed.
+     *
+     * @param array<string,mixed> $notification
+     * @return string
+     */
+    function mj_regmgr_extract_notification_emoji(array $notification) {
+        $payload = array();
+        if (isset($notification['payload']) && is_array($notification['payload'])) {
+            $payload = $notification['payload'];
+        }
+
+        $candidates = array();
+        if (isset($notification['type']) && is_string($notification['type'])) {
+            $candidates[] = $notification['type'];
+        }
+
+        $candidate_keys = array('emoji', 'eventEmoji', 'icon', 'symbol', 'typeEmoji');
+        foreach ($candidate_keys as $key) {
+            if (isset($payload[$key]) && is_scalar($payload[$key])) {
+                $candidates[] = (string) $payload[$key];
+            }
+        }
+
+        if (isset($notification['title']) && is_string($notification['title'])) {
+            $candidates[] = $notification['title'];
+        }
+
+        foreach ($candidates as $candidate) {
+            $value = wp_check_invalid_utf8((string) $candidate);
+            if ($value === '') {
+                continue;
+            }
+
+            $value = wp_strip_all_tags($value, false);
+            $value = preg_replace('/[\x00-\x1F\x7F]+/', '', $value);
+            if (!is_string($value)) {
+                continue;
+            }
+
+            $value = trim($value);
+            if ($value === '') {
+                continue;
+            }
+
+            if (function_exists('mb_substr')) {
+                $value = mb_substr($value, 0, 2);
+            } else {
+                $value = substr($value, 0, 2);
+            }
+
+            if ($value === '') {
+                continue;
+            }
+
+            if (preg_match('/[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}]/u', $value)) {
+                return trim($value);
+            }
+        }
+
+        if (isset($notification['type']) && is_string($notification['type'])) {
+            $type_emoji = mj_regmgr_get_notification_type_emoji((string) $notification['type']);
+            if ($type_emoji !== '') {
+                return $type_emoji;
+            }
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('mj_regmgr_format_member_notification')) {
+    /**
+     * Formate une entrée notification pour la fiche membre.
+     *
+     * @param array<string,mixed> $feed_row
+     * @return array<string,mixed>
+     */
+    function mj_regmgr_format_member_notification(array $feed_row) {
+        $notification = isset($feed_row['notification']) && is_array($feed_row['notification'])
+            ? $feed_row['notification']
+            : array();
+
+        $notification_id = isset($notification['id']) ? (int) $notification['id'] : 0;
+        $recipient_id = isset($feed_row['recipient_id']) ? (int) $feed_row['recipient_id'] : 0;
+        $type = isset($notification['type']) ? mj_regmgr_normalize_notification_type_key((string) $notification['type']) : '';
+
+        $type_label = $type !== '' ? ucwords(str_replace('_', ' ', $type)) : __('Notification', 'mj-member');
+        $title = isset($notification['title']) ? sanitize_text_field((string) $notification['title']) : '';
+        $excerpt = isset($notification['excerpt']) ? sanitize_text_field((string) $notification['excerpt']) : '';
+        $text = $title !== '' ? $title : $excerpt;
+
+        return array(
+            'id' => $recipient_id,
+            'recipientId' => $recipient_id,
+            'notificationId' => $notification_id,
+            'type' => $type,
+            'typeLabel' => $type_label,
+            'emoji' => mj_regmgr_extract_notification_emoji($notification),
+            'title' => $title,
+            'excerpt' => $excerpt,
+            'text' => $text,
+            'url' => isset($notification['url']) ? esc_url_raw((string) $notification['url']) : '',
+            'status' => isset($feed_row['recipient_status']) ? sanitize_key((string) $feed_row['recipient_status']) : '',
+            'createdAt' => isset($notification['created_at']) ? (string) $notification['created_at'] : '',
+        );
+    }
+}
+
 /**
  * Get member details
  */
@@ -6318,6 +6511,27 @@ function mj_regmgr_get_member_details() {
         }
     }
 
+    $member_notifications = array();
+    if (function_exists('mj_member_get_member_notifications_feed')) {
+        $feed = mj_member_get_member_notifications_feed($member_id, array(
+            'limit' => 250,
+            'include_archived' => true,
+            'include_drafts' => true,
+            'include_expired' => true,
+            'order' => 'DESC',
+        ));
+
+        if (is_array($feed)) {
+            foreach ($feed as $feed_row) {
+                if (!is_array($feed_row)) {
+                    continue;
+                }
+                $member_notifications[] = mj_regmgr_format_member_notification($feed_row);
+            }
+        }
+    }
+    $member['notifications'] = $member_notifications;
+
     $member['badges'] = mj_regmgr_get_member_badges_payload($member_id);
     $member['trophies'] = mj_regmgr_get_member_trophies_payload($member_id);
     $member['actions'] = mj_regmgr_get_member_actions_payload($member_id);
@@ -6455,6 +6669,139 @@ function mj_regmgr_get_member_details() {
     }
 
     wp_send_json_success(array('member' => $member));
+}
+
+/**
+ * Met à jour le label, l'URL et le statut d'une notification pour un membre.
+ */
+function mj_regmgr_update_member_notification() {
+    $current_member = mj_regmgr_verify_request();
+    if (!$current_member) {
+        return;
+    }
+
+    $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+    $notification_id = isset($_POST['notificationId']) ? absint($_POST['notificationId']) : 0;
+    $text = isset($_POST['text']) ? sanitize_textarea_field(wp_unslash($_POST['text'])) : '';
+    $url = isset($_POST['url']) ? esc_url_raw(wp_unslash($_POST['url'])) : '';
+    $status = isset($_POST['status']) ? sanitize_key(wp_unslash($_POST['status'])) : '';
+
+    if ($member_id <= 0 || $notification_id <= 0) {
+        wp_send_json_error(array('message' => __('Notification invalide.', 'mj-member')));
+        return;
+    }
+
+    $recipients = MjNotificationRecipients::get_all(array(
+        'member_ids' => array($member_id),
+        'notification_ids' => array($notification_id),
+        'limit' => 50,
+    ));
+
+    if (empty($recipients)) {
+        wp_send_json_error(array('message' => __('Cette notification n\'est pas liée à ce membre.', 'mj-member')));
+        return;
+    }
+
+    if ($text === '') {
+        wp_send_json_error(array('message' => __('Le texte de notification est requis.', 'mj-member')));
+        return;
+    }
+
+    $update = MjNotifications::update($notification_id, array(
+        'title' => $text,
+        'excerpt' => $text,
+        'url' => $url,
+    ));
+
+    if (is_wp_error($update)) {
+        wp_send_json_error(array('message' => $update->get_error_message()));
+        return;
+    }
+
+    if ($status !== '') {
+        $allowed_statuses = MjNotificationRecipients::get_statuses();
+        if (!in_array($status, $allowed_statuses, true)) {
+            wp_send_json_error(array('message' => __('Statut de notification invalide.', 'mj-member')));
+            return;
+        }
+
+        $recipient_ids = array();
+        foreach ($recipients as $recipient) {
+            $recipient_id = isset($recipient->id) ? (int) $recipient->id : 0;
+            if ($recipient_id > 0) {
+                $recipient_ids[] = $recipient_id;
+            }
+        }
+
+        if (!empty($recipient_ids)) {
+            $status_update = MjNotificationRecipients::mark_status($recipient_ids, $status);
+            if (is_wp_error($status_update)) {
+                wp_send_json_error(array('message' => $status_update->get_error_message()));
+                return;
+            }
+        }
+    }
+
+    wp_send_json_success(array(
+        'message' => __('Notification mise à jour.', 'mj-member'),
+        'notificationId' => $notification_id,
+        'text' => $text,
+        'url' => $url,
+        'status' => $status,
+    ));
+}
+
+/**
+ * Supprime l'association d'une notification pour un membre.
+ */
+function mj_regmgr_delete_member_notification() {
+    $current_member = mj_regmgr_verify_request();
+    if (!$current_member) {
+        return;
+    }
+
+    $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
+    $notification_id = isset($_POST['notificationId']) ? absint($_POST['notificationId']) : 0;
+
+    if ($member_id <= 0 || $notification_id <= 0) {
+        wp_send_json_error(array('message' => __('Notification invalide.', 'mj-member')));
+        return;
+    }
+
+    $recipients = MjNotificationRecipients::get_all(array(
+        'member_ids' => array($member_id),
+        'notification_ids' => array($notification_id),
+        'limit' => 50,
+    ));
+
+    if (empty($recipients)) {
+        wp_send_json_error(array('message' => __('Cette notification n\'est pas liée à ce membre.', 'mj-member')));
+        return;
+    }
+
+    foreach ($recipients as $recipient) {
+        $recipient_id = isset($recipient->id) ? (int) $recipient->id : 0;
+        if ($recipient_id <= 0) {
+            continue;
+        }
+        $deleted = MjNotificationRecipients::delete($recipient_id);
+        if (is_wp_error($deleted)) {
+            wp_send_json_error(array('message' => $deleted->get_error_message()));
+            return;
+        }
+    }
+
+    $remaining = MjNotificationRecipients::count(array(
+        'notification_ids' => array($notification_id),
+    ));
+    if ((int) $remaining === 0) {
+        MjNotifications::delete($notification_id);
+    }
+
+    wp_send_json_success(array(
+        'message' => __('Notification supprimée.', 'mj-member'),
+        'notificationId' => $notification_id,
+    ));
 }
 
 /**
@@ -9520,12 +9867,45 @@ function mj_regmgr_save_job_profile() {
         return;
     }
 
-    $allowed_titles = array('coordination', 'animateur', 'communication', 'autre');
     $allowed_regimes = array('mi-temps', 'temps-plein', 'quatre-cinquieme');
 
-    $job_title = isset($_POST['jobTitle']) ? sanitize_text_field($_POST['jobTitle']) : '';
-    if ($job_title !== '' && !in_array($job_title, $allowed_titles, true)) {
-        $job_title = 'autre';
+    $raw_job_title = isset($_POST['jobTitle']) ? sanitize_text_field(wp_unslash($_POST['jobTitle'])) : '';
+    $legacy_job_title_map = array(
+        'coordination' => 'Coordinateur',
+        'animateur' => 'Animateur',
+        'communication' => 'Employe',
+    );
+
+    $job_title = $raw_job_title;
+
+    if ($raw_job_title !== '') {
+        $legacy_key = sanitize_key($raw_job_title);
+
+        if (isset($legacy_job_title_map[$legacy_key])) {
+            $job_title = $legacy_job_title_map[$legacy_key];
+        } elseif ($legacy_key === 'autre') {
+            $custom_title_candidates = array('jobTitleOther', 'jobTitleCustom', 'customJobTitle', 'jobTitleFree', 'job_title_custom');
+            $custom_title = '';
+
+            foreach ($custom_title_candidates as $candidate_key) {
+                if (!isset($_POST[$candidate_key])) {
+                    continue;
+                }
+
+                $candidate_value = sanitize_text_field(wp_unslash($_POST[$candidate_key]));
+                if ($candidate_value !== '') {
+                    $custom_title = $candidate_value;
+                    break;
+                }
+            }
+
+            // Never persist the legacy key itself.
+            $job_title = $custom_title;
+        }
+    }
+
+    if ($job_title !== '') {
+        $job_title = function_exists('mb_substr') ? mb_substr($job_title, 0, 100) : substr($job_title, 0, 100);
     }
 
     $work_regime = isset($_POST['workRegime']) ? sanitize_text_field($_POST['workRegime']) : '';

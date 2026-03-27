@@ -24,7 +24,7 @@ class Mj_Member_Elementor_Idea_Box_Widget extends Widget_Base
 
     public function get_icon()
     {
-        return 'eicon-lightbulb';
+        return 'eicon-info-circle';
     }
 
     public function get_categories()

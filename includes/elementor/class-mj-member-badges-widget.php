@@ -24,7 +24,7 @@ class Mj_Member_Elementor_Badges_Widget extends Widget_Base
 
     public function get_icon()
     {
-        return 'eicon-star-circle';
+        return 'eicon-upgrade-crown';
     }
 
     public function get_categories()

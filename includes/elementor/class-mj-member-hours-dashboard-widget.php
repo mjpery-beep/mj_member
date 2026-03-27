@@ -20,7 +20,7 @@ class Mj_Member_Elementor_Hours_Dashboard_Widget extends Widget_Base {
     }
 
     public function get_icon() {
-        return 'eicon-bar-chart';
+        return 'eicon-counter';
     }
 
     public function get_categories() {

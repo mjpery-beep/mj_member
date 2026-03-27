@@ -492,9 +492,6 @@ class Mj_Member_Elementor_Account_Links_Widget extends Widget_Base {
         $account_base = $account_base_setting !== '' ? esc_url_raw($account_base_setting) : $default_account_url;
 
         if (!$is_logged_in && !$preview_mode) {
-            $redirect_to = function_exists('mj_member_get_current_url') ? mj_member_get_current_url() : $account_base;
-            $login_url = wp_login_url($redirect_to);
-            echo '<div class="mj-member-account-warning">' . esc_html__('Connectez-vous pour afficher vos liens "Mon compte".', 'mj-member') . ' <a href="' . esc_url($login_url) . '">' . esc_html__('Se connecter', 'mj-member') . '</a></div>';
             return;
         }
 
