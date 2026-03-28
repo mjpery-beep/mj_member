@@ -66,14 +66,86 @@
     MjHeader.prototype._bindTriggers = function () {
         var self = this;
         this.el.querySelectorAll('[data-mj-header-trigger]').forEach(function (btn) {
+            var name = btn.getAttribute('data-mj-header-trigger');
+
+            // Resolve direct URL from the dropdown's header link (if any)
+            var dropdown    = self.el.querySelector('[data-mj-header-dropdown="' + name + '"]');
+            var headerLink  = dropdown ? dropdown.querySelector('.mj-header-dropdown__header-link') : null;
+            var directHref  = headerLink ? headerLink.getAttribute('href') : '';
+            var isDirectLink = !!(directHref && directHref !== '#' && directHref !== '');
+
+            // Touch : single tap → dropdown, double-tap → navigate
+            var lastTap = 0;
+            btn.addEventListener('touchend', function (e) {
+                if (!isDirectLink) {
+                    // No direct link — behave like a normal toggle
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (self.activeDropdown === name) {
+                        self._closeAll();
+                    } else {
+                        self._closeAll();
+                        self._openDropdown(name);
+                    }
+                    return;
+                }
+                var now = Date.now();
+                var delta = now - lastTap;
+                lastTap = now;
+                if (delta < 350) {
+                    // Double-tap → follow the link
+                    e.stopPropagation();
+                    window.location.href = directHref;
+                } else {
+                    // Single tap → open dropdown only
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (self.activeDropdown === name) {
+                        self._closeAll();
+                    } else {
+                        self._closeAll();
+                        self._openDropdown(name);
+                    }
+                }
+            });
+
+            // Click (desktop fallback — ignored on touch devices since touchend fires first)
             btn.addEventListener('click', function (e) {
                 e.stopPropagation();
-                var name = btn.getAttribute('data-mj-header-trigger');
+                if (isDirectLink) {
+                    window.location.href = directHref;
+                    return;
+                }
                 if (self.activeDropdown === name) {
                     self._closeAll();
                 } else {
                     self._closeAll();
                     self._openDropdown(name);
+                }
+            });
+
+            // Hover (desktop only — skip touch devices)
+            var item = btn.closest('.mj-header__action-item');
+            if (!item) return;
+            var hoverTimer = null;
+
+            item.addEventListener('mouseenter', function () {
+                if (window.matchMedia('(hover: hover)').matches) {
+                    clearTimeout(hoverTimer);
+                    if (self.activeDropdown !== name) {
+                        self._closeAll();
+                        self._openDropdown(name, true); // skipOverlay: avoid cursor flicker
+                    }
+                }
+            });
+
+            item.addEventListener('mouseleave', function () {
+                if (window.matchMedia('(hover: hover)').matches) {
+                    hoverTimer = setTimeout(function () {
+                        if (self.activeDropdown === name) {
+                            self._closeAll();
+                        }
+                    }, 150);
                 }
             });
         });
@@ -277,7 +349,7 @@
         document.body.style.overflow = '';
     };
 
-    MjHeader.prototype._openDropdown = function (name) {
+    MjHeader.prototype._openDropdown = function (name, skipOverlay) {
         var dropdown = this.el.querySelector('[data-mj-header-dropdown="' + name + '"]');
         var trigger  = this.el.querySelector('[data-mj-header-trigger="' + name + '"]');
         if (!dropdown) return;
@@ -287,8 +359,10 @@
         if (trigger) trigger.setAttribute('aria-expanded', 'true');
         dropdown.classList.add('mj-header-dropdown--open');
 
-        var overlay = this.el.querySelector('.mj-header-overlay');
-        if (overlay) overlay.classList.add('mj-header-overlay--active');
+        if (!skipOverlay) {
+            var overlay = this.el.querySelector('.mj-header-overlay');
+            if (overlay) overlay.classList.add('mj-header-overlay--active');
+        }
 
         // Lazy-load content
         if (!this.config.isPreview && !this._loaded[name]) {
@@ -340,9 +414,12 @@
             if (scrollY > scrollOffset && !self._isStuck) {
                 self._isStuck = true;
                 self.el.classList.add('mj-header--stuck');
+                // Update placeholder after height transition completes (0.25s)
+                setTimeout(updatePlaceholder, 270);
             } else if (scrollY <= scrollOffset && self._isStuck) {
                 self._isStuck = false;
                 self.el.classList.remove('mj-header--stuck');
+                setTimeout(updatePlaceholder, 270);
             }
         };
 

@@ -62,8 +62,7 @@
                     tab.icon && h('span', {
                         class: 'mj-regmgr-tab__icon',
                         'aria-hidden': 'true',
-                        dangerouslySetInnerHTML: { __html: tab.icon },
-                    }),
+                    }, tab.icon),
                     h('span', { class: 'mj-regmgr-tab__label', 'aria-hidden': 'true' }, tab.label),
                     tab.badge !== undefined && h('span', { class: 'mj-regmgr-tab__badge' }, tab.badge),
                 ]);

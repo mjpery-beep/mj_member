@@ -148,7 +148,7 @@ function mj_header_svg_icon(string $name): string {
                 </div>
                 <div class="mj-header-gest-favs-grid">
                     <div class="mj-header-gest-favs-col">
-                        <div class="mj-header-gest-favs-col__title"><?php esc_html_e('Membres', 'mj-member'); ?></div>
+                        <a class="mj-header-gest-favs-col__title mj-header-gest-favs-col__title--link" href="<?php echo esc_url(add_query_arg('main-tab', 'member', $gest_url)); ?>"><?php esc_html_e('Membres', 'mj-member'); ?></a>
                         <?php if (!empty($gest_fav_member_items)): ?>
                         <ul class="mj-header-gest-fav-list">
                             <?php foreach ($gest_fav_member_items as $fi): ?>
@@ -167,6 +167,9 @@ function mj_header_svg_icon(string $name): string {
                                     <a href="<?php echo esc_url((string)$fi['tab_urls']['info']); ?>" title="<?php esc_attr_e('Infos', 'mj-member'); ?>">&#128100;</a>
                                     <a href="<?php echo esc_url((string)$fi['tab_urls']['edit']); ?>" title="<?php esc_attr_e('Modifier', 'mj-member'); ?>">&#9998;</a>
                                     <a href="<?php echo esc_url((string)$fi['tab_urls']['badge']); ?>" title="<?php esc_attr_e('Badges', 'mj-member'); ?>">&#127942;</a>
+                                    <a href="<?php echo esc_url((string)$fi['tab_urls']['testimonials']); ?>" title="<?php esc_attr_e('Témoignages', 'mj-member'); ?>">&#11088;</a>
+                                    <a href="<?php echo esc_url((string)$fi['tab_urls']['notes']); ?>" title="<?php esc_attr_e('Notes', 'mj-member'); ?>">&#128203;</a>
+                                    <a href="<?php echo esc_url((string)$fi['tab_urls']['ideas']); ?>" title="<?php esc_attr_e('Idées', 'mj-member'); ?>">&#128161;</a>
                                 </div>
                             </li>
                             <?php endforeach; ?>
@@ -176,7 +179,7 @@ function mj_header_svg_icon(string $name): string {
                         <?php endif; ?>
                     </div>
                     <div class="mj-header-gest-favs-col">
-                        <div class="mj-header-gest-favs-col__title"><?php esc_html_e('Événements', 'mj-member'); ?></div>
+                        <a class="mj-header-gest-favs-col__title mj-header-gest-favs-col__title--link" href="<?php echo esc_url(add_query_arg('main-tab', 'event', $gest_url)); ?>"><?php esc_html_e('Événements', 'mj-member'); ?></a>
                         <?php if (!empty($gest_fav_event_items)): ?>
                         <ul class="mj-header-gest-fav-list">
                             <?php foreach ($gest_fav_event_items as $fe): ?>
@@ -211,27 +214,16 @@ function mj_header_svg_icon(string $name): string {
             <div class="mj-header-dropdown mj-header-dropdown--nextcloud" data-mj-header-dropdown="nextcloud" role="dialog" aria-label="<?php echo esc_attr($nc_label); ?>">
                 <div class="mj-header-dropdown__header">
                     <span class="mj-header-dropdown__title"><?php echo esc_html($nc_label); ?></span>
-                    <a href="<?php echo esc_url($nc_url); ?>" class="mj-header-dropdown__header-link"><?php esc_html_e('Ouvrir', 'mj-member'); ?></a>
+                    <?php if ($nc_page_url): ?>
+                    <a href="<?php echo esc_url($nc_page_url); ?>" class="mj-header-dropdown__header-link"><?php esc_html_e('Ouvrir', 'mj-member'); ?></a>
+                    <?php endif; ?>
                     <button type="button" class="mj-header-dropdown__close" aria-label="<?php esc_attr_e('Fermer', 'mj-member'); ?>"><?php echo mj_header_svg_icon('close'); ?></button>
                 </div>
-                <div class="mj-header-nc-apps" data-mj-nc-apps>
-                    <?php if ($is_preview): ?>
-                        <a href="#" class="mj-header-nc-app">
-                            <div class="mj-header-nc-app__icon"></div>
-                            <span class="mj-header-nc-app__label">App exemple</span>
-                        </a>
-                        <a href="#" class="mj-header-nc-app">
-                            <div class="mj-header-nc-app__icon"></div>
-                            <span class="mj-header-nc-app__label">Fichiers</span>
-                        </a>
-                    <?php else: ?>
-                        <div class="mj-header-nc-loading">Chargement&hellip;</div>
-                    <?php endif; ?>
-                </div>
+                <div data-mj-nc-apps style="display:none"></div>
             </div>
         </div>
 
-        <?php elseif ($key === 'notifications' && $notif_enabled): ?>
+        <?php elseif ($key === 'notifications' && $notif_enabled && $is_logged_in): ?>
         <div class="mj-header__action-item" style="order:<?php echo (int)$order; ?>">
             <button type="button" class="mj-header__trigger" data-mj-header-trigger="notifications" aria-expanded="false" aria-haspopup="true" title="<?php echo esc_attr($notif_label); ?>">
                 <span class="mj-header__trigger-icon">

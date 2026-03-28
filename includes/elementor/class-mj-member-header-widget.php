@@ -387,35 +387,11 @@ $this->add_control('nextcloud_label', array(
             'condition'   => array('nextcloud_enabled' => 'yes'),
         ));
 
-        // Repeater : applications Nextcloud
-        $nc_repeater = new Repeater();
-        $nc_repeater->add_control('app_name', array(
-            'label'       => __('Nom de l\'app', 'mj-member'),
-            'type'        => Controls_Manager::TEXT,
-            'label_block' => true,
-        ));
-        $nc_repeater->add_control('app_url', array(
-            'label' => __('URL de l\'app', 'mj-member'),
-            'type'  => Controls_Manager::URL,
-        ));
-        $nc_repeater->add_control('app_icon', array(
-            'label'       => __('Icône (image)', 'mj-member'),
-            'type'        => Controls_Manager::MEDIA,
-            'media_types' => array('image', 'svg'),
-        ));
-
-        $this->add_control('nextcloud_apps', array(
-            'label'       => __('Applications Nextcloud', 'mj-member'),
-            'type'        => Controls_Manager::REPEATER,
-            'fields'      => $nc_repeater->get_controls(),
-            'default'     => array(
-                array('app_name' => 'Fichiers',   'app_url' => array('url' => '')),
-                array('app_name' => 'Agenda',     'app_url' => array('url' => '')),
-                array('app_name' => 'Contacts',   'app_url' => array('url' => '')),
-                array('app_name' => 'Partages',   'app_url' => array('url' => '')),
-                array('app_name' => 'Activité',   'app_url' => array('url' => '')),
-            ),
-            'title_field' => '{{{ app_name }}}',
+        $this->add_control('nextcloud_page_url', array(
+            'label'       => __('Lien interne (page documents)', 'mj-member'),
+            'description' => __('URL de la page WordPress contenant le widget documents. L\'URL de base Nextcloud ci-dessus est utilisée pour les appels API.', 'mj-member'),
+            'type'        => Controls_Manager::URL,
+            'placeholder' => home_url('/documents'),
             'condition'   => array('nextcloud_enabled' => 'yes'),
         ));
 
@@ -544,10 +520,17 @@ $this->add_control('nextcloud_label', array(
         ));
 
         $this->add_control('account_register_url', array(
-            'label'       => __('URL d\'inscription (lien « Créer un compte »)', 'mj-member'),
+            'label'       => __('URL du bouton d\'inscription', 'mj-member'),
             'type'        => Controls_Manager::URL,
             'placeholder' => home_url('/mon-compte/inscription'),
             'condition'   => array('account_enabled' => 'yes'),
+        ));
+
+        $this->add_control('account_register_label', array(
+            'label'     => __('Texte du bouton d\'inscription', 'mj-member'),
+            'type'      => Controls_Manager::TEXT,
+            'default'   => __('S\'inscrire', 'mj-member'),
+            'condition' => array('account_enabled' => 'yes', 'account_register_url[url]!' => ''),
         ));
 
         $this->end_controls_section();
@@ -996,13 +979,16 @@ $this->add_control('nextcloud_label', array(
                 if ($initials === '') $initials = 'M';
                 $gest_fav_member_items[] = array(
                     'label'      => $label,
-                    'url'        => add_query_arg(array('main-tab' => 'member', 'member_id' => $fav_id), $gest_url),
+                    'url'        => add_query_arg(array('main-tab' => 'member', 'member' => $fav_id), $gest_url),
                     'avatar_url' => $avatar_url,
                     'initials'   => $initials,
                     'tab_urls'   => array(
-                        'info'  => add_query_arg(array('main-tab' => 'member', 'member_id' => $fav_id, 'tab' => 'info'), $gest_url),
-                        'edit'  => add_query_arg(array('main-tab' => 'member', 'member_id' => $fav_id, 'tab' => 'edit'), $gest_url),
-                        'badge' => add_query_arg(array('main-tab' => 'member', 'member_id' => $fav_id, 'tab' => 'badge'), $gest_url),
+                        'info'         => add_query_arg(array('main-tab' => 'member', 'member' => $fav_id, 'tab' => 'info'), $gest_url),
+                        'edit'         => add_query_arg(array('main-tab' => 'member', 'member' => $fav_id, 'tab' => 'edit'), $gest_url),
+                        'badge'        => add_query_arg(array('main-tab' => 'member', 'member' => $fav_id, 'tab' => 'badge'), $gest_url),
+                        'testimonials' => add_query_arg(array('main-tab' => 'member', 'member' => $fav_id, 'tab' => 'testimonials'), $gest_url),
+                        'notes'        => add_query_arg(array('main-tab' => 'member', 'member' => $fav_id, 'tab' => 'notes'), $gest_url),
+                        'ideas'        => add_query_arg(array('main-tab' => 'member', 'member' => $fav_id, 'tab' => 'ideas'), $gest_url),
                     ),
                 );
             }
@@ -1027,8 +1013,8 @@ $this->add_control('nextcloud_label', array(
 
         if ($is_preview && empty($gest_fav_member_items) && empty($gest_fav_event_items)) {
             $gest_fav_member_items = array(
-                array('label' => __('Membre exemple 1', 'mj-member'), 'url' => '#', 'avatar_url' => '', 'initials' => 'ME', 'tab_urls' => array('info' => '#', 'edit' => '#', 'badge' => '#')),
-                array('label' => __('Membre exemple 2', 'mj-member'), 'url' => '#', 'avatar_url' => '', 'initials' => 'ME', 'tab_urls' => array('info' => '#', 'edit' => '#', 'badge' => '#')),
+                array('label' => __('Membre exemple 1', 'mj-member'), 'url' => '#', 'avatar_url' => '', 'initials' => 'ME', 'tab_urls' => array('info' => '#', 'edit' => '#', 'badge' => '#', 'testimonials' => '#', 'notes' => '#', 'ideas' => '#')),
+                array('label' => __('Membre exemple 2', 'mj-member'), 'url' => '#', 'avatar_url' => '', 'initials' => 'ME', 'tab_urls' => array('info' => '#', 'edit' => '#', 'badge' => '#', 'testimonials' => '#', 'notes' => '#', 'ideas' => '#')),
             );
             $gest_fav_event_items = array(
                 array('label' => __('Événement exemple 1', 'mj-member'), 'url' => '#', 'emoji' => '🎯', 'tab_urls' => array('inscription' => '#', 'presence' => '#', 'edit' => '#')),
@@ -1045,6 +1031,7 @@ $this->add_control('nextcloud_label', array(
             }
         }
         $nc_url         = !empty($settings['nextcloud_url']['url']) ? $settings['nextcloud_url']['url'] : '';
+        $nc_page_url    = !empty($settings['nextcloud_page_url']['url']) ? $settings['nextcloud_page_url']['url'] : '';
         $nc_label       = $settings['nextcloud_label'] ?? __('Nextcloud', 'mj-member');
         $nc_custom_icon = $settings['nextcloud_custom_icon']['url'] ?? '';
         $nc_login       = $member ? trim((string) $member->get('member_nextcloud_login', '')) : '';
@@ -1070,9 +1057,12 @@ $this->add_control('nextcloud_label', array(
         $login_redirect    = !empty($settings['login_redirect_url']['url'])
             ? $settings['login_redirect_url']['url']
             : home_url('/mon-compte');
-        $acc_register_url  = !empty($settings['account_register_url']['url'])
+        $acc_register_url   = !empty($settings['account_register_url']['url'])
             ? $settings['account_register_url']['url']
             : '';
+        $acc_register_label = !empty($settings['account_register_label'])
+            ? $settings['account_register_label']
+            : __('S\'inscrire', 'mj-member');
 
         // Account links — sections depuis la config plugin (MJ Member > Paramètres > Liens Mon compte)
         $acc_link_sections = array();
@@ -1135,6 +1125,7 @@ $this->add_control('nextcloud_label', array(
             'notifRefreshInterval' => $notif_interval * 1000,
             'agendaLimit'          => $agenda_limit,
             'ncUrl'                => esc_url($nc_url),
+            'ncPageUrl'            => esc_url($nc_page_url),
             'ncLogin'              => esc_html($nc_login),
             'ncPassword'           => $nc_password,
             'loginRedirect'        => esc_url($login_redirect),
