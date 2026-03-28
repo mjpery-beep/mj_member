@@ -46,12 +46,19 @@ if ($isNextcloudIframe) {
         $nextcloudSessionCheckUrl = trailingslashit($nextcloudBaseUrl) . 'apps/mj_session_check/session';
         $nextcloudSessionLoginUrl = trailingslashit($nextcloudBaseUrl) . 'apps/mj_session_check/login';
 
-        $nextcloudRootFolder = trim((string) Config::nextcloudRootFolder(), '/');
-        if ($nextcloudRootFolder !== '') {
-            $nextcloudIframeUrl = add_query_arg(
-                array('dir' => '/' . $nextcloudRootFolder),
-                $nextcloudIframeUrl
-            );
+        // Allow ?link=/apps/... to override the default iframe path.
+        $linkParam = isset($_GET['link']) ? (string) $_GET['link'] : '';
+        if ($linkParam !== '' && preg_match('#^/apps/[a-zA-Z0-9/_.-]+$#', $linkParam)) {
+            $nextcloudIframeUrl = trailingslashit($nextcloudBaseUrl) . ltrim($linkParam, '/');
+            $nextcloudIframeUrl = trailingslashit($nextcloudIframeUrl);
+        } else {
+            $nextcloudRootFolder = trim((string) Config::nextcloudRootFolder(), '/');
+            if ($nextcloudRootFolder !== '') {
+                $nextcloudIframeUrl = add_query_arg(
+                    array('dir' => '/' . $nextcloudRootFolder),
+                    $nextcloudIframeUrl
+                );
+            }
         }
 
         // First display: best-effort auto-login with saved member credentials.

@@ -1800,10 +1800,6 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
 
         echo '<div ' . implode(' ', $calendar_attributes) . '>';
 
-        if (!empty($settings['title'])) {
-            echo '<h3 class="mj-member-events-calendar__title">' . esc_html($settings['title']) . '</h3>';
-        }
-
         if ($show_toolbar_left || $show_toolbar_actions) {
             echo '<div class="mj-member-events-calendar__toolbar">';
             if ($show_toolbar_left) {

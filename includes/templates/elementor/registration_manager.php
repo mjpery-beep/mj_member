@@ -45,6 +45,7 @@ $allow_manual_payment = !empty($settings['allow_manual_payment']) && $settings['
 $allow_delete_registration = !empty($settings['allow_delete_registration']) && $settings['allow_delete_registration'] === 'yes';
 $allow_create_member = !empty($settings['allow_create_member']) && $settings['allow_create_member'] === 'yes';
 
+$is_coordinateur = false;
 $can_manage_accounts = current_user_can(Config::capability()) && (current_user_can('create_users') || current_user_can('promote_users'));
 $nextcloud_available = MjNextcloud::isAvailable();
 $can_manage_nextcloud = (current_user_can(Config::capability()) || $is_coordinateur) && $nextcloud_available;

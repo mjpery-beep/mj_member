@@ -1,0 +1,1755 @@
+/**
+ * MJ Header Widget — Styles
+ *
+ * Convention BEM :
+ *   .mj-header        → bloc racine
+ *   .mj-header-dropdown  → panneau déroulant (partagé par tous les items)
+ *
+ * Les variables CSS (--mj-header-*) sont surchargeables via les sélecteurs
+ * générés par Elementor.
+ *
+ * @package MjMember
+ */
+
+/* ============================================================================
+   Header principal
+   ========================================================================== */
+
+.mj-header {
+    position: relative;
+    width: 100%;
+    background-color: #ffffff; /* default — overridden by Elementor controls */
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    transition: box-shadow 0.25s ease;
+    z-index: 100;
+
+    /* Valeurs par défaut — surchargées par les contrôles Elementor */
+    --mj-header-height: 70px;
+    --mj-header-stuck-height: 56px;
+    /* Trigger = 57% de la hauteur, icône = 31% */
+    --mj-trigger-size: calc(var(--mj-header-height) * 0.57);
+    --mj-icon-size:    calc(var(--mj-header-height) * 0.31);
+}
+
+.mj-header--sticky {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    z-index: 9999;
+}
+
+.mj-header--stuck {
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+    --mj-trigger-size: calc(var(--mj-header-stuck-height) * 0.57);
+    --mj-icon-size:    calc(var(--mj-header-stuck-height) * 0.31);
+}
+
+.mj-header__inner {
+    display: flex;
+    align-items: center;
+    height: 70px;
+    padding: 0 20px;
+    gap: 8px;
+    transition: height 0.25s ease;
+    max-width: 100%;
+    box-sizing: border-box;
+    position: relative;
+}
+
+/* Espace flexible entre logo+nav et actions */
+.mj-header__spacer {
+    flex: 1 1 auto;
+}
+
+/* ============================================================================
+   Logo
+   ========================================================================== */
+
+.mj-header__logo-wrap {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+
+.mj-header__logo {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+.mj-header__logo img {
+    display: block;
+    width: auto;
+    height: calc(var(--mj-header-height) * 0.68);
+    max-height: calc(var(--mj-header-height) * 0.68);
+    object-fit: contain;
+    transition: height 0.25s ease, max-height 0.25s ease;
+}
+
+.mj-header--stuck .mj-header__logo img {
+    height: calc(var(--mj-header-stuck-height) * 0.68);
+    max-height: calc(var(--mj-header-stuck-height) * 0.68);
+}
+
+.mj-header__logo-text {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #0f172a;
+    white-space: nowrap;
+}
+
+.mj-header__logo-placeholder {
+    font-size: 0.75rem;
+    color: #64748b;
+    background: #f1f5f9;
+    border: 1px dashed #94a3b8;
+    border-radius: 4px;
+    padding: 4px 8px;
+    white-space: nowrap;
+}
+
+/* ============================================================================
+   Navigation principale
+   ========================================================================== */
+
+.mj-header__nav-wrap {
+    display: flex;
+    align-items: center;
+}
+
+.mj-header__nav {
+    display: flex;
+    align-items: center;
+}
+
+.mj-header__nav ul {
+    display: flex;
+    align-items: center;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    gap: 4px;
+}
+
+.mj-header__nav li {
+    position: relative;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.mj-header__nav a {
+    display: block;
+    padding: 6px 12px;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: #1e293b;
+    text-decoration: none;
+    border-radius: 6px;
+    white-space: nowrap;
+    transition: color 0.18s ease, background-color 0.18s ease;
+    line-height: 1.4;
+}
+
+.mj-header__nav a:hover,
+.mj-header__nav .current-menu-item > a,
+.mj-header__nav .current_page_item > a {
+    color: #6366f1;
+    background-color: #f1f5f9;
+}
+
+/* Sous-menus */
+.mj-header__nav ul ul {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 300;
+    min-width: 180px;
+    flex-direction: column;
+    align-items: stretch;
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    padding: 4px;
+    gap: 0;
+    display: none;
+    pointer-events: none;
+}
+
+.mj-header__nav li.mj-nav-open > ul,
+.mj-header__nav li:focus-within > ul {
+    display: flex;
+    pointer-events: auto;
+}
+
+.mj-header__nav ul ul a {
+    font-size: 0.875rem;
+    padding: 7px 12px;
+    border-radius: 6px;
+    white-space: nowrap;
+    text-align: left;
+}
+
+/* Burger mobile */
+button.mj-header__burger {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #475569;
+    flex-shrink: 0;
+    transition: background-color 0.18s ease;
+}
+
+button.mj-header__burger:hover {
+    background-color: #3f3f3f;
+}
+
+.mj-header__burger svg {
+    width: 22px;
+    height: 22px;
+    fill: currentColor;
+    pointer-events: none;
+}
+
+/* ============================================================================
+   Actions (icônes droite)
+   ========================================================================== */
+
+.mj-header__actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.mj-header__action-item {
+    position: relative;
+    flex-shrink: 0;
+}
+
+/* Bouton déclencheur */
+.mj-header button.mj-header__trigger {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--mj-trigger-size, 40px);
+    height: var(--mj-trigger-size, 40px);
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #475569;
+    transition: background-color 0.18s ease, color 0.18s ease, width 0.25s ease, height 0.25s ease;
+    flex-shrink: 0;
+    outline: none;
+}
+
+.mj-header button.mj-header__trigger:hover,
+.mj-header button.mj-header__trigger[aria-expanded="true"] {
+    background-color: #f1f5f9;
+    color: #6366f1;
+}
+
+.mj-header .mj-header__trigger:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+}
+
+.mj-header__trigger-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--mj-icon-size, 22px);
+    height: var(--mj-icon-size, 22px);
+    pointer-events: none;
+    transition: width 0.25s ease, height 0.25s ease;
+}
+
+.mj-header__trigger-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+}
+
+.mj-header__trigger-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.mj-header__trigger-icon--avatar {
+    width: var(--mj-trigger-size, 40px);
+    height: var(--mj-trigger-size, 40px);
+    overflow: hidden;
+}
+
+.mj-header__trigger-avatar {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+/* Badge */
+.mj-header__trigger-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    background-color: #ef4444;
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+    border-radius: 8px;
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
+.mj-header__trigger-badge--hidden {
+    display: none;
+}
+
+.mj-header__notif-count {
+    display: block;
+    line-height: 16px;
+}
+
+/* ============================================================================
+   Dropdown (panneau partagé)
+   ========================================================================== */
+
+.mj-header-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 500;
+    width: 320px;
+    max-height: 680px !important;
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.07);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.mj-header-dropdown--open {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+/* En-tête du dropdown */
+.mj-header-dropdown__header {
+    display: flex;
+    align-items: center;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.mj-header-dropdown__title {
+    flex: 1;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+a.mj-header-dropdown__header-link {
+    font-size: 0.8125rem;
+    color: #6366f1;
+    text-decoration: none;
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: opacity 0.18s ease;
+}
+
+a.mj-header-dropdown__header-link:hover {
+    opacity: 0.75;
+    text-decoration: none;
+}
+
+/* Bouton action header (ex : tout marquer comme lu) */
+.mj-header .mj-header-dropdown__header-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 10px;
+    gap: 5px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 99px;
+    cursor: pointer;
+    color: #16a34a;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.mj-header .mj-header-dropdown__header-action:hover {
+    background: #dcfce7;
+    border-color: #86efac;
+    color: #15803d;
+}
+
+.mj-header .mj-header-dropdown__header-action:disabled {
+    opacity: 0.4;
+    cursor: default;
+    pointer-events: none;
+}
+
+.mj-header .mj-header-dropdown__header-action svg {
+    width: 13px;
+    height: 13px;
+    fill: currentColor;
+    flex-shrink: 0;
+}
+
+/* Bouton fermer */
+.mj-header .mj-header-dropdown__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 50%;
+    cursor: pointer;
+    color: #64748b;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.mj-header .mj-header-dropdown__close:hover {
+    background: #e2e8f0;
+    border-color: #cbd5e1;
+    color: #1e293b;
+}
+
+.mj-header .mj-header-dropdown__close svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+}
+
+/* Contenu scrollable */
+.mj-header-dropdown__content {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    min-height: 0;
+}
+
+/* Calendrier mobile intégré dans le dropdown Agenda */
+.mj-header-dropdown--agenda .mj-header-agenda-calendar {
+    padding: 8px;
+    gap: 8px;
+}
+
+.mj-header-dropdown--agenda .mj-header-agenda-calendar .mj-member-events-calendar__toolbar {
+    border-radius: 8px;
+}
+
+.mj-header-dropdown--agenda .mj-header-agenda-calendar .mj-cal-mobile {
+    padding: 0;
+}
+
+/* Pied de page */
+.mj-header-dropdown__footer {
+    flex-shrink: 0;
+    padding: 10px 14px;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+/* États : loader, vide, erreur */
+.mj-header-dropdown__loader {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 28px 16px;
+    gap: 8px;
+    color: #94a3b8;
+    font-size: 0.875rem;
+}
+
+.mj-header-dropdown__loader svg {
+    width: 20px;
+    height: 20px;
+    animation: mj-header-spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes mj-header-spin {
+    to { transform: rotate(360deg); }
+}
+
+.mj-header-dropdown__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 16px;
+    text-align: center;
+    color: #94a3b8;
+}
+
+.mj-header-dropdown__empty svg {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 8px;
+    opacity: 0.5;
+}
+
+.mj-header-dropdown__empty p {
+    margin: 0;
+    font-size: 0.875rem;
+}
+
+.mj-header-dropdown__error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    color: #dc2626;
+    font-size: 0.875rem;
+}
+
+.mj-header-dropdown__error svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+/* ============================================================================
+   Notifications
+   ========================================================================== */
+
+.mj-header-notif-list {
+    padding: 4px 0;
+}
+
+/* Swipe wrapper — clip le déplacement de l'item */
+.mj-header-notif-swipe-wrap {
+    position: relative;
+    overflow: hidden;
+}
+
+/* Couches de fond révélées au swipe */
+.mj-header-notif-swipe-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 18px;
+    gap: 8px;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    opacity: 0;
+    pointer-events: none;
+    user-select: none;
+    transition: opacity 0.06s linear;
+}
+
+.mj-header-notif-swipe-hint svg {
+    width: 17px;
+    height: 17px;
+    fill: currentColor;
+    flex-shrink: 0;
+}
+
+/* Swipe droite → SUPPRIMER (rouge, aligné à gauche) */
+.mj-header-notif-swipe-hint--right {
+    justify-content: flex-start;
+    background: #ef4444;
+    color: #fff;
+}
+
+/* Swipe gauche → MARQUER LU (vert, aligné à droite) */
+.mj-header-notif-swipe-hint--left {
+    justify-content: flex-end;
+    background: #22c55e;
+    color: #fff;
+}
+
+.mj-header-notif-item {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px;
+    background: #fff;
+    will-change: transform;
+    transition: background-color 0.15s ease;
+    touch-action: pan-y; /* autoriser scroll vertical, JS gère horizontal */
+}
+
+.mj-header-notif-item:hover {
+    background-color: #f8fafc;
+}
+
+.mj-header-notif-item--unread {
+    background-color: #f8f9ff;
+}
+
+.mj-header-notif-item--unread::before {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 5px;
+    height: 5px;
+    background-color: #6366f1;
+    border-radius: 50%;
+}
+
+/* Lien de fond invisible pour les items cliquables */
+.mj-header-notif-item__bg-link {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+}
+
+.mj-header-notif-icon {
+    font-size: 1.1875rem;
+    line-height: 1;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.mj-header-notif-body {
+    flex: 1;
+    min-width: 0;
+    z-index: 2;
+}
+
+.mj-header-notif-title {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #0f172a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mj-header-notif-excerpt {
+    margin: 2px 0 0;
+    font-size: 0.8125rem;
+    color: #64748b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.mj-header-notif-time {
+    display: block;
+    font-size: 0.75rem;
+    color: #94a3b8;
+    margin-top: 3px;
+}
+
+.mj-header-notif-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.mj-header-notif-item:hover .mj-header-notif-actions {
+    opacity: 1;
+}
+
+.mj-header .mj-header-notif-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 50%;
+    cursor: pointer;
+    color: #94a3b8;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.mj-header .mj-header-notif-action:hover {
+    background: #e2e8f0;
+    border-color: #cbd5e1;
+    color: #475569;
+}
+
+.mj-header .mj-header-notif-action--del:hover {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #dc2626;
+}
+
+.mj-header .mj-header-notif-action svg {
+    width: 13px;
+    height: 13px;
+    fill: currentColor;
+}
+
+/* Bouton "Tout supprimer" dans le footer notifications */
+button.mj-header-notif-delete-all {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 12px;
+    height: 28px;
+    background: transparent;
+    border: 1px solid #fecaca;
+    border-radius: 99px;
+    cursor: pointer;
+    color: #dc2626;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+button.mj-header-notif-delete-all:hover {
+    background: #fef2f2;
+    border-color: #f87171;
+}
+
+.mj-header-notif-delete-all:disabled {
+    opacity: 0.4;
+    cursor: default;
+    pointer-events: none;
+}
+
+/* ============================================================================
+   Agenda
+   ========================================================================== */
+
+.mj-header-agenda-list {
+    padding: 6px 0;
+}
+
+.mj-header-agenda-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    text-decoration: none;
+    color: inherit;
+    transition: background-color 0.15s ease;
+}
+
+.mj-header-agenda-item:hover {
+    background-color: #f8fafc;
+    text-decoration: none;
+}
+
+.mj-header-agenda-date {
+    flex-shrink: 0;
+    width: 42px;
+    min-height: 46px;
+    background: #f8fafc;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 4px 0;
+    gap: 1px;
+}
+
+.mj-header-agenda-date__day {
+    font-size: 1.0625rem;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1;
+}
+
+.mj-header-agenda-date__month {
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.mj-header-agenda-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.mj-header-agenda-title {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #0f172a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mj-header-agenda-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 3px;
+}
+
+.mj-header-agenda-type {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background: #e0e7ff;
+    color: #4338ca;
+    text-transform: capitalize;
+}
+
+.mj-header-agenda-chevron {
+    flex-shrink: 0;
+    color: #cbd5e1;
+}
+
+.mj-header-agenda-chevron svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+}
+
+/* ============================================================================
+   Nextcloud apps
+   ========================================================================== */
+
+.mj-header-nc-apps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    padding: 8px;
+}
+
+.mj-header-nc-app {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 6px;
+    border-radius: 8px;
+    text-decoration: none;
+    color: #1e293b;
+    transition: background-color 0.15s ease;
+}
+
+.mj-header-nc-app:hover {
+    background-color: #f1f5f9;
+    text-decoration: none;
+}
+
+a .mj-header-nc-app__icon {
+    width: 36px;
+    height: 36px;
+    padding: 6px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #0082c9;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+a .mj-header-nc-app__icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.mj-header-nc-app__icon svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+    color: #64748b;
+}
+
+.mj-header-nc-app__label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-align: center;
+    color: #475569;
+    line-height: 1.2;
+}
+
+/* ============================================================================
+   Compte / Liens
+   ========================================================================== */
+
+.mj-header-account-links {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.mj-header-account-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    text-decoration: none;
+    color: #1e293b;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: background-color 0.15s ease;
+    position: relative;
+}
+
+.mj-header-account-link:hover {
+    background-color: #f1f5f9;
+    text-decoration: none;
+}
+
+.mj-header-account-link__icon {
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    flex-shrink: 0;
+}
+
+.mj-header-account-link__icon svg {
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+}
+
+.mj-header-account-link__chevron {
+    margin-left: auto;
+    color: #cbd5e1;
+    display: flex;
+    align-items: center;
+}
+
+.mj-header-account-link__chevron svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+}
+
+.mj-header-account-link--logout {
+    color: #dc2626;
+    margin-top: 4px;
+    border-top: 1px solid #f1f5f9;
+    border-radius: 0 0 8px 8px;
+    padding-top: 12px;
+}
+
+.mj-header-account-link--logout .mj-header-account-link__icon {
+    color: #dc2626;
+}
+
+.mj-header-account-link--logout:hover {
+    background-color: #fef2f2;
+}
+
+/* Liens gestionnaire (partagent le style account-link) */
+.mj-header-gest-links {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+/* ============================================================================
+   Formulaire de login
+   ========================================================================== */
+
+.mj-header-login-form {
+    padding: 16px;
+}
+
+.mj-header-login-form__field {
+    margin-bottom: 10px;
+}
+
+.mj-header-login-form__label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 4px;
+}
+
+.mj-header-login-form__input {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    color: #0f172a;
+    background-color: #f8fafc;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+    box-sizing: border-box;
+    outline: none;
+    font-family: inherit;
+}
+
+.mj-header-login-form__input:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+    background-color: #ffffff;
+}
+
+.mj-header-login-form__submit {
+    display: block;
+    width: 100%;
+    padding: 9px 16px;
+    background-color: #6366f1;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 14px;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    font-family: inherit;
+}
+
+.mj-header-login-form__submit:hover {
+    background-color: #4f46e5;
+}
+
+.mj-header-login-form__submit:active {
+    transform: scale(0.99);
+}
+
+.mj-header-login-form__submit:disabled {
+    opacity: 0.6;
+    cursor: default;
+    pointer-events: none;
+}
+
+.mj-header-login-form__error {
+    display: none;
+    margin-top: 10px;
+    padding: 8px 12px;
+    background-color: #fef2f2;
+    color: #dc2626;
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    border: 1px solid #fecaca;
+}
+
+.mj-header-login-form__error--visible {
+    display: block;
+}
+
+/* Wrapper champ mot de passe avec bouton toggle */
+.mj-header-login-form__pwd-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.mj-header-login-form__pwd-wrap .mj-header-login-form__input {
+    padding-right: 40px;
+}
+
+.mj-header-login-form__toggle-pwd {
+    position: absolute;
+    right: 10px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s;
+}
+
+.mj-header-login-form__toggle-pwd:hover {
+    color: #6366f1;
+}
+
+.mj-header-login-form__toggle-pwd svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* ============================================================================
+   Panneau connexion (non connecté)
+   ========================================================================== */
+
+.mj-header-acc-login-panel {
+    display: flex;
+    flex-direction: column;
+    min-width: 300px;
+}
+
+.mj-header-acc-login-panel__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px 4px 14px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    gap: 8px;
+}
+
+.mj-header-acc-login-panel__head-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.mj-header-acc-login-panel__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    border-radius: 8px;
+    color: #fff;
+    flex-shrink: 0;
+}
+
+.mj-header-acc-login-panel__icon svg {
+    width: 16px;
+    height: 16px;
+}
+
+.mj-header-acc-login-panel__title {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.2;
+}
+
+.mj-header-acc-login-panel__subtitle {
+    display: block;
+    font-size: 0.75rem;
+    color: #64748b;
+    line-height: 1.3;
+}
+
+/* Lien d'inscription */
+.mj-header-acc-login-register {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px 16px 14px;
+    font-size: 0.8125rem;
+    color: #64748b;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.mj-header-acc-login-register__link {
+    font-weight: 600;
+    color: #6366f1;
+    text-decoration: none;
+    transition: color 0.15s;
+}
+
+.mj-header-acc-login-register__link:hover {
+    color: #4f46e5;
+    text-decoration: underline;
+}
+
+/* ============================================================================
+   Overlay de fermeture
+   ========================================================================== */
+
+.mj-header-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 450;
+    background: transparent;
+    cursor: default;
+}
+
+.mj-header-overlay--active {
+    display: block;
+}
+
+/* ============================================================================
+   Responsive — Mobile
+   ========================================================================== */
+
+@media (max-width: 1024px) {
+    /* Cache le menu desktop, affiche le burger */
+    .mj-header__nav {
+        display: none;
+    }
+
+    button.mj-header__burger {
+        display: flex;
+    }
+
+    /* Menu mobile déroulant */
+    .mj-header__nav--active {
+        display: block;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background-color: #ffffff;
+        border-top: 1px solid rgba(0, 0, 0, 0.06);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        z-index: 400;
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+
+    .mj-header__nav--active ul {
+        display: flex;
+        flex-direction: column;
+        list-style: none;
+        margin: 0;
+        padding: 8px;
+        gap: 0;
+    }
+
+    .mj-header__nav--active li {
+        width: 100%;
+    }
+
+    .mj-header__nav--active a {
+        display: block;
+        padding: 10px 14px;
+        border-radius: 8px;
+        text-align: left;
+        width: 100%;
+        box-sizing: border-box;
+        white-space: normal;
+    }
+
+    /* Sous-menus mobiles : toujours visibles, indentés */
+    .mj-header__nav--active ul ul {
+        position: static;
+        display: flex;
+        flex-direction: column;
+        box-shadow: none;
+        border-radius: 0;
+        border: none;
+        border-left: 2px solid rgba(0, 0, 0, 0.08);
+        padding: 4px 0 4px 0;
+        margin: 0 0 4px 20px;
+        pointer-events: auto;
+        background: transparent;
+        gap: 0;
+    }
+
+    .mj-header__nav--active ul ul a {
+        font-size: 0.875rem;
+        color: #475569;
+        padding: 8px 12px;
+    }
+
+    /* Tablette : dropdown aligné à droite de l'icône, largeur contrainte */
+    .mj-header-dropdown {
+        left: auto;
+        right: 0;
+        width: min(400px, calc(100vw - 24px));
+        max-width: min(400px, calc(100vw - 24px));
+        max-height: 78vh;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    /* Compte : 1 colonne */
+    .mj-header-dropdown--account {
+        width: min(400px, calc(100vw - 24px));
+        max-width: min(400px, calc(100vw - 24px));
+    }
+
+    .mj-header-acc-panel {
+        grid-template-columns: 1fr;
+        max-height: none;
+        overflow-y: visible;
+        padding: 0 !important;
+    }
+
+    /* Gestionnaire : largeur contrainte + une seule colonne */
+    .mj-header-dropdown--gestionnaire {
+        width: min(480px, calc(100vw - 24px));
+    }
+
+    .mj-header-gest-favs-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .mj-header-gest-favs-col + .mj-header-gest-favs-col {
+        border-left: none;
+        border-top: 1px solid rgba(0, 0, 0, 0.06);
+    }
+
+    /* Tablette/touch : actions notifications toujours visibles (pas de hover) */
+    .mj-header-notif-actions {
+        opacity: 1;
+    }
+
+    /* Tablette/touch : actions gestionnaire toujours visibles */
+    .mj-header-gest-fav-actions {
+        display: flex;
+    }
+}
+
+@media (max-width: 480px) {
+    .mj-header__inner {
+        padding: 0 12px;
+        gap: 4px;
+    }
+
+    /* Téléphone : panneau commun pleine largeur depuis le header */
+    .mj-header__action-item {
+        position: static;
+    }
+
+    .mj-header-dropdown {
+        left: 0;
+        right: 0;
+        width: 100%;
+        max-width: 100%;
+        border-radius: 0 0 14px 14px;
+    }
+
+    .mj-header-dropdown--account {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    /* Indicateur onglet actif */
+    .mj-header__trigger[aria-expanded="true"] {
+        color: #6366f1;
+        background-color: #eef2ff;
+        border-radius: 8px 8px 0 0;
+    }
+
+    .mj-header-nc-apps {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* ============================================================================
+   Gestionnaire — dropdown & grille de favoris
+   ========================================================================== */
+
+/* Dropdown élargi pour la grille 2 colonnes */
+.mj-header-dropdown--gestionnaire {
+    width: 500px !important;
+}
+
+.mj-header-gest-favs-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+}
+
+.mj-header-gest-favs-col {
+    padding: 5px;
+}
+
+.mj-header-gest-favs-col + .mj-header-gest-favs-col {
+    border-left: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* Titre de colonne */
+.mj-header-gest-favs-col__title {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #94a3b8;
+    padding: 0 4px;
+    margin: 0 0 10px;
+}
+
+/* Liste */
+.mj-header-gest-fav-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+/* Ligne d'un item */
+a.mj-header-gest-fav-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 8px;
+    padding: 3px 4px;
+    transition: background 0.15s;
+}
+
+a.mj-header-gest-fav-item:hover {
+    background: rgba(99, 102, 241, 0.07);
+}
+
+/* Zone cliquable principale */
+a.mj-header-gest-fav-link {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    flex: 1;
+    text-decoration: none;
+    color: #1e293b;
+    min-width: 0;
+    padding: 4px 2px;
+}
+
+a.mj-header-gest-fav-link:hover {
+    color: #6366f1;
+    text-decoration: none;
+}
+
+/* Avatar membre */
+.mj-header-gest-fav-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: #e0e7ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.mj-header-gest-fav-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.mj-header-gest-fav-initials {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: #6366f1;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+/* Emoji événement */
+.mj-header-gest-fav-emoji {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f1f5f9;
+    border-radius: 8px;
+    font-size: 1.0625rem;
+    line-height: 1;
+}
+
+/* Libellé */
+.mj-header-gest-fav-label {
+    flex: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+/* Actions rapides (affichées au survol) */
+.mj-header-gest-fav-actions {
+    display: none;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.mj-header-gest-fav-item:hover .mj-header-gest-fav-actions {
+    display: flex;
+}
+
+.mj-header-gest-fav-actions a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    line-height: 1;
+    text-decoration: none;
+    color: #64748b;
+    transition: background 0.15s, color 0.15s;
+}
+
+.mj-header-gest-fav-actions a:hover {
+    background: rgba(99, 102, 241, 0.1);
+    color: #6366f1;
+    text-decoration: none;
+}
+
+/* État vide */
+.mj-header-gest-fav-empty {
+    font-size: 0.8125rem;
+    color: #94a3b8;
+    padding: 6px 4px;
+    margin: 0;
+    font-style: italic;
+}
+
+/* ============================================================================
+   Compte — panneau Mon compte (sections + grille de cartes)
+   ========================================================================== */
+
+/* Dropdown plus large pour le panneau compte */
+.mj-header-dropdown--account {
+    width: 560px !important;
+    max-width: 90vw;
+}
+
+/* En-tête du panneau : rôle + bouton fermer */
+.mj-header-acc-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding:0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    gap: 8px;
+}
+
+.mj-header-acc-panel-role {
+    font-size: .6875rem;
+    padding: 5px 8px;
+    font-weight: 800;
+    letter-spacing: .1em;
+    color: #475569;
+    text-transform: uppercase;
+}
+
+.mj-header-acc-panel-close {
+    display: flex;
+    margin: 5px 8px;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    background: #f87171;
+    color: #fff;
+    flex-shrink: 0;
+    transition: background 0.15s;
+    padding: 0;
+}
+
+.mj-header-acc-panel-close:hover {
+    background: #ef4444;
+}
+
+.mj-header-acc-panel-close svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Grille de sections — 2 colonnes */
+.mj-header-acc-panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    padding: 12px 8px 16px;
+    max-height: 71vh;
+    overflow-y: auto;
+}
+
+/* Section individuelle */
+.mj-header-acc-section {
+    padding: 4px 8px 8px;
+}
+
+.mj-header-acc-section__title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #475569;
+    padding: 0px 4px 5px;
+    margin-bottom: 2px;
+}
+
+.mj-header-acc-section__links {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Carte de lien */
+a.mj-header-acc-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 7px;
+    border-radius: 10px;
+    text-decoration: none;
+    background: #f8fafc;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    color: #1e293b;
+    font-size: .8125rem;
+    font-weight: 100;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    min-width: 0;
+}
+
+a.mj-header-acc-card:hover {
+    background: #eff6ff;
+    border-color: rgba(99, 102, 241, 0.2);
+    color: #4338ca;
+}
+
+a.mj-header-acc-card__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.07);
+    flex-shrink: 0;
+    font-size: 1.25rem;
+    overflow: hidden;
+}
+
+.mj-header-acc-card__icon img {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+}
+
+.mj-header-acc-card__icon svg {
+    width: 18px;
+    height: 18px;
+    color: #6366f1;
+}
+
+.mj-header-acc-card__label {
+    flex: 1;
+    line-height: 1.25;
+    overflow: hidden;
+    /* Allow wrapping for long labels (like in the screenshot) */
+}
+
+.mj-header-acc-card__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: #6366f1;
+    color: #fff;
+    font-size: .625rem;
+    font-weight: 700;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.mj-header-acc-card__chevron {
+    color: #94a3b8;
+    font-size: 1.125rem;
+    font-weight: 300;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+/* Carte déconnexion */
+.mj-header-acc-card--logout {
+    background: #fff1f2;
+    border-color: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.mj-header-acc-card--logout:hover {
+    background: #fee2e2;
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #dc2626;
+}
+
+.mj-header-acc-card--logout .mj-header-acc-card__icon {
+    background: #fff;
+    border-color: rgba(239, 68, 68, 0.15);
+}
+
+.mj-header-acc-card--logout .mj-header-acc-card__icon svg {
+    color: #ef4444;
+}
+
+.mj-header-acc-card--logout .mj-header-acc-card__chevron {
+    color: #fca5a5;
+}
+

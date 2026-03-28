@@ -409,6 +409,10 @@ final class AssetsManager
         self::registerStyle('mj-member-notification-bell', 'css/notification-bell.css');
         self::registerScript('mj-member-notification-bell', 'js/notification-bell.js', array('jquery'));
 
+        // Header Widget MJ
+        self::registerStyle('mj-member-header-widget', 'css/header-widget.css');
+        self::registerScript('mj-member-header-widget', 'js/header-widget.js', array());
+
         // Push Subscribe (Web Push)
         self::registerScript('mj-member-push-subscribe', 'js/push-subscribe.js', array());
 
@@ -662,6 +666,11 @@ final class AssetsManager
                     wp_enqueue_script('mj-member-push-subscribe');
                     self::localizePushSubscribe();
                 }
+                break;
+
+            case 'header-widget':
+                wp_enqueue_style('mj-member-header-widget');
+                wp_enqueue_script('mj-member-header-widget');
                 break;
 
             case 'registration-manager':
