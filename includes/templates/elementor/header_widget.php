@@ -219,7 +219,20 @@ function mj_header_svg_icon(string $name): string {
                     <?php endif; ?>
                     <button type="button" class="mj-header-dropdown__close" aria-label="<?php esc_attr_e('Fermer', 'mj-member'); ?>"><?php echo mj_header_svg_icon('close'); ?></button>
                 </div>
-                <div data-mj-nc-apps style="display:none"></div>
+                <div class="mj-header-nc-apps" data-mj-nc-apps>
+                    <?php if ($is_preview): ?>
+                        <a href="#" class="mj-header-nc-app">
+                            <div class="mj-header-nc-app__icon"></div>
+                            <span class="mj-header-nc-app__label">App exemple</span>
+                        </a>
+                        <a href="#" class="mj-header-nc-app">
+                            <div class="mj-header-nc-app__icon"></div>
+                            <span class="mj-header-nc-app__label">Fichiers</span>
+                        </a>
+                    <?php else: ?>
+                        <div class="mj-header-nc-loading">Chargement&hellip;</div>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
 

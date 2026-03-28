@@ -121,6 +121,42 @@ class Mj_Member_Elementor_Header_Widget extends Widget_Base {
             ),
         ));
 
+        $this->add_responsive_control('content_width', array(
+            'label'      => __('Largeur du contenu', 'mj-member'),
+            'type'       => Controls_Manager::SLIDER,
+            'size_units' => array('px', '%', 'vw'),
+            'range'      => array(
+                'px' => array('min' => 200, 'max' => 2400, 'step' => 10),
+                '%'  => array('min' => 10,  'max' => 100),
+                'vw' => array('min' => 10,  'max' => 100),
+            ),
+            'selectors'  => array(
+                '{{WRAPPER}} .mj-header__inner' => 'max-width: {{SIZE}}{{UNIT}}; width: 100%;',
+            ),
+        ));
+
+        $this->add_responsive_control('content_align', array(
+            'label'     => __('Alignement du contenu', 'mj-member'),
+            'type'      => Controls_Manager::CHOOSE,
+            'options'   => array(
+                'flex-start' => array(
+                    'title' => __('Gauche', 'mj-member'),
+                    'icon'  => 'eicon-h-align-left',
+                ),
+                'center'     => array(
+                    'title' => __('Centre', 'mj-member'),
+                    'icon'  => 'eicon-h-align-center',
+                ),
+                'flex-end'   => array(
+                    'title' => __('Droite', 'mj-member'),
+                    'icon'  => 'eicon-h-align-right',
+                ),
+            ),
+            'selectors' => array(
+                '{{WRAPPER}} .mj-header' => 'justify-content: {{VALUE}};',
+            ),
+        ));
+
         $this->end_controls_section();
 
         // --- Section : Ordre des éléments ---
