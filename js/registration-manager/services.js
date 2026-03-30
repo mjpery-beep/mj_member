@@ -848,6 +848,39 @@
                     target_id: targetId,
                 });
             },
+
+            // ------------------------------------------------------------------
+            // Nextcloud media
+            // ------------------------------------------------------------------
+
+            ncListFolder: function (context, contextId, mediaType) {
+                return post('mj_regmgr_nc_list', {
+                    context: context,
+                    context_id: contextId,
+                    media_type: mediaType,
+                });
+            },
+
+            ncUpload: function (context, contextId, mediaType, file, subFolder) {
+                var fd = new FormData();
+                fd.append('action', 'mj_regmgr_nc_upload');
+                fd.append('nonce', nonce);
+                fd.append('context', context);
+                fd.append('context_id', contextId);
+                fd.append('media_type', mediaType);
+                if (subFolder) { fd.append('sub_folder', subFolder); }
+                fd.append('file', file);
+                return fetch(ajaxUrl, { method: 'POST', body: fd })
+                    .then(function (r) { return r.json(); });
+            },
+
+            ncDelete: function (filePath) {
+                return post('mj_regmgr_nc_delete', { file_path: filePath });
+            },
+
+            ncRename: function (filePath, newName) {
+                return post('mj_regmgr_nc_rename', { file_path: filePath, new_name: newName });
+            },
         };
     }
 

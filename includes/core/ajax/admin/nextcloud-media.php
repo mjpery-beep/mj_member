@@ -31,7 +31,7 @@ if (!defined('ABSPATH')) {
  */
 function mj_nc_event_folder(int $eventId, string $type)
 {
-    $event = MjEvents::findById($eventId);
+    $event = MjEvents::find($eventId);
     if (!$event) {
         return new WP_Error('mj_nc_not_found', __('Événement introuvable.', 'mj-member'));
     }

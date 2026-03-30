@@ -1767,3 +1767,90 @@ a.mj-header-acc-card__icon {
     color: #fca5a5;
 }
 
+/* ============================================================================
+   Notification preview — hover on account cards
+   ========================================================================== */
+
+.mj-header-acc-notif-preview {
+    position: fixed;
+    z-index: 99999;
+    width: 300px;
+    max-height: 370px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.06);
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.96) translateY(-4px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.mj-header-acc-notif-preview--open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: scale(1) translateY(0);
+}
+
+/* Arrow pointing toward the card */
+.mj-header-acc-notif-preview::after {
+    content: '';
+    position: absolute;
+    top: 14px;
+    width: 8px;
+    height: 8px;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    transform: rotate(45deg);
+}
+
+/* Preview on the left → arrow on the right edge */
+.mj-header-acc-notif-preview--left::after {
+    right: -5px;
+    border-left: none;
+    border-bottom: none;
+}
+
+/* Preview on the right → arrow on the left edge */
+.mj-header-acc-notif-preview--right::after {
+    left: -5px;
+    border-right: none;
+    border-top: none;
+}
+
+.mj-header-acc-notif-preview__head {
+    flex-shrink: 0;
+    padding: 10px 14px 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+/* Scrollable list area */
+.mj-header-acc-notif-preview .mj-header-notif-list {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* Disable swipe hints in preview */
+.mj-header-acc-notif-preview .mj-header-notif-swipe-hint {
+    display: none;
+}
+
+/* Tighter items in preview */
+.mj-header-acc-notif-preview .mj-header-notif-item {
+    padding: 9px 12px;
+}
+
+/* Hide action buttons in preview (read-only) */
+.mj-header-acc-notif-preview .mj-header-notif-actions {
+    display: none;
+}
+

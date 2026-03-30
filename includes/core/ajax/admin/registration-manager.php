@@ -56,6 +56,7 @@ if (!defined('ABSPATH')) {
 
 // Include social media publishing handler
 require_once __DIR__ . '/publish-event.php';
+require_once __DIR__ . '/nextcloud-media.php';
 
 // Register AJAX actions
 add_action('wp_ajax_mj_regmgr_get_events', 'mj_regmgr_get_events');

@@ -49,6 +49,7 @@
         this._bindSubMenus();
         this._bindLoginForm();
         this._bindNotifActions();
+        this._bindAccCardNotifPreview();
 
         if (this.config.sticky) {
             this._initSticky();
@@ -327,6 +328,153 @@
             } else if (action === 'archive-all') {
                 self._notifArchiveAll(btn);
             }
+        });
+    };
+
+    // -------------------------------------------------------------------------
+    // Notification preview on account card hover
+    // -------------------------------------------------------------------------
+
+    MjHeader.prototype._bindAccCardNotifPreview = function () {
+        var self       = this;
+        var _preview   = null;
+        var _hideTimer = null;
+        var _hoverTimer = null;
+        var PREVIEW_W  = 300;
+
+        // Selector: cards that have server-side notification data embedded
+        var cards = this.el.querySelectorAll('a.mj-header-acc-card[data-notifications]');
+        if (!cards.length) return;
+
+        function getPreview() {
+            if (!_preview) {
+                _preview = document.createElement('div');
+                _preview.className = 'mj-header-acc-notif-preview';
+                document.body.appendChild(_preview);
+
+                _preview.addEventListener('mouseenter', function () {
+                    clearTimeout(_hideTimer);
+                    // Prevent the account dropdown from closing when the mouse
+                    // leaves the action-item to enter this fixed-position preview.
+                    if (self.activeDropdown !== 'account') {
+                        self._openDropdown('account', true);
+                    }
+                });
+
+                _preview.addEventListener('mouseleave', function () {
+                    scheduleHide();
+                    // Close the account dropdown after a short delay so that
+                    // moving back onto the action-item keeps it open.
+                    setTimeout(function () {
+                        if (_preview && !_preview.classList.contains('mj-header-acc-notif-preview--open')) {
+                            self._closeAll();
+                        }
+                    }, 150);
+                });
+            }
+            return _preview;
+        }
+
+        function scheduleHide() {
+            clearTimeout(_hideTimer);
+            _hideTimer = setTimeout(function () {
+                if (_preview) _preview.classList.remove('mj-header-acc-notif-preview--open');
+            }, 200);
+        }
+
+        function position(card) {
+            var p    = getPreview();
+            var rect = card.getBoundingClientRect();
+
+            // Compare to the panel mid-point: left-column cards → preview RIGHT,
+            // right-column cards → preview LEFT (panel is a 2-col grid).
+            var panel     = card.closest('.mj-header-acc-panel');
+            var panelRect = panel ? panel.getBoundingClientRect() : null;
+            var mid       = panelRect
+                ? (panelRect.left + panelRect.width / 2)
+                : window.innerWidth / 2;
+
+            if (rect.left + rect.width / 2 > mid) {
+                // RIGHT column → preview LEFT
+                p.classList.add('mj-header-acc-notif-preview--left');
+                p.classList.remove('mj-header-acc-notif-preview--right');
+                p.style.left = Math.max(8, rect.left - PREVIEW_W - 10) + 'px';
+            } else {
+                // LEFT column → preview RIGHT
+                p.classList.add('mj-header-acc-notif-preview--right');
+                p.classList.remove('mj-header-acc-notif-preview--left');
+                p.style.left = (rect.right + 10) + 'px';
+            }
+
+            var maxTop = window.innerHeight - 380;
+            p.style.top = Math.max(8, Math.min(rect.top, maxTop)) + 'px';
+        }
+
+        // Render using the flat format from fetchNotificationPreviews():
+        // { recipient_id, title, excerpt, url, type, created_at }
+        function renderContent(notifications) {
+            if (!notifications.length) {
+                return '<div class="mj-header-acc-notif-preview__head">Notifications</div>' +
+                    '<div class="mj-header-dropdown__empty">' +
+                    '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0M3.124 7.5A8.969 8.969 0 0 1 5.292 3m13.416 0a8.969 8.969 0 0 1 2.168 4.5" /></svg>' +
+                    '<p>Aucune notification.</p>' +
+                    '</div>';
+            }
+
+            var html = '<div class="mj-header-acc-notif-preview__head">Notifications récentes</div>';
+            html += '<div class="mj-header-notif-list">';
+
+            notifications.forEach(function (item) {
+                var emoji   = MjHeader.notifEmoji(item.type || 'info');
+                var title   = esc(item.title   || '');
+                var excerpt = esc(item.excerpt || '');
+                var timeAgo = MjHeader.relativeTime(item.created_at || '');
+                var url     = item.url || '';
+
+                html += '<div class="mj-header-notif-swipe-wrap">';
+                html += '<div class="mj-header-notif-item mj-header-notif-item--unread">';
+                if (url) {
+                    html += '<a href="' + esc(url) + '" class="mj-header-notif-item__bg-link" aria-label="' + title + '"></a>';
+                }
+                html += '<div class="mj-header-notif-icon">' + emoji + '</div>';
+                html += '<div class="mj-header-notif-body">';
+                html += '<span class="mj-header-notif-title">' + title + '</span>';
+                if (excerpt) html += '<p class="mj-header-notif-excerpt">' + excerpt + '</p>';
+                html += '<time class="mj-header-notif-time">' + timeAgo + '</time>';
+                html += '</div>';
+                html += '</div>'; // .mj-header-notif-item
+                html += '</div>'; // .mj-header-notif-swipe-wrap
+            });
+
+            html += '</div>';
+            return html;
+        }
+
+        cards.forEach(function (card) {
+            // Parse the notifications embedded by PHP at page load — no AJAX needed.
+            var notifications = [];
+            try {
+                notifications = JSON.parse(card.getAttribute('data-notifications') || '[]');
+            } catch (e) { return; }
+            if (!Array.isArray(notifications) || !notifications.length) return;
+
+            card.addEventListener('mouseenter', function () {
+                if (!window.matchMedia('(hover: hover)').matches) return;
+                clearTimeout(_hideTimer);
+                clearTimeout(_hoverTimer);
+
+                _hoverTimer = setTimeout(function () {
+                    var p = getPreview();
+                    position(card);
+                    p.innerHTML = renderContent(notifications);
+                    p.classList.add('mj-header-acc-notif-preview--open');
+                }, 300);
+            });
+
+            card.addEventListener('mouseleave', function () {
+                clearTimeout(_hoverTimer);
+                scheduleHide();
+            });
         });
     };
 
