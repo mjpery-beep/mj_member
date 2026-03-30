@@ -46,19 +46,12 @@ if ($isNextcloudIframe) {
         $nextcloudSessionCheckUrl = trailingslashit($nextcloudBaseUrl) . 'apps/mj_session_check/session';
         $nextcloudSessionLoginUrl = trailingslashit($nextcloudBaseUrl) . 'apps/mj_session_check/login';
 
-        // Allow ?link=/apps/... to override the default iframe path.
-        $linkParam = isset($_GET['link']) ? (string) $_GET['link'] : '';
-        if ($linkParam !== '' && preg_match('#^/apps/[a-zA-Z0-9/_.-]+$#', $linkParam)) {
-            $nextcloudIframeUrl = trailingslashit($nextcloudBaseUrl) . ltrim($linkParam, '/');
-            $nextcloudIframeUrl = trailingslashit($nextcloudIframeUrl);
-        } else {
-            $nextcloudRootFolder = trim((string) Config::nextcloudRootFolder(), '/');
-            if ($nextcloudRootFolder !== '') {
-                $nextcloudIframeUrl = add_query_arg(
-                    array('dir' => '/' . $nextcloudRootFolder),
-                    $nextcloudIframeUrl
-                );
-            }
+        $nextcloudRootFolder = trim((string) Config::nextcloudRootFolder(), '/');
+        if ($nextcloudRootFolder !== '') {
+            $nextcloudIframeUrl = add_query_arg(
+                array('dir' => '/' . $nextcloudRootFolder),
+                $nextcloudIframeUrl
+            );
         }
 
         // First display: best-effort auto-login with saved member credentials.
@@ -1182,3 +1175,27 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
         </p>
     </noscript>
 </div>
+<?php if (!$isPreview) : ?>
+<script>
+(function () {
+    function initDocumentsLayout() {
+        document.body.classList.add('mj-page--documents-fullheight');
+        document.querySelectorAll('.mj-header').forEach(function (header) {
+            header.classList.add('mj-header--stuck');
+            // Resync the sticky placeholder after the CSS height transition (0.25s)
+            setTimeout(function () {
+                var placeholder = header.previousElementSibling;
+                if (placeholder && placeholder.classList.contains('mj-header-sticky-placeholder')) {
+                    placeholder.style.height = header.offsetHeight + 'px';
+                }
+            }, 270);
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initDocumentsLayout);
+    } else {
+        initDocumentsLayout();
+    }
+})();
+</script>
+<?php endif; ?>

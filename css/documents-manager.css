@@ -816,3 +816,30 @@ body.mj-documents-immersive-open {
     }
 }
 
+/* ============================================================================
+   Full-height mode — activé automatiquement quand le widget Documents est affiché
+   ========================================================================== */
+
+/* Masquer le footer de la page */
+.mj-page--documents-fullheight footer {
+    display: none !important;
+}
+
+/* Header réduit (compact) : ramener la hauteur à --mj-header-stuck-height */
+.mj-page--documents-fullheight .mj-header .mj-header__inner {
+    height: var(--mj-header-stuck-height, 56px);
+}
+
+/* Widget prend toute la hauteur disponible sous le header */
+.mj-page--documents-fullheight .mj-documents-widget {
+    min-height: calc(100dvh - var(--mj-header-stuck-height, 56px));
+    display: flex;
+    flex-direction: column;
+}
+
+/* Iframe Nextcloud : remplir la hauteur restante (override l'inline style) */
+.mj-page--documents-fullheight .mj-documents-widget__nextcloud-iframe {
+    flex: 1;
+    min-height: calc(100dvh - var(--mj-header-stuck-height, 56px) - 80px) !important;
+}
+

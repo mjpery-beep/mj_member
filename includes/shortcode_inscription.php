@@ -1143,10 +1143,11 @@ if (!function_exists('mj_ajax_inscription_handler')) {
             }
 
             if ($login_user instanceof \WP_User) {
-                wp_clear_auth_cookie();
-                wp_set_current_user($login_user->ID);
-                wp_set_auth_cookie($login_user->ID, true);
-                do_action('wp_login', $login_user->user_login, $login_user);
+                // Generate a one-time token so the auth cookie is set during a real page
+                // load (not AJAX), which guarantees the browser stores it correctly.
+                $autologin_token = wp_generate_password(32, false);
+                set_transient('mj_autologin_' . $autologin_token, $login_user->ID, 5 * MINUTE_IN_SECONDS);
+                $result['autologin_token'] = $autologin_token;
                 $did_login = true;
             }
 
@@ -1165,6 +1166,38 @@ if (!function_exists('mj_ajax_inscription_handler')) {
 
 add_action('wp_ajax_nopriv_mj_member_ajax_register', 'mj_ajax_inscription_handler');
 add_action('wp_ajax_mj_member_ajax_register', 'mj_ajax_inscription_handler');
+
+/**
+ * Process the one-time auto-login token generated after a successful registration.
+ * The token is passed as ?mj_autologin=<token> in the redirect URL. Setting the
+ * auth cookie here (during a normal page load) guarantees the browser stores it.
+ */
+add_action('template_redirect', function () {
+    $token = sanitize_text_field(wp_unslash($_GET['mj_autologin'] ?? ''));
+    if ($token === '') {
+        return;
+    }
+
+    $user_id = get_transient('mj_autologin_' . $token);
+    if (empty($user_id)) {
+        return;
+    }
+
+    delete_transient('mj_autologin_' . $token);
+
+    $user = get_user_by('ID', (int) $user_id);
+    if (!($user instanceof \WP_User)) {
+        return;
+    }
+
+    wp_clear_auth_cookie();
+    wp_set_current_user($user->ID);
+    wp_set_auth_cookie($user->ID, true);
+    do_action('wp_login', $user->user_login, $user);
+
+    wp_safe_redirect(remove_query_arg('mj_autologin'));
+    exit;
+});
 
 if (!function_exists('mj_member_render_registration_form')) {
     function mj_member_render_registration_form($args = array()) {
@@ -3435,7 +3468,7 @@ if (!function_exists('mj_member_render_registration_form')) {
                     }
 
                     // ── Registration success overlay with countdown ────────────────────
-                    function mjShowRegistrationSuccess(accountUrl, didLogin) {
+                    function mjShowRegistrationSuccess(accountUrl, didLogin, autoLoginToken) {
                         var DURATION = 5;
                         var radius = 19;
                         var circumference = +(2 * Math.PI * radius).toFixed(2);
@@ -3470,7 +3503,12 @@ if (!function_exists('mj_member_render_registration_form')) {
 
                         function buildRedirect() {
                             var base = accountUrl || window.location.href;
-                            return base + (base.indexOf('?') !== -1 ? '&' : '?') + 'new_subscription=1';
+                            var sep = base.indexOf('?') !== -1 ? '&' : '?';
+                            var url = base + sep + 'new_subscription=1';
+                            if (autoLoginToken) {
+                                url += '&mj_autologin=' + encodeURIComponent(autoLoginToken);
+                            }
+                            return url;
                         }
                         function doRedirect() { window.location.href = buildRedirect(); }
 
@@ -3533,7 +3571,8 @@ if (!function_exists('mj_member_render_registration_form')) {
                             .then(function (data) {
                                 if (data && data.success) {
                                     var didLogin = data.data && data.data.did_login ? 1 : 0;
-                                    mjShowRegistrationSuccess(accountUrl, didLogin);
+                                    var autoLoginToken = (data.data && data.data.autologin_token) ? data.data.autologin_token : '';
+                                    mjShowRegistrationSuccess(accountUrl, didLogin, autoLoginToken);
                                 } else {
                                     var msg = (data && data.data && data.data.message)
                                         ? data.data.message

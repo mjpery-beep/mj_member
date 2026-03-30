@@ -1,0 +1,7690 @@
+/**
+ * Registration Manager - Members Components
+ * Composants pour la gestion des membres
+ */
+
+(function (global) {
+    'use strict';
+
+    var preact = global.preact;
+    var hooks = global.preactHooks;
+    var Utils = global.MjRegMgrUtils;
+    var RegComps = global.MjRegMgrRegistrations;
+    var TabsModule = global.MjRegMgrTabs;
+
+    if (!preact || !hooks || !Utils) {
+        console.warn('[MjRegMgr] Dépendances manquantes pour members.js');
+        return;
+    }
+
+    var h = preact.h;
+    var Fragment = preact.Fragment;
+    var useState = hooks.useState;
+    var useEffect = hooks.useEffect;
+    var useCallback = hooks.useCallback;
+    var useMemo = hooks.useMemo;
+    var useRef = hooks.useRef;
+
+    var formatDate = Utils.formatDate;
+    var formatTimeAgo = Utils.formatTimeAgo;
+    var classNames = Utils.classNames;
+    var getString = Utils.getString;
+    var buildWhatsAppLink = Utils.buildWhatsAppLink;
+
+    var MemberAvatar = RegComps ? RegComps.MemberAvatar : function () { return null; };
+    var TabsComponent = TabsModule && typeof TabsModule.Tabs === 'function'
+        ? TabsModule.Tabs
+        : null;
+
+    // ============================================
+    // UTILITY FUNCTIONS
+    // ============================================
+
+    /**
+     * Calculate age from birth date
+     * @param {string} birthDate - Date string in YYYY-MM-DD format
+     * @returns {number|null} Age in years or null if invalid
+     */
+    function calculateAge(birthDate) {
+        if (!birthDate) return null;
+        var birth = new Date(birthDate);
+        if (isNaN(birth.getTime())) return null;
+        
+        var today = new Date();
+        var age = today.getFullYear() - birth.getFullYear();
+        var monthDiff = today.getMonth() - birth.getMonth();
+        
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+            age--;
+        }
+        
+        return age >= 0 ? age : null;
+    }
+
+    function buildInitialEditData(member) {
+        var base = {
+            firstName: '',
+            lastName: '',
+            nickname: '',
+            email: '',
+            phone: '',
+            phoneSecondary: '',
+            birthDate: '',
+            addressLine: '',
+            postalCode: '',
+            city: '',
+            isVolunteer: false,
+            isAutonomous: false,
+            isTrustedMember: false,
+            newsletterOptIn: false,
+            smsOptIn: false,
+            whatsappOptIn: false,
+            photoUsageConsent: false,
+            descriptionShort: '',
+            descriptionLong: '',
+        };
+
+        if (!member) {
+            return base;
+        }
+
+        base.firstName = member.firstName || '';
+        base.lastName = member.lastName || '';
+        base.nickname = member.nickname || '';
+        base.email = member.email || '';
+        base.phone = member.phone || '';
+        base.phoneSecondary = member.phoneSecondary || '';
+        base.birthDate = member.birthDate || '';
+        base.addressLine = member.addressLine || '';
+        base.postalCode = member.postalCode || '';
+        base.city = member.city || '';
+        if (typeof member.isVolunteer !== 'undefined') {
+            base.isVolunteer = !!member.isVolunteer;
+        }
+        if (typeof member.isAutonomous !== 'undefined') {
+            base.isAutonomous = !!member.isAutonomous;
+        }
+        if (typeof member.newsletterOptIn !== 'undefined') {
+            base.newsletterOptIn = !!member.newsletterOptIn;
+        }
+        if (typeof member.smsOptIn !== 'undefined') {
+            base.smsOptIn = !!member.smsOptIn;
+        }
+        if (typeof member.whatsappOptIn !== 'undefined') {
+            base.whatsappOptIn = !!member.whatsappOptIn;
+        }
+        if (typeof member.photoUsageConsent !== 'undefined') {
+            base.photoUsageConsent = !!member.photoUsageConsent;
+        }
+        if (typeof member.isTrustedMember !== 'undefined') {
+            base.isTrustedMember = !!member.isTrustedMember;
+        }
+        base.descriptionShort = member.descriptionShort || '';
+        base.descriptionLong = member.descriptionLong || '';
+
+        return base;
+    }
+
+    function normalizeBadgeEntry(entry) {
+        if (!entry || typeof entry !== 'object') {
+            return null;
+        }
+
+        var badgeId = 0;
+        if (typeof entry.id === 'number') {
+            badgeId = entry.id;
+        } else if (typeof entry.id === 'string' && entry.id !== '') {
+            badgeId = parseInt(entry.id, 10);
+            if (isNaN(badgeId)) {
+                badgeId = 0;
+            }
+        }
+
+        var imageId = 0;
+        if (typeof entry.imageId === 'number') {
+            imageId = entry.imageId;
+        } else if (typeof entry.image_id === 'number') {
+            imageId = entry.image_id;
+        } else if (typeof entry.imageId === 'string' && entry.imageId !== '') {
+            var parsedImageId = parseInt(entry.imageId, 10);
+            imageId = isNaN(parsedImageId) ? 0 : parsedImageId;
+        } else if (typeof entry.image_id === 'string' && entry.image_id !== '') {
+            var parsedLegacyImageId = parseInt(entry.image_id, 10);
+            imageId = isNaN(parsedLegacyImageId) ? 0 : parsedLegacyImageId;
+        }
+
+        var imageUrl = '';
+        if (typeof entry.imageUrl === 'string') {
+            imageUrl = entry.imageUrl;
+        } else if (typeof entry.image_url === 'string') {
+            imageUrl = entry.image_url;
+        }
+
+        var criteria = Array.isArray(entry.criteria) ? entry.criteria : [];
+        var normalizedCriteria = criteria.map(function (criterion) {
+            var criterionId = 0;
+            if (typeof criterion.id === 'number') {
+                criterionId = criterion.id;
+            } else if (typeof criterion.id === 'string' && criterion.id !== '') {
+                var parsed = parseInt(criterion.id, 10);
+                criterionId = isNaN(parsed) ? 0 : parsed;
+            }
+
+            var canToggle = typeof criterion.canToggle === 'boolean' ? criterion.canToggle : criterionId > 0;
+            var awarded = !!criterion.awarded;
+            var status = typeof criterion.status === 'string' && criterion.status !== ''
+                ? criterion.status
+                : (awarded ? 'awarded' : 'pending');
+
+            var criterionXp = 0;
+            if (typeof criterion.xp === 'number') {
+                criterionXp = criterion.xp;
+            } else if (typeof criterion.xp === 'string' && criterion.xp !== '') {
+                var parsedCriterionXp = parseInt(criterion.xp, 10);
+                criterionXp = isNaN(parsedCriterionXp) ? 0 : parsedCriterionXp;
+            }
+
+            var criterionCoins = 0;
+            if (typeof criterion.coins === 'number') {
+                criterionCoins = criterion.coins;
+            } else if (typeof criterion.coins === 'string' && criterion.coins !== '') {
+                var parsedCriterionCoins = parseInt(criterion.coins, 10);
+                criterionCoins = isNaN(parsedCriterionCoins) ? 0 : parsedCriterionCoins;
+            }
+
+            return {
+                id: criterionId,
+                label: typeof criterion.label === 'string' ? criterion.label : '',
+                description: typeof criterion.description === 'string' ? criterion.description : '',
+                xp: criterionXp,
+                coins: criterionCoins,
+                awarded: awarded,
+                status: status,
+                canToggle: canToggle,
+            };
+        });
+
+        var toggleableCount = normalizedCriteria.reduce(function (count, criterion) {
+            return count + (criterion.canToggle ? 1 : 0);
+        }, 0);
+
+        var awardedCount = typeof entry.awardedCount === 'number'
+            ? entry.awardedCount
+            : normalizedCriteria.reduce(function (count, criterion) {
+                if (criterion.canToggle && criterion.awarded) {
+                    return count + 1;
+                }
+                return count;
+            }, 0);
+
+        var totalCriteria = typeof entry.totalCriteria === 'number'
+            ? entry.totalCriteria
+            : toggleableCount;
+
+        if (totalCriteria < toggleableCount) {
+            totalCriteria = toggleableCount;
+        }
+
+        var progress = 0;
+        if (typeof entry.progressPercent === 'number' && !isNaN(entry.progressPercent)) {
+            progress = entry.progressPercent;
+        } else if (totalCriteria > 0) {
+            progress = Math.round((awardedCount / Math.max(totalCriteria, 1)) * 100);
+        } else if (typeof entry.status === 'string' && entry.status === 'awarded') {
+            progress = 100;
+        }
+
+        if (progress < 0) {
+            progress = 0;
+        } else if (progress > 100) {
+            progress = 100;
+        }
+
+        var badgeXp = 0;
+        if (typeof entry.xp === 'number') {
+            badgeXp = entry.xp;
+        } else if (typeof entry.xp === 'string' && entry.xp !== '') {
+            var parsedBadgeXp = parseInt(entry.xp, 10);
+            badgeXp = isNaN(parsedBadgeXp) ? 0 : parsedBadgeXp;
+        }
+
+        var badgeCoins = 0;
+        if (typeof entry.coins === 'number') {
+            badgeCoins = entry.coins;
+        } else if (typeof entry.coins === 'string' && entry.coins !== '') {
+            var parsedBadgeCoins = parseInt(entry.coins, 10);
+            badgeCoins = isNaN(parsedBadgeCoins) ? 0 : parsedBadgeCoins;
+        }
+
+        return {
+            id: badgeId,
+            label: typeof entry.label === 'string' ? entry.label : '',
+            summary: typeof entry.summary === 'string' ? entry.summary : '',
+            description: typeof entry.description === 'string' ? entry.description : '',
+            icon: typeof entry.icon === 'string' ? entry.icon : '',
+            imageId: imageId,
+            imageUrl: imageUrl,
+            xp: badgeXp,
+            coins: badgeCoins,
+            status: typeof entry.status === 'string' ? entry.status : '',
+            awardedAt: typeof entry.awardedAt === 'string' ? entry.awardedAt : (typeof entry.awarded_at === 'string' ? entry.awarded_at : ''),
+            revokedAt: typeof entry.revokedAt === 'string' ? entry.revokedAt : (typeof entry.revoked_at === 'string' ? entry.revoked_at : ''),
+            totalCriteria: totalCriteria,
+            awardedCount: awardedCount,
+            progress: progress,
+            criteria: normalizedCriteria,
+        };
+    }
+
+    function normalizeBadgeEntries(member) {
+        if (!member || !Array.isArray(member.badges)) {
+            return [];
+        }
+
+        var entries = [];
+        for (var i = 0; i < member.badges.length; i++) {
+            var normalized = normalizeBadgeEntry(member.badges[i]);
+            if (normalized) {
+                entries.push(normalized);
+            }
+        }
+        return entries;
+    }
+
+    // ============================================
+    // TROPHY NORMALIZATION FUNCTIONS
+    // ============================================
+
+    function normalizeTrophyEntry(entry) {
+        if (!entry || typeof entry !== 'object') {
+            return null;
+        }
+
+        var trophyId = 0;
+        if (typeof entry.id === 'number') {
+            trophyId = entry.id;
+        } else if (typeof entry.id === 'string' && entry.id !== '') {
+            trophyId = parseInt(entry.id, 10);
+            if (isNaN(trophyId)) {
+                trophyId = 0;
+            }
+        }
+
+        var imageId = 0;
+        if (typeof entry.imageId === 'number') {
+            imageId = entry.imageId;
+        } else if (typeof entry.image_id === 'number') {
+            imageId = entry.image_id;
+        } else if (typeof entry.imageId === 'string' && entry.imageId !== '') {
+            var parsedImageId = parseInt(entry.imageId, 10);
+            imageId = isNaN(parsedImageId) ? 0 : parsedImageId;
+        }
+
+        var imageUrl = '';
+        if (typeof entry.imageUrl === 'string') {
+            imageUrl = entry.imageUrl;
+        } else if (typeof entry.image_url === 'string') {
+            imageUrl = entry.image_url;
+        }
+
+        var xp = 0;
+        if (typeof entry.xp === 'number') {
+            xp = entry.xp;
+        } else if (typeof entry.xp === 'string' && entry.xp !== '') {
+            var parsedXp = parseInt(entry.xp, 10);
+            xp = isNaN(parsedXp) ? 0 : parsedXp;
+        }
+
+        var coins = 0;
+        if (typeof entry.coins === 'number') {
+            coins = entry.coins;
+        } else if (typeof entry.coins === 'string' && entry.coins !== '') {
+            var parsedCoins = parseInt(entry.coins, 10);
+            coins = isNaN(parsedCoins) ? 0 : parsedCoins;
+        }
+
+        var autoMode = false;
+        if (typeof entry.autoMode === 'boolean') {
+            autoMode = entry.autoMode;
+        } else if (typeof entry.auto_mode === 'boolean') {
+            autoMode = entry.auto_mode;
+        } else if (entry.autoMode === 1 || entry.auto_mode === 1) {
+            autoMode = true;
+        }
+
+        var canToggle = false;
+        if (typeof entry.canToggle === 'boolean') {
+            canToggle = entry.canToggle;
+        } else if (typeof entry.can_toggle === 'boolean') {
+            canToggle = entry.can_toggle;
+        } else {
+            canToggle = !autoMode;
+        }
+
+        return {
+            id: trophyId,
+            title: typeof entry.title === 'string' ? entry.title : '',
+            description: typeof entry.description === 'string' ? entry.description : '',
+            xp: xp,
+            coins: coins,
+            imageId: imageId,
+            imageUrl: imageUrl,
+            autoMode: autoMode,
+            awarded: !!entry.awarded,
+            awardedAt: typeof entry.awardedAt === 'string' ? entry.awardedAt : (typeof entry.awarded_at === 'string' ? entry.awarded_at : ''),
+            canToggle: canToggle,
+        };
+    }
+
+    function normalizeTrophyEntries(member) {
+        if (!member || !Array.isArray(member.trophies)) {
+            return [];
+        }
+
+        var entries = [];
+        for (var i = 0; i < member.trophies.length; i++) {
+            var normalized = normalizeTrophyEntry(member.trophies[i]);
+            if (normalized) {
+                entries.push(normalized);
+            }
+        }
+        return entries;
+    }
+
+    /**
+     * Normalize a single action entry.
+     */
+    function normalizeActionEntry(entry) {
+        if (!entry) return null;
+
+        var actionId = 0;
+        if (typeof entry.id === 'number') {
+            actionId = entry.id;
+        } else if (typeof entry.id === 'string' && entry.id !== '') {
+            var parsedId = parseInt(entry.id, 10);
+            actionId = isNaN(parsedId) ? 0 : parsedId;
+        }
+
+        if (actionId <= 0) return null;
+
+        var xp = 0;
+        if (typeof entry.xp === 'number') {
+            xp = entry.xp;
+        } else if (typeof entry.xp === 'string' && entry.xp !== '') {
+            var parsedXp = parseInt(entry.xp, 10);
+            xp = isNaN(parsedXp) ? 0 : parsedXp;
+        }
+
+        var coins = 0;
+        if (typeof entry.coins === 'number') {
+            coins = entry.coins;
+        } else if (typeof entry.coins === 'string' && entry.coins !== '') {
+            var parsedCoins = parseInt(entry.coins, 10);
+            coins = isNaN(parsedCoins) ? 0 : parsedCoins;
+        }
+
+        var count = 0;
+        if (typeof entry.count === 'number') {
+            count = entry.count;
+        } else if (typeof entry.count === 'string' && entry.count !== '') {
+            var parsedCount = parseInt(entry.count, 10);
+            count = isNaN(parsedCount) ? 0 : parsedCount;
+        }
+
+        var isAuto = false;
+        if (typeof entry.isAuto === 'boolean') {
+            isAuto = entry.isAuto;
+        } else if (typeof entry.is_auto === 'boolean') {
+            isAuto = entry.is_auto;
+        } else if (entry.attribution === 'auto') {
+            isAuto = true;
+        }
+
+        var canAward = false;
+        if (typeof entry.canAward === 'boolean') {
+            canAward = entry.canAward;
+        } else if (typeof entry.can_award === 'boolean') {
+            canAward = entry.can_award;
+        } else {
+            canAward = !isAuto;
+        }
+
+        return {
+            id: actionId,
+            slug: typeof entry.slug === 'string' ? entry.slug : '',
+            title: typeof entry.title === 'string' ? entry.title : '',
+            description: typeof entry.description === 'string' ? entry.description : '',
+            emoji: typeof entry.emoji === 'string' ? entry.emoji : '',
+            category: typeof entry.category === 'string' ? entry.category : '',
+            categoryLabel: typeof entry.categoryLabel === 'string' ? entry.categoryLabel : '',
+            attribution: typeof entry.attribution === 'string' ? entry.attribution : 'manual',
+            xp: xp,
+            coins: coins,
+            count: count,
+            isAuto: isAuto,
+            canAward: canAward,
+        };
+    }
+
+    /**
+     * Normalize action entries from member data.
+     */
+    function normalizeActionEntries(member) {
+        if (!member || !Array.isArray(member.actions)) {
+            return [];
+        }
+
+        var entries = [];
+        for (var i = 0; i < member.actions.length; i++) {
+            var normalized = normalizeActionEntry(member.actions[i]);
+            if (normalized) {
+                entries.push(normalized);
+            }
+        }
+        return entries;
+    }
+
+    /**
+     * Group actions by category.
+     */
+    function groupActionsByCategory(actions) {
+        var groups = {};
+        for (var i = 0; i < actions.length; i++) {
+            var action = actions[i];
+            var category = action.category || 'other';
+            if (!groups[category]) {
+                groups[category] = {
+                    label: action.categoryLabel || category,
+                    actions: [],
+                };
+            }
+            groups[category].actions.push(action);
+        }
+        return groups;
+    }
+
+    // ============================================
+    // MEMBER CARD (for sidebar list)
+    // ============================================
+
+    function MemberCard(props) {
+        var member = props.member;
+        var isSelected = props.isSelected;
+        var onClick = props.onClick;
+        var strings = props.strings;
+        var isFavorite = props.isFavorite;
+        var onToggleFavorite = props.onToggleFavorite;
+        
+        var roleLabels = {
+            'jeune': '🧒 Jeune',
+            'animateur': '🎭 Animateur',
+            'tuteur': '👨‍👩‍👧 Tuteur',
+            'benevole': '🤝 Bénévole',
+            'coordinateur': '👑 Coordinateur',
+        };
+
+        /**
+         * use emojis
+         * paid: ✅
+         * expired: clock emoji + "expirée"
+         * unpaid: coin emoji + "due"
+         */
+        var membershipLabels = {
+            'paid': '✅',
+            'expired': '⏰',
+            'unpaid': '🪙',
+            'not_required': '', // Ne pas afficher si pas de cotisation requise
+        };
+
+        var volunteerLabel = getString(strings, 'volunteerLabel', 'Bénévole');
+        
+        return h('div', {
+            class: classNames('mj-regmgr-member-card', {
+                'mj-regmgr-member-card--selected': isSelected,
+                'mj-regmgr-member-card--inactive': member.status === 'inactive',
+            }),
+            onClick: function () { onClick(member); },
+            role: 'button',
+            tabIndex: 0,
+            onKeyDown: function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onClick(member);
+                }
+            },
+        }, [
+            h(MemberAvatar, { member: member, size: 'medium' }),
+            onToggleFavorite && h('button', {
+                type: 'button',
+                class: classNames('mj-regmgr-favorite-btn', {
+                    'mj-regmgr-favorite-btn--active': isFavorite,
+                }),
+                onClick: function (e) {
+                    e.stopPropagation();
+                    onToggleFavorite('member', member.id);
+                },
+                title: isFavorite
+                    ? getString(strings, 'removeFavorite', 'Retirer des favoris')
+                    : getString(strings, 'addFavorite', 'Ajouter aux favoris'),
+                'aria-label': isFavorite
+                    ? getString(strings, 'removeFavorite', 'Retirer des favoris')
+                    : getString(strings, 'addFavorite', 'Ajouter aux favoris'),
+                'aria-pressed': isFavorite ? 'true' : 'false',
+            }, [
+                h('svg', {
+                    width: 14, height: 14, viewBox: '0 0 24 24',
+                    fill: isFavorite ? 'currentColor' : 'none',
+                    stroke: 'currentColor', 'stroke-width': 2,
+                }, [
+                    h('path', { d: 'M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z' }),
+                ]),
+            ]),
+            h('div', { class: 'mj-regmgr-member-card__content' }, [
+                h('div', { class: 'mj-regmgr-member-card__name' }, 
+                    
+                    member.role && h('span', { class: 'mj-regmgr-member-card__role' }, 
+                        roleLabels[member.role] || member.role
+                    ),
+                    ' ' + (member.firstName || '') + ' ' + (member.lastName || '')
+                ),
+                h('div', { class: 'mj-regmgr-member-card__meta' }, [
+                    member.wpUserId && h('span', {
+                        class: 'mj-regmgr-member-card__wordpress-icon',
+                        title: 'Compte WordPress associé',
+                    }, '⚡'),
+                   
+                    member.membershipStatus && member.membershipStatus !== 'not_required' && h('span', { 
+                        class: classNames('mj-regmgr-member-card__membership', {
+                            'mj-regmgr-member-card__membership--paid': member.membershipStatus === 'paid',
+                            'mj-regmgr-member-card__membership--expired': member.membershipStatus === 'expired',
+                            'mj-regmgr-member-card__membership--unpaid': member.membershipStatus === 'unpaid',
+                        })
+                    }, membershipLabels[member.membershipStatus] || ''),
+                    member.isVolunteer && h('span', {
+                        class: classNames('mj-regmgr-member-card__volunteer', 'mj-regmgr-badge', 'mj-regmgr-badge--volunteer'),
+                    }, volunteerLabel),
+                    member.status === 'inactive' && h('span', {
+                        class: classNames('mj-regmgr-badge', 'mj-regmgr-badge--secondary'),
+                        title: 'Compte inactif',
+                    }, getString(strings, 'memberStatusInactive', 'Inactif')),
+                    
+                    member.birthDate && calculateAge(member.birthDate) !== null && h('span', {
+                        class: 'mj-regmgr-member-card__age',
+                        title: 'Date de naissance: ' + formatDate(member.birthDate, true),
+                    }, calculateAge(member.birthDate) + ' ans'),
+                    
+                    member.lastActivityAt && h('span', {
+                        class: 'mj-regmgr-member-card__activity-date',
+                        title: 'Dernière activité: ' + formatDate(member.lastActivityAt, true),
+                    }, '🟢 ' + formatTimeAgo(member.lastActivityAt)),
+                    member.lastLoginAt && h('span', {
+                        class: 'mj-regmgr-member-card__login-date',
+                        title: 'Dernière connexion: ' + formatDate(member.lastLoginAt, true),
+                    }, '🔑 ' + formatTimeAgo(member.lastLoginAt)),
+                ]),
+                h('div', { class: 'mj-regmgr-member-card__footer' }, [
+                    member.createdAt && h('div', {
+                        class: 'mj-regmgr-member-card__date',
+                        title: formatDate(member.createdAt, true),
+                    }, '📅 ' + formatTimeAgo(member.createdAt)),
+
+                    // Level / Coins / XP badges (only if > 0)
+                    (member.levelNumber > 0 || member.coinsTotal > 0 || member.xpTotal > 0) && h('div', { class: 'mj-regmgr-member-card__stats' }, [
+                        member.levelNumber > 0 && h('span', {
+                            class: 'mj-regmgr-member-card__level',
+                            title: 'Niveau ' + member.levelNumber,
+                        }, '⭐ ' + member.levelNumber),
+                        member.coinsTotal > 0 && h('span', {
+                            class: 'mj-regmgr-member-card__coins',
+                            title: member.coinsTotal.toLocaleString() + ' coins',
+                        }, '🪙 ' + member.coinsTotal.toLocaleString()),
+                        member.xpTotal > 0 && h('span', {
+                            class: 'mj-regmgr-member-card__xp',
+                            title: member.xpTotal.toLocaleString() + ' XP',
+                        }, '✨ ' + member.xpTotal.toLocaleString()),
+                    ]),
+                ]),
+            ]),
+        ]);
+    }
+
+    // ============================================
+    // MEMBERS LIST
+    // ============================================
+
+    function MembersList(props) {
+        var members = props.members || [];
+        var loading = props.loading;
+        var selectedMemberId = props.selectedMemberId;
+        var onSelectMember = props.onSelectMember;
+        var strings = props.strings;
+        var onLoadMore = props.onLoadMore;
+        var hasMore = props.hasMore;
+        var loadingMore = props.loadingMore;
+        var pagination = props.pagination || {};
+        var onPageChange = props.onPageChange;
+        var favoriteMemberIds = props.favoriteMemberIds || [];
+        var onToggleFavorite = props.onToggleFavorite;
+
+        var currentPage = pagination.page || 1;
+        var totalPages = pagination.totalPages || 1;
+        var totalFiltered = typeof pagination.total === 'number' ? pagination.total : null;
+        var totalAll = typeof pagination.totalAll === 'number' ? pagination.totalAll : null;
+
+        if (loading && members.length === 0) {
+            return h('div', { class: 'mj-regmgr-members-list mj-regmgr-members-list--loading' }, [
+                h('div', { class: 'mj-regmgr-spinner' }),
+                h('p', null, getString(strings, 'loading', 'Chargement...')),
+            ]);
+        }
+
+        if (members.length === 0) {
+            return h('div', { class: 'mj-regmgr-members-list mj-regmgr-members-list--empty' }, [
+                h('div', { class: 'mj-regmgr-members-list__empty-icon' }, [
+                    h('svg', {
+                        width: 48,
+                        height: 48,
+                        viewBox: '0 0 24 24',
+                        fill: 'none',
+                        stroke: 'currentColor',
+                        'stroke-width': 1.5,
+                    }, [
+                        h('path', { d: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' }),
+                        h('circle', { cx: 9, cy: 7, r: 4 }),
+                        h('path', { d: 'M23 21v-2a4 4 0 0 0-3-3.87' }),
+                        h('path', { d: 'M16 3.13a4 4 0 0 1 0 7.75' }),
+                    ]),
+                ]),
+                h('p', null, getString(strings, 'noMembers', 'Aucun membre trouvé.')),
+            ]);
+        }
+
+        return h('div', { class: 'mj-regmgr-members-list' }, [
+            // Pagination
+            (totalPages > 1 || totalFiltered !== null) && h('div', { class: 'mj-regmgr-members-list__pagination' }, [
+                // Compteur filtré / total
+                totalFiltered !== null && h('div', { class: 'mj-regmgr-members-list__pagination-info' },
+                    totalAll !== null && totalAll !== totalFiltered
+                        ? totalFiltered + ' / ' + totalAll + ' membres'
+                        : totalFiltered + ' membre' + (totalFiltered !== 1 ? 's' : '')
+                ),
+
+                // Contrôles de pagination
+                totalPages > 1 && h('div', { class: 'mj-regmgr-members-list__pagination-controls' }, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-regmgr-members-list__pagination-btn',
+                        disabled: currentPage <= 1 || loading,
+                        onClick: function () { onPageChange(currentPage - 1); },
+                        title: 'Page précédente',
+                    }, [
+                        h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.5 }, [
+                            h('polyline', { points: '15 18 9 12 15 6' }),
+                        ]),
+                    ]),
+                    h('span', { class: 'mj-regmgr-members-list__pagination-pages' },
+                        currentPage + ' / ' + totalPages
+                    ),
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-regmgr-members-list__pagination-btn',
+                        disabled: currentPage >= totalPages || loading,
+                        onClick: function () { onPageChange(currentPage + 1); },
+                        title: 'Page suivante',
+                    }, [
+                        h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.5 }, [
+                            h('polyline', { points: '9 18 15 12 9 6' }),
+                        ]),
+                    ]),
+                ]),
+            ]),
+
+            members.map(function (member) {
+                return h(MemberCard, {
+                    key: member.id,
+                    member: member,
+                    isSelected: member.id === selectedMemberId,
+                    onClick: onSelectMember,
+                    strings: strings,
+                    isFavorite: favoriteMemberIds.indexOf(member.id) !== -1,
+                    onToggleFavorite: onToggleFavorite,
+                });
+            }),
+        ]);
+    }
+
+    // ============================================
+    // REGISTRATION HISTORY ITEM
+    // ============================================
+
+    function RegistrationHistoryItem(props) {
+        var reg = props.registration;
+        var strings = props.strings || {};
+        var allowDelete = !!props.allowDelete;
+        var onDelete = typeof props.onDelete === 'function' ? props.onDelete : null;
+        var onUpdateOccurrences = typeof props.onUpdateOccurrences === 'function' ? props.onUpdateOccurrences : null;
+        var onSelectEvent = typeof props.onSelectEvent === 'function' ? props.onSelectEvent : null;
+
+        var expanded = useState(false);
+        var isExpanded = expanded[0];
+        var setExpanded = expanded[1];
+
+        var editingOccurrences = useState(false);
+        var isEditingOccurrences = editingOccurrences[0];
+        var setEditingOccurrences = editingOccurrences[1];
+
+        var selectedOccurrences = useState([]);
+        var localSelectedOccurrences = selectedOccurrences[0];
+        var setSelectedOccurrences = selectedOccurrences[1];
+
+        var saving = useState(false);
+        var isSaving = saving[0];
+        var setSaving = saving[1];
+
+        var allMode = useState(true);
+        var isAllMode = allMode[0];
+        var setIsAllMode = allMode[1];
+
+        var statusClasses = {
+            'valide': 'mj-regmgr-badge--success',
+            'en_attente': 'mj-regmgr-badge--warning',
+            'annule': 'mj-regmgr-badge--danger',
+        };
+
+        var sessions = Array.isArray(reg.occurrenceDetails) ? reg.occurrenceDetails : [];
+        var allOccurrences = Array.isArray(reg.allOccurrences) ? reg.allOccurrences : [];
+        var coversAllSessions = !!reg.coversAllOccurrences;
+        var totalOccurrences = typeof reg.totalOccurrences === 'number' ? reg.totalOccurrences : 0;
+        var canEditOccurrences = !!reg.canEditOccurrences && onUpdateOccurrences;
+
+        var sessionsLabel = getString(strings, 'sessions', 'Séances');
+        var allSessionsLabel = getString(strings, 'allSessions', 'Toutes les séances');
+        var deleteLabel = getString(strings, 'deleteRegistration', 'Supprimer');
+        var editOccurrencesLabel = getString(strings, 'editOccurrences', 'Modifier les séances');
+        var saveLabel = getString(strings, 'save', 'Enregistrer');
+        var cancelLabel = getString(strings, 'cancel', 'Annuler');
+        var viewEventLabel = getString(strings, 'viewEvent', 'Voir l\'événement');
+        var allOccurrencesOptionLabel = getString(strings, 'allOccurrencesOption', 'Toutes les séances');
+        var customOccurrencesOptionLabel = getString(strings, 'customOccurrencesOption', 'Séances spécifiques');
+        var noOccurrencesSelectedLabel = getString(strings, 'noOccurrencesSelected', 'Aucune séance sélectionnée');
+        var savingLabel = getString(strings, 'saving', 'Enregistrement...');
+
+        var canDelete = allowDelete && onDelete;
+
+        var handleToggleExpand = useCallback(function () {
+            setExpanded(function (prev) { return !prev; });
+        }, []);
+
+        var handleStartEditOccurrences = useCallback(function () {
+            var currentAssignments = reg.occurrenceAssignments || {};
+            var mode = currentAssignments.mode || 'all';
+            var currentOccs = Array.isArray(currentAssignments.occurrences) ? currentAssignments.occurrences : [];
+            
+            setIsAllMode(mode === 'all');
+            setSelectedOccurrences(mode === 'all' ? [] : currentOccs);
+            setEditingOccurrences(true);
+        }, [reg]);
+
+        var handleCancelEditOccurrences = useCallback(function () {
+            setEditingOccurrences(false);
+        }, []);
+
+        var handleToggleOccurrence = useCallback(function (occurrenceStart) {
+            setSelectedOccurrences(function (prev) {
+                if (prev.indexOf(occurrenceStart) !== -1) {
+                    return prev.filter(function (o) { return o !== occurrenceStart; });
+                }
+                return prev.concat([occurrenceStart]);
+            });
+        }, []);
+
+        var handleModeChange = useCallback(function (newMode) {
+            setIsAllMode(newMode === 'all');
+            if (newMode === 'all') {
+                setSelectedOccurrences([]);
+            }
+        }, []);
+
+        var handleSaveOccurrences = useCallback(function () {
+            if (!onUpdateOccurrences) return;
+
+            var mode = isAllMode ? 'all' : 'custom';
+            var occurrences = isAllMode ? [] : localSelectedOccurrences;
+
+            setSaving(true);
+            onUpdateOccurrences(reg.id, mode, occurrences)
+                .then(function () {
+                    setEditingOccurrences(false);
+                })
+                .catch(function () {
+                    // Error handled by parent
+                })
+                .finally(function () {
+                    setSaving(false);
+                });
+        }, [onUpdateOccurrences, reg.id, isAllMode, localSelectedOccurrences]);
+
+        var handleDelete = useCallback(function () {
+            if (onDelete) {
+                onDelete(reg);
+            }
+        }, [onDelete, reg]);
+
+        var handleViewEvent = useCallback(function (e) {
+            e.stopPropagation();
+            if (onSelectEvent && reg.eventId) {
+                onSelectEvent(reg.eventId);
+            }
+        }, [onSelectEvent, reg.eventId]);
+
+        // Cover image or fallback
+        var coverUrl = reg.eventCover && reg.eventCover.url ? reg.eventCover.url : '';
+
+        // Count sessions
+        var sessionCount = coversAllSessions ? totalOccurrences : sessions.length;
+        var sessionSummary = coversAllSessions 
+            ? allSessionsLabel 
+            : (sessionCount > 0 ? sessionCount + ' ' + sessionsLabel.toLowerCase() : '');
+
+        return h('div', { 
+            class: classNames('mj-regmgr-history-item', {
+                'mj-regmgr-history-item--expanded': isExpanded,
+                'mj-regmgr-history-item--cancelled': reg.status === 'annule',
+            }),
+        }, [
+            // Main row (always visible)
+            h('div', { 
+                class: 'mj-regmgr-history-item__header',
+                onClick: handleToggleExpand,
+            }, [
+                // Cover thumbnail
+                h('div', { class: 'mj-regmgr-history-item__cover' }, [
+                    coverUrl 
+                        ? h('img', { src: coverUrl, alt: '', class: 'mj-regmgr-history-item__cover-img' })
+                        : h('div', { class: 'mj-regmgr-history-item__cover-placeholder' }, [
+                            h('span', { 
+                                class: 'mj-regmgr-history-item__cover-icon',
+                                dangerouslySetInnerHTML: { __html: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' },
+                            }),
+                        ]),
+                ]),
+
+                // Main info
+                h('div', { class: 'mj-regmgr-history-item__main' }, [
+                    h('div', { class: 'mj-regmgr-history-item__title' }, reg.eventTitle || 'Événement'),
+                    h('div', { class: 'mj-regmgr-history-item__meta' }, [
+                        h('span', { class: 'mj-regmgr-history-item__date' }, formatDate(reg.createdAt)),
+                        sessionSummary && h('span', { class: 'mj-regmgr-history-item__sessions-count' }, sessionSummary),
+                    ]),
+                ]),
+
+                // Status badge and expand icon
+                h('div', { class: 'mj-regmgr-history-item__end' }, [
+                    h('span', {
+                        class: classNames('mj-regmgr-badge mj-regmgr-badge--sm', statusClasses[reg.status] || ''),
+                    }, reg.statusLabel || reg.status),
+                    h('span', { 
+                        class: classNames('mj-regmgr-history-item__expand-icon', {
+                            'mj-regmgr-history-item__expand-icon--open': isExpanded,
+                        }),
+                        dangerouslySetInnerHTML: { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>' },
+                    }),
+                ]),
+            ]),
+
+            // Expanded content
+            isExpanded && h('div', { class: 'mj-regmgr-history-item__body' }, [
+                // Sessions section (if has occurrences)
+                (totalOccurrences > 0 && !isEditingOccurrences) && h('div', { class: 'mj-regmgr-history-item__section' }, [
+                    h('div', { class: 'mj-regmgr-history-item__section-header' }, [
+                        h('span', { class: 'mj-regmgr-history-item__section-label' }, sessionsLabel),
+                        canEditOccurrences && h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--ghost mj-btn--small',
+                            onClick: handleStartEditOccurrences,
+                        }, [
+                            h('span', { 
+                                class: 'mj-btn__icon',
+                                dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' },
+                            }),
+                            editOccurrencesLabel,
+                        ]),
+                    ]),
+                    coversAllSessions
+                        ? h('div', { class: 'mj-regmgr-history-item__all-sessions' }, [
+                            h('span', { class: 'mj-regmgr-history-item__all-sessions-badge' }, allSessionsLabel),
+                        ])
+                        : (sessions.length > 0
+                            ? h('div', { class: 'mj-regmgr-history-item__sessions-grid' },
+                                sessions.map(function (session, idx) {
+                                    var key = session.start ? 'session-' + session.start : 'session-' + idx;
+                                    var label = session.label || (session.start ? formatDate(session.start) : '');
+                                    return h('span', { 
+                                        key: key, 
+                                        class: classNames('mj-regmgr-session-chip', {
+                                            'mj-regmgr-session-chip--past': !!session.isPast,
+                                        }),
+                                    }, label);
+                                })
+                            )
+                            : h('span', { class: 'mj-regmgr-history-item__no-sessions' }, noOccurrencesSelectedLabel)
+                        ),
+                ]),
+
+                // Occurrences edit mode
+                isEditingOccurrences && h('div', { class: 'mj-regmgr-history-item__section mj-regmgr-history-item__section--editing' }, [
+                    h('div', { class: 'mj-regmgr-history-item__section-label' }, editOccurrencesLabel),
+                    
+                    // Mode selector
+                    h('div', { class: 'mj-regmgr-history-item__mode-selector' }, [
+                        h('label', { class: 'mj-regmgr-radio' }, [
+                            h('input', {
+                                type: 'radio',
+                                name: 'occurrence-mode-' + reg.id,
+                                checked: isAllMode,
+                                onChange: function () { handleModeChange('all'); },
+                            }),
+                            h('span', { class: 'mj-regmgr-radio__label' }, allOccurrencesOptionLabel),
+                        ]),
+                        h('label', { class: 'mj-regmgr-radio' }, [
+                            h('input', {
+                                type: 'radio',
+                                name: 'occurrence-mode-' + reg.id,
+                                checked: !isAllMode,
+                                onChange: function () { handleModeChange('custom'); },
+                            }),
+                            h('span', { class: 'mj-regmgr-radio__label' }, customOccurrencesOptionLabel),
+                        ]),
+                    ]),
+
+                    // Occurrences checkboxes (only when custom mode)
+                    !isAllMode && h('div', { class: 'mj-regmgr-history-item__occurrences-list' },
+                        allOccurrences.map(function (occ, idx) {
+                            var occStart = occ.start || '';
+                            var key = occStart ? 'occ-' + occStart : 'occ-' + idx;
+                            var label = occ.label || (occStart ? formatDate(occStart) : '');
+                            var isChecked = localSelectedOccurrences.indexOf(occStart) !== -1;
+                            var isPast = !!occ.isPast;
+
+                            return h('label', { 
+                                key: key, 
+                                class: classNames('mj-regmgr-checkbox', {
+                                    'mj-regmgr-checkbox--past': isPast,
+                                }),
+                            }, [
+                                h('input', {
+                                    type: 'checkbox',
+                                    checked: isChecked,
+                                    onChange: function () { handleToggleOccurrence(occStart); },
+                                }),
+                                h('span', { class: 'mj-regmgr-checkbox__label' }, label),
+                                isPast && h('span', { class: 'mj-regmgr-checkbox__hint' }, '(passé)'),
+                            ]);
+                        })
+                    ),
+
+                    // Save/Cancel buttons
+                    h('div', { class: 'mj-regmgr-history-item__edit-actions' }, [
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--secondary mj-btn--small',
+                            onClick: handleCancelEditOccurrences,
+                            disabled: isSaving,
+                        }, cancelLabel),
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--primary mj-btn--small',
+                            onClick: handleSaveOccurrences,
+                            disabled: isSaving || (!isAllMode && localSelectedOccurrences.length === 0),
+                        }, isSaving ? savingLabel : saveLabel),
+                    ]),
+                ]),
+
+                // Actions row
+                !isEditingOccurrences && h('div', { class: 'mj-regmgr-history-item__actions' }, [
+                    onSelectEvent && reg.eventId && h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--ghost mj-btn--small',
+                        onClick: handleViewEvent,
+                    }, [
+                        h('span', { 
+                            class: 'mj-btn__icon',
+                            dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>' },
+                        }),
+                        viewEventLabel,
+                    ]),
+                    canDelete && h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--ghost mj-btn--danger mj-btn--small',
+                        onClick: handleDelete,
+                    }, [
+                        h('span', { 
+                            class: 'mj-btn__icon',
+                            dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>' },
+                        }),
+                        deleteLabel,
+                    ]),
+                ]),
+            ]),
+        ]);
+    }
+
+    // ============================================
+    // MEMBER LEAVE QUOTAS SECTION
+    // ============================================
+
+    /**
+     * Leave quotas management section for animateurs
+     */
+    function MemberLeaveQuotasSection(props) {
+        var member = props.member;
+        var config = props.config || {};
+        var strings = props.strings || {};
+        var onRefresh = props.onRefresh;
+
+        var currentYear = new Date().getFullYear();
+        var _useStateYear = useState(currentYear);
+        var selectedYear = _useStateYear[0];
+        var setSelectedYear = _useStateYear[1];
+
+        var _useStateSaving = useState(false);
+        var isSaving = _useStateSaving[0];
+        var setIsSaving = _useStateSaving[1];
+
+        var _useStateEditing = useState(false);
+        var isEditing = _useStateEditing[0];
+        var setIsEditing = _useStateEditing[1];
+
+        var _useStateEditedQuotas = useState({});
+        var editedQuotas = _useStateEditedQuotas[0];
+        var setEditedQuotas = _useStateEditedQuotas[1];
+
+        // Local state for quotas (to update after save)
+        var _useStateLocalQuotas = useState(null);
+        var localQuotas = _useStateLocalQuotas[0];
+        var setLocalQuotas = _useStateLocalQuotas[1];
+
+        // Get quotas for selected year (prefer local state if available)
+        var memberQuotas = member && member.leaveQuotas ? member.leaveQuotas : {};
+        var leaveQuotas = localQuotas !== null ? localQuotas : memberQuotas;
+        var yearQuotas = leaveQuotas[selectedYear] || [];
+
+        // Sync local state when member changes
+        useEffect(function () {
+            if (member && member.leaveQuotas) {
+                setLocalQuotas(member.leaveQuotas);
+            }
+        }, [member]);
+
+        // Available years
+        var years = [currentYear - 1, currentYear, currentYear + 1];
+
+        // Start editing
+        var handleStartEdit = useCallback(function () {
+            var initial = {};
+            yearQuotas.forEach(function (q) {
+                initial[q.typeId] = q.quota;
+            });
+            setEditedQuotas(initial);
+            setIsEditing(true);
+        }, [yearQuotas]);
+
+        // Cancel editing
+        var handleCancelEdit = useCallback(function () {
+            setIsEditing(false);
+            setEditedQuotas({});
+        }, []);
+
+        // Handle quota change
+        var handleQuotaChange = useCallback(function (typeId, value) {
+            setEditedQuotas(function (prev) {
+                var next = Object.assign({}, prev);
+                next[typeId] = parseInt(value, 10) || 0;
+                return next;
+            });
+        }, []);
+
+        // Save quotas
+        var handleSave = useCallback(function () {
+            if (!member || !member.id) return;
+
+            var quotasToSave = yearQuotas.map(function (q) {
+                return {
+                    typeId: q.typeId,
+                    quota: editedQuotas[q.typeId] !== undefined ? editedQuotas[q.typeId] : q.quota,
+                };
+            });
+
+            setIsSaving(true);
+
+            var formData = new FormData();
+            formData.append('action', 'mj_regmgr_update_member_leave_quotas');
+            formData.append('nonce', config.nonce || '');
+            formData.append('memberId', member.id);
+            formData.append('year', selectedYear);
+            formData.append('quotas', JSON.stringify(quotasToSave));
+
+            fetch(config.ajaxUrl || '', {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+            })
+                .then(function (res) { return res.json(); })
+                .then(function (response) {
+                    setIsSaving(false);
+                    if (response.success) {
+                        setIsEditing(false);
+                        setEditedQuotas({});
+                        // Update local quotas with response data
+                        if (response.data && response.data.quotas && response.data.year) {
+                            setLocalQuotas(function (prev) {
+                                var updated = Object.assign({}, prev || {});
+                                updated[response.data.year] = response.data.quotas;
+                                return updated;
+                            });
+                        }
+                        if (onRefresh) {
+                            onRefresh();
+                        }
+                    } else {
+                        alert(response.data && response.data.message ? response.data.message : 'Erreur');
+                    }
+                })
+                .catch(function () {
+                    setIsSaving(false);
+                    alert('Erreur de connexion');
+                });
+        }, [member, selectedYear, editedQuotas, yearQuotas, config, onRefresh]);
+
+        // Copy from previous year
+        var handleCopyFromPreviousYear = useCallback(function () {
+            var prevYearQuotas = leaveQuotas[selectedYear - 1] || [];
+            if (prevYearQuotas.length > 0) {
+                var copied = {};
+                prevYearQuotas.forEach(function (q) {
+                    copied[q.typeId] = q.quota;
+                });
+                setEditedQuotas(copied);
+                setIsEditing(true);
+            }
+        }, [leaveQuotas, selectedYear]);
+
+        var sectionTitle = getString(strings, 'leaveQuotasTitle', 'Quotas de congés');
+        var yearLabel = getString(strings, 'leaveQuotasYear', 'Année');
+        var typeLabel = getString(strings, 'leaveQuotasType', 'Type');
+        var quotaLabel = getString(strings, 'leaveQuotasQuota', 'Jours');
+        var editLabel = getString(strings, 'edit', 'Modifier');
+        var saveLabel = getString(strings, 'save', 'Enregistrer');
+        var cancelLabel = getString(strings, 'cancel', 'Annuler');
+        var savingLabel = getString(strings, 'saving', 'Enregistrement...');
+        var copyLabel = getString(strings, 'leaveQuotasCopyPrevious', 'Copier depuis l\'année précédente');
+        var noQuotasLabel = getString(strings, 'leaveQuotasEmpty', 'Aucun type de congé configuré.');
+
+        return h('div', { class: 'mj-regmgr-member-detail__section mj-regmgr-leave-quotas' }, [
+            h('div', { class: 'mj-regmgr-leave-quotas__header' }, [
+                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, sectionTitle),
+                h('div', { class: 'mj-regmgr-leave-quotas__year-select' }, [
+                    h('label', { htmlFor: 'leave-quotas-year' }, yearLabel + ' : '),
+                    h('select', {
+                        id: 'leave-quotas-year',
+                        class: 'mj-regmgr-select',
+                        value: selectedYear,
+                        onChange: function (e) {
+                            setSelectedYear(parseInt(e.target.value, 10));
+                            setIsEditing(false);
+                            setEditedQuotas({});
+                        },
+                    }, years.map(function (y) {
+                        return h('option', { key: y, value: y }, y);
+                    })),
+                ]),
+            ]),
+
+            yearQuotas.length > 0
+                ? h('div', { class: 'mj-regmgr-leave-quotas__table-wrapper' }, [
+                    h('table', { class: 'mj-regmgr-leave-quotas__table' }, [
+                        h('thead', null, [
+                            h('tr', null, [
+                                h('th', null, typeLabel),
+                                h('th', { class: 'mj-regmgr-leave-quotas__quota-col' }, quotaLabel),
+                            ]),
+                        ]),
+                        h('tbody', null,
+                            yearQuotas.map(function (q) {
+                                var displayQuota = isEditing && editedQuotas[q.typeId] !== undefined
+                                    ? editedQuotas[q.typeId]
+                                    : q.quota;
+
+                                return h('tr', { key: q.typeId }, [
+                                    h('td', null, q.name),
+                                    h('td', { class: 'mj-regmgr-leave-quotas__quota-col' }, [
+                                        isEditing
+                                            ? h('input', {
+                                                type: 'number',
+                                                class: 'mj-regmgr-input mj-regmgr-input--small',
+                                                min: 0,
+                                                value: displayQuota,
+                                                onInput: function (e) {
+                                                    handleQuotaChange(q.typeId, e.target.value);
+                                                },
+                                            })
+                                            : h('span', { class: 'mj-regmgr-leave-quotas__quota-value' }, displayQuota),
+                                    ]),
+                                ]);
+                            })
+                        ),
+                    ]),
+                ])
+                : h('p', { class: 'mj-regmgr-member-detail__empty' }, noQuotasLabel),
+
+            h('div', { class: 'mj-regmgr-leave-quotas__actions' }, [
+                !isEditing && yearQuotas.length > 0 && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--primary',
+                    onClick: handleStartEdit,
+                }, editLabel),
+                !isEditing && leaveQuotas[selectedYear - 1] && leaveQuotas[selectedYear - 1].length > 0 && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--secondary',
+                    onClick: handleCopyFromPreviousYear,
+                }, copyLabel),
+                isEditing && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--secondary',
+                    onClick: handleCancelEdit,
+                    disabled: isSaving,
+                }, cancelLabel),
+                isEditing && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--primary',
+                    onClick: handleSave,
+                    disabled: isSaving,
+                }, isSaving ? savingLabel : saveLabel),
+            ]),
+        ]);
+    }
+
+    // ============================================
+    // MEMBER WORK SCHEDULES SECTION
+    // ============================================
+
+    /**
+     * Work schedules management section for staff members
+     * Allows managing multiple schedule periods with start/end dates
+     */
+    function MemberWorkSchedulesSection(props) {
+        var member = props.member;
+        var config = props.config || {};
+        var strings = props.strings || {};
+        var onRefresh = props.onRefresh;
+
+        var _useStateSchedules = useState(null);
+        var localSchedules = _useStateSchedules[0];
+        var setLocalSchedules = _useStateSchedules[1];
+
+        var _useStateSaving = useState(false);
+        var isSaving = _useStateSaving[0];
+        var setIsSaving = _useStateSaving[1];
+
+        var _useStateEditing = useState(null);
+        var editingId = _useStateEditing[0];
+        var setEditingId = _useStateEditing[1];
+
+        var _useStateFormData = useState(null);
+        var formData = _useStateFormData[0];
+        var setFormData = _useStateFormData[1];
+
+        var _useStateExpandedId = useState(null);
+        var expandedId = _useStateExpandedId[0];
+        var setExpandedId = _useStateExpandedId[1];
+
+        // Get schedules from local state or member
+        var memberSchedules = member && member.workSchedules ? member.workSchedules : [];
+        var schedules = localSchedules !== null ? localSchedules : memberSchedules;
+
+        // Sync local state when member changes
+        useEffect(function () {
+            if (member && member.workSchedules) {
+                setLocalSchedules(member.workSchedules);
+            }
+        }, [member]);
+
+        // Day labels
+        var dayLabels = strings.workScheduleDays || {
+            monday: 'Lundi',
+            tuesday: 'Mardi',
+            wednesday: 'Mercredi',
+            thursday: 'Jeudi',
+            friday: 'Vendredi',
+            saturday: 'Samedi',
+            sunday: 'Dimanche',
+        };
+
+        var dayOrder = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+        // Labels
+        var sectionTitle = getString(strings, 'workSchedulesTitle', 'Horaires contractuels');
+        var addLabel = getString(strings, 'workScheduleAdd', 'Ajouter une période');
+        var editLabel = getString(strings, 'edit', 'Modifier');
+        var deleteLabel = getString(strings, 'workScheduleDelete', 'Supprimer');
+        var saveLabel = getString(strings, 'save', 'Enregistrer');
+        var cancelLabel = getString(strings, 'cancel', 'Annuler');
+        var savingLabel = getString(strings, 'saving', 'Enregistrement...');
+        var emptyLabel = getString(strings, 'workScheduleEmpty', 'Aucun horaire défini.');
+        var startDateLabel = getString(strings, 'workScheduleStartDate', 'Date de début');
+        var endDateLabel = getString(strings, 'workScheduleEndDate', 'Date de fin');
+        var endDateHint = getString(strings, 'workScheduleEndDateHint', 'Laisser vide si en cours');
+        var ongoingLabel = getString(strings, 'workScheduleOngoing', 'En cours');
+        var confirmDeleteLabel = getString(strings, 'workScheduleConfirmDelete', 'Êtes-vous sûr de vouloir supprimer cette période ?');
+        var dayLabel = getString(strings, 'workScheduleDay', 'Jour');
+        var startLabel = getString(strings, 'workScheduleStart', 'Début');
+        var endLabel = getString(strings, 'workScheduleEnd', 'Fin');
+        var breakLabel = getString(strings, 'workScheduleBreak', 'Pause (min)');
+        var addSlotLabel = getString(strings, 'workScheduleAddSlot', 'Ajouter un créneau');
+        var noteLabel = getString(strings, 'workScheduleNote', 'Note');
+
+        // Helper to format date for display
+        function formatDate(dateStr) {
+            if (!dateStr) return ongoingLabel;
+            var parts = dateStr.split('-');
+            if (parts.length === 3) {
+                return parts[2] + '/' + parts[1] + '/' + parts[0];
+            }
+            return dateStr;
+        }
+
+        // Helper to calculate total hours for a schedule
+        function calculateTotalHours(schedule) {
+            if (!Array.isArray(schedule)) return 0;
+            var totalMinutes = 0;
+            schedule.forEach(function (slot) {
+                if (!slot.start || !slot.end) return;
+                var startParts = slot.start.split(':');
+                var endParts = slot.end.split(':');
+                if (startParts.length >= 2 && endParts.length >= 2) {
+                    var startMins = parseInt(startParts[0], 10) * 60 + parseInt(startParts[1], 10);
+                    var endMins = parseInt(endParts[0], 10) * 60 + parseInt(endParts[1], 10);
+                    var breakMins = slot.break_minutes ? parseInt(slot.break_minutes, 10) : 0;
+                    totalMinutes += Math.max(0, endMins - startMins - breakMins);
+                }
+            });
+            var hours = Math.floor(totalMinutes / 60);
+            var mins = totalMinutes % 60;
+            return hours + 'h' + (mins > 0 ? mins.toString().padStart(2, '0') : '');
+        }
+
+        // Helper to calculate net hours for a single slot
+        function calculateSlotHours(slot) {
+            if (!slot.start || !slot.end) return '';
+            var startParts = slot.start.split(':');
+            var endParts = slot.end.split(':');
+            if (startParts.length < 2 || endParts.length < 2) return '';
+            var startMins = parseInt(startParts[0], 10) * 60 + parseInt(startParts[1], 10);
+            var endMins = parseInt(endParts[0], 10) * 60 + parseInt(endParts[1], 10);
+            var breakMins = slot.break_minutes ? parseInt(slot.break_minutes, 10) : 0;
+            var net = Math.max(0, endMins - startMins - breakMins);
+            var h = Math.floor(net / 60);
+            var m = net % 60;
+            return h + 'h' + (m > 0 ? m.toString().padStart(2, '0') : '');
+        }
+
+        // Start adding a new schedule
+        var handleAdd = useCallback(function () {
+            setEditingId('new');
+            setFormData({
+                startDate: '',
+                endDate: '',
+                schedule: [],
+            });
+        }, []);
+
+        // Start editing an existing schedule
+        var handleEdit = useCallback(function (sched) {
+            setEditingId(sched.id);
+            setFormData({
+                startDate: sched.startDate || '',
+                endDate: sched.endDate || '',
+                schedule: Array.isArray(sched.schedule) ? sched.schedule.slice() : [],
+            });
+        }, []);
+
+        // Cancel editing
+        var handleCancel = useCallback(function () {
+            setEditingId(null);
+            setFormData(null);
+        }, []);
+
+        // Handle form field change
+        var handleFieldChange = useCallback(function (field, value) {
+            setFormData(function (prev) {
+                if (!prev) return prev;
+                var next = Object.assign({}, prev);
+                next[field] = value;
+                return next;
+            });
+        }, []);
+
+        // Handle slot change
+        var handleSlotChange = useCallback(function (index, field, value) {
+            setFormData(function (prev) {
+                if (!prev) return prev;
+                var next = Object.assign({}, prev);
+                var slots = next.schedule.slice();
+                slots[index] = Object.assign({}, slots[index]);
+                slots[index][field] = value;
+                next.schedule = slots;
+                return next;
+            });
+        }, []);
+
+        // Add a new slot
+        var handleAddSlot = useCallback(function () {
+            setFormData(function (prev) {
+                if (!prev) return prev;
+                var next = Object.assign({}, prev);
+                next.schedule = next.schedule.slice();
+                next.schedule.push({ day: 'monday', start: '09:00', end: '17:00', break_minutes: 60, note: '' });
+                return next;
+            });
+        }, []);
+
+        // Remove a slot
+        var handleRemoveSlot = useCallback(function (index) {
+            setFormData(function (prev) {
+                if (!prev) return prev;
+                var next = Object.assign({}, prev);
+                next.schedule = next.schedule.filter(function (_, i) { return i !== index; });
+                return next;
+            });
+        }, []);
+
+        // Save schedule
+        var handleSave = useCallback(function () {
+            if (!member || !member.id || !formData) return;
+
+            setIsSaving(true);
+
+            var postData = new FormData();
+            postData.append('action', 'mj_regmgr_save_member_work_schedule');
+            postData.append('nonce', config.nonce || '');
+            postData.append('memberId', member.id);
+            if (editingId !== 'new') {
+                postData.append('scheduleId', editingId);
+            }
+            postData.append('startDate', formData.startDate);
+            postData.append('endDate', formData.endDate);
+            postData.append('schedule', JSON.stringify(formData.schedule));
+
+            fetch(config.ajaxUrl || '', {
+                method: 'POST',
+                body: postData,
+                credentials: 'same-origin',
+            })
+                .then(function (res) { return res.json(); })
+                .then(function (response) {
+                    setIsSaving(false);
+                    if (response.success) {
+                        setEditingId(null);
+                        setFormData(null);
+                        if (response.data && response.data.workSchedules) {
+                            setLocalSchedules(response.data.workSchedules);
+                        }
+                        if (onRefresh) {
+                            onRefresh();
+                        }
+                    } else {
+                        alert(response.data && response.data.message ? response.data.message : 'Erreur');
+                    }
+                })
+                .catch(function () {
+                    setIsSaving(false);
+                    alert('Erreur de connexion');
+                });
+        }, [member, formData, editingId, config, onRefresh]);
+
+        // Delete schedule
+        var handleDelete = useCallback(function (scheduleId) {
+            if (!confirm(confirmDeleteLabel)) return;
+
+            setIsSaving(true);
+
+            var postData = new FormData();
+            postData.append('action', 'mj_regmgr_delete_member_work_schedule');
+            postData.append('nonce', config.nonce || '');
+            postData.append('memberId', member.id);
+            postData.append('scheduleId', scheduleId);
+
+            fetch(config.ajaxUrl || '', {
+                method: 'POST',
+                body: postData,
+                credentials: 'same-origin',
+            })
+                .then(function (res) { return res.json(); })
+                .then(function (response) {
+                    setIsSaving(false);
+                    if (response.success) {
+                        if (response.data && response.data.workSchedules) {
+                            setLocalSchedules(response.data.workSchedules);
+                        }
+                        if (onRefresh) {
+                            onRefresh();
+                        }
+                    } else {
+                        alert(response.data && response.data.message ? response.data.message : 'Erreur');
+                    }
+                })
+                .catch(function () {
+                    setIsSaving(false);
+                    alert('Erreur de connexion');
+                });
+        }, [member, config, confirmDeleteLabel, onRefresh]);
+
+        // Toggle expand/collapse schedule details
+        var handleToggleExpand = useCallback(function (id) {
+            setExpandedId(function (prev) { return prev === id ? null : id; });
+        }, []);
+
+        // Render schedule slots editor
+        function renderSlotsEditor() {
+            if (!formData) return null;
+
+            var weeklyTotal = calculateTotalHours(formData.schedule);
+            var weeklyTotalLabel = getString(strings, 'workScheduleWeeklyTotal', 'Total hebdomadaire');
+
+            return h('div', { class: 'mj-regmgr-work-schedules__slots' }, [
+                h('table', { class: 'mj-regmgr-work-schedules__slots-table' }, [
+                    h('thead', null, [
+                        h('tr', null, [
+                            h('th', null, dayLabel),
+                            h('th', null, startLabel),
+                            h('th', null, endLabel),
+                            h('th', null, breakLabel),
+                            h('th', null, noteLabel),
+                            h('th', null, ''),
+                        ]),
+                    ]),
+                    h('tbody', null, [
+                        formData.schedule.map(function (slot, index) {
+                            return h('tr', { key: index }, [
+                                h('td', null, [
+                                    h('select', {
+                                        class: 'mj-regmgr-select mj-regmgr-select--small',
+                                        value: slot.day || 'monday',
+                                        onChange: function (e) { handleSlotChange(index, 'day', e.target.value); },
+                                    }, dayOrder.map(function (d) {
+                                        return h('option', { key: d, value: d }, dayLabels[d] || d);
+                                    })),
+                                ]),
+                                h('td', null, [
+                                    h('input', {
+                                        type: 'time',
+                                        class: 'mj-regmgr-input mj-regmgr-input--small',
+                                        value: slot.start || '',
+                                        onInput: function (e) { handleSlotChange(index, 'start', e.target.value); },
+                                    }),
+                                ]),
+                                h('td', null, [
+                                    h('input', {
+                                        type: 'time',
+                                        class: 'mj-regmgr-input mj-regmgr-input--small',
+                                        value: slot.end || '',
+                                        onInput: function (e) { handleSlotChange(index, 'end', e.target.value); },
+                                    }),
+                                ]),
+                                h('td', null, [
+                                    h('input', {
+                                        type: 'number',
+                                        class: 'mj-regmgr-input mj-regmgr-input--small',
+                                        min: 0,
+                                        max: 120,
+                                        step: 5,
+                                        value: slot.break_minutes || 0,
+                                        onInput: function (e) { handleSlotChange(index, 'break_minutes', parseInt(e.target.value, 10) || 0); },
+                                    }),
+                                ]),
+                                h('td', null, [
+                                    h('input', {
+                                        type: 'text',
+                                        class: 'mj-regmgr-input mj-regmgr-input--small',
+                                        placeholder: noteLabel,
+                                        value: slot.note || '',
+                                        onInput: function (e) { handleSlotChange(index, 'note', e.target.value); },
+                                    }),
+                                ]),
+                                h('td', null, [
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--ghost mj-btn--small mj-btn--danger',
+                                        onClick: function () { handleRemoveSlot(index); },
+                                        title: deleteLabel,
+                                    }, '×'),
+                                ]),
+                            ]);
+                        }),
+                    ]),
+                ]),
+                h('div', { class: 'mj-regmgr-work-schedules__slots-footer' }, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--secondary mj-btn--small',
+                        onClick: handleAddSlot,
+                    }, addSlotLabel),
+                    h('div', { class: 'mj-regmgr-work-schedules__weekly-total' }, [
+                        h('span', { class: 'mj-regmgr-work-schedules__weekly-total-label' }, weeklyTotalLabel + ' : '),
+                        h('span', { class: 'mj-regmgr-work-schedules__weekly-total-value' }, weeklyTotal),
+                    ]),
+                ]),
+            ]);
+        }
+
+        // Render the editor form
+        function renderEditor() {
+            if (!formData) return null;
+
+            return h('div', { class: 'mj-regmgr-work-schedules__editor' }, [
+                h('div', { class: 'mj-regmgr-form-grid mj-regmgr-form-grid--2' }, [
+                    h('div', { class: 'mj-regmgr-form-field' }, [
+                        h('label', null, startDateLabel),
+                        h('input', {
+                            type: 'date',
+                            class: 'mj-regmgr-input',
+                            value: formData.startDate,
+                            onInput: function (e) { handleFieldChange('startDate', e.target.value); },
+                        }),
+                    ]),
+                    h('div', { class: 'mj-regmgr-form-field' }, [
+                        h('label', null, endDateLabel),
+                        h('input', {
+                            type: 'date',
+                            class: 'mj-regmgr-input',
+                            value: formData.endDate,
+                            onInput: function (e) { handleFieldChange('endDate', e.target.value); },
+                        }),
+                        h('small', { class: 'mj-regmgr-form-hint' }, endDateHint),
+                    ]),
+                ]),
+                renderSlotsEditor(),
+                h('div', { class: 'mj-regmgr-work-schedules__actions' }, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--secondary',
+                        onClick: handleCancel,
+                        disabled: isSaving,
+                    }, cancelLabel),
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--primary',
+                        onClick: handleSave,
+                        disabled: isSaving || !formData.startDate,
+                    }, isSaving ? savingLabel : saveLabel),
+                ]),
+            ]);
+        }
+
+        // Render a schedule card
+        function renderScheduleCard(sched) {
+            var isExpanded = expandedId === sched.id;
+            var isEditing = editingId === sched.id;
+
+            if (isEditing) {
+                return h('div', { key: sched.id, class: 'mj-regmgr-work-schedules__card mj-regmgr-work-schedules__card--editing' }, [
+                    renderEditor(),
+                ]);
+            }
+
+            return h('div', { key: sched.id, class: 'mj-regmgr-work-schedules__card' }, [
+                h('div', {
+                    class: 'mj-regmgr-work-schedules__card-header',
+                    onClick: function () { handleToggleExpand(sched.id); },
+                }, [
+                    h('div', { class: 'mj-regmgr-work-schedules__dates' }, [
+                        h('span', { class: 'mj-regmgr-work-schedules__date' }, formatDate(sched.startDate)),
+                        h('span', { class: 'mj-regmgr-work-schedules__separator' }, ' → '),
+                        h('span', { class: classNames('mj-regmgr-work-schedules__date', { 'mj-regmgr-work-schedules__date--ongoing': !sched.endDate }) },
+                            formatDate(sched.endDate)
+                        ),
+                    ]),
+                    h('div', { class: 'mj-regmgr-work-schedules__total' }, calculateTotalHours(sched.schedule) + '/sem'),
+                    h('svg', {
+                        class: classNames('mj-regmgr-work-schedules__chevron', { 'mj-regmgr-work-schedules__chevron--expanded': isExpanded }),
+                        width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2,
+                    }, [
+                        h('polyline', { points: '6 9 12 15 18 9' }),
+                    ]),
+                ]),
+                isExpanded && h('div', { class: 'mj-regmgr-work-schedules__card-body' }, [
+                    sched.schedule && sched.schedule.length > 0
+                        ? h('ul', { class: 'mj-regmgr-work-schedules__slot-list' },
+                            sched.schedule.map(function (slot, idx) {
+                                var breakInfo = slot.break_minutes ? ' (pause ' + slot.break_minutes + ' min)' : '';
+                                var slotHours = calculateSlotHours(slot);
+                                return h('li', { key: idx, class: 'mj-regmgr-work-schedules__slot-item' }, [
+                                    h('div', { class: 'mj-regmgr-work-schedules__slot-main' }, [
+                                        h('span', { class: 'mj-regmgr-work-schedules__slot-day' }, dayLabels[slot.day] || slot.day),
+                                        h('span', { class: 'mj-regmgr-work-schedules__slot-time' }, slot.start + ' - ' + slot.end + breakInfo),
+                                        slotHours && h('span', { class: 'mj-regmgr-work-schedules__slot-hours' }, slotHours),
+                                    ]),
+                                    slot.note && h('div', { class: 'mj-regmgr-work-schedules__slot-note' }, slot.note),
+                                ]);
+                            })
+                        )
+                        : h('p', { class: 'mj-regmgr-work-schedules__empty-slots' }, 'Aucun créneau défini'),
+                    h('div', { class: 'mj-regmgr-work-schedules__card-actions' }, [
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--secondary mj-btn--small',
+                            onClick: function (e) { e.stopPropagation(); handleEdit(sched); },
+                        }, editLabel),
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--ghost mj-btn--small mj-btn--danger',
+                            onClick: function (e) { e.stopPropagation(); handleDelete(sched.id); },
+                            disabled: isSaving,
+                        }, deleteLabel),
+                    ]),
+                ]),
+            ]);
+        }
+
+        return h('div', { class: 'mj-regmgr-member-detail__section mj-regmgr-work-schedules' }, [
+            h('h2', { class: 'mj-regmgr-member-detail__section-title' }, sectionTitle),
+
+            // List of existing schedules
+            schedules.length > 0
+                ? h('div', { class: 'mj-regmgr-work-schedules__list' },
+                    schedules.map(function (sched) { return renderScheduleCard(sched); })
+                )
+                : editingId !== 'new' && h('p', { class: 'mj-regmgr-member-detail__empty' }, emptyLabel),
+
+            // New schedule editor
+            editingId === 'new' && h('div', { class: 'mj-regmgr-work-schedules__card mj-regmgr-work-schedules__card--new' }, [
+                renderEditor(),
+            ]),
+
+            // Add button
+            editingId === null && h('div', { class: 'mj-regmgr-work-schedules__actions' }, [
+                h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--primary',
+                    onClick: handleAdd,
+                }, addLabel),
+            ]),
+        ]);
+    }
+
+    // ============================================
+    // EMPLOYEE DOCUMENTS SECTION
+    // ============================================
+
+    /**
+     * Employee documents manager (payslips, contracts, misc)
+     * Stored securely on server with coordinator-only access.
+     */
+    function MemberEmployeeDocumentsSection(props) {
+        var member = props.member;
+        var config = props.config || {};
+        var strings = props.strings || {};
+        var onRefresh = props.onRefresh;
+
+        // State
+        var _stDocs = useState(null);
+        var documents = _stDocs[0];
+        var setDocuments = _stDocs[1];
+
+        var _stLoading = useState(false);
+        var isLoading = _stLoading[0];
+        var setIsLoading = _stLoading[1];
+
+        var _stUploading = useState(false);
+        var isUploading = _stUploading[0];
+        var setIsUploading = _stUploading[1];
+
+        var _stShowForm = useState(false);
+        var showForm = _stShowForm[0];
+        var setShowForm = _stShowForm[1];
+
+        var _stFormDocType = useState('payslip');
+        var formDocType = _stFormDocType[0];
+        var setFormDocType = _stFormDocType[1];
+
+        var _stFormLabel = useState('');
+        var formLabel = _stFormLabel[0];
+        var setFormLabel = _stFormLabel[1];
+
+        var _stFormDate = useState('');
+        var formDate = _stFormDate[0];
+        var setFormDate = _stFormDate[1];
+
+        var _stFormMonth = useState('');
+        var formMonth = _stFormMonth[0];
+        var setFormMonth = _stFormMonth[1];
+
+        var _stFormYear = useState('');
+        var formYear = _stFormYear[0];
+        var setFormYear = _stFormYear[1];
+
+        var _stFormFile = useState(null);
+        var formFile = _stFormFile[0];
+        var setFormFile = _stFormFile[1];
+
+        var _stDragOver = useState(false);
+        var dragOver = _stDragOver[0];
+        var setDragOver = _stDragOver[1];
+
+        var _stMsg = useState('');
+        var statusMsg = _stMsg[0];
+        var setStatusMsg = _stMsg[1];
+
+        var _stMsgType = useState('');
+        var msgType = _stMsgType[0];
+        var setMsgType = _stMsgType[1];
+
+        var _stRenamingId = useState(null);
+        var renamingId = _stRenamingId[0];
+        var setRenamingId = _stRenamingId[1];
+
+        var _stRenameValue = useState('');
+        var renameValue = _stRenameValue[0];
+        var setRenameValue = _stRenameValue[1];
+
+        var _stRenameSaving = useState(false);
+        var renameSaving = _stRenameSaving[0];
+        var setRenameSaving = _stRenameSaving[1];
+
+        var _stPreviewDoc = useState(null);
+        var previewDoc = _stPreviewDoc[0];
+        var setPreviewDoc = _stPreviewDoc[1];
+
+        // String helpers
+        var sectionTitle      = getString(strings, 'employeeDocsTitle', 'Documents employé');
+        var emptyLabel        = getString(strings, 'employeeDocsEmpty', 'Aucun document pour ce membre.');
+        var uploadLabel       = getString(strings, 'employeeDocsUpload', 'Téléverser un document');
+        var uploadingLabel    = getString(strings, 'employeeDocsUploading', 'Téléversement…');
+        var deleteLabel       = getString(strings, 'employeeDocsDelete', 'Supprimer');
+        var confirmDeleteMsg  = getString(strings, 'employeeDocsConfirmDelete', 'Êtes-vous sûr de vouloir supprimer ce document ?');
+        var downloadLabel     = getString(strings, 'employeeDocsDownload', 'Télécharger');
+        var previewLabel      = getString(strings, 'employeeDocsPreview', 'Aperçu');
+        var renameLabel       = getString(strings, 'employeeDocsRename', 'Renommer');
+        var previewTitleLabel = getString(strings, 'employeeDocsPreviewTitle', 'Aperçu du document');
+        var previewUnavailableLabel = getString(strings, 'employeeDocsPreviewUnavailable', 'Ce format ne peut pas être prévisualisé.');
+        var labelLabel        = getString(strings, 'employeeDocsLabel', 'Libellé');
+        var typeLabel         = getString(strings, 'employeeDocsType', 'Type');
+        var dateLabel         = getString(strings, 'employeeDocsDate', 'Date du document');
+        var fileLabel         = getString(strings, 'employeeDocsFile', 'Fichier');
+        var monthLabel        = getString(strings, 'employeeDocsPayslipMonth', 'Mois');
+        var yearLabel         = getString(strings, 'employeeDocsPayslipYear', 'Année');
+        var dropHint          = getString(strings, 'employeeDocsDropHint', 'Glissez un fichier ou cliquez pour parcourir');
+        var maxSizeHint       = getString(strings, 'employeeDocsMaxSize', 'PDF, JPG, PNG ou GIF – 10 Mo max.');
+
+        var monthNames = strings.employeeDocsMonths || {
+            1: 'Janvier', 2: 'Février', 3: 'Mars', 4: 'Avril',
+            5: 'Mai', 6: 'Juin', 7: 'Juillet', 8: 'Août',
+            9: 'Septembre', 10: 'Octobre', 11: 'Novembre', 12: 'Décembre',
+        };
+
+        var docTypes = {
+            payslip:  getString(strings, 'employeeDocsTypePayslip', 'Fiche de paie'),
+            contract: getString(strings, 'employeeDocsTypeContract', 'Emploi'),
+            misc:     getString(strings, 'employeeDocsTypeMisc', 'Divers'),
+        };
+
+        // Load documents on mount / member change
+        useEffect(function () {
+            if (!member || !member.id) return;
+            loadDocuments();
+        }, [member && member.id]);
+
+        function loadDocuments() {
+            if (!member || !member.id) return;
+            setIsLoading(true);
+            var fd = new FormData();
+            fd.append('action', 'mj_regmgr_get_employee_documents');
+            fd.append('nonce', config.nonce || '');
+            fd.append('memberId', member.id);
+            fetch(config.ajaxUrl || '', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (resp) {
+                    setIsLoading(false);
+                    if (resp.success && resp.data && resp.data.documents) {
+                        setDocuments(resp.data.documents);
+                    } else {
+                        setDocuments([]);
+                    }
+                })
+                .catch(function () {
+                    setIsLoading(false);
+                    setDocuments([]);
+                });
+        }
+
+        // Reset form
+        function resetForm() {
+            setFormDocType('payslip');
+            setFormLabel('');
+            setFormDate(new Date().toISOString().substring(0, 10));
+            setFormMonth(String(new Date().getMonth() + 1));
+            setFormYear(String(new Date().getFullYear()));
+            setFormFile(null);
+            setShowForm(false);
+        }
+
+        // Upload
+        function handleUpload() {
+            if (!formFile || !member || !member.id) return;
+            setIsUploading(true);
+            setStatusMsg('');
+
+            var fd = new FormData();
+            fd.append('action', 'mj_regmgr_upload_employee_document');
+            fd.append('nonce', config.nonce || '');
+            fd.append('memberId', member.id);
+            fd.append('docType', formDocType);
+            fd.append('label', formLabel);
+            fd.append('documentDate', formDate);
+            fd.append('file', formFile);
+            if (formDocType === 'payslip') {
+                fd.append('payslipMonth', formMonth);
+                fd.append('payslipYear', formYear);
+            }
+
+            fetch(config.ajaxUrl || '', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (resp) {
+                    setIsUploading(false);
+                    if (resp.success && resp.data && resp.data.document) {
+                        setDocuments(function (prev) {
+                            return [resp.data.document].concat(prev || []);
+                        });
+                        resetForm();
+                        setStatusMsg(resp.data.message || 'OK');
+                        setMsgType('success');
+                    } else {
+                        setStatusMsg(resp.data && resp.data.message ? resp.data.message : 'Erreur');
+                        setMsgType('error');
+                    }
+                })
+                .catch(function () {
+                    setIsUploading(false);
+                    setStatusMsg('Erreur de connexion');
+                    setMsgType('error');
+                });
+        }
+
+        // Rename
+        function startRename(doc) {
+            setRenamingId(doc.id);
+            setRenameValue(doc.label || doc.originalName || '');
+        }
+
+        function cancelRename() {
+            setRenamingId(null);
+            setRenameValue('');
+        }
+
+        function handleRename(docId) {
+            var trimmed = renameValue.trim();
+            if (!trimmed) return;
+            setRenameSaving(true);
+            var fd = new FormData();
+            fd.append('action', 'mj_regmgr_update_employee_document');
+            fd.append('nonce', config.nonce || '');
+            fd.append('docId', docId);
+            fd.append('label', trimmed);
+            fetch(config.ajaxUrl || '', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (resp) {
+                    setRenameSaving(false);
+                    if (resp.success && resp.data && resp.data.document) {
+                        setDocuments(function (prev) {
+                            return (prev || []).map(function (d) {
+                                return d.id === docId ? Object.assign({}, d, { label: resp.data.document.label }) : d;
+                            });
+                        });
+                        setRenamingId(null);
+                        setRenameValue('');
+                        setStatusMsg(resp.data.message || 'OK');
+                        setMsgType('success');
+                    } else {
+                        setStatusMsg(resp.data && resp.data.message ? resp.data.message : 'Erreur');
+                        setMsgType('error');
+                    }
+                })
+                .catch(function () {
+                    setRenameSaving(false);
+                    setStatusMsg('Erreur de connexion');
+                    setMsgType('error');
+                });
+        }
+
+        // Delete
+        function handleDelete(docId) {
+            if (!confirm(confirmDeleteMsg)) return;
+            var fd = new FormData();
+            fd.append('action', 'mj_regmgr_delete_employee_document');
+            fd.append('nonce', config.nonce || '');
+            fd.append('docId', docId);
+            fetch(config.ajaxUrl || '', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (resp) {
+                    if (resp.success) {
+                        setDocuments(function (prev) {
+                            return (prev || []).filter(function (d) { return d.id !== docId; });
+                        });
+                        setStatusMsg(resp.data.message || 'OK');
+                        setMsgType('success');
+                    } else {
+                        setStatusMsg(resp.data && resp.data.message ? resp.data.message : 'Erreur');
+                        setMsgType('error');
+                    }
+                })
+                .catch(function () {
+                    setStatusMsg('Erreur de connexion');
+                    setMsgType('error');
+                });
+        }
+
+        // Download URL builder
+        function downloadUrl(docId) {
+            return (config.ajaxUrl || '') + '?action=mj_regmgr_download_employee_document&doc_id=' + docId + '&nonce=' + encodeURIComponent(config.nonce || '');
+        }
+
+        // Format file size
+        function fmtSize(bytes) {
+            if (!bytes || bytes <= 0) return '';
+            if (bytes < 1024) return bytes + ' o';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' Ko';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' Mo';
+        }
+
+        // Format date
+        function fmtDate(raw) {
+            if (!raw) return '';
+            try {
+                var d = new Date(raw);
+                return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            } catch (_e) {
+                return raw;
+            }
+        }
+
+        // File icon
+        function fileIcon(mime) {
+            if (!mime) return '\uD83D\uDCC4';
+            if (mime.indexOf('pdf') !== -1) return '\uD83D\uDCC4';
+            if (mime.indexOf('image') !== -1) return '\uD83D\uDDBC\uFE0F';
+            return '\uD83D\uDCC3';
+        }
+
+        function isImageMime(mime) {
+            return !!mime && mime.indexOf('image/') === 0;
+        }
+
+        function isPdfMime(mime) {
+            return !!mime && mime.indexOf('pdf') !== -1;
+        }
+
+        function canPreview(doc) {
+            var mime = doc && doc.mimeType ? String(doc.mimeType).toLowerCase() : '';
+            return isImageMime(mime) || isPdfMime(mime);
+        }
+
+        function closePreview() {
+            setPreviewDoc(null);
+        }
+
+        function handlePreviewBackdropClick(e) {
+            if (e && e.target === e.currentTarget) {
+                closePreview();
+            }
+        }
+
+        useEffect(function () {
+            if (previewDoc) {
+                document.body.style.overflow = 'hidden';
+            }
+            return function () {
+                document.body.style.overflow = '';
+            };
+        }, [previewDoc]);
+
+        // Build payslip period label
+        function payslipPeriod(doc) {
+            if (doc.payslipMonth && doc.payslipYear) {
+                return (monthNames[doc.payslipMonth] || '') + ' ' + doc.payslipYear;
+            }
+            return '';
+        }
+
+        // --- File drop handlers ---
+        function onDragOver(e) { e.preventDefault(); setDragOver(true); }
+        function onDragLeave(e) { e.preventDefault(); setDragOver(false); }
+        function onDrop(e) {
+            e.preventDefault();
+            setDragOver(false);
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                setFormFile(e.dataTransfer.files[0]);
+            }
+        }
+
+        // File input ref  
+        var fileInputRef = preact.createRef ? preact.createRef() : { current: null };
+
+        // Generate year options
+        var curYear = new Date().getFullYear();
+        var yearOptions = [];
+        for (var y = curYear; y >= curYear - 5; y--) {
+            yearOptions.push(y);
+        }
+
+        // Docs list
+        var docs = documents || [];
+
+        // ---------- Render ----------
+        return h('div', { class: 'mj-regmgr-member-detail__section mj-regmgr-employee-docs' }, [
+
+            // Title + add button
+            h('div', { class: 'mj-regmgr-employee-docs__header' }, [
+                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, sectionTitle),
+                !showForm && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--primary mj-btn--small',
+                    onClick: function () {
+                        setFormDate(new Date().toISOString().substring(0, 10));
+                        setFormMonth(String(new Date().getMonth() + 1));
+                        setFormYear(String(curYear));
+                        setShowForm(true);
+                    },
+                }, [
+                    h('span', { class: 'mj-btn__icon', dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' } }),
+                    uploadLabel,
+                ]),
+            ]),
+
+            // Status message
+            statusMsg && h('div', { class: 'mj-regmgr-employee-docs__status mj-regmgr-employee-docs__status--' + msgType }, statusMsg),
+
+            // Upload form
+            showForm && h('div', { class: 'mj-regmgr-employee-docs__form' }, [
+                // Doc type
+                h('div', { class: 'mj-regmgr-employee-docs__field' }, [
+                    h('label', null, typeLabel),
+                    h('select', {
+                        value: formDocType,
+                        onChange: function (e) { setFormDocType(e.target.value); },
+                        class: 'mj-input',
+                    }, Object.keys(docTypes).map(function (k) {
+                        return h('option', { key: k, value: k }, docTypes[k]);
+                    })),
+                ]),
+
+                // Payslip month/year
+                formDocType === 'payslip' && h('div', { class: 'mj-regmgr-employee-docs__field-row' }, [
+                    h('div', { class: 'mj-regmgr-employee-docs__field mj-regmgr-employee-docs__field--half' }, [
+                        h('label', null, monthLabel),
+                        h('select', {
+                            value: formMonth,
+                            onChange: function (e) { setFormMonth(e.target.value); },
+                            class: 'mj-input',
+                        }, Object.keys(monthNames).map(function (k) {
+                            return h('option', { key: k, value: k }, monthNames[k]);
+                        })),
+                    ]),
+                    h('div', { class: 'mj-regmgr-employee-docs__field mj-regmgr-employee-docs__field--half' }, [
+                        h('label', null, yearLabel),
+                        h('select', {
+                            value: formYear,
+                            onChange: function (e) { setFormYear(e.target.value); },
+                            class: 'mj-input',
+                        }, yearOptions.map(function (yr) {
+                            return h('option', { key: yr, value: String(yr) }, String(yr));
+                        })),
+                    ]),
+                ]),
+
+                // Label
+                h('div', { class: 'mj-regmgr-employee-docs__field' }, [
+                    h('label', null, labelLabel),
+                    h('input', {
+                        type: 'text',
+                        class: 'mj-input',
+                        value: formLabel,
+                        placeholder: formDocType === 'payslip' ? 'Auto-généré si vide' : '',
+                        onInput: function (e) { setFormLabel(e.target.value); },
+                    }),
+                ]),
+
+                // Date
+                h('div', { class: 'mj-regmgr-employee-docs__field' }, [
+                    h('label', null, dateLabel),
+                    h('input', {
+                        type: 'date',
+                        class: 'mj-input',
+                        value: formDate,
+                        onInput: function (e) { setFormDate(e.target.value); },
+                    }),
+                ]),
+
+                // File drop zone
+                h('div', {
+                    class: 'mj-regmgr-employee-docs__dropzone' + (dragOver ? ' mj-regmgr-employee-docs__dropzone--active' : ''),
+                    onDragOver: onDragOver,
+                    onDragLeave: onDragLeave,
+                    onDrop: onDrop,
+                    onClick: function () { if (fileInputRef.current) fileInputRef.current.click(); },
+                }, [
+                    h('input', {
+                        ref: fileInputRef,
+                        type: 'file',
+                        accept: '.pdf,.jpg,.jpeg,.png,.gif',
+                        style: 'display:none',
+                        onChange: function (e) {
+                            if (e.target.files && e.target.files.length > 0) {
+                                setFormFile(e.target.files[0]);
+                            }
+                        },
+                    }),
+                    formFile
+                        ? h('div', { class: 'mj-regmgr-employee-docs__file-selected' }, [
+                            h('span', null, '\uD83D\uDCC4 '),
+                            h('span', null, formFile.name),
+                            h('span', { class: 'mj-regmgr-employee-docs__file-size' }, ' (' + fmtSize(formFile.size) + ')'),
+                        ])
+                        : h('div', { class: 'mj-regmgr-employee-docs__drop-hint' }, [
+                            h('span', { class: 'mj-regmgr-employee-docs__drop-icon', dangerouslySetInnerHTML: { __html: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' } }),
+                            h('p', null, dropHint),
+                            h('p', { class: 'mj-regmgr-employee-docs__drop-sub' }, maxSizeHint),
+                        ]),
+                ]),
+
+                // Action buttons
+                h('div', { class: 'mj-regmgr-employee-docs__form-actions' }, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                        disabled: isUploading || !formFile,
+                        onClick: handleUpload,
+                    }, isUploading ? uploadingLabel : uploadLabel),
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--ghost mj-btn--small',
+                        onClick: resetForm,
+                    }, getString(strings, 'cancel', 'Annuler')),
+                ]),
+            ]),
+
+            // Loading
+            isLoading && h('p', { class: 'mj-regmgr-member-detail__empty' }, '…'),
+
+            // Empty state
+            !isLoading && docs.length === 0 && !showForm && h('p', { class: 'mj-regmgr-member-detail__empty' }, emptyLabel),
+
+            // Documents list  
+            !isLoading && docs.length > 0 && h('div', { class: 'mj-regmgr-employee-docs__list' },
+                docs.map(function (doc) {
+                    var period = payslipPeriod(doc);
+                    var typeStr = docTypes[doc.docType] || doc.docType;
+                    return h('div', { key: doc.id, class: 'mj-regmgr-employee-docs__card' }, [
+                        h('div', { class: 'mj-regmgr-employee-docs__card-icon' }, fileIcon(doc.mimeType)),
+                        h('div', { class: 'mj-regmgr-employee-docs__card-body' }, [
+                            renamingId === doc.id
+                                ? h('div', { class: 'mj-regmgr-employee-docs__rename-form' }, [
+                                    h('input', {
+                                        type: 'text',
+                                        class: 'mj-input mj-regmgr-employee-docs__rename-input',
+                                        value: renameValue,
+                                        onInput: function (e) { setRenameValue(e.target.value); },
+                                        onKeyDown: function (e) {
+                                            if (e.key === 'Enter') { e.preventDefault(); handleRename(doc.id); }
+                                            if (e.key === 'Escape') { cancelRename(); }
+                                        },
+                                        disabled: renameSaving,
+                                        autofocus: true,
+                                    }),
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                                        onClick: function () { handleRename(doc.id); },
+                                        disabled: renameSaving || !renameValue.trim(),
+                                    }, renameSaving
+                                        ? h('span', { class: 'mj-btn__icon mj-spinner' })
+                                        : h('span', { class: 'mj-btn__icon', dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>' } })
+                                    ),
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                        onClick: cancelRename,
+                                        disabled: renameSaving,
+                                    }, h('span', { class: 'mj-btn__icon', dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' } })),
+                                  ])
+                                : h('div', { class: 'mj-regmgr-employee-docs__card-title' }, doc.label || doc.originalName),
+                            h('div', { class: 'mj-regmgr-employee-docs__card-meta' }, [
+                                h('span', { class: 'mj-regmgr-employee-docs__card-type' }, typeStr),
+                                period && h('span', { class: 'mj-regmgr-employee-docs__card-period' }, period),
+                                doc.documentDate && h('span', { class: 'mj-regmgr-employee-docs__card-date' }, fmtDate(doc.documentDate)),
+                                h('span', { class: 'mj-regmgr-employee-docs__card-size' }, fmtSize(doc.fileSize)),
+                            ]),
+                        ]),
+                        h('div', { class: 'mj-regmgr-employee-docs__card-actions' }, [
+                            renamingId !== doc.id && h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                onClick: function () { startRename(doc); },
+                                title: renameLabel,
+                            }, [
+                                h('span', { class: 'mj-btn__icon', dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' } }),
+                                renameLabel,
+                            ]),
+                            h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                onClick: function () { setPreviewDoc(doc); },
+                                title: previewLabel,
+                            }, [
+                                h('span', { class: 'mj-btn__icon', dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>' } }),
+                                previewLabel,
+                            ]),
+                            h('a', {
+                                href: downloadUrl(doc.id),
+                                target: '_blank',
+                                rel: 'noopener noreferrer',
+                                class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                title: downloadLabel,
+                            }, [
+                                h('span', { class: 'mj-btn__icon', dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' } }),
+                                downloadLabel,
+                            ]),
+                            h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--ghost mj-btn--danger mj-btn--small',
+                                onClick: function () { handleDelete(doc.id); },
+                                title: deleteLabel,
+                            }, [
+                                h('span', { class: 'mj-btn__icon', dangerouslySetInnerHTML: { __html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>' } }),
+                                deleteLabel,
+                            ]),
+                        ]),
+                    ]);
+                })
+            ),
+
+            previewDoc && h('div', {
+                class: 'mj-regmgr-modal-backdrop',
+                onClick: handlePreviewBackdropClick,
+            }, [
+                h('div', { class: 'mj-regmgr-modal mj-regmgr-modal--small mj-regmgr-employee-docs__preview-modal' }, [
+                    h('div', { class: 'mj-regmgr-modal__header' }, [
+                        h('h2', { class: 'mj-regmgr-modal__title' }, previewTitleLabel),
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-regmgr-modal__close',
+                            onClick: closePreview,
+                            'aria-label': getString(strings, 'close', 'Fermer'),
+                        }, [
+                            h('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                h('line', { x1: 18, y1: 6, x2: 6, y2: 18 }),
+                                h('line', { x1: 6, y1: 6, x2: 18, y2: 18 }),
+                            ]),
+                        ]),
+                    ]),
+                    h('div', { class: 'mj-regmgr-modal__body mj-regmgr-employee-docs__preview-body' }, [
+                        h('p', { class: 'mj-regmgr-employee-docs__preview-name' }, previewDoc.label || previewDoc.originalName || ''),
+                        canPreview(previewDoc)
+                            ? h('div', { class: 'mj-regmgr-employee-docs__preview-frame-wrap' }, [
+                                isImageMime(String(previewDoc.mimeType || '').toLowerCase())
+                                    ? h('img', {
+                                        class: 'mj-regmgr-employee-docs__preview-image',
+                                        src: downloadUrl(previewDoc.id),
+                                        alt: previewDoc.label || previewDoc.originalName || previewTitleLabel,
+                                    })
+                                    : h('iframe', {
+                                        class: 'mj-regmgr-employee-docs__preview-frame',
+                                        src: downloadUrl(previewDoc.id),
+                                        title: previewDoc.label || previewDoc.originalName || previewTitleLabel,
+                                    }),
+                            ])
+                            : h('p', { class: 'mj-regmgr-member-detail__empty' }, previewUnavailableLabel),
+                        h('div', { class: 'mj-regmgr-employee-docs__preview-actions' }, [
+                            h('a', {
+                                href: downloadUrl(previewDoc.id),
+                                target: '_blank',
+                                rel: 'noopener noreferrer',
+                                class: 'mj-btn mj-btn--primary mj-btn--small',
+                            }, downloadLabel),
+                        ]),
+                    ]),
+                ]),
+            ]),
+        ]);
+    }
+
+    // ============================================
+    // JOB PROFILE SECTION COMPONENT
+    // ============================================
+
+    function MemberJobProfileSection(props) {
+        var member = props.member;
+        var config = props.config || {};
+        var strings = props.strings || {};
+        var onRefresh = props.onRefresh;
+
+        // State
+        var _stTitle = useState(String(member && member.jobTitle || ''));
+        var jobTitle = _stTitle[0];
+        var setJobTitle = _stTitle[1];
+        var jobTitleInputRef = preact.createRef ? preact.createRef() : { current: null };
+
+        var _stRegime = useState(member && member.workRegime || '');
+        var workRegime = _stRegime[0];
+        var setWorkRegime = _stRegime[1];
+
+        var _stFunding = useState(member && member.fundingSource || '');
+        var fundingSource = _stFunding[0];
+        var setFundingSource = _stFunding[1];
+
+        var _stDesc = useState(member && member.jobDescription || '');
+        var jobDescription = _stDesc[0];
+        var setJobDescription = _stDesc[1];
+
+        var _stSignature = useState(member && member.signatureMessage || '');
+        var signatureMessage = _stSignature[0];
+        var setSignatureMessage = _stSignature[1];
+
+        var _stSaving = useState(false);
+        var isSaving = _stSaving[0];
+        var setIsSaving = _stSaving[1];
+
+        var _stMsg = useState('');
+        var statusMsg = _stMsg[0];
+        var setStatusMsg = _stMsg[1];
+
+        var _stMsgType = useState('');
+        var msgType = _stMsgType[0];
+        var setMsgType = _stMsgType[1];
+
+        var _stDirty = useState(false);
+        var isDirty = _stDirty[0];
+        var setIsDirty = _stDirty[1];
+
+        var _stPreviewCopyMsg = useState('');
+        var previewCopyMsg = _stPreviewCopyMsg[0];
+        var setPreviewCopyMsg = _stPreviewCopyMsg[1];
+
+        // WYSIWYG ref – managed outside Preact VDOM to avoid cursor resets.
+        var editorRef = preact.createRef ? preact.createRef() : { current: null };
+        var signatureEditorRef = preact.createRef ? preact.createRef() : { current: null };
+        // Keep a snapshot so we can repopulate the editor after re-renders.
+        var _stServerDesc = useState(member && member.jobDescription || '');
+        var serverDesc = _stServerDesc[0];
+        var setServerDesc = _stServerDesc[1];
+        var _stServerSignature = useState(member && member.signatureMessage || '');
+        var serverSignature = _stServerSignature[0];
+        var setServerSignature = _stServerSignature[1];
+
+        // Sync from member when it changes
+        useEffect(function () {
+            if (!member) return;
+            setJobTitle(String(member.jobTitle || ''));
+            setWorkRegime(member.workRegime || '');
+            setFundingSource(member.fundingSource || '');
+            var desc = member.jobDescription || '';
+            var signature = member.signatureMessage || '';
+            setJobDescription(desc);
+            setSignatureMessage(signature);
+            setServerDesc(desc);
+            setServerSignature(signature);
+            setIsDirty(false);
+            if (jobTitleInputRef.current) {
+                jobTitleInputRef.current.value = String(member.jobTitle || '');
+            }
+            // Re-inject into the editor DOM node
+            if (editorRef.current) {
+                editorRef.current.innerHTML = desc;
+            }
+            if (signatureEditorRef.current) {
+                signatureEditorRef.current.innerHTML = signature;
+            }
+        }, [member && member.id]);
+
+        // Labels
+        var sectionTitle = getString(strings, 'jobProfileTitle', 'Profil de fonction');
+        var titleLabel = getString(strings, 'jobProfileJobTitle', 'Titre de fonction');
+        var regimeLabel = getString(strings, 'jobProfileWorkRegime', 'Régime de travail');
+        var fundingLabel = getString(strings, 'jobProfileFundingSource', 'Origine du financement');
+        var descLabel = getString(strings, 'jobProfileDescription', 'Description du poste');
+        var signatureLabel = getString(strings, 'jobProfileSignatureMessage', 'Signature Message');
+        var signaturePreviewLabel = getString(strings, 'jobProfileSignaturePreview', 'Aperçu de la signature');
+        var signaturePreviewCopyLabel = getString(strings, 'jobProfileSignaturePreviewCopy', 'Copier l\'aperçu');
+        var signaturePreviewCopiedLabel = getString(strings, 'jobProfileSignaturePreviewCopied', 'Aperçu copié.');
+        var signaturePreviewCopyErrorLabel = getString(strings, 'jobProfileSignaturePreviewCopyError', 'Impossible de copier l\'aperçu.');
+        var saveLabel = getString(strings, 'jobProfileSave', 'Enregistrer');
+        var savedLabel = getString(strings, 'jobProfileSaved', 'Profil de fonction enregistré.');
+        var savingLabel = getString(strings, 'jobProfileSaving', 'Enregistrement…');
+
+        var regimeOptions = strings.jobProfileRegimes || {
+            'mi-temps': 'Mi-temps (19h)',
+            'temps-plein': 'Temps plein (38h)',
+            'quatre-cinquieme': 'Quatre cinquième temps (30h30)',
+        };
+
+        function markDirty() { setIsDirty(true); setStatusMsg(''); }
+
+        function handleTitleChange(e) { setJobTitle(e.target.value); markDirty(); }
+        function handleRegimeChange(e) { setWorkRegime(e.target.value); markDirty(); }
+        function handleFundingChange(e) { setFundingSource(e.target.value); markDirty(); }
+
+        // Re-populate editor whenever the DOM node is (re-)created by Preact.
+        useEffect(function () {
+            if (editorRef.current) {
+                var current = editorRef.current.innerHTML;
+                if (!current || current === '<br>') {
+                    editorRef.current.innerHTML = jobDescription || serverDesc || '';
+                }
+            }
+
+            if (signatureEditorRef.current) {
+                var signatureCurrent = signatureEditorRef.current.innerHTML;
+                if (!signatureCurrent || signatureCurrent === '<br>') {
+                    signatureEditorRef.current.innerHTML = signatureMessage || serverSignature || '';
+                }
+            }
+        });
+
+        function onDescriptionEditorInput() {
+            if (editorRef.current) {
+                setJobDescription(editorRef.current.innerHTML);
+                markDirty();
+            }
+        }
+
+        function onSignatureEditorInput() {
+            if (signatureEditorRef.current) {
+                setSignatureMessage(signatureEditorRef.current.innerHTML);
+                markDirty();
+            }
+        }
+
+        function buildSignatureReplacements(memberData) {
+            if (!memberData) {
+                return {};
+            }
+
+            var firstName = memberData.firstName || '';
+            var lastName = memberData.lastName || '';
+            var fullName = (firstName + ' ' + lastName).replace(/\s+/g, ' ').trim() || (memberData.nickname || '');
+            var phone = memberData.phone || memberData.phoneSecondary || '';
+            var birthDate = memberData.birthDate || '';
+            var addressLine = memberData.addressLine || '';
+            var postalCode = memberData.postalCode || '';
+            var city = memberData.city || '';
+            var roleLabel = String(memberData.jobTitle || '').trim();
+
+            var cityLine = [postalCode, city].filter(Boolean).join(' ').trim();
+            var fullAddress = [addressLine, cityLine].filter(Boolean).join(', ').trim();
+
+            return {
+                '[member_name]': fullName,
+                '[member_first_name]': firstName,
+                '[member_last_name]': lastName,
+                '[member_email]': memberData.email || '',
+                '[member_role]': roleLabel,
+                '[member_phone]': phone,
+                '[member_birth_date]': birthDate,
+                '[member_address]': fullAddress,
+                '[member_address_line]': addressLine,
+                '[member_postal_code]': postalCode,
+                '[member_city]': city,
+            };
+        }
+
+        function applySignatureTemplateVariables(html, replacements) {
+            var output = String(html || '');
+            Object.keys(replacements || {}).forEach(function (token) {
+                output = output.split(token).join(replacements[token] || '');
+            });
+            return output;
+        }
+
+        function signaturePreviewHtml() {
+            return applySignatureTemplateVariables(signatureMessage || '', buildSignatureReplacements(member));
+        }
+
+        function copySignaturePreview() {
+            var html = signaturePreviewHtml();
+            var container = document.createElement('div');
+            container.innerHTML = html;
+            var plain = (container.textContent || container.innerText || '').trim();
+
+            function onSuccess() {
+                setPreviewCopyMsg(signaturePreviewCopiedLabel);
+                setTimeout(function () { setPreviewCopyMsg(''); }, 2200);
+            }
+
+            function onFailure() {
+                setPreviewCopyMsg(signaturePreviewCopyErrorLabel);
+                setTimeout(function () { setPreviewCopyMsg(''); }, 2600);
+            }
+
+            if (navigator.clipboard && typeof navigator.clipboard.write === 'function' && typeof window.ClipboardItem === 'function') {
+                var payload = new window.ClipboardItem({
+                    'text/html': new Blob([html], { type: 'text/html' }),
+                    'text/plain': new Blob([plain], { type: 'text/plain' }),
+                });
+
+                navigator.clipboard.write([payload]).then(onSuccess).catch(function () {
+                    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                        navigator.clipboard.writeText(plain).then(onSuccess).catch(onFailure);
+                    } else {
+                        onFailure();
+                    }
+                });
+                return;
+            }
+
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                navigator.clipboard.writeText(plain).then(onSuccess).catch(onFailure);
+                return;
+            }
+
+            onFailure();
+        }
+
+        function execCmd(targetRef, inputHandler, cmd, val) {
+            targetRef.current && targetRef.current.focus();
+            document.execCommand(cmd, false, val || null);
+            inputHandler();
+        }
+
+        function execSignatureCmd(cmd, val) {
+            if (!signatureEditorRef.current) {
+                return;
+            }
+
+            signatureEditorRef.current.focus();
+
+            if (cmd === 'createLink') {
+                var currentUrl = window.prompt('URL du lien', 'https://');
+                if (!currentUrl) {
+                    return;
+                }
+                var trimmed = String(currentUrl).trim();
+                if (!/^https?:\/\//i.test(trimmed) && !/^mailto:/i.test(trimmed)) {
+                    trimmed = 'https://' + trimmed;
+                }
+                document.execCommand('createLink', false, trimmed);
+                onSignatureEditorInput();
+                return;
+            }
+
+            if (cmd === 'insertTable') {
+                var tableHtml = '<table style="width:100%;border-collapse:collapse;"><tbody><tr><td style="border:1px solid #d1d5db;padding:6px;">&nbsp;</td><td style="border:1px solid #d1d5db;padding:6px;">&nbsp;</td></tr></tbody></table>';
+                document.execCommand('insertHTML', false, tableHtml);
+                onSignatureEditorInput();
+                return;
+            }
+
+            if (cmd === 'insertHorizontalRule') {
+                document.execCommand('insertHorizontalRule', false, null);
+                onSignatureEditorInput();
+                return;
+            }
+
+            document.execCommand(cmd, false, val || null);
+            onSignatureEditorInput();
+        }
+
+        function handleSave() {
+            if (!member || !member.id) return;
+            setIsSaving(true);
+            setStatusMsg('');
+
+            var currentJobTitle = jobTitleInputRef.current ? String(jobTitleInputRef.current.value || '') : jobTitle;
+            setJobTitle(currentJobTitle);
+
+            var fd = new FormData();
+            fd.append('action', 'mj_regmgr_save_job_profile');
+            fd.append('nonce', config.nonce || '');
+            fd.append('memberId', member.id);
+            fd.append('jobTitle', currentJobTitle);
+            fd.append('workRegime', workRegime);
+            fd.append('fundingSource', fundingSource);
+            fd.append('jobDescription', jobDescription);
+            fd.append('signatureMessage', signatureMessage);
+
+            fetch(config.ajaxUrl || '', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (resp) {
+                    setIsSaving(false);
+                    if (resp.success) {
+                        setStatusMsg(resp.data.message || savedLabel);
+                        setMsgType('success');
+                        setIsDirty(false);
+                        // Update snapshot so editor keeps content after re-render
+                        setServerDesc(jobDescription);
+                        setServerSignature(signatureMessage);
+                        if (editorRef.current && !editorRef.current.innerHTML) {
+                            editorRef.current.innerHTML = jobDescription || '';
+                        }
+                        if (signatureEditorRef.current && !signatureEditorRef.current.innerHTML) {
+                            signatureEditorRef.current.innerHTML = signatureMessage || '';
+                        }
+                        if (onRefresh) onRefresh();
+                    } else {
+                        setStatusMsg(resp.data && resp.data.message ? resp.data.message : 'Erreur');
+                        setMsgType('error');
+                    }
+                })
+                .catch(function () {
+                    setIsSaving(false);
+                    setStatusMsg('Erreur de connexion');
+                    setMsgType('error');
+                });
+        }
+
+        // ---------- Render ----------
+        return h('div', { class: 'mj-regmgr-member-detail__section mj-regmgr-job-profile' }, [
+            h('h2', { class: 'mj-regmgr-member-detail__section-title' }, sectionTitle),
+
+            // Status message
+            statusMsg && h('div', { class: 'mj-regmgr-job-profile__status mj-regmgr-job-profile__status--' + msgType }, statusMsg),
+
+            h('div', { class: 'mj-regmgr-job-profile__form' }, [
+
+                // Row: Titre de fonction + Régime de travail
+                h('div', { class: 'mj-regmgr-job-profile__field-row' }, [
+                    h('div', { class: 'mj-regmgr-job-profile__field mj-regmgr-job-profile__field--half' }, [
+                        h('label', null, titleLabel),
+                        h('input', {
+                            type: 'text',
+                            class: 'mj-regmgr-input',
+                            ref: jobTitleInputRef,
+                            defaultValue: jobTitle,
+                            onInput: handleTitleChange,
+                            onChange: handleTitleChange,
+                            placeholder: titleLabel,
+                            autocomplete: 'off',
+                        }),
+                    ]),
+                    h('div', { class: 'mj-regmgr-job-profile__field mj-regmgr-job-profile__field--half' }, [
+                        h('label', null, regimeLabel),
+                        h('select', {
+                            class: 'mj-regmgr-select',
+                            value: workRegime,
+                            onChange: handleRegimeChange,
+                        }, [
+                            h('option', { value: '' }, '— ' + regimeLabel + ' —'),
+                        ].concat(
+                            Object.keys(regimeOptions).map(function (key) {
+                                return h('option', { value: key }, regimeOptions[key]);
+                            })
+                        )),
+                    ]),
+                ]),
+
+                // Row: Origine du financement
+                h('div', { class: 'mj-regmgr-job-profile__field' }, [
+                    h('label', null, fundingLabel),
+                    h('input', {
+                        type: 'text',
+                        class: 'mj-regmgr-input',
+                        value: fundingSource,
+                        onInput: handleFundingChange,
+                        placeholder: fundingLabel,
+                    }),
+                ]),
+
+                // Row: Description du poste (WYSIWYG – rich textarea)
+                h('div', { class: 'mj-regmgr-job-profile__field' }, [
+                    h('label', null, descLabel),
+                    h('div', { class: 'mj-regmgr-job-profile__editor-wrap' }, [
+                        // Toolbar
+                        h('div', { class: 'mj-regmgr-job-profile__toolbar' }, [
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Gras', onClick: function () { execCmd(editorRef, onDescriptionEditorInput, 'bold'); } },
+                                h('strong', null, 'B')),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Italique', onClick: function () { execCmd(editorRef, onDescriptionEditorInput, 'italic'); } },
+                                h('em', null, 'I')),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Souligné', onClick: function () { execCmd(editorRef, onDescriptionEditorInput, 'underline'); } },
+                                h('u', null, 'U')),
+                            h('span', { class: 'mj-regmgr-job-profile__toolbar-sep' }),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Liste à puces', onClick: function () { execCmd(editorRef, onDescriptionEditorInput, 'insertUnorderedList'); } },
+                                h('span', { dangerouslySetInnerHTML: { __html: '&#8226;' } })),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Liste numérotée', onClick: function () { execCmd(editorRef, onDescriptionEditorInput, 'insertOrderedList'); } },
+                                h('span', null, '1.')),
+                        ]),
+                        // Editable area
+                        h('div', {
+                            ref: editorRef,
+                            class: 'mj-regmgr-job-profile__wysiwyg',
+                            contentEditable: 'true',
+                            onInput: onDescriptionEditorInput,
+                            onBlur: onDescriptionEditorInput,
+                        }),
+                    ]),
+                ]),
+
+                // Row: Signature Message (WYSIWYG)
+                h('div', { class: 'mj-regmgr-job-profile__field' }, [
+                    h('label', null, signatureLabel),
+                    h('div', { class: 'mj-regmgr-job-profile__editor-wrap' }, [
+                        h('div', { class: 'mj-regmgr-job-profile__toolbar' }, [
+                            h('select', {
+                                class: 'mj-regmgr-job-profile__toolbar-select',
+                                title: 'Format',
+                                defaultValue: 'P',
+                                onChange: function (e) {
+                                    var tag = e.target.value || 'P';
+                                    execSignatureCmd('formatBlock', tag);
+                                },
+                            }, [
+                                h('option', { value: 'P' }, 'Paragraphe'),
+                                h('option', { value: 'H3' }, 'Titre 3'),
+                                h('option', { value: 'H4' }, 'Titre 4'),
+                            ]),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Gras', onClick: function () { execSignatureCmd('bold'); } },
+                                h('strong', null, 'B')),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Italique', onClick: function () { execSignatureCmd('italic'); } },
+                                h('em', null, 'I')),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Souligné', onClick: function () { execSignatureCmd('underline'); } },
+                                h('u', null, 'U')),
+                            h('span', { class: 'mj-regmgr-job-profile__toolbar-sep' }),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Liste à puces', onClick: function () { execSignatureCmd('insertUnorderedList'); } },
+                                h('span', { dangerouslySetInnerHTML: { __html: '&#8226;' } })),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Liste numérotée', onClick: function () { execSignatureCmd('insertOrderedList'); } },
+                                h('span', null, '1.')),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Aligner à gauche', onClick: function () { execSignatureCmd('justifyLeft'); } }, 'L'),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Centrer', onClick: function () { execSignatureCmd('justifyCenter'); } }, 'C'),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Aligner à droite', onClick: function () { execSignatureCmd('justifyRight'); } }, 'R'),
+                            h('span', { class: 'mj-regmgr-job-profile__toolbar-sep' }),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Ajouter un lien', onClick: function () { execSignatureCmd('createLink'); } }, 'Link'),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Supprimer le lien', onClick: function () { execSignatureCmd('unlink'); } }, 'Unlink'),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Insérer un tableau', onClick: function () { execSignatureCmd('insertTable'); } }, 'Tbl'),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Ligne horizontale', onClick: function () { execSignatureCmd('insertHorizontalRule'); } }, 'HR'),
+                            h('span', { class: 'mj-regmgr-job-profile__toolbar-sep' }),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Annuler', onClick: function () { execSignatureCmd('undo'); } }, 'Undo'),
+                            h('button', { type: 'button', class: 'mj-regmgr-job-profile__toolbar-btn', title: 'Refaire', onClick: function () { execSignatureCmd('redo'); } }, 'Redo'),
+                        ]),
+                        h('div', {
+                            ref: signatureEditorRef,
+                            class: 'mj-regmgr-job-profile__wysiwyg',
+                            contentEditable: 'true',
+                            onInput: onSignatureEditorInput,
+                            onBlur: onSignatureEditorInput,
+                        }),
+                    ]),
+                    h('div', { class: 'mj-regmgr-job-profile__preview-wrap' }, [
+                        h('div', { class: 'mj-regmgr-job-profile__preview-head' }, [
+                            h('span', { class: 'mj-regmgr-job-profile__preview-title' }, signaturePreviewLabel),
+                            h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                onClick: copySignaturePreview,
+                            }, signaturePreviewCopyLabel),
+                        ]),
+                        h('div', {
+                            class: 'mj-regmgr-job-profile__preview-body',
+                            dangerouslySetInnerHTML: { __html: signaturePreviewHtml() || '&nbsp;' },
+                        }),
+                        previewCopyMsg && h('div', { class: 'mj-regmgr-job-profile__preview-feedback' }, previewCopyMsg),
+                    ]),
+                ]),
+
+                // Save button
+                h('div', { class: 'mj-regmgr-job-profile__actions' }, [
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                        disabled: isSaving || !isDirty,
+                        onClick: handleSave,
+                    }, isSaving ? savingLabel : saveLabel),
+                ]),
+            ]),
+        ]);
+    }
+
+    // ============================================
+    // DYNAMIC DATA EDITOR COMPONENT
+    // ============================================
+
+    function DynDataEditor(props) {
+        var member = props.member;
+        var dynFields = props.dynFields;
+        var config = props.config;
+        var onRefresh = props.onRefresh;
+
+        var _s1 = useState(false); var saving = _s1[0]; var setSaving = _s1[1];
+        var _s2 = useState(''); var statusMsg = _s2[0]; var setStatusMsg = _s2[1];
+
+        // Build local editable state from dynFields
+        var initValues = {};
+        dynFields.forEach(function (df) {
+            if (df.type === 'title') return;
+            initValues[df.id] = df.value || '';
+        });
+        var _s3 = useState(initValues); var values = _s3[0]; var setValues = _s3[1];
+
+        // Other text inputs state (for allow_other fields)
+        var initOther = {};
+        dynFields.forEach(function (df) {
+            if (df.type === 'title' || !df.allowOther) return;
+            var val = df.value || '';
+            if (df.type === 'checklist') {
+                try {
+                    var arr = JSON.parse(val || '[]');
+                    if (Array.isArray(arr)) {
+                        for (var i = 0; i < arr.length; i++) {
+                            if (typeof arr[i] === 'string' && arr[i].indexOf('__other:') === 0) {
+                                initOther[df.id] = arr[i].substring(8);
+                                break;
+                            }
+                        }
+                    }
+                } catch (e) {}
+            } else if (typeof val === 'string' && val.indexOf('__other:') === 0) {
+                initOther[df.id] = val.substring(8);
+            }
+            if (!initOther[df.id]) initOther[df.id] = '';
+        });
+        var _s4 = useState(initOther); var otherTexts = _s4[0]; var setOtherTexts = _s4[1];
+
+        function updateValue(id, val) {
+            var next = {}; Object.keys(values).forEach(function (k) { next[k] = values[k]; });
+            next[id] = val;
+            setValues(next);
+        }
+
+        function updateOtherText(id, text) {
+            var next = {}; Object.keys(otherTexts).forEach(function (k) { next[k] = otherTexts[k]; });
+            next[id] = text;
+            setOtherTexts(next);
+        }
+
+        function handleSave() {
+            setSaving(true);
+            setStatusMsg('');
+
+            // Build payload — merge __other text into values
+            var payload = [];
+            dynFields.forEach(function (df) {
+                if (df.type === 'title') return;
+                var val = values[df.id] !== undefined ? values[df.id] : '';
+
+                if (df.type === 'checklist' && df.allowOther) {
+                    // Replace __other placeholder with actual text
+                    try {
+                        var arr = JSON.parse(val || '[]');
+                        if (Array.isArray(arr)) {
+                            var otherText = otherTexts[df.id] || '';
+                            arr = arr.map(function (v) {
+                                return v === '__other' && otherText ? '__other:' + otherText : v;
+                            });
+                            arr = arr.filter(function (v) { return v !== '__other'; });
+                            val = JSON.stringify(arr);
+                        }
+                    } catch (e) {}
+                } else if (df.allowOther && val === '__other') {
+                    var ot = otherTexts[df.id] || '';
+                    val = ot ? '__other:' + ot : '';
+                }
+
+                payload.push({ id: df.id, value: val });
+            });
+
+            var formData = new FormData();
+            formData.append('action', 'mj_regmgr_save_member_dynfields');
+            formData.append('nonce', config.nonce || '');
+            formData.append('member_id', member.id);
+            formData.append('values', JSON.stringify(payload));
+
+            fetch(config.ajaxUrl || '', { method: 'POST', body: formData, credentials: 'same-origin' })
+                .then(function (res) { return res.json(); })
+                .then(function (response) {
+                    setSaving(false);
+                    if (response.success) {
+                        setStatusMsg('Enregistré ✓');
+                        setTimeout(function () { setStatusMsg(''); }, 3000);
+                        if (onRefresh) onRefresh();
+                    } else {
+                        setStatusMsg('Erreur : ' + (response.data && response.data.message ? response.data.message : 'inconnue'));
+                    }
+                })
+                .catch(function () {
+                    setSaving(false);
+                    setStatusMsg('Erreur réseau.');
+                });
+        }
+
+        // Helper: is __other selected for a field?
+        function isOtherSelected(df) {
+            var val = values[df.id] || '';
+            if (df.type === 'checklist') {
+                try {
+                    var arr = JSON.parse(val || '[]');
+                    return Array.isArray(arr) && arr.indexOf('__other') !== -1;
+                } catch (e) { return false; }
+            }
+            return val === '__other' || (typeof val === 'string' && val.indexOf('__other:') === 0);
+        }
+
+        // Helper: get checklist array from value
+        function getChecklistArr(df) {
+            var val = values[df.id] || '[]';
+            try {
+                var arr = JSON.parse(val);
+                if (!Array.isArray(arr)) return [];
+                // Convert __other:xxx entries back to __other for checkbox state
+                return arr.map(function (v) {
+                    return typeof v === 'string' && v.indexOf('__other:') === 0 ? '__other' : v;
+                });
+            } catch (e) { return []; }
+        }
+
+        function toggleChecklistValue(df, opt) {
+            var arr = getChecklistArr(df);
+            var idx = arr.indexOf(opt);
+            if (idx !== -1) {
+                arr.splice(idx, 1);
+            } else {
+                arr.push(opt);
+            }
+            updateValue(df.id, JSON.stringify(arr));
+        }
+
+        // Render a single field
+        function renderField(df) {
+            var val = values[df.id] !== undefined ? values[df.id] : '';
+            var label = df.title + (df.isRequired ? ' *' : '');
+            var desc = df.description ? h('small', { class: 'mj-regmgr-dyndata-hint' }, df.description) : null;
+
+            if (df.type === 'text') {
+                return h('div', { class: 'mj-regmgr-dyndata-field', key: df.id }, [
+                    h('label', { class: 'mj-regmgr-dyndata-field__label' }, label),
+                    h('input', { type: 'text', class: 'mj-regmgr-dyndata-field__input', value: val, onInput: function (e) { updateValue(df.id, e.target.value); } }),
+                    desc,
+                ]);
+            }
+
+            if (df.type === 'textarea') {
+                return h('div', { class: 'mj-regmgr-dyndata-field mj-regmgr-dyndata-field--full', key: df.id }, [
+                    h('label', { class: 'mj-regmgr-dyndata-field__label' }, label),
+                    h('textarea', { class: 'mj-regmgr-dyndata-field__input', rows: 3, value: val, onInput: function (e) { updateValue(df.id, e.target.value); } }),
+                    desc,
+                ]);
+            }
+
+            if (df.type === 'checkbox') {
+                return h('div', { class: 'mj-regmgr-dyndata-field', key: df.id }, [
+                    h('label', { class: 'mj-regmgr-dyndata-field__checkbox-label' }, [
+                        h('input', { type: 'checkbox', checked: val === '1', onChange: function (e) { updateValue(df.id, e.target.checked ? '1' : '0'); } }),
+                        h('span', null, ' ' + df.title),
+                    ]),
+                    desc,
+                ]);
+            }
+
+            if (df.type === 'dropdown') {
+                var options = df.options || [];
+                var isOther = isOtherSelected(df);
+                var selectVal = isOther ? '__other' : val;
+                return h('div', { class: 'mj-regmgr-dyndata-field', key: df.id }, [
+                    h('label', { class: 'mj-regmgr-dyndata-field__label' }, label),
+                    h('select', { class: 'mj-regmgr-dyndata-field__input', value: selectVal, onChange: function (e) { updateValue(df.id, e.target.value); } }, [
+                        h('option', { value: '' }, '— Sélectionnez —'),
+                    ].concat(options.map(function (opt) {
+                        return h('option', { value: opt, key: opt }, opt);
+                    })).concat(df.allowOther ? [h('option', { value: '__other', key: '__other' }, 'Autre…')] : [])),
+                    df.allowOther && isOther ? h('input', { type: 'text', class: 'mj-regmgr-dyndata-field__input mj-regmgr-dyndata-field__other', placeholder: 'Précisez…', value: otherTexts[df.id] || '', onInput: function (e) { updateOtherText(df.id, e.target.value); } }) : null,
+                    desc,
+                ]);
+            }
+
+            if (df.type === 'radio') {
+                var options = df.options || [];
+                var isOther = isOtherSelected(df);
+                var radioVal = isOther ? '__other' : val;
+                return h('div', { class: 'mj-regmgr-dyndata-field', key: df.id }, [
+                    h('label', { class: 'mj-regmgr-dyndata-field__label' }, label),
+                    h('div', { class: 'mj-regmgr-dyndata-field__options' }, options.map(function (opt) {
+                        return h('label', { class: 'mj-regmgr-dyndata-field__radio', key: opt }, [
+                            h('input', { type: 'radio', name: 'dyndata_' + df.id, value: opt, checked: radioVal === opt, onChange: function () { updateValue(df.id, opt); } }),
+                            h('span', null, ' ' + opt),
+                        ]);
+                    }).concat(df.allowOther ? [
+                        h('label', { class: 'mj-regmgr-dyndata-field__radio', key: '__other' }, [
+                            h('input', { type: 'radio', name: 'dyndata_' + df.id, value: '__other', checked: isOther, onChange: function () { updateValue(df.id, '__other'); } }),
+                            h('span', null, ' ' + (df.otherLabel || 'Autre')),
+                        ]),
+                    ] : [])),
+                    df.allowOther && isOther ? h('input', { type: 'text', class: 'mj-regmgr-dyndata-field__input mj-regmgr-dyndata-field__other', placeholder: 'Précisez…', value: otherTexts[df.id] || '', onInput: function (e) { updateOtherText(df.id, e.target.value); } }) : null,
+                    desc,
+                ]);
+            }
+
+            if (df.type === 'checklist') {
+                var options = df.options || [];
+                var checkedArr = getChecklistArr(df);
+                var hasOther = checkedArr.indexOf('__other') !== -1;
+                return h('div', { class: 'mj-regmgr-dyndata-field mj-regmgr-dyndata-field--full', key: df.id }, [
+                    h('label', { class: 'mj-regmgr-dyndata-field__label' }, label),
+                    h('div', { class: 'mj-regmgr-dyndata-field__options' }, options.map(function (opt) {
+                        return h('label', { class: 'mj-regmgr-dyndata-field__checkbox', key: opt }, [
+                            h('input', { type: 'checkbox', checked: checkedArr.indexOf(opt) !== -1, onChange: function () { toggleChecklistValue(df, opt); } }),
+                            h('span', null, ' ' + opt),
+                        ]);
+                    }).concat(df.allowOther ? [
+                        h('label', { class: 'mj-regmgr-dyndata-field__checkbox', key: '__other' }, [
+                            h('input', { type: 'checkbox', checked: hasOther, onChange: function () { toggleChecklistValue(df, '__other'); } }),
+                            h('span', null, ' ' + (df.otherLabel || 'Autre')),
+                        ]),
+                    ] : [])),
+                    df.allowOther && hasOther ? h('input', { type: 'text', class: 'mj-regmgr-dyndata-field__input mj-regmgr-dyndata-field__other', placeholder: 'Précisez…', value: otherTexts[df.id] || '', onInput: function (e) { updateOtherText(df.id, e.target.value); } }) : null,
+                    desc,
+                ]);
+            }
+
+            // Fallback: read-only
+            return h('div', { class: 'mj-regmgr-dyndata-field', key: df.id }, [
+                h('label', { class: 'mj-regmgr-dyndata-field__label' }, label),
+                h('div', { class: 'mj-regmgr-dyndata-field__value' }, val || '—'),
+            ]);
+        }
+
+        // Build layout with section title support
+        var groups = [];
+        var currentItems = [];
+        dynFields.forEach(function (df) {
+            if (df.type === 'title') {
+                if (currentItems.length) {
+                    groups.push(h('div', { class: 'mj-regmgr-dyndata-grid', key: 'grid-' + groups.length }, currentItems));
+                    currentItems = [];
+                }
+                groups.push(h('h4', { class: 'mj-regmgr-dyndata-section-title', key: 'title-' + df.id }, df.title));
+            } else {
+                currentItems.push(renderField(df));
+            }
+        });
+        if (currentItems.length) {
+            groups.push(h('div', { class: 'mj-regmgr-dyndata-grid', key: 'grid-' + groups.length }, currentItems));
+        }
+
+        return h('div', { class: 'mj-regmgr-member-detail__section' }, [
+            h('h2', { class: 'mj-regmgr-member-detail__section-title' }, 'Données dynamiques'),
+        ].concat(groups).concat([
+            h('div', { class: 'mj-regmgr-dyndata-actions' }, [
+                h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--primary mj-btn--small',
+                    disabled: saving,
+                    onClick: handleSave,
+                }, saving ? 'Enregistrement…' : 'Enregistrer'),
+                statusMsg ? h('span', { class: 'mj-regmgr-dyndata-status' }, statusMsg) : null,
+            ]),
+        ]));
+    }
+
+    // ============================================
+    // MEMBER DETAIL PANEL
+    // ============================================
+
+    function MemberDetailPanel(props) {
+        var member = props.member;
+        var loading = props.loading;
+        var strings = props.strings;
+        var config = props.config;
+        var apiService = props.apiService;
+        
+        // Créer apiService localement si elle n'est pas fournie
+        if (!apiService && typeof window !== 'undefined' && window.MjRegMgrServices) {
+            apiService = window.MjRegMgrServices.createApiService(config);
+        }
+        
+        var notes = props.notes || [];
+        var registrations = props.registrations || [];
+        var onSaveNote = props.onSaveNote;
+        var onDeleteNote = props.onDeleteNote;
+        var onUpdateMember = props.onUpdateMember;
+        var onPayMembershipOnline = props.onPayMembershipOnline;
+        var onMarkMembershipPaid = props.onMarkMembershipPaid;
+        var onUpdateIdea = typeof props.onUpdateIdea === 'function' ? props.onUpdateIdea : null;
+        var onDeleteIdea = typeof props.onDeleteIdea === 'function' ? props.onDeleteIdea : null;
+        var onUpdatePhoto = typeof props.onUpdatePhoto === 'function' ? props.onUpdatePhoto : null;
+        var onDeletePhoto = typeof props.onDeletePhoto === 'function' ? props.onDeletePhoto : null;
+        var onUpdateAvatar = typeof props.onUpdateAvatar === 'function' ? props.onUpdateAvatar : null;
+        var onRemoveAvatar = typeof props.onRemoveAvatar === 'function' ? props.onRemoveAvatar : null;
+        var onCaptureAvatar = typeof props.onCaptureAvatar === 'function' ? props.onCaptureAvatar : null;
+        var onCreateMessage = typeof props.onCreateMessage === 'function' ? props.onCreateMessage : null;
+        var onDeleteMessage = typeof props.onDeleteMessage === 'function' ? props.onDeleteMessage : null;
+        var onUpdateNotification = typeof props.onUpdateNotification === 'function' ? props.onUpdateNotification : null;
+        var onDeleteNotification = typeof props.onDeleteNotification === 'function' ? props.onDeleteNotification : null;
+        var onDeleteTestimonial = typeof props.onDeleteTestimonial === 'function' ? props.onDeleteTestimonial : null;
+        var onUpdateTestimonialStatus = typeof props.onUpdateTestimonialStatus === 'function' ? props.onUpdateTestimonialStatus : null;
+        var onToggleFeatured = typeof props.onToggleFeatured === 'function' ? props.onToggleFeatured : null;
+        var onManageAccount = typeof props.onManageAccount === 'function' ? props.onManageAccount : null;
+        var onCreateNextcloudLogin = typeof props.onCreateNextcloudLogin === 'function' ? props.onCreateNextcloudLogin : null;
+        var onDeleteMember = typeof props.onDeleteMember === 'function' ? props.onDeleteMember : null;
+        var onDeleteRegistration = typeof props.onDeleteRegistration === 'function' ? props.onDeleteRegistration : null;
+        var onUpdateRegistrationOccurrences = typeof props.onUpdateRegistrationOccurrences === 'function' ? props.onUpdateRegistrationOccurrences : null;
+        var onOpenMember = typeof props.onOpenMember === 'function' ? props.onOpenMember : null;
+        var onSyncBadgeCriteria = typeof props.onSyncBadgeCriteria === 'function' ? props.onSyncBadgeCriteria : null;
+        var onAdjustXp = typeof props.onAdjustXp === 'function' ? props.onAdjustXp : null;
+        var onToggleTrophy = typeof props.onToggleTrophy === 'function' ? props.onToggleTrophy : null;
+        var onAwardAction = typeof props.onAwardAction === 'function' ? props.onAwardAction : null;
+        var onMemberUpdated = typeof props.onMemberUpdated === 'function' ? props.onMemberUpdated : null;
+        var onSelectEvent = typeof props.onSelectEvent === 'function' ? props.onSelectEvent : null;
+        var pendingEditRequest = props.pendingEditRequest || null;
+        var onPendingEditHandled = typeof props.onPendingEditHandled === 'function' ? props.onPendingEditHandled : null;
+        var initialTab = props.initialTab || null;
+        var onTabChange = typeof props.onTabChange === 'function' ? props.onTabChange : null;
+
+        if (!member) {
+            var loadingLabel = getString(strings, 'memberLoadingDetails', 'Chargement des informations...');
+            var selectPromptLabel = getString(strings, 'memberSelectPrompt', 'Sélectionnez un membre pour afficher les détails.');
+
+            return h('div', { class: 'mj-regmgr-member-detail mj-regmgr-member-detail--placeholder' }, [
+                loading
+                    ? h('div', { class: 'mj-regmgr-member-detail__placeholder mj-regmgr-member-detail__placeholder--loading' }, [
+                        h('div', { class: 'mj-regmgr-spinner' }),
+                        h('p', null, loadingLabel),
+                    ])
+                    : h('div', { class: 'mj-regmgr-member-detail__placeholder mj-regmgr-member-detail__placeholder--empty' }, [
+                        h('p', null, selectPromptLabel),
+                    ]),
+            ]);
+        }
+
+        var memberId = member && member.id ? member.id : null;
+
+        // Onglets valides pour les membres
+        var validMemberTabs = ['information', 'dyndata', 'membership', 'badges', 'photos', 'ideas', 'messages', 'notifications', 'testimonials', 'notes', 'history', 'quotas'];
+        var resolvedInitialTab = initialTab && validMemberTabs.indexOf(initialTab) !== -1 ? initialTab : 'information';
+        var initialTabAppliedRef = useRef(false);
+
+        var _useStateActiveTab = useState(resolvedInitialTab);
+        var activeTab = _useStateActiveTab[0];
+        var setActiveTabInternal = _useStateActiveTab[1];
+
+        // Wrapper pour setActiveTab qui notifie aussi le parent
+        var setActiveTab = useCallback(function (tab) {
+            setActiveTabInternal(tab);
+            if (onTabChange) {
+                onTabChange(tab);
+            }
+        }, [onTabChange]);
+
+        var _useStateEditMode = useState(false);
+        var editMode = _useStateEditMode[0];
+        var setEditMode = _useStateEditMode[1];
+
+        var _useStateEditData = useState(buildInitialEditData(member));
+        var editData = _useStateEditData[0];
+        var setEditData = _useStateEditData[1];
+
+        var _useStateNewNote = useState('');
+        var newNote = _useStateNewNote[0];
+        var setNewNote = _useStateNewNote[1];
+
+        var _useStateSavingNote = useState(false);
+        var savingNote = _useStateSavingNote[0];
+        var setSavingNote = _useStateSavingNote[1];
+
+        var _useStateEditingNoteId = useState(null);
+        var editingNoteId = _useStateEditingNoteId[0];
+        var setEditingNoteId = _useStateEditingNoteId[1];
+
+        var _useStateEditingNoteContent = useState('');
+        var editingNoteContent = _useStateEditingNoteContent[0];
+        var setEditingNoteContent = _useStateEditingNoteContent[1];
+
+        var _useStateEditingNoteSaving = useState(false);
+        var editingNoteSaving = _useStateEditingNoteSaving[0];
+        var setEditingNoteSaving = _useStateEditingNoteSaving[1];
+
+        var _useStateEditingIdeaId = useState(null);
+        var editingIdeaId = _useStateEditingIdeaId[0];
+        var setEditingIdeaId = _useStateEditingIdeaId[1];
+
+        var _useStateIdeaDraft = useState({ title: '', content: '', status: 'published' });
+        var ideaDraft = _useStateIdeaDraft[0];
+        var setIdeaDraft = _useStateIdeaDraft[1];
+
+        var _useStateIdeaSaving = useState(false);
+        var ideaSaving = _useStateIdeaSaving[0];
+        var setIdeaSaving = _useStateIdeaSaving[1];
+
+        var _useStateIdeaDeletingId = useState(null);
+        var ideaDeletingId = _useStateIdeaDeletingId[0];
+        var setIdeaDeletingId = _useStateIdeaDeletingId[1];
+
+        var _useStateEditingPhotoId = useState(null);
+        var editingPhotoId = _useStateEditingPhotoId[0];
+        var setEditingPhotoId = _useStateEditingPhotoId[1];
+
+        var _useStatePhotoDraft = useState({ caption: '', status: 'approved' });
+        var photoDraft = _useStatePhotoDraft[0];
+        var setPhotoDraft = _useStatePhotoDraft[1];
+
+        var _useStatePhotoSaving = useState(false);
+        var photoSaving = _useStatePhotoSaving[0];
+        var setPhotoSaving = _useStatePhotoSaving[1];
+
+        var _useStatePhotoDeletingId = useState(null);
+        var photoDeletingId = _useStatePhotoDeletingId[0];
+        var setPhotoDeletingId = _useStatePhotoDeletingId[1];
+
+        var _useStatePhotoApprovingId = useState(null);
+        var photoApprovingId = _useStatePhotoApprovingId[0];
+        var setPhotoApprovingId = _useStatePhotoApprovingId[1];
+
+        var _useStateTrustedMemberSaving = useState(false);
+        var trustedMemberSaving = _useStateTrustedMemberSaving[0];
+        var setTrustedMemberSaving = _useStateTrustedMemberSaving[1];
+
+        var _useStateMessageDeletingId = useState(null);
+        var messageDeletingId = _useStateMessageDeletingId[0];
+        var setMessageDeletingId = _useStateMessageDeletingId[1];
+
+        var _useStateNewMessageOpen = useState(false);
+        var newMessageOpen = _useStateNewMessageOpen[0];
+        var setNewMessageOpen = _useStateNewMessageOpen[1];
+
+        var _useStateNewMessageSubject = useState('');
+        var newMessageSubject = _useStateNewMessageSubject[0];
+        var setNewMessageSubject = _useStateNewMessageSubject[1];
+
+        var _useStateNewMessageBody = useState('');
+        var newMessageBody = _useStateNewMessageBody[0];
+        var setNewMessageBody = _useStateNewMessageBody[1];
+
+        var _useStateNewMessageSaving = useState(false);
+        var newMessageSaving = _useStateNewMessageSaving[0];
+        var setNewMessageSaving = _useStateNewMessageSaving[1];
+
+        var _useStateNotificationSearch = useState('');
+        var notificationSearch = _useStateNotificationSearch[0];
+        var setNotificationSearch = _useStateNotificationSearch[1];
+
+        var _useStateNotificationTypeFilter = useState('all');
+        var notificationTypeFilter = _useStateNotificationTypeFilter[0];
+        var setNotificationTypeFilter = _useStateNotificationTypeFilter[1];
+
+        var _useStateNotificationEmojiFilter = useState('all');
+        var notificationEmojiFilter = _useStateNotificationEmojiFilter[0];
+        var setNotificationEmojiFilter = _useStateNotificationEmojiFilter[1];
+
+        var _useStateNotificationReadFilter = useState('all');
+        var notificationReadFilter = _useStateNotificationReadFilter[0];
+        var setNotificationReadFilter = _useStateNotificationReadFilter[1];
+
+        var _useStateEditingNotificationId = useState(null);
+        var editingNotificationId = _useStateEditingNotificationId[0];
+        var setEditingNotificationId = _useStateEditingNotificationId[1];
+
+        var _useStateNotificationDraft = useState({ text: '', url: '', status: 'unread' });
+        var notificationDraft = _useStateNotificationDraft[0];
+        var setNotificationDraft = _useStateNotificationDraft[1];
+
+        var _useStateNotificationSaving = useState(false);
+        var notificationSaving = _useStateNotificationSaving[0];
+        var setNotificationSaving = _useStateNotificationSaving[1];
+
+        var _useStateNotificationDeletingId = useState(null);
+        var notificationDeletingId = _useStateNotificationDeletingId[0];
+        var setNotificationDeletingId = _useStateNotificationDeletingId[1];
+
+        var _useStateSelectedNotificationIds = useState({});
+        var selectedNotificationIds = _useStateSelectedNotificationIds[0];
+        var setSelectedNotificationIds = _useStateSelectedNotificationIds[1];
+
+        var _useStateNotificationBulkDeleting = useState(false);
+        var notificationBulkDeleting = _useStateNotificationBulkDeleting[0];
+        var setNotificationBulkDeleting = _useStateNotificationBulkDeleting[1];
+
+        var _useStateAvatarSaving = useState(false);
+        var avatarSaving = _useStateAvatarSaving[0];
+        var setAvatarSaving = _useStateAvatarSaving[1];
+
+        var _useStateDeletingMember = useState(false);
+        var deletingMember = _useStateDeletingMember[0];
+        var setDeletingMember = _useStateDeletingMember[1];
+
+        var _useStateCreatingNextcloud = useState(false);
+        var creatingNextcloud = _useStateCreatingNextcloud[0];
+        var setCreatingNextcloud = _useStateCreatingNextcloud[1];
+
+        var _useStateNextcloudModal = useState(false);
+        var nextcloudModalOpen = _useStateNextcloudModal[0];
+        var setNextcloudModalOpen = _useStateNextcloudModal[1];
+
+        var _useStatePaymentProcessing = useState(false);
+        var paymentProcessing = _useStatePaymentProcessing[0];
+        var setPaymentProcessing = _useStatePaymentProcessing[1];
+
+        var _useStateShowPaymentModal = useState(false);
+        var showPaymentModal = _useStateShowPaymentModal[0];
+        var setShowPaymentModal = _useStateShowPaymentModal[1];
+
+        var _useStateAccountStatusDraft = useState(member && member.status ? member.status : 'active');
+        var accountStatusDraft = _useStateAccountStatusDraft[0];
+        var setAccountStatusDraft = _useStateAccountStatusDraft[1];
+
+        var _useStateAccountStatusSaving = useState(false);
+        var accountStatusSaving = _useStateAccountStatusSaving[0];
+        var setAccountStatusSaving = _useStateAccountStatusSaving[1];
+
+        var _useStateBadgeData = useState(normalizeBadgeEntries(member));
+        var badgeData = _useStateBadgeData[0];
+        var setBadgeData = _useStateBadgeData[1];
+
+        var _useStateBadgeSaving = useState({});
+        var badgeSaving = _useStateBadgeSaving[0];
+        var setBadgeSaving = _useStateBadgeSaving[1];
+
+        var _useStateTrophyData = useState(normalizeTrophyEntries(member));
+        var trophyData = _useStateTrophyData[0];
+        var setTrophyData = _useStateTrophyData[1];
+
+        var _useStateTrophySaving = useState({});
+        var trophySaving = _useStateTrophySaving[0];
+        var setTrophySaving = _useStateTrophySaving[1];
+
+        var _useStateActionData = useState(normalizeActionEntries(member));
+        var actionData = _useStateActionData[0];
+        var setActionData = _useStateActionData[1];
+
+        var _useStateActionSaving = useState({});
+        var actionSaving = _useStateActionSaving[0];
+        var setActionSaving = _useStateActionSaving[1];
+
+        // States pour la gestion des témoignages
+        var _useStateEditingTestimonialId = useState(null);
+        var editingTestimonialId = _useStateEditingTestimonialId[0];
+        var setEditingTestimonialId = _useStateEditingTestimonialId[1];
+
+        var _useStateTestimonialContentDraft = useState({});
+        var testimonialContentDraft = _useStateTestimonialContentDraft[0];
+        var setTestimonialContentDraft = _useStateTestimonialContentDraft[1];
+
+        var _useStateTestimonialContentSaving = useState({});
+        var testimonialContentSaving = _useStateTestimonialContentSaving[0];
+        var setTestimonialContentSaving = _useStateTestimonialContentSaving[1];
+
+        var _useStateNewTestimonialComment = useState({});
+        var newTestimonialComment = _useStateNewTestimonialComment[0];
+        var setNewTestimonialComment = _useStateNewTestimonialComment[1];
+
+        var _useStateTestimonialCommentSaving = useState({});
+        var testimonialCommentSaving = _useStateTestimonialCommentSaving[0];
+        var setTestimonialCommentSaving = _useStateTestimonialCommentSaving[1];
+
+        var _useStateEditingTestimonialCommentId = useState(null);
+        var editingTestimonialCommentId = _useStateEditingTestimonialCommentId[0];
+        var setEditingTestimonialCommentId = _useStateEditingTestimonialCommentId[1];
+
+        var _useStateEditingTestimonialCommentDraft = useState({});
+        var editingTestimonialCommentDraft = _useStateEditingTestimonialCommentDraft[0];
+        var setEditingTestimonialCommentDraft = _useStateEditingTestimonialCommentDraft[1];
+
+        var _useStateTestimonialLinkEditing = useState({});
+        var testimonialLinkEditing = _useStateTestimonialLinkEditing[0];
+        var setTestimonialLinkEditing = _useStateTestimonialLinkEditing[1];
+
+        var _useStateTestimonialLinkDraft = useState({});
+        var testimonialLinkDraft = _useStateTestimonialLinkDraft[0];
+        var setTestimonialLinkDraft = _useStateTestimonialLinkDraft[1];
+
+        // Helper pour créer un objet avec clé dynamique
+        var _assignKeyValue = function(obj, key, value) {
+            var temp = Object.assign({}, obj);
+            temp[key] = value;
+            return temp;
+        };
+
+        var avatarFrameRef = useRef(null);
+
+        useEffect(function () {
+            setEditData(buildInitialEditData(member));
+            setEditMode(false);
+            // Utiliser l'onglet initial seulement au premier chargement
+            if (!initialTabAppliedRef.current && initialTab && validMemberTabs.indexOf(initialTab) !== -1) {
+                setActiveTab(initialTab);
+                initialTabAppliedRef.current = true;
+            } else if (initialTabAppliedRef.current) {
+                // Après le premier chargement, réinitialiser à 'information'
+                setActiveTab('information');
+            }
+            setEditingNoteId(null);
+            setEditingNoteContent('');
+            setEditingNoteSaving(false);
+            setIdeaDraft({ title: '', content: '', status: 'published' });
+            setEditingIdeaId(null);
+            setIdeaSaving(false);
+            setEditingPhotoId(null);
+            setPhotoDraft({ caption: '', status: 'approved' });
+            setPhotoSaving(false);
+            setPhotoDeletingId(null);
+            setMessageDeletingId(null);
+            setNewMessageOpen(false);
+            setNewMessageSubject('');
+            setNewMessageBody('');
+            setNewMessageSaving(false);
+            setNotificationSearch('');
+            setNotificationTypeFilter('all');
+            setNotificationEmojiFilter('all');
+            setNotificationReadFilter('all');
+            setEditingNotificationId(null);
+            setNotificationDraft({ text: '', url: '', status: 'unread' });
+            setNotificationSaving(false);
+            setNotificationDeletingId(null);
+            setSelectedNotificationIds({});
+            setNotificationBulkDeleting(false);
+            setPaymentProcessing(false);
+            setShowPaymentModal(false);
+            setAccountStatusDraft(member && member.status ? member.status : 'active');
+            setAccountStatusSaving(false);
+        }, [memberId]);
+
+        useEffect(function () {
+            setBadgeData(normalizeBadgeEntries(member));
+            setBadgeSaving({});
+        }, [member]);
+
+        useEffect(function () {
+            setTrophyData(normalizeTrophyEntries(member));
+            setTrophySaving({});
+        }, [member]);
+
+        useEffect(function () {
+            setActionData(normalizeActionEntries(member));
+            setActionSaving({});
+        }, [member]);
+
+        useEffect(function () {
+            if (!pendingEditRequest || !memberId) {
+                return;
+            }
+
+            var targetTab = 'information';
+            if (typeof pendingEditRequest === 'string') {
+                targetTab = pendingEditRequest;
+            } else if (pendingEditRequest && (pendingEditRequest.tab || pendingEditRequest.type)) {
+                targetTab = pendingEditRequest.tab || pendingEditRequest.type;
+            }
+
+            if (targetTab) {
+                setActiveTab(targetTab);
+            }
+            if (targetTab === 'information') {
+                setEditMode(true);
+            }
+            if (onPendingEditHandled) {
+                onPendingEditHandled();
+            }
+        }, [pendingEditRequest, memberId, onPendingEditHandled]);
+
+        var roleLabels = {
+            jeune: getString(strings, 'roleJeune', 'Jeune'),
+            animateur: getString(strings, 'roleAnimateur', 'Animateur'),
+            tuteur: getString(strings, 'roleTuteur', 'Tuteur'),
+            benevole: getString(strings, 'roleBenevole', 'Bénévole'),
+            coordinateur: getString(strings, 'roleCoordinateur', 'Coordinateur'),
+            parent: getString(strings, 'roleParent', 'Parent'),
+            admin: getString(strings, 'roleAdmin', 'Administrateur'),
+        };
+
+        var membershipLabels = {
+            paid: getString(strings, 'membershipStatusPaid', 'Cotisation OK'),
+            expired: getString(strings, 'membershipStatusExpired', 'Cotisation expirée'),
+            unpaid: getString(strings, 'membershipStatusUnpaid', 'Cotisation due'),
+            not_required: getString(strings, 'membershipStatusNotRequired', 'Non requise'),
+        };
+
+        var statusLabels = {
+            active: getString(strings, 'memberStatusActive', 'Actif'),
+            inactive: getString(strings, 'memberStatusInactive', 'Inactif'),
+            pending: getString(strings, 'memberStatusPending', 'En attente'),
+            archived: getString(strings, 'memberStatusArchived', 'Archivé'),
+        };
+
+        var photoStatusLabels = {
+            approved: getString(strings, 'photoStatusApproved', 'Approuvée'),
+            pending: getString(strings, 'photoStatusPending', 'En attente'),
+            rejected: getString(strings, 'photoStatusRejected', 'Refusée'),
+        };
+        var photoStatusClasses = {
+            approved: 'mj-regmgr-badge--success',
+            pending: 'mj-regmgr-badge--warning',
+            rejected: 'mj-regmgr-badge--danger',
+        };
+
+        var ideaStatusLabels = {
+            published: getString(strings, 'ideaStatusPublished', 'Publiée'),
+            draft: getString(strings, 'ideaStatusDraft', 'Brouillon'),
+            archived: getString(strings, 'ideaStatusArchived', 'Archivée'),
+        };
+        var ideaStatusClasses = {
+            published: 'mj-regmgr-badge--success',
+            draft: 'mj-regmgr-badge--warning',
+            archived: 'mj-regmgr-badge--secondary',
+        };
+
+        var communicationEnabledLabel = getString(strings, 'communicationEnabled', 'Activé');
+        var communicationDisabledLabel = getString(strings, 'communicationDisabled', 'Désactivé');
+
+        var avatarMediaUnavailableLabel = getString(strings, 'avatarMediaUnavailable', "La médiathèque WordPress est indisponible.");
+        var avatarLibraryTitle = getString(strings, 'avatarLibraryTitle', 'Bibliothèque de médias');
+        var avatarLibraryButton = getString(strings, 'avatarLibraryButton', 'Choisir');
+        var captureAvatarLabel = getString(strings, 'captureAvatar', 'Capturer');
+        var avatarUploadingLabel = getString(strings, 'avatarUploading', 'Téléversement...');
+        var changeAvatarLabel = getString(strings, 'changeAvatar', 'Changer');
+
+        var memberRoleRaw = member && typeof member.role === 'string' ? member.role : '';
+        var memberRole = memberRoleRaw ? memberRoleRaw.toLowerCase() : '';
+        var isGuardianRole = memberRole === 'tuteur';
+        var isChildCapableRole = memberRole === 'tuteur' || memberRole === 'animateur' || memberRole === 'coordinateur';
+        var canManageChildren = !!(config && config.canManageChildren && isChildCapableRole);
+        var allowCreateChild = !!(config && config.allowCreateChild && isChildCapableRole);
+        var allowAttachChild = !!(config && config.allowAttachChild && isChildCapableRole);
+        var hasChildren = !!(member && Array.isArray(member.children) && member.children.length > 0);
+        var showChildSection = isChildCapableRole && (hasChildren || canManageChildren);
+
+        var handleCreateChild = useCallback(function () {
+            if (!canManageChildren || !allowCreateChild) {
+                return;
+            }
+            if (!config || typeof config.onCreateChild !== 'function' || !member) {
+                return;
+            }
+            config.onCreateChild(member);
+        }, [canManageChildren, allowCreateChild, config, member]);
+
+        var handleAttachChild = useCallback(function () {
+            if (!canManageChildren || !allowAttachChild) {
+                return;
+            }
+            if (!config || typeof config.onAttachChild !== 'function' || !member) {
+                return;
+            }
+            config.onAttachChild(member);
+        }, [canManageChildren, allowAttachChild, config, member]);
+        var removeAvatarLabel = getString(strings, 'removeAvatar', 'Supprimer');
+        var removeAvatarConfirmLabel = getString(strings, 'removeAvatarConfirm', 'Supprimer l’avatar personnalisé ?');
+
+        var canChangeAvatar = !!(onUpdateAvatar || onRemoveAvatar || onCaptureAvatar);
+        if (config && typeof config.canManageAvatars !== 'undefined') {
+            canChangeAvatar = canChangeAvatar && !!config.canManageAvatars;
+        }
+
+        var canDeleteMember = !!(onDeleteMember && config && config.canDeleteMember);
+        var allowDeleteRegistration = !!(config && config.canDeleteRegistration);
+
+        var memberPhotoId = null;
+        if (member.photoId) {
+            memberPhotoId = member.photoId;
+        } else if (member.photo && member.photo.id) {
+            memberPhotoId = member.photo.id;
+        }
+
+        var memberHasCustomAvatar = false;
+        if (typeof member.hasCustomAvatar !== 'undefined') {
+            memberHasCustomAvatar = !!member.hasCustomAvatar;
+        } else if (memberPhotoId) {
+            memberHasCustomAvatar = memberPhotoId !== 0;
+        }
+
+        var guardian = null;
+        if (member.guardian) {
+            guardian = member.guardian;
+        } else if (member.guardianData) {
+            guardian = member.guardianData;
+        }
+
+        var guardianDisplayName = '';
+        if (guardian) {
+            guardianDisplayName = ((guardian.firstName || '') + ' ' + (guardian.lastName || '')).trim();
+            if (!guardianDisplayName && guardian.displayName) {
+                guardianDisplayName = guardian.displayName;
+            }
+        } else if (member.guardianName) {
+            guardianDisplayName = member.guardianName;
+        }
+        if (!guardianDisplayName) {
+            var guardianFirstFromMember = member.guardianFirstName || member.guardian_first_name || '';
+            var guardianLastFromMember = member.guardianLastName || member.guardian_last_name || '';
+            var guardianNameFromMember = ((guardianFirstFromMember || '') + ' ' + (guardianLastFromMember || '')).trim();
+            if (guardianNameFromMember) {
+                guardianDisplayName = guardianNameFromMember;
+            }
+        }
+
+        var guardianId = null;
+        if (guardian && typeof guardian.id !== 'undefined') {
+            guardianId = guardian.id;
+        }
+        if (guardianId === null && typeof member.guardianId !== 'undefined' && member.guardianId !== null) {
+            guardianId = member.guardianId;
+        }
+        if ((guardianId === null || typeof guardianId === 'undefined') && typeof member.guardian_id !== 'undefined' && member.guardian_id !== null) {
+            guardianId = member.guardian_id;
+        }
+        if (guardianId !== null) {
+            guardianId = parseInt(guardianId, 10);
+            if (isNaN(guardianId)) {
+                guardianId = null;
+            }
+        }
+
+        var guardianEditUrl = '';
+        if (guardian && guardian.editUrl) {
+            guardianEditUrl = guardian.editUrl;
+        } else if (member.guardianEditUrl) {
+            guardianEditUrl = member.guardianEditUrl;
+        } else if (config && config.guardianEditBaseUrl && guardianId) {
+            guardianEditUrl = config.guardianEditBaseUrl.replace('%ID%', guardianId);
+        }
+
+        var canEditGuardianInline = !!(config && config.canEditGuardianInline);
+        if (typeof member.canEditGuardianInline !== 'undefined') {
+            canEditGuardianInline = !!member.canEditGuardianInline;
+        }
+
+        var guardianReference = null;
+        if (guardian && guardian.id) {
+            guardianReference = guardian;
+        } else if (guardianId) {
+            var nameParts = guardianDisplayName ? guardianDisplayName.split(' ') : [];
+            var fallbackFirst = guardian && guardian.firstName ? guardian.firstName : '';
+            if (!fallbackFirst && member.guardianFirstName) {
+                fallbackFirst = member.guardianFirstName;
+            }
+            if (!fallbackFirst && member.guardian_first_name) {
+                fallbackFirst = member.guardian_first_name;
+            }
+            if (!fallbackFirst && nameParts.length > 0) {
+                fallbackFirst = nameParts[0];
+            }
+            var fallbackLast = guardian && guardian.lastName ? guardian.lastName : '';
+            if (!fallbackLast && member.guardianLastName) {
+                fallbackLast = member.guardianLastName;
+            }
+            if (!fallbackLast && member.guardian_last_name) {
+                fallbackLast = member.guardian_last_name;
+            }
+            if (!fallbackLast && nameParts.length > 1) {
+                fallbackLast = nameParts.slice(1).join(' ');
+            }
+            var derivedDisplayName = guardianDisplayName;
+            if (!derivedDisplayName) {
+                if (guardian && guardian.displayName) {
+                    derivedDisplayName = guardian.displayName;
+                } else {
+                    var combinedFallback = ((fallbackFirst || '') + ' ' + (fallbackLast || '')).trim();
+                    if (combinedFallback) {
+                        derivedDisplayName = combinedFallback;
+                    }
+                }
+            }
+            guardianReference = {
+                id: guardianId,
+                firstName: fallbackFirst,
+                lastName: fallbackLast,
+                displayName: derivedDisplayName,
+                role: guardian && guardian.role ? guardian.role : 'tuteur',
+                roleLabel: guardian && guardian.roleLabel ? guardian.roleLabel : '',
+                avatarUrl: guardian && guardian.avatarUrl ? guardian.avatarUrl : '',
+                email: guardian && guardian.email ? guardian.email : '',
+                phone: guardian && guardian.phone ? guardian.phone : '',
+                phoneSecondary: guardian && guardian.phoneSecondary ? guardian.phoneSecondary : '',
+            };
+        }
+        if (!guardianDisplayName && guardianReference) {
+            if (guardianReference.displayName) {
+                guardianDisplayName = guardianReference.displayName;
+            } else {
+                guardianDisplayName = ((guardianReference.firstName || '') + ' ' + (guardianReference.lastName || '')).trim();
+            }
+        }
+
+        var handleGuardianEditClick = function () {
+            if (canEditGuardianInline && typeof config.onEditGuardian === 'function') {
+                config.onEditGuardian(member);
+                return;
+            }
+            if (guardianEditUrl) {
+                if (typeof window !== 'undefined') {
+                    window.open(guardianEditUrl, '_blank', 'noopener');
+                }
+            }
+        };
+
+        var guardianActions = [];
+        if (onOpenMember && guardianReference) {
+            guardianActions.push(h('button', {
+                type: 'button',
+                class: 'mj-regmgr-guardian__edit-link mj-regmgr-guardian__view-link',
+                onClick: function () {
+                    onOpenMember(guardianReference);
+                },
+                title: getString(strings, 'viewMemberProfile', 'Ouvrir la fiche membre'),
+            }, [
+                h('svg', {
+                    width: 14,
+                    height: 14,
+                    viewBox: '0 0 24 24',
+                    fill: 'none',
+                    stroke: 'currentColor',
+                    'stroke-width': 2,
+                }, [
+                    h('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
+                    h('polyline', { points: '15 3 21 3 21 9' }),
+                    h('line', { x1: 10, y1: 14, x2: 21, y2: 3 }),
+                ]),
+                h('span', null, getString(strings, 'openMember', 'Fiche')),
+            ]));
+        }
+
+        if (canEditGuardianInline) {
+            guardianActions.push(h('button', {
+                type: 'button',
+                class: 'mj-regmgr-guardian__edit-link',
+                onClick: handleGuardianEditClick,
+            }, [
+                h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                    h('path', { d: 'M12 20h9' }),
+                    h('path', { d: 'M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z' }),
+                ]),
+                h('span', null, 'Modifier'),
+            ]));
+        } else if (guardianEditUrl) {
+            guardianActions.push(h('a', {
+                class: 'mj-regmgr-guardian__edit-link',
+                href: guardianEditUrl,
+                target: '_blank',
+                rel: 'noopener noreferrer',
+            }, [
+                h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                    h('path', { d: 'M12 20h9' }),
+                    h('path', { d: 'M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z' }),
+                ]),
+                h('span', null, 'Modifier'),
+            ]));
+        }
+
+        var handleFieldChange = function (field) {
+            return function (event) {
+                var value = event && event.target ? event.target.value : '';
+                setEditData(function (prev) {
+                    var next = Object.assign({}, prev);
+                    next[field] = value;
+                    return next;
+                });
+            };
+        };
+
+        var handleBooleanChange = function (field) {
+            return function (event) {
+                var checked = !!(event && event.target && event.target.checked);
+                setEditData(function (prev) {
+                    var next = Object.assign({}, prev);
+                    next[field] = checked;
+                    return next;
+                });
+            };
+        };
+
+        var handleCaptureClick = function () {
+            if (!onCaptureAvatar || !memberId || avatarSaving) {
+                return;
+            }
+            setAvatarSaving(true);
+            Promise.resolve(onCaptureAvatar(memberId))
+                .catch(function (error) {
+                    if (error && error.message) {
+                        console.error('[MjRegMgr] Avatar capture failed:', error.message);
+                    }
+                })
+                .finally(function () {
+                    setAvatarSaving(false);
+                });
+        };
+
+        var handleAvatarPick = function () {
+            if (!canChangeAvatar || !member || !member.id || !onUpdateAvatar || avatarSaving) {
+                return;
+            }
+
+            if (typeof window === 'undefined' || !window.wp || !window.wp.media || typeof window.wp.media !== 'function') {
+                if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+                    window.alert(avatarMediaUnavailableLabel);
+                }
+                return;
+            }
+
+            var frame = avatarFrameRef.current;
+
+            if (!frame) {
+                frame = window.wp.media({
+                    title: avatarLibraryTitle,
+                    button: { text: avatarLibraryButton },
+                    library: { type: 'image' },
+                    multiple: false,
+                });
+                avatarFrameRef.current = frame;
+            }
+
+            if (frame && typeof frame.off === 'function') {
+                frame.off('select');
+                frame.off('open');
+            }
+
+            if (frame) {
+                frame.on('open', function () {
+                    var state = typeof frame.state === 'function' ? frame.state() : null;
+                    if (!state || typeof state.get !== 'function') {
+                        return;
+                    }
+                    var selection = state.get('selection');
+                    if (!selection || typeof selection.reset !== 'function') {
+                        return;
+                    }
+                    if (memberHasCustomAvatar && memberPhotoId) {
+                        var attachment = window.wp.media.attachment(memberPhotoId);
+                        if (attachment) {
+                            attachment.fetch();
+                            selection.reset([attachment]);
+                            return;
+                        }
+                    }
+                    selection.reset([]);
+                });
+
+                frame.on('select', function () {
+                    var state = typeof frame.state === 'function' ? frame.state() : null;
+                    if (!state || typeof state.get !== 'function') {
+                        return;
+                    }
+                    var selection = state.get('selection');
+                    if (!selection || typeof selection.first !== 'function') {
+                        return;
+                    }
+                    var attachmentModel = selection.first();
+                    if (!attachmentModel) {
+                        return;
+                    }
+                    var attachmentData = attachmentModel.toJSON ? attachmentModel.toJSON() : attachmentModel;
+                    if (!attachmentData || !attachmentData.id) {
+                        return;
+                    }
+                    setAvatarSaving(true);
+                    Promise.resolve(onUpdateAvatar(member.id, attachmentData.id))
+                        .catch(function (error) {
+                            if (error && error.message) {
+                                console.error('[MjRegMgr] Avatar update failed:', error.message);
+                            }
+                        })
+                        .finally(function () {
+                            setAvatarSaving(false);
+                        });
+                });
+
+                frame.open();
+            }
+        };
+
+        var handleAvatarRemove = function () {
+            if (!canChangeAvatar || !member || !member.id || !onRemoveAvatar || !memberHasCustomAvatar || avatarSaving) {
+                return;
+            }
+
+            if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+                if (!window.confirm(removeAvatarConfirmLabel)) {
+                    return;
+                }
+            }
+
+            setAvatarSaving(true);
+            Promise.resolve(onRemoveAvatar(member.id))
+                .catch(function (error) {
+                    if (error && error.message) {
+                        console.error('[MjRegMgr] Avatar remove failed:', error.message);
+                    }
+                })
+                .finally(function () {
+                    setAvatarSaving(false);
+                });
+        };
+
+        var renderAvatarActions = function (extraClass) {
+            if (!canChangeAvatar) {
+                return null;
+            }
+
+            var extraClasses = {};
+            if (extraClass) {
+                extraClasses[extraClass] = true;
+            }
+
+            return h('div', {
+                class: classNames('mj-regmgr-member-detail__avatar-actions', extraClasses),
+            }, [
+                onCaptureAvatar && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--primary mj-btn--small',
+                    onClick: handleCaptureClick,
+                    disabled: avatarSaving,
+                    title: avatarSaving ? avatarUploadingLabel : captureAvatarLabel,
+                    'aria-label': avatarSaving ? avatarUploadingLabel : captureAvatarLabel,
+                }, avatarSaving ? avatarUploadingLabel : captureAvatarLabel),
+                onUpdateAvatar && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--secondary mj-btn--small',
+                    onClick: handleAvatarPick,
+                    disabled: avatarSaving,
+                    title: avatarSaving ? avatarUploadingLabel : changeAvatarLabel,
+                    'aria-label': avatarSaving ? avatarUploadingLabel : changeAvatarLabel,
+                }, avatarSaving ? avatarUploadingLabel : changeAvatarLabel),
+                memberHasCustomAvatar && onRemoveAvatar && h('button', {
+                    type: 'button',
+                    class: 'mj-btn mj-btn--ghost mj-btn--small',
+                    onClick: handleAvatarRemove,
+                    disabled: avatarSaving,
+                    title: avatarSaving ? avatarUploadingLabel : removeAvatarLabel,
+                    'aria-label': avatarSaving ? avatarUploadingLabel : removeAvatarLabel,
+                }, avatarSaving ? avatarUploadingLabel : removeAvatarLabel),
+            ]);
+        };
+
+        var handleDeleteMember = function () {
+            if (!canDeleteMember || !member || !onDeleteMember || deletingMember) {
+                return;
+            }
+
+            var confirmMessage = getString(strings, 'deleteMemberConfirm', 'Voulez-vous vraiment supprimer ce membre ? Cette action est irréversible.');
+            if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) {
+                return;
+            }
+
+            setDeletingMember(true);
+            Promise.resolve(onDeleteMember(member.id))
+                .catch(function () {
+                    // L'erreur est déjà gérée côté parent via showError
+                })
+                .finally(function () {
+                    setDeletingMember(false);
+                });
+        };
+
+        var handleSave = function () {
+            onUpdateMember(member.id, editData);
+            setEditMode(false);
+        };
+
+        var handleSaveAccountStatus = function () {
+            if (!member || !member.id || !onUpdateMember || accountStatusSaving) {
+                return;
+            }
+
+            var nextStatus = accountStatusDraft || 'active';
+            if (nextStatus === member.status) {
+                return;
+            }
+
+            setAccountStatusSaving(true);
+            Promise.resolve(onUpdateMember(member.id, { status: nextStatus }))
+                .finally(function () {
+                    setAccountStatusSaving(false);
+                });
+        };
+
+        var handleToggleTrustedMember = function (isTrusted) {
+            if (!member || !member.id) {
+                return;
+            }
+            console.log('[MjRegMgr] Toggling trusted member status for member ID ' + member.id + ': ' + isTrusted);
+            setTrustedMemberSaving(true);
+
+            var nonce = config && config.nonce ? config.nonce : '';
+            var ajaxUrl = config && config.ajaxUrl ? config.ajaxUrl : '/wp-admin/admin-ajax.php';
+
+            if (typeof window !== 'undefined' && window.jQuery) {
+                window.jQuery.ajax({
+                    url: ajaxUrl,
+                    type: 'POST',
+                    dataType: 'json',
+                    data: {
+                        action: 'mj_regmgr_update_member_trusted_status',
+                        nonce: nonce,
+                        memberId: member.id,
+                        isTrustedMember: isTrusted ? 1 : 0,
+                    },
+                    success: function (response) {
+                        console.log('[MjRegMgr] Trusted member status update response:', response);
+                        if (response.success) {
+                            if (onMemberUpdated) {
+                                var updatedMember = Object.assign({}, member, {
+                                    isTrustedMember: isTrusted,
+                                });
+                                onMemberUpdated(updatedMember);
+                            }
+                        }
+                    },
+                    error: function (jqXHR, textStatus, errorThrown) {
+                        console.error('[MjRegMgr] Error updating trusted member:', textStatus, errorThrown);
+                    },
+                })
+                .always(function () {
+                    setTrustedMemberSaving(false);
+                });
+            } else {
+                console.error('[MjRegMgr] jQuery not available');
+                setTrustedMemberSaving(false);
+            }
+        };
+
+        var handleAddNote = function () {
+            if (!newNote.trim()) return;
+            setSavingNote(true);
+            onSaveNote(member.id, newNote.trim())
+                .then(function () {
+                    setNewNote('');
+                })
+                .finally(function () {
+                    setSavingNote(false);
+                });
+        };
+
+        var handleNoteEditStart = function (note) {
+            if (!note || !note.canEdit) {
+                return;
+            }
+            setEditingNoteId(note.id);
+            setEditingNoteContent(note.content || '');
+        };
+
+        var handleNoteEditCancel = function () {
+            setEditingNoteId(null);
+            setEditingNoteContent('');
+            setEditingNoteSaving(false);
+        };
+
+        var handleUpdateNote = function () {
+            if (!onSaveNote || !editingNoteId || !member) {
+                return;
+            }
+            var trimmed = editingNoteContent ? editingNoteContent.trim() : '';
+            if (!trimmed) {
+                return;
+            }
+            setEditingNoteSaving(true);
+            Promise.resolve(onSaveNote(member.id, trimmed, editingNoteId))
+                .then(function () {
+                    handleNoteEditCancel();
+                })
+                .finally(function () {
+                    setEditingNoteSaving(false);
+                });
+        };
+
+        var handleIdeaEditStart = function (idea) {
+            if (!idea) {
+                return;
+            }
+            setEditingIdeaId(idea.id);
+            setIdeaDraft({
+                title: idea.title || '',
+                content: idea.content || '',
+                status: idea.status || 'published',
+            });
+        };
+
+        var handleIdeaEditCancel = function () {
+            setEditingIdeaId(null);
+            setIdeaDraft({ title: '', content: '', status: 'published' });
+            setIdeaSaving(false);
+        };
+
+        var handleSaveIdea = function () {
+            if (!onUpdateIdea || !editingIdeaId || !member) {
+                return;
+            }
+            var title = ideaDraft.title ? ideaDraft.title.trim() : '';
+            var content = ideaDraft.content ? ideaDraft.content.trim() : '';
+            if (!title || !content) {
+                return;
+            }
+            var payload = {
+                title: title,
+                content: content,
+                status: ideaDraft.status || 'published',
+            };
+            setIdeaSaving(true);
+            Promise.resolve(onUpdateIdea(member.id, editingIdeaId, payload))
+                .then(function () {
+                    handleIdeaEditCancel();
+                })
+                .finally(function () {
+                    setIdeaSaving(false);
+                });
+        };
+
+        var handleDeleteIdea = function (idea) {
+            if (!onDeleteIdea || !member || !member.id || !idea || !idea.id) {
+                return;
+            }
+            if (!window.confirm('Supprimer cette idée ?')) {
+                return;
+            }
+            setIdeaDeletingId(idea.id);
+            Promise.resolve(onDeleteIdea(member.id, idea.id))
+                .finally(function () {
+                    setIdeaDeletingId(null);
+                });
+        };
+
+        var handlePhotoEditStart = function (photo) {
+            if (!photo) {
+                return;
+            }
+            setEditingPhotoId(photo.id);
+            setPhotoDraft({
+                caption: photo.caption || '',
+                status: photo.status || 'approved',
+            });
+        };
+
+        var handlePhotoEditCancel = function () {
+            setEditingPhotoId(null);
+            setPhotoDraft({ caption: '', status: 'approved' });
+            setPhotoSaving(false);
+        };
+
+        var handleSavePhoto = function () {
+            if (!onUpdatePhoto || !editingPhotoId || !member) {
+                return;
+            }
+            var payload = {
+                caption: photoDraft.caption ? photoDraft.caption.trim() : '',
+                status: photoDraft.status || 'approved',
+            };
+            setPhotoSaving(true);
+            Promise.resolve(onUpdatePhoto(member.id, editingPhotoId, payload))
+                .then(function () {
+                    handlePhotoEditCancel();
+                })
+                .finally(function () {
+                    setPhotoSaving(false);
+                });
+        };
+
+        var handleDeletePhoto = function (photo) {
+            if (!onDeletePhoto || !member || !member.id || !photo || !photo.id) {
+                console.error('[MJ-Member] handleDeletePhoto failed preconditions:', {
+                    hasCallback: !!onDeletePhoto,
+                    memberId: member ? member.id : undefined,
+                    photoId: photo ? photo.id : undefined
+                });
+                return;
+            }
+            if (!window.confirm('Supprimer cette photo ?')) {
+                return;
+            }
+            setPhotoDeletingId(photo.id);
+            Promise.resolve(onDeletePhoto(member.id, photo.id))
+                .then(function () {
+                    if (editingPhotoId === photo.id) {
+                        handlePhotoEditCancel();
+                    }
+                })
+                .catch(function () {
+                    // Notification already gérée en amont
+                })
+                .finally(function () {
+                    setPhotoDeletingId(null);
+                });
+        };
+
+        var handleApprovePhoto = function (photo) {
+            if (!onUpdatePhoto || !member || !member.id || !photo || !photo.id) {
+                return;
+            }
+            var payload = {
+                caption: photo.caption || '',
+                status: 'approved',
+            };
+            setPhotoApprovingId(photo.id);
+            Promise.resolve(onUpdatePhoto(member.id, photo.id, payload))
+                .catch(function () {
+                    // Erreur gérée en amont
+                })
+                .finally(function () {
+                    setPhotoApprovingId(null);
+                });
+        };
+
+        var handleDeleteMessage = function (message) {
+            if (!onDeleteMessage || !member || !member.id || !message || !message.id) {
+                return;
+            }
+            if (!window.confirm('Supprimer ce message ?')) {
+                return;
+            }
+            setMessageDeletingId(message.id);
+            Promise.resolve(onDeleteMessage(member.id, message.id))
+                .catch(function () {
+                    // Gestion des erreurs dans le handler parent
+                })
+                .finally(function () {
+                    setMessageDeletingId(null);
+                });
+        };
+
+        var handleCreateMessage = function () {
+            if (!onCreateMessage || !member || !member.id) {
+                return;
+            }
+            var subject = (newMessageSubject || '').trim();
+            var body = (newMessageBody || '').trim();
+            if (!subject || !body) {
+                return;
+            }
+            setNewMessageSaving(true);
+            Promise.resolve(onCreateMessage(member.id, subject, body))
+                .then(function () {
+                    setNewMessageSubject('');
+                    setNewMessageBody('');
+                    setNewMessageOpen(false);
+                })
+                .catch(function () {
+                    // Gestion des erreurs dans le handler parent
+                })
+                .finally(function () {
+                    setNewMessageSaving(false);
+                });
+        };
+
+        var handleNotificationEditStart = function (notification) {
+            if (!notification || !notification.notificationId) {
+                return;
+            }
+
+            setEditingNotificationId(notification.notificationId);
+            setNotificationDraft({
+                text: notification.text || notification.title || notification.excerpt || '',
+                url: notification.url || '',
+                status: (notification.status || 'unread').toLowerCase(),
+            });
+        };
+
+        var handleNotificationEditCancel = function () {
+            setEditingNotificationId(null);
+            setNotificationDraft({ text: '', url: '', status: 'unread' });
+            setNotificationSaving(false);
+        };
+
+        var getNotificationNumericId = function (notification) {
+            if (!notification) {
+                return 0;
+            }
+
+            var rawId = notification.notificationId || notification.id || 0;
+            var numericId = parseInt(rawId, 10);
+            return isNaN(numericId) ? 0 : numericId;
+        };
+
+        var handleNotificationSave = function (notification) {
+            if (!onUpdateNotification || !member || !member.id || !notification || !notification.notificationId) {
+                return;
+            }
+
+            var nextText = (notificationDraft.text || '').trim();
+            var nextUrl = (notificationDraft.url || '').trim();
+            var nextStatus = (notificationDraft.status || '').toLowerCase();
+
+            if (!nextText) {
+                return;
+            }
+
+            setNotificationSaving(true);
+            Promise.resolve(onUpdateNotification(member.id, notification.notificationId, {
+                text: nextText,
+                url: nextUrl,
+                status: nextStatus,
+            }))
+                .then(function () {
+                    handleNotificationEditCancel();
+                })
+                .finally(function () {
+                    setNotificationSaving(false);
+                });
+        };
+
+        var handleNotificationDelete = function (notification) {
+            if (!onDeleteNotification || !member || !member.id || !notification || !notification.notificationId) {
+                return;
+            }
+
+            if (!window.confirm(getString(strings, 'memberNotificationsDeleteConfirm', 'Supprimer cette notification ?'))) {
+                return;
+            }
+
+            setNotificationDeletingId(notification.notificationId);
+            Promise.resolve(onDeleteNotification(member.id, notification.notificationId))
+                .finally(function () {
+                    setNotificationDeletingId(null);
+                });
+        };
+
+        var handleNotificationSelectionToggle = function (notificationId) {
+            if (!notificationId) {
+                return;
+            }
+
+            setSelectedNotificationIds(function (prev) {
+                var next = Object.assign({}, prev);
+                if (next[notificationId]) {
+                    delete next[notificationId];
+                } else {
+                    next[notificationId] = true;
+                }
+                return next;
+            });
+        };
+
+        var handleNotificationSelectAllVisible = function () {
+            setSelectedNotificationIds(function (prev) {
+                var next = Object.assign({}, prev);
+                filteredNotifications.forEach(function (notification) {
+                    var notificationId = getNotificationNumericId(notification);
+                    if (notificationId > 0) {
+                        next[notificationId] = true;
+                    }
+                });
+                return next;
+            });
+        };
+
+        var handleNotificationClearSelection = function () {
+            setSelectedNotificationIds({});
+        };
+
+        var handleDeleteSelectedNotifications = function () {
+            if (!onDeleteNotification || !member || !member.id || notificationBulkDeleting) {
+                return;
+            }
+
+            var ids = Object.keys(selectedNotificationIds)
+                .map(function (rawId) { return parseInt(rawId, 10); })
+                .filter(function (id) { return !isNaN(id) && id > 0; });
+
+            if (!ids.length) {
+                return;
+            }
+
+            if (!window.confirm(getString(strings, 'memberNotificationsDeleteSelectionConfirm', 'Supprimer les notifications sélectionnées ?'))) {
+                return;
+            }
+
+            setNotificationBulkDeleting(true);
+
+            var sequence = Promise.resolve();
+            ids.forEach(function (id) {
+                sequence = sequence.then(function () {
+                    return Promise.resolve(onDeleteNotification(member.id, id)).catch(function () {
+                        return null;
+                    });
+                });
+            });
+
+            sequence.finally(function () {
+                setNotificationBulkDeleting(false);
+                setSelectedNotificationIds({});
+                if (editingNotificationId && ids.indexOf(editingNotificationId) !== -1) {
+                    handleNotificationEditCancel();
+                }
+            });
+        };
+
+        var handleToggleBadgeCriterion = function (badgeId, criterionId, checked) {
+            if (!onSyncBadgeCriteria || !memberId) {
+                return;
+            }
+
+            var numericBadgeId = typeof badgeId === 'number' ? badgeId : parseInt(badgeId, 10);
+            var numericCriterionId = typeof criterionId === 'number' ? criterionId : parseInt(criterionId, 10);
+            var numericMemberId = typeof memberId === 'number' ? memberId : parseInt(memberId, 10);
+
+            if (!numericMemberId || numericMemberId <= 0 || !numericBadgeId || numericBadgeId <= 0 || !numericCriterionId || numericCriterionId <= 0) {
+                return;
+            }
+
+            if (badgeSaving[numericBadgeId]) {
+                return;
+            }
+
+            var targetBadge = null;
+            for (var i = 0; i < badgeData.length; i++) {
+                if (badgeData[i].id === numericBadgeId) {
+                    targetBadge = badgeData[i];
+                    break;
+                }
+            }
+
+            if (!targetBadge) {
+                return;
+            }
+
+            var targetCriterion = null;
+            for (var j = 0; j < targetBadge.criteria.length; j++) {
+                if (targetBadge.criteria[j].id === numericCriterionId) {
+                    targetCriterion = targetBadge.criteria[j];
+                    break;
+                }
+            }
+
+            if (!targetCriterion || !targetCriterion.canToggle) {
+                return;
+            }
+
+            if (!!targetCriterion.awarded === !!checked) {
+                return;
+            }
+
+            var previousBadges = badgeData.slice();
+            var nextSelectedIds = [];
+
+            var nextBadges = badgeData.map(function (badge) {
+                if (badge.id !== numericBadgeId) {
+                    return badge;
+                }
+
+                var updatedCriteria = badge.criteria.map(function (criterion) {
+                    if (criterion.id !== numericCriterionId) {
+                        return criterion;
+                    }
+                    return Object.assign({}, criterion, {
+                        awarded: checked,
+                        status: checked ? 'awarded' : 'pending',
+                    });
+                });
+
+                var toggleableTotal = 0;
+                var awardedCount = 0;
+                var selectedIds = [];
+
+                updatedCriteria.forEach(function (criterion) {
+                    if (criterion.canToggle) {
+                        toggleableTotal++;
+                        if (criterion.awarded && criterion.id > 0) {
+                            awardedCount++;
+                            selectedIds.push(criterion.id);
+                        }
+                    }
+                });
+
+                var totalCriteria = typeof badge.totalCriteria === 'number'
+                    ? Math.max(badge.totalCriteria, toggleableTotal)
+                    : toggleableTotal;
+
+                var progress = totalCriteria > 0
+                    ? Math.round((awardedCount / Math.max(totalCriteria, 1)) * 100)
+                    : (badge.status === 'awarded' ? 100 : 0);
+
+                if (progress < 0) {
+                    progress = 0;
+                } else if (progress > 100) {
+                    progress = 100;
+                }
+
+                var nextStatus = badge.status;
+                if (awardedCount === 0) {
+                    nextStatus = 'revoked';
+                } else if (totalCriteria > 0 && awardedCount >= totalCriteria) {
+                    nextStatus = 'awarded';
+                } else if (nextStatus === 'revoked') {
+                    nextStatus = '';
+                }
+
+                nextSelectedIds = selectedIds;
+
+                return Object.assign({}, badge, {
+                    criteria: updatedCriteria,
+                    awardedCount: awardedCount,
+                    totalCriteria: totalCriteria,
+                    progress: progress,
+                    status: nextStatus,
+                });
+            });
+
+            setBadgeData(nextBadges);
+
+            setBadgeSaving(function (prev) {
+                var next = Object.assign({}, prev);
+                next[numericBadgeId] = true;
+                return next;
+            });
+
+            Promise.resolve(onSyncBadgeCriteria(numericMemberId, numericBadgeId, nextSelectedIds))
+                .then(function (result) {
+                    if (result && result.badge) {
+                        var normalized = normalizeBadgeEntry(result.badge);
+                        if (normalized) {
+                            setBadgeData(function (currentBadges) {
+                                return currentBadges.map(function (badge) {
+                                    return badge.id === numericBadgeId ? normalized : badge;
+                                });
+                            });
+                        }
+                    }
+                })
+                .catch(function () {
+                    setBadgeData(previousBadges);
+                })
+                .finally(function () {
+                    setBadgeSaving(function (prev) {
+                        var next = Object.assign({}, prev);
+                        delete next[numericBadgeId];
+                        return next;
+                    });
+                });
+        };
+
+        var handleToggleTrophy = function (trophyId, checked) {
+            if (!onToggleTrophy || !memberId) {
+                return;
+            }
+
+            var numericTrophyId = typeof trophyId === 'number' ? trophyId : parseInt(trophyId, 10);
+            var numericMemberId = typeof memberId === 'number' ? memberId : parseInt(memberId, 10);
+
+            if (!numericMemberId || numericMemberId <= 0 || !numericTrophyId || numericTrophyId <= 0) {
+                return;
+            }
+
+            if (trophySaving[numericTrophyId]) {
+                return;
+            }
+
+            var targetTrophy = null;
+            for (var i = 0; i < trophyData.length; i++) {
+                if (trophyData[i].id === numericTrophyId) {
+                    targetTrophy = trophyData[i];
+                    break;
+                }
+            }
+
+            if (!targetTrophy || !targetTrophy.canToggle) {
+                return;
+            }
+
+            if (!!targetTrophy.awarded === !!checked) {
+                return;
+            }
+
+            var previousTrophies = trophyData.slice();
+
+            // Optimistic update
+            var nextTrophies = trophyData.map(function (trophy) {
+                if (trophy.id !== numericTrophyId) {
+                    return trophy;
+                }
+                return Object.assign({}, trophy, {
+                    awarded: checked,
+                    awardedAt: checked ? new Date().toISOString() : '',
+                });
+            });
+
+            setTrophyData(nextTrophies);
+
+            setTrophySaving(function (prev) {
+                var next = Object.assign({}, prev);
+                next[numericTrophyId] = true;
+                return next;
+            });
+
+            Promise.resolve(onToggleTrophy(numericMemberId, numericTrophyId, checked))
+                .then(function (result) {
+                    if (result && result.trophy) {
+                        var normalized = normalizeTrophyEntry(result.trophy);
+                        if (normalized) {
+                            setTrophyData(function (currentTrophies) {
+                                return currentTrophies.map(function (trophy) {
+                                    return trophy.id === numericTrophyId ? normalized : trophy;
+                                });
+                            });
+                        }
+                    }
+                })
+                .catch(function () {
+                    setTrophyData(previousTrophies);
+                })
+                .finally(function () {
+                    setTrophySaving(function (prev) {
+                        var next = Object.assign({}, prev);
+                        delete next[numericTrophyId];
+                        return next;
+                    });
+                });
+        };
+
+        var handleAwardAction = function (actionId) {
+            if (!onAwardAction || !memberId) {
+                return;
+            }
+
+            var numericActionId = typeof actionId === 'number' ? actionId : parseInt(actionId, 10);
+            var numericMemberId = typeof memberId === 'number' ? memberId : parseInt(memberId, 10);
+
+            if (!numericMemberId || numericMemberId <= 0 || !numericActionId || numericActionId <= 0) {
+                return;
+            }
+
+            if (actionSaving[numericActionId]) {
+                return;
+            }
+
+            var targetAction = null;
+            for (var i = 0; i < actionData.length; i++) {
+                if (actionData[i].id === numericActionId) {
+                    targetAction = actionData[i];
+                    break;
+                }
+            }
+
+            if (!targetAction || !targetAction.canAward) {
+                return;
+            }
+
+            var previousActions = actionData.slice();
+
+            // Optimistic update: increment count
+            var nextActions = actionData.map(function (action) {
+                if (action.id !== numericActionId) {
+                    return action;
+                }
+                return Object.assign({}, action, {
+                    count: (action.count || 0) + 1,
+                });
+            });
+
+            setActionData(nextActions);
+
+            setActionSaving(function (prev) {
+                var next = Object.assign({}, prev);
+                next[numericActionId] = true;
+                return next;
+            });
+
+            Promise.resolve(onAwardAction(numericMemberId, numericActionId))
+                .then(function (result) {
+                    if (result && result.action) {
+                        var normalized = normalizeActionEntry(result.action);
+                        if (normalized) {
+                            setActionData(function (currentActions) {
+                                return currentActions.map(function (action) {
+                                    return action.id === numericActionId ? normalized : action;
+                                });
+                            });
+                        }
+                    }
+                    // Update XP and coins totals if returned
+                    if (result && onMemberUpdated && (result.xp !== undefined || result.coins !== undefined)) {
+                        onMemberUpdated({
+                            id: numericMemberId,
+                            xpTotal: result.xp,
+                            coinsTotal: result.coins,
+                        });
+                    }
+                })
+                .catch(function () {
+                    setActionData(previousActions);
+                })
+                .finally(function () {
+                    setActionSaving(function (prev) {
+                        var next = Object.assign({}, prev);
+                        delete next[numericActionId];
+                        return next;
+                    });
+                });
+        };
+
+        var memberId = member && member.id ? member.id : null;
+        var hasLinkedAccount = member && member.userId ? true : false;
+        var nextcloudLogin = member && typeof member.nextcloudLogin === 'string'
+            ? member.nextcloudLogin
+            : '';
+        var hasNextcloudLogin = !!nextcloudLogin;
+
+        var handleOpenAccountModal = useCallback(function () {
+            if (!onManageAccount || !member) {
+                return;
+            }
+            onManageAccount(member);
+        }, [onManageAccount, member]);
+
+        var handleCreateNextcloudLogin = useCallback(function () {
+            if (!onCreateNextcloudLogin || !member || !member.id || creatingNextcloud) {
+                return;
+            }
+            setNextcloudModalOpen(true);
+        }, [onCreateNextcloudLogin, member, creatingNextcloud, setNextcloudModalOpen]);
+
+        var handleNextcloudLoginSubmit = useCallback(function (payload) {
+            setCreatingNextcloud(true);
+            return Promise.resolve(onCreateNextcloudLogin(member.id, payload || {}))
+                .finally(function () {
+                    setCreatingNextcloud(false);
+                });
+        }, [onCreateNextcloudLogin, member]);
+
+        // Calculate age
+        var age = null;
+        if (member.birthDate) {
+            var birth = new Date(member.birthDate);
+            var today = new Date();
+            age = today.getFullYear() - birth.getFullYear();
+            var m = today.getMonth() - birth.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+                age--;
+            }
+        }
+
+        var memberPhone = typeof member.phone === 'string' ? member.phone : '';
+        var memberWhatsappOptIn = typeof member.whatsappOptIn === 'undefined' ? true : !!member.whatsappOptIn;
+        var whatsappLink = '';
+        if (memberWhatsappOptIn && memberPhone) {
+            whatsappLink = buildWhatsAppLink(memberPhone);
+        }
+
+        var addressParts = [];
+        if (member.addressLine) {
+            addressParts.push(member.addressLine);
+        }
+        var cityLineParts = [];
+        if (member.postalCode) {
+            cityLineParts.push(member.postalCode);
+        }
+        if (member.city) {
+            cityLineParts.push(member.city);
+        }
+        var cityLine = cityLineParts.join(' ');
+        if (cityLine) {
+            addressParts.push(cityLine);
+        }
+        var addressDisplay = addressParts.join(' · ');
+
+        var memberPhotos = Array.isArray(member.photos) ? member.photos : [];
+        var memberIdeas = Array.isArray(member.ideas) ? member.ideas : [];
+        var memberMessages = Array.isArray(member.messages) ? member.messages : [];
+
+        var tabInformationLabel = getString(strings, 'tabMemberInformation', 'Informations');
+        var tabMembershipLabel = getString(strings, 'tabMemberMembership', 'Statut');
+        var tabBadgesLabel = getString(strings, 'tabMemberBadges', 'Badges');
+        var tabPhotosLabel = getString(strings, 'tabMemberPhotos', 'Photos');
+        var tabIdeasLabel = getString(strings, 'tabMemberIdeas', 'Idées');
+        var tabMessagesLabel = getString(strings, 'tabMemberMessages', 'Messages');
+        var tabNotificationsLabel = getString(strings, 'tabMemberNotifications', 'Notifications');
+        var tabTestimonialsLabel = getString(strings, 'tabMemberTestimonials', 'Témoignages');
+        var tabNotesLabel = getString(strings, 'tabMemberNotes', 'Notes');
+        var tabHistoryLabel = getString(strings, 'tabMemberHistory', 'Historique');
+
+        var memberTestimonials = Array.isArray(member.testimonials) ? member.testimonials : [];
+        var pendingTestimonialsCount = memberTestimonials.filter(function (t) { return t.status === 'pending'; }).length;
+        var testimonialsCount = memberTestimonials.length;
+
+        var photosCount = memberPhotos.length;
+        var pendingPhotosCount = memberPhotos.filter(function (p) { return p.status === 'pending'; }).length;
+        var ideasCount = memberIdeas.length;
+        var messagesCount = memberMessages.length;
+        var memberNotifications = Array.isArray(member.notifications) ? member.notifications : [];
+        var notificationsCount = memberNotifications.length;
+        var notesCount = notes.length;
+        var registrationsTitle = getString(strings, 'memberRegistrationsHistoryTitle', 'Inscriptions');
+        var registrationsEmptyLabel = getString(strings, 'memberNoRegistrations', 'Aucune inscription enregistrée.');
+        var sessionsLabel = getString(strings, 'sessions', 'Séances');
+        var allSessionsLabel = getString(strings, 'allSessions', 'Toutes les séances');
+        var noSessionsLabel = getString(strings, 'noSessionsAssigned', 'Aucune séance assignée');
+        var badgesTitle = getString(strings, 'memberBadgesTitle', 'Badges & progression');
+        var badgeEmptyLabel = getString(strings, 'memberNoBadges', 'Aucun badge disponible pour ce membre.');
+        var badgeNoCriteriaLabel = getString(strings, 'memberBadgeNoCriteria', 'Ce badge ne possède pas encore de critères configurables.');
+        var badgeReadonlyHint = getString(strings, 'memberBadgeReadonlyCriterion', 'Critère informatif non modifiable.');
+        var badgeSavingLabel = getString(strings, 'memberBadgeSaving', 'Enregistrement...');
+        var badgeCompletedLabel = getString(strings, 'memberBadgeCompleted', 'Badge obtenu');
+        var badgeNotStartedLabel = getString(strings, 'memberBadgeNotStarted', 'Non commencé');
+        var badgeStateLabels = {
+            complete: getString(strings, 'memberBadgeStateComplete', 'Obtenu'),
+            in_progress: getString(strings, 'memberBadgeStateInProgress', 'En cours'),
+            locked: getString(strings, 'memberBadgeStateLocked', 'À faire'),
+            revoked: getString(strings, 'memberBadgeStateRevoked', 'Révoqué'),
+        };
+        var badgesCompletedCount = badgeData.reduce(function (count, badge) {
+            if (!badge) {
+                return count;
+            }
+            if (badge.totalCriteria > 0) {
+                return count + (badge.awardedCount >= badge.totalCriteria ? 1 : 0);
+            }
+            if (badge.status === 'awarded') {
+                return count + 1;
+            }
+            return count;
+        }, 0);
+
+        var tabIcons = {
+            information: 'ℹ️',
+            membership: '💳',
+            badges: '🏅',
+            photos: '📸',
+            documents: '📁',
+            ideas: '💡',
+            messages: '💬',
+            notifications: '🔔',
+            notes: '📓',
+            history: '🕐',
+            testimonials: '⭐',
+            quotas: '📆',
+            dyndata: '🗃️',
+        };
+
+        // Préparer l'onglet Données dynamiques (inséré après Informations)
+        var dynFields = member && Array.isArray(member.dynamicFields) ? member.dynamicFields : [];
+        var dynDataTab = dynFields.length > 0 ? [{ key: 'dyndata', label: 'Données', icon: tabIcons.dyndata }] : [];
+
+        var memberTabs = [
+            { key: 'information', label: tabInformationLabel, icon: tabIcons.information },
+        ].concat(dynDataTab, [
+            { key: 'membership', label: tabMembershipLabel, icon: tabIcons.membership },
+            { key: 'badges', label: tabBadgesLabel, badge: badgesCompletedCount > 0 ? badgesCompletedCount : undefined, icon: tabIcons.badges },
+            { key: 'ideas', label: tabIdeasLabel, badge: ideasCount > 0 ? ideasCount : undefined, icon: tabIcons.ideas },
+            { key: 'messages', label: tabMessagesLabel, badge: messagesCount > 0 ? messagesCount : undefined, icon: tabIcons.messages },
+            { key: 'notifications', label: tabNotificationsLabel, badge: notificationsCount > 0 ? notificationsCount : undefined, icon: tabIcons.notifications },
+            { key: 'testimonials', label: tabTestimonialsLabel, badge: pendingTestimonialsCount > 0 ? pendingTestimonialsCount : undefined, badgeType: pendingTestimonialsCount > 0 ? 'warning' : undefined, icon: tabIcons.testimonials },
+            { key: 'notes', label: tabNotesLabel, badge: notesCount > 0 ? notesCount : undefined, icon: tabIcons.notes },
+            { key: 'history', label: tabHistoryLabel, badge: registrations.length > 0 ? registrations.length : undefined, icon: tabIcons.history },
+        ]);
+
+        // Ajouter l'onglet quotas uniquement pour les animateurs
+        var tabQuotasLabel = getString(strings, 'tabLeaveQuotas', 'Employé');
+        var isAnimateur = member && (member.role === 'animateur' || member.role === 'coordinateur' || member.role === 'benevole');
+        var canManageQuotas = config && (config.isCoordinateur || config.canDeleteMember);
+        if (isAnimateur && canManageQuotas) {
+            memberTabs.push({ key: 'quotas', label: tabQuotasLabel, icon: tabIcons.quotas });
+        }
+
+        // Onglets Nextcloud (photos & documents) si configuré
+        if (config && config.hasNextcloudIntegration) {
+            memberTabs.push({ key: 'nc-photos', label: getString(strings, 'tabNcPhotos', 'Photos'), icon: tabIcons.photos });
+            memberTabs.push({ key: 'nc-documents', label: getString(strings, 'tabNcDocuments', 'Documents'), icon: tabIcons.documents });
+        }
+
+        var newsletterLabel = getString(strings, 'chipNewsletter', 'Newsletter');
+        var smsLabel = getString(strings, 'chipSMS', 'SMS');
+        var whatsappLabel = getString(strings, 'chipWhatsapp', 'WhatsApp');
+        var photoConsentLabel = getString(strings, 'chipPhotoConsent', 'Consentement photo');
+        var accountButtonLinked = getString(strings, 'memberAccountLinked', 'Modifier le compte WordPress');
+        var accountButtonUnlinked = getString(strings, 'memberAccountUnlinked', 'Lier un compte WordPress');
+        var accountStatusLinked = getString(strings, 'memberAccountStatusLinked', 'Un compte WordPress est lié à ce membre.');
+        var accountStatusUnlinked = getString(strings, 'memberAccountStatusUnlinked', 'Aucun compte WordPress n\'est encore lié.');
+        var nextcloudCreateLabel = getString(strings, 'memberNextcloudCreate', 'Créer un login Nextcloud');
+        var nextcloudExistsLabel = getString(strings, 'memberNextcloudExists', 'Login Nextcloud déjà créé');
+        var nextcloudMissingStatus = getString(strings, 'memberNextcloudStatusMissing', 'Aucun login Nextcloud n\'est associé à ce membre.');
+        var nextcloudReadyStatus = getString(strings, 'memberNextcloudStatusReady', 'Un login Nextcloud est associé à ce membre.');
+        var nextcloudCreatingLabel = getString(strings, 'memberNextcloudCreating', 'Création du login Nextcloud...');
+
+        var messageStatusLabels = {
+            'nouveau': 'Nouveau',
+            'en_cours': 'En cours',
+            'resolu': 'Résolu',
+            'archive': 'Archivé',
+        };
+        var messageStatusClasses = {
+            'nouveau': 'mj-regmgr-badge--warning',
+            'en_cours': 'mj-regmgr-badge--info',
+            'resolu': 'mj-regmgr-badge--success',
+            'archive': 'mj-regmgr-badge--secondary',
+        };
+
+        var communicationChips = [];
+        if (typeof member.newsletterOptIn !== 'undefined') {
+            communicationChips.push({ key: 'newsletter', label: newsletterLabel, enabled: !!member.newsletterOptIn });
+        }
+        if (typeof member.smsOptIn !== 'undefined') {
+            communicationChips.push({ key: 'sms', label: smsLabel, enabled: !!member.smsOptIn });
+        }
+        if (typeof member.whatsappOptIn !== 'undefined') {
+            communicationChips.push({ key: 'whatsapp', label: whatsappLabel, enabled: !!member.whatsappOptIn });
+        }
+        if (typeof member.photoUsageConsent !== 'undefined') {
+            communicationChips.push({ key: 'photo', label: photoConsentLabel, enabled: !!member.photoUsageConsent });
+        }
+
+        var contactMessageViewUrl = typeof config.contactMessageViewUrl === 'string' ? config.contactMessageViewUrl : '';
+        var contactMessageListUrl = typeof config.contactMessageListUrl === 'string' ? config.contactMessageListUrl : '';
+
+        var notificationTypes = [];
+        var notificationTypeMap = {};
+        var notificationEmojis = [];
+        var notificationEmojiMap = {};
+
+        memberNotifications.forEach(function (notification) {
+            if (!notification) {
+                return;
+            }
+
+            var typeValue = (notification.type || '').trim();
+            var typeLabel = (notification.typeLabel || typeValue || getString(strings, 'memberNotificationsTypeUnknown', 'Autre')).trim();
+            if (typeValue && !notificationTypeMap[typeValue]) {
+                notificationTypeMap[typeValue] = true;
+                notificationTypes.push({ value: typeValue, label: typeLabel });
+            }
+
+            var emojiValue = (notification.emoji || '').trim();
+            if (emojiValue && !notificationEmojiMap[emojiValue]) {
+                notificationEmojiMap[emojiValue] = true;
+                notificationEmojis.push(emojiValue);
+            }
+        });
+
+        notificationTypes.sort(function (a, b) {
+            return a.label.localeCompare(b.label);
+        });
+        notificationEmojis.sort(function (a, b) {
+            return a.localeCompare(b);
+        });
+
+        var normalizedNotificationSearch = (notificationSearch || '').trim().toLowerCase();
+        var filteredNotifications = memberNotifications.filter(function (notification) {
+            if (!notification) {
+                return false;
+            }
+
+            var readStatusValue = (notification.status || '').toLowerCase();
+            if (notificationReadFilter !== 'all' && readStatusValue !== notificationReadFilter) {
+                return false;
+            }
+
+            if (notificationTypeFilter !== 'all' && notification.type !== notificationTypeFilter) {
+                return false;
+            }
+
+            var emojiValue = (notification.emoji || '').trim();
+            if (notificationEmojiFilter !== 'all' && emojiValue !== notificationEmojiFilter) {
+                return false;
+            }
+
+            if (!normalizedNotificationSearch) {
+                return true;
+            }
+
+            var haystack = [
+                notification.text || '',
+                notification.title || '',
+                notification.excerpt || '',
+                notification.url || '',
+                notification.typeLabel || '',
+                notification.type || '',
+                emojiValue,
+            ].join(' ').toLowerCase();
+
+            return haystack.indexOf(normalizedNotificationSearch) !== -1;
+        });
+
+        var notificationStatusLabels = {
+            unread: getString(strings, 'memberNotificationUnread', 'Non lu'),
+            read: getString(strings, 'memberNotificationRead', 'Lu'),
+            archived: getString(strings, 'memberNotificationArchived', 'Archivé'),
+        };
+
+        var selectedNotificationsCount = Object.keys(selectedNotificationIds).filter(function (rawId) {
+            return !!selectedNotificationIds[rawId];
+        }).length;
+
+        var allVisibleNotificationsSelected = filteredNotifications.length > 0 && filteredNotifications.every(function (notification) {
+            var notificationId = getNotificationNumericId(notification);
+            return notificationId > 0 && !!selectedNotificationIds[notificationId];
+        });
+
+        var hasMemberBio = (member.descriptionShort && member.descriptionShort.trim() !== '') || (member.descriptionLong && member.descriptionLong.trim() !== '');
+        var profileTitle = getString(strings, 'memberProfile', 'Profil');
+        var messageHistoryLabel = getString(strings, 'messageHistory', 'Historique');
+        var fieldIdPrefix = 'member-edit-' + (member && member.id ? member.id : 'current') + '-';
+        var memberRegistrationDate = member.dateInscription || member.createdAt || '';
+        var memberLastLoginDate = member.lastLoginAt || '';
+        var memberLastActivityDate = member.lastActivityAt || '';
+
+        var tabsNav = null;
+        if (memberTabs.length > 0) {
+            if (TabsComponent) {
+                tabsNav = h(TabsComponent, {
+                    tabs: memberTabs,
+                    activeTab: activeTab,
+                    onChange: function (nextTab) {
+                        setActiveTab(nextTab);
+                    },
+                    ensureRegistrationsTab: false,
+                });
+            } else {
+                tabsNav = h('div', { class: 'mj-regmgr-tabs', role: 'tablist' },
+                    memberTabs.map(function (tab) {
+                        var isActive = tab.key === activeTab;
+                        return h('button', {
+                            key: tab.key,
+                            type: 'button',
+                            class: classNames('mj-regmgr-tab', {
+                                'mj-regmgr-tab--active': isActive,
+                            }),
+                            role: 'tab',
+                            'aria-selected': isActive ? 'true' : 'false',
+                            'aria-label': tab.label,
+                            title: tab.label,
+                            onClick: function () {
+                                setActiveTab(tab.key);
+                            },
+                        }, [
+                            tab.icon && h('span', {
+                                class: 'mj-regmgr-tab__icon',
+                                'aria-hidden': 'true',
+                            }, tab.icon),
+                            h('span', { class: 'mj-regmgr-tab__label', 'aria-hidden': 'true' }, tab.label),
+                            tab.badge !== undefined && h('span', {
+                                class: classNames('mj-regmgr-tab__badge', {
+                                    'mj-regmgr-tab__badge--warning': tab.badgeType === 'warning',
+                                }),
+                            }, tab.badge),
+                        ]);
+                    })
+                );
+            }
+        }
+
+        var informationSection = h('div', { class: 'mj-regmgr-member-detail__section' }, [
+            h('h2', { class: 'mj-regmgr-member-detail__section-title' }, tabInformationLabel),
+            h('div', { class: 'mj-regmgr-event-editor__section mj-regmgr-member-editor' }, [
+                    h('div', { class: 'mj-regmgr-form-grid' }, [
+                        h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', { htmlFor: fieldIdPrefix + 'first-name' }, 'Prénom'),
+                            h('input', {
+                                id: fieldIdPrefix + 'first-name',
+                                type: 'text',
+                                class: 'mj-regmgr-input',
+                                value: editData.firstName,
+                                onInput: handleFieldChange('firstName'),
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', { htmlFor: fieldIdPrefix + 'last-name' }, 'Nom'),
+                            h('input', {
+                                id: fieldIdPrefix + 'last-name',
+                                type: 'text',
+                                class: 'mj-regmgr-input',
+                                value: editData.lastName,
+                                onInput: handleFieldChange('lastName'),
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', { htmlFor: fieldIdPrefix + 'nickname' }, 'Surnom'),
+                            h('input', {
+                                id: fieldIdPrefix + 'nickname',
+                                type: 'text',
+                                class: 'mj-regmgr-input',
+                                value: editData.nickname || '',
+                                onInput: handleFieldChange('nickname'),
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', { htmlFor: fieldIdPrefix + 'email' }, 'Email'),
+                            h('input', {
+                                id: fieldIdPrefix + 'email',
+                                type: 'email',
+                                class: 'mj-regmgr-input',
+                                value: editData.email,
+                                onInput: handleFieldChange('email'),
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', { htmlFor: fieldIdPrefix + 'phone' }, 'Téléphone'),
+                            h('input', {
+                                id: fieldIdPrefix + 'phone',
+                                type: 'tel',
+                                class: 'mj-regmgr-input',
+                                value: editData.phone,
+                                onInput: handleFieldChange('phone'),
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', { htmlFor: fieldIdPrefix + 'phone-secondary' }, 'Téléphone secondaire'),
+                            h('input', {
+                                id: fieldIdPrefix + 'phone-secondary',
+                                type: 'tel',
+                                class: 'mj-regmgr-input',
+                                value: editData.phoneSecondary,
+                                onInput: handleFieldChange('phoneSecondary'),
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', { htmlFor: fieldIdPrefix + 'birth-date' }, 'Date de naissance'),
+                            h('input', {
+                                id: fieldIdPrefix + 'birth-date',
+                                type: 'date',
+                                class: 'mj-regmgr-input',
+                                value: editData.birthDate,
+                                onInput: handleFieldChange('birthDate'),
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
+                            h('label', { htmlFor: fieldIdPrefix + 'address' }, 'Adresse'),
+                            h('input', {
+                                id: fieldIdPrefix + 'address',
+                                type: 'text',
+                                class: 'mj-regmgr-input',
+                                value: editData.addressLine || '',
+                                onInput: handleFieldChange('addressLine'),
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', { htmlFor: fieldIdPrefix + 'postal-code' }, 'Code postal'),
+                            h('input', {
+                                id: fieldIdPrefix + 'postal-code',
+                                type: 'text',
+                                class: 'mj-regmgr-input',
+                                value: editData.postalCode || '',
+                                onInput: handleFieldChange('postalCode'),
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field' }, [
+                            h('label', { htmlFor: fieldIdPrefix + 'city' }, 'Ville'),
+                            h('input', {
+                                id: fieldIdPrefix + 'city',
+                                type: 'text',
+                                class: 'mj-regmgr-input',
+                                value: editData.city || '',
+                                onInput: handleFieldChange('city'),
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--checkbox' }, [
+                            h('label', { class: 'mj-regmgr-checkbox' }, [
+                                h('input', {
+                                    id: fieldIdPrefix + 'is-volunteer',
+                                    type: 'checkbox',
+                                    checked: !!editData.isVolunteer,
+                                    onChange: handleBooleanChange('isVolunteer'),
+                                }),
+                                h('span', null, 'Bénévole'),
+                            ]),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--checkbox' }, [
+                            h('label', { class: 'mj-regmgr-checkbox' }, [
+                                h('input', {
+                                    id: fieldIdPrefix + 'is-autonomous',
+                                    type: 'checkbox',
+                                    checked: !!editData.isAutonomous,
+                                    onChange: handleBooleanChange('isAutonomous'),
+                                }),
+                                h('span', null, 'Autonome'),
+                            ]),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--checkbox' }, [
+                            h('label', { class: 'mj-regmgr-checkbox' }, [
+                                h('input', {
+                                    id: fieldIdPrefix + 'newsletter-optin',
+                                    type: 'checkbox',
+                                    checked: !!editData.newsletterOptIn,
+                                    onChange: handleBooleanChange('newsletterOptIn'),
+                                }),
+                                h('span', null, 'Newsletter'),
+                            ]),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--checkbox' }, [
+                            h('label', { class: 'mj-regmgr-checkbox' }, [
+                                h('input', {
+                                    id: fieldIdPrefix + 'sms-optin',
+                                    type: 'checkbox',
+                                    checked: !!editData.smsOptIn,
+                                    onChange: handleBooleanChange('smsOptIn'),
+                                }),
+                                h('span', null, 'SMS'),
+                            ]),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--checkbox' }, [
+                            h('label', { class: 'mj-regmgr-checkbox' }, [
+                                h('input', {
+                                    id: fieldIdPrefix + 'whatsapp-optin',
+                                    type: 'checkbox',
+                                    checked: !!editData.whatsappOptIn,
+                                    onChange: handleBooleanChange('whatsappOptIn'),
+                                }),
+                                h('span', null, 'WhatsApp'),
+                            ]),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--checkbox' }, [
+                            h('label', { class: 'mj-regmgr-checkbox' }, [
+                                h('input', {
+                                    id: fieldIdPrefix + 'photo-consent',
+                                    type: 'checkbox',
+                                    checked: !!editData.photoUsageConsent,
+                                    onChange: handleBooleanChange('photoUsageConsent'),
+                                }),
+                                h('span', null, 'Consentement photo'),
+                            ]),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
+                            h('label', { htmlFor: fieldIdPrefix + 'bio-short' }, getString(strings, 'memberBioShort', 'Bio courte')),
+                            h('textarea', {
+                                id: fieldIdPrefix + 'bio-short',
+                                class: 'mj-regmgr-textarea',
+                                rows: 3,
+                                value: editData.descriptionShort || '',
+                                onInput: handleFieldChange('descriptionShort'),
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--full' }, [
+                            h('label', { htmlFor: fieldIdPrefix + 'bio-long' }, getString(strings, 'memberBioLong', 'Bio détaillée')),
+                            h('textarea', {
+                                id: fieldIdPrefix + 'bio-long',
+                                class: 'mj-regmgr-textarea',
+                                rows: 4,
+                                value: editData.descriptionLong || '',
+                                onInput: handleFieldChange('descriptionLong'),
+                            }),
+                        ]),
+                    ]),
+                    h('div', { class: 'mj-regmgr-event-editor__actions mj-regmgr-member-editor__actions' }, [
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--secondary',
+                            onClick: function () {
+                                setEditData(buildInitialEditData(member));
+                            },
+                        }, getString(strings, 'cancel', 'Annuler')),
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--primary',
+                            onClick: handleSave,
+                        }, getString(strings, 'save', 'Enregistrer')),
+                    ]),
+                ]),
+        ]);
+
+        return h('div', { class: 'mj-regmgr-member-detail' }, [
+            // Header avec avatar
+            h('div', { class: 'mj-regmgr-member-detail__header' }, [
+                h('div', {
+                    class: 'mj-regmgr-member-detail__avatar-wrapper',
+                    'aria-busy': avatarSaving ? 'true' : 'false',
+                }, [
+                    h(MemberAvatar, { member: member, size: 'large' }),
+                    renderAvatarActions(),
+                ]),
+                h('div', { class: 'mj-regmgr-member-detail__identity' }, [
+                    h('h2', { class: 'mj-regmgr-member-detail__name' }, 
+                        (member.firstName || '') + ' ' + (member.lastName || '')
+                    ),
+                    member.role && h('span', { 
+                        class: 'mj-regmgr-badge mj-regmgr-badge--role-' + member.role 
+                    }, roleLabels[member.role] || member.role),
+                    !guardianDisplayName && memberRole === 'jeune' && config && typeof config.onAssignGuardian === 'function' && h('button', {
+                        type: 'button',
+                        class: 'mj-regmgr-member-detail__add-guardian-btn',
+                        onClick: function () { config.onAssignGuardian(member); },
+                        title: getString(strings, 'addGuardian', 'Ajouter un tuteur'),
+                    }, [
+                        h('svg', {
+                            width: 14, height: 14, viewBox: '0 0 24 24',
+                            fill: 'none', stroke: 'currentColor',
+                            'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                        }, [
+                            h('path', { d: 'M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' }),
+                            h('circle', { cx: 8.5, cy: 7, r: 4 }),
+                            h('line', { x1: 20, y1: 8, x2: 20, y2: 14 }),
+                            h('line', { x1: 17, y1: 11, x2: 23, y2: 11 }),
+                        ]),
+                        h('span', null, getString(strings, 'addGuardian', 'Ajouter un tuteur')),
+                    ]),
+                    guardianDisplayName && h('div', { class: 'mj-regmgr-member-detail__guardian-chip' }, [
+                        h('svg', {
+                            class: 'mj-regmgr-member-detail__guardian-chip-icon',
+                            width: 25, height: 25, viewBox: '0 0 24 24',
+                            fill: 'none', stroke: 'currentColor',
+                            'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                        }, [
+                            h('path', { d: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' }),
+                            h('circle', { cx: 9, cy: 7, r: 4 }),
+                            h('path', { d: 'M23 21v-2a4 4 0 0 0-3-3.87' }),
+                            h('path', { d: 'M16 3.13a4 4 0 0 1 0 7.75' }),
+                        ]),
+                        onOpenMember && guardianReference
+                            ? h('button', {
+                                type: 'button',
+                                class: 'mj-regmgr-member-detail__guardian-chip-name',
+                                onClick: function () { onOpenMember(guardianReference); },
+                                title: getString(strings, 'viewMemberProfile', 'Ouvrir la fiche membre'),
+                            }, guardianDisplayName)
+                            : h('span', { class: 'mj-regmgr-member-detail__guardian-chip-name mj-regmgr-member-detail__guardian-chip-name--static' }, guardianDisplayName),
+                        (guardianReference && guardianReference.phone) && h('a', {
+                            href: 'tel:' + guardianReference.phone,
+                            class: 'mj-regmgr-member-detail__guardian-chip-phone',
+                            title: getString(strings, 'guardianPhone', 'Tél. tuteur'),
+                        }, [
+                            h('svg', {
+                                width: 12, height: 12, viewBox: '0 0 24 24',
+                                fill: 'none', stroke: 'currentColor',
+                                'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                            }, [
+                                h('path', { d: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z' }),
+                            ]),
+                            h('span', null, guardianReference.phone),
+                        ]),
+                        (guardianReference && guardianReference.phoneSecondary) && h('a', {
+                            href: 'tel:' + guardianReference.phoneSecondary,
+                            class: 'mj-regmgr-member-detail__guardian-chip-phone',
+                            title: getString(strings, 'guardianPhoneSecondary', 'Tél. 2 tuteur'),
+                        }, [
+                            h('svg', {
+                                width: 12, height: 12, viewBox: '0 0 24 24',
+                                fill: 'none', stroke: 'currentColor',
+                                'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                            }, [
+                                h('path', { d: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z' }),
+                            ]),
+                            h('span', null, guardianReference.phoneSecondary),
+                        ]),
+                        (guardianReference && guardianReference.email) && h('a', {
+                            href: 'mailto:' + guardianReference.email,
+                            class: 'mj-regmgr-member-detail__guardian-chip-action',
+                            title: guardianReference.email,
+                            'aria-label': getString(strings, 'guardianEmail', 'Email tuteur'),
+                        }, [
+                            h('svg', {
+                                width: 12, height: 12, viewBox: '0 0 24 24',
+                                fill: 'none', stroke: 'currentColor',
+                                'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                            }, [
+                                h('rect', { x: 2, y: 4, width: 20, height: 16, rx: 2 }),
+                                h('path', { d: 'M22 7l-10 7L2 7' }),
+                            ]),
+                        ]),
+                    ]),
+                    hasChildren && h('div', { class: 'mj-regmgr-member-detail__children-chips' },
+                        member.children.map(function (child) {
+                            var childName = ((child.firstName || '') + ' ' + (child.lastName || '')).trim();
+                            if (!childName && child.displayName) childName = child.displayName;
+                            return h('div', { key: child.id, class: 'mj-regmgr-member-detail__guardian-chip' }, [
+                                h('svg', {
+                                    class: 'mj-regmgr-member-detail__guardian-chip-icon',
+                                    width: 25, height: 25, viewBox: '0 0 24 24',
+                                    fill: 'none', stroke: 'currentColor',
+                                    'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                                }, [
+                                    h('circle', { cx: 12, cy: 8, r: 5 }),
+                                    h('path', { d: 'M20 21a8 8 0 0 0-16 0' }),
+                                ]),
+                                onOpenMember && child && child.id
+                                    ? h('button', {
+                                        type: 'button',
+                                        class: 'mj-regmgr-member-detail__guardian-chip-name',
+                                        onClick: function () { onOpenMember(child); },
+                                        title: getString(strings, 'viewMemberProfile', 'Ouvrir la fiche membre'),
+                                    }, childName || '?')
+                                    : h('span', { class: 'mj-regmgr-member-detail__guardian-chip-name mj-regmgr-member-detail__guardian-chip-name--static' }, childName || '?'),
+                                child.phone && h('a', {
+                                    href: 'tel:' + child.phone,
+                                    class: 'mj-regmgr-member-detail__guardian-chip-phone',
+                                    title: getString(strings, 'childPhone', 'Tél. enfant'),
+                                }, [
+                                    h('svg', {
+                                        width: 25, height: 25, viewBox: '0 0 24 24',
+                                        fill: 'none', stroke: 'currentColor',
+                                        'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                                    }, [
+                                        h('path', { d: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z' }),
+                                    ]),
+                                    h('span', null, child.phone),
+                                ]),
+                            ]);
+                        })
+                    ),
+                    isChildCapableRole && config && typeof config.onAttachChild === 'function' && h('button', {
+                        type: 'button',
+                        class: 'mj-regmgr-member-detail__add-guardian-btn',
+                        onClick: function () { config.onAttachChild(member); },
+                        title: getString(strings, 'addChild', 'Ajouter un enfant'),
+                    }, [
+                        h('svg', {
+                            width: 14, height: 14, viewBox: '0 0 24 24',
+                            fill: 'none', stroke: 'currentColor',
+                            'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+                        }, [
+                            h('circle', { cx: 12, cy: 8, r: 5 }),
+                            h('path', { d: 'M20 21a8 8 0 0 0-16 0' }),
+                            h('line', { x1: 12, y1: 18, x2: 12, y2: 24 }),
+                            h('line', { x1: 9, y1: 21, x2: 15, y2: 21 }),
+                        ]),
+                        h('span', null, getString(strings, 'addChild', 'Ajouter un enfant')),
+                    ]),
+                ]),
+                h('div', { class: 'mj-regmgr-member-detail__header-actions' }, [
+                    whatsappLink && h('a', {
+                        href: whatsappLink,
+                        target: '_blank',
+                        rel: 'noopener noreferrer',
+                        class: 'mj-regmgr-member-detail__contact',
+                        title: getString(strings, 'contactWhatsapp', 'WhatsApp'),
+                        'aria-label': getString(strings, 'contactWhatsapp', 'WhatsApp'),
+                    }, [
+                        h('svg', { class: 'mj-regmgr-member-detail__contact-icon', width: 28, height: 28, viewBox: '0 0 32 32', fill: 'none' }, [
+                            h('path', {
+                                d: 'M26.576 5.363c-2.69-2.69-6.406-4.354-10.511-4.354-8.209 0-14.865 6.655-14.865 14.865 0 2.732 0.737 5.291 2.022 7.491l-0.038-0.070-2.109 7.702 7.879-2.067c2.051 1.139 4.498 1.809 7.102 1.809h0.006c8.209-0.003 14.862-6.659 14.862-14.868 0-4.103-1.662-7.817-4.349-10.507l0 0zM16.062 28.228h-0.005c-0 0-0.001 0-0.001 0-2.319 0-4.489-0.64-6.342-1.753l0.056 0.031-0.451-0.267-4.675 1.227 1.247-4.559-0.294-0.467c-1.185-1.862-1.889-4.131-1.889-6.565 0-6.822 5.531-12.353 12.353-12.353s12.353 5.531 12.353 12.353c0 6.822-5.53 12.353-12.353 12.353h-0zM22.838 18.977c-0.371-0.186-2.197-1.083-2.537-1.208-0.341-0.124-0.589-0.185-0.837 0.187-0.246 0.371-0.958 1.207-1.175 1.455-0.216 0.249-0.434 0.279-0.805 0.094-1.15-0.466-2.138-1.087-2.997-1.852l0.010 0.009c-0.799-0.74-1.484-1.587-2.037-2.521l-0.028-0.052c-0.216-0.371-0.023-0.572 0.162-0.757 0.167-0.166 0.372-0.434 0.557-0.65 0.146-0.179 0.271-0.384 0.366-0.604l0.006-0.017c0.043-0.087 0.068-0.188 0.068-0.296 0-0.131-0.037-0.253-0.101-0.357l0.002 0.003c-0.094-0.186-0.836-2.014-1.145-2.758-0.302-0.724-0.609-0.625-0.836-0.637-0.216-0.010-0.464-0.012-0.712-0.012-0.395 0.010-0.746 0.188-0.988 0.463l-0.001 0.002c-0.802 0.761-1.3 1.834-1.3 3.023 0 0.026 0 0.053 0.001 0.079l-0-0.004c0.131 1.467 0.681 2.784 1.527 3.857l-0.012-0.015c1.604 2.379 3.742 4.282 6.251 5.564l0.094 0.043c0.548 0.248 1.25 0.513 1.968 0.74l0.149 0.041c0.442 0.14 0.951 0.221 1.479 0.221 0.303 0 0.601-0.027 0.889-0.078l-0.031 0.004c1.069-0.223 1.956-0.868 2.497-1.749l0.009-0.017c0.165-0.366 0.261-0.793 0.261-1.242 0-0.185-0.016-0.366-0.047-0.542l0.003 0.019c-0.092-0.155-0.34-0.247-0.712-0.434z',
+                                fill: 'currentColor',
+                            }),
+                        ]),
+                    ]),
+                    onManageAccount && config && config.canManageAccounts && h('button', {
+                        type: 'button',
+                        class: classNames('mj-btn', 'mj-btn--icon', {
+                            'mj-btn--warning': hasLinkedAccount,
+                            'mj-btn--secondary': !hasLinkedAccount,
+                        }),
+                        onClick: handleOpenAccountModal,
+                        title: hasLinkedAccount ? accountButtonLinked : accountButtonUnlinked,
+                        'aria-label': hasLinkedAccount ? accountButtonLinked : accountButtonUnlinked,
+                        'data-status': hasLinkedAccount ? 'linked' : 'unlinked',
+                        'data-tooltip': hasLinkedAccount ? accountStatusLinked : accountStatusUnlinked,
+                    }, [
+                        h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, [
+                            h('circle', { cx: 7, cy: 7, r: 3 }),
+                            h('path', { d: 'M12 18c0-3-2.5-5-5-5s-5 2-5 5' }),
+                            h('path', { d: 'M15 7.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0z' }),
+                            h('path', { d: 'M17.5 10v2' }),
+                            h('path', { d: 'M16 15l2 2 3-3' }),
+                        ]),
+                    ]),
+                    onCreateNextcloudLogin && config && config.canManageNextcloud && h('button', {
+                        type: 'button',
+                        class: classNames('mj-btn', 'mj-btn--icon', {
+                            'mj-btn--warning': hasNextcloudLogin,
+                            'mj-btn--secondary': !hasNextcloudLogin,
+                        }),
+                        onClick: handleCreateNextcloudLogin,
+                        disabled: creatingNextcloud,
+                        title: hasNextcloudLogin ? nextcloudExistsLabel : nextcloudCreateLabel,
+                        'aria-label': hasNextcloudLogin ? nextcloudExistsLabel : nextcloudCreateLabel,
+                        'data-status': hasNextcloudLogin ? 'linked' : 'unlinked',
+                        'data-tooltip': creatingNextcloud
+                            ? nextcloudCreatingLabel
+                            : (hasNextcloudLogin ? nextcloudReadyStatus : nextcloudMissingStatus),
+                    }, [
+                        h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, [
+                            h('path', { d: 'M3 3h18v18H3z' }),
+                            h('path', { d: 'M7 8h10' }),
+                            h('path', { d: 'M7 12h10' }),
+                            h('path', { d: 'M7 16h6' }),
+                        ]),
+                    ]),
+                    canDeleteMember && h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--ghost mj-btn--danger mj-btn--small',
+                        onClick: handleDeleteMember,
+                        disabled: deletingMember,
+                        title: deletingMember
+                            ? getString(strings, 'deleteMemberProcessing', 'Suppression...')
+                            : getString(strings, 'deleteMember', 'Supprimer le membre'),
+                        'aria-label': deletingMember
+                            ? getString(strings, 'deleteMemberProcessing', 'Suppression...')
+                            : getString(strings, 'deleteMember', 'Supprimer le membre'),
+                    }, [
+                        h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                            h('polyline', { points: '3 6 5 6 21 6' }),
+                            h('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6' }),
+                            h('path', { d: 'M10 11v6' }),
+                            h('path', { d: 'M14 11v6' }),
+                            h('path', { d: 'M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2' }),
+                        ]),
+                        h('span', { class: 'mj-regmgr-member-detail__delete-label' }, deletingMember
+                            ? getString(strings, 'deleteMemberProcessing', 'Suppression...')
+                            : getString(strings, 'deleteMember', 'Supprimer le membre')
+                        ),
+                    ]),
+                ]),
+            ]),
+
+            h('div', { class: 'mj-regmgr-member-detail__content' }, [
+                tabsNav && h('div', { class: 'mj-regmgr-member-detail__tabs-nav' }, [tabsNav]),
+                h('div', { class: 'mj-regmgr-member-detail__tabs-content' }, [
+                    activeTab === 'information' && informationSection,
+                    activeTab === 'membership' && h(Fragment, null, [
+                        h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                            h('h2', { class: 'mj-regmgr-member-detail__section-title' }, 'Cotisation & Statut'),
+                            h('div', { class: 'mj-regmgr-member-detail__membership' }, [
+                                h('div', { class: 'mj-regmgr-member-detail__membership-main' }, [
+                                    h('div', { class: 'mj-regmgr-member-detail__membership-item' }, [
+                                        h('span', { class: 'mj-regmgr-member-detail__status-label' }, 'Statut du compte'),
+                                        h('div', { class: 'mj-regmgr-member-detail__membership-info' }, [
+                                            h('span', {
+                                                class: classNames('mj-regmgr-badge', {
+                                                    'mj-regmgr-badge--success': member.status === 'active',
+                                                    'mj-regmgr-badge--secondary': member.status !== 'active',
+                                                }),
+                                            }, statusLabels[member.status] || member.status || 'Actif'),
+                                            onUpdateMember && h('div', { class: 'mj-regmgr-member-detail__membership-actions' }, [
+                                                h('select', {
+                                                    class: 'mj-regmgr-select mj-regmgr-select--small',
+                                                    value: accountStatusDraft,
+                                                    onChange: function (e) { setAccountStatusDraft(e.target.value); },
+                                                    disabled: accountStatusSaving,
+                                                    'aria-label': 'Statut du compte',
+                                                }, [
+                                                    h('option', { value: 'active' }, statusLabels.active || 'Actif'),
+                                                    h('option', { value: 'inactive' }, statusLabels.inactive || 'Inactif'),
+                                                ]),
+                                                h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--small mj-btn--secondary',
+                                                    onClick: handleSaveAccountStatus,
+                                                    disabled: accountStatusSaving || accountStatusDraft === (member.status || 'active'),
+                                                }, accountStatusSaving ? 'Enregistrement...' : 'Enregistrer'),
+                                            ]),
+                                        ]),
+                                    ]),
+                                    h('div', { class: 'mj-regmgr-member-detail__membership-item mj-regmgr-member-detail__membership-item--subscription' }, [
+                                        h('span', { class: 'mj-regmgr-member-detail__status-label' }, 'Cotisation'),
+                                        h('div', { class: 'mj-regmgr-member-detail__membership-info' }, [
+                                            h('span', {
+                                                class: classNames('mj-regmgr-badge', {
+                                                    'mj-regmgr-badge--success': member.membershipStatus === 'paid',
+                                                    'mj-regmgr-badge--warning': member.membershipStatus === 'expired',
+                                                    'mj-regmgr-badge--danger': member.membershipStatus === 'unpaid',
+                                                    'mj-regmgr-badge--secondary': member.membershipStatus === 'not_required',
+                                                }),
+                                            }, [
+                                                membershipLabels[member.membershipStatus] || 'Inconnu',
+                                                member.membershipYear && member.membershipStatus === 'paid' && ' (' + member.membershipYear + ')',
+                                            ]),
+                                            member.requiresPayment && member.membershipStatus !== 'paid' && h('div', { class: 'mj-regmgr-member-detail__membership-actions' }, [
+                                                h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--small mj-btn--primary',
+                                                    onClick: function () { setShowPaymentModal(true); },
+                                                    disabled: paymentProcessing,
+                                                }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                        h('rect', { x: 1, y: 4, width: 22, height: 16, rx: 2, ry: 2 }),
+                                                        h('line', { x1: 1, y1: 10, x2: 23, y2: 10 }),
+                                                    ]),
+                                                    ' Payer',
+                                                ]),
+                                                h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--small mj-btn--secondary',
+                                                    onClick: function () {
+                                                        if (confirm('Confirmer que la cotisation a été payée en main propre ?')) {
+                                                            setPaymentProcessing(true);
+                                                            onMarkMembershipPaid(member.id, 'cash')
+                                                                .finally(function () { setPaymentProcessing(false); });
+                                                        }
+                                                    },
+                                                    disabled: paymentProcessing,
+                                                }, paymentProcessing ? 'Traitement...' : 'Payé en main propre'),
+                                            ]),
+                                        ]),
+                                    ]),
+                                    communicationChips.length > 0 && h('div', { class: 'mj-regmgr-member-detail__membership-item mj-regmgr-member-detail__membership-item--communication' }, [
+                                        h('span', { class: 'mj-regmgr-member-detail__status-label' }, 'Communication'),
+                                        h('ul', { class: 'mj-regmgr-communication-list' }, communicationChips.map(function (chip) {
+                                            var isEnabled = !!chip.enabled;
+                                            var chipStateLabel = isEnabled ? communicationEnabledLabel : communicationDisabledLabel;
+                                            return h('li', {
+                                                key: chip.key,
+                                                class: classNames('mj-regmgr-communication-item', {
+                                                    'mj-regmgr-communication-item--enabled': isEnabled,
+                                                    'mj-regmgr-communication-item--disabled': !isEnabled,
+                                                }),
+                                                title: chip.label + ' · ' + chipStateLabel,
+                                                'aria-label': chip.label + ' : ' + chipStateLabel,
+                                            }, [
+                                                h('span', { class: 'mj-regmgr-communication-item__icon', 'aria-hidden': 'true' }, [
+                                                    isEnabled
+                                                        ? h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                            h('polyline', { points: '5 13 9 17 19 7' }),
+                                                        ])
+                                                        : h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                            h('line', { x1: 18, y1: 6, x2: 6, y2: 18 }),
+                                                            h('line', { x1: 6, y1: 6, x2: 18, y2: 18 }),
+                                                        ]),
+                                                ]),
+                                                h('span', { class: 'mj-regmgr-communication-item__label' }, chip.label),
+                                                h('span', { class: 'mj-regmgr-communication-item__state' }, chipStateLabel),
+                                            ]);
+                                        })),
+                                    ]),
+                                ]),
+                                h('aside', { class: 'mj-regmgr-member-detail__membership-meta' }, [
+                                    member.membershipNumber && h('div', { class: 'mj-regmgr-member-detail__meta-row' }, [
+                                        h('span', { class: 'mj-regmgr-member-detail__meta-label' }, 'N° de membre'),
+                                        h('span', { class: 'mj-regmgr-member-detail__meta-value' }, member.membershipNumber),
+                                    ]),
+                                    h('div', { class: 'mj-regmgr-member-detail__meta-row' }, [
+                                        h('span', { class: 'mj-regmgr-member-detail__meta-label' }, 'Date d\'inscription'),
+                                        h('span', { class: 'mj-regmgr-member-detail__meta-value' }, memberRegistrationDate ? formatDate(memberRegistrationDate, true) : '—'),
+                                    ]),
+                                    h('div', { class: 'mj-regmgr-member-detail__meta-row' }, [
+                                        h('span', { class: 'mj-regmgr-member-detail__meta-label' }, 'Dernière connexion'),
+                                        h('span', { class: 'mj-regmgr-member-detail__meta-value' }, memberLastLoginDate ? formatDate(memberLastLoginDate, true) : '—'),
+                                    ]),
+                                    h('div', { class: 'mj-regmgr-member-detail__meta-row' }, [
+                                        h('span', { class: 'mj-regmgr-member-detail__meta-label' }, 'Dernière activité'),
+                                        h('span', { class: 'mj-regmgr-member-detail__meta-value' }, memberLastActivityDate ? formatDate(memberLastActivityDate, true) : '—'),
+                                    ]),
+                                    member.isVolunteer && h('div', { class: 'mj-regmgr-member-detail__meta-row' }, [
+                                        h('span', { class: 'mj-regmgr-member-detail__meta-label' }, 'Bénévole'),
+                                        h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--info' }, 'Oui'),
+                                    ]),
+                                    member.role === 'jeune' && h('div', { class: 'mj-regmgr-member-detail__meta-row' }, [
+                                        h('span', { class: 'mj-regmgr-member-detail__meta-label' }, 'Autonome'),
+                                        h('span', {
+                                            class: classNames('mj-regmgr-badge', {
+                                                'mj-regmgr-badge--info': member.isAutonomous,
+                                                'mj-regmgr-badge--secondary': !member.isAutonomous,
+                                            }),
+                                        }, member.isAutonomous ? 'Oui' : 'Non'),
+                                    ]),
+                                ]),
+                            ]),
+                        ]),
+                        hasMemberBio && h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                            h('h2', { class: 'mj-regmgr-member-detail__section-title' }, profileTitle),
+                            member.descriptionShort && h('p', { class: 'mj-regmgr-member-detail__bio-short' }, member.descriptionShort),
+                            member.descriptionLong && h('div', { class: 'mj-regmgr-member-detail__bio-long', dangerouslySetInnerHTML: { __html: member.descriptionLong } }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                            h('h2', { class: 'mj-regmgr-member-detail__section-title' }, 'Activité du membre'),
+                            h('div', { class: 'mj-regmgr-member-activity' }, [
+                                h('div', { class: 'mj-regmgr-member-activity__grid' }, [
+                                    member.dateInscription && h('div', { class: 'mj-regmgr-member-activity__item' }, [
+                                        h('span', { class: 'mj-regmgr-member-activity__label' }, 'Inscrit depuis'),
+                                        h('span', { class: 'mj-regmgr-member-activity__value' }, formatDate(member.dateInscription)),
+                                    ]),
+                                    member.lastLoginAt && h('div', { class: 'mj-regmgr-member-activity__item' }, [
+                                        h('span', { class: 'mj-regmgr-member-activity__label' }, 'Dernière connexion'),
+                                        h('span', { class: 'mj-regmgr-member-activity__value' }, formatTimeAgo(member.lastLoginAt)),
+                                        h('span', { class: 'mj-regmgr-member-activity__timestamp' }, formatDate(member.lastLoginAt)),
+                                    ]),
+                                    member.lastActivityAt && h('div', { class: 'mj-regmgr-member-activity__item' }, [
+                                        h('span', { class: 'mj-regmgr-member-activity__label' }, 'Dernière activité'),
+                                        h('span', { class: 'mj-regmgr-member-activity__value' }, formatTimeAgo(member.lastActivityAt)),
+                                        h('span', { class: 'mj-regmgr-member-activity__timestamp' }, formatDate(member.lastActivityAt)),
+                                    ]),
+                                ]),
+                                member.activityStats && h('div', { class: 'mj-regmgr-member-activity__stats' }, [
+                                    h('h3', { class: 'mj-regmgr-member-activity__stats-title' }, 'Statistiques'),
+                                    h('div', { class: 'mj-regmgr-member-activity__stats-grid' }, [
+                                        h('div', { class: 'mj-regmgr-member-activity__stat' }, [
+                                            h('span', { class: 'mj-regmgr-member-activity__stat-icon' }, '📅'),
+                                            h('div', { class: 'mj-regmgr-member-activity__stat-content' }, [
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-value' }, member.activityStats.eventRegistrations || 0),
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-label' }, 'Inscriptions'),
+                                            ]),
+                                        ]),
+                                        h('div', { class: 'mj-regmgr-member-activity__stat' }, [
+                                            h('span', { class: 'mj-regmgr-member-activity__stat-icon' }, '✅'),
+                                            h('div', { class: 'mj-regmgr-member-activity__stat-content' }, [
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-value' }, member.activityStats.eventAttendances || 0),
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-label' }, 'Présences'),
+                                            ]),
+                                        ]),
+                                        h('div', { class: 'mj-regmgr-member-activity__stat' }, [
+                                            h('span', { class: 'mj-regmgr-member-activity__stat-icon' }, '🎨'),
+                                            h('div', { class: 'mj-regmgr-member-activity__stat-content' }, [
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-value' }, member.activityStats.eventContributions || 0),
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-label' }, 'Contributions'),
+                                            ]),
+                                        ]),
+                                        h('div', { class: 'mj-regmgr-member-activity__stat' }, [
+                                            h('span', { class: 'mj-regmgr-member-activity__stat-icon' }, '💡'),
+                                            h('div', { class: 'mj-regmgr-member-activity__stat-content' }, [
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-value' }, member.activityStats.ideas || 0),
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-label' }, 'Idées'),
+                                            ]),
+                                        ]),
+                                        h('div', { class: 'mj-regmgr-member-activity__stat' }, [
+                                            h('span', { class: 'mj-regmgr-member-activity__stat-icon' }, '🎖️'),
+                                            h('div', { class: 'mj-regmgr-member-activity__stat-content' }, [
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-value' }, member.activityStats.badges || 0),
+                                                h('span', { class: 'mj-regmgr-member-activity__stat-label' }, 'Badges'),
+                                            ]),
+                                        ]),
+                                    ]),
+                                ]),
+                            ]),
+                        ]),
+                        config.adminMemberUrl && h('div', { class: 'mj-regmgr-member-detail__admin-link' }, [
+                            h('a', {
+                                href: config.adminMemberUrl + member.id,
+                                target: '_blank',
+                                class: 'mj-btn mj-btn--secondary',
+                            }, [
+                                h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                    h('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
+                                    h('polyline', { points: '15 3 21 3 21 9' }),
+                                    h('line', { x1: 10, y1: 14, x2: 21, y2: 3 }),
+                                ]),
+                                'Voir dans l\'admin',
+                            ]),
+                        ]),
+                    ]),
+                    activeTab === 'badges' && h(Fragment, null, [
+                        // Level Display
+                        member.levelProgression && member.levelProgression.currentLevel && h('div', { class: 'mj-regmgr-member-level' }, [
+                            h('div', { class: 'mj-regmgr-member-level__current' }, [
+                                member.levelProgression.currentLevel.imageUrl
+                                    ? h('div', { class: 'mj-regmgr-member-level__image' }, [
+                                        h('img', {
+                                            src: member.levelProgression.currentLevel.imageUrl,
+                                            alt: member.levelProgression.currentLevel.title || '',
+                                            loading: 'lazy',
+                                        }),
+                                    ])
+                                    : h('div', { class: 'mj-regmgr-member-level__badge' }, [
+                                        h('span', { class: 'mj-regmgr-member-level__badge-number' }, member.levelProgression.currentLevel.levelNumber),
+                                    ]),
+                                h('div', { class: 'mj-regmgr-member-level__info' }, [
+                                    h('div', { class: 'mj-regmgr-member-level__header' }, [
+                                        h('span', { class: 'mj-regmgr-member-level__label' }, getString(strings, 'memberLevelLabel', 'Niveau')),
+                                        h('span', { class: 'mj-regmgr-member-level__number' }, member.levelProgression.currentLevel.levelNumber),
+                                    ]),
+                                    h('h2', { class: 'mj-regmgr-member-level__title' }, member.levelProgression.currentLevel.title || ''),
+                                    member.levelProgression.currentLevel.description && h('p', { class: 'mj-regmgr-member-level__description' }, member.levelProgression.currentLevel.description),
+                                ]),
+                            ]),
+                            !member.levelProgression.isMaxLevel && member.levelProgression.nextLevel && h('div', { class: 'mj-regmgr-member-level__progress-section' }, [
+                                h('div', { class: 'mj-regmgr-member-level__progress-header' }, [
+                                    h('span', { class: 'mj-regmgr-member-level__progress-label' }, [
+                                        getString(strings, 'memberLevelNextLabel', 'Prochain niveau:'),
+                                        ' ',
+                                        h('strong', null, member.levelProgression.nextLevel.title || ('Niveau ' + member.levelProgression.nextLevel.levelNumber)),
+                                    ]),
+                                    h('span', { class: 'mj-regmgr-member-level__progress-xp' }, [
+                                        member.levelProgression.xpRemaining.toLocaleString(),
+                                        ' ',
+                                        getString(strings, 'memberXpRemainingLabel', 'XP restants'),
+                                    ]),
+                                ]),
+                                h('div', { class: 'mj-regmgr-member-level__progress-bar' }, [
+                                    h('div', {
+                                        class: 'mj-regmgr-member-level__progress-fill',
+                                        style: { width: member.levelProgression.progressPercent + '%' },
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-member-level__progress-footer' }, [
+                                    h('span', null, member.levelProgression.xpCurrent.toLocaleString() + ' XP'),
+                                    h('span', null, member.levelProgression.progressPercent + '%'),
+                                    h('span', null, member.levelProgression.xpForNext.toLocaleString() + ' XP'),
+                                ]),
+                            ]),
+                            member.levelProgression.isMaxLevel && h('div', { class: 'mj-regmgr-member-level__max' }, [
+                                h('span', { class: 'mj-regmgr-member-level__max-icon' }, '🏆'),
+                                h('span', { class: 'mj-regmgr-member-level__max-text' }, getString(strings, 'memberLevelMax', 'Niveau maximum atteint !')),
+                            ]),
+                        ]),
+                        // XP and Coins Display
+                        h('div', { class: 'mj-regmgr-member-xp' }, [
+                            h('div', { class: 'mj-regmgr-member-xp__icon' }, [
+                                h('svg', { width: 28, height: 28, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, [
+                                    h('polygon', { points: '12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2' }),
+                                ]),
+                            ]),
+                            h('div', { class: 'mj-regmgr-member-xp__content' }, [
+                                h('span', { class: 'mj-regmgr-member-xp__value' }, typeof member.xpTotal === 'number' ? member.xpTotal.toLocaleString() : '0'),
+                                h('span', { class: 'mj-regmgr-member-xp__label' }, getString(strings, 'memberXpLabel', 'points XP')),
+                            ]),
+                            onAdjustXp && h('div', { class: 'mj-regmgr-member-xp__actions' }, [
+                                h('button', {
+                                    type: 'button',
+                                    class: 'mj-regmgr-member-xp__btn mj-regmgr-member-xp__btn--minus',
+                                    title: getString(strings, 'memberXpRemove10', 'Retirer 10 XP'),
+                                    onClick: function () { onAdjustXp(member.id, -10); },
+                                }, '-10'),
+                                h('button', {
+                                    type: 'button',
+                                    class: 'mj-regmgr-member-xp__btn mj-regmgr-member-xp__btn--plus',
+                                    title: getString(strings, 'memberXpAdd10', 'Ajouter 10 XP'),
+                                    onClick: function () { onAdjustXp(member.id, 10); },
+                                }, '+10'),
+                            ]),
+                            // Coins display
+                            h('div', { class: 'mj-regmgr-member-xp__separator' }),
+                            h('div', { class: 'mj-regmgr-member-xp__icon mj-regmgr-member-xp__icon--coins' }, '🪙'),
+                            h('div', { class: 'mj-regmgr-member-xp__content' }, [
+                                h('span', { class: 'mj-regmgr-member-xp__value mj-regmgr-member-xp__value--coins' }, typeof member.coinsTotal === 'number' ? member.coinsTotal.toLocaleString() : '0'),
+                                h('span', { class: 'mj-regmgr-member-xp__label' }, getString(strings, 'memberCoinsLabel', 'coins')),
+                            ]),
+                        ]),
+                        badgeData.length > 0
+                            ? h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, badgesTitle),
+                                h('div', { class: 'mj-regmgr-member-badges' }, badgeData.map(function (badge) {
+                                    var isSaving = !!badgeSaving[badge.id];
+                                    var hasCriteria = Array.isArray(badge.criteria) && badge.criteria.length > 0;
+                                    var hasBadgeImage = typeof badge.imageUrl === 'string' && badge.imageUrl !== '';
+                                    var badgeState = 'locked';
+                                    if (badge.status === 'revoked') {
+                                        badgeState = 'revoked';
+                                    } else if (badge.totalCriteria > 0) {
+                                        if (badge.awardedCount >= badge.totalCriteria) {
+                                            badgeState = 'complete';
+                                        } else if (badge.awardedCount > 0) {
+                                            badgeState = 'in_progress';
+                                        }
+                                    } else if (badge.status === 'awarded') {
+                                        badgeState = 'complete';
+                                    }
+
+                                    var badgeStateLabel = badgeStateLabels[badgeState] || '';
+                                    var progressValue = typeof badge.progress === 'number' ? Math.max(0, Math.min(100, badge.progress)) : 0;
+                                    var progressDisplay = badge.totalCriteria > 0
+                                        ? badge.awardedCount + ' / ' + badge.totalCriteria
+                                        : (badge.status === 'awarded' ? badgeCompletedLabel : badgeNotStartedLabel);
+
+                                    return h('article', {
+                                        key: badge.id ? 'badge-' + badge.id : 'badge-' + badge.label,
+                                        class: classNames('mj-regmgr-member-badge', 'mj-regmgr-member-badge--state-' + badgeState),
+                                    }, [
+                                        h('header', { class: 'mj-regmgr-member-badge__header' }, [
+                                            h('div', { class: 'mj-regmgr-member-badge__title' }, [
+                                                (hasBadgeImage || (typeof badge.icon === 'string' && badge.icon !== '')) && h('span', {
+                                                    class: classNames('mj-regmgr-member-badge__icon', {
+                                                        'mj-regmgr-member-badge__icon--image': hasBadgeImage,
+                                                    }),
+                                                }, [
+                                                    hasBadgeImage
+                                                        ? h('img', {
+                                                            src: badge.imageUrl,
+                                                            alt: badge.label || '',
+                                                            loading: 'lazy',
+                                                        })
+                                                        : h('i', { class: badge.icon, 'aria-hidden': 'true' }),
+                                                ]),
+                                                h('div', { class: 'mj-regmgr-member-badge__heading' }, [
+                                                    h('h2', { class: 'mj-regmgr-member-badge__name' }, badge.label || 'Badge'),
+                                                    badge.summary && h('p', { class: 'mj-regmgr-member-badge__summary' }, badge.summary),
+                                                ]),
+                                            ]),
+                                            h('div', { class: 'mj-regmgr-member-badge__meta' }, [
+                                                badgeStateLabel && h('span', { class: classNames('mj-regmgr-member-badge__state', 'mj-regmgr-member-badge__state--' + badgeState) }, badgeStateLabel),
+                                                h('span', { class: 'mj-regmgr-member-badge__progress-count' }, progressDisplay),
+                                                (badge.xp > 0 || badge.coins > 0) && h('div', { class: 'mj-regmgr-member-badge__rewards' }, [
+                                                    badge.xp > 0 && h('span', { class: 'mj-regmgr-member-badge__xp', title: 'Points XP' }, '+' + badge.xp + ' XP'),
+                                                    badge.coins > 0 && h('span', { class: 'mj-regmgr-member-badge__coins', title: 'Coins' }, [
+                                                        '🪙 +' + badge.coins,
+                                                    ]),
+                                                ]),
+                                            ]),
+                                        ]),
+                                        h('div', { class: 'mj-regmgr-member-badge__progress' }, [
+                                            h('div', { class: 'mj-regmgr-member-badge__progress-bar' }, [
+                                                h('span', {
+                                                    class: 'mj-regmgr-member-badge__progress-fill',
+                                                    style: { width: progressValue + '%' },
+                                                }),
+                                            ]),
+                                            h('span', { class: 'mj-regmgr-member-badge__progress-label' }, progressValue + '%'),
+                                        ]),
+                                        hasCriteria
+                                            ? h('ul', { class: 'mj-regmgr-member-badge__criteria' }, badge.criteria.map(function (criterion) {
+                                                var isChecked = !!criterion.awarded;
+                                                var canToggle = !!criterion.canToggle;
+                                                return h('li', {
+                                                    key: criterion.id ? 'criterion-' + criterion.id : 'criterion-' + badge.id + '-' + criterion.label,
+                                                    class: classNames('mj-regmgr-member-badge__criterion', {
+                                                        'mj-regmgr-member-badge__criterion--awarded': isChecked,
+                                                        'mj-regmgr-member-badge__criterion--readonly': !canToggle,
+                                                    }),
+                                                }, [
+                                                    h('label', { class: 'mj-regmgr-member-badge__criterion-label' }, [
+                                                        h('input', {
+                                                            type: 'checkbox',
+                                                            class: 'mj-regmgr-member-badge__checkbox',
+                                                            checked: isChecked,
+                                                            disabled: !canToggle || isSaving,
+                                                            onChange: function (event) {
+                                                                handleToggleBadgeCriterion(badge.id, criterion.id, event.target.checked);
+                                                            },
+                                                        }),
+                                                        h('span', { class: 'mj-regmgr-member-badge__criterion-content' }, [
+                                                            h('span', { class: 'mj-regmgr-member-badge__criterion-name' }, criterion.label || getString(strings, 'memberBadgeUnnamedCriterion', 'Critère')),
+                                                            criterion.description && h('span', { class: 'mj-regmgr-member-badge__criterion-description' }, criterion.description),
+                                                            (criterion.xp > 0 || criterion.coins > 0) && h('span', { class: 'mj-regmgr-member-badge__criterion-rewards' }, [
+                                                                criterion.xp > 0 && h('span', { class: 'mj-regmgr-member-badge__criterion-xp' }, '+' + criterion.xp + ' XP'),
+                                                                criterion.coins > 0 && h('span', { class: 'mj-regmgr-member-badge__criterion-coins' }, '🪙 +' + criterion.coins),
+                                                            ]),
+                                                            !canToggle && h('span', { class: 'mj-regmgr-member-badge__criterion-hint' }, badgeReadonlyHint),
+                                                        ]),
+                                                    ]),
+                                                ]);
+                                            }))
+                                            : h('p', { class: 'mj-regmgr-member-badge__empty' }, badgeNoCriteriaLabel),
+                                        isSaving && h('div', { class: 'mj-regmgr-member-badge__saving', 'aria-live': 'polite' }, [
+                                            h('span', { class: 'mj-regmgr-spinner mj-regmgr-spinner--inline' }),
+                                            h('span', null, badgeSavingLabel),
+                                        ]),
+                                    ]);
+                                })),
+                            ])
+                            : h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, badgesTitle),
+                                h('p', { class: 'mj-regmgr-member-detail__empty' }, badgeEmptyLabel),
+                            ]),
+                        // Trophies Section
+                        trophyData.length > 0
+                            ? h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberTrophiesTitle', 'Trophées')),
+                                h('div', { class: 'mj-regmgr-member-trophies' }, trophyData.map(function (trophy) {
+                                    var isSaving = !!trophySaving[trophy.id];
+                                    var hasTrophyImage = typeof trophy.imageUrl === 'string' && trophy.imageUrl !== '';
+                                    var isAwarded = trophy.awarded;
+                                    var canToggle = trophy.canToggle && !trophy.autoMode;
+
+                                    return h('article', {
+                                        key: trophy.id ? 'trophy-' + trophy.id : 'trophy-' + trophy.title,
+                                        class: classNames('mj-regmgr-member-trophy', {
+                                            'mj-regmgr-member-trophy--awarded': isAwarded,
+                                            'mj-regmgr-member-trophy--auto': trophy.autoMode,
+                                            'mj-regmgr-member-trophy--saving': isSaving,
+                                        }),
+                                    }, [
+                                        h('label', {
+                                            class: classNames('mj-regmgr-member-trophy__container', {
+                                                'mj-regmgr-member-trophy__container--disabled': !canToggle,
+                                            }),
+                                        }, [
+                                            canToggle && h('input', {
+                                                type: 'checkbox',
+                                                class: 'mj-regmgr-member-trophy__checkbox',
+                                                checked: isAwarded,
+                                                disabled: isSaving,
+                                                onChange: function (event) {
+                                                    handleToggleTrophy(trophy.id, event.target.checked);
+                                                },
+                                            }),
+                                            h('div', { class: 'mj-regmgr-member-trophy__visual' }, [
+                                                hasTrophyImage
+                                                    ? h('img', {
+                                                        src: trophy.imageUrl,
+                                                        alt: trophy.title || '',
+                                                        class: 'mj-regmgr-member-trophy__image',
+                                                        loading: 'lazy',
+                                                    })
+                                                    : h('div', { class: 'mj-regmgr-member-trophy__icon' }, [
+                                                        h('svg', { width: 32, height: 32, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                            h('path', { d: 'M6 9H4.5a2.5 2.5 0 0 1 0-5H6' }),
+                                                            h('path', { d: 'M18 9h1.5a2.5 2.5 0 0 0 0-5H18' }),
+                                                            h('path', { d: 'M4 22h16' }),
+                                                            h('path', { d: 'M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22' }),
+                                                            h('path', { d: 'M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22' }),
+                                                            h('path', { d: 'M18 2H6v7a6 6 0 0 0 12 0V2Z' }),
+                                                        ]),
+                                                    ]),
+                                            ]),
+                                            h('div', { class: 'mj-regmgr-member-trophy__content' }, [
+                                                h('h2', { class: 'mj-regmgr-member-trophy__title' }, trophy.title || getString(strings, 'memberTrophyUntitled', 'Trophée')),
+                                                trophy.description && h('p', { class: 'mj-regmgr-member-trophy__description' }, trophy.description),
+                                                h('div', { class: 'mj-regmgr-member-trophy__meta' }, [
+                                                    trophy.xp > 0 && h('span', { class: 'mj-regmgr-member-trophy__xp' }, '+' + trophy.xp + ' XP'),
+                                                    trophy.coins > 0 && h('span', { class: 'mj-regmgr-member-trophy__coins' }, '🪙 +' + trophy.coins),
+                                                    trophy.autoMode && h('span', { class: 'mj-regmgr-member-trophy__auto-badge' }, getString(strings, 'memberTrophyAuto', 'Automatique')),
+                                                    isAwarded && !trophy.autoMode && h('span', { class: 'mj-regmgr-member-trophy__awarded-badge' }, getString(strings, 'memberTrophyAwarded', 'Obtenu')),
+                                                ]),
+                                            ]),
+                                        ]),
+                                        isSaving && h('div', { class: 'mj-regmgr-member-trophy__saving' }, [
+                                            h('span', { class: 'mj-regmgr-spinner mj-regmgr-spinner--inline' }),
+                                        ]),
+                                    ]);
+                                })),
+                            ])
+                            : h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberTrophiesTitle', 'Trophées')),
+                                h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoTrophies', 'Aucun trophée disponible.')),
+
+                            ]),
+                        // Actions Section
+                        actionData.length > 0
+                            ? h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberActionsTitle', 'Actions')),
+                                h('div', { class: 'mj-regmgr-member-actions' }, (function () {
+                                    var grouped = groupActionsByCategory(actionData);
+                                    var categoryKeys = Object.keys(grouped);
+                                    return categoryKeys.map(function (categoryKey) {
+                                        var group = grouped[categoryKey];
+                                        return h('div', { 
+                                            key: 'action-category-' + categoryKey,
+                                            class: 'mj-regmgr-member-actions__category',
+                                        }, [
+                                            h('h3', { class: 'mj-regmgr-member-actions__category-title' }, group.label),
+                                            h('div', { class: 'mj-regmgr-member-actions__list' }, group.actions.map(function (action) {
+                                                var isSaving = !!actionSaving[action.id];
+                                                var hasCount = action.count > 0;
+
+                                                return h('button', {
+                                                    key: 'action-' + action.id,
+                                                    type: 'button',
+                                                    class: classNames('mj-regmgr-member-action', {
+                                                        'mj-regmgr-member-action--has-count': hasCount,
+                                                        'mj-regmgr-member-action--auto': action.isAuto,
+                                                        'mj-regmgr-member-action--saving': isSaving,
+                                                    }),
+                                                    disabled: isSaving || !action.canAward,
+                                                    title: action.description || action.title,
+                                                    onClick: function () {
+                                                        if (action.canAward && !isSaving) {
+                                                            handleAwardAction(action.id);
+                                                        }
+                                                    },
+                                                }, [
+                                                    action.emoji && h('span', { class: 'mj-regmgr-member-action__emoji' }, action.emoji),
+                                                    h('span', { class: 'mj-regmgr-member-action__title' }, action.title),
+                                                    hasCount && h('span', { class: 'mj-regmgr-member-action__count' }, action.count),
+                                                    h('span', { class: 'mj-regmgr-member-action__rewards' }, [
+                                                        action.xp > 0 && h('span', { class: 'mj-regmgr-member-action__xp' }, '+' + action.xp + ' XP'),
+                                                        action.coins > 0 && h('span', { class: 'mj-regmgr-member-action__coins' }, '🪙'),
+                                                    ]),
+                                                    action.isAuto && h('span', { class: 'mj-regmgr-member-action__auto-badge' }, getString(strings, 'memberActionAuto', 'Auto')),
+                                                    isSaving && h('span', { class: 'mj-regmgr-spinner mj-regmgr-spinner--inline mj-regmgr-member-action__spinner' }),
+                                                ]);
+                                            })),
+                                        ]);
+                                    });
+                                })()),
+                            ])
+                            : h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberActionsTitle', 'Actions')),
+                                h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoActions', 'Aucune action disponible.')),
+
+                            ]),
+                    ]),
+
+                    activeTab === 'ideas' && h(Fragment, null, [
+                        h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                            h('div', { class: 'mj-regmgr-member-detail__section-header' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, [
+                                    h('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', class: 'mj-regmgr-member-detail__section-icon' }, [
+                                        h('path', { d: 'M9 18h6' }),
+                                        h('path', { d: 'M10 22h4' }),
+                                        h('path', { d: 'M12 2a7 7 0 0 0-4 12.9V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.1A7 7 0 0 0 12 2z' }),
+                                    ]),
+                                    getString(strings, 'memberIdeas', 'Idées proposées'),
+                                    memberIdeas.length > 0 && h('span', { class: 'mj-regmgr-member-detail__section-count' }, memberIdeas.length),
+                                ]),
+                            ]),
+                            memberIdeas.length > 0
+                                ? h('div', { class: 'mj-regmgr-member-ideas-grid' }, memberIdeas.map(function (idea) {
+                                    var statusKey = idea.status || 'published';
+                                    var statusLabel = ideaStatusLabels[statusKey] || statusKey;
+                                    var isEditingIdea = editingIdeaId === idea.id;
+                                    var voteCount = typeof idea.voteCount === 'number' ? idea.voteCount : 0;
+                                    return h('article', {
+                                        key: idea.id,
+                                        class: classNames('mj-regmgr-idea-card', {
+                                            'mj-regmgr-idea-card--editing': isEditingIdea,
+                                            'mj-regmgr-idea-card--published': statusKey === 'published',
+                                            'mj-regmgr-idea-card--draft': statusKey === 'draft',
+                                            'mj-regmgr-idea-card--archived': statusKey === 'archived',
+                                        }),
+                                    }, [
+                                        h('div', { class: 'mj-regmgr-idea-card__status-indicator' }),
+                                        !isEditingIdea && h('header', { class: 'mj-regmgr-idea-card__header' }, [
+                                            h('div', { class: 'mj-regmgr-idea-card__title-row' }, [
+                                                h('h3', { class: 'mj-regmgr-idea-card__title' }, idea.title || 'Idée sans titre'),
+                                                onUpdateIdea && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-regmgr-idea-card__edit-btn',
+                                                    onClick: function () { handleIdeaEditStart(idea); },
+                                                    title: 'Modifier l\'idée',
+                                                    disabled: ideaDeletingId === idea.id,
+                                                }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                        h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
+                                                        h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+                                                    ]),
+                                                ]),
+                                                onDeleteIdea && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-regmgr-idea-card__delete-btn',
+                                                    onClick: function () { handleDeleteIdea(idea); },
+                                                    title: 'Supprimer l\'idée',
+                                                    disabled: ideaDeletingId === idea.id,
+                                                }, [
+                                                    ideaDeletingId === idea.id
+                                                        ? h('span', { class: 'mj-regmgr-spinner mj-regmgr-spinner--small' })
+                                                        : h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                            h('polyline', { points: '3 6 5 6 21 6' }),
+                                                            h('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' }),
+                                                        ]),
+                                                ]),
+                                            ]),
+                                            h('div', { class: 'mj-regmgr-idea-card__badges' }, [
+                                                h('span', {
+                                                    class: classNames('mj-regmgr-idea-card__status', 'mj-regmgr-idea-card__status--' + statusKey),
+                                                }, statusLabel),
+                                                h('span', { class: 'mj-regmgr-idea-card__votes' }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'currentColor', class: 'mj-regmgr-idea-card__vote-icon' }, [
+                                                        h('path', { d: 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z' }),
+                                                    ]),
+                                                    h('span', null, voteCount),
+                                                ]),
+                                            ]),
+                                        ]),
+                                        !isEditingIdea && h('div', { class: 'mj-regmgr-idea-card__body' }, [
+                                            idea.content && h('p', { class: 'mj-regmgr-idea-card__content' }, idea.content),
+                                        ]),
+                                        !isEditingIdea && h('footer', { class: 'mj-regmgr-idea-card__footer' }, [
+                                            idea.createdAt && h('span', { class: 'mj-regmgr-idea-card__date' }, [
+                                                h('svg', { width: 12, height: 12, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                    h('circle', { cx: 12, cy: 12, r: 10 }),
+                                                    h('polyline', { points: '12 6 12 12 16 14' }),
+                                                ]),
+                                                formatDate(idea.createdAt),
+                                            ]),
+                                            Array.isArray(idea.voters) && idea.voters.length > 0 && h('div', { class: 'mj-regmgr-idea-card__voters' }, [
+                                                h('span', { class: 'mj-regmgr-idea-card__voters-label' }, [
+                                                    h('svg', { width: 12, height: 12, viewBox: '0 0 24 24', fill: 'currentColor', class: 'mj-regmgr-idea-card__voters-icon' }, [
+                                                        h('path', { d: 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z' }),
+                                                    ]),
+                                                    'Aimé par :',
+                                                ]),
+                                                h('span', { class: 'mj-regmgr-idea-card__voters-list' }, idea.voters.map(function (voter, idx) {
+                                                    var separator = idx < idea.voters.length - 1 ? ', ' : '';
+                                                    return h(Fragment, { key: voter.id }, [
+                                                        onOpenMember
+                                                            ? h('button', {
+                                                                type: 'button',
+                                                                class: 'mj-regmgr-idea-card__voter-link',
+                                                                onClick: function () { onOpenMember({ id: voter.id }); },
+                                                                title: voter.name,
+                                                            }, voter.name)
+                                                            : h('span', null, voter.name),
+                                                        separator,
+                                                    ]);
+                                                })),
+                                            ]),
+                                        ]),
+                                        isEditingIdea && h('div', { class: 'mj-regmgr-idea-card__edit-form' }, [
+                                            h('div', { class: 'mj-regmgr-idea-card__edit-field' }, [
+                                                h('label', { class: 'mj-regmgr-idea-card__edit-label' }, 'Titre'),
+                                                h('input', {
+                                                    type: 'text',
+                                                    class: 'mj-regmgr-input',
+                                                    value: ideaDraft.title,
+                                                    placeholder: 'Titre de l\'idée...',
+                                                    onInput: function (e) {
+                                                        var value = e.target.value;
+                                                        setIdeaDraft(function (prev) {
+                                                            var next = prev ? Object.assign({}, prev) : {};
+                                                            next.title = value;
+                                                            return next;
+                                                        });
+                                                    },
+                                                }),
+                                            ]),
+                                            h('div', { class: 'mj-regmgr-idea-card__edit-field' }, [
+                                                h('label', { class: 'mj-regmgr-idea-card__edit-label' }, 'Description'),
+                                                h('textarea', {
+                                                    class: 'mj-regmgr-textarea',
+                                                    rows: 4,
+                                                    value: ideaDraft.content,
+                                                    placeholder: 'Décrivez l\'idée...',
+                                                    onInput: function (e) {
+                                                        var value = e.target.value;
+                                                        setIdeaDraft(function (prev) {
+                                                            var next = prev ? Object.assign({}, prev) : {};
+                                                            next.content = value;
+                                                            return next;
+                                                        });
+                                                    },
+                                                }),
+                                            ]),
+                                            h('div', { class: 'mj-regmgr-idea-card__edit-field' }, [
+                                                h('label', { class: 'mj-regmgr-idea-card__edit-label' }, 'Statut'),
+                                                h('select', {
+                                                    class: 'mj-regmgr-select',
+                                                    value: ideaDraft.status,
+                                                    onChange: function (e) {
+                                                        var value = e.target.value;
+                                                        setIdeaDraft(function (prev) {
+                                                            var next = prev ? Object.assign({}, prev) : {};
+                                                            next.status = value;
+                                                            return next;
+                                                        });
+                                                    },
+                                                }, Object.keys(ideaStatusLabels).map(function (key) {
+                                                    return h('option', { key: key, value: key }, ideaStatusLabels[key]);
+                                                })),
+                                            ]),
+                                            h('div', { class: 'mj-regmgr-idea-card__edit-actions' }, [
+                                                h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                                    onClick: handleIdeaEditCancel,
+                                                    disabled: ideaSaving,
+                                                }, 'Annuler'),
+                                                h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--primary mj-btn--small',
+                                                    onClick: handleSaveIdea,
+                                                    disabled: ideaSaving || !ideaDraft.title || !ideaDraft.title.trim() || !ideaDraft.content || !ideaDraft.content.trim(),
+                                                }, ideaSaving ? 'Enregistrement...' : 'Enregistrer'),
+                                            ]),
+                                        ]),
+                                    ]);
+                                }))
+                                : h('div', { class: 'mj-regmgr-member-ideas-empty' }, [
+                                    h('div', { class: 'mj-regmgr-member-ideas-empty__icon' }, [
+                                        h('svg', { width: 48, height: 48, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, [
+                                            h('path', { d: 'M9 18h6' }),
+                                            h('path', { d: 'M10 22h4' }),
+                                            h('path', { d: 'M12 2a7 7 0 0 0-4 12.9V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.1A7 7 0 0 0 12 2z' }),
+                                        ]),
+                                    ]),
+                                    h('p', { class: 'mj-regmgr-member-ideas-empty__text' }, getString(strings, 'memberNoIdeas', 'Aucune idée proposée pour le moment.')),
+                                    h('p', { class: 'mj-regmgr-member-ideas-empty__hint' }, 'Les idées proposées par ce membre apparaîtront ici.'),
+                                ]),
+                        ]),
+                    ]),
+                    activeTab === 'messages' && h(Fragment, null, [
+                        h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                            h('div', { class: 'mj-regmgr-member-detail__section-header' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberMessages', 'Messages reçus')),
+                                h('div', { class: 'mj-regmgr-member-detail__section-actions' }, [
+                                    onCreateMessage && h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                                        onClick: function () { setNewMessageOpen(!newMessageOpen); },
+                                    }, newMessageOpen ? 'Annuler' : '+ Nouveau message'),
+                                    contactMessageListUrl && h('a', {
+                                        href: contactMessageListUrl,
+                                        target: '_blank',
+                                        rel: 'noreferrer',
+                                        class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                    }, getString(strings, 'viewAllMessages', 'Voir tous les messages')),
+                                ]),
+                            ]),
+                            newMessageOpen && onCreateMessage && h('div', { class: 'mj-regmgr-member-detail__add-message' }, [
+                                h('div', { class: 'mj-regmgr-member-detail__add-message-field' }, [
+                                    h('label', { class: 'mj-regmgr-member-detail__add-message-label' }, 'Sujet'),
+                                    h('input', {
+                                        type: 'text',
+                                        class: 'mj-regmgr-input',
+                                        placeholder: 'Objet du message...',
+                                        value: newMessageSubject,
+                                        onInput: function (e) { setNewMessageSubject(e.target.value); },
+                                        disabled: newMessageSaving,
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-member-detail__add-message-field' }, [
+                                    h('label', { class: 'mj-regmgr-member-detail__add-message-label' }, 'Message'),
+                                    h('textarea', {
+                                        class: 'mj-regmgr-textarea',
+                                        placeholder: 'Rédigez votre message...',
+                                        value: newMessageBody,
+                                        onInput: function (e) { setNewMessageBody(e.target.value); },
+                                        rows: 4,
+                                        disabled: newMessageSaving,
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-member-detail__add-message-actions' }, [
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                        onClick: function () {
+                                            setNewMessageOpen(false);
+                                            setNewMessageSubject('');
+                                            setNewMessageBody('');
+                                        },
+                                        disabled: newMessageSaving,
+                                    }, 'Annuler'),
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                                        onClick: handleCreateMessage,
+                                        disabled: newMessageSaving || !newMessageSubject.trim() || !newMessageBody.trim(),
+                                    }, newMessageSaving ? 'Envoi...' : 'Envoyer'),
+                                ]),
+                            ]),
+                            memberMessages.length > 0
+                                ? h('div', { class: 'mj-regmgr-member-detail__messages' }, memberMessages.map(function (message) {
+                                    var status = message.status || '';
+                                    return h('article', { key: message.id, class: 'mj-regmgr-member-message' }, [
+                                        h('header', { class: 'mj-regmgr-member-message__header' }, [
+                                            h('h2', { class: 'mj-regmgr-member-message__subject' }, message.subject || '(Sans objet)'),
+                                            h('span', {
+                                                class: classNames('mj-regmgr-badge mj-regmgr-badge--sm', messageStatusClasses[status] || 'mj-regmgr-badge--secondary'),
+                                            }, messageStatusLabels[status] || status || 'N/A'),
+                                        ]),
+                                        h('p', { class: 'mj-regmgr-member-message__meta' }, [
+                                            message.senderName || message.senderEmail || 'Anonyme',
+                                            message.createdAt ? ' · ' + formatDate(message.createdAt) : '',
+                                        ]),
+                                        message.message && h('div', {
+                                            class: 'mj-regmgr-member-message__content',
+                                            dangerouslySetInnerHTML: { __html: message.message },
+                                        }),
+                                        message.activityLog && message.activityLog.length > 0 && h('details', { class: 'mj-regmgr-member-message__activity' }, [
+                                            h('summary', null, messageHistoryLabel),
+                                            h('ul', null, message.activityLog.map(function (entry, index) {
+                                                return h('li', { key: index }, [
+                                                    entry.date ? formatDate(entry.date) + ' · ' : '',
+                                                    entry.note || '',
+                                                ]);
+                                            })),
+                                        ]),
+                                        onDeleteMessage && h('div', { class: 'mj-regmgr-member-message__actions' }, [
+                                            h('button', {
+                                                type: 'button',
+                                                class: 'mj-btn mj-btn--ghost mj-btn--danger mj-btn--small',
+                                                onClick: function () { handleDeleteMessage(message); },
+                                                disabled: messageDeletingId === message.id,
+                                            }, messageDeletingId === message.id ? 'Suppression...' : 'Supprimer'),
+                                        ]),
+                                    ]);
+                                }))
+                                : !newMessageOpen && h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoMessages', 'Aucun échange trouvé pour ce membre.')),
+                        ]),
+                    ]),
+                    activeTab === 'notifications' && h(Fragment, null, [
+                        h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                            h('div', { class: 'mj-regmgr-member-detail__section-header' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, getString(strings, 'memberNotificationsTitle', 'Notifications') + ' (' + memberNotifications.length + ')'),
+                                h('div', { class: 'mj-regmgr-member-detail__section-actions' }, [
+                                    h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--secondary' },
+                                        getString(strings, 'memberNotificationsFilteredCount', 'Affichées') + ': ' + filteredNotifications.length
+                                    ),
+                                    h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--info' },
+                                        getString(strings, 'memberNotificationsSelectedCount', 'Sélectionnées') + ': ' + selectedNotificationsCount
+                                    ),
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                        onClick: handleNotificationSelectAllVisible,
+                                        disabled: !filteredNotifications.length || allVisibleNotificationsSelected,
+                                    }, getString(strings, 'memberNotificationsSelectAll', 'Sélectionner tout')),
+                                    h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                        onClick: handleNotificationClearSelection,
+                                        disabled: !selectedNotificationsCount,
+                                    }, getString(strings, 'memberNotificationsSelectNone', 'Aucun')),
+                                    onDeleteNotification && h('button', {
+                                        type: 'button',
+                                        class: 'mj-btn mj-btn--ghost mj-btn--danger mj-btn--small',
+                                        onClick: handleDeleteSelectedNotifications,
+                                        disabled: !selectedNotificationsCount || notificationBulkDeleting,
+                                    }, notificationBulkDeleting
+                                        ? getString(strings, 'deleting', 'Suppression...')
+                                        : getString(strings, 'memberNotificationsDeleteSelection', 'Supprimer la sélection')),
+                                ]),
+                            ]),
+                            h('div', { class: 'mj-regmgr-member-detail__add-message' }, [
+                                h('div', { class: 'mj-regmgr-member-detail__add-message-field' }, [
+                                    h('label', { class: 'mj-regmgr-member-detail__add-message-label' }, getString(strings, 'memberNotificationsSearchLabel', 'Recherche')),
+                                    h('input', {
+                                        type: 'search',
+                                        class: 'mj-regmgr-input',
+                                        value: notificationSearch,
+                                        placeholder: getString(strings, 'memberNotificationsSearchPlaceholder', 'Rechercher une notification...'),
+                                        onInput: function (e) { setNotificationSearch(e.target.value); },
+                                    }),
+                                ]),
+                                h('div', { class: 'mj-regmgr-member-detail__add-message-field' }, [
+                                    h('label', { class: 'mj-regmgr-member-detail__add-message-label' }, getString(strings, 'memberNotificationsTypeLabel', 'Type')),
+                                    h('select', {
+                                        class: 'mj-regmgr-select',
+                                        value: notificationTypeFilter,
+                                        onChange: function (e) { setNotificationTypeFilter(e.target.value); },
+                                    }, [
+                                        h('option', { value: 'all' }, getString(strings, 'memberNotificationsAllTypes', 'Tous les types')),
+                                    ].concat(notificationTypes.map(function (entry) {
+                                        return h('option', { key: entry.value, value: entry.value }, entry.label);
+                                    }))),
+                                ]),
+                                h('div', { class: 'mj-regmgr-member-detail__add-message-field' }, [
+                                    h('label', { class: 'mj-regmgr-member-detail__add-message-label' }, getString(strings, 'memberNotificationsEmojiLabel', 'Emoji')),
+                                    h('select', {
+                                        class: 'mj-regmgr-select',
+                                        value: notificationEmojiFilter,
+                                        onChange: function (e) { setNotificationEmojiFilter(e.target.value); },
+                                    }, [
+                                        h('option', { value: 'all' }, getString(strings, 'memberNotificationsAllEmojis', 'Tous les emojis')),
+                                    ].concat(notificationEmojis.map(function (emoji) {
+                                        return h('option', { key: emoji, value: emoji }, emoji);
+                                    }))),
+                                ]),
+                                h('div', { class: 'mj-regmgr-member-detail__add-message-field' }, [
+                                    h('label', { class: 'mj-regmgr-member-detail__add-message-label' }, getString(strings, 'memberNotificationsReadFilterLabel', 'Statut')),
+                                    h('select', {
+                                        class: 'mj-regmgr-select',
+                                        value: notificationReadFilter,
+                                        onChange: function (e) { setNotificationReadFilter(e.target.value); },
+                                    }, [
+                                        h('option', { value: 'all' }, getString(strings, 'memberNotificationsAllReadStatuses', 'Tous les statuts')),
+                                        h('option', { value: 'unread' }, getString(strings, 'memberNotificationUnread', 'Non lu')),
+                                        h('option', { value: 'read' }, getString(strings, 'memberNotificationRead', 'Lu')),
+                                        h('option', { value: 'archived' }, getString(strings, 'memberNotificationArchived', 'Archivé')),
+                                    ]),
+                                ]),
+                            ]),
+                            filteredNotifications.length > 0
+                                ? h('div', {
+                                    class: 'mj-regmgr-member-detail__messages mj-regmgr-member-notifications-grid',
+                                }, filteredNotifications.map(function (notification) {
+                                    var notificationId = getNotificationNumericId(notification);
+                                    var notificationItemKey = 'notif-' + String(notification.recipientId || notification.id || notificationId);
+                                    var isEditingNotification = editingNotificationId === notificationId;
+                                    var isDeletingNotification = notificationDeletingId === notificationId;
+                                    var isSelectedNotification = !!selectedNotificationIds[notificationId];
+                                    var textValue = notification.text || notification.title || notification.excerpt || '';
+                                    var urlValue = notification.url || '';
+                                    var statusValue = (notification.status || '').toLowerCase();
+                                    var statusLabel = notificationStatusLabels[statusValue] || (notification.status || getString(strings, 'memberNotificationsStatusUnknown', 'Inconnu'));
+                                    var statusBadgeClass = 'mj-regmgr-badge--secondary';
+                                    if (statusValue === 'unread') {
+                                        statusBadgeClass = 'mj-regmgr-badge--warning';
+                                    } else if (statusValue === 'read') {
+                                        statusBadgeClass = 'mj-regmgr-badge--success';
+                                    }
+
+                                    return h('article', {
+                                        key: notificationItemKey,
+                                        class: classNames('mj-regmgr-member-message', 'mj-regmgr-member-notification-card', {
+                                            'mj-regmgr-member-notification-card--selected': isSelectedNotification,
+                                            'mj-regmgr-member-notification-card--editing': isEditingNotification,
+                                        }),
+                                    }, [
+                                        h('header', { class: 'mj-regmgr-member-message__header mj-regmgr-member-notification-card__header' }, [
+                                            isEditingNotification
+                                                ? h('div', { class: 'mj-regmgr-member-notification-card__subject-inline' }, [
+                                                    notification.emoji && h('span', { class: 'mj-regmgr-note-card__event-emoji' }, notification.emoji),
+                                                    h('input', {
+                                                        type: 'text',
+                                                        class: 'mj-regmgr-input mj-regmgr-member-notification-card__subject-input',
+                                                        value: notificationDraft.text,
+                                                        onInput: function (e) {
+                                                            setNotificationDraft(function (prev) {
+                                                                return Object.assign({}, prev, { text: e.target.value });
+                                                            });
+                                                        },
+                                                        disabled: notificationSaving,
+                                                    }),
+                                                ])
+                                                : h('h3', { class: 'mj-regmgr-member-notification-card__subject' }, [
+                                                    notification.emoji && h('span', { class: 'mj-regmgr-note-card__event-emoji' }, notification.emoji),
+                                                    h('span', { class: 'mj-regmgr-member-notification-card__subject-text' }, textValue || getString(strings, 'memberNotificationsNoText', 'Sans texte')),
+                                                ]),
+                                            h('div', { class: 'mj-regmgr-member-notification-card__meta' }, [
+                                                h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--secondary' }, notification.typeLabel || notification.type || getString(strings, 'memberNotificationsTypeUnknown', 'Autre')),
+                                                isEditingNotification
+                                                    ? h('select', {
+                                                        class: 'mj-regmgr-select mj-regmgr-select--small mj-regmgr-member-notification-card__status-select',
+                                                        value: notificationDraft.status || 'unread',
+                                                        onChange: function (e) {
+                                                            setNotificationDraft(function (prev) {
+                                                                return Object.assign({}, prev, { status: e.target.value });
+                                                            });
+                                                        },
+                                                        disabled: notificationSaving,
+                                                    }, [
+                                                        h('option', { value: 'unread' }, getString(strings, 'memberNotificationUnread', 'Non lu')),
+                                                        h('option', { value: 'read' }, getString(strings, 'memberNotificationRead', 'Lu')),
+                                                        h('option', { value: 'archived' }, getString(strings, 'memberNotificationArchived', 'Archivé')),
+                                                    ])
+                                                    : h('span', { class: 'mj-regmgr-badge ' + statusBadgeClass }, statusLabel),
+                                            ]),
+                                        ]),
+                                        h('p', { class: 'mj-regmgr-member-message__meta mj-regmgr-member-notification-card__date' }, [
+                                            notification.createdAt ? formatDate(notification.createdAt) : getString(strings, 'unknownDate', 'Date inconnue'),
+                                        ]),
+                                        h('label', {
+                                            class: 'mj-regmgr-checkbox mj-regmgr-member-notification-card__select',
+                                        }, [
+                                            h('input', {
+                                                type: 'checkbox',
+                                                checked: isSelectedNotification,
+                                                onChange: function () { handleNotificationSelectionToggle(notificationId); },
+                                            }),
+                                            h('span', null, getString(strings, 'memberNotificationsSelectItem', 'Sélectionner')),
+                                        ]),
+                                        h('div', { class: 'mj-regmgr-member-message__actions' }, [
+                                                !isEditingNotification && onUpdateNotification && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                                    onClick: function () { handleNotificationEditStart(notification); },
+                                                }, getString(strings, 'edit', 'Éditer')),
+                                                isEditingNotification && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                                    onClick: handleNotificationEditCancel,
+                                                    disabled: notificationSaving,
+                                                }, getString(strings, 'cancel', 'Annuler')),
+                                                isEditingNotification && onUpdateNotification && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--primary mj-btn--small',
+                                                    onClick: function () { handleNotificationSave(notification); },
+                                                    disabled: notificationSaving || !(notificationDraft.text || '').trim(),
+                                                }, notificationSaving ? getString(strings, 'saving', 'Enregistrement...') : getString(strings, 'save', 'Enregistrer')),
+                                                onDeleteNotification && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--ghost mj-btn--danger mj-btn--small',
+                                                    onClick: function () { handleNotificationDelete(notification); },
+                                                    disabled: isDeletingNotification || notificationBulkDeleting,
+                                                }, isDeletingNotification ? getString(strings, 'deleting', 'Suppression...') : getString(strings, 'delete', 'Supprimer')),
+                                        ]),
+                                            h('div', { class: 'mj-regmgr-member-message__content mj-regmgr-member-notification-card__content' }, [
+                                            urlValue
+                                                ? h('a', {
+                                                    href: urlValue,
+                                                    target: '_blank',
+                                                    rel: 'noopener noreferrer',
+                                                    class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                                }, getString(strings, 'memberNotificationsOpenUrl', 'Ouvrir le lien'))
+                                                : h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--ghost mj-btn--small',
+                                                    disabled: true,
+                                                }, getString(strings, 'memberNotificationsNoUrlButton', 'Pas de lien')),
+                                        ]),
+                                    ]);
+                                }))
+                                : h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNotificationsEmpty', 'Aucune notification trouvée pour ce filtre.')),
+                        ]),
+                    ]),
+                    activeTab === 'notes' && h(Fragment, null, [
+                        h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                            h('h2', { class: 'mj-regmgr-member-detail__section-title' }, 'Notes (' + notes.length + ')'),
+
+                            h('div', { class: 'mj-regmgr-member-detail__add-note' }, [
+                                h('textarea', {
+                                    class: 'mj-regmgr-textarea',
+                                    placeholder: 'Ajouter une note...',
+                                    value: newNote,
+                                    onInput: function (e) { setNewNote(e.target.value); },
+                                    rows: 3,
+                                }),
+                                h('button', {
+                                    type: 'button',
+                                    class: 'mj-btn mj-btn--primary mj-btn--small',
+                                    onClick: handleAddNote,
+                                    disabled: savingNote || !newNote.trim(),
+                                }, savingNote ? 'Enregistrement...' : 'Ajouter'),
+                            ]),
+                            notes.length > 0 && h('div', { class: 'mj-regmgr-member-detail__notes' },
+                                notes.map(function (note) {
+                                    var isEditing = editingNoteId === note.id;
+                                    return h('div', { key: note.id, class: 'mj-regmgr-note-card' }, [
+                                        h('div', { class: 'mj-regmgr-note-card__header' }, [
+                                            h('div', { class: 'mj-regmgr-note-card__header-left' }, [
+                                                h('span', { class: 'mj-regmgr-note-card__author' }, note.authorName || 'Anonyme'),
+                                                note.eventId && note.eventTitle && h('a', { 
+                                                    class: 'mj-regmgr-note-card__event-badge',
+                                                    href: '?event=' + note.eventId + '&tab=registrations',
+                                                    title: 'Voir l\'événement ' + note.eventTitle,
+                                                }, [
+                                                    note.eventEmoji && h('span', { class: 'mj-regmgr-note-card__event-emoji' }, note.eventEmoji),
+                                                    note.eventTitle,
+                                                ]),
+                                            ]),
+                                            h('div', { class: 'mj-regmgr-note-card__header-right' }, [
+                                                h('span', { class: 'mj-regmgr-note-card__date' }, formatDate(note.createdAt)),
+                                                h('div', { class: 'mj-regmgr-note-card__actions' }, [
+                                                note.canEdit && !isEditing && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--icon mj-btn--ghost',
+                                                    onClick: function () { handleNoteEditStart(note); },
+                                                    title: 'Modifier',
+                                                }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                        h('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
+                                                        h('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+                                                    ]),
+                                                ]),
+                                                isEditing && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--icon mj-btn--ghost',
+                                                    onClick: handleNoteEditCancel,
+                                                    title: 'Annuler',
+                                                }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                        h('line', { x1: 18, y1: 6, x2: 6, y2: 18 }),
+                                                        h('line', { x1: 6, y1: 6, x2: 18, y2: 18 }),
+                                                    ]),
+                                                ]),
+                                                h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--icon mj-btn--ghost mj-btn--danger',
+                                                    onClick: function () { onDeleteNote(note.id); },
+                                                    title: 'Supprimer',
+                                                }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                        h('polyline', { points: '3 6 5 6 21 6' }),
+                                                        h('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' }),
+                                                    ]),
+                                                ]),
+                                            ]),
+                                            ]),
+                                        ]),
+                                        isEditing
+                                            ? h('div', { class: 'mj-regmgr-note-card__editor' }, [
+                                                h('textarea', {
+                                                    class: 'mj-regmgr-textarea',
+                                                    rows: 3,
+                                                    value: editingNoteContent,
+                                                    onInput: function (e) { setEditingNoteContent(e.target.value); },
+                                                }),
+                                                h('div', { class: 'mj-regmgr-note-card__editor-actions' }, [
+                                                    h('button', {
+                                                        type: 'button',
+                                                        class: 'mj-btn mj-btn--secondary mj-btn--small',
+                                                        onClick: handleNoteEditCancel,
+                                                        disabled: editingNoteSaving,
+                                                    }, 'Annuler'),
+                                                    h('button', {
+                                                        type: 'button',
+                                                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                                                        onClick: handleUpdateNote,
+                                                        disabled: editingNoteSaving || !editingNoteContent.trim(),
+                                                    }, editingNoteSaving ? 'Enregistrement...' : 'Enregistrer'),
+                                                ]),
+                                            ])
+                                            : h('div', { class: 'mj-regmgr-note-card__content' }, note.content),
+                                    ]);
+                                })
+                            ),
+                        ]),
+                    ]),
+                    activeTab === 'testimonials' && h(Fragment, null, [
+                        h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                            h('h2', { class: 'mj-regmgr-member-detail__section-title' }, 
+                                getString(strings, 'memberTestimonials', 'Témoignages') + (testimonialsCount > 0 ? ' (' + testimonialsCount + ')' : '')
+                            ),
+                            h('div', { class: 'mj-regmgr-form-field mj-regmgr-form-field--checkbox' }, [
+                                h('label', { class: 'mj-regmgr-checkbox' }, [
+                                    h('input', {
+                                        id: fieldIdPrefix + 'trusted-member',
+                                        type: 'checkbox',
+                                        checked: !!member.isTrustedMember,
+                                        disabled: trustedMemberSaving,
+                                        onChange: function (e) {
+                                            handleToggleTrustedMember(e.target.checked);
+                                        },
+                                    }),
+                                    h('span', null, getString(strings, 'memberTrustedLabel', 'Membre de confiance')),
+                                    h('span', { class: 'mj-regmgr-member-detail__hint' }, getString(strings, 'memberTrustedHint', '(Les témoignages sont auto-approvés)')),
+                                ]),
+                                trustedMemberSaving && h('span', { class: 'mj-regmgr-spinner mj-regmgr-spinner--inline' }),
+                            ]),
+                            testimonialsCount > 0
+                                ? h('div', { class: 'mj-regmgr-testimonials-list' },
+                                    memberTestimonials.map(function (testimonial) {
+                                        var statusLabel = testimonial.status === 'approved' 
+                                            ? getString(strings, 'testimonialStatusApproved', 'Approuvé')
+                                            : testimonial.status === 'rejected' 
+                                                ? getString(strings, 'testimonialStatusRejected', 'Rejeté') 
+                                                : getString(strings, 'testimonialStatusPending', 'En attente');
+                                        var statusClass = testimonial.status === 'approved' ? 'mj-regmgr-badge--success' :
+                                            testimonial.status === 'rejected' ? 'mj-regmgr-badge--danger' : 'mj-regmgr-badge--warning';
+                                        var isPending = testimonial.status === 'pending';
+                                        var isApproved = testimonial.status === 'approved';
+                                        var isRejected = testimonial.status === 'rejected';
+                                        
+                                        var isEditingContent = editingTestimonialId === testimonial.id;
+                                        var contentDraft = testimonialContentDraft[testimonial.id] || testimonial.content || '';
+                                        var isContentSaving = testimonialContentSaving[testimonial.id] || false;
+
+                                        var isEditingLink = testimonialLinkEditing[testimonial.id] || false;
+                                        var linkDraft = testimonialLinkDraft[testimonial.id] || { url: testimonial.linkPreview?.url || '', title: testimonial.linkPreview?.title || '' };
+
+                                        var newCommentDraft = newTestimonialComment[testimonial.id] || '';
+                                        var isCommentSaving = testimonialCommentSaving[testimonial.id] || false;
+
+                                        var comments = Array.isArray(testimonial.comments) ? testimonial.comments : [];
+                                        var reactions = Array.isArray(testimonial.reactions) ? testimonial.reactions : [];
+                                        
+                                        return h('div', { 
+                                            key: testimonial.id, 
+                                            class: classNames('mj-regmgr-testimonial-card', {
+                                                'mj-regmgr-testimonial-card--pending': isPending,
+                                                'mj-regmgr-testimonial-card--approved': isApproved,
+                                                'mj-regmgr-testimonial-card--rejected': isRejected,
+                                            }),
+                                        }, [
+                                            h('div', { class: 'mj-regmgr-testimonial-card__header' }, [
+                                                h('div', { class: 'mj-regmgr-testimonial-card__header-left' }, [
+                                                    h('span', { class: classNames('mj-regmgr-badge', statusClass) }, statusLabel),
+                                                    testimonial.created_at && h('span', { class: 'mj-regmgr-testimonial-card__date' }, testimonial.created_at),
+                                                ]),
+                                                h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-regmgr-testimonial-card__delete-btn',
+                                                    title: getString(strings, 'deleteTestimonial', 'Supprimer'),
+                                                    onClick: function () {
+                                                        if (confirm(getString(strings, 'confirmDeleteTestimonial', 'Voulez-vous vraiment supprimer ce témoignage ?'))) {
+                                                            onDeleteTestimonial && onDeleteTestimonial(testimonial.id);
+                                                        }
+                                                    },
+                                                }, [
+                                                    h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                        h('polyline', { points: '3 6 5 6 21 6' }),
+                                                        h('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' }),
+                                                    ]),
+                                                ]),
+                                            ]),
+                                            // CONTENU - Éditable
+                                            isEditingContent
+                                                ? h('div', { class: 'mj-regmgr-testimonial-card__content-edit' }, [
+                                                    h('textarea', {
+                                                        class: 'mj-regmgr-form-control',
+                                                        value: contentDraft,
+                                                        placeholder: getString(strings, 'testimonialContentPlaceholder', 'Contenu du témoignage...'),
+                                                        onChange: function (e) {
+                                                            setTestimonialContentDraft(_assignKeyValue(testimonialContentDraft, testimonial.id, e.target.value));
+                                                        },
+                                                        rows: '4',
+                                                    }),
+                                                    h('div', { class: 'mj-regmgr-button-group mj-regmgr-button-group--small' }, [
+                                                        h('button', {
+                                                            type: 'button',
+                                                            class: 'mj-btn mj-btn--success mj-btn--small',
+                                                            disabled: isContentSaving,
+                                                            onClick: function () {
+                                                                if (contentDraft.trim().length < 10) {
+                                                                    alert(getString(strings, 'testimonialContentMinLength', 'Le contenu doit contenir au moins 10 caractères.'));
+                                                                    return;
+                                                                }
+                                                                setTestimonialContentSaving(_assignKeyValue(testimonialContentSaving, testimonial.id, true));
+                                                                apiService.editTestimonialContent(testimonial.id, contentDraft).then(function () {
+                                                                    // Mettre à jour les données du membre
+                                                                    if (onMemberUpdated) {
+                                                                        var updatedMember = Object.assign({}, member, {
+                                                                            testimonials: member.testimonials.map(function (t) {
+                                                                                return t.id === testimonial.id ? Object.assign({}, t, { content: contentDraft }) : t;
+                                                                            }),
+                                                                        });
+                                                                        onMemberUpdated(updatedMember);
+                                                                    }
+                                                                    setEditingTestimonialId(null);
+                                                                    // Garder le draft visible jusqu'à ce que le parent re-render
+                                                                    setTimeout(function () {
+                                                                        setTestimonialContentDraft({});
+                                                                    }, 100);
+                                                                }).catch(function (e) {
+                                                                    alert(getString(strings, 'errorUpdatingTestimonial', 'Erreur lors de la mise à jour du témoignage.'));
+                                                                }).finally(function () {
+                                                                    setTestimonialContentSaving(_assignKeyValue(testimonialContentSaving, testimonial.id, false));
+                                                                });
+                                                            },
+                                                        }, getString(strings, 'save', 'Enregistrer')),
+                                                        h('button', {
+                                                            type: 'button',
+                                                            class: 'mj-btn mj-btn--outline mj-btn--small',
+                                                            onClick: function () {
+                                                                setEditingTestimonialId(null);
+                                                                setTestimonialContentDraft({});
+                                                            },
+                                                        }, getString(strings, 'cancel', 'Annuler')),
+                                                    ]),
+                                                ])
+                                                : h('div', { class: 'mj-regmgr-testimonial-card__content-view' }, [
+                                                    (contentDraft || testimonial.content) && h('div', { class: 'mj-regmgr-testimonial-card__content' }, contentDraft || testimonial.content),
+                                                    h('button', {
+                                                        type: 'button',
+                                                        class: 'mj-btn mj-btn--link mj-btn--small mj-regmgr-testimonial-card__edit-btn',
+                                                        onClick: function () {
+                                                            setEditingTestimonialId(testimonial.id);
+                                                            setTestimonialContentDraft(_assignKeyValue(testimonialContentDraft, testimonial.id, testimonial.content || ''));
+                                                        },
+                                                    }, [
+                                                        h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                            h('polyline', { points: '17 3 21 7 3 21 3 21' }),
+                                                        ]),
+                                                        h('span', null, getString(strings, 'edit', 'Éditer')),
+                                                    ]),
+                                                ]),
+                                            // LIEN - Avec aperçu
+                                            testimonial.linkPreview || isEditingLink ? h('div', { class: 'mj-regmgr-testimonial-card__link-section' }, [
+                                                h('h4', { class: 'mj-regmgr-testimonial-card__section-title' }, getString(strings, 'linkedContent', 'Lien associé')),
+                                                isEditingLink
+                                                    ? h('div', { class: 'mj-regmgr-testimonial-card__link-edit' }, [
+                                                        h('input', {
+                                                            type: 'url',
+                                                            class: 'mj-regmgr-form-control',
+                                                            placeholder: 'URL du lien social...',
+                                                            value: linkDraft.url || '',
+                                                            onChange: function (e) {
+                                                                setTestimonialLinkDraft(_assignKeyValue(testimonialLinkDraft, testimonial.id, Object.assign({}, linkDraft, { url: e.target.value })));
+                                                            },
+                                                        }),
+                                                        h('input', {
+                                                            type: 'text',
+                                                            class: 'mj-regmgr-form-control',
+                                                            placeholder: 'Titre du lien...',
+                                                            value: linkDraft.title || '',
+                                                            onChange: function (e) {
+                                                                setTestimonialLinkDraft(_assignKeyValue(testimonialLinkDraft, testimonial.id, Object.assign({}, linkDraft, { title: e.target.value })));
+                                                            },
+                                                        }),
+                                                        h('div', { class: 'mj-regmgr-button-group mj-regmgr-button-group--small' }, [
+                                                            h('button', {
+                                                                type: 'button',
+                                                                class: 'mj-btn mj-btn--success mj-btn--small',
+                                                                onClick: function () {
+                                                                    apiService.updateTestimonialLink(testimonial.id, linkDraft.url ? 'add' : 'remove', linkDraft.url, linkDraft.title).then(function () {
+                                                                        if (onMemberUpdated) {
+                                                                            var updatedMember = Object.assign({}, member, {
+                                                                                testimonials: member.testimonials.map(function (t) {
+                                                                                    return t.id === testimonial.id 
+                                                                                        ? Object.assign({}, t, { linkPreview: linkDraft.url ? linkDraft : null })
+                                                                                        : t;
+                                                                                }),
+                                                                            });
+                                                                            onMemberUpdated(updatedMember);
+                                                                        }
+                                                                        setTestimonialLinkEditing(_assignKeyValue(testimonialLinkEditing, testimonial.id, false));
+                                                                        // Garder le draft visible jusqu'à ce que le parent re-render
+                                                                        setTimeout(function () {
+                                                                            setTestimonialLinkDraft({});
+                                                                        }, 100);
+                                                                    });
+                                                                },
+                                                            }, getString(strings, 'save', 'Enregistrer')),
+                                                            h('button', {
+                                                                type: 'button',
+                                                                class: 'mj-btn mj-btn--outline mj-btn--small',
+                                                                onClick: function () {
+                                                                    setTestimonialLinkEditing(_assignKeyValue(testimonialLinkEditing, testimonial.id, false));
+                                                                    setTestimonialLinkDraft({});
+                                                                },
+                                                            }, getString(strings, 'cancel', 'Annuler')),
+                                                        ]),
+                                                    ])
+                                                    : h('div', { class: 'mj-regmgr-testimonial-card__link-view' }, [
+                                                        testimonial.linkPreview && h('div', { class: 'mj-regmgr-testimonial-card__link-preview' }, [
+                                                            testimonial.linkPreview.url && h('a', {
+                                                                href: testimonial.linkPreview.url,
+                                                                target: '_blank',
+                                                                rel: 'noopener noreferrer',
+                                                                class: 'mj-regmgr-testimonial-card__link-url',
+                                                            }, testimonial.linkPreview.title || getString(strings, 'viewLink', 'Voir le lien')),
+                                                            testimonial.linkPreview.preview && h('p', { class: 'mj-regmgr-testimonial-card__link-description' }, testimonial.linkPreview.preview),
+                                                        ]),
+                                                        h('div', { class: 'mj-regmgr-button-group mj-regmgr-button-group--small' }, [
+                                                            h('button', {
+                                                                type: 'button',
+                                                                class: 'mj-btn mj-btn--link mj-btn--small',
+                                                                onClick: function () {
+                                                                    setTestimonialLinkEditing(_assignKeyValue(testimonialLinkEditing, testimonial.id, true));
+                                                                    setTestimonialLinkDraft(_assignKeyValue(testimonialLinkDraft, testimonial.id, Object.assign({}, testimonial.linkPreview)));
+                                                                },
+                                                            }, getString(strings, 'edit', 'Éditer')),
+                                                            h('button', {
+                                                                type: 'button',
+                                                                class: 'mj-btn mj-btn--danger mj-btn--small',
+                                                                onClick: function () {
+                                                                    apiService.updateTestimonialLink(testimonial.id, 'remove').then(function () {
+                                                                        if (onMemberUpdated) {
+                                                                            var updatedMember = Object.assign({}, member, {
+                                                                                testimonials: member.testimonials.map(function (t) {
+                                                                                    return t.id === testimonial.id 
+                                                                                        ? Object.assign({}, t, { linkPreview: null })
+                                                                                        : t;
+                                                                                }),
+                                                                            });
+                                                                            onMemberUpdated(updatedMember);
+                                                                        }
+                                                                    });
+                                                                },
+                                                            }, getString(strings, 'removeLink', 'Supprimer')),
+                                                        ]),
+                                                    ]),
+                                            ]) : null,
+                                            // PHOTOS
+                                            testimonial.photos && testimonial.photos.length > 0 && h('div', { class: 'mj-regmgr-testimonial-card__photos' },
+                                                testimonial.photos.slice(0, 4).map(function (photo, idx) {
+                                                    return h('img', { key: idx, src: photo.thumb || photo.url, alt: '', class: 'mj-regmgr-testimonial-card__photo' });
+                                                })
+                                            ),
+                                            // VIDEO
+                                            testimonial.video && h('div', { class: 'mj-regmgr-testimonial-card__video' }, [
+                                                h('video', { controls: true, src: testimonial.video.url, poster: testimonial.video.poster }),
+                                            ]),
+                                            // RAISON DU REJET
+                                            isRejected && testimonial.rejection_reason && h('div', { class: 'mj-regmgr-testimonial-card__rejection' }, [
+                                                h('strong', null, getString(strings, 'rejectionReasonLabel', 'Raison du rejet : ')),
+                                                testimonial.rejection_reason,
+                                            ]),
+                                            // COMMENTAIRES
+                                            h('div', { class: 'mj-regmgr-testimonial-card__comments-section' }, [
+                                                h('h4', { class: 'mj-regmgr-testimonial-card__section-title' }, 
+                                                    getString(strings, 'commentaires', 'Commentaires') + (comments.length > 0 ? ' (' + comments.length + ')' : '')
+                                                ),
+                                                comments.length > 0 && h('div', { class: 'mj-regmgr-testimonial-card__comments-list' },
+                                                    comments.map(function (comment) {
+                                                        var isEditingComment = editingTestimonialCommentId === comment.id;
+                                                        var commentDraft = editingTestimonialCommentDraft[comment.id] || comment.content || '';
+                                                        return h('div', { key: comment.id, class: 'mj-regmgr-testimonial-card__comment' }, [
+                                                            h('div', { class: 'mj-regmgr-testimonial-card__comment-header' }, [
+                                                                h('strong', null, comment.memberName || getString(strings, 'anonymous', 'Anonyme')),
+                                                                h('span', { class: 'mj-regmgr-testimonial-card__comment-date' }, comment.createdAt),
+                                                            ]),
+                                                            isEditingComment
+                                                                ? h('div', { class: 'mj-regmgr-testimonial-card__comment-edit' }, [
+                                                                    h('textarea', {
+                                                                        class: 'mj-regmgr-form-control',
+                                                                        value: commentDraft,
+                                                                        onChange: function (e) {
+                                                                            setEditingTestimonialCommentDraft(_assignKeyValue(editingTestimonialCommentDraft, comment.id, e.target.value));
+                                                                        },
+                                                                        rows: '3',
+                                                                    }),
+                                                                    h('div', { class: 'mj-regmgr-button-group mj-regmgr-button-group--small' }, [
+                                                                        h('button', {
+                                                                            type: 'button',
+                                                                            class: 'mj-btn mj-btn--success mj-btn--small',
+                                                                            onClick: function () {
+                                                                                apiService.editTestimonialComment(comment.id, commentDraft).then(function () {
+                                                                                    if (onMemberUpdated) {
+                                                                                        var updatedMember = Object.assign({}, member, {
+                                                                                            testimonials: member.testimonials.map(function (t) {
+                                                                                                return t.id === testimonial.id
+                                                                                                    ? Object.assign({}, t, {
+                                                                                                        comments: t.comments.map(function (c) {
+                                                                                                            return c.id === comment.id 
+                                                                                                                ? Object.assign({}, c, { content: commentDraft })
+                                                                                                                : c;
+                                                                                                        }),
+                                                                                                    })
+                                                                                                    : t;
+                                                                                            }),
+                                                                                        });
+                                                                                        onMemberUpdated(updatedMember);
+                                                                                    }
+                                                                                    setEditingTestimonialCommentId(null);
+                                                                                    // Garder le draft visible jusqu'à ce que le parent re-render
+                                                                                    setTimeout(function () {
+                                                                                        setEditingTestimonialCommentDraft({});
+                                                                                    }, 100);
+                                                                                });
+                                                                            },
+                                                                        }, getString(strings, 'save', 'Enregistrer')),
+                                                                        h('button', {
+                                                                            type: 'button',
+                                                                            class: 'mj-btn mj-btn--outline mj-btn--small',
+                                                                            onClick: function () {
+                                                                                setEditingTestimonialCommentId(null);
+                                                                                setEditingTestimonialCommentDraft({});
+                                                                            },
+                                                                        }, getString(strings, 'cancel', 'Annuler')),
+                                                                    ]),
+                                                                ])
+                                                                : h('div', { class: 'mj-regmgr-testimonial-card__comment-view' }, [
+                                                                    h('p', { class: 'mj-regmgr-testimonial-card__comment-content' }, commentDraft || comment.content),
+                                                                    h('div', { class: 'mj-regmgr-button-group mj-regmgr-button-group--small' }, [
+                                                                        h('button', {
+                                                                            type: 'button',
+                                                                            class: 'mj-btn mj-btn--link mj-btn--small',
+                                                                            onClick: function () {
+                                                                                setEditingTestimonialCommentId(comment.id);
+                                                                                setEditingTestimonialCommentDraft(_assignKeyValue(editingTestimonialCommentDraft, comment.id, comment.content));
+                                                                            },
+                                                                        }, getString(strings, 'edit', 'Éditer')),
+                                                                        h('button', {
+                                                                            type: 'button',
+                                                                            class: 'mj-btn mj-btn--danger mj-btn--small',
+                                                                            onClick: function () {
+                                                                                if (confirm(getString(strings, 'confirmDeleteComment', 'Supprimer ce commentaire ?'))) {
+                                                                                    apiService.deleteTestimonialComment(comment.id).then(function () {
+                                                                                        if (onMemberUpdated) {
+                                                                                            var updatedMember = Object.assign({}, member, {
+                                                                                                testimonials: member.testimonials.map(function (t) {
+                                                                                                    return t.id === testimonial.id
+                                                                                                        ? Object.assign({}, t, {
+                                                                                                            comments: t.comments.filter(function (c) { return c.id !== comment.id; }),
+                                                                                                        })
+                                                                                                        : t;
+                                                                                                }),
+                                                                                            });
+                                                                                            onMemberUpdated(updatedMember);
+                                                                                        }
+                                                                                    });
+                                                                                }
+                                                                            },
+                                                                        }, getString(strings, 'delete', 'Supprimer')),
+                                                                    ]),
+                                                                ]),
+                                                        ]);
+                                                    })
+                                                ),
+                                                h('div', { class: 'mj-regmgr-testimonial-card__new-comment' }, [
+                                                    h('textarea', {
+                                                        class: 'mj-regmgr-form-control',
+                                                        placeholder: getString(strings, 'addCommentPlaceholder', 'Ajouter un commentaire...'),
+                                                        value: newCommentDraft,
+                                                        onChange: function (e) {
+                                                            setNewTestimonialComment(_assignKeyValue(newTestimonialComment, testimonial.id, e.target.value));
+                                                        },
+                                                        rows: '2',
+                                                    }),
+                                                    h('button', {
+                                                        type: 'button',
+                                                        class: 'mj-btn mj-btn--primary mj-btn--small',
+                                                        disabled: isCommentSaving || !newCommentDraft.trim(),
+                                                        onClick: function () {
+                                                            setTestimonialCommentSaving(_assignKeyValue(testimonialCommentSaving, testimonial.id, true));
+                                                            apiService.addTestimonialComment(testimonial.id, newCommentDraft).then(function (response) {
+                                                                if (response && response.comment) {
+                                                                    if (onMemberUpdated) {
+                                                                        var updatedMember = Object.assign({}, member, {
+                                                                            testimonials: member.testimonials.map(function (t) {
+                                                                                return t.id === testimonial.id
+                                                                                    ? Object.assign({}, t, {
+                                                                                        comments: Array.isArray(t.comments) ? t.comments.concat(response.comment) : [response.comment],
+                                                                                    })
+                                                                                    : t;
+                                                                            }),
+                                                                        });
+                                                                        onMemberUpdated(updatedMember);
+                                                                    }
+                                                                }
+                                                                setNewTestimonialComment(_assignKeyValue(newTestimonialComment, testimonial.id, ''));
+                                                            }).catch(function (err) {
+                                                                alert(getString(strings, 'errorAddingComment', 'Erreur lors de l\'ajout du commentaire.'));
+                                                            }).finally(function () {
+                                                                setTestimonialCommentSaving(_assignKeyValue(testimonialCommentSaving, testimonial.id, false));
+                                                            });
+                                                        },
+                                                    }, getString(strings, 'postComment', 'Poster')),
+                                                ]),
+                                            ]),
+                                            // RÉACTIONS
+                                            h('div', { class: 'mj-regmgr-testimonial-card__reactions-section' }, [
+                                                h('h4', { class: 'mj-regmgr-testimonial-card__section-title' }, getString(strings, 'reactions', 'Réactions')),
+                                                reactions.length > 0 && h('div', { class: 'mj-regmgr-testimonial-card__reactions-list' },
+                                                    reactions.map(function (reaction) {
+                                                        return h('button', {
+                                                            key: reaction.type,
+                                                            type: 'button',
+                                                            class: 'mj-regmgr-testimonial-card__reaction-btn',
+                                                            title: reaction.label,
+                                                            onClick: function () {
+                                                                apiService.removeTestimonialReaction(testimonial.id, reaction.type).then(function () {
+                                                                    if (onMemberUpdated) {
+                                                                        var updatedMember = Object.assign({}, member, {
+                                                                            testimonials: member.testimonials.map(function (t) {
+                                                                                return t.id === testimonial.id
+                                                                                    ? Object.assign({}, t, {
+                                                                                        reactions: t.reactions.filter(function (r) { return r.type !== reaction.type; }),
+                                                                                    })
+                                                                                    : t;
+                                                                            }),
+                                                                        });
+                                                                        onMemberUpdated(updatedMember);
+                                                                    }
+                                                                });
+                                                            },
+                                                        }, [
+                                                            h('span', { class: 'mj-regmgr-testimonial-card__reaction-emoji' }, reaction.emoji),
+                                                            h('span', { class: 'mj-regmgr-testimonial-card__reaction-count' }, reaction.count),
+                                                        ]);
+                                                    })
+                                                ),
+                                                h('div', { class: 'mj-regmgr-testimonial-card__add-reaction' }, [
+                                                    h('button', {
+                                                        type: 'button',
+                                                        class: 'mj-regmgr-testimonial-card__add-reaction-btn',
+                                                        title: getString(strings, 'addReaction', 'Ajouter une réaction'),
+                                                        onClick: function () {
+                                                            // Menu des réactions
+                                                            var reactionTypes = [
+                                                                { type: 'like', emoji: '👍', label: getString(strings, 'reactionLike', 'J\'aime') },
+                                                                { type: 'love', emoji: '❤️', label: getString(strings, 'reactionLove', 'J\'adore') },
+                                                                { type: 'haha', emoji: '😂', label: getString(strings, 'reactionHaha', 'Haha') },
+                                                                { type: 'wow', emoji: '😮', label: getString(strings, 'reactionWow', 'Wouah') },
+                                                                { type: 'sad', emoji: '😢', label: getString(strings, 'reactionSad', 'Triste') },
+                                                                { type: 'angry', emoji: '😠', label: getString(strings, 'reactionAngry', 'Grrr') },
+                                                            ];
+                                                            var selectedType = prompt('Choisir une réaction (like, love, haha, wow, sad, angry):');
+                                                            if (selectedType && reactionTypes.find(function (r) { return r.type === selectedType; })) {
+                                                                apiService.addTestimonialReaction(testimonial.id, selectedType).then(function () {
+                                                                    if (onMemberUpdated) {
+                                                                        var reaction = reactionTypes.find(function (r) { return r.type === selectedType; });
+                                                                        var updatedMember = Object.assign({}, member, {
+                                                                            testimonials: member.testimonials.map(function (t) {
+                                                                                if (t.id !== testimonial.id) return t;
+                                                                                var existingReaction = t.reactions.find(function (r) { return r.type === selectedType; });
+                                                                                if (existingReaction) {
+                                                                                    return Object.assign({}, t, {
+                                                                                        reactions: t.reactions.map(function (r) {
+                                                                                            return r.type === selectedType
+                                                                                                ? Object.assign({}, r, { count: r.count + 1 })
+                                                                                                : r;
+                                                                                        }),
+                                                                                    });
+                                                                                } else {
+                                                                                    return Object.assign({}, t, {
+                                                                                        reactions: Array.isArray(t.reactions) ? t.reactions.concat(reaction || { type: selectedType, emoji: selectedType === 'like' ? '👍' : '❤️', label: selectedType, count: 1 }) : [reaction || { type: selectedType, emoji: selectedType === 'like' ? '👍' : '❤️', label: selectedType, count: 1 }],
+                                                                                    });
+                                                                                }
+                                                                            }),
+                                                                        });
+                                                                        onMemberUpdated(updatedMember);
+                                                                    }
+                                                                });
+                                                            }
+                                                        },
+                                                    }, '+'),
+                                                ]),
+                                            ]),
+                                            // PIED DE PAGE - ACTIONS
+                                            (isPending || onUpdateTestimonialStatus) && h('div', { class: 'mj-regmgr-testimonial-card__footer' }, [
+                                                !isApproved && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--success mj-btn--small',
+                                                    onClick: function () {
+                                                        onUpdateTestimonialStatus && onUpdateTestimonialStatus(testimonial.id, 'approved');
+                                                    },
+                                                }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.5 }, [
+                                                        h('polyline', { points: '20 6 9 17 4 12' }),
+                                                    ]),
+                                                    h('span', null, getString(strings, 'approveTestimonial', 'Approuver')),
+                                                ]),
+                                                !isRejected && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--outline mj-btn--small',
+                                                    onClick: function () {
+                                                        var reason = prompt(getString(strings, 'rejectTestimonialReason', 'Raison du refus (optionnel) :'));
+                                                        if (reason !== null) {
+                                                            onUpdateTestimonialStatus && onUpdateTestimonialStatus(testimonial.id, 'rejected', reason);
+                                                        }
+                                                    },
+                                                }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                        h('line', { x1: 18, y1: 6, x2: 6, y2: 18 }),
+                                                        h('line', { x1: 6, y1: 6, x2: 18, y2: 18 }),
+                                                    ]),
+                                                    h('span', null, getString(strings, 'rejectTestimonial', 'Refuser')),
+                                                ]),
+                                                isRejected && h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--secondary mj-btn--small',
+                                                    onClick: function () {
+                                                        onUpdateTestimonialStatus && onUpdateTestimonialStatus(testimonial.id, 'pending');
+                                                    },
+                                                }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                        h('polyline', { points: '1 4 1 10 7 10' }),
+                                                        h('path', { d: 'M3.51 15a9 9 0 1 0 2.13-9.36L1 10' }),
+                                                    ]),
+                                                    h('span', null, getString(strings, 'resetTestimonial', 'Remettre en attente')),
+                                                ]),
+                                                isApproved && onToggleFeatured && h('button', {
+                                                    type: 'button',
+                                                    class: classNames('mj-btn mj-btn--small', {
+                                                        'mj-btn--warning': testimonial.featured,
+                                                        'mj-btn--outline': !testimonial.featured,
+                                                    }),
+                                                    title: testimonial.featured 
+                                                        ? getString(strings, 'removeFeaturedTestimonial', 'Retirer de la page d\'accueil')
+                                                        : getString(strings, 'addFeaturedTestimonial', 'Afficher sur la page d\'accueil'),
+                                                    onClick: function () {
+                                                        onToggleFeatured(testimonial.id);
+                                                    },
+                                                }, [
+                                                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: testimonial.featured ? 'currentColor' : 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                                        h('polygon', { points: '12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2' }),
+                                                    ]),
+                                                    h('span', null, testimonial.featured 
+                                                        ? getString(strings, 'featuredActive', 'En vedette')
+                                                        : getString(strings, 'featuredInactive', 'Mettre en vedette')),
+                                                ]),
+                                            ]),
+                                        ]);
+                                    })
+                                )
+                                : h('p', { class: 'mj-regmgr-member-detail__empty' }, getString(strings, 'memberNoTestimonials', 'Aucun témoignage.')),
+                        ]),
+                    ]),
+                    activeTab === 'history' && h(Fragment, null, [
+                        registrations.length > 0
+                            ? h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, registrationsTitle + ' (' + registrations.length + ')'),
+
+                                h('div', { class: 'mj-regmgr-history-list' },
+                                    registrations.map(function (reg) {
+                                        return h(RegistrationHistoryItem, {
+                                            key: reg.id,
+                                            registration: reg,
+                                            strings: strings,
+                                            allowDelete: allowDeleteRegistration,
+                                            onDelete: onDeleteRegistration,
+                                            onUpdateOccurrences: onUpdateRegistrationOccurrences,
+                                            onSelectEvent: onSelectEvent,
+                                        });
+                                    })
+                                ),
+                            ])
+                            : h('div', { class: 'mj-regmgr-member-detail__section' }, [
+                                h('h2', { class: 'mj-regmgr-member-detail__section-title' }, registrationsTitle),
+                                h('p', { class: 'mj-regmgr-member-detail__empty' }, registrationsEmptyLabel),
+                            ]),
+                    ]),
+                    activeTab === 'quotas' && isAnimateur && canManageQuotas && h(MemberLeaveQuotasSection, {
+                        member: member,
+                        config: config,
+                        strings: strings,
+                        onRefresh: onMemberUpdated,
+                    }),
+                    activeTab === 'quotas' && isAnimateur && canManageQuotas && h(MemberWorkSchedulesSection, {
+                        member: member,
+                        config: config,
+                        strings: strings,
+                        onRefresh: onMemberUpdated,
+                    }),
+                    activeTab === 'quotas' && isAnimateur && canManageQuotas && h(MemberEmployeeDocumentsSection, {
+                        member: member,
+                        config: config,
+                        strings: strings,
+                        onRefresh: onMemberUpdated,
+                    }),
+                    activeTab === 'quotas' && isAnimateur && canManageQuotas && h(MemberJobProfileSection, {
+                        member: member,
+                        config: config,
+                        strings: strings,
+                        onRefresh: onMemberUpdated,
+                    }),
+
+                    // Données dynamiques tab
+                    activeTab === 'dyndata' && dynFields.length > 0 && h(DynDataEditor, {
+                        member: member,
+                        dynFields: dynFields,
+                        config: config,
+                        onRefresh: onMemberUpdated,
+                    }),
+
+                    // Nextcloud media tabs
+                    (activeTab === 'nc-photos' || activeTab === 'nc-documents') && (function () {
+                        var NcComps = window.MjRegMgrNextcloudFiles;
+                        var NcMediaTab = NcComps ? NcComps.MediaTab : null;
+                        if (!NcMediaTab || !member || !member.id) { return null; }
+                        var ncMediaType = activeTab === 'nc-photos' ? 'photos' : 'documents';
+                        return h(NcMediaTab, {
+                            key: 'nc-' + activeTab + '-' + member.id,
+                            context: 'member',
+                            contextId: member.id,
+                            mediaType: ncMediaType,
+                            apiService: apiService,
+                        });
+                    })(),
+                ]),
+
+                // Section enfants (si le membre est tuteur)
+              
+            ]),
+
+            // Modal de paiement cotisation
+            showPaymentModal && h(MembershipPaymentModal, {
+                member: member,
+                config: config,
+                onClose: function () { 
+                    setShowPaymentModal(false); 
+                },
+                onPayOnline: function (memberId) {
+                    // Retourne la promesse pour que la modal puisse gérer l'état
+                    return onPayMembershipOnline(memberId);
+                },
+                onMarkPaid: function (method) {
+                    // Retourne la promesse pour que la modal puisse gérer l'état
+                    return onMarkMembershipPaid(member.id, method)
+                        .then(function () {
+                            setShowPaymentModal(false);
+                        });
+                },
+            }),
+
+            // Modal création login Nextcloud
+            nextcloudModalOpen && global.MjRegMgrModals && global.MjRegMgrModals.NextcloudLoginModal && h(global.MjRegMgrModals.NextcloudLoginModal, {
+                isOpen: nextcloudModalOpen,
+                onClose: function () { setNextcloudModalOpen(false); },
+                onSubmit: handleNextcloudLoginSubmit,
+                member: member,
+                availableGroups: (config && Array.isArray(config.nextcloudGroups)) ? config.nextcloudGroups : [],
+            }),
+        ]);
+    }
+
+    // ============================================
+    // MEMBERSHIP PAYMENT MODAL
+    // ============================================
+
+    function MembershipPaymentModal(props) {
+        var member = props.member;
+        var config = props.config;
+        var onClose = props.onClose;
+        var onPayOnline = props.onPayOnline;
+        var onMarkPaid = props.onMarkPaid;
+
+        var currentYear = new Date().getFullYear();
+        var membershipPrice = parseFloat(config.membershipPrice) || 2;
+        var membershipPriceManual = parseFloat(config.membershipPriceManual) || membershipPrice;
+
+        // État local pour le processing et le QR code
+        var _processing = useState(false);
+        var processing = _processing[0];
+        var setProcessing = _processing[1];
+
+        var _paymentData = useState(null);
+        var paymentData = _paymentData[0];
+        var setPaymentData = _paymentData[1];
+
+        var _error = useState(null);
+        var error = _error[0];
+        var setError = _error[1];
+
+        var handleBackdropClick = function (e) {
+            if (e.target === e.currentTarget && !processing) {
+                onClose();
+            }
+        };
+
+        var handlePayOnline = function () {
+            setProcessing(true);
+            setError(null);
+            onPayOnline(member.id)
+                .then(function (result) {
+                    if (result && result.checkoutUrl) {
+                        setPaymentData(result);
+                    }
+                })
+                .catch(function (err) {
+                    setError(err.message || 'Erreur lors de la création du lien de paiement');
+                })
+                .finally(function () {
+                    setProcessing(false);
+                });
+        };
+
+        var handleMarkPaid = function () {
+            setProcessing(true);
+            setError(null);
+            onMarkPaid('cash')
+                .finally(function () {
+                    setProcessing(false);
+                });
+        };
+
+        // Vue avec QR code après création du lien
+        if (paymentData && paymentData.checkoutUrl) {
+            return h('div', { 
+                class: 'mj-regmgr-modal-backdrop',
+                onClick: handleBackdropClick,
+            }, [
+                h('div', { class: 'mj-regmgr-modal mj-regmgr-modal--small' }, [
+                    h('div', { class: 'mj-regmgr-modal__header' }, [
+                        h('h2', { class: 'mj-regmgr-modal__title' }, 'Lien de paiement'),
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-regmgr-modal__close',
+                            onClick: onClose,
+                        }, [
+                            h('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                h('line', { x1: 18, y1: 6, x2: 6, y2: 18 }),
+                                h('line', { x1: 6, y1: 6, x2: 18, y2: 18 }),
+                            ]),
+                        ]),
+                    ]),
+                    h('div', { class: 'mj-regmgr-modal__body' }, [
+                        // Info membre
+                        h('div', { class: 'mj-regmgr-payment-info' }, [
+                            h('div', { class: 'mj-regmgr-payment-info__member' }, [
+                                h(MemberAvatar, { member: member, size: 'medium' }),
+                                h('div', null, [
+                                    h('strong', null, (member.firstName || '') + ' ' + (member.lastName || '')),
+                                    h('div', { class: 'mj-regmgr-payment-info__detail' }, membershipPrice.toFixed(2) + ' €'),
+                                ]),
+                            ]),
+                        ]),
+
+                        // QR Code
+                        paymentData.qrUrl && h('div', { class: 'mj-regmgr-payment-qr' }, [
+                            h('img', {
+                                src: paymentData.qrUrl,
+                                alt: 'QR Code paiement',
+                                class: 'mj-regmgr-payment-qr__image',
+                            }),
+                            h('p', { class: 'mj-regmgr-payment-qr__text' }, 'Scanner ce QR code pour payer'),
+                        ]),
+
+                        // Lien direct
+                        h('div', { style: { marginTop: '16px', textAlign: 'center' } }, [
+                            h('a', {
+                                href: paymentData.checkoutUrl,
+                                target: '_blank',
+                                rel: 'noopener noreferrer',
+                                class: 'mj-btn mj-btn--primary mj-btn--block',
+                            }, [
+                                'Ouvrir la page de paiement',
+                                h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, style: { marginLeft: '8px' } }, [
+                                    h('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
+                                    h('polyline', { points: '15 3 21 3 21 9' }),
+                                    h('line', { x1: 10, y1: 14, x2: 21, y2: 3 }),
+                                ]),
+                            ]),
+                        ]),
+                    ]),
+                ]),
+            ]);
+        }
+
+        // Vue initiale - choix du mode de paiement
+        return h('div', { 
+            class: 'mj-regmgr-modal-backdrop',
+            onClick: handleBackdropClick,
+        }, [
+            h('div', { class: 'mj-regmgr-modal mj-regmgr-modal--small' }, [
+                h('div', { class: 'mj-regmgr-modal__header' }, [
+                    h('h2', { class: 'mj-regmgr-modal__title' }, 'Paiement cotisation ' + currentYear),
+                    h('button', {
+                        type: 'button',
+                        class: 'mj-regmgr-modal__close',
+                        onClick: onClose,
+                        disabled: processing,
+                    }, [
+                        h('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                            h('line', { x1: 18, y1: 6, x2: 6, y2: 18 }),
+                            h('line', { x1: 6, y1: 6, x2: 18, y2: 18 }),
+                        ]),
+                    ]),
+                ]),
+                h('div', { class: 'mj-regmgr-modal__body' }, [
+                    // Erreur éventuelle
+                    error && h('div', { 
+                        class: 'mj-regmgr-alert mj-regmgr-alert--error',
+                        style: { marginBottom: '16px' },
+                    }, error),
+
+                    // Info membre
+                    h('div', { class: 'mj-regmgr-payment-info' }, [
+                        h('div', { class: 'mj-regmgr-payment-info__member' }, [
+                            h(MemberAvatar, { member: member, size: 'medium' }),
+                            h('div', null, [
+                                h('strong', null, (member.firstName || '') + ' ' + (member.lastName || '')),
+                                h('div', { class: 'mj-regmgr-payment-info__detail' }, 'Cotisation annuelle ' + currentYear),
+                            ]),
+                        ]),
+                    ]),
+
+                    h('div', { class: 'mj-regmgr-payment-options' }, [
+                        // Option 1: Paiement en ligne via Stripe
+                        h('div', { class: 'mj-regmgr-payment-option' }, [
+                            h('div', { class: 'mj-regmgr-payment-option__header' }, [
+                                h('svg', { width: 24, height: 24, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                    h('rect', { x: 1, y: 4, width: 22, height: 16, rx: 2, ry: 2 }),
+                                    h('line', { x1: 1, y1: 10, x2: 23, y2: 10 }),
+                                ]),
+                                h('div', null, [
+                                    h('strong', null, 'Paiement en ligne'),
+                                    h('div', { class: 'mj-regmgr-payment-option__price' }, membershipPrice.toFixed(2) + ' €'),
+                                ]),
+                            ]),
+                            h('p', { class: 'mj-regmgr-payment-option__desc' }, 
+                                'Génère un lien Stripe avec QR code pour paiement par carte.'
+                            ),
+                            h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--primary mj-btn--block',
+                                onClick: handlePayOnline,
+                                disabled: processing,
+                            }, [
+                                processing ? h('span', null, [
+                                    h('span', { class: 'mj-regmgr-loading__spinner', style: { width: '16px', height: '16px', marginRight: '8px', display: 'inline-block', verticalAlign: 'middle' } }),
+                                    'Création du lien...'
+                                ]) : 'Générer le lien de paiement',
+                            ]),
+                        ]),
+
+                        h('div', { class: 'mj-regmgr-payment-separator' }, [
+                            h('span', null, 'ou'),
+                        ]),
+
+                        // Option 2: Paiement en main propre
+                        h('div', { class: 'mj-regmgr-payment-option mj-regmgr-payment-option--secondary' }, [
+                            h('div', { class: 'mj-regmgr-payment-option__header' }, [
+                                h('svg', { width: 24, height: 24, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                                    h('line', { x1: 12, y1: 1, x2: 12, y2: 23 }),
+                                    h('path', { d: 'M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' }),
+                                ]),
+                                h('div', null, [
+                                    h('strong', null, 'Payé en main propre'),
+                                    h('div', { class: 'mj-regmgr-payment-option__price' }, membershipPriceManual.toFixed(2) + ' €'),
+                                ]),
+                            ]),
+                            h('p', { class: 'mj-regmgr-payment-option__desc' }, 
+                                'Espèces, chèque ou virement reçu directement.'
+                            ),
+                            h('button', {
+                                type: 'button',
+                                class: 'mj-btn mj-btn--secondary mj-btn--block',
+                                onClick: handleMarkPaid,
+                                disabled: processing,
+                            }, processing ? 'Enregistrement...' : 'Marquer comme payé'),
+                        ]),
+                    ]),
+                ]),
+            ]),
+        ]);
+    }
+
+    // ============================================
+    // EXPORT
+    // ============================================
+
+    global.MjRegMgrMembers = {
+        MemberCard: MemberCard,
+        MembersList: MembersList,
+        MemberDetailPanel: MemberDetailPanel,
+        MembershipPaymentModal: MembershipPaymentModal,
+    };
+
+})(window);

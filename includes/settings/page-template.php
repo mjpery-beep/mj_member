@@ -1500,8 +1500,138 @@ if (!defined('ABSPATH')) {
                                 <?php endif; ?>
                             </div>
                         </details>
-                        <div style="background:#f8fafc; border:1px solid #dbe3ef; border-radius:8px; padding:14px 16px; color:#475569;">
-                            <?php esc_html_e('Les intégrations Facebook, Instagram et WhatsApp ont été retirées. La publication passe désormais uniquement par n8n.', 'mj-member'); ?>
+                        <hr style="margin:24px 0; border:0; border-top:1px solid #e2e8f0;">
+
+                        <h3 style="margin:0 0 16px 0; font-size:16px; color:#1e293b;">🔑 Clés API des réseaux sociaux</h3>
+                        <p style="margin:0 0 20px 0; color:#475569; font-size:14px;">
+                            <?php esc_html_e('Ces clés sont transmises à votre workflow n8n dans le payload sécurisé. Elles ne sont pas utilisées directement par le plugin pour publier.', 'mj-member'); ?>
+                        </p>
+
+                        <!-- Facebook -->
+                        <details style="margin-bottom:16px; background:#fff; border:1px solid #dbe3ef; border-radius:10px; overflow:hidden;">
+                            <summary style="cursor:pointer; font-weight:700; padding:14px 16px; background:#f0f4ff; color:#1e40af; display:flex; align-items:center; gap:8px; list-style:none;">
+                                <span style="font-size:20px;">📘</span> <?php esc_html_e('Facebook — Page Access Token', 'mj-member'); ?>
+                                <?php if (!empty($social_facebook_page_token)) : ?>
+                                    <span style="margin-left:auto; background:#dcfce7; color:#16a34a; font-size:11px; padding:2px 8px; border-radius:20px; font-weight:600;">✓ Configuré</span>
+                                <?php else : ?>
+                                    <span style="margin-left:auto; background:#fef3c7; color:#92400e; font-size:11px; padding:2px 8px; border-radius:20px; font-weight:600;">Non configuré</span>
+                                <?php endif; ?>
+                            </summary>
+                            <div style="padding:16px 18px;">
+                                <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:14px; margin-bottom:16px; font-size:13px; line-height:1.7; color:#1e3a8a;">
+                                    <strong>📋 Comment obtenir ces informations :</strong>
+                                    <ol style="margin:8px 0 0 0; padding-left:18px;">
+                                        <li>Allez sur <strong>developers.facebook.com</strong> → <em>My Apps</em> → créez une app de type <em>Business</em>.</li>
+                                        <li>Ajoutez le produit <strong>Facebook Login</strong> puis <strong>Pages API</strong>.</li>
+                                        <li>Dans <em>Tools → Graph API Explorer</em>, sélectionnez votre app et votre Page, puis générez un <strong>Page Access Token</strong> avec les permissions : <code>pages_manage_posts</code>, <code>pages_read_engagement</code>, <code>instagram_basic</code>, <code>instagram_content_publish</code>.</li>
+                                        <li>Pour un token permanent : utilisez l'<strong>API Token Debugger</strong> pour l'échanger contre un token longue durée.</li>
+                                        <li>L'<strong>ID de Page</strong> se trouve dans <em>Paramètres de la Page Facebook → À propos</em> (en bas).</li>
+                                    </ol>
+                                </div>
+                                <p style="margin-bottom:12px;">
+                                    <label><strong><?php esc_html_e('URL de la Page Facebook', 'mj-member'); ?></strong></label><br>
+                                    <input type="url" name="mj_social_facebook_page_url" value="<?php echo esc_attr($social_facebook_page_url); ?>" class="regular-text" placeholder="https://www.facebook.com/VotrePage" autocomplete="off">
+                                    <small style="color:#6b7280; display:block; margin-top:4px;"><?php esc_html_e('Affiché comme lien dans le widget gestionnaire.', 'mj-member'); ?></small>
+                                </p>
+                                <p style="margin-bottom:12px;">
+                                    <label><strong><?php esc_html_e('ID de Page Facebook', 'mj-member'); ?></strong></label><br>
+                                    <input type="text" name="mj_social_facebook_page_id" value="<?php echo esc_attr($social_facebook_page_id); ?>" class="regular-text" placeholder="123456789012345" autocomplete="off">
+                                    <small style="color:#6b7280; display:block; margin-top:4px;"><?php esc_html_e('Numéro dans Paramètres → À propos de la page.', 'mj-member'); ?></small>
+                                </p>
+                                <p style="margin-bottom:0;">
+                                    <label><strong><?php esc_html_e('Page Access Token', 'mj-member'); ?></strong></label><br>
+                                    <input type="password" name="mj_social_facebook_page_token" value="<?php echo esc_attr($social_facebook_page_token); ?>" class="regular-text" placeholder="EAAxxxxxx..." autocomplete="off">
+                                    <small style="color:#6b7280; display:block; margin-top:4px;"><?php esc_html_e('Token généré dans le Graph API Explorer ou via l\'API de longue durée.', 'mj-member'); ?></small>
+                                </p>
+                            </div>
+                        </details>
+
+                        <!-- Instagram -->
+                        <details style="margin-bottom:16px; background:#fff; border:1px solid #dbe3ef; border-radius:10px; overflow:hidden;">
+                            <summary style="cursor:pointer; font-weight:700; padding:14px 16px; background:#fdf2f8; color:#9d174d; display:flex; align-items:center; gap:8px; list-style:none;">
+                                <span style="font-size:20px;">📸</span> <?php esc_html_e('Instagram — Compte Business', 'mj-member'); ?>
+                                <?php if (!empty($social_instagram_access_token)) : ?>
+                                    <span style="margin-left:auto; background:#dcfce7; color:#16a34a; font-size:11px; padding:2px 8px; border-radius:20px; font-weight:600;">✓ Configuré</span>
+                                <?php else : ?>
+                                    <span style="margin-left:auto; background:#fef3c7; color:#92400e; font-size:11px; padding:2px 8px; border-radius:20px; font-weight:600;">Non configuré</span>
+                                <?php endif; ?>
+                            </summary>
+                            <div style="padding:16px 18px;">
+                                <div style="background:#fdf4ff; border:1px solid #e9d5ff; border-radius:8px; padding:14px; margin-bottom:16px; font-size:13px; line-height:1.7; color:#4a044e;">
+                                    <strong>📋 Comment obtenir ces informations :</strong>
+                                    <ol style="margin:8px 0 0 0; padding-left:18px;">
+                                        <li>Votre compte Instagram doit être un <strong>compte professionnel</strong> (ou créateur) connecté à une Page Facebook.</li>
+                                        <li>Dans l'app Meta Developer, ajoutez le produit <strong>Instagram Graph API</strong>.</li>
+                                        <li>Dans <em>Graph API Explorer</em>, faites un appel <code>GET /me/accounts</code> pour lister vos pages liées.</li>
+                                        <li>Puis <code>GET /{page-id}?fields=instagram_business_account</code> pour récupérer l'<strong>Instagram Business Account ID</strong>.</li>
+                                        <li>L'<strong>Access Token</strong> est le même Page Access Token que Facebook (avec les permissions Instagram activées).</li>
+                                    </ol>
+                                    <p style="margin:8px 0 0 0; color:#7e22ce;"><strong>⚠️ Limitation :</strong> Instagram via API n'accepte que les posts avec image (pas de texte seul). Les Stories nécessitent une image ou une vidéo.</p>
+                                </div>
+                                <p style="margin-bottom:12px;">
+                                    <label><strong><?php esc_html_e('URL du profil Instagram', 'mj-member'); ?></strong></label><br>
+                                    <input type="url" name="mj_social_instagram_page_url" value="<?php echo esc_attr($social_instagram_page_url); ?>" class="regular-text" placeholder="https://www.instagram.com/votrecompte" autocomplete="off">
+                                </p>
+                                <p style="margin-bottom:12px;">
+                                    <label><strong><?php esc_html_e('Instagram Business Account ID', 'mj-member'); ?></strong></label><br>
+                                    <input type="text" name="mj_social_instagram_business_id" value="<?php echo esc_attr($social_instagram_business_id); ?>" class="regular-text" placeholder="987654321098765" autocomplete="off">
+                                    <small style="color:#6b7280; display:block; margin-top:4px;"><?php esc_html_e('Récupéré via GET /{page-id}?fields=instagram_business_account dans l\'API Explorer.', 'mj-member'); ?></small>
+                                </p>
+                                <p style="margin-bottom:0;">
+                                    <label><strong><?php esc_html_e('Access Token Instagram', 'mj-member'); ?></strong></label><br>
+                                    <input type="password" name="mj_social_instagram_access_token" value="<?php echo esc_attr($social_instagram_access_token); ?>" class="regular-text" placeholder="EAAxxxxxx..." autocomplete="off">
+                                    <small style="color:#6b7280; display:block; margin-top:4px;"><?php esc_html_e('Même token que Facebook (Page Access Token longue durée).', 'mj-member'); ?></small>
+                                </p>
+                            </div>
+                        </details>
+
+                        <!-- WhatsApp -->
+                        <details style="margin-bottom:16px; background:#fff; border:1px solid #dbe3ef; border-radius:10px; overflow:hidden;">
+                            <summary style="cursor:pointer; font-weight:700; padding:14px 16px; background:#f0fdf4; color:#166534; display:flex; align-items:center; gap:8px; list-style:none;">
+                                <span style="font-size:20px;">💬</span> <?php esc_html_e('WhatsApp Business API', 'mj-member'); ?>
+                                <?php if (!empty($social_whatsapp_access_token)) : ?>
+                                    <span style="margin-left:auto; background:#dcfce7; color:#16a34a; font-size:11px; padding:2px 8px; border-radius:20px; font-weight:600;">✓ Configuré</span>
+                                <?php else : ?>
+                                    <span style="margin-left:auto; background:#fef3c7; color:#92400e; font-size:11px; padding:2px 8px; border-radius:20px; font-weight:600;">Non configuré</span>
+                                <?php endif; ?>
+                            </summary>
+                            <div style="padding:16px 18px;">
+                                <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:14px; margin-bottom:16px; font-size:13px; line-height:1.7; color:#14532d;">
+                                    <strong>📋 Comment obtenir ces informations :</strong>
+                                    <ol style="margin:8px 0 0 0; padding-left:18px;">
+                                        <li>Créez une app <strong>Business</strong> sur <strong>developers.facebook.com</strong> et ajoutez le produit <strong>WhatsApp</strong>.</li>
+                                        <li>Dans <em>WhatsApp → Getting Started</em>, un numéro de test est fourni. Pour la production, ajoutez votre propre numéro dans <em>Phone Numbers</em>.</li>
+                                        <li>Le <strong>Phone Number ID</strong> est visible dans <em>WhatsApp → Phone Numbers</em> (ex. : <code>123456789012</code>).</li>
+                                        <li>Le <strong>WhatsApp Business Account ID</strong> se trouve dans <em>WhatsApp → Configuration → Business Account ID</em>.</li>
+                                        <li>Le <strong>Token d'accès</strong> : utilisez un <em>System User Token</em> permanent depuis <em>Business Settings → Users → System Users</em> (évitez les tokens temporaires de 24h).</li>
+                                    </ol>
+                                    <p style="margin:8px 0 0 0; color:#15803d;"><strong>⚠️ Note :</strong> WhatsApp Business API permet d'envoyer des messages à des numéros individuels ayant opté-in, pas à des groupes. Pour les groupes, n8n peut utiliser l'intégration WhatsApp Business Cloud API.</p>
+                                </div>
+                                <p style="margin-bottom:12px;">
+                                    <label><strong><?php esc_html_e('Lien groupe WhatsApp', 'mj-member'); ?></strong></label><br>
+                                    <input type="url" name="mj_social_whatsapp_group_url" value="<?php echo esc_attr($social_whatsapp_group_url); ?>" class="regular-text" placeholder="https://chat.whatsapp.com/xxxxx" autocomplete="off">
+                                    <small style="color:#6b7280; display:block; margin-top:4px;"><?php esc_html_e('Lien d\'invitation du groupe, transmis dans le payload n8n.', 'mj-member'); ?></small>
+                                </p>
+                                <p style="margin-bottom:12px;">
+                                    <label><strong><?php esc_html_e('Phone Number ID', 'mj-member'); ?></strong></label><br>
+                                    <input type="text" name="mj_social_whatsapp_phone_number_id" value="<?php echo esc_attr($social_whatsapp_phone_number_id); ?>" class="regular-text" placeholder="123456789012345" autocomplete="off">
+                                    <small style="color:#6b7280; display:block; margin-top:4px;"><?php esc_html_e('Dans WhatsApp → Phone Numbers de votre app Meta.', 'mj-member'); ?></small>
+                                </p>
+                                <p style="margin-bottom:12px;">
+                                    <label><strong><?php esc_html_e('WhatsApp Business Account ID', 'mj-member'); ?></strong></label><br>
+                                    <input type="text" name="mj_social_whatsapp_business_id" value="<?php echo esc_attr($social_whatsapp_business_id); ?>" class="regular-text" placeholder="987654321098765" autocomplete="off">
+                                    <small style="color:#6b7280; display:block; margin-top:4px;"><?php esc_html_e('Dans WhatsApp → Configuration → Business Account ID.', 'mj-member'); ?></small>
+                                </p>
+                                <p style="margin-bottom:0;">
+                                    <label><strong><?php esc_html_e('Access Token WhatsApp (System User)', 'mj-member'); ?></strong></label><br>
+                                    <input type="password" name="mj_social_whatsapp_access_token" value="<?php echo esc_attr($social_whatsapp_access_token); ?>" class="regular-text" placeholder="EAAxxxxxx..." autocomplete="off">
+                                    <small style="color:#6b7280; display:block; margin-top:4px;"><?php esc_html_e('Token System User permanent depuis Business Settings → Users → System Users.', 'mj-member'); ?></small>
+                                </p>
+                            </div>
+                        </details>
+
+                        <div style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:8px; padding:14px 16px; color:#475569; font-size:13px; margin-top:8px;">
+                            <strong>💡 Conseil :</strong> <?php esc_html_e('Ces clés sont stockées dans la base WordPress et transmises à n8n dans le payload HMAC signé. C\'est votre workflow n8n qui effectue les appels API vers chaque réseau. Assurez-vous que votre instance n8n est sécurisée.', 'mj-member'); ?>
                         </div>
                     </div>
 

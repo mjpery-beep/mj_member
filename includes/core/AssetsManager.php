@@ -429,6 +429,8 @@ final class AssetsManager
         self::registerScript('mj-member-regmgr-modals', 'js/registration-manager/modals.js', array('mj-member-regmgr-hooks'));
         self::registerScript('mj-member-regmgr-modal-ia', 'js/registration-manager/modal-ia.js', array('mj-member-regmgr-hooks', 'mj-member-regmgr-modals'));
         self::registerScript('mj-member-regmgr-tabs', 'js/registration-manager/tabs.js', array('mj-member-regmgr-hooks', 'mj-member-utils'));
+        self::registerStyle('mj-member-regmgr-nextcloud-files', 'css/nextcloud-files.css', array('mj-member-registration-manager'));
+        self::registerScript('mj-member-regmgr-nextcloud-files', 'js/registration-manager/nextcloud-files.js', array('mj-member-regmgr-hooks'));
         self::registerScript('mj-member-regmgr-app', 'js/registration-manager/app.js', array(
             'mj-member-regmgr-services',
             'mj-member-regmgr-hooks',
@@ -440,6 +442,7 @@ final class AssetsManager
             'mj-member-regmgr-modals',
             'mj-member-regmgr-modal-ia',
             'mj-member-regmgr-tabs',
+            'mj-member-regmgr-nextcloud-files',
             'mj-member-create-event-modal',
         ));
 
@@ -676,6 +679,7 @@ final class AssetsManager
             case 'registration-manager':
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-registration-manager');
+                wp_enqueue_style('mj-member-regmgr-nextcloud-files');
                 if (function_exists('wp_enqueue_media')) {
                     wp_enqueue_media();
                 }
@@ -692,6 +696,7 @@ final class AssetsManager
                 wp_enqueue_script('mj-member-regmgr-members');
                 wp_enqueue_script('mj-member-regmgr-event-editor');
                 wp_enqueue_script('mj-member-regmgr-modals');
+                wp_enqueue_script('mj-member-regmgr-nextcloud-files');
                 wp_enqueue_script('mj-member-regmgr-app');
                 break;
 
