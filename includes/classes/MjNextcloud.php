@@ -517,24 +517,33 @@ final class MjNextcloud
         }
 
         $prev = libxml_use_internal_errors(true);
-        $doc  = simplexml_load_string($xml);
+        $doc  = new \DOMDocument();
+        $ok   = $doc->loadXML($xml);
         libxml_use_internal_errors($prev);
 
-        if ($doc === false) {
+        if (!$ok) {
             return $items;
         }
 
-        $doc->registerXPathNamespace('d',  'DAV:');
-        $doc->registerXPathNamespace('oc', 'http://owncloud.org/ns');
-        $responses = $doc->xpath('//d:response') ?: [];
+        $xpath = new \DOMXPath($doc);
+        $xpath->registerNamespace('d',  'DAV:');
+        $xpath->registerNamespace('oc', 'http://owncloud.org/ns');
 
-        // Admin user's DAV root prefix to strip from hrefs.
-        $davPrefix = '/remote.php/dav/files/' . rawurlencode($this->user) . '/';
+        $responses = $xpath->query('//d:response');
+        if (!$responses || $responses->length === 0) {
+            return $items;
+        }
+
+        // DAV root prefix (decoded, to compare against decoded hrefs).
+        $davPrefix = '/remote.php/dav/files/' . rawurldecode(rawurlencode($this->user)) . '/';
 
         foreach ($responses as $resp) {
-            $resp->registerXPathNamespace('d', 'DAV:');
+            $hrefNodes = $xpath->query('d:href', $resp);
+            if (!$hrefNodes || $hrefNodes->length === 0) {
+                continue;
+            }
 
-            $href         = trim((string) ($resp->xpath('d:href')[0] ?? ''));
+            $href         = trim($hrefNodes->item(0)->textContent);
             $decodedHref  = rawurldecode($href);
             $relativePath = ltrim(substr($decodedHref, strlen($davPrefix)), '/');
 
@@ -543,20 +552,28 @@ final class MjNextcloud
                 continue;
             }
 
-            $propstat = $resp->xpath('d:propstat[d:status[contains(text(),"200")]]')[0] ?? null;
-            if (!$propstat) {
+            // Find the 200 propstat.
+            $propstatNodes = $xpath->query('d:propstat[d:status[contains(.,\'200\')]]', $resp);
+            if (!$propstatNodes || $propstatNodes->length === 0) {
                 continue;
             }
-            $propstat->registerXPathNamespace('d', 'DAV:');
+            $propstat = $propstatNodes->item(0);
 
-            $resourceType = $propstat->xpath('d:prop/d:resourcetype/d:collection') ?? [];
-            $isDir        = count($resourceType) > 0;
-            $mimeType     = $isDir
+            $isDir    = $xpath->query('d:prop/d:resourcetype/d:collection', $propstat)->length > 0;
+            $mimeNode = $xpath->query('d:prop/d:getcontenttype', $propstat)->item(0);
+            $sizeNode = $xpath->query('d:prop/d:getcontentlength', $propstat)->item(0);
+            $modNode  = $xpath->query('d:prop/d:getlastmodified', $propstat)->item(0);
+
+            $mimeType = $isDir
                 ? 'httpd/unix-directory'
-                : trim((string) ($propstat->xpath('d:prop/d:getcontenttype')[0] ?? 'application/octet-stream'));
-            $size         = (int) trim((string) ($propstat->xpath('d:prop/d:getcontentlength')[0] ?? '0'));
-            $modified     = trim((string) ($propstat->xpath('d:prop/d:getlastmodified')[0] ?? ''));
-            $name         = basename(rtrim($relativePath, '/'));
+                : ($mimeNode ? trim($mimeNode->textContent) : 'application/octet-stream');
+            $size     = $sizeNode ? (int) trim($sizeNode->textContent) : 0;
+            $modified = $modNode  ? trim($modNode->textContent) : '';
+            $name     = basename(rtrim($relativePath, '/'));
+
+            if ($name === '') {
+                continue;
+            }
 
             $items[] = [
                 'path'         => $relativePath,

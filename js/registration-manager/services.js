@@ -871,7 +871,14 @@
                 if (subFolder) { fd.append('sub_folder', subFolder); }
                 fd.append('file', file);
                 return fetch(ajaxUrl, { method: 'POST', body: fd })
-                    .then(function (r) { return r.json(); });
+                    .then(function (r) { return r.json(); })
+                    .then(function (result) {
+                        if (!result.success) {
+                            var msg = result.data && result.data.message ? result.data.message : 'Erreur upload';
+                            return Promise.reject(new Error(msg));
+                        }
+                        return result.data;
+                    });
             },
 
             ncDelete: function (filePath) {
