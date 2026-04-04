@@ -146,7 +146,7 @@
                         if (self.activeDropdown === name) {
                             self._closeAll();
                         }
-                    }, 150);
+                    }, 320);
                 }
             });
         });
@@ -341,6 +341,8 @@
         var _hideTimer = null;
         var _hoverTimer = null;
         var PREVIEW_W  = 300;
+        var SVG_TRASH = '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.519.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd" /></svg>';
+        var SVG_CHECK = '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" /></svg>';
 
         // Selector: cards that have server-side notification data embedded
         var cards = this.el.querySelectorAll('a.mj-header-acc-card[data-notifications]');
@@ -369,7 +371,7 @@
                         if (_preview && !_preview.classList.contains('mj-header-acc-notif-preview--open')) {
                             self._closeAll();
                         }
-                    }, 150);
+                    }, 420);
                 });
             }
             return _preview;
@@ -379,7 +381,7 @@
             clearTimeout(_hideTimer);
             _hideTimer = setTimeout(function () {
                 if (_preview) _preview.classList.remove('mj-header-acc-notif-preview--open');
-            }, 200);
+            }, 420);
         }
 
         function position(card) {
@@ -412,6 +414,43 @@
 
         // Render using the flat format from fetchNotificationPreviews():
         // { recipient_id, title, excerpt, url, type, created_at }
+        function updateCardBadge(card, count) {
+            if (!card) return;
+
+            var nextCount = Math.max(0, parseInt(count || 0, 10));
+            if (nextCount > 0) {
+                card.setAttribute('data-notif-badge', String(nextCount));
+            } else {
+                card.removeAttribute('data-notif-badge');
+            }
+
+            var badgeEl = card.querySelector('.mj-header-acc-card__badge');
+            if (nextCount > 0) {
+                if (!badgeEl) {
+                    badgeEl = document.createElement('span');
+                    badgeEl.className = 'mj-header-acc-card__badge';
+                    var chevron = card.querySelector('.mj-header-acc-card__chevron');
+                    if (chevron && chevron.parentNode) {
+                        chevron.parentNode.insertBefore(badgeEl, chevron);
+                    } else {
+                        card.appendChild(badgeEl);
+                    }
+                }
+                badgeEl.textContent = String(nextCount);
+            } else if (badgeEl) {
+                badgeEl.remove();
+            }
+        }
+
+        function postNotifAction(action, recipientId) {
+            var data = new FormData();
+            data.append('action', action);
+            data.append('nonce', self.config.notifNonce || '');
+            data.append('recipient_id', recipientId);
+            return fetch(self.config.ajaxUrl, { method: 'POST', body: data, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); });
+        }
+
         function renderContent(notifications) {
             if (!notifications.length) {
                 return '<div class="mj-header-acc-notif-preview__head">Notifications</div>' +
@@ -430,6 +469,7 @@
                 var excerpt = esc(item.excerpt || '');
                 var timeAgo = MjHeader.relativeTime(item.created_at || '');
                 var url     = item.url || '';
+                var recipientId = parseInt(item.recipient_id || 0, 10);
 
                 html += '<div class="mj-header-notif-swipe-wrap">';
                 html += '<div class="mj-header-notif-item mj-header-notif-item--unread">';
@@ -442,13 +482,132 @@
                 if (excerpt) html += '<p class="mj-header-notif-excerpt">' + excerpt + '</p>';
                 html += '<time class="mj-header-notif-time">' + timeAgo + '</time>';
                 html += '</div>';
+
+                if (recipientId > 0) {
+                    html += '<div class="mj-header-notif-actions">';
+                    html += '<button type="button" class="mj-header-notif-action mj-header-notif-action--mark" data-acc-notif-action="mark-read" data-recipient-id="' + recipientId + '" title="Vu">' + SVG_CHECK + '<span>Vu</span></button>';
+                    html += '<button type="button" class="mj-header-notif-action mj-header-notif-action--del" data-acc-notif-action="archive" data-recipient-id="' + recipientId + '" title="Supprimer">' + SVG_TRASH + '<span>Supprimer</span></button>';
+                    html += '</div>';
+                }
                 html += '</div>'; // .mj-header-notif-item
                 html += '</div>'; // .mj-header-notif-swipe-wrap
             });
 
             html += '</div>';
+            html += '<div class="mj-header-acc-notif-preview__footer">';
+            html += '<button type="button" class="mj-header-notif-delete-all mj-header-acc-notif-delete-all" data-acc-notif-action="archive-all">Tout supprimer</button>';
+            html += '</div>';
             return html;
         }
+
+        function renderPreviewForCard(card, notifications) {
+            var p = getPreview();
+            position(card);
+            p.innerHTML = renderContent(notifications);
+            p.classList.add('mj-header-acc-notif-preview--open');
+            p._accCard = card;
+            p._accNotifications = notifications;
+
+            var hasActionable = notifications.some(function (n) {
+                return parseInt(n && n.recipient_id ? n.recipient_id : 0, 10) > 0;
+            });
+            var allBtn = p.querySelector('[data-acc-notif-action="archive-all"]');
+            if (allBtn) {
+                allBtn.disabled = !hasActionable;
+            }
+        }
+
+        getPreview().addEventListener('click', function (event) {
+            var btn = event.target.closest('[data-acc-notif-action]');
+            if (!btn) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            var previewNode = getPreview();
+            var card = previewNode._accCard;
+            var notifications = Array.isArray(previewNode._accNotifications)
+                ? previewNode._accNotifications
+                : [];
+            var action = btn.getAttribute('data-acc-notif-action') || '';
+
+            if (!card || !notifications.length) {
+                return;
+            }
+
+            if (action === 'archive-all') {
+                var notificationTypes = [];
+                try {
+                    notificationTypes = JSON.parse(card.getAttribute('data-notif-types') || '[]');
+                } catch (err) {
+                    notificationTypes = [];
+                }
+
+                if (!Array.isArray(notificationTypes) || !notificationTypes.length || !self.config.memberId) {
+                    return;
+                }
+
+                btn.disabled = true;
+
+                var bulkData = new FormData();
+                bulkData.append('action', 'mj_header_archive_link_notifications');
+                bulkData.append('nonce', self.config.notifNonce || '');
+                bulkData.append('member_id', self.config.memberId || 0);
+                bulkData.append('types', JSON.stringify(notificationTypes));
+
+                fetch(self.config.ajaxUrl, { method: 'POST', body: bulkData, credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (res) {
+                        if (!res || !res.success) {
+                            btn.disabled = false;
+                            return;
+                        }
+
+                        notifications.length = 0;
+                        updateCardBadge(card, 0);
+                        renderPreviewForCard(card, notifications);
+                        self._fetchNotifCount();
+                    })
+                    .catch(function () {
+                        btn.disabled = false;
+                    });
+                return;
+            }
+
+            var recipientId = parseInt(btn.getAttribute('data-recipient-id') || '0', 10);
+            if (recipientId <= 0) {
+                return;
+            }
+
+            btn.disabled = true;
+            var ajaxAction = action === 'mark-read'
+                ? 'mj_member_notification_bell_mark_read'
+                : 'mj_member_notification_bell_archive';
+
+            postNotifAction(ajaxAction, recipientId).then(function (response) {
+                if (!response || !response.success) {
+                    btn.disabled = false;
+                    return;
+                }
+
+                var idx = -1;
+                for (var i = 0; i < notifications.length; i += 1) {
+                    if (parseInt(notifications[i] && notifications[i].recipient_id ? notifications[i].recipient_id : 0, 10) === recipientId) {
+                        idx = i;
+                        break;
+                    }
+                }
+                if (idx !== -1) {
+                    notifications.splice(idx, 1);
+                }
+
+                updateCardBadge(card, notifications.length);
+                renderPreviewForCard(card, notifications);
+                self._fetchNotifCount();
+            }).catch(function () {
+                btn.disabled = false;
+            });
+        });
 
         cards.forEach(function (card) {
             // Parse the notifications embedded by PHP at page load — no AJAX needed.
@@ -464,10 +623,7 @@
                 clearTimeout(_hoverTimer);
 
                 _hoverTimer = setTimeout(function () {
-                    var p = getPreview();
-                    position(card);
-                    p.innerHTML = renderContent(notifications);
-                    p.classList.add('mj-header-acc-notif-preview--open');
+                    renderPreviewForCard(card, notifications);
                 }, 300);
             });
 

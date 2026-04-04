@@ -695,6 +695,9 @@ class MjAccountLinks {
             }
 
             $linkNotifications = isset($notificationPreviews[$linkKey]) ? $notificationPreviews[$linkKey] : array();
+            $linkNotificationTypes = isset($config['notification_types']) && is_array($config['notification_types'])
+                ? array_values(array_filter(array_map('sanitize_key', $config['notification_types'])))
+                : array();
 
             $links[] = array(
                 'key' => sanitize_key($key),
@@ -704,6 +707,7 @@ class MjAccountLinks {
                 'is_logout' => false,
                 'badge' => $badge,
                 'notifications' => $linkNotifications,
+                'notification_types' => $linkNotificationTypes,
                 'icon_id' => $icon_id,
                 'icon' => $icon_payload,
             );
@@ -741,6 +745,9 @@ class MjAccountLinks {
                 'is_logout' => !empty($link['is_logout']),
                 'badge' => isset($link['badge']) ? (int) $link['badge'] : 0,
                 'notifications' => $notifications,
+                'notification_types' => isset($link['notification_types']) && is_array($link['notification_types'])
+                    ? array_values(array_filter(array_map('sanitize_key', $link['notification_types'])))
+                    : array(),
                 'icon_id' => isset($link['icon_id']) ? (int) $link['icon_id'] : 0,
                 'icon' => $icon_payload,
             );

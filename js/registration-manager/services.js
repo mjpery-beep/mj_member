@@ -853,22 +853,24 @@
             // Nextcloud media
             // ------------------------------------------------------------------
 
-            ncListFolder: function (context, contextId, mediaType) {
-                return post('mj_regmgr_nc_list', {
+            ncListFolder: function (context, contextId, mediaType, subPath) {
+                var payload = {
                     context: context,
                     context_id: contextId,
                     media_type: mediaType,
-                });
+                };
+                if (subPath) { payload.sub_path = subPath; }
+                return post('mj_regmgr_nc_list', payload);
             },
 
-            ncUpload: function (context, contextId, mediaType, file, subFolder) {
+            ncUpload: function (context, contextId, mediaType, file, subPath) {
                 var fd = new FormData();
                 fd.append('action', 'mj_regmgr_nc_upload');
                 fd.append('nonce', nonce);
                 fd.append('context', context);
                 fd.append('context_id', contextId);
                 fd.append('media_type', mediaType);
-                if (subFolder) { fd.append('sub_folder', subFolder); }
+                if (subPath) { fd.append('sub_path', subPath); }
                 fd.append('file', file);
                 return fetch(ajaxUrl, { method: 'POST', body: fd })
                     .then(function (r) { return r.json(); })
@@ -887,6 +889,26 @@
 
             ncRename: function (filePath, newName) {
                 return post('mj_regmgr_nc_rename', { file_path: filePath, new_name: newName });
+            },
+
+            ncCreateFolder: function (context, contextId, mediaType, subPath, folderName) {
+                var payload = {
+                    context: context,
+                    context_id: contextId,
+                    media_type: mediaType,
+                };
+                if (subPath) { payload.sub_path = subPath; }
+                if (folderName) { payload.folder_name = folderName; }
+                return post('mj_regmgr_nc_create_folder', payload);
+            },
+
+            ncMove: function (filePath, targetFolder, newName) {
+                var payload = {
+                    file_path: filePath,
+                    target_folder: targetFolder,
+                };
+                if (newName) { payload.new_name = newName; }
+                return post('mj_regmgr_nc_move', payload);
             },
         };
     }

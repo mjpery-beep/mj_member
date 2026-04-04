@@ -329,11 +329,14 @@ function mj_header_svg_icon(string $name): string {
                                 $al_icon_html = $al_icon['html'] ?? '';
                                 $al_icon_url  = $al_icon['url'] ?? '';
                                 $al_notifications = $al['notifications'] ?? [];
+                                $al_notification_types = isset($al['notification_types']) && is_array($al['notification_types'])
+                                    ? array_values(array_filter(array_map('sanitize_key', $al['notification_types'])))
+                                    : [];
                             ?>
                             <a href="<?php echo ($is_preview && $al_logout) ? '#' : esc_url($al_url); ?>"
                                class="mj-header-acc-card<?php echo $al_logout ? ' mj-header-acc-card--logout' : ''; ?>"
                                <?php if ($al_logout && !$is_preview): ?>data-mj-logout<?php endif; ?>
-                               <?php if ($al_badge > 0 && !$al_logout && !empty($al_notifications)): ?>data-notif-badge="<?php echo (int)$al_badge; ?>" data-notifications="<?php echo esc_attr(wp_json_encode($al_notifications)); ?>"<?php endif; ?>>
+                               <?php if ($al_badge > 0 && !$al_logout && !empty($al_notifications)): ?>data-notif-badge="<?php echo (int)$al_badge; ?>" data-notifications="<?php echo esc_attr(wp_json_encode($al_notifications)); ?>" data-notif-types="<?php echo esc_attr(wp_json_encode($al_notification_types)); ?>"<?php endif; ?>>
                                 <span class="mj-header-acc-card__icon" aria-hidden="true">
                                     <?php if ($al_icon_html): echo $al_icon_html; // phpcs:ignore WordPress.Security.EscapeOutput
                                     elseif ($al_icon_url): echo '<img src="' . esc_url($al_icon_url) . '" alt="" loading="lazy" />';

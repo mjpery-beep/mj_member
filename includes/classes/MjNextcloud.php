@@ -193,12 +193,44 @@ final class MjNextcloud
      * ----------------------------------------------------------------*/
 
     /**
-     * List the contents of a folder. Creates the folder if it doesn't exist.
+     * Check whether a folder exists in Nextcloud.
+     *
+     * @param  string        $folderPath Path relative to the admin user root.
+     * @return bool|WP_Error True if exists, false if not found.
+     */
+    public function folderExists(string $folderPath)
+    {
+        $folderPath = $this->sanitizePath($folderPath);
+        $url        = $this->davUrl . ($folderPath !== '' ? '/' . ltrim($folderPath, '/') : '');
+
+        $response = $this->request('PROPFIND', $url, [
+            'headers' => [
+                'Depth'        => '0',
+                'Content-Type' => 'application/xml; charset=utf-8',
+            ],
+            'body' => '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>',
+        ]);
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code === 404) {
+            return false;
+        }
+
+        return $code >= 200 && $code < 400;
+    }
+
+    /**
+     * List the contents of a folder.
      *
      * @param  string   $folderPath Path relative to the admin user root (no leading slash).
+     * @param  bool     $autoCreate Create the folder if it doesn't exist.
      * @return array[]|WP_Error     Array of file/folder descriptors.
      */
-    public function listFolder(string $folderPath = '')
+    public function listFolder(string $folderPath = '', bool $autoCreate = true)
     {
         $folderPath = $this->sanitizePath($folderPath);
         $url        = $this->davUrl . ($folderPath !== '' ? '/' . ltrim($folderPath, '/') : '');
@@ -225,8 +257,11 @@ final class MjNextcloud
 
         $code = wp_remote_retrieve_response_code($response);
 
-        // Folder doesn't exist yet – create it then return empty list.
+        // Folder doesn't exist yet.
         if ($code === 404) {
+            if (!$autoCreate) {
+                return new WP_Error('mj_nextcloud_not_found', __('Le dossier n\'existe pas.', 'mj-member'));
+            }
             $created = $this->ensureFolder($folderPath);
             if (is_wp_error($created)) {
                 return $created;
@@ -441,6 +476,59 @@ final class MjNextcloud
     }
 
     /**
+     * Move a file or folder to another folder.
+     *
+     * @param  string      $itemPath     Current path relative to admin root.
+     * @param  string      $targetFolder Destination folder path relative to admin root.
+     * @param  string|null $newName      Optional new basename.
+     * @return array|WP_Error
+     */
+    public function move(string $itemPath, string $targetFolder, ?string $newName = null)
+    {
+        $itemPath     = $this->sanitizePath($itemPath);
+        $targetFolder = $this->sanitizePath($targetFolder);
+        $baseName     = $newName !== null && $newName !== '' ? $this->sanitizeName($newName) : basename($itemPath);
+
+        if ($itemPath === '' || $targetFolder === '' || $baseName === '') {
+            return new WP_Error('mj_nextcloud_move_invalid', __('Paramètres de déplacement invalides.', 'mj-member'));
+        }
+
+        $ensure = $this->ensureFolder($targetFolder);
+        if (is_wp_error($ensure)) {
+            return $ensure;
+        }
+
+        $newPath = rtrim($targetFolder, '/') . '/' . $baseName;
+        $srcUrl  = $this->davUrl . '/' . ltrim($itemPath, '/');
+        $dstUrl  = $this->davUrl . '/' . ltrim($newPath, '/');
+
+        $response = $this->request('MOVE', $srcUrl, [
+            'headers' => [
+                'Destination' => $dstUrl,
+                'Overwrite'   => 'F',
+            ],
+        ]);
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code >= 400) {
+            return new WP_Error('mj_nextcloud_move_failed', sprintf(
+                __('Impossible de déplacer l\'élément (HTTP %d).', 'mj-member'),
+                $code
+            ));
+        }
+
+        return [
+            'path'    => $newPath,
+            'name'    => basename($newPath),
+            'oldPath' => $itemPath,
+        ];
+    }
+
+    /**
      * Build a download URL for a file (uses WebDAV endpoint with basic auth embedded – admin only).
      */
     public function getDownloadUrl(string $filePath): string
@@ -452,7 +540,7 @@ final class MjNextcloud
         // Return an AJAX URL instead of embedding credentials.
         return add_query_arg([
             'action' => 'mj_regmgr_nc_download',
-            'path'   => rawurlencode($filePath),
+            'path'   => $filePath,
             'nonce'  => wp_create_nonce('mj-registration-manager'),
         ], admin_url('admin-ajax.php'));
     }
@@ -466,6 +554,23 @@ final class MjNextcloud
             return '';
         }
         return $this->baseUrl . '/apps/files/?dir=/' . rawurlencode(ltrim(dirname($this->sanitizePath($filePath)), '/'));
+    }
+
+    /**
+     * Build a direct file URL in Nextcloud web UI.
+     */
+    public function getFileWebUrl(string $filePath, string $fileId = ''): string
+    {
+        if ($this->baseUrl === '') {
+            return '';
+        }
+
+        $fileId = trim($fileId);
+        if ($fileId !== '') {
+            return $this->baseUrl . '/f/' . rawurlencode($fileId);
+        }
+
+        return $this->getWebUrl($filePath);
     }
 
     /* ------------------------------------------------------------------
@@ -563,12 +668,14 @@ final class MjNextcloud
             $mimeNode = $xpath->query('d:prop/d:getcontenttype', $propstat)->item(0);
             $sizeNode = $xpath->query('d:prop/d:getcontentlength', $propstat)->item(0);
             $modNode  = $xpath->query('d:prop/d:getlastmodified', $propstat)->item(0);
+            $idNode   = $xpath->query('d:prop/oc:fileid', $propstat)->item(0);
 
             $mimeType = $isDir
                 ? 'httpd/unix-directory'
                 : ($mimeNode ? trim($mimeNode->textContent) : 'application/octet-stream');
             $size     = $sizeNode ? (int) trim($sizeNode->textContent) : 0;
             $modified = $modNode  ? trim($modNode->textContent) : '';
+            $fileId   = $idNode ? trim($idNode->textContent) : '';
             $name     = basename(rtrim($relativePath, '/'));
 
             if ($name === '') {
@@ -582,7 +689,10 @@ final class MjNextcloud
                 'mimeType'     => $mimeType,
                 'size'         => $size,
                 'modifiedTime' => $modified,
+                'fileId'       => $fileId,
                 'downloadUrl'  => $isDir ? '' : $this->getDownloadUrl($relativePath),
+                'webUrl'       => $isDir ? $this->getWebUrl($relativePath) : $this->getFileWebUrl($relativePath, $fileId),
+                'editUrl'      => $isDir ? '' : $this->getFileWebUrl($relativePath, $fileId),
             ];
         }
 
