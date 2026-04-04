@@ -626,8 +626,10 @@ function mj_member_leave_request_certificate_handler(): void
     }
 
     // Serve file
+    $forceDownload = isset($_GET['dl']) && $_GET['dl'] === '1';
+    $disposition = $forceDownload ? 'attachment' : 'inline';
     header('Content-Type: ' . $mimeType);
-    header('Content-Disposition: inline; filename="certificat_' . $requestId . '.' . pathinfo($filePath, PATHINFO_EXTENSION) . '"');
+    header('Content-Disposition: ' . $disposition . '; filename="certificat_' . $requestId . '.' . pathinfo($filePath, PATHINFO_EXTENSION) . '"');
     header('Content-Length: ' . filesize($filePath));
     header('Cache-Control: private, max-age=3600');
     header('X-Content-Type-Options: nosniff');

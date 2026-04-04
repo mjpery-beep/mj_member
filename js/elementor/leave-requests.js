@@ -356,6 +356,7 @@
         const today = new Date();
         const [startMonth, setStartMonth] = useState(selectedYear !== today.getFullYear() ? 0 : today.getMonth());
         const [startYear, setStartYear] = useState(selectedYear || today.getFullYear());
+        const [viewingCertificate, setViewingCertificate] = useState(null);
         const i18n = mjLeaveRequests.i18n;
 
         // Reset calendar when selected year changes
@@ -540,13 +541,12 @@
                                 class: 'mj-leave-requests__overview-request-comment mj-leave-requests__overview-request-comment--approved',
                                 title: req.reviewer_comment
                             }, req.reviewer_comment),
-                            isSickLeave && hasCertificate && h('a', {
-                                href: `${mjLeaveRequests.ajaxUrl}?action=mj_leave_request_certificate&request_id=${req.id}&nonce=${mjLeaveRequests.nonce}`,
-                                download: true,
-                                target: '_blank',
+                            isSickLeave && hasCertificate && h('button', {
+                                type: 'button',
                                 class: 'mj-leave-requests__overview-request-certificate',
-                                title: i18n.downloadCertificate || 'Télécharger certificat'
-                            }, '📥'),
+                                title: i18n.viewCertificate || 'Voir certificat',
+                                onClick: (e) => { e.stopPropagation(); setViewingCertificate(req.id); }
+                            }, '📎'),
                             isCoordinator && req.status === 'pending' && h('button', {
                                 type: 'button',
                                 class: 'mj-leave-requests__btn mj-leave-requests__btn--success mj-leave-requests__btn--xs',
@@ -568,16 +568,20 @@
                         );
                     })
                 )
-            )
+            ),
+            viewingCertificate && h(CertificateModal, {
+                requestId: viewingCertificate,
+                onClose: () => setViewingCertificate(null)
+            })
         );
     }
 
     // Modal Component
-    function Modal({ isOpen, onClose, title, children, footer }) {
+    function Modal({ isOpen, onClose, title, children, footer, className }) {
         if (!isOpen) return null;
 
         return h('div', { class: 'mj-leave-requests__modal-overlay', onClick: (e) => e.target === e.currentTarget && onClose() },
-            h('div', { class: 'mj-leave-requests__modal' },
+            h('div', { class: `mj-leave-requests__modal${className ? ' ' + className : ''}` },
                 h('div', { class: 'mj-leave-requests__modal-header' },
                     h('h2', { class: 'mj-leave-requests__modal-title' }, title),
                     h('button', { type: 'button', class: 'mj-leave-requests__modal-close', onClick: onClose }, '×')
@@ -585,6 +589,38 @@
                 h('div', { class: 'mj-leave-requests__modal-body' }, children),
                 footer && h('div', { class: 'mj-leave-requests__modal-footer' }, footer)
             )
+        );
+    }
+
+    // Certificate Viewer Modal
+    function CertificateModal({ requestId, onClose }) {
+        const i18n = mjLeaveRequests.i18n;
+        const certUrl = `${mjLeaveRequests.ajaxUrl}?action=mj_leave_request_certificate&request_id=${requestId}&nonce=${mjLeaveRequests.nonce}`;
+        const downloadUrl = `${certUrl}&dl=1`;
+
+        return h(Modal, {
+            isOpen: true,
+            onClose,
+            title: i18n.certificateTitle || 'Certificat médical',
+            className: 'mj-leave-requests__modal--wide',
+            footer: h(Fragment, null,
+                h('a', {
+                    href: downloadUrl,
+                    download: true,
+                    class: 'mj-leave-requests__btn mj-leave-requests__btn--primary'
+                }, (i18n.download || 'Télécharger')),
+                h('button', {
+                    type: 'button',
+                    class: 'mj-leave-requests__btn mj-leave-requests__btn--secondary',
+                    onClick: onClose
+                }, i18n.close || 'Fermer')
+            )
+        },
+            h('iframe', {
+                src: certUrl,
+                class: 'mj-leave-requests__certificate-frame',
+                title: i18n.certificateTitle || 'Certificat médical'
+            })
         );
     }
 
@@ -763,6 +799,7 @@
     // Request Item Component
     function RequestItem({ request, types, onCancel, onApprove, onReject, onDelete, isCoordinator, showMember }) {
         const i18n = mjLeaveRequests.i18n;
+        const [viewingCertificate, setViewingCertificate] = useState(null);
         const type = types.find(t => t.id === parseInt(request.type_id)) || { name: 'Congé', slug: 'unknown' };
         const dates = JSON.parse(request.dates || '[]');
         const dateCount = dates.length;
@@ -831,7 +868,11 @@
                     onClick: () => onDelete(request.id),
                     style: { marginLeft: '4px' }
                 }, i18n.delete || 'Supprimer')
-            )
+            ),
+            viewingCertificate && h(CertificateModal, {
+                requestId: viewingCertificate,
+                onClose: () => setViewingCertificate(null)
+            })
         );
     }
 
@@ -1442,7 +1483,7 @@
     }
 
     // Support for Elementor editor preview
-    if (window.elementorFrontend) {
+    if (window.elementorFrontend && window.elementorFrontend.hooks && typeof window.elementorFrontend.hooks.addAction === 'function') {
         window.elementorFrontend.hooks.addAction('frontend/element_ready/mj-member-leave-requests.default', init);
     }
 })();

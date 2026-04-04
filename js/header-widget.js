@@ -1006,6 +1006,52 @@
 
         item.addEventListener('touchend',    onEnd,               { passive: true });
         item.addEventListener('touchcancel', function () { dragging = false; spring(); curX = 0; }, { passive: true });
+
+        // Mouse drag (desktop)
+        item.addEventListener('mousedown', function (e) {
+            if (e.button !== 0) return;
+            startX   = e.clientX;
+            startY   = e.clientY;
+            curX     = 0;
+            dragging = true;
+            axis     = null;
+            item.style.transition = 'none';
+            item.style.userSelect = 'none';
+
+            function onMouseMove(e) {
+                if (!dragging) return;
+                var dx = e.clientX - startX;
+                var dy = e.clientY - startY;
+
+                if (axis === null) {
+                    if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+                    axis = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+                }
+                if (axis === 'v') return;
+
+                e.preventDefault();
+
+                if (dx > 0) {
+                    curX = dx > MAX ? MAX + (dx - MAX) * 0.08 : dx;
+                } else {
+                    curX = !isUnread ? dx * 0.08
+                         : (dx < -MAX ? -MAX + (dx + MAX) * 0.08 : dx);
+                }
+
+                item.style.transform = 'translateX(' + curX + 'px)';
+                hint(curX);
+            }
+
+            function onMouseUp() {
+                item.style.userSelect = '';
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup',  onMouseUp);
+                onEnd();
+            }
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup',   onMouseUp);
+        });
     };
 
     MjHeader.prototype._swipeArchive = function (item, wrap, recipId) {

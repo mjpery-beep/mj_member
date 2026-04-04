@@ -47,9 +47,42 @@ if ($isNextcloudIframe) {
         $nextcloudSessionLoginUrl = trailingslashit($nextcloudBaseUrl) . 'apps/mj_session_check/login';
 
         $nextcloudRootFolder = trim((string) Config::nextcloudRootFolder(), '/');
+        $dirParam = '/';
         if ($nextcloudRootFolder !== '') {
+            $dirParam = '/' . $nextcloudRootFolder;
+        }
+
+        // If a ?link= parameter is present on current page, build the iframe URL accordingly
+        $iframeUrlSet = false;
+        if (isset($_GET['link'])) {
+            $linkParam = sanitize_text_field(wp_unslash($_GET['link']));
+            if ($linkParam !== '') {
+                $linkClean = ltrim($linkParam, '/');
+
+                if (preg_match('#^apps/files/files/#', $linkClean)) {
+                    // Nextcloud file viewer URL: apps/files/files/{id}?dir=...&openfile=true
+                    $nextcloudIframeUrl = trailingslashit($nextcloudBaseUrl) . $linkClean;
+                    $iframeUrlSet = true;
+                } elseif (preg_match('#^apps/(?!files(/|$))#', $linkClean)) {
+                    // Any other Nextcloud app (e.g. apps/spreed, apps/talk) — load directly
+                    $nextcloudIframeUrl = trailingslashit($nextcloudBaseUrl) . $linkClean;
+                    $iframeUrlSet = true;
+                } elseif (strpos($linkClean, '?dir=') !== false) {
+                    // apps/files/?dir=... — extract the dir value
+                    preg_match('/\?dir=(.+)$/', $linkClean, $matches);
+                    if (!empty($matches[1])) {
+                        $dirParam = urldecode($matches[1]);
+                    }
+                } else {
+                    // Plain folder path — use as dir parameter
+                    $dirParam = '/' . $linkClean;
+                }
+            }
+        }
+
+        if (!$iframeUrlSet) {
             $nextcloudIframeUrl = add_query_arg(
-                array('dir' => '/' . $nextcloudRootFolder),
+                array('dir' => $dirParam),
                 $nextcloudIframeUrl
             );
         }
@@ -267,9 +300,7 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                 <div class="mj-documents-status-bar__actions">
                     <a href="<?php echo esc_url($nextcloudIframeUrl); ?>"
                        id="<?php echo esc_attr($ncSbUid . '-open-page'); ?>"
-                       class="mj-documents-status-bar__connect-btn mj-documents-status-bar__open-link"
-                       target="_blank"
-                       rel="noopener noreferrer">
+                       class="mj-documents-status-bar__connect-btn mj-documents-status-bar__open-link">
                         <svg class="mj-documents-status-bar__open-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
                             <path d="M8.75 2.25H11.75V5.25" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
                             <path d="M6 8L11.5 2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1139,14 +1170,19 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                 name="<?php echo esc_attr($ncSbUid . '-iframe-target'); ?>"
                 class="mj-documents-widget__nextcloud-iframe"
                 src="<?php echo esc_url($nextcloudIframeUrl); ?>"
-                data-base-src="<?php echo esc_url($nextcloudIframeUrl); ?>"
+<?php 
+/**
+ *                 data-base-src="<?php echo esc_url($nextcloudIframeUrl); ?>"
                 data-autologin-src="<?php echo esc_attr($nextcloudIframeAutoUrl); ?>"
                 data-autologin-key="<?php echo esc_attr($nextcloudAutoLoginKey); ?>"
                 data-autologin-user="<?php echo esc_attr($nextcloudAutoLoginUser); ?>"
                 data-autologin-password="<?php echo esc_attr($nextcloudAutoLoginPassword); ?>"
                 data-login-post-url="<?php echo esc_url($nextcloudLoginPostUrl); ?>"
+ */
+?>
                 title="<?php esc_attr_e('Espace documents Nextcloud', 'mj-member'); ?>"
                 loading="lazy"
+                allow="clipboard-read; clipboard-write"
                 referrerpolicy="strict-origin-when-cross-origin"
                 style="width:100%; min-height:820px; border:1px solid #e2e8f0; border-radius:12px; background:#fff;"
             ></iframe>

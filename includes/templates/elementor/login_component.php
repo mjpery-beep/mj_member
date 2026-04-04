@@ -1335,6 +1335,8 @@ if (!function_exists('mj_member_register_elementor_login_widget')) {
             $disabled_widgets = array();
         }
 
+        $registered_widget_slugs = array();
+
         foreach ($widgets_map as $class_name => $relative_path) {
             if (empty($loaded_widgets[$class_name]) || !class_exists($class_name, false)) {
                 continue;
@@ -1346,6 +1348,26 @@ if (!function_exists('mj_member_register_elementor_login_widget')) {
                     continue;
                 }
                 $widgets_manager->register($instance);
+                $registered_widget_slugs[] = $instance->get_name();
+            }
+        }
+
+        // Safety fallback: ensure notification list widget stays available in Elementor panel.
+        if (!in_array('mj-member-notification-list', $registered_widget_slugs, true)) {
+            $notification_widget_class = 'Mj_Member_Elementor_Notification_List_Widget';
+
+            if (!class_exists($notification_widget_class, false) && function_exists('mj_member_load_elementor_widget_class')) {
+                mj_member_load_elementor_widget_class(
+                    $notification_widget_class,
+                    'includes/elementor/class-mj-member-notification-list-widget.php'
+                );
+            }
+
+            if (class_exists($notification_widget_class, false) && is_subclass_of($notification_widget_class, 'Elementor\\Widget_Base')) {
+                $notification_widget_instance = new $notification_widget_class();
+                if (!in_array($notification_widget_instance->get_name(), $disabled_widgets, true)) {
+                    $widgets_manager->register($notification_widget_instance);
+                }
             }
         }
     }

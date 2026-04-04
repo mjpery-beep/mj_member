@@ -25,6 +25,7 @@
         var activeTab = props.activeTab;
         var onChange = props.onChange;
         var shouldEnsureRegistrationsTab = props.ensureRegistrationsTab !== false;
+        var tabsClassName = props.className;
 
         var tabs = originalTabs;
         var hasRegistrationsTab = tabs.some(function (tab) {
@@ -41,7 +42,7 @@
             tabs = [fallback].concat(tabs);
         }
 
-        return h('div', { class: 'mj-regmgr-tabs', role: 'tablist' },
+        return h('div', { class: classNames('mj-regmgr-tabs', tabsClassName), role: 'tablist' },
             tabs.map(function (tab) {
                 return h('button', {
                     key: tab.key,

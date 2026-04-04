@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) {
 }
 ?>
 <div class="wrap">
-        <h1>⚙️ Configuration MJ Péry</h1>
+        <h1>⚙️ Configuration MJ Péry <small style="font-size:12px; font-weight:400; color:#64748b;">(build photo-import 2026-04-02)</small></h1>
 
         <?php if (!empty($backup_notices)) : ?>
             <?php foreach ($backup_notices as $bn) : ?>
@@ -23,6 +23,7 @@ if (!defined('ABSPATH')) {
                     <button type="button" class="mj-settings-tabs__nav-btn is-active" id="mj-tab-button-stripe" data-tab-target="stripe" role="tab" aria-controls="mj-tab-stripe" aria-selected="true">💳 Paiements Stripe</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-calendar" data-tab-target="calendar" role="tab" aria-controls="mj-tab-calendar" aria-selected="false">📅 Agenda</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-nextcloud" data-tab-target="nextcloud" role="tab" aria-controls="mj-tab-nextcloud" aria-selected="false">☁️ Nextcloud</button>
+                    <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-photo-import" data-tab-target="photo-import" role="tab" aria-controls="mj-tab-photo-import" aria-selected="false">🖼️ Import photo</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-backup" data-tab-target="backup" role="tab" aria-controls="mj-tab-backup" aria-selected="false">🗄️ Sauvegardes</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-account" data-tab-target="account" role="tab" aria-controls="mj-tab-account" aria-selected="false">👤 Espace membre</button>
                     <button type="button" class="mj-settings-tabs__nav-btn" id="mj-tab-button-account-links" data-tab-target="account-links" role="tab" aria-controls="mj-tab-account-links" aria-selected="false">🔗 Liens Mon compte</button>
@@ -248,6 +249,80 @@ if (!defined('ABSPATH')) {
                                     <?php endif; ?>
                             </div>
                                 </div>
+                        </div>
+                    </div>
+
+                    <div id="mj-tab-photo-import" class="mj-settings-tabs__panel" data-tab="photo-import" role="tabpanel" aria-labelledby="mj-tab-button-photo-import" aria-hidden="true">
+                        <div style="background:#f8fafc; padding:20px; margin:20px 0; border-radius:8px; border-left:4px solid #0ea5e9;">
+                            <h2 style="margin-top:0;">🖼️ Import photo Nextcloud</h2>
+                            <p style="color:#475569; font-size:14px; margin-top:0;">
+                                Importez automatiquement les photos marquées par étiquettes Nextcloud, puis générez des miniatures prêtes pour le widget timeline.
+                            </p>
+
+                            <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:16px; margin-bottom:16px;">
+                                <h3 style="margin-top:0;">Paramètres d'import</h3>
+                                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px;">
+                                    <p style="margin:0;">
+                                        <label for="mj-member-photo-import-source-folder"><strong>Dossier source Nextcloud</strong></label><br>
+                                        <input type="text" id="mj-member-photo-import-source-folder" name="mj_member_photo_import_source_folder" class="regular-text" value="<?php echo esc_attr($photo_import_source_folder_option); ?>" placeholder="photos">
+                                        <small style="color:#64748b; display:block; margin-top:4px;">Chemin relatif depuis la racine Nextcloud configurée.</small>
+                                    </p>
+                                    <p style="margin:0;">
+                                        <label for="mj-member-photo-import-default-tags"><strong>Étiquettes par défaut</strong></label><br>
+                                        <textarea id="mj-member-photo-import-default-tags" name="mj_member_photo_import_default_tags" rows="4" class="large-text" placeholder="sortie\natelier\nanniversaire"><?php echo esc_textarea($photo_import_default_tags_option); ?></textarea>
+                                        <small style="color:#64748b; display:block; margin-top:4px;">Une étiquette par ligne (ou séparées par virgule).</small>
+                                    </p>
+                                </div>
+
+                                <p style="margin:14px 0 0;">
+                                    <label for="mj-member-photo-import-tag-folder-map"><strong>Mapping manuel Étiquette => Dossier</strong></label><br>
+                                    <textarea id="mj-member-photo-import-tag-folder-map" name="mj_member_photo_import_tag_folder_map" rows="4" class="large-text" placeholder="Siteweb=Photos/Evenements/Siteweb\nSport=Photos/Sorties/Sport"><?php echo esc_textarea($photo_import_tag_folder_map_option); ?></textarea>
+                                    <small style="color:#64748b; display:block; margin-top:4px;">Une règle par ligne. Formats acceptés: <code>Tag=Dossier</code> ou <code>Tag: Dossier</code>. Le dossier peut être relatif au dossier source.</small>
+                                </p>
+
+                                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-top:14px;">
+                                    <p style="margin:0;">
+                                        <label for="mj-member-photo-import-thumb-width"><strong>Largeur miniatures</strong></label><br>
+                                        <input type="number" min="120" step="10" id="mj-member-photo-import-thumb-width" name="mj_member_photo_import_thumb_width" value="<?php echo esc_attr((string) $photo_import_thumb_width_option); ?>" class="small-text">
+                                    </p>
+                                    <p style="margin:0;">
+                                        <label for="mj-member-photo-import-thumb-height"><strong>Hauteur miniatures</strong></label><br>
+                                        <input type="number" min="120" step="10" id="mj-member-photo-import-thumb-height" name="mj_member_photo_import_thumb_height" value="<?php echo esc_attr((string) $photo_import_thumb_height_option); ?>" class="small-text">
+                                    </p>
+                                    <p style="margin:0;">
+                                        <label for="mj-member-photo-import-display-width"><strong>Largeur image modal</strong></label><br>
+                                        <input type="number" min="320" step="20" id="mj-member-photo-import-display-width" name="mj_member_photo_import_display_width" value="<?php echo esc_attr((string) $photo_import_display_width_option); ?>" class="small-text">
+                                    </p>
+                                    <p style="margin:0;">
+                                        <label for="mj-member-photo-import-display-height"><strong>Hauteur image modal</strong></label><br>
+                                        <input type="number" min="320" step="20" id="mj-member-photo-import-display-height" name="mj_member_photo_import_display_height" value="<?php echo esc_attr((string) $photo_import_display_height_option); ?>" class="small-text">
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:16px;">
+                                <h3 style="margin-top:0;">Import manuel par étiquettes</h3>
+                                <p style="margin-top:0; color:#64748b;">1) Chargez les étiquettes depuis Nextcloud. 2) Sélectionnez les étiquettes. 3) Lancez l'import.</p>
+
+                                <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+                                    <button type="button" class="button" id="mj-photo-import-load-tags">Charger les étiquettes</button>
+                                    <button type="button" class="button button-primary" id="mj-photo-import-run">Importer les photos sélectionnées</button>
+                                </div>
+
+                                <label for="mj-photo-import-tags"><strong>Étiquettes Nextcloud</strong></label>
+                                <select id="mj-photo-import-tags" multiple size="10" style="width:100%; max-width:520px;" data-default-tags="<?php echo esc_attr($photo_import_default_tags_option); ?>"></select>
+
+                                <div id="mj-photo-import-status" class="mj-photo-import-status" style="margin-top:12px;">Utilisez le bouton « Charger les étiquettes » pour commencer.</div>
+                            </div>
+
+                            <div style="background:#0f172a; border:1px solid #1e293b; border-radius:8px; padding:16px; margin-top:16px; color:#e2e8f0;">
+                                <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+                                    <h3 style="margin:0; color:#f8fafc;">Suivi live import photo</h3>
+                                    <button type="button" class="button" id="mj-photo-import-refresh-live">Rafraîchir</button>
+                                </div>
+                                <p style="margin:8px 0 10px; color:#94a3b8;">Affiche en direct les étapes API Nextcloud et l'avancement du téléchargement pendant l'import.</p>
+                                <pre id="mj-photo-import-live" style="background:#020617; color:#cbd5e1; border:1px solid #1e293b; border-radius:6px; padding:10px; margin:0; max-height:320px; overflow:auto; white-space:pre-wrap; font-size:12px; line-height:1.4;">Aucun import en cours.</pre>
+                            </div>
                         </div>
                     </div>
 
@@ -1518,14 +1593,55 @@ if (!defined('ABSPATH')) {
                                 <?php endif; ?>
                             </summary>
                             <div style="padding:16px 18px;">
-                                <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:14px; margin-bottom:16px; font-size:13px; line-height:1.7; color:#1e3a8a;">
-                                    <strong>📋 Comment obtenir ces informations :</strong>
-                                    <ol style="margin:8px 0 0 0; padding-left:18px;">
-                                        <li>Allez sur <strong>developers.facebook.com</strong> → <em>My Apps</em> → créez une app de type <em>Business</em>.</li>
-                                        <li>Ajoutez le produit <strong>Facebook Login</strong> puis <strong>Pages API</strong>.</li>
-                                        <li>Dans <em>Tools → Graph API Explorer</em>, sélectionnez votre app et votre Page, puis générez un <strong>Page Access Token</strong> avec les permissions : <code>pages_manage_posts</code>, <code>pages_read_engagement</code>, <code>instagram_basic</code>, <code>instagram_content_publish</code>.</li>
-                                        <li>Pour un token permanent : utilisez l'<strong>API Token Debugger</strong> pour l'échanger contre un token longue durée.</li>
-                                        <li>L'<strong>ID de Page</strong> se trouve dans <em>Paramètres de la Page Facebook → À propos</em> (en bas).</li>
+                                <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:16px; margin-bottom:16px; font-size:13px; line-height:1.8; color:#1e3a8a;">
+                                    <strong style="font-size:14px;">📋 Guide pas-à-pas — Page Access Token Facebook</strong>
+
+                                    <p style="margin:10px 0 4px 0; font-weight:600; color:#1e40af;">Étape 1 — Créer une app Meta</p>
+                                    <ol style="margin:0 0 10px 0; padding-left:18px;">
+                                        <li>Allez sur <strong>developers.facebook.com</strong> et connectez-vous avec le compte <strong>administrateur</strong> de votre Page Facebook.</li>
+                                        <li>Cliquez sur <strong>Mes apps</strong> (en haut à droite) → <strong>Créer une app</strong>.</li>
+                                        <li>L'interface vous demande un cas d'usage : choisissez <strong>« Autre »</strong> si vous ne voyez pas de catégorie évidente, puis <strong>« Entreprise »</strong> (Business) à l'étape suivante.</li>
+                                        <li>Donnez un nom (ex. "MJ Péry Publisher"), laissez le compte Business vide si vous n'en avez pas, validez. L'app est créée.</li>
+                                    </ol>
+
+                                    <p style="margin:0 0 4px 0; font-weight:600; color:#1e40af;">Étape 2 — Ouvrir l'Explorateur d'API Graph</p>
+                                    <ol style="margin:0 0 10px 0; padding-left:18px;">
+                                        <li>Depuis le tableau de bord de votre app, regardez le <strong>menu de gauche</strong> tout en bas → cliquez sur <strong>Outils</strong> (icône clé/outil) → <strong>Explorateur d'API Graph</strong>.<br>
+                                            <em>Si vous ne voyez pas « Outils », accédez directement à l'URL :</em><br>
+                                            <code style="background:#dbeafe; padding:3px 8px; border-radius:4px; display:inline-block; margin-top:3px;">developers.facebook.com/tools/explorer</code>
+                                        </li>
+                                        <li>En haut de la page, dans le menu déroulant <strong>« Application Meta »</strong>, sélectionnez l'app que vous venez de créer (elle doit apparaître dans la liste).</li>
+                                    </ol>
+
+                                    <p style="margin:0 0 4px 0; font-weight:600; color:#1e40af;">Étape 3 — Générer un User Token avec les bonnes permissions</p>
+                                    <ol style="margin:0 0 10px 0; padding-left:18px;">
+                                        <li>Cliquez sur le bouton <strong>« Générer un jeton d'accès »</strong> (bouton bleu, colonne de droite).</li>
+                                        <li>Une pop-up Facebook s'ouvre. Cliquez <strong>Continuer en tant que [votre nom]</strong>.</li>
+                                        <li>Cliquez ensuite sur <strong>Modifier les permissions</strong> (ou "Edit permissions") et cochez :<br>
+                                            <code style="background:#dbeafe; padding:2px 5px; border-radius:4px; margin:2px 2px; display:inline-block;">pages_show_list</code>
+                                            <code style="background:#dbeafe; padding:2px 5px; border-radius:4px; margin:2px 2px; display:inline-block;">pages_manage_posts</code>
+                                            <code style="background:#dbeafe; padding:2px 5px; border-radius:4px; margin:2px 2px; display:inline-block;">pages_read_engagement</code>
+                                        </li>
+                                        <li>Validez la pop-up. Un <strong>User Access Token</strong> temporaire (1h) apparaît dans le champ en haut de l'Explorateur.</li>
+                                    </ol>
+
+                                    <p style="margin:0 0 4px 0; font-weight:600; color:#1e40af;">Étape 4 — Récupérer le Page Access Token via /me/accounts</p>
+                                    <ol style="margin:0 0 10px 0; padding-left:18px;">
+                                        <li>Dans le champ de l'Explorateur (à côté de GET), remplacez le texte par : <code style="background:#dbeafe; padding:2px 6px; border-radius:4px;">me/accounts</code></li>
+                                        <li>Cliquez <strong>Soumettre</strong> (bouton bleu).</li>
+                                        <li>La réponse JSON liste vos Pages. Pour chaque Page, vous voyez un <code>access_token</code> et un <code>id</code>.<br>
+                                            → <strong>Copiez l'<code>access_token</code></strong> de votre Page : c'est le <strong>Page Access Token</strong>.<br>
+                                            → <strong>Copiez l'<code>id</code></strong> : c'est l'<strong>ID de Page</strong>.
+                                        </li>
+                                    </ol>
+
+                                    <p style="margin:0 0 4px 0; font-weight:600; color:#1e40af;">Étape 5 — Obtenir un token qui n'expire jamais</p>
+                                    <ol style="margin:0 0 4px 0; padding-left:18px;">
+                                        <li>Le User Token dure 1h. Pour que le Page Token soit permanent, il faut d'abord <strong>étendre le User Token</strong> en longue durée (60 jours), puis refaire l'appel <code>me/accounts</code> — le Page Token obtenu ainsi ne expire jamais.</li>
+                                        <li>Pour étendre : allez sur <code style="background:#dbeafe; padding:2px 5px; border-radius:4px;">developers.facebook.com/tools/debug/accesstoken</code></li>
+                                        <li>Collez votre User Token (court), cliquez <strong>Déboguer</strong>, puis en bas <strong>« Étendre le jeton d'accès »</strong>. Un nouveau token à 60 jours apparaît.</li>
+                                        <li>Revenez dans l'Explorateur, collez ce nouveau token dans le champ en haut, refaites l'appel <code>me/accounts</code>.</li>
+                                        <li>Le <code>access_token</code> retourné pour votre Page sera cette fois <strong>permanent</strong>. Vérifiez sur la page de débogage : il doit indiquer <strong>« N'expire jamais »</strong>.</li>
                                     </ol>
                                 </div>
                                 <p style="margin-bottom:12px;">
@@ -2000,6 +2116,32 @@ if (!defined('ABSPATH')) {
                     if (function_exists('mj_member_get_elementor_widgets_catalog')) {
                         $widgets_catalog = mj_member_get_elementor_widgets_catalog();
                     }
+
+                    // Safety fallback: ensure the notification list widget is visible in settings,
+                    // even if Elementor metadata extraction fails for this request.
+                    $has_notification_list_widget = false;
+                    if (!empty($widgets_catalog)) {
+                        foreach ($widgets_catalog as $widget_entry) {
+                            $entry_slug = isset($widget_entry['slug']) ? (string) $widget_entry['slug'] : '';
+                            if ($entry_slug === 'mj-member-notification-list') {
+                                $has_notification_list_widget = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!$has_notification_list_widget) {
+                        $widgets_catalog[] = array(
+                            'class' => 'Mj_Member_Elementor_Notification_List_Widget',
+                            'path' => 'includes/elementor/class-mj-member-notification-list-widget.php',
+                            'loaded' => true,
+                            'title' => __('Liste Notifications MJ', 'mj-member'),
+                            'slug' => 'mj-member-notification-list',
+                            'categories' => array('mj-member'),
+                            'keywords' => array('mj', 'notifications', 'liste'),
+                            'icon' => 'eicon-post-list',
+                        );
+                    }
                     ?>
                     <div id="mj-tab-widgets" class="mj-settings-tabs__panel" data-tab="widgets" role="tabpanel" aria-labelledby="mj-tab-button-widgets" aria-hidden="true">
                         <div style="background:#f0fdf4; border-left:4px solid #22c55e; padding:18px 20px; border-radius:10px; margin-bottom:24px;">
@@ -2249,6 +2391,29 @@ if (!defined('ABSPATH')) {
             gap: 8px;
             align-items: center;
             margin-bottom: 6px;
+        }
+        .mj-photo-import-status {
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: #eef2ff;
+            color: #334155;
+            border: 1px solid #c7d2fe;
+            font-size: 13px;
+        }
+        .mj-photo-import-status.is-success {
+            background: #ecfdf5;
+            border-color: #86efac;
+            color: #166534;
+        }
+        .mj-photo-import-status.is-error {
+            background: #fef2f2;
+            border-color: #fca5a5;
+            color: #991b1b;
+        }
+        .mj-photo-import-status.is-warning {
+            background: #fffbeb;
+            border-color: #fcd34d;
+            color: #92400e;
         }
         /* Styles pour le tri des liens Mon compte */
         .mj-account-links-sortable {

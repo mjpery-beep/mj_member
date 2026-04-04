@@ -2662,6 +2662,11 @@
 }
 
 @media (max-width: 720px) {
+    .mj-hour-encode-app__card--calendar{
+        padding: 0;
+        border: 0;
+    }
+    
     .mj-hour-encode-app__global-aggregates {
         grid-template-columns: 1fr;
     }

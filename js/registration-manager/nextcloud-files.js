@@ -1,6 +1,6 @@
 /**
- * Registration Manager – Nextcloud Files Panel
- * Composant Preact pour parcourir et gérer les photos/documents Nextcloud.
+ * Registration Manager - Nextcloud Files Panel
+ * Preact component used to browse and manage event/member photos and documents.
  *
  * Expose window.MjRegMgrNextcloudFiles = { NextcloudFilesPanel }
  */
@@ -16,10 +16,6 @@
     if (!h || !useState) {
         return;
     }
-
-    // -----------------------------------------------------------------------
-    // Utilities
-    // -----------------------------------------------------------------------
 
     function formatSize(bytes) {
         if (!bytes || bytes === 0) { return '–'; }
@@ -39,25 +35,75 @@
     function fileIcon(item) {
         if (item.type === 'folder') { return '📁'; }
         if (isImage(item.mimeType)) { return '🖼️'; }
-        if (isPdf(item.mimeType))   { return '📄'; }
-        var m = item.mimeType || '';
-        if (m.indexOf('word') !== -1 || m.indexOf('document') !== -1) { return '📝'; }
-        if (m.indexOf('spreadsheet') !== -1 || m.indexOf('excel') !== -1) { return '📊'; }
-        if (m.indexOf('presentation') !== -1 || m.indexOf('powerpoint') !== -1) { return '📊'; }
-        if (m.indexOf('zip') !== -1 || m.indexOf('archive') !== -1) { return '🗜️'; }
-        if (m.indexOf('video') !== -1) { return '🎬'; }
-        if (m.indexOf('audio') !== -1) { return '🎵'; }
+        if (isPdf(item.mimeType)) { return '📄'; }
+
+        var mime = item.mimeType || '';
+        if (mime.indexOf('word') !== -1 || mime.indexOf('document') !== -1) { return '📝'; }
+        if (mime.indexOf('spreadsheet') !== -1 || mime.indexOf('excel') !== -1) { return '📊'; }
+        if (mime.indexOf('presentation') !== -1 || mime.indexOf('powerpoint') !== -1) { return '📈'; }
+        if (mime.indexOf('zip') !== -1 || mime.indexOf('archive') !== -1) { return '🗜️'; }
+        if (mime.indexOf('video') !== -1) { return '🎬'; }
+        if (mime.indexOf('audio') !== -1) { return '🎵'; }
         return '📎';
     }
 
-    // -----------------------------------------------------------------------
-    // DragDrop Uploader
-    // -----------------------------------------------------------------------
+    function sortFoldersFirst(items) {
+        return (items || []).slice().sort(function (a, b) {
+            if (a.type === 'folder' && b.type !== 'folder') { return -1; }
+            if (a.type !== 'folder' && b.type === 'folder') { return 1; }
+            return String(a.name || '').localeCompare(String(b.name || ''));
+        });
+    }
+
+    function getLabelForMediaType(mediaType) {
+        return mediaType === 'photos' ? 'Photos' : 'Documents';
+    }
+
+    function basename(path) {
+        var parts = String(path || '').split('/');
+        return parts.length ? parts[parts.length - 1] : '';
+    }
+
+    function dirname(path) {
+        var normalized = String(path || '').replace(/\/+$/, '');
+        if (!normalized || normalized.indexOf('/') === -1) {
+            return '';
+        }
+        return normalized.substring(0, normalized.lastIndexOf('/'));
+    }
+
+    function buildBreadcrumbSegments(subPath) {
+        if (!subPath) { return []; }
+
+        var parts = subPath.split('/').filter(function (part) { return !!part; });
+        var current = '';
+
+        return parts.map(function (part) {
+            current = current ? current + '/' + part : part;
+            return {
+                label: part,
+                subPath: current,
+            };
+        });
+    }
+
+    function toSubPath(absolutePath, rootPath) {
+        var absolute = String(absolutePath || '').replace(/^\/+|\/+$/g, '');
+        var root = String(rootPath || '').replace(/^\/+|\/+$/g, '');
+
+        if (!absolute) { return ''; }
+        if (!root) { return absolute; }
+        if (absolute === root) { return ''; }
+        if (absolute.indexOf(root + '/') === 0) {
+            return absolute.substring(root.length + 1);
+        }
+        return absolute;
+    }
 
     function FileUploader(props) {
         var onUpload    = props.onUpload;
+        var onReject    = props.onReject;
         var uploading   = props.uploading;
-        var subFolder   = props.subFolder;
         var mediaType   = props.mediaType;
 
         var _dragging   = useState(false);
@@ -67,19 +113,41 @@
 
         var acceptAttr = mediaType === 'photos' ? 'image/*' : '*/*';
 
+        function isAcceptedFile(file) {
+            if (!file) { return false; }
+            if (mediaType !== 'photos') { return true; }
+
+            var fileType = typeof file.type === 'string' ? file.type : '';
+            if (fileType.indexOf('image/') === 0) {
+                return true;
+            }
+
+            var fileName = typeof file.name === 'string' ? file.name.toLowerCase() : '';
+            return /\.(avif|bmp|gif|heic|heif|jpe?g|png|svg|webp)$/.test(fileName);
+        }
+
         function handleFiles(files) {
             if (!files || files.length === 0 || typeof onUpload !== 'function') { return; }
-            Array.from(files).forEach(function (f) { onUpload(f, subFolder); });
+
+            Array.from(files).forEach(function (file) {
+                if (!isAcceptedFile(file)) {
+                    if (typeof onReject === 'function') {
+                        onReject(file);
+                    }
+                    return;
+                }
+                onUpload(file);
+            });
         }
 
-        function onDrop(e) {
-            e.preventDefault();
+        function onDrop(event) {
+            event.preventDefault();
             setDragging(false);
-            handleFiles(e.dataTransfer.files);
+            handleFiles(event.dataTransfer.files);
         }
 
-        function onDragOver(e) {
-            e.preventDefault();
+        function onDragOver(event) {
+            event.preventDefault();
             setDragging(true);
         }
 
@@ -87,9 +155,9 @@
             setDragging(false);
         }
 
-        function onInputChange(e) {
-            handleFiles(e.target.files);
-            e.target.value = '';
+        function onInputChange(event) {
+            handleFiles(event.target.files);
+            event.target.value = '';
         }
 
         return h('div', {
@@ -97,7 +165,11 @@
             onDrop: onDrop,
             onDragOver: onDragOver,
             onDragLeave: onDragLeave,
-            onClick: function () { !uploading && inputRef.current && inputRef.current.click(); },
+            onClick: function () {
+                if (!uploading && inputRef.current) {
+                    inputRef.current.click();
+                }
+            },
         }, [
             h('input', {
                 ref: inputRef,
@@ -120,24 +192,28 @@
         ]);
     }
 
-    // -----------------------------------------------------------------------
-    // Photo Thumbnail Card
-    // -----------------------------------------------------------------------
-
     function PhotoCard(props) {
-        var item      = props.item;
-        var onDelete  = props.onDelete;
-        var onView    = props.onView;
-        var deleting  = props.deleting;
+        var item        = props.item;
+        var onDelete    = props.onDelete;
+        var onView      = props.onView;
+        var deleting    = props.deleting;
+        var onDragStart = props.onDragStart;
+        var onDragEnd   = props.onDragEnd;
+        var isDragging  = props.isDragging;
 
-        return h('div', { class: 'mj-nc-photo-card' }, [
+        return h('div', {
+            class: 'mj-nc-photo-card' + (isDragging ? ' mj-nc-photo-card--dragging' : ''),
+            draggable: true,
+            onDragStart: function (event) { typeof onDragStart === 'function' && onDragStart(item, event); },
+            onDragEnd: function () { typeof onDragEnd === 'function' && onDragEnd(); },
+        }, [
             h('div', {
                 class: 'mj-nc-photo-card__thumb',
                 onClick: function () { typeof onView === 'function' && onView(item); },
                 title: 'Voir',
             }, [
-                item.downloadUrl
-                    ? h('img', { src: item.downloadUrl, alt: item.name, loading: 'lazy' })
+                (item.thumbnailUrl || item.downloadUrl)
+                    ? h('img', { src: item.thumbnailUrl || item.downloadUrl, alt: item.name, loading: 'lazy' })
                     : h('span', { class: 'mj-nc-photo-card__icon' }, fileIcon(item)),
             ]),
             h('div', { class: 'mj-nc-photo-card__footer' }, [
@@ -146,37 +222,40 @@
                     h('button', {
                         class: 'mj-nc-btn mj-nc-btn--icon',
                         title: 'Voir',
-                        onClick: function (e) { e.stopPropagation(); typeof onView === 'function' && onView(item); },
+                        onClick: function (event) {
+                            event.stopPropagation();
+                            typeof onView === 'function' && onView(item);
+                        },
                     }, '👁'),
                     h('button', {
                         class: 'mj-nc-btn mj-nc-btn--icon mj-nc-btn--danger',
                         title: 'Supprimer',
                         disabled: deleting,
-                        onClick: function (e) { e.stopPropagation(); typeof onDelete === 'function' && onDelete(item); },
+                        onClick: function (event) {
+                            event.stopPropagation();
+                            typeof onDelete === 'function' && onDelete(item);
+                        },
                     }, deleting ? '…' : '🗑'),
                 ]),
             ]),
         ]);
     }
 
-    // -----------------------------------------------------------------------
-    // Document Row
-    // -----------------------------------------------------------------------
-
     function DocumentRow(props) {
-        var item      = props.item;
-        var onDelete  = props.onDelete;
-        var onRename  = props.onRename;
-        var onOpen    = props.onOpen; // navigate into folder
-        var onMove    = props.onMove;
-        var deleting  = props.deleting;
+        var item        = props.item;
+        var onDelete    = props.onDelete;
+        var onRename    = props.onRename;
+        var deleting    = props.deleting;
+        var onDragStart = props.onDragStart;
+        var onDragEnd   = props.onDragEnd;
+        var isDragging  = props.isDragging;
 
-        var _editing    = useState(false);
-        var editing     = _editing[0];
-        var setEditing  = _editing[1];
-        var _newName    = useState(item.name);
-        var newName     = _newName[0];
-        var setNewName  = _newName[1];
+        var _editing   = useState(false);
+        var editing    = _editing[0];
+        var setEditing = _editing[1];
+        var _newName   = useState(item.name);
+        var newName    = _newName[0];
+        var setNewName = _newName[1];
 
         function saveRename() {
             if (newName.trim() !== '' && newName.trim() !== item.name && typeof onRename === 'function') {
@@ -185,90 +264,183 @@
             setEditing(false);
         }
 
-        function onKeyDown(e) {
-            if (e.key === 'Enter') { saveRename(); }
-            if (e.key === 'Escape') { setEditing(false); setNewName(item.name); }
+        function onKeyDown(event) {
+            if (event.key === 'Enter') { saveRename(); }
+            if (event.key === 'Escape') {
+                setEditing(false);
+                setNewName(item.name);
+            }
         }
 
-        return h('div', { class: 'mj-nc-doc-row' + (item.type === 'folder' ? ' mj-nc-doc-row--folder' : '') }, [
-            h('span', {
-                class: 'mj-nc-doc-row__icon',
-                onClick: item.type === 'folder' ? function () { typeof onOpen === 'function' && onOpen(item); } : null,
-            }, fileIcon(item)),
+        return h('div', {
+            class: 'mj-nc-doc-row' + (isDragging ? ' mj-nc-doc-row--dragging' : ''),
+            draggable: true,
+            onDragStart: function (event) { typeof onDragStart === 'function' && onDragStart(item, event); },
+            onDragEnd: function () { typeof onDragEnd === 'function' && onDragEnd(); },
+        }, [
+            h('span', { class: 'mj-nc-doc-row__icon' }, fileIcon(item)),
 
             editing
                 ? h('input', {
                     class: 'mj-nc-doc-row__rename-input',
                     value: newName,
                     autoFocus: true,
-                    onInput: function (e) { setNewName(e.target.value); },
+                    onInput: function (event) { setNewName(event.target.value); },
                     onBlur: saveRename,
                     onKeyDown: onKeyDown,
                 })
-                : h('span', {
-                    class: 'mj-nc-doc-row__name',
-                    onClick: item.type === 'folder' ? function () { typeof onOpen === 'function' && onOpen(item); } : null,
-                    title: item.name,
-                }, item.name),
+                : h('span', { class: 'mj-nc-doc-row__name', title: item.name }, item.name),
 
-            h('span', { class: 'mj-nc-doc-row__size' }, item.type === 'folder' ? '' : formatSize(item.size)),
+            h('span', { class: 'mj-nc-doc-row__size' }, formatSize(item.size)),
 
             h('div', { class: 'mj-nc-doc-row__actions' }, [
-                item.type === 'file' && item.downloadUrl && h('a', {
+                (item.editUrl || item.webUrl) && h('a', {
                     class: 'mj-nc-btn mj-nc-btn--icon',
-                    href: item.downloadUrl,
-                    target: '_blank',
-                    rel: 'noopener',
-                    title: 'Ouvrir',
-                    onClick: function (e) { e.stopPropagation(); },
-                }, '↗'),
-
-                item.type === 'file' && item.webUrl && h('a', {
-                    class: 'mj-nc-btn',
-                    href: item.webUrl,
-                    target: '_blank',
-                    rel: 'noopener',
-                    title: 'Voir dans Nextcloud',
-                    onClick: function (e) { e.stopPropagation(); },
-                }, 'Voir dans Nextcloud'),
-
-                item.type === 'file' && item.editUrl && h('a', {
-                    class: 'mj-nc-btn',
-                    href: item.editUrl,
-                    target: '_blank',
-                    rel: 'noopener',
+                    href: item.editUrl || item.webUrl,
                     title: 'Éditer dans Nextcloud',
-                    onClick: function (e) { e.stopPropagation(); },
-                }, 'Éditer dans Nextcloud'),
-
-                item.type === 'file' && h('button', {
-                    class: 'mj-nc-btn mj-nc-btn--icon',
-                    title: 'Renommer',
-                    onClick: function (e) { e.stopPropagation(); setEditing(true); setNewName(item.name); },
-                }, '✏️'),
+                    onClick: function (event) { event.stopPropagation(); },
+                }, '📝'),
 
                 h('button', {
                     class: 'mj-nc-btn mj-nc-btn--icon',
-                    title: 'Déplacer',
-                    onClick: function (e) { e.stopPropagation(); typeof onMove === 'function' && onMove(item); },
-                }, '↪'),
+                    title: 'Renommer',
+                    onClick: function (event) {
+                        event.stopPropagation();
+                        setEditing(true);
+                        setNewName(item.name);
+                    },
+                }, '✏️'),
 
                 h('button', {
                     class: 'mj-nc-btn mj-nc-btn--icon mj-nc-btn--danger',
                     title: 'Supprimer',
                     disabled: deleting,
-                    onClick: function (e) { e.stopPropagation(); typeof onDelete === 'function' && onDelete(item); },
+                    onClick: function (event) {
+                        event.stopPropagation();
+                        typeof onDelete === 'function' && onDelete(item);
+                    },
                 }, deleting ? '…' : '🗑'),
             ]),
         ]);
     }
 
-    // -----------------------------------------------------------------------
-    // Lightbox
-    // -----------------------------------------------------------------------
+    function TreeNode(props) {
+        var node             = props.node;
+        var treeNodes        = props.treeNodes;
+        var expandedFolders  = props.expandedFolders;
+        var selectedSubPath  = props.selectedSubPath;
+        var dropTargetPath   = props.dropTargetPath;
+        var draggingItemPath = props.draggingItemPath;
+        var onToggle         = props.onToggle;
+        var onSelect         = props.onSelect;
+        var onDropItem       = props.onDropItem;
+        var setDropTargetPath = props.setDropTargetPath;
+        var level            = props.level || 0;
+
+        var isExpanded = !!expandedFolders[node.subPath];
+        var isSelected = node.subPath === selectedSubPath;
+        var isDroppable = !!draggingItemPath && !!node.absolutePath;
+        var isDropTarget = dropTargetPath === node.subPath;
+        var hasChildren = node.loaded ? (node.children || []).length > 0 : true;
+        var label = node.name || 'Dossier';
+        var folderUrl = node.webUrl || '';
+
+        function handleToggle(event) {
+            event.stopPropagation();
+            typeof onToggle === 'function' && onToggle(node);
+        }
+
+        function handleSelect() {
+            typeof onSelect === 'function' && onSelect(node.subPath);
+        }
+
+        function handleDragOver(event) {
+            if (!isDroppable) { return; }
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            setDropTargetPath(node.subPath);
+        }
+
+        function handleDragLeave() {
+            if (isDropTarget) {
+                setDropTargetPath('');
+            }
+        }
+
+        function handleDrop(event) {
+            if (!isDroppable) { return; }
+            event.preventDefault();
+            setDropTargetPath('');
+
+            var raw = event.dataTransfer.getData('application/x-mj-nc-item');
+            if (!raw) { return; }
+
+            try {
+                var payload = JSON.parse(raw);
+                typeof onDropItem === 'function' && onDropItem(payload, node);
+            } catch (error) {
+                return;
+            }
+        }
+
+        return h('div', { class: 'mj-nc-tree-node' }, [
+            h('div', {
+                class: 'mj-nc-tree-node__row'
+                    + (isSelected ? ' mj-nc-tree-node__row--selected' : '')
+                    + (isDropTarget ? ' mj-nc-tree-node__row--drop-target' : ''),
+                style: { paddingLeft: String(level * 14) + 'px' },
+                onDragOver: handleDragOver,
+                onDragLeave: handleDragLeave,
+                onDrop: handleDrop,
+            }, [
+                h('button', {
+                    class: 'mj-nc-tree-node__toggle',
+                    type: 'button',
+                    onClick: handleToggle,
+                    title: isExpanded ? 'Réduire' : 'Déplier',
+                }, hasChildren ? (isExpanded ? '▾' : '▸') : '•'),
+                h('button', {
+                    class: 'mj-nc-tree-node__label',
+                    type: 'button',
+                    onClick: handleSelect,
+                    title: label,
+                }, [
+                    h('span', { class: 'mj-nc-tree-node__icon' }, '📁'),
+                    h('span', { class: 'mj-nc-tree-node__text' }, label),
+                    node.loading && h('span', { class: 'mj-nc-tree-node__loading' }, '…'),
+                ]),
+                folderUrl && h('a', {
+                    class: 'mj-nc-tree-node__action mj-nc-btn mj-nc-btn--icon',
+                    href: folderUrl,
+                    title: 'Ouvrir dans Nextcloud',
+                    onClick: function (event) { event.stopPropagation(); },
+                }, '↗'),
+            ]),
+
+            isExpanded && node.loaded && (node.children || []).length > 0 && h('div', { class: 'mj-nc-tree-node__children' },
+                node.children.map(function (child) {
+                    var childNode = treeNodes[child.subPath] || child;
+                    return h(TreeNode, {
+                        key: child.subPath,
+                        node: childNode,
+                        treeNodes: treeNodes,
+                        expandedFolders: expandedFolders,
+                        selectedSubPath: selectedSubPath,
+                        dropTargetPath: dropTargetPath,
+                        draggingItemPath: draggingItemPath,
+                        onToggle: onToggle,
+                        onSelect: onSelect,
+                        onDropItem: onDropItem,
+                        setDropTargetPath: setDropTargetPath,
+                        level: level + 1,
+                    });
+                })
+            ),
+        ]);
+    }
 
     function Lightbox(props) {
-        var item    = props.item;
+        var item = props.item;
         var onClose = props.onClose;
 
         if (!item) { return null; }
@@ -279,7 +451,7 @@
         }, [
             h('div', {
                 class: 'mj-nc-lightbox__inner',
-                onClick: function (e) { e.stopPropagation(); },
+                onClick: function (event) { event.stopPropagation(); },
             }, [
                 h('button', { class: 'mj-nc-lightbox__close', onClick: onClose }, '×'),
                 h('img', { src: item.downloadUrl, alt: item.name, class: 'mj-nc-lightbox__img' }),
@@ -288,34 +460,33 @@
         ]);
     }
 
-    // -----------------------------------------------------------------------
-    // Media Tab (Photos or Documents)
-    // -----------------------------------------------------------------------
-
     function MediaTab(props) {
-        var context    = props.context;    // 'event' | 'member'
+        var context    = props.context;
         var contextId  = props.contextId;
-        var mediaType  = props.mediaType;  // 'photos' | 'documents'
+        var mediaType  = props.mediaType;
         var apiService = props.apiService;
 
-        var _items        = useState([]);
-        var items         = _items[0];
-        var setItems      = _items[1];
-        var _loading      = useState(false);
-        var loading       = _loading[0];
-        var setLoading    = _loading[1];
-        var _uploading    = useState(false);
-        var uploading     = _uploading[0];
-        var setUploading  = _uploading[1];
-        var _error        = useState('');
-        var error         = _error[0];
-        var setError      = _error[1];
-        var _lightbox     = useState(null);
-        var lightboxItem  = _lightbox[0];
-        var setLightbox   = _lightbox[1];
+        var _items = useState([]);
+        var items = _items[0];
+        var setItems = _items[1];
+        var _loading = useState(false);
+        var loading = _loading[0];
+        var setLoading = _loading[1];
+        var _uploading = useState(false);
+        var uploading = _uploading[0];
+        var setUploading = _uploading[1];
+        var _error = useState('');
+        var error = _error[0];
+        var setError = _error[1];
+        var _lightbox = useState(null);
+        var lightboxItem = _lightbox[0];
+        var setLightbox = _lightbox[1];
         var _deletingPath = useState('');
-        var deletingPath  = _deletingPath[0];
+        var deletingPath = _deletingPath[0];
         var setDeletingPath = _deletingPath[1];
+        var _movingPath = useState('');
+        var movingPath = _movingPath[0];
+        var setMovingPath = _movingPath[1];
         var _folderPath = useState('');
         var folderPath = _folderPath[0];
         var setFolderPath = _folderPath[1];
@@ -328,239 +499,436 @@
         var _newFolderName = useState('');
         var newFolderName = _newFolderName[0];
         var setNewFolderName = _newFolderName[1];
+        var _selectedSubPath = useState('');
+        var selectedSubPath = _selectedSubPath[0];
+        var setSelectedSubPath = _selectedSubPath[1];
+        var _rootFolderPath = useState('');
+        var rootFolderPath = _rootFolderPath[0];
+        var setRootFolderPath = _rootFolderPath[1];
+        var _treeNodes = useState({});
+        var treeNodes = _treeNodes[0];
+        var setTreeNodes = _treeNodes[1];
+        var _expandedFolders = useState({ '': true });
+        var expandedFolders = _expandedFolders[0];
+        var setExpandedFolders = _expandedFolders[1];
+        var _dropTargetPath = useState('');
+        var dropTargetPath = _dropTargetPath[0];
+        var setDropTargetPath = _dropTargetPath[1];
+        var _draggingItemPath = useState('');
+        var draggingItemPath = _draggingItemPath[0];
+        var setDraggingItemPath = _draggingItemPath[1];
 
-        // Navigation stack for sub-folders: array of folder path strings.
-        var _navStack   = useState([]);
-        var navStack    = _navStack[0];
-        var setNavStack = _navStack[1];
+        var isPhotos = mediaType === 'photos';
+        var mediaLabel = getLabelForMediaType(mediaType);
+        var breadcrumbSegments = buildBreadcrumbSegments(selectedSubPath);
+        var folderItems = sortFoldersFirst(items.filter(function (item) { return item.type === 'folder'; }));
+        var fileItems = sortFoldersFirst(items.filter(function (item) { return item.type === 'file'; }));
 
-        // Current folder = base folder path (when navStack is empty) or last entry.
-        var currentPath = navStack.length > 0 ? navStack[navStack.length - 1] : null;
+        function resetTreeState() {
+            setTreeNodes({
+                '': {
+                    subPath: '',
+                    name: mediaLabel,
+                    absolutePath: '',
+                    loaded: false,
+                    loading: false,
+                    exists: true,
+                    children: [],
+                },
+            });
+            setExpandedFolders({ '': true });
+        }
 
-        var loadFolder = useCallback(function (subPath) {
-            if (!apiService || !contextId) { return; }
-            setLoading(true);
+        function ensureExpandedPath(subPath) {
+            setExpandedFolders(function (prev) {
+                var next = Object.assign({}, prev);
+                next[''] = true;
+
+                if (subPath) {
+                    var current = '';
+                    subPath.split('/').forEach(function (segment) {
+                        current = current ? current + '/' + segment : segment;
+                        next[current] = true;
+                    });
+                }
+
+                return next;
+            });
+        }
+
+        function updateTreeNode(subPath, absoluteFolder, folderWebUrl, fetchedItems, exists) {
+            var effectiveRoot = rootFolderPath || (subPath === '' ? absoluteFolder : '');
+            var children = exists
+                ? sortFoldersFirst((fetchedItems || []).filter(function (item) { return item.type === 'folder'; }))
+                    .map(function (item) {
+                        return {
+                            subPath: toSubPath(item.path, effectiveRoot || absoluteFolder),
+                            absolutePath: item.path,
+                            name: item.name,
+                            webUrl: item.webUrl || '',
+                            loaded: false,
+                            loading: false,
+                            children: [],
+                        };
+                    })
+                : [];
+
+            setTreeNodes(function (prev) {
+                var next = Object.assign({}, prev);
+                var currentNode = next[subPath] || {
+                    subPath: subPath,
+                    name: subPath ? basename(absoluteFolder) : mediaLabel,
+                    absolutePath: absoluteFolder,
+                    children: [],
+                };
+
+                next[subPath] = Object.assign({}, currentNode, {
+                    subPath: subPath,
+                    name: subPath ? basename(absoluteFolder) : mediaLabel,
+                    absolutePath: absoluteFolder,
+                    webUrl: folderWebUrl || currentNode.webUrl || '',
+                    loaded: true,
+                    loading: false,
+                    exists: exists,
+                    children: children,
+                });
+
+                children.forEach(function (child) {
+                    var previousChild = next[child.subPath] || {};
+                    next[child.subPath] = Object.assign({}, previousChild, child, {
+                        loaded: !!previousChild.loaded,
+                        loading: false,
+                        children: previousChild.children || [],
+                    });
+                });
+
+                return next;
+            });
+        }
+
+        var loadFolder = useCallback(function (subPath, options) {
+            if (!apiService || !contextId) { return Promise.resolve(); }
+
+            var settings = options && typeof options === 'object' ? options : {};
+            if (!settings.treeOnly) {
+                setLoading(true);
+            }
             setError('');
 
-            var api = apiService;
-            var req = subPath
-                ? api.ncListFolder(context, contextId, mediaType, subPath)
-                : api.ncListFolder(context, contextId, mediaType, '');
-
-            req
+            return apiService.ncListFolder(context, contextId, mediaType, subPath || '')
                 .then(function (data) {
-                    setFolderPath(data.folderPath || '');
-                    setFolderExists(data.folderExists !== false);
-                    setItems(data.items || []);
-                    setLoading(false);
+                    var absoluteFolder = data.folderPath || '';
+                    var exists = data.folderExists !== false;
+
+                    if (!rootFolderPath && subPath === '') {
+                        setRootFolderPath(absoluteFolder);
+                    }
+
+                    updateTreeNode(subPath || '', absoluteFolder, data.folderWebUrl || '', data.items || [], exists);
+
+                    if (!settings.treeOnly) {
+                        setFolderPath(absoluteFolder);
+                        setFolderExists(exists);
+                        setItems(data.items || []);
+                        setLoading(false);
+                    }
+
+                    return data;
                 })
                 .catch(function (err) {
-                    var msg = err && err.message ? err.message : 'Erreur de chargement';
-                    setError(msg);
-                    setLoading(false);
+                    if (!settings.treeOnly) {
+                        setLoading(false);
+                    }
+                    setError(err && err.message ? err.message : 'Erreur de chargement');
+                    return Promise.reject(err);
                 });
-        }, [context, contextId, mediaType, apiService]);
+        }, [apiService, context, contextId, mediaType, rootFolderPath]);
 
         useEffect(function () {
-            loadFolder(currentPath);
-        }, [context, contextId, mediaType, currentPath]);
+            setItems([]);
+            setError('');
+            setFolderPath('');
+            setFolderExists(true);
+            setNewFolderName('');
+            setSelectedSubPath('');
+            setRootFolderPath('');
+            setDraggingItemPath('');
+            setDropTargetPath('');
+            resetTreeState();
+        }, [context, contextId, mediaType]);
+
+        useEffect(function () {
+            loadFolder(selectedSubPath || '');
+        }, [loadFolder, selectedSubPath]);
+
+        var handleRejectedUpload = useCallback(function () {
+            setError('Seules les images sont autorisées dans l\'onglet Photos.');
+        }, []);
 
         var handleUpload = useCallback(function (file) {
             if (!folderExists) {
                 setError('Le dossier n\'existe pas encore. Créez-le d\'abord.');
                 return;
             }
+
             setUploading(true);
             setError('');
-            apiService.ncUpload(context, contextId, mediaType, file, currentPath)
-                .then(function (data) {
+
+            apiService.ncUpload(context, contextId, mediaType, file, selectedSubPath || '')
+                .then(function () {
                     setUploading(false);
-                    var newItem = data.file;
-                    if (newItem) {
-                        setItems(function (prev) { return prev.concat([newItem]); });
-                    } else {
-                        loadFolder(currentPath);
-                    }
+                    loadFolder(selectedSubPath || '');
                 })
                 .catch(function (err) {
                     setUploading(false);
                     setError(err && err.message ? err.message : 'Échec de l\'envoi');
                 });
-        }, [context, contextId, mediaType, currentPath, apiService, loadFolder, folderExists]);
+        }, [apiService, context, contextId, folderExists, loadFolder, mediaType, selectedSubPath]);
 
         var handleCreateFolder = useCallback(function (name) {
             setCreatingFolder(true);
             setError('');
-            apiService.ncCreateFolder(context, contextId, mediaType, currentPath || '', name || '')
+
+            apiService.ncCreateFolder(context, contextId, mediaType, selectedSubPath || '', name || '')
                 .then(function () {
                     setCreatingFolder(false);
-                    if (name) {
-                        setNewFolderName('');
-                    }
-                    loadFolder(currentPath);
+                    setNewFolderName('');
+                    ensureExpandedPath(selectedSubPath || '');
+                    loadFolder(selectedSubPath || '');
                 })
                 .catch(function (err) {
                     setCreatingFolder(false);
                     setError(err && err.message ? err.message : 'Échec de création du dossier');
                 });
-        }, [context, contextId, mediaType, currentPath, apiService, loadFolder]);
+        }, [apiService, context, contextId, loadFolder, mediaType, selectedSubPath]);
 
         var handleDelete = useCallback(function (item) {
             if (!window.confirm('Supprimer « ' + item.name + ' » ?')) { return; }
+
             setDeletingPath(item.path);
             apiService.ncDelete(item.path)
                 .then(function () {
                     setDeletingPath('');
-                    setItems(function (prev) { return prev.filter(function (i) { return i.path !== item.path; }); });
+                    loadFolder(selectedSubPath || '');
                 })
                 .catch(function (err) {
                     setDeletingPath('');
                     setError(err && err.message ? err.message : 'Échec de la suppression');
                 });
-        }, [apiService]);
+        }, [apiService, loadFolder, selectedSubPath]);
 
         var handleRename = useCallback(function (item, newName) {
             apiService.ncRename(item.path, newName)
-                .then(function (data) {
-                    var updated = data.file || {};
-                    setItems(function (prev) {
-                        return prev.map(function (i) {
-                            if (i.path !== item.path) { return i; }
-                            return Object.assign({}, i, { path: updated.path || i.path, name: updated.name || newName });
-                        });
-                    });
+                .then(function () {
+                    loadFolder(selectedSubPath || '');
                 })
                 .catch(function (err) {
                     setError(err && err.message ? err.message : 'Échec du renommage');
                 });
-        }, [apiService]);
+        }, [apiService, loadFolder, selectedSubPath]);
 
-        var handleMove = useCallback(function (item) {
-            var target = window.prompt('Déplacer vers quel dossier ? (chemin complet Nextcloud)', folderPath || '');
-            if (!target) { return; }
+        var handleTreeToggle = useCallback(function (node) {
+            var nodeSubPath = node.subPath || '';
+            var willExpand = !expandedFolders[nodeSubPath];
 
-            apiService.ncMove(item.path, target)
+            setExpandedFolders(function (prev) {
+                var next = Object.assign({}, prev);
+                next[nodeSubPath] = willExpand;
+                return next;
+            });
+
+            if (willExpand && (!treeNodes[nodeSubPath] || !treeNodes[nodeSubPath].loaded)) {
+                setTreeNodes(function (prev) {
+                    var next = Object.assign({}, prev);
+                    var previous = next[nodeSubPath] || node;
+                    next[nodeSubPath] = Object.assign({}, previous, { loading: true });
+                    return next;
+                });
+                loadFolder(nodeSubPath, { treeOnly: true });
+            }
+        }, [expandedFolders, loadFolder, treeNodes]);
+
+        var handleSelectFolder = useCallback(function (subPath) {
+            ensureExpandedPath(subPath || '');
+            setSelectedSubPath(subPath || '');
+        }, []);
+
+        var handleDragStart = useCallback(function (item, event) {
+            if (!event || !event.dataTransfer || !item || item.type !== 'file') {
+                return;
+            }
+
+            var payload = {
+                path: item.path,
+                name: item.name,
+                type: item.type,
+            };
+
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('application/x-mj-nc-item', JSON.stringify(payload));
+            event.dataTransfer.setData('text/plain', item.path);
+            setDraggingItemPath(item.path);
+        }, []);
+
+        var handleDragEnd = useCallback(function () {
+            setDraggingItemPath('');
+            setDropTargetPath('');
+        }, []);
+
+        var handleDropItem = useCallback(function (payload, node) {
+            if (!payload || payload.type !== 'file' || !node || !node.absolutePath) {
+                return;
+            }
+
+            var sourceParent = dirname(payload.path);
+            if (sourceParent === node.absolutePath) {
+                return;
+            }
+
+            setMovingPath(payload.path);
+            apiService.ncMove(payload.path, node.absolutePath)
                 .then(function () {
-                    loadFolder(currentPath);
+                    setMovingPath('');
+                    setDraggingItemPath('');
+                    setDropTargetPath('');
+                    loadFolder(selectedSubPath || '');
                 })
                 .catch(function (err) {
+                    setMovingPath('');
+                    setDraggingItemPath('');
+                    setDropTargetPath('');
                     setError(err && err.message ? err.message : 'Échec du déplacement');
                 });
-        }, [apiService, folderPath, loadFolder, currentPath]);
-
-        function handleOpenFolder(item) {
-            var subPath = item.path;
-            setNavStack(function (prev) { return prev.concat([subPath]); });
-        }
-
-        function navigateBack() {
-            setNavStack(function (prev) { return prev.slice(0, -1); });
-        }
-
-        function navigateTo(index) {
-            setNavStack(function (prev) { return prev.slice(0, index + 1); });
-        }
-
-        // Sort: folders first, then by name.
-        var sorted = items.slice().sort(function (a, b) {
-            if (a.type === 'folder' && b.type !== 'folder') { return -1; }
-            if (a.type !== 'folder' && b.type === 'folder') { return 1; }
-            return a.name.localeCompare(b.name);
-        });
-
-        var isPhotos = mediaType === 'photos';
-
-        // Build breadcrumb from navStack.
-        var breadcrumb = null;
-        if (navStack.length > 0) {
-            breadcrumb = h('div', { class: 'mj-nc-breadcrumb' }, [
-                h('button', {
-                    class: 'mj-nc-breadcrumb__item',
-                    onClick: function () { setNavStack([]); },
-                }, mediaType === 'photos' ? 'Photos' : 'Documents'),
-                navStack.map(function (seg, idx) {
-                    var label = seg.split('/').pop();
-                    var isLast = idx === navStack.length - 1;
-                    return [
-                        h('span', { key: 'sep-' + idx, class: 'mj-nc-breadcrumb__sep' }, '›'),
-                        isLast
-                            ? h('span', { key: 'seg-' + idx, class: 'mj-nc-breadcrumb__item mj-nc-breadcrumb__item--active' }, label)
-                            : h('button', { key: 'seg-' + idx, class: 'mj-nc-breadcrumb__item', onClick: function () { navigateTo(idx); } }, label),
-                    ];
-                }),
-            ]);
-        }
+        }, [apiService, loadFolder, selectedSubPath]);
 
         return h('div', { class: 'mj-nc-media-tab' }, [
-            breadcrumb,
+            h('div', { class: 'mj-nc-layout' }, [
+                h('section', { class: 'mj-nc-main' }, [
+                    h('div', { class: 'mj-nc-breadcrumb' }, [
+                        h('button', {
+                            class: 'mj-nc-breadcrumb__item' + (selectedSubPath === '' ? ' mj-nc-breadcrumb__item--active' : ''),
+                            onClick: function () { handleSelectFolder(''); },
+                        }, mediaLabel),
+                        breadcrumbSegments.map(function (segment, index) {
+                            var isLast = index === breadcrumbSegments.length - 1;
+                            return [
+                                h('span', { key: 'sep-' + segment.subPath, class: 'mj-nc-breadcrumb__sep' }, '›'),
+                                isLast
+                                    ? h('span', { key: 'seg-' + segment.subPath, class: 'mj-nc-breadcrumb__item mj-nc-breadcrumb__item--active' }, segment.label)
+                                    : h('button', {
+                                        key: 'seg-' + segment.subPath,
+                                        class: 'mj-nc-breadcrumb__item',
+                                        onClick: function () { handleSelectFolder(segment.subPath); },
+                                    }, segment.label),
+                            ];
+                        }),
+                    ]),
 
-            h(FileUploader, {
-                onUpload: handleUpload,
-                uploading: uploading,
-                mediaType: mediaType,
-            }),
+                    h('div', { class: 'mj-nc-toolbar' }, [
+                        h(FileUploader, {
+                            onUpload: handleUpload,
+                            onReject: handleRejectedUpload,
+                            uploading: uploading,
+                            mediaType: mediaType,
+                        }),
+                    ]),
 
-            h('div', { class: 'mj-nc-toolbar' }, [
-                h('button', {
-                    class: 'mj-nc-btn',
-                    disabled: creatingFolder,
-                    onClick: function () { handleCreateFolder(''); },
-                    title: 'Créer le dossier courant s\'il n\'existe pas',
-                }, creatingFolder ? 'Création…' : 'Créer le dossier'),
+                    error && h('div', { class: 'mj-nc-error' }, error),
 
-                h('input', {
-                    class: 'mj-nc-doc-row__rename-input',
-                    placeholder: 'Nouveau sous-dossier',
-                    value: newFolderName,
-                    onInput: function (e) { setNewFolderName(e.target.value); },
-                }),
+                    h('div', { class: 'mj-nc-section-head' }, [
+                        h('div', { class: 'mj-nc-section-head__title' }, basename(folderPath) || mediaLabel),
+                        h('div', { class: 'mj-nc-section-head__meta' }, [
+                            fileItems.length + ' fichier' + (fileItems.length > 1 ? 's' : ''),
+                            ' • ',
+                            folderItems.length + ' dossier' + (folderItems.length > 1 ? 's' : ''),
+                            movingPath && ' • Déplacement…',
+                        ]),
+                    ]),
 
-                h('button', {
-                    class: 'mj-nc-btn',
-                    disabled: creatingFolder || !newFolderName.trim(),
-                    onClick: function () { handleCreateFolder(newFolderName.trim()); },
-                }, 'Créer sous-dossier'),
+                    !folderExists && h('div', { class: 'mj-nc-empty' }, [
+                        h('span', null, 'Le dossier Nextcloud est introuvable.'),
+                    ]),
+
+                    loading && h('div', { class: 'mj-nc-loading' }, [
+                        h('div', { class: 'mj-regmgr-loading__spinner' }),
+                    ]),
+
+                    !loading && folderExists && fileItems.length === 0 && h('div', { class: 'mj-nc-empty' }, [
+                        h('span', null, isPhotos ? '📸 Aucun fichier image dans ce dossier.' : '📁 Aucun fichier dans ce dossier.'),
+                    ]),
+
+                    !loading && folderExists && isPhotos && fileItems.length > 0 && h('div', { class: 'mj-nc-photo-grid' },
+                        fileItems.map(function (item) {
+                            return h(PhotoCard, {
+                                key: item.path,
+                                item: item,
+                                deleting: deletingPath === item.path || movingPath === item.path,
+                                onView: function (currentItem) { setLightbox(currentItem); },
+                                onDelete: handleDelete,
+                                onDragStart: handleDragStart,
+                                onDragEnd: handleDragEnd,
+                                isDragging: draggingItemPath === item.path,
+                            });
+                        })
+                    ),
+
+                    !loading && folderExists && !isPhotos && fileItems.length > 0 && h('div', { class: 'mj-nc-doc-list' },
+                        fileItems.map(function (item) {
+                            return h(DocumentRow, {
+                                key: item.path,
+                                item: item,
+                                deleting: deletingPath === item.path || movingPath === item.path,
+                                onDelete: handleDelete,
+                                onRename: handleRename,
+                                onDragStart: handleDragStart,
+                                onDragEnd: handleDragEnd,
+                                isDragging: draggingItemPath === item.path,
+                            });
+                        })
+                    ),
+                ]),
+
+                h('aside', { class: 'mj-nc-sidebar' }, [
+                    h('div', { class: 'mj-nc-sidebar__header' }, [
+                        h('h4', { class: 'mj-nc-sidebar__title' }, 'Arborescence'),
+                        h('p', { class: 'mj-nc-sidebar__hint' }, 'Cliquez sur un dossier pour lister ses fichiers. Glissez un fichier sur un dossier pour le déplacer.'),
+                    ]),
+                    h('div', { class: 'mj-nc-sidebar__actions' }, [
+                        h('button', {
+                            class: 'mj-nc-btn',
+                            disabled: creatingFolder,
+                            onClick: function () { handleCreateFolder(''); },
+                            title: 'Créer le dossier courant s\'il n\'existe pas',
+                        }, creatingFolder ? 'Création…' : 'Créer le dossier'),
+                        h('input', {
+                            class: 'mj-nc-doc-row__rename-input mj-nc-sidebar__input',
+                            placeholder: 'Nouveau sous-dossier',
+                            value: newFolderName,
+                            onInput: function (event) { setNewFolderName(event.target.value); },
+                        }),
+                        h('button', {
+                            class: 'mj-nc-btn',
+                            disabled: creatingFolder || !newFolderName.trim(),
+                            onClick: function () { handleCreateFolder(newFolderName.trim()); },
+                        }, 'Créer sous-dossier'),
+                    ]),
+                    h('div', { class: 'mj-nc-tree' }, [
+                        treeNodes[''] && h(TreeNode, {
+                            node: treeNodes[''],
+                            treeNodes: treeNodes,
+                            expandedFolders: expandedFolders,
+                            selectedSubPath: selectedSubPath,
+                            dropTargetPath: dropTargetPath,
+                            draggingItemPath: draggingItemPath,
+                            onToggle: handleTreeToggle,
+                            onSelect: handleSelectFolder,
+                            onDropItem: handleDropItem,
+                            setDropTargetPath: setDropTargetPath,
+                            level: 0,
+                        }),
+                    ]),
+                ]),
             ]),
-
-            error && h('div', { class: 'mj-nc-error' }, error),
-
-            !folderExists && h('div', { class: 'mj-nc-empty' }, [
-                h('span', null, 'Le dossier Nextcloud est introuvable.'),
-            ]),
-
-            loading && h('div', { class: 'mj-nc-loading' }, [
-                h('div', { class: 'mj-regmgr-loading__spinner' }),
-            ]),
-
-            !loading && folderExists && sorted.length === 0 && h('div', { class: 'mj-nc-empty' }, [
-                h('span', null, isPhotos ? '📸 Aucune photo.' : '📁 Aucun document.'),
-            ]),
-
-            !loading && folderExists && isPhotos && sorted.length > 0 && h('div', { class: 'mj-nc-photo-grid' },
-                sorted.map(function (item) {
-                    return h(PhotoCard, {
-                        key: item.path,
-                        item: item,
-                        deleting: deletingPath === item.path,
-                        onView: function (i) { setLightbox(i); },
-                        onDelete: handleDelete,
-                    });
-                })
-            ),
-
-            !loading && folderExists && !isPhotos && sorted.length > 0 && h('div', { class: 'mj-nc-doc-list' },
-                sorted.map(function (item) {
-                    return h(DocumentRow, {
-                        key: item.path,
-                        item: item,
-                        deleting: deletingPath === item.path,
-                        onOpen: handleOpenFolder,
-                        onDelete: handleDelete,
-                        onRename: handleRename,
-                        onMove: handleMove,
-                    });
-                })
-            ),
 
             h(Lightbox, {
                 item: lightboxItem,
@@ -569,17 +937,13 @@
         ]);
     }
 
-    // -----------------------------------------------------------------------
-    // Main panel – Photos / Documents sub-tabs
-    // -----------------------------------------------------------------------
-
     function NextcloudFilesPanel(props) {
-        var context    = props.context;    // 'event' | 'member'
+        var context    = props.context;
         var contextId  = props.contextId;
         var apiService = props.apiService;
 
-        var _activeTab   = useState('photos');
-        var activeTab    = _activeTab[0];
+        var _activeTab = useState('photos');
+        var activeTab = _activeTab[0];
         var setActiveTab = _activeTab[1];
 
         if (!contextId) {
@@ -587,7 +951,7 @@
         }
 
         var subTabs = [
-            { key: 'photos',    label: 'Photos',    icon: '📸' },
+            { key: 'photos', label: 'Photos', icon: '📸' },
             { key: 'documents', label: 'Documents', icon: '📁' },
         ];
 
@@ -615,10 +979,6 @@
             }),
         ]);
     }
-
-    // -----------------------------------------------------------------------
-    // Export
-    // -----------------------------------------------------------------------
 
     global.MjRegMgrNextcloudFiles = {
         NextcloudFilesPanel: NextcloudFilesPanel,

@@ -47,75 +47,48 @@ function mj_regmgr_build_n8n_publish_payload($event, $message, $event_url, $user
 }
 
 /**
- * Publish through n8n webhook using HMAC signature.
+ * Save a social publication record to the database.
  *
- * @param array<string,mixed> $payload Request payload.
- * @return array<string,mixed>|WP_Error
+ * @param int    $event_id    Event ID.
+ * @param string $platform    Platform slug (facebook|instagram|whatsapp).
+ * @param string $message     Published message.
+ * @param string $status      'success' or 'error'.
+ * @param string $post_id     API-returned post/message ID.
+ * @param array  $api_response Raw API response data.
+ * @param int    $user_id     WP user who triggered the publish.
+ * @return int|false Inserted row ID or false on failure.
  */
-function mj_regmgr_publish_event_via_n8n($payload) {
-    $webhook_url = esc_url_raw((string) get_option('mj_social_n8n_webhook_url', ''));
-    $secret = (string) get_option('mj_social_n8n_secret', '');
+function mj_regmgr_save_social_publication($event_id, $platform, $message, $status, $post_id, $api_response, $user_id) {
+    global $wpdb;
+    $table = $wpdb->prefix . 'mj_social_publications';
 
-    if ($webhook_url === '') {
-        return new WP_Error('n8n_missing_url', __('Le webhook n8n n\'est pas configuré.', 'mj-member'));
-    }
-
-    if ($secret === '') {
-        return new WP_Error('n8n_missing_secret', __('Le secret n8n est requis pour sécuriser la publication.', 'mj-member'));
-    }
-
-    $body = wp_json_encode($payload);
-    if (!is_string($body) || $body === '') {
-        return new WP_Error('n8n_invalid_payload', __('Impossible de préparer la requête n8n.', 'mj-member'));
-    }
-
-    $timestamp = (string) time();
-    $signature = hash_hmac('sha256', $timestamp . "\n" . $body, $secret);
-
-    $response = wp_remote_post($webhook_url, array(
-        'timeout' => 25,
-        'headers' => array(
-            'Content-Type' => 'application/json',
-            'X-MJ-Timestamp' => $timestamp,
-            'X-MJ-Signature' => 'sha256=' . $signature,
+    $result = $wpdb->insert(
+        $table,
+        array(
+            'event_id'     => (int) $event_id,
+            'platform'     => sanitize_key($platform),
+            'message'      => (string) $message,
+            'status'       => in_array($status, array('success', 'error'), true) ? $status : 'error',
+            'post_id'      => $post_id !== '' ? (string) $post_id : null,
+            'api_response' => wp_json_encode($api_response),
+            'published_by' => (int) $user_id,
         ),
-        'body' => $body,
-    ));
-
-    if (is_wp_error($response)) {
-        return $response;
-    }
-
-    $status_code = (int) wp_remote_retrieve_response_code($response);
-    $raw_body = (string) wp_remote_retrieve_body($response);
-    $json = json_decode($raw_body, true);
-    if (!is_array($json)) {
-        $json = array();
-    }
-
-    if ($status_code < 200 || $status_code >= 300) {
-        $error_message = isset($json['message']) && is_string($json['message'])
-            ? $json['message']
-            : __('Le workflow n8n a retourné une erreur.', 'mj-member');
-        return new WP_Error('n8n_http_error', $error_message, array('status' => $status_code));
-    }
-
-    $message = isset($json['message']) && is_string($json['message'])
-        ? $json['message']
-        : __('Publication traitée via n8n.', 'mj-member');
-    $post_id = isset($json['postId']) ? (string) $json['postId'] : '';
-
-    return array(
-        'message' => $message,
-        'postId' => $post_id,
-        'raw' => $json,
+        array('%d', '%s', '%s', '%s', '%s', '%s', '%d')
     );
+
+    return $result !== false ? (int) $wpdb->insert_id : false;
 }
 
 /**
- * AJAX handler for publishing an event through n8n.
+ * AJAX handler for publishing an event directly to Facebook, Instagram, or WhatsApp.
+ *
+ * POST params:
+ *   eventId    (int)    – ID of the event.
+ *   platform   (string) – 'facebook', 'instagram', or 'whatsapp'.
+ *   message    (string) – Message/caption to publish.
+ *   imageUrl   (string) – Optional image URL for Instagram.
  */
-function mj_regmgr_publish_event() {
+function mj_regmgr_publish_event_direct() {
     if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'mj-registration-manager')) {
         wp_send_json_error(array('message' => __('Vérification de sécurité échouée.', 'mj-member')), 403);
         return;
@@ -138,9 +111,9 @@ function mj_regmgr_publish_event() {
         return;
     }
 
-    $n8n_enabled = get_option('mj_social_n8n_enabled', '0') === '1';
-    if (!$n8n_enabled) {
-        wp_send_json_error(array('message' => __('La publication via n8n n\'est pas activée.', 'mj-member')), 400);
+    $platform = isset($_POST['platform']) ? sanitize_key($_POST['platform']) : '';
+    if (!in_array($platform, array('facebook', 'instagram', 'whatsapp'), true)) {
+        wp_send_json_error(array('message' => __('Plateforme invalide.', 'mj-member')), 400);
         return;
     }
 
@@ -149,6 +122,8 @@ function mj_regmgr_publish_event() {
         wp_send_json_error(array('message' => __('Le message ne peut pas être vide.', 'mj-member')), 400);
         return;
     }
+
+    $image_url = isset($_POST['imageUrl']) ? esc_url_raw(wp_unslash($_POST['imageUrl'])) : '';
 
     $event = \Mj\Member\Classes\Crud\MjEvents::find($event_id);
     if (!$event) {
@@ -163,19 +138,186 @@ function mj_regmgr_publish_event() {
         $event_url = esc_url_raw((string) $event->front_url);
     }
 
-    $payload = mj_regmgr_build_n8n_publish_payload($event, $message, $event_url, $user_id);
-    $result = mj_regmgr_publish_event_via_n8n($payload);
+    $logs = array();
+    $publisher = new \Mj\Member\Classes\MjSocialMediaPublisher();
+
+    $logs[] = array(
+        'type' => 'info',
+        'text' => sprintf(__('Début de la publication sur %s…', 'mj-member'), ucfirst($platform)),
+        'time' => gmdate('H:i:s'),
+    );
+
+    switch ($platform) {
+        case 'facebook':
+            $logs[] = array(
+                'type' => 'info',
+                'text' => sprintf(__('Envoi vers l\'API Graph Facebook (page %s)…', 'mj-member'), get_option('mj_social_facebook_page_id', '?')),
+                'time' => gmdate('H:i:s'),
+            );
+            $result = $publisher->publishToFacebook($message, $event_url);
+            break;
+
+        case 'instagram':
+            $logs[] = array(
+                'type' => 'info',
+                'text' => sprintf(__('Envoi vers l\'API Instagram Business (compte %s)…', 'mj-member'), get_option('mj_social_instagram_business_id', '?')),
+                'time' => gmdate('H:i:s'),
+            );
+            $result = $publisher->publishToInstagram($message, $event_url, $image_url);
+            break;
+
+        case 'whatsapp':
+            $group_url = (string) get_option('mj_social_whatsapp_group_url', '');
+            $group_id  = (string) get_option('mj_social_whatsapp_phone_number_id', '');
+            $logs[] = array(
+                'type' => 'info',
+                'text' => sprintf(__('Envoi via l\'API WhatsApp Business (Phone Number ID : %s)…', 'mj-member'), $group_id !== '' ? $group_id : '?'),
+                'time' => gmdate('H:i:s'),
+            );
+            $result = $publisher->publishToWhatsApp($group_id, $message);
+            break;
+
+        default:
+            wp_send_json_error(array('message' => __('Plateforme non gérée.', 'mj-member')), 400);
+            return;
+    }
 
     if (is_wp_error($result)) {
-        wp_send_json_error(array('message' => $result->get_error_message()), 400);
+        $error_msg = $result->get_error_message();
+        $error_data = $result->get_error_data();
+
+        $logs[] = array(
+            'type' => 'error',
+            'text' => sprintf(__('Erreur API : %s', 'mj-member'), $error_msg),
+            'time' => gmdate('H:i:s'),
+        );
+        if (is_array($error_data) && isset($error_data['status'])) {
+            $logs[] = array(
+                'type' => 'error',
+                'text' => sprintf(__('Code HTTP retourné : %d', 'mj-member'), (int) $error_data['status']),
+                'time' => gmdate('H:i:s'),
+            );
+        }
+
+        mj_regmgr_save_social_publication(
+            $event_id,
+            $platform,
+            $message,
+            'error',
+            '',
+            array('error' => $error_msg, 'data' => $error_data),
+            $user_id
+        );
+
+        wp_send_json_error(array(
+            'message' => $error_msg,
+            'logs'    => $logs,
+        ), 200);
         return;
     }
 
+    $post_id     = isset($result['postId']) ? (string) $result['postId'] : '';
+    $success_msg = isset($result['message']) ? (string) $result['message'] : __('Publication réussie !', 'mj-member');
+
+    $logs[] = array(
+        'type' => 'success',
+        'text' => $success_msg . ($post_id !== '' ? sprintf(' (ID : %s)', $post_id) : ''),
+        'time' => gmdate('H:i:s'),
+    );
+
+    $saved_id = mj_regmgr_save_social_publication(
+        $event_id,
+        $platform,
+        $message,
+        'success',
+        $post_id,
+        $result,
+        $user_id
+    );
+
+    if ($saved_id !== false) {
+        $logs[] = array(
+            'type' => 'info',
+            'text' => sprintf(__('Publication enregistrée dans l\'historique (entrée #%d).', 'mj-member'), $saved_id),
+            'time' => gmdate('H:i:s'),
+        );
+    }
+
     wp_send_json_success(array(
-        'message' => isset($result['message']) ? (string) $result['message'] : __('Publication réussie !', 'mj-member'),
-        'postId' => isset($result['postId']) ? (string) $result['postId'] : '',
-        'n8n' => true,
+        'message'    => $success_msg,
+        'postId'     => $post_id,
+        'platform'   => $platform,
+        'logs'       => $logs,
+        'savedId'    => $saved_id !== false ? $saved_id : null,
     ));
 }
 
-add_action('wp_ajax_mj_regmgr_publish_event', 'mj_regmgr_publish_event');
+add_action('wp_ajax_mj_regmgr_publish_event_direct', 'mj_regmgr_publish_event_direct');
+
+/**
+ * AJAX handler to retrieve social publications for a given event.
+ *
+ * POST params:
+ *   eventId (int) – ID of the event.
+ */
+function mj_regmgr_get_social_publications() {
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'mj-registration-manager')) {
+        wp_send_json_error(array('message' => __('Vérification de sécurité échouée.', 'mj-member')), 403);
+        return;
+    }
+
+    if (!get_current_user_id()) {
+        wp_send_json_error(array('message' => __('Vous devez être connecté.', 'mj-member')), 403);
+        return;
+    }
+
+    if (!current_user_can(\Mj\Member\Core\Config::capability())) {
+        wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+        return;
+    }
+
+    $event_id = isset($_POST['eventId']) ? absint($_POST['eventId']) : 0;
+    if ($event_id <= 0) {
+        wp_send_json_error(array('message' => __('ID événement invalide.', 'mj-member')), 400);
+        return;
+    }
+
+    global $wpdb;
+    $table = $wpdb->prefix . 'mj_social_publications';
+
+    $rows = $wpdb->get_results($wpdb->prepare(
+        "SELECT id, platform, message, status, post_id, api_response, published_by, published_at
+         FROM {$table}
+         WHERE event_id = %d
+         ORDER BY published_at DESC
+         LIMIT 50",
+        $event_id
+    ), ARRAY_A);
+
+    if (!is_array($rows)) {
+        $rows = array();
+    }
+
+    $publications = array();
+    foreach ($rows as $row) {
+        $user_name = '';
+        if (!empty($row['published_by'])) {
+            $u = get_userdata((int) $row['published_by']);
+            $user_name = $u ? $u->display_name : '';
+        }
+        $publications[] = array(
+            'id'           => (int) $row['id'],
+            'platform'     => (string) $row['platform'],
+            'message'      => (string) $row['message'],
+            'status'       => (string) $row['status'],
+            'postId'       => (string) $row['post_id'],
+            'apiResponse'  => $row['api_response'] ? json_decode($row['api_response'], true) : null,
+            'publishedBy'  => $user_name,
+            'publishedAt'  => (string) $row['published_at'],
+        );
+    }
+
+    wp_send_json_success(array('publications' => $publications));
+}
+
+add_action('wp_ajax_mj_regmgr_get_social_publications', 'mj_regmgr_get_social_publications');

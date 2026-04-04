@@ -184,10 +184,208 @@ final class MjNextcloud
             return true;
         }
 
-        // Some instances may only expose HTTP-level errors.
-        return $httpCode >= 200 && $httpCode < 400;
+        // OCS meta was not parseable – fall back to HTTP status code only.
+        if ($meta['statuscode'] === 0) {
+            return $httpCode >= 200 && $httpCode < 400;
+        }
+
+        return false;
     }
 
+    /**
+     * Create a new Nextcloud user account.
+     *
+     * @param  string $userId      Nextcloud username.
+     * @param  string $password    Initial password.
+     * @param  string $displayName Display name (optional).
+     * @param  string $email       Email address (optional).
+     * @return true|WP_Error
+     */
+    public function createUser(string $userId, string $password, string $displayName = '', string $email = '')
+    {
+        $userId = sanitize_user($userId, true);
+        if ($userId === '' || $password === '') {
+            return new WP_Error('mj_nextcloud_create_user_invalid', __('Identifiant ou mot de passe invalide.', 'mj-member'));
+        }
+
+        $url = $this->baseUrl . '/ocs/v1.php/cloud/users';
+
+        $body = http_build_query([
+            'userid'      => $userId,
+            'password'    => $password,
+            'displayName' => $displayName,
+            'email'       => $email,
+        ]);
+
+        $response = $this->request('POST', $url, [
+            'headers' => [
+                'Content-Type'   => 'application/x-www-form-urlencoded',
+                'OCS-APIREQUEST' => 'true',
+            ],
+            'body' => $body,
+        ]);
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $httpCode = wp_remote_retrieve_response_code($response);
+        $meta     = $this->parseOcsMeta(wp_remote_retrieve_body($response));
+
+        if ($meta['statuscode'] === 100) {
+            return true;
+        }
+
+        $message = $meta['message'] !== ''
+            ? $meta['message']
+            : sprintf(__('Impossible de créer l\'utilisateur Nextcloud (HTTP %d, OCS %d).', 'mj-member'), (int) $httpCode, (int) $meta['statuscode']);
+
+        return new WP_Error('mj_nextcloud_create_user_failed', $message);
+    }
+
+    /**
+     * Update the password of an existing Nextcloud user.
+     *
+     * @param  string $userId   Nextcloud username.
+     * @param  string $password New password.
+     * @return true|WP_Error
+     */
+    public function setUserPassword(string $userId, string $password)
+    {
+        $userId = sanitize_user($userId, true);
+        if ($userId === '' || $password === '') {
+            return new WP_Error('mj_nextcloud_set_password_invalid', __('Identifiant ou mot de passe invalide.', 'mj-member'));
+        }
+
+        $url = $this->baseUrl . '/ocs/v1.php/cloud/users/' . rawurlencode($userId);
+
+        $body = http_build_query([
+            'key'   => 'password',
+            'value' => $password,
+        ]);
+
+        $response = $this->request('PUT', $url, [
+            'headers' => [
+                'Content-Type'   => 'application/x-www-form-urlencoded',
+                'OCS-APIREQUEST' => 'true',
+            ],
+            'body' => $body,
+        ]);
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $httpCode = wp_remote_retrieve_response_code($response);
+        $meta     = $this->parseOcsMeta(wp_remote_retrieve_body($response));
+
+        if ($meta['statuscode'] === 100) {
+            return true;
+        }
+
+        $message = $meta['message'] !== ''
+            ? $meta['message']
+            : sprintf(__('Impossible de mettre à jour le mot de passe Nextcloud (HTTP %d, OCS %d).', 'mj-member'), (int) $httpCode, (int) $meta['statuscode']);
+
+        return new WP_Error('mj_nextcloud_set_password_failed', $message);
+    }
+
+    /**
+     * Add a Nextcloud user to a group.
+     *
+     * @param  string $userId  Nextcloud username.
+     * @param  string $groupId Group ID.
+     * @return true|WP_Error
+     */
+    public function addUserToGroup(string $userId, string $groupId)
+    {
+        $userId  = sanitize_user($userId, true);
+        $groupId = sanitize_text_field($groupId);
+        if ($userId === '' || $groupId === '') {
+            return new WP_Error('mj_nextcloud_group_invalid', __('Identifiant utilisateur ou groupe invalide.', 'mj-member'));
+        }
+
+        $url = $this->baseUrl . '/ocs/v1.php/cloud/users/' . rawurlencode($userId) . '/groups';
+
+        $body = http_build_query(['groupid' => $groupId]);
+
+        $response = $this->request('POST', $url, [
+            'headers' => [
+                'Content-Type'   => 'application/x-www-form-urlencoded',
+                'OCS-APIREQUEST' => 'true',
+            ],
+            'body' => $body,
+        ]);
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $httpCode = wp_remote_retrieve_response_code($response);
+        $meta     = $this->parseOcsMeta(wp_remote_retrieve_body($response));
+
+        if ($meta['statuscode'] === 100) {
+            return true;
+        }
+
+        $message = $meta['message'] !== ''
+            ? $meta['message']
+            : sprintf(__('Impossible d\'ajouter l\'utilisateur au groupe "%s" (HTTP %d, OCS %d).', 'mj-member'), $groupId, (int) $httpCode, (int) $meta['statuscode']);
+
+        return new WP_Error('mj_nextcloud_add_group_failed', $message);
+    }
+
+    /**
+     * Set a user's avatar via the WebDAV avatars endpoint.
+     *
+     * @param  string $userId  Nextcloud username.
+     * @param  string $content Raw image binary content.
+     * @param  string $mime    MIME type (e.g. "image/jpeg").
+     * @return true|WP_Error
+     */
+    public function setUserAvatar(string $userId, string $content, string $mime)
+    {
+        $userId = sanitize_user($userId, true);
+        if ($userId === '' || $content === '') {
+            return new WP_Error('mj_nextcloud_avatar_invalid', __('Données avatar invalides.', 'mj-member'));
+        }
+
+        $ext = $mime === 'image/png' ? 'png' : 'jpg';
+        $url = $this->baseUrl . '/remote.php/dav/avatars/' . rawurlencode($userId) . '/avatar.' . $ext;
+
+        $response = $this->request('PUT', $url, [
+            'headers' => ['Content-Type' => $mime],
+            'body'    => $content,
+        ]);
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code >= 200 && $code < 300) {
+            return true;
+        }
+
+        return new WP_Error(
+            'mj_nextcloud_avatar_failed',
+            sprintf(__('Impossible de définir l\'avatar Nextcloud (HTTP %d).', 'mj-member'), (int) $code)
+        );
+    }
+
+    /**
+     * Upload raw content to a folder (alias for uploadFile with binary content).
+     *
+     * @param  string $folderPath Destination folder.
+     * @param  string $fileName   File name.
+     * @param  string $content    Raw file content.
+     * @param  string $mimeType   MIME type.
+     * @return array|WP_Error
+     */
+    public function uploadContent(string $folderPath, string $fileName, string $content, string $mimeType)
+    {
+        return $this->uploadFile($folderPath, $fileName, $content, $mimeType);
+    }
     /* ------------------------------------------------------------------
      * WebDAV – File operations
      * ----------------------------------------------------------------*/
@@ -375,6 +573,7 @@ final class MjNextcloud
             'size'         => is_string($content) ? strlen($content) : 0,
             'modifiedTime' => current_time('c'),
             'downloadUrl'  => $this->getDownloadUrl($filePath),
+            'thumbnailUrl' => strpos($mimeType, 'image/') === 0 ? $this->getThumbnailUrl($filePath, current_time('c') . '|' . (is_string($content) ? strlen($content) : 0)) : '',
         ];
     }
 
@@ -400,6 +599,86 @@ final class MjNextcloud
         $fileName = $file['name'] ?? 'fichier';
 
         return $this->uploadFile($folderPath, $fileName, $content, $mimeType);
+    }
+
+    /**
+     * Download a file content from Nextcloud.
+     *
+     * @param string $filePath Path relative to admin root.
+     * @return string|WP_Error
+     */
+    public function downloadFile(string $filePath)
+    {
+        $filePath = $this->sanitizePath($filePath);
+        if ($filePath === '') {
+            return new WP_Error('mj_nextcloud_download_invalid', __('Chemin de fichier invalide.', 'mj-member'));
+        }
+
+        $url = $this->davUrl . '/' . ltrim($filePath, '/');
+        $response = $this->request('GET', $url);
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code < 200 || $code >= 300) {
+            return new WP_Error(
+                'mj_nextcloud_download_failed',
+                sprintf(__('Impossible de télécharger le fichier (HTTP %d).', 'mj-member'), (int) $code)
+            );
+        }
+
+        return (string) wp_remote_retrieve_body($response);
+    }
+
+    /**
+     * Download a file from Nextcloud directly to a local path (streamed).
+     *
+     * This avoids loading full binary content into PHP memory.
+     *
+     * @param string $filePath   Path relative to admin root.
+     * @param string $targetPath Absolute local path where file must be written.
+     * @return true|WP_Error
+     */
+    public function downloadFileToPath(string $filePath, string $targetPath)
+    {
+        $filePath = $this->sanitizePath($filePath);
+        $targetPath = trim($targetPath);
+
+        if ($filePath === '' || $targetPath === '') {
+            return new WP_Error('mj_nextcloud_download_invalid', __('Chemin de fichier invalide.', 'mj-member'));
+        }
+
+        $targetDir = dirname($targetPath);
+        if (!is_dir($targetDir) && !wp_mkdir_p($targetDir)) {
+            return new WP_Error('mj_nextcloud_download_target_dir', __('Impossible de créer le dossier cible de téléchargement.', 'mj-member'));
+        }
+
+        $url = $this->davUrl . '/' . ltrim($filePath, '/');
+        $response = $this->request('GET', $url, [
+            'stream'   => true,
+            'filename' => $targetPath,
+            'timeout'  => 90,
+        ]);
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $code = (int) wp_remote_retrieve_response_code($response);
+        if ($code < 200 || $code >= 300) {
+            @unlink($targetPath);
+            return new WP_Error(
+                'mj_nextcloud_download_failed',
+                sprintf(__('Impossible de télécharger le fichier (HTTP %d).', 'mj-member'), $code)
+            );
+        }
+
+        if (!file_exists($targetPath) || filesize($targetPath) === 0) {
+            return new WP_Error('mj_nextcloud_download_empty', __('Le fichier téléchargé est vide ou introuvable.', 'mj-member'));
+        }
+
+        return true;
     }
 
     /**
@@ -546,18 +825,106 @@ final class MjNextcloud
     }
 
     /**
+     * Build a cached thumbnail URL for an image file.
+     */
+    public function getThumbnailUrl(string $filePath, string $version = '', int $width = 480, int $height = 480): string
+    {
+        if ($this->baseUrl === '') {
+            return '';
+        }
+
+        $filePath = $this->sanitizePath($filePath);
+        $version  = $version !== '' ? md5($version) : md5($filePath);
+
+        return add_query_arg([
+            'action' => 'mj_regmgr_nc_thumbnail',
+            'path'   => $filePath,
+            'w'      => max(64, $width),
+            'h'      => max(64, $height),
+            'v'      => $version,
+            'nonce'  => wp_create_nonce('mj-registration-manager'),
+        ], admin_url('admin-ajax.php'));
+    }
+
+    /**
+     * Build a wrapper URL that redirects Nextcloud links through the WordPress documents page.
+     * The page at /mon-compte/documents/ will handle the ?link= parameter and load in iframe.
+     *
+     * Extracts the 'dir' parameter from Nextcloud URLs like /apps/files/?dir=/path
+     * or uses the path directly if it's already just a path.
+     */
+    private function buildWrapperUrl(string $ncPath): string
+    {
+        $ncPath = ltrim((string) $ncPath, '/');
+
+        // If this is a Nextcloud file viewer URL (apps/files/files/{id}?...), pass the full path
+        if (strpos($ncPath, 'apps/files/files/') === 0) {
+            return add_query_arg('link', '/' . $ncPath, home_url('/mon-compte/documents/'));
+        }
+
+        // If this looks like a Nextcloud file browser URL, extract the 'dir' parameter
+        if (strpos($ncPath, 'apps/files/?dir=') !== false) {
+            // Extract the dir parameter value
+            if (preg_match('/\?dir=(.+)$/', $ncPath, $matches)) {
+                $dirValue = $matches[1];
+                // Remove any additional query params (shouldn't be there, but safe)
+                if (strpos($dirValue, '&') !== false) {
+                    $dirValue = substr($dirValue, 0, strpos($dirValue, '&'));
+                }
+                // URL decode the dir value
+                $dirValue = urldecode($dirValue);
+                $ncPath = $dirValue;
+            }
+        }
+        
+        if ($ncPath === '') {
+            return home_url('/mon-compte/documents/');
+        }
+        
+        return add_query_arg('link', '/' . ltrim($ncPath, '/'), home_url('/mon-compte/documents/'));
+    }
+
+    /**
+     * Build URL to documents page with link parameter.
+     *
+     * @param string $ncPath Nextcloud path (can start with /docs or other roots).
+     * @return string URL to documents page with ?link= parameter.
+     */
+    public function getDocumentsPageUrl(string $ncPath): string
+    {
+        return $this->buildWrapperUrl($ncPath);
+    }
+
+    /**
      * Build the Nextcloud web UI file URL (direct link in browser).
+     * Redirects through the WordPress documents wrapper page.
      */
     public function getWebUrl(string $filePath): string
     {
         if ($this->baseUrl === '') {
             return '';
         }
-        return $this->baseUrl . '/apps/files/?dir=/' . rawurlencode(ltrim(dirname($this->sanitizePath($filePath)), '/'));
+        $ncPath = '/apps/files/?dir=/' . rawurlencode(ltrim(dirname($this->sanitizePath($filePath)), '/'));
+        return $this->buildWrapperUrl($ncPath);
+    }
+
+    /**
+     * Build the Nextcloud web UI folder URL.
+     * Redirects through the WordPress documents wrapper page.
+     */
+    public function getFolderWebUrl(string $folderPath): string
+    {
+        if ($this->baseUrl === '') {
+            return '';
+        }
+
+        $ncPath = '/apps/files/?dir=/' . rawurlencode(ltrim($this->sanitizePath($folderPath), '/'));
+        return $this->buildWrapperUrl($ncPath);
     }
 
     /**
      * Build a direct file URL in Nextcloud web UI.
+     * Redirects through the WordPress documents wrapper page.
      */
     public function getFileWebUrl(string $filePath, string $fileId = ''): string
     {
@@ -567,7 +934,10 @@ final class MjNextcloud
 
         $fileId = trim($fileId);
         if ($fileId !== '') {
-            return $this->baseUrl . '/f/' . rawurlencode($fileId);
+            // Use the files app file viewer URL: apps/files/files/{id}?dir={parentDir}&openfile=true
+            $dirPath = '/' . ltrim(dirname($this->sanitizePath($filePath)), '/');
+            $ncPath = '/apps/files/files/' . rawurlencode($fileId) . '?dir=' . rawurlencode($dirPath) . '&openfile=true';
+            return $this->buildWrapperUrl($ncPath);
         }
 
         return $this->getWebUrl($filePath);
@@ -689,8 +1059,10 @@ final class MjNextcloud
                 'mimeType'     => $mimeType,
                 'size'         => $size,
                 'modifiedTime' => $modified,
+                'id'           => $fileId,
                 'fileId'       => $fileId,
                 'downloadUrl'  => $isDir ? '' : $this->getDownloadUrl($relativePath),
+                'thumbnailUrl' => (!$isDir && strpos($mimeType, 'image/') === 0) ? $this->getThumbnailUrl($relativePath, $modified . '|' . $size) : '',
                 'webUrl'       => $isDir ? $this->getWebUrl($relativePath) : $this->getFileWebUrl($relativePath, $fileId),
                 'editUrl'      => $isDir ? '' : $this->getFileWebUrl($relativePath, $fileId),
             ];

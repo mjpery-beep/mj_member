@@ -241,18 +241,18 @@
 }
 
 .mj-notification-bell__list {
-    padding: 12px;
+    padding: 8px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
 }
 
 /* Item */
 .mj-notification-bell__item {
     display: flex;
-    gap: 14px;
-    padding: 10px 14px;
-    border-radius: 14px;
+    gap: 10px;
+    padding: 6px 10px;
+    border-radius: 12px;
     cursor: default;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
@@ -338,13 +338,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 42px;
-    height: 42px;
+    width: 34px;
+    height: 34px;
     background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
-    border-radius: 12px;
+    border-radius: 10px;
     color: #64748b;
     transition: all 0.2s ease;
-    font-size: 30px;
+    font-size: 22px;
     line-height: 1;
 }
 
@@ -353,8 +353,8 @@
 }
 
 .mj-notification-bell__item-icon svg {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
 }
 
 /* Icon couleurs par type */
@@ -511,7 +511,7 @@
 .mj-notification-bell__item-title {
     display: block;
     margin: 0;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     color: #1e293b;
     line-height: 1.2;
@@ -529,13 +529,9 @@
 
 .mj-notification-bell__item-excerpt {
     margin: 0;
-    font-size: 13px;
+    font-size: 12px;
     color: #64748b;
-    line-height: 1.5;
-    display: -webkit-box;
-    -webkit-line-clamp: 4;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+    line-height: 1.4;
 }
 
 .mj-notification-bell__item-time {

@@ -1,9 +1,10 @@
-﻿<?php
+<?php
 
 use Mj\Member\Classes\MjBackupProfile;
 use Mj\Member\Classes\MjDatabaseBackup;
 use Mj\Member\Classes\MjManualActionLog;
 use Mj\Member\Classes\MjMediaBackup;
+use Mj\Member\Classes\MjNextcloudPhotoImporter;
 use Mj\Member\Core\Config;
 
 require_once __DIR__ . '/settings/editor-tools.php';
@@ -18,6 +19,22 @@ function mj_settings_page() {
 
     if (function_exists('mj_member_account_menu_icon_enqueue_assets')) {
         mj_member_account_menu_icon_enqueue_assets();
+    }
+
+    $photo_import_script_file = dirname(__DIR__) . '/js/admin-photo-import.js';
+    if (is_readable($photo_import_script_file)) {
+        wp_enqueue_script(
+            'mj-member-admin-photo-import',
+            plugins_url('../js/admin-photo-import.js', __FILE__),
+            array('jquery'),
+            (string) filemtime($photo_import_script_file),
+            true
+        );
+
+        wp_localize_script('mj-member-admin-photo-import', 'mjMemberPhotoImportAdmin', array(
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('mj_member_photo_import_admin'),
+        ));
     }
 
     // -----------------------------------------------------------------------
@@ -327,6 +344,37 @@ function mj_settings_page() {
         }
         update_option('mj_member_nextcloud_root_folder', $nc_root_folder);
         update_option('mj_member_nextcloud_groups', $nc_groups);
+
+        // --- Photo import settings ---
+        $photo_import_source_folder = isset($_POST['mj_member_photo_import_source_folder'])
+            ? sanitize_text_field(wp_unslash($_POST['mj_member_photo_import_source_folder']))
+            : 'photos';
+        $photo_import_default_tags = isset($_POST['mj_member_photo_import_default_tags'])
+            ? sanitize_textarea_field(wp_unslash($_POST['mj_member_photo_import_default_tags']))
+            : '';
+        $photo_import_tag_folder_map = isset($_POST['mj_member_photo_import_tag_folder_map'])
+            ? sanitize_textarea_field(wp_unslash($_POST['mj_member_photo_import_tag_folder_map']))
+            : '';
+        $photo_import_thumb_width = isset($_POST['mj_member_photo_import_thumb_width'])
+            ? max(120, (int) $_POST['mj_member_photo_import_thumb_width'])
+            : 520;
+        $photo_import_thumb_height = isset($_POST['mj_member_photo_import_thumb_height'])
+            ? max(120, (int) $_POST['mj_member_photo_import_thumb_height'])
+            : 520;
+        $photo_import_display_width = isset($_POST['mj_member_photo_import_display_width'])
+            ? max(320, (int) $_POST['mj_member_photo_import_display_width'])
+            : 1920;
+        $photo_import_display_height = isset($_POST['mj_member_photo_import_display_height'])
+            ? max(320, (int) $_POST['mj_member_photo_import_display_height'])
+            : 1080;
+
+        update_option('mj_member_photo_import_source_folder', $photo_import_source_folder);
+        update_option('mj_member_photo_import_default_tags', $photo_import_default_tags);
+        update_option('mj_member_photo_import_tag_folder_map', $photo_import_tag_folder_map);
+        update_option('mj_member_photo_import_thumb_width', $photo_import_thumb_width);
+        update_option('mj_member_photo_import_thumb_height', $photo_import_thumb_height);
+        update_option('mj_member_photo_import_display_width', $photo_import_display_width);
+        update_option('mj_member_photo_import_display_height', $photo_import_display_height);
 
         $backup_enabled = isset($_POST['mj_backup_enabled']) ? '1' : '0';
         $backup_frequency_raw = isset($_POST['mj_backup_frequency']) ? sanitize_key(wp_unslash($_POST['mj_backup_frequency'])) : 'daily';
@@ -761,6 +809,35 @@ function mj_settings_page() {
     $nc_groups_option = get_option('mj_member_nextcloud_groups', '');
     $nc_groups_resolved = Config::nextcloudGroups();
     $nc_is_ready = Config::nextcloudIsReady();
+    $photo_import_source_folder_option = 'photos';
+    $photo_import_default_tags_option = '';
+    $photo_import_tag_folder_map_option = '';
+    $photo_import_thumb_width_option = 520;
+    $photo_import_thumb_height_option = 520;
+    $photo_import_display_width_option = 1920;
+    $photo_import_display_height_option = 1080;
+    if (class_exists(MjNextcloudPhotoImporter::class)) {
+        $photo_import_settings = MjNextcloudPhotoImporter::getSettings();
+        $source_folder_value = $photo_import_settings['source_folder'] ?? $photo_import_source_folder_option;
+        $photo_import_source_folder_option = is_scalar($source_folder_value) ? (string) $source_folder_value : $photo_import_source_folder_option;
+
+        $default_tags_value = $photo_import_settings['default_tags'] ?? $photo_import_default_tags_option;
+        if (is_array($default_tags_value)) {
+            $photo_import_default_tags_option = implode("\n", array_filter(array_map('strval', $default_tags_value)));
+        } elseif (is_scalar($default_tags_value)) {
+            $photo_import_default_tags_option = (string) $default_tags_value;
+        }
+
+        $tag_folder_map_value = $photo_import_settings['tag_folder_map_raw'] ?? $photo_import_tag_folder_map_option;
+        if (is_scalar($tag_folder_map_value)) {
+            $photo_import_tag_folder_map_option = (string) $tag_folder_map_value;
+        }
+
+        $photo_import_thumb_width_option = (int) ($photo_import_settings['thumb_width'] ?? $photo_import_thumb_width_option);
+        $photo_import_thumb_height_option = (int) ($photo_import_settings['thumb_height'] ?? $photo_import_thumb_height_option);
+        $photo_import_display_width_option = (int) ($photo_import_settings['display_width'] ?? $photo_import_display_width_option);
+        $photo_import_display_height_option = (int) ($photo_import_settings['display_height'] ?? $photo_import_display_height_option);
+    }
     $nc_missing_fields = array();
     if (trim((string) $nc_url_option) === '') {
         $nc_missing_fields[] = __('URL Nextcloud', 'mj-member');

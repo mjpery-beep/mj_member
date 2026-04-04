@@ -342,6 +342,7 @@ final class AssetsManager
         self::registerScript('mj-member-upcoming-events', 'js/elementor/upcoming-events.js', array('mj-member-utils'));
         self::registerScript('mj-member-hour-encode', 'js/elementor/hour-encode.js', array('mj-member-utils'));
         self::registerScript('mj-member-photo-grimlins', 'js/elementor/photo-grimlins.js', array('mj-member-utils'));
+        self::registerScript('mj-member-photo-import-timeline', 'js/elementor/photo-import-timeline.js', array('mj-member-utils'));
         self::registerScript('mj-member-grimlins-gallery', 'js/elementor/grimlins-gallery.js', array('mj-member-utils'));
         self::registerScript('mj-member-idea-box', 'js/elementor/idea-box.js', array('mj-member-utils'));
         self::registerScript('mj-member-documents-manager', 'js/elementor/documents-manager.js', array('mj-member-utils'));
@@ -371,6 +372,7 @@ final class AssetsManager
         self::registerScript('mj-member-login-component', 'js/login-component.js');
         self::registerStyle('mj-member-hour-encode', 'css/hour-encode.css', array('mj-member-components'));
         self::registerStyle('mj-member-photo-grimlins', 'css/photo-grimlins.css', array('mj-member-components'));
+        self::registerStyle('mj-member-photo-import-timeline', 'css/photo-import-timeline.css', array('mj-member-components'));
         self::registerStyle('mj-member-grimlins-gallery', 'css/grimlins-gallery.css', array('mj-member-components'));
         self::registerStyle('mj-member-grim-gif', 'css/grim-gif.css', array('mj-member-components'));
         self::registerStyle('mj-member-todo-widget', 'css/todo-widget.css', array('mj-member-components'));
@@ -408,6 +410,8 @@ final class AssetsManager
         // Notification Bell Widget
         self::registerStyle('mj-member-notification-bell', 'css/notification-bell.css');
         self::registerScript('mj-member-notification-bell', 'js/notification-bell.js', array('jquery'));
+        self::registerStyle('mj-member-notification-list', 'css/notification-list.css');
+        self::registerScript('mj-member-notification-list', 'js/notification-list.js', array());
 
         // Header Widget MJ
         self::registerStyle('mj-member-header-widget', 'css/header-widget.css');
@@ -555,6 +559,12 @@ final class AssetsManager
                 }
                 break;
 
+            case 'photo-import-timeline':
+                wp_enqueue_style('mj-member-components');
+                wp_enqueue_style('mj-member-photo-import-timeline');
+                wp_enqueue_script('mj-member-photo-import-timeline');
+                break;
+
             case 'grimlins-gallery':
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-grimlins-gallery');
@@ -663,6 +673,15 @@ final class AssetsManager
                 }
                 break;
 
+            case 'notification-list':
+                wp_enqueue_style('mj-member-notification-list');
+                wp_enqueue_script('mj-member-notification-list');
+                wp_localize_script('mj-member-notification-list', 'mjNotificationList', array(
+                    'ajaxUrl' => admin_url('admin-ajax.php'),
+                    'nonce' => wp_create_nonce('mj-notification-bell'),
+                ));
+                break;
+
             case 'push-subscribe':
                 if (\Mj\Member\Core\Config::webPushIsReady() && is_user_logged_in()) {
                     wp_enqueue_style('mj-member-notification-bell');
@@ -698,6 +717,14 @@ final class AssetsManager
                 wp_enqueue_script('mj-member-regmgr-modals');
                 wp_enqueue_script('mj-member-regmgr-nextcloud-files');
                 wp_enqueue_script('mj-member-regmgr-app');
+                wp_add_inline_script('mj-member-regmgr-app', sprintf(
+                    'window.mjRegMgrSocialPublishExtras = %s;',
+                    wp_json_encode(array(
+                        'facebookConfigured'  => get_option('mj_social_facebook_page_token', '') !== '' && get_option('mj_social_facebook_page_id', '') !== '',
+                        'instagramConfigured' => get_option('mj_social_instagram_access_token', '') !== '' && get_option('mj_social_instagram_business_id', '') !== '',
+                        'whatsappConfigured'  => get_option('mj_social_whatsapp_access_token', '') !== '' && get_option('mj_social_whatsapp_phone_number_id', '') !== '',
+                    ))
+                ), 'before');
                 break;
 
             case 'testimonials':

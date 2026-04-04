@@ -3754,6 +3754,26 @@
         var publishRequestError = _publishRequestError[0];
         var setPublishRequestError = _publishRequestError[1];
 
+        var _publishDirectSubmitting = useState('');
+        var publishDirectSubmitting = _publishDirectSubmitting[0];
+        var setPublishDirectSubmitting = _publishDirectSubmitting[1];
+
+        var _publishDirectError = useState({});
+        var publishDirectError = _publishDirectError[0];
+        var setPublishDirectError = _publishDirectError[1];
+
+        var _publishLogs = useState([]);
+        var publishLogs = _publishLogs[0];
+        var setPublishLogs = _publishLogs[1];
+
+        var _publishHistory = useState([]);
+        var publishHistory = _publishHistory[0];
+        var setPublishHistory = _publishHistory[1];
+
+        var _publishHistoryLoading = useState(false);
+        var publishHistoryLoading = _publishHistoryLoading[0];
+        var setPublishHistoryLoading = _publishHistoryLoading[1];
+
         var _pagination = useState({ page: 1, totalPages: 1 });
         var pagination = _pagination[0];
         var setPagination = _pagination[1];
@@ -7092,6 +7112,7 @@
             occurrences: '📅',
             editor: '✏️',
             photos: '📸',
+            documents: '📁',
         };
 
         var socialPublishConfig = config && typeof config.socialPublish === 'object' && config.socialPublish
@@ -7285,6 +7306,77 @@
             });
         }, [selectedEvent, publishDescription, api, showSuccess, showError, strings]);
 
+        var handleLoadPublishHistory = useCallback(function (eventId) {
+            if (!eventId) return;
+            setPublishHistoryLoading(true);
+            api.post('mj_regmgr_get_social_publications', { eventId: eventId })
+                .then(function (response) {
+                    setPublishHistoryLoading(false);
+                    if (response && response.success && response.data && Array.isArray(response.data.publications)) {
+                        setPublishHistory(response.data.publications);
+                    }
+                })
+                .catch(function () {
+                    setPublishHistoryLoading(false);
+                });
+        }, [api]);
+
+        var handlePublishDirect = useCallback(function (platform) {
+            if (!selectedEvent || !selectedEvent.id) return;
+
+            setPublishDirectSubmitting(platform);
+            setPublishDirectError(function (prev) {
+                var next = Object.assign({}, prev);
+                next[platform] = '';
+                return next;
+            });
+            setPublishLogs([{
+                type: 'info',
+                text: 'Préparation de la requête…',
+                time: new Date().toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            }]);
+
+            api.post('mj_regmgr_publish_event_direct', {
+                eventId: selectedEvent.id,
+                platform: platform,
+                message: publishDescription,
+            }).then(function (response) {
+                setPublishDirectSubmitting('');
+                var logs = (response && response.data && Array.isArray(response.data.logs)) ? response.data.logs : [];
+                if (logs.length > 0) setPublishLogs(logs);
+                if (response && response.success) {
+                    showSuccess((response.data && response.data.message) || getString(strings, 'publishActionSuccess', 'Publication réussie !'));
+                    handleLoadPublishHistory(selectedEvent.id);
+                } else {
+                    var msg = (response && response.data && response.data.message) || getString(strings, 'publishError', 'Erreur lors de la publication.');
+                    setPublishDirectError(function (prev) {
+                        var next = Object.assign({}, prev);
+                        next[platform] = msg;
+                        return next;
+                    });
+                    showError(msg);
+                }
+            }).catch(function (err) {
+                setPublishDirectSubmitting('');
+                var msg = (err && err.message) || getString(strings, 'publishError', 'Erreur lors de la publication.');
+                setPublishLogs(function (prev) {
+                    return prev.concat([{ type: 'error', text: msg, time: new Date().toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }]);
+                });
+                setPublishDirectError(function (prev) {
+                    var next = Object.assign({}, prev);
+                    next[platform] = msg;
+                    return next;
+                });
+                showError(msg);
+            });
+        }, [selectedEvent, publishDescription, api, showSuccess, showError, strings, handleLoadPublishHistory]);
+
+        useEffect(function () {
+            if (activeTab === 'publish' && selectedEvent && selectedEvent.id) {
+                handleLoadPublishHistory(selectedEvent.id);
+            }
+        }, [activeTab, selectedEvent, handleLoadPublishHistory]);
+
         // Compteur de photos en attente pour l'événement
         var eventPendingPhotosCount = useMemo(function () {
             return eventPhotos.filter(function (p) { return p.status === 'pending'; }).length;
@@ -7309,7 +7401,7 @@
             },
             {
                 key: 'regdoc',
-                label: getString(strings, 'tabRegDoc', 'Document'),
+                label: getString(strings, 'tabRegDoc', 'Contrat'),
                 icon: tabIcons.regdoc,
             },
             {
@@ -7553,6 +7645,7 @@
                         ]),
                         // Onglets
                         TabsComponent && h(TabsComponent, {
+                            className: 'mj-regmgr-tabs--event',
                             tabs: tabs,
                             fallbackRegistrationsTab: {
                                 key: 'registrations',
@@ -7832,23 +7925,100 @@
                                         : h('span', { class: 'mj-regmgr-publish-tab__missing' }, getString(strings, 'publishNoEventLink', 'Aucun lien événement disponible pour le moment.')),
                                 ]),
                                 h('div', { class: 'mj-regmgr-publish-tab__actions' }, [
-                                    h('div', { class: 'mj-regmgr-publish-card' }, [
-                                        h('h4', null, getString(strings, 'publishActionTitle', 'Workflow n8n')),
-                                        h('p', { class: 'mj-regmgr-field-hint' }, getString(strings, 'publishActionHint', 'Envoie le message et les données de l\'événement au webhook n8n configuré.')),
-                                        config.socialPublish && config.socialPublish.n8nConfigured
+                                    // Facebook
+                                    h('div', { class: 'mj-regmgr-publish-card mj-regmgr-publish-card--facebook' }, [
+                                        h('h4', null, '📘 Facebook'),
+                                        h('p', { class: 'mj-regmgr-field-hint' }, 'Publie un post sur la Page Facebook configurée.'),
+                                        config.socialPublish && config.socialPublish.facebookConfigured
                                             ? h(Fragment, null, [
                                                 h('button', {
                                                     type: 'button',
-                                                    class: 'mj-btn mj-btn--primary' + (publishSubmitting ? ' running' : ''),
-                                                    onClick: handlePublishToN8n,
-                                                    disabled: publishSubmitting,
-                                                }, publishSubmitting
-                                                    ? getString(strings, 'publishing', 'Publication en cours...')
-                                                    : getString(strings, 'publishActionButton', 'Publier via n8n')),
-                                                publishRequestError && h('p', { class: 'mj-regmgr-alert mj-regmgr-alert--error' }, publishRequestError),
+                                                    class: 'mj-btn mj-btn--primary' + (publishDirectSubmitting === 'facebook' ? ' running' : ''),
+                                                    onClick: function () { handlePublishDirect('facebook'); },
+                                                    disabled: publishDirectSubmitting !== '',
+                                                }, publishDirectSubmitting === 'facebook' ? 'Publication...' : 'Publier sur Facebook'),
+                                                publishDirectError.facebook && h('p', { class: 'mj-regmgr-alert mj-regmgr-alert--error' }, publishDirectError.facebook),
                                             ])
-                                            : h('p', { class: 'mj-regmgr-publish-tab__missing' }, getString(strings, 'publishNotConfigured', 'Non configuré dans l\'onglet module « Publier sur les réseaux ».')),
+                                            : h('p', { class: 'mj-regmgr-publish-tab__missing' }, 'Non configuré — ajoutez le Page Access Token dans Paramètres → Publier sur les réseaux.'),
                                     ]),
+                                    // Instagram
+                                    h('div', { class: 'mj-regmgr-publish-card mj-regmgr-publish-card--instagram' }, [
+                                        h('h4', null, '📸 Instagram'),
+                                        h('p', { class: 'mj-regmgr-field-hint' }, 'Publie sur le compte Instagram Business configuré.'),
+                                        config.socialPublish && config.socialPublish.instagramConfigured
+                                            ? h(Fragment, null, [
+                                                h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--primary' + (publishDirectSubmitting === 'instagram' ? ' running' : ''),
+                                                    onClick: function () { handlePublishDirect('instagram'); },
+                                                    disabled: publishDirectSubmitting !== '',
+                                                }, publishDirectSubmitting === 'instagram' ? 'Publication...' : 'Publier sur Instagram'),
+                                                publishDirectError.instagram && h('p', { class: 'mj-regmgr-alert mj-regmgr-alert--error' }, publishDirectError.instagram),
+                                            ])
+                                            : h('p', { class: 'mj-regmgr-publish-tab__missing' }, 'Non configuré — ajoutez l\'Instagram Business Account dans Paramètres → Publier sur les réseaux.'),
+                                    ]),
+                                    // WhatsApp
+                                    h('div', { class: 'mj-regmgr-publish-card mj-regmgr-publish-card--whatsapp' }, [
+                                        h('h4', null, '💬 WhatsApp'),
+                                        h('p', { class: 'mj-regmgr-field-hint' }, 'Envoie le message via l\'API WhatsApp Business.'),
+                                        config.socialPublish && config.socialPublish.whatsappConfigured
+                                            ? h(Fragment, null, [
+                                                h('button', {
+                                                    type: 'button',
+                                                    class: 'mj-btn mj-btn--primary' + (publishDirectSubmitting === 'whatsapp' ? ' running' : ''),
+                                                    onClick: function () { handlePublishDirect('whatsapp'); },
+                                                    disabled: publishDirectSubmitting !== '',
+                                                }, publishDirectSubmitting === 'whatsapp' ? 'Publication...' : 'Envoyer sur WhatsApp'),
+                                                publishDirectError.whatsapp && h('p', { class: 'mj-regmgr-alert mj-regmgr-alert--error' }, publishDirectError.whatsapp),
+                                            ])
+                                            : h('p', { class: 'mj-regmgr-publish-tab__missing' }, 'Non configuré — ajoutez le Phone Number ID dans Paramètres → Publier sur les réseaux.'),
+                                    ]),
+                                ]),
+                                // Console de publication
+                                publishLogs.length > 0 && h('div', { class: 'mj-regmgr-publish-console' }, [
+                                    h('div', { class: 'mj-regmgr-publish-console__header' }, [
+                                        h('span', { class: 'mj-regmgr-publish-console__title' }, 'Console de publication'),
+                                        h('button', {
+                                            type: 'button',
+                                            class: 'mj-regmgr-publish-console__clear',
+                                            onClick: function () { setPublishLogs([]); },
+                                        }, 'Effacer'),
+                                    ]),
+                                    h('div', { class: 'mj-regmgr-publish-console__body' },
+                                        publishLogs.map(function (log, i) {
+                                            return h('div', {
+                                                key: i,
+                                                class: 'mj-regmgr-publish-console__line mj-regmgr-publish-console__line--' + (log.type || 'info'),
+                                            }, [
+                                                log.time && h('span', { class: 'mj-regmgr-publish-console__time' }, log.time),
+                                                h('span', { class: 'mj-regmgr-publish-console__text' }, log.text),
+                                            ]);
+                                        })
+                                    ),
+                                ]),
+                                // Historique des publications
+                                h('div', { class: 'mj-regmgr-publish-history' }, [
+                                    h('h4', { class: 'mj-regmgr-publish-history__title' }, 'Publications postées'),
+                                    publishHistoryLoading
+                                        ? h('p', { class: 'mj-regmgr-field-hint' }, 'Chargement…')
+                                        : publishHistory.length === 0
+                                            ? h('p', { class: 'mj-regmgr-field-hint' }, 'Aucune publication enregistrée pour cet événement.')
+                                            : h('div', { class: 'mj-regmgr-publish-history__list' },
+                                                publishHistory.map(function (pub) {
+                                                    var platformIcon = pub.platform === 'facebook' ? '📘' : pub.platform === 'instagram' ? '📸' : pub.platform === 'whatsapp' ? '💬' : '📢';
+                                                    var statusClass = pub.status === 'success' ? 'mj-regmgr-publish-history__item--success' : 'mj-regmgr-publish-history__item--error';
+                                                    return h('div', { key: pub.id, class: 'mj-regmgr-publish-history__item ' + statusClass }, [
+                                                        h('div', { class: 'mj-regmgr-publish-history__item-header' }, [
+                                                            h('span', { class: 'mj-regmgr-publish-history__platform' }, platformIcon + ' ' + pub.platform),
+                                                            h('span', { class: 'mj-regmgr-publish-history__date' }, pub.publishedAt),
+                                                            h('span', { class: 'mj-regmgr-publish-history__status mj-regmgr-publish-history__status--' + pub.status }, pub.status === 'success' ? '✓ Succès' : '✗ Erreur'),
+                                                            pub.publishedBy && h('span', { class: 'mj-regmgr-publish-history__user' }, 'par ' + pub.publishedBy),
+                                                        ]),
+                                                        h('p', { class: 'mj-regmgr-publish-history__message' }, pub.message),
+                                                        pub.postId && h('p', { class: 'mj-regmgr-field-hint' }, 'ID post : ' + pub.postId),
+                                                    ]);
+                                                })
+                                            ),
                                 ]),
                             ]),
 
@@ -8238,6 +8408,11 @@
                 config = JSON.parse(configAttr || '{}');
             } catch (e) {
                 console.error('[MjRegMgr] Invalid config JSON');
+            }
+
+            // Merge server-side social publish flags (injected via wp_add_inline_script)
+            if (window.mjRegMgrSocialPublishExtras) {
+                config.socialPublish = Object.assign({}, config.socialPublish || {}, window.mjRegMgrSocialPublishExtras);
             }
 
             // Injecter les paramètres URL dans la config

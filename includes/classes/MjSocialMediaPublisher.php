@@ -12,8 +12,8 @@ if (!defined('ABSPATH')) {
 final class MjSocialMediaPublisher
 {
     private const FACEBOOK_API_BASE = 'https://graph.facebook.com/v18.0';
-    private const INSTAGRAM_API_BASE = 'https://graph.instagram.com/v18.0';
-    private const WHATSAPP_API_BASE = 'https://graph.instagram.com/v18.0';
+    private const INSTAGRAM_API_BASE = 'https://graph.facebook.com/v18.0';
+    private const WHATSAPP_API_BASE = 'https://graph.facebook.com/v18.0';
 
     private $facebookPageToken;
     private $facebookPageId;
@@ -177,12 +177,8 @@ final class MjSocialMediaPublisher
      */
     private function makeApiRequest($endpoint, $payload, $token, $method = 'POST')
     {
-        if ($method === 'POST') {
-            $payload['access_token'] = $token;
-        } else {
-            // For GET, add token to URL
-            $endpoint = add_query_arg('access_token', $token, $endpoint);
-        }
+        // Meta Graph API requires access_token as a query parameter, not in the JSON body.
+        $endpoint = add_query_arg('access_token', $token, $endpoint);
 
         $args = array(
             'method' => $method,

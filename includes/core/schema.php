@@ -1042,6 +1042,24 @@ function mj_member_ensure_auxiliary_tables() {
         KEY template_idx (template_slug(100))
     ) $charset_collate;";
     dbDelta($sql_email_logs);
+
+    $social_pub_table = $wpdb->prefix . 'mj_social_publications';
+    $sql_social_pub = "CREATE TABLE IF NOT EXISTS $social_pub_table (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        event_id bigint(20) unsigned NOT NULL,
+        platform varchar(30) NOT NULL,
+        message text NOT NULL,
+        status varchar(20) NOT NULL DEFAULT 'success',
+        post_id varchar(255) DEFAULT NULL,
+        api_response longtext DEFAULT NULL,
+        published_by bigint(20) unsigned NOT NULL DEFAULT 0,
+        published_at datetime DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY event_idx (event_id),
+        KEY platform_idx (platform),
+        KEY published_by_idx (published_by)
+    ) $charset_collate;";
+    dbDelta($sql_social_pub);
 }
 
 function mj_member_seed_email_templates() {

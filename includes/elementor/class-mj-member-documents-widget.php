@@ -19,7 +19,7 @@ class Mj_Member_Elementor_Documents_Widget extends Widget_Base
 
     public function get_title()
     {
-        return __('MJ – Documents', 'mj-member');
+        return __('MJ – Documents Nextcloud', 'mj-member');
     }
 
     public function get_icon()
@@ -34,7 +34,7 @@ class Mj_Member_Elementor_Documents_Widget extends Widget_Base
 
     public function get_keywords()
     {
-        return array('documents', 'drive', 'fichiers', 'dossier', 'google', 'animateur');
+        return array('documents', 'nextcould', 'fichiers', 'dossier', 'google', 'animateur');
     }
 
     protected function register_controls()
