@@ -424,11 +424,13 @@ final class MjNextcloudPhotoImporter
         $skipped = 0;
         $processed = 0;
         $matchedPreview = array();
+        $candidateFiles = array();
+        $seenCandidates = array();
         $folderPathPrefixes = self::buildFolderPrefixesFromSelectors($files, $allowedFilePaths);
         if (!empty($folderPathPrefixes)) {
             self::debugLog('photo-import folder prefix selectors=' . count($folderPathPrefixes));
         }
-        self::runtimePush($runId, 'Démarrage du téléchargement des images correspondantes...', array('step' => 'download'));
+        self::runtimePush($runId, '🚀 Préparation de la file d\'import...', array('step' => 'download'));
 
         foreach ($files as $file) {
             $fileId = isset($file['id']) ? (string) $file['id'] : '';
@@ -444,20 +446,45 @@ final class MjNextcloudPhotoImporter
                 continue;
             }
 
+            $candidateKey = '';
+            if ($filePath !== '') {
+                $candidateKey = 'path:' . self::normalizeSourcePath($filePath);
+            } elseif ($fileId !== '') {
+                $candidateKey = 'id:' . trim($fileId);
+            } else {
+                $candidateKey = 'raw:' . md5(wp_json_encode($file));
+            }
+
+            if (isset($seenCandidates[$candidateKey])) {
+                continue;
+            }
+
+            $seenCandidates[$candidateKey] = true;
+            $candidateFiles[] = $file;
             $matched++;
-            $processed++;
             if (count($matchedPreview) < 5 && $filePath !== '') {
                 $matchedPreview[] = $filePath;
             }
-            if ($processed <= 5 || ($processed % 10) === 0) {
-                $name = isset($file['name']) ? (string) $file['name'] : ('file-' . $processed);
-                self::runtimePush($runId, 'Téléchargement en cours: ' . $name . ' (' . $processed . '/' . $matched . ')');
-            }
+        }
 
-            if ($processed <= 3 || ($processed % 25) === 0) {
-                $diagName = isset($file['name']) ? (string) $file['name'] : ('file-' . $processed);
-                self::runtimePush($runId, 'Préparation import: ' . $diagName, array('step' => 'download'));
-            }
+        $totalToImport = count($candidateFiles);
+        self::runtimePush(
+            $runId,
+            sprintf('📊 Total=%1$d | Déjà importé=%2$d | Restant=%3$d', $totalToImport, $alreadyPresent, $totalToImport),
+            array(
+                'step' => 'download',
+                'total' => $totalToImport,
+                'remaining' => $totalToImport,
+                'already_present' => $alreadyPresent,
+                'imported' => $imported,
+                'skipped' => $skipped,
+            )
+        );
+
+        foreach ($candidateFiles as $file) {
+            $processed++;
+            $name = isset($file['name']) ? (string) $file['name'] : ('file-' . $processed);
+            self::runtimePush($runId, '[' . $name . '] 🔎 Scan (' . $processed . '/' . $totalToImport . ')', array('step' => 'download'));
 
             try {
                 $itemResult = self::importSingleFile($nextcloud, $file, $settings, $resolvedTagNames, $manifest, $runId);
@@ -474,33 +501,30 @@ final class MjNextcloudPhotoImporter
                 continue;
             }
 
-            if ($processed <= 3 || ($processed % 25) === 0) {
-                $diagName = isset($file['name']) ? (string) $file['name'] : ('file-' . $processed);
-                self::runtimePush($runId, 'Fichier traité: ' . $diagName, array('step' => 'download'));
-            }
-
             if (!empty($itemResult['imported'])) {
                 $imported++;
                 self::saveManifest($manifest);
+                self::runtimePush($runId, '[' . $name . '] ✅ Imported', array('step' => 'download'));
             } elseif (!empty($itemResult['already_present'])) {
                 $alreadyPresent++;
+                self::runtimePush($runId, '[' . $name . '] ♻️ Already exist', array('step' => 'download'));
             } else {
                 $skipped++;
             }
 
-            if ($processed <= 3 || ($processed % 10) === 0) {
-                self::runtimePush(
-                    $runId,
-                    sprintf(
-                        'Progression: Importées=%1$d | Déjà présents=%2$d | Ignorées=%3$d | Correspondances=%4$d',
-                        $imported,
-                        $alreadyPresent,
-                        $skipped,
-                        $matched
-                    ),
-                    array('step' => 'download')
-                );
-            }
+            $remaining = max(0, $totalToImport - $processed);
+            self::runtimePush(
+                $runId,
+                sprintf('📊 Total=%1$d | Déjà importé=%2$d | Restant=%3$d', $totalToImport, $alreadyPresent, $remaining),
+                array(
+                    'step' => 'download',
+                    'total' => $totalToImport,
+                    'remaining' => $remaining,
+                    'already_present' => $alreadyPresent,
+                    'imported' => $imported,
+                    'skipped' => $skipped,
+                )
+            );
         }
 
         self::saveManifest($manifest);
@@ -568,7 +592,7 @@ final class MjNextcloudPhotoImporter
         delete_transient($key);
     }
 
-    public static function getTimelineItems(int $limit = 120, string $order = 'desc'): array
+    public static function getTimelineItems(int $limit = 120, string $order = 'desc', int $offset = 0): array
     {
         $manifest = self::loadManifest();
         $items = array_values($manifest['items']);
@@ -586,11 +610,112 @@ final class MjNextcloudPhotoImporter
             $items = array_reverse($items);
         }
 
+        if ($offset > 0) {
+            $items = array_slice($items, $offset);
+        }
+
         if ($limit > 0) {
             $items = array_slice($items, 0, $limit);
         }
 
         return $items;
+    }
+
+    public static function getTimelineYearSummary(): array
+    {
+        $manifest = self::loadManifest();
+        $items = isset($manifest['items']) && is_array($manifest['items']) ? array_values($manifest['items']) : array();
+
+        $yearCounts = array();
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $ts = isset($item['taken_at_ts']) ? (int) $item['taken_at_ts'] : 0;
+            if ($ts <= 0) {
+                $ts = isset($item['imported_at_ts']) ? (int) $item['imported_at_ts'] : 0;
+            }
+            if ($ts <= 0) {
+                $ts = time();
+            }
+
+            $year = (int) wp_date('Y', $ts);
+            if ($year <= 0) {
+                continue;
+            }
+
+            if (!isset($yearCounts[$year])) {
+                $yearCounts[$year] = 0;
+            }
+            $yearCounts[$year]++;
+        }
+
+        if (empty($yearCounts)) {
+            return array();
+        }
+
+        krsort($yearCounts, SORT_NUMERIC);
+
+        $summary = array();
+        foreach ($yearCounts as $year => $count) {
+            $summary[] = array(
+                'year' => (int) $year,
+                'count' => (int) $count,
+            );
+        }
+
+        return $summary;
+    }
+
+    public static function getTimelineItemsForYear(int $year, int $limit = 3000, int $offset = 0, string $order = 'desc'): array
+    {
+        $year = (int) $year;
+        if ($year <= 0) {
+            return array();
+        }
+
+        $manifest = self::loadManifest();
+        $items = isset($manifest['items']) && is_array($manifest['items']) ? array_values($manifest['items']) : array();
+
+        $filtered = array_values(array_filter($items, static function ($item) use ($year): bool {
+            if (!is_array($item)) {
+                return false;
+            }
+
+            $ts = isset($item['taken_at_ts']) ? (int) $item['taken_at_ts'] : 0;
+            if ($ts <= 0) {
+                $ts = isset($item['imported_at_ts']) ? (int) $item['imported_at_ts'] : 0;
+            }
+            if ($ts <= 0) {
+                return false;
+            }
+
+            return (int) wp_date('Y', $ts) === $year;
+        }));
+
+        usort($filtered, static function (array $left, array $right): int {
+            $leftTs = isset($left['taken_at_ts']) ? (int) $left['taken_at_ts'] : 0;
+            $rightTs = isset($right['taken_at_ts']) ? (int) $right['taken_at_ts'] : 0;
+            if ($leftTs === $rightTs) {
+                return strcmp((string) ($left['id'] ?? ''), (string) ($right['id'] ?? ''));
+            }
+            return $leftTs <=> $rightTs;
+        });
+
+        if (strtolower($order) !== 'asc') {
+            $filtered = array_reverse($filtered);
+        }
+
+        if ($offset > 0) {
+            $filtered = array_slice($filtered, $offset);
+        }
+
+        if ($limit > 0) {
+            $filtered = array_slice($filtered, 0, $limit);
+        }
+
+        return $filtered;
     }
 
     public static function getPreviewTimelineItems(): array
@@ -648,6 +773,9 @@ final class MjNextcloudPhotoImporter
             $existingDisplay = Config::path() . 'data/photo-import/display/' . $existingItemId . '.jpg';
             if (self::isUsableGeneratedImage($existingThumb) && self::isUsableGeneratedImage($existingDisplay)) {
                 self::debugLog('photo-import skip already downloaded source=' . $sourcePath . ' item=' . $existingItemId);
+                if ($runId !== '') {
+                    self::runtimePush($runId, '[' . $sourceName . '] ♻️ Already exist', array('step' => 'download'));
+                }
                 return array('imported' => false, 'already_present' => true, 'id' => $existingItemId);
             }
         }
@@ -680,6 +808,9 @@ final class MjNextcloudPhotoImporter
             && file_exists($displayAbsolute);
 
         if ($alreadyCurrent) {
+            if ($runId !== '') {
+                self::runtimePush($runId, '[' . $sourceName . '] ♻️ Already exist', array('step' => 'download'));
+            }
             return array('imported' => false, 'already_present' => true, 'id' => $id);
         }
 
@@ -695,27 +826,25 @@ final class MjNextcloudPhotoImporter
         self::debugLog('photo-import importSingleFile downloaded source=' . $sourcePath . ' size=' . (string) @filesize($originalAbsolute));
 
         if ($runId !== '') {
-            self::runtimePush($runId, 'Génération miniature: ' . $sourceName, array('step' => 'download'));
+            self::runtimePush($runId, '[' . $sourceName . '] 🧩 Miniatured', array('step' => 'download'));
         }
 
-        if (self::isUsableGeneratedImage($thumbAbsolute)) {
+        if (self::isUsableGeneratedImage($thumbAbsolute) && self::isThumbnailOptimized($thumbAbsolute, (int) $settings['thumb_width'], (int) $settings['thumb_height'])) {
             self::debugLog('photo-import thumb already exists, skip generation source=' . $sourcePath);
         } else {
-            // Prefer direct copy first to avoid sporadic hangs in image editors on large files.
-            $thumbDone = @copy($originalAbsolute, $thumbAbsolute);
-            if ($thumbDone !== true) {
-                self::debugLog('photo-import thumb copy failed, fallback resize source=' . $sourcePath);
-                $thumbDone = self::generateResizedImage($originalAbsolute, $thumbAbsolute, (int) $settings['thumb_width'], (int) $settings['thumb_height'], true);
-                if (is_wp_error($thumbDone)) {
+            // Thumbnail must stay lightweight for grid rendering.
+            $thumbDone = self::generateResizedImage($originalAbsolute, $thumbAbsolute, (int) $settings['thumb_width'], (int) $settings['thumb_height'], true, 72);
+            if (is_wp_error($thumbDone)) {
+                // Last-resort fallback keeps import operational even if image editor fails.
+                if (@copy($originalAbsolute, $thumbAbsolute) !== true) {
                     return $thumbDone;
                 }
-            } else {
-                self::debugLog('photo-import thumb generated via direct copy source=' . $sourcePath);
+                self::debugLog('photo-import thumb fallback copy used source=' . $sourcePath);
             }
         }
 
         if ($runId !== '') {
-            self::runtimePush($runId, 'Génération image affichage: ' . $sourceName, array('step' => 'download'));
+            self::runtimePush($runId, '[' . $sourceName . '] 🖼️ Covered', array('step' => 'download'));
         }
 
         if (self::isUsableGeneratedImage($displayAbsolute)) {
@@ -726,7 +855,7 @@ final class MjNextcloudPhotoImporter
             $displayDone = @copy($originalAbsolute, $displayAbsolute);
             if ($displayDone !== true) {
                 self::debugLog('photo-import display copy failed, fallback resize source=' . $sourcePath);
-                $displayDone = self::generateResizedImage($originalAbsolute, $displayAbsolute, (int) $settings['display_width'], (int) $settings['display_height'], false);
+                $displayDone = self::generateResizedImage($originalAbsolute, $displayAbsolute, (int) $settings['display_width'], (int) $settings['display_height'], false, 82);
                 if (is_wp_error($displayDone)) {
                     return $displayDone;
                 }
@@ -2489,7 +2618,7 @@ final class MjNextcloudPhotoImporter
         return '';
     }
 
-    private static function generateResizedImage(string $sourcePath, string $targetPath, int $width, int $height, bool $crop)
+    private static function generateResizedImage(string $sourcePath, string $targetPath, int $width, int $height, bool $crop, ?int $quality = null)
     {
         if (!function_exists('wp_get_image_editor')) {
             if (@copy($sourcePath, $targetPath)) {
@@ -2508,12 +2637,19 @@ final class MjNextcloudPhotoImporter
             return $editor;
         }
 
+        if ($quality !== null && method_exists($editor, 'set_quality')) {
+            $editor->set_quality(max(30, min(95, (int) $quality)));
+        }
+
         $resize = $editor->resize($width, $height, $crop);
         if (is_wp_error($resize)) {
             self::debugLog('photo-import resize failed primary: ' . $resize->get_error_message() . ' source=' . $sourcePath);
 
             $retryEditor = wp_get_image_editor($sourcePath);
             if (!is_wp_error($retryEditor)) {
+                if ($quality !== null && method_exists($retryEditor, 'set_quality')) {
+                    $retryEditor->set_quality(max(30, min(95, (int) $quality)));
+                }
                 $retryResize = $retryEditor->resize($width, $height, $crop);
                 if (!is_wp_error($retryResize)) {
                     $retrySaved = $retryEditor->save($targetPath);
@@ -2542,6 +2678,9 @@ final class MjNextcloudPhotoImporter
         // Retry with a fresh editor and default mime inference.
         $retryEditor = wp_get_image_editor($sourcePath);
         if (!is_wp_error($retryEditor)) {
+            if ($quality !== null && method_exists($retryEditor, 'set_quality')) {
+                $retryEditor->set_quality(max(30, min(95, (int) $quality)));
+            }
             $retryResize = $retryEditor->resize($width, $height, $crop);
             if (!is_wp_error($retryResize)) {
                 $retrySaved = $retryEditor->save($targetPath);
@@ -2583,6 +2722,35 @@ final class MjNextcloudPhotoImporter
         }
 
         return true;
+    }
+
+    private static function isThumbnailOptimized(string $path, int $targetWidth, int $targetHeight): bool
+    {
+        if (!self::isUsableGeneratedImage($path)) {
+            return false;
+        }
+
+        // Keep grid thumbnails lightweight.
+        $maxBytes = 450 * 1024;
+        $size = (int) @filesize($path);
+        if ($size <= 0 || $size > $maxBytes) {
+            return false;
+        }
+
+        $imageSize = @getimagesize($path);
+        if (!is_array($imageSize) || !isset($imageSize[0], $imageSize[1])) {
+            return false;
+        }
+
+        $w = (int) $imageSize[0];
+        $h = (int) $imageSize[1];
+        if ($w <= 0 || $h <= 0) {
+            return false;
+        }
+
+        $maxW = max(1, $targetWidth * 2);
+        $maxH = max(1, $targetHeight * 2);
+        return $w <= $maxW && $h <= $maxH;
     }
 
     private static function getManifestPath(): string

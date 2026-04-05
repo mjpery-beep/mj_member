@@ -71,6 +71,7 @@ final class Bootstrap
         'includes/core/ajax/front/work_schedules_ajax.php',
         'includes/core/ajax/front/mileage_ajax.php',
         'includes/core/ajax/front/header_widget_ajax.php',
+        'includes/core/ajax/front/photo_import_timeline_ajax.php',
     );
 
     /**

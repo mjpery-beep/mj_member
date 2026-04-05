@@ -104,7 +104,7 @@ function mj_member_photo_import_start_callback(): void
     set_transient('mj_member_photo_import_worker_' . $runId, $payload, 30 * MINUTE_IN_SECONDS);
 
     $dispatch = wp_remote_post(admin_url('admin-ajax.php'), array(
-        'timeout' => 1,
+        'timeout' => 4,
         'blocking' => false,
         'sslverify' => apply_filters('https_local_ssl_verify', false),
         'body' => array(

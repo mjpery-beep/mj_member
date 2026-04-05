@@ -158,6 +158,10 @@
         var step = state.step || '...';
         lines.push('Statut: ' + status + ' | étape: ' + step);
 
+        if (typeof state.total !== 'undefined' || typeof state.remaining !== 'undefined' || typeof state.already_present !== 'undefined') {
+            lines.push('Compteurs: total=' + (state.total || 0) + ' | deja importes=' + (state.already_present || 0) + ' | restant=' + (state.remaining || 0));
+        }
+
         if (typeof state.imported !== 'undefined' || typeof state.matched !== 'undefined' || typeof state.skipped !== 'undefined') {
             lines.push('Résumé: importées=' + (state.imported || 0) + ' | correspondances=' + (state.matched || 0) + ' | ignorées=' + (state.skipped || 0));
         }
