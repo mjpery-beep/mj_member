@@ -25,6 +25,92 @@ namespace {
 require_once __DIR__ . '/settings/editor-tools.php';
 require_once __DIR__ . '/settings/ajax-account-pages.php';
 
+if (!function_exists('mj_member_sanitize_pdf_rich_html')) {
+    /**
+     * Sanitize rich HTML for registration-doc templates while preserving layout tags/styles.
+     */
+    function mj_member_sanitize_pdf_rich_html($html): string {
+        $raw = is_string($html) ? $html : (string) $html;
+        if ($raw === '') {
+            return '';
+        }
+
+        $allowed_tags = wp_kses_allowed_html('post');
+        $table_tags = array('table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'colgroup', 'col', 'caption');
+        foreach ($table_tags as $tag) {
+            if (!isset($allowed_tags[$tag]) || !is_array($allowed_tags[$tag])) {
+                $allowed_tags[$tag] = array();
+            }
+            $allowed_tags[$tag] = array_merge($allowed_tags[$tag], array(
+                'class' => true,
+                'id' => true,
+                'style' => true,
+                'align' => true,
+                'valign' => true,
+                'width' => true,
+                'height' => true,
+            ));
+        }
+
+        if (!isset($allowed_tags['td'])) {
+            $allowed_tags['td'] = array();
+        }
+        $allowed_tags['td']['colspan'] = true;
+        $allowed_tags['td']['rowspan'] = true;
+
+        if (!isset($allowed_tags['th'])) {
+            $allowed_tags['th'] = array();
+        }
+        $allowed_tags['th']['colspan'] = true;
+        $allowed_tags['th']['rowspan'] = true;
+        $allowed_tags['th']['scope'] = true;
+
+        if (!isset($allowed_tags['img'])) {
+            $allowed_tags['img'] = array();
+        }
+        $allowed_tags['img'] = array_merge($allowed_tags['img'], array(
+            'class' => true,
+            'id' => true,
+            'style' => true,
+            'src' => true,
+            'srcset' => true,
+            'sizes' => true,
+            'alt' => true,
+            'title' => true,
+            'width' => true,
+            'height' => true,
+            'loading' => true,
+            'data-src' => true,
+            'data-lazy-src' => true,
+            'data-original' => true,
+        ));
+
+        $extra_safe_css = array(
+            'float', 'clear', 'display',
+            'width', 'height', 'min-width', 'min-height', 'max-width', 'max-height',
+            'margin', 'margin-left', 'margin-right', 'margin-top', 'margin-bottom',
+            'padding', 'padding-left', 'padding-right', 'padding-top', 'padding-bottom',
+            'border', 'border-width', 'border-style', 'border-color',
+            'border-collapse', 'border-spacing', 'table-layout', 'vertical-align',
+            'text-align', 'font-size', 'font-weight', 'line-height',
+            'background', 'background-color', 'color'
+        );
+
+        $safe_css_filter = static function ($styles) use ($extra_safe_css) {
+            if (!is_array($styles)) {
+                $styles = array();
+            }
+            return array_values(array_unique(array_merge($styles, $extra_safe_css)));
+        };
+
+        add_filter('safe_style_css', $safe_css_filter, 999);
+        $sanitized = wp_kses($raw, $allowed_tags);
+        remove_filter('safe_style_css', $safe_css_filter, 999);
+
+        return is_string($sanitized) ? $sanitized : '';
+    }
+}
+
 // Admin settings page for plugin
 function mj_settings_page() {
     if (function_exists('wp_enqueue_media')) {
@@ -260,6 +346,8 @@ function mj_settings_page() {
             $ai_social_description_prompt = isset($_POST['mj_ai_social_description_prompt']) ? sanitize_textarea_field(wp_unslash($_POST['mj_ai_social_description_prompt'])) : '';
             $ai_regdoc_prompt      = isset($_POST['mj_ai_regdoc_prompt'])      ? sanitize_textarea_field(wp_unslash($_POST['mj_ai_regdoc_prompt']))      : '';
             $ai_sms_prompt         = isset($_POST['mj_ai_sms_prompt'])         ? sanitize_textarea_field(wp_unslash($_POST['mj_ai_sms_prompt']))         : '';
+            $ai_priority_rules     = isset($_POST['mj_ai_priority_rules'])     ? sanitize_textarea_field(wp_unslash($_POST['mj_ai_priority_rules']))     : '';
+            $ai_closure_rules      = isset($_POST['mj_ai_closure_rules'])      ? sanitize_textarea_field(wp_unslash($_POST['mj_ai_closure_rules']))      : '';
         $contact_default_signature = isset($_POST['mj_contact_default_signature']) ? wp_kses_post(wp_unslash($_POST['mj_contact_default_signature'])) : '';
 
         // --- Web Push VAPID settings ---
@@ -308,6 +396,8 @@ function mj_settings_page() {
             update_option('mj_member_ai_social_description_prompt', $ai_social_description_prompt);
             update_option('mj_member_ai_regdoc_prompt',      $ai_regdoc_prompt);
             update_option('mj_member_ai_sms_prompt',         $ai_sms_prompt);
+            update_option('mj_member_ai_priority_rules',     $ai_priority_rules);
+            update_option('mj_member_ai_closure_rules',      $ai_closure_rules);
         update_option('mj_member_contact_default_signature', $contact_default_signature);
 
         // Disabled widgets
@@ -330,8 +420,8 @@ function mj_settings_page() {
         update_option('mj_mileage_default_origin_id', $mileage_default_origin);
 
         // Document d'inscription header/footer
-        $regdoc_header = isset($_POST['mj_regdoc_header']) ? wp_kses_post(wp_unslash($_POST['mj_regdoc_header'])) : '';
-        $regdoc_footer = isset($_POST['mj_regdoc_footer']) ? wp_kses_post(wp_unslash($_POST['mj_regdoc_footer'])) : '';
+        $regdoc_header = isset($_POST['mj_regdoc_header']) ? mj_member_sanitize_pdf_rich_html(wp_unslash($_POST['mj_regdoc_header'])) : '';
+        $regdoc_footer = isset($_POST['mj_regdoc_footer']) ? mj_member_sanitize_pdf_rich_html(wp_unslash($_POST['mj_regdoc_footer'])) : '';
         update_option('mj_regdoc_header', $regdoc_header);
         update_option('mj_regdoc_footer', $regdoc_footer);
 
@@ -798,6 +888,8 @@ function mj_settings_page() {
         $ai_social_description_prompt_option = get_option('mj_member_ai_social_description_prompt', '');
         $ai_regdoc_prompt_option      = get_option('mj_member_ai_regdoc_prompt', '');
         $ai_sms_prompt_option         = get_option('mj_member_ai_sms_prompt', '');
+        $ai_priority_rules_option     = get_option('mj_member_ai_priority_rules', '');
+        $ai_closure_rules_option      = get_option('mj_member_ai_closure_rules', '');
     $contact_default_signature_option = get_option('mj_member_contact_default_signature', '');
     $vapid_public_key_option = get_option('mj_member_vapid_public_key', '');
     $vapid_private_key_option = get_option('mj_member_vapid_private_key', '');

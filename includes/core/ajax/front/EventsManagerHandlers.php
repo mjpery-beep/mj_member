@@ -129,25 +129,25 @@ class EventsManagerHandlers
             require_once Config::path() . 'includes/classes/crud/MjEvents.php';
         }
 
-        $title = !empty($_POST['title']) ? sanitize_text_field($_POST['title']) : '';
+        $title = !empty($_POST['title']) ? sanitize_text_field(wp_unslash((string) $_POST['title'])) : '';
         if (empty($title)) {
             wp_send_json_error(['message' => __('Le titre est requis.', 'mj-member')], 400);
         }
 
-        $type = !empty($_POST['type']) ? sanitize_key($_POST['type']) : '';
+        $type = !empty($_POST['type']) ? sanitize_key(wp_unslash((string) $_POST['type'])) : '';
         if (empty($type)) {
             wp_send_json_error(['message' => __('Le type est requis.', 'mj-member')], 400);
         }
 
-        $status = !empty($_POST['status']) ? sanitize_key($_POST['status']) : 'brouillon';
+        $status = !empty($_POST['status']) ? sanitize_key(wp_unslash((string) $_POST['status'])) : 'brouillon';
         // Validate status against allowed values
         $allowed_statuses = array_keys(MjEvents::get_status_labels());
         if (!in_array($status, $allowed_statuses, true)) {
             $status = 'brouillon';
         }
-        $description = !empty($_POST['description']) ? wp_kses_post($_POST['description']) : '';
-        $start_date = !empty($_POST['start_date']) ? self::parseDateTime($_POST['start_date']) : '';
-        $end_date = !empty($_POST['end_date']) ? self::parseDateTime($_POST['end_date']) : '';
+        $description = !empty($_POST['description']) ? wp_kses_post(wp_unslash((string) $_POST['description'])) : '';
+        $start_date = !empty($_POST['start_date']) ? self::parseDateTime(wp_unslash((string) $_POST['start_date'])) : '';
+        $end_date = !empty($_POST['end_date']) ? self::parseDateTime(wp_unslash((string) $_POST['end_date'])) : '';
         $price = isset($_POST['price']) ? floatval($_POST['price']) : 0;
         $capacity_total = isset($_POST['capacity_total']) ? intval($_POST['capacity_total']) : 0;
         $attendance_show_all_members = isset($_POST['attendance_show_all_members'])

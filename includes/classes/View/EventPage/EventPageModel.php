@@ -14,8 +14,10 @@ use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Crud\MjTestimonials;
 use Mj\Member\Classes\MjEventSchedule;
+use Mj\Member\Classes\MjNextcloud;
 use Mj\Member\Classes\Value\EventData;
 use Mj\Member\Classes\Value\EventLocationData;
+use Mj\Member\Core\Config;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -1974,6 +1976,11 @@ final class EventPageModel
             );
         }
 
+        $nextcloudItems = $this->getNextcloudEventPhotoItems($eventArray, $eventId);
+        if (!empty($nextcloudItems)) {
+            $items = array_merge($items, $nextcloudItems);
+        }
+
         $total = count($items);
         $hasPhotos = $total > 0;
 
@@ -2020,16 +2027,234 @@ final class EventPageModel
 
         return array(
             'has_photos' => $hasPhotos,
-            'can_upload' => $canUpload,
+            'can_upload' => false,
             'items' => $items,
             'total' => $total,
             'pending_count' => $pendingCount,
-            'upload_nonce' => $uploadNonce,
+            'upload_nonce' => '',
             'event_id' => $eventId,
             'admin_post_url' => admin_url('admin-post.php'),
-            'member_remaining' => $memberRemaining,
+            'member_remaining' => 0,
             'is_unlimited' => $isUnlimited,
         );
+    }
+
+    /**
+     * @param array<string, mixed> $eventArray
+     * @return array<int, array<string, mixed>>
+     */
+    private function getNextcloudEventPhotoItems(array $eventArray, int $eventId): array
+    {
+        if ($eventId <= 0 || !class_exists(MjNextcloud::class) || !MjNextcloud::isAvailable()) {
+            return array();
+        }
+
+        $eventSlug = isset($eventArray['slug']) ? sanitize_title((string) $eventArray['slug']) : '';
+        if ($eventSlug === '') {
+            $eventTitle = isset($eventArray['title']) ? (string) $eventArray['title'] : '';
+            $eventSlug = sanitize_title($eventTitle !== '' ? $eventTitle : ('evenement-' . $eventId));
+        }
+        if ($eventSlug === '') {
+            $eventSlug = 'evenement-' . $eventId;
+        }
+
+        $root = trim((string) Config::nextcloudRootFolder(), "/\\ \t\n\r\0\x0B");
+        $folderPath = ($root !== '' ? ($root . '/') : '') . 'evenements/' . $eventSlug . '/photos';
+
+        $nextcloud = MjNextcloud::make();
+        if (is_wp_error($nextcloud)) {
+            return array();
+        }
+
+        $files = $nextcloud->listFolder($folderPath, false);
+        if (is_wp_error($files) || !is_array($files) || empty($files)) {
+            return array();
+        }
+
+        $imageFiles = array();
+        foreach ($files as $file) {
+            if (!is_array($file)) {
+                continue;
+            }
+
+            $type = isset($file['type']) ? (string) $file['type'] : '';
+            if ($type !== 'file') {
+                continue;
+            }
+
+            $mimeType = isset($file['mimeType']) ? (string) $file['mimeType'] : '';
+            if (strpos($mimeType, 'image/') !== 0) {
+                continue;
+            }
+
+            $imageFiles[] = $file;
+        }
+
+        if (empty($imageFiles)) {
+            return array();
+        }
+
+        usort($imageFiles, static function (array $left, array $right): int {
+            $leftTs = isset($left['modifiedTime']) ? strtotime((string) $left['modifiedTime']) : 0;
+            $rightTs = isset($right['modifiedTime']) ? strtotime((string) $right['modifiedTime']) : 0;
+            return $rightTs <=> $leftTs;
+        });
+
+        $maxItems = (int) apply_filters('mj_member_event_page_nextcloud_photos_limit', 120, $eventId);
+        if ($maxItems <= 0) {
+            $maxItems = 120;
+        }
+
+        $items = array();
+        $count = 0;
+
+        foreach ($imageFiles as $file) {
+            if ($count >= $maxItems) {
+                break;
+            }
+
+            $sourcePath = isset($file['path']) ? trim((string) $file['path']) : '';
+            $sourceName = isset($file['name']) ? trim((string) $file['name']) : '';
+            if ($sourcePath === '' || $sourceName === '') {
+                continue;
+            }
+
+            $modified = isset($file['modifiedTime']) ? (string) $file['modifiedTime'] : '';
+            $size = isset($file['size']) ? (int) $file['size'] : 0;
+            $cacheId = md5($sourcePath . '|' . $modified . '|' . $size);
+
+            $cached = $this->ensureNextcloudPhotoCached($nextcloud, $eventId, $cacheId, $sourcePath, $sourceName);
+            if (empty($cached['thumb']) || empty($cached['cover'])) {
+                continue;
+            }
+
+            $caption = preg_replace('/\.[^.]+$/', '', $sourceName);
+            if (!is_string($caption)) {
+                $caption = $sourceName;
+            }
+
+            $items[] = array(
+                'id' => 'nc-' . $cacheId,
+                'attachment_id' => 0,
+                'thumb' => (string) $cached['thumb'],
+                'full' => (string) $cached['cover'],
+                'url' => (string) $cached['cover'],
+                'caption' => $caption,
+                'author_name' => '',
+                'author_initials' => '',
+                'author_avatar_url' => '',
+                'source' => 'nextcloud',
+            );
+
+            $count++;
+        }
+
+        return $items;
+    }
+
+    /**
+     * @return array{thumb:string,cover:string}
+     */
+    private function ensureNextcloudPhotoCached(MjNextcloud $nextcloud, int $eventId, string $cacheId, string $sourcePath, string $sourceName): array
+    {
+        $baseRelative = 'data/event/' . $eventId;
+        $thumbRelative = $baseRelative . '/thumbnail/' . $cacheId . '.jpg';
+        $coverRelative = $baseRelative . '/cover/' . $cacheId . '.jpg';
+        $tmpRelative = $baseRelative . '/tmp/' . $cacheId . '.' . $this->guessImageExtension($sourceName);
+
+        $thumbAbsolute = Config::path() . $thumbRelative;
+        $coverAbsolute = Config::path() . $coverRelative;
+        $tmpAbsolute = Config::path() . $tmpRelative;
+
+        if ($this->isUsableImageFile($thumbAbsolute) && $this->isUsableImageFile($coverAbsolute)) {
+            return array(
+                'thumb' => Config::url() . $thumbRelative,
+                'cover' => Config::url() . $coverRelative,
+            );
+        }
+
+        if (!wp_mkdir_p(dirname($thumbAbsolute)) || !wp_mkdir_p(dirname($coverAbsolute)) || !wp_mkdir_p(dirname($tmpAbsolute))) {
+            return array('thumb' => '', 'cover' => '');
+        }
+
+        $downloaded = $nextcloud->downloadFileToPath($sourcePath, $tmpAbsolute);
+        if (is_wp_error($downloaded) || !$this->isUsableImageFile($tmpAbsolute)) {
+            if (file_exists($tmpAbsolute)) {
+                @unlink($tmpAbsolute);
+            }
+            return array('thumb' => '', 'cover' => '');
+        }
+
+        $thumbDone = $this->generateCachedImage($tmpAbsolute, $thumbAbsolute, 520, 360, true, 72);
+        if (!$thumbDone) {
+            @copy($tmpAbsolute, $thumbAbsolute);
+        }
+
+        $coverDone = $this->generateCachedImage($tmpAbsolute, $coverAbsolute, 1920, 1280, false, 82);
+        if (!$coverDone) {
+            @copy($tmpAbsolute, $coverAbsolute);
+        }
+
+        @unlink($tmpAbsolute);
+
+        if (!$this->isUsableImageFile($thumbAbsolute) || !$this->isUsableImageFile($coverAbsolute)) {
+            return array('thumb' => '', 'cover' => '');
+        }
+
+        return array(
+            'thumb' => Config::url() . $thumbRelative,
+            'cover' => Config::url() . $coverRelative,
+        );
+    }
+
+    private function generateCachedImage(string $sourceAbsolute, string $targetAbsolute, int $width, int $height, bool $crop, int $quality): bool
+    {
+        if (!file_exists($sourceAbsolute)) {
+            return false;
+        }
+
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+
+        $editor = wp_get_image_editor($sourceAbsolute);
+        if (is_wp_error($editor)) {
+            return false;
+        }
+
+        $resized = $editor->resize($width, $height, $crop);
+        if (is_wp_error($resized)) {
+            return false;
+        }
+
+        if (method_exists($editor, 'set_quality')) {
+            $editor->set_quality($quality);
+        }
+
+        $saved = $editor->save($targetAbsolute, 'image/jpeg');
+        if (is_wp_error($saved)) {
+            return false;
+        }
+
+        return $this->isUsableImageFile($targetAbsolute);
+    }
+
+    private function isUsableImageFile(string $path): bool
+    {
+        return file_exists($path) && is_file($path) && (int) @filesize($path) > 0;
+    }
+
+    private function guessImageExtension(string $sourceName): string
+    {
+        $ext = strtolower((string) pathinfo($sourceName, PATHINFO_EXTENSION));
+        if ($ext === '') {
+            return 'jpg';
+        }
+
+        $allowed = array('jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif');
+        if (!in_array($ext, $allowed, true)) {
+            return 'jpg';
+        }
+
+        return $ext;
     }
 
     /**

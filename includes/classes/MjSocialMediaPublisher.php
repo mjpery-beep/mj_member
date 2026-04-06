@@ -37,11 +37,12 @@ final class MjSocialMediaPublisher
     /**
      * Publish to Facebook page.
      *
-     * @param string $message The message/caption to post.
-     * @param string $link The event URL to share.
+     * @param string               $message   The message/caption to post.
+     * @param string               $link      The event URL to share.
+     * @param array<int,string>    $imageUrls Optional image URLs to attach directly.
      * @return array{success: bool, message: string, url?: string}|WP_Error
      */
-    public function publishToFacebook($message, $link)
+    public function publishToFacebook($message, $link, $imageUrls = array())
     {
         if (!$this->facebookPageToken || !$this->facebookPageId) {
             return new \WP_Error(
@@ -53,7 +54,14 @@ final class MjSocialMediaPublisher
         $message = trim((string) $message);
         $link = trim((string) $link);
 
-        if ($message === '' && $link === '') {
+        $messageWithEventUrl = $message;
+        if ($link !== '' && strpos($messageWithEventUrl, $link) === false) {
+            $messageWithEventUrl = $messageWithEventUrl !== ''
+                ? ($messageWithEventUrl . "\n\n" . $link)
+                : $link;
+        }
+
+        if ($messageWithEventUrl === '') {
             return new \WP_Error(
                 'mj_facebook_empty_content',
                 __('Le message et le lien ne peuvent pas être vides.', 'mj-member')
@@ -61,18 +69,81 @@ final class MjSocialMediaPublisher
         }
 
         $payload = array(
-            'message' => $message !== '' ? $message : '',
-            'link' => $link !== '' ? $link : '',
+            'message' => $messageWithEventUrl,
         );
 
-        if ($message !== '' && $link !== '') {
-            $payload['message'] = $message . "\n\n" . $link;
-            unset($payload['link']);
+        $imageUrls = is_array($imageUrls) ? $imageUrls : array();
+        $imageUrls = array_values(array_filter(array_map(function ($url) {
+            $candidate = esc_url_raw((string) $url);
+            return ($candidate !== '' && wp_http_validate_url($candidate)) ? $candidate : '';
+        }, $imageUrls)));
+        $imageUrls = array_values(array_unique($imageUrls));
+
+        if (!empty($imageUrls)) {
+            $photoEndpoint = self::FACEBOOK_API_BASE . '/' . $this->facebookPageId . '/photos';
+
+            if (count($imageUrls) === 1) {
+                $singleMessage = $messageWithEventUrl;
+
+                $singlePhotoPayload = array(
+                    'url' => $imageUrls[0],
+                    'published' => 'true',
+                );
+                if ($singleMessage !== '') {
+                    $singlePhotoPayload['message'] = $singleMessage;
+                }
+
+                $singlePhotoResult = $this->makeApiRequestForm($photoEndpoint, $singlePhotoPayload, $this->facebookPageToken, 'POST');
+                if (is_wp_error($singlePhotoResult)) {
+                    return $singlePhotoResult;
+                }
+
+                $singlePostId = isset($singlePhotoResult['id']) ? (string) $singlePhotoResult['id'] : '';
+                return array(
+                    'success' => true,
+                    'message' => __('Publication réussie !', 'mj-member'),
+                    'postId' => $singlePostId,
+                );
+            }
+
+            $attachedMedia = array();
+
+            foreach ($imageUrls as $imageUrl) {
+                $photoResult = $this->makeApiRequestForm($photoEndpoint, array(
+                    'url' => $imageUrl,
+                    'published' => 'false',
+                ), $this->facebookPageToken, 'POST');
+
+                if (is_wp_error($photoResult)) {
+                    return $photoResult;
+                }
+
+                $photoId = isset($photoResult['id']) ? (string) $photoResult['id'] : '';
+                if ($photoId !== '') {
+                    $attachedMedia[] = $photoId;
+                }
+            }
+
+            if (!empty($attachedMedia)) {
+                foreach ($attachedMedia as $index => $mediaId) {
+                    $payload['attached_media[' . $index . ']'] = wp_json_encode(array('media_fbid' => $mediaId));
+                }
+            }
         }
 
         $endpoint = self::FACEBOOK_API_BASE . '/' . $this->facebookPageId . '/feed';
 
-        return $this->makeApiRequest($endpoint, $payload, $this->facebookPageToken, 'POST');
+        $feedResult = $this->makeApiRequestForm($endpoint, $payload, $this->facebookPageToken, 'POST');
+        if (is_wp_error($feedResult)) {
+            return $feedResult;
+        }
+
+        $postId = isset($feedResult['id']) ? (string) $feedResult['id'] : '';
+        return array(
+            'success' => true,
+            'message' => __('Publication réussie !', 'mj-member'),
+            'postId' => $postId,
+        );
     }
 
     /**
@@ -256,6 +327,85 @@ final class MjSocialMediaPublisher
             'message' => __('Publication réussie !', 'mj-member'),
             'postId' => $postId,
         );
+    }
+
+    /**
+     * Graph API form-data request handler (used for Facebook media attachment flow).
+     *
+     * @param string $endpoint Full API endpoint URL.
+     * @param array  $payload Request body fields.
+     * @param string $token Access token.
+     * @param string $method HTTP method.
+     * @return array|WP_Error
+     */
+    private function makeApiRequestForm($endpoint, $payload, $token, $method = 'POST')
+    {
+        $endpoint = add_query_arg('access_token', $token, $endpoint);
+
+        $args = array(
+            'method' => $method,
+            'body' => $method === 'POST' ? $payload : null,
+            'timeout' => 30,
+        );
+
+        $response = wp_remote_request($endpoint, $args);
+
+        if (is_wp_error($response)) {
+            return new \WP_Error(
+                'mj_social_http_error',
+                sprintf(
+                    __('Erreur de communication avec l\'API : %s', 'mj-member'),
+                    $response->get_error_message()
+                )
+            );
+        }
+
+        $statusCode = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+
+        if ($statusCode < 200 || $statusCode >= 300) {
+            $errorMsg     = __('Erreur inconnue lors de la publication.', 'mj-member');
+            $apiCode      = 0;
+            $tokenExpired = false;
+            $permError    = false;
+
+            if ($body !== '') {
+                $decoded = json_decode($body, true);
+                if (is_array($decoded)) {
+                    $apiError = isset($decoded['error']) && is_array($decoded['error']) ? $decoded['error'] : array();
+                    $apiCode  = isset($apiError['code']) ? (int) $apiError['code'] : 0;
+                    $rawMsg   = isset($apiError['message']) ? (string) $apiError['message']
+                              : (isset($decoded['message']) ? (string) $decoded['message'] : '');
+
+                    if ($apiCode === 190 || strpos($rawMsg, 'Session has expired') !== false || strpos($rawMsg, 'access token') !== false) {
+                        $tokenExpired = true;
+                        $errorMsg = __('Le token d\'accès a expiré ou est invalide. Renouvelez-le dans Paramètres → Publier sur les réseaux.', 'mj-member');
+                    } elseif ($apiCode === 200) {
+                        $permError = true;
+                        $errorMsg = __('Permissions insuffisantes sur le token. Pour une Page Facebook, le token doit être un Page Access Token avec les permissions pages_read_engagement et pages_manage_posts. Obtenez-le via Graph API Explorer → Génerer → Open in Access Token Tool → "Get Page Access Token".', 'mj-member');
+                    } elseif ($rawMsg !== '') {
+                        $errorMsg = sanitize_text_field($rawMsg);
+                    }
+                }
+            }
+
+            return new \WP_Error('mj_social_api_error', $errorMsg, array(
+                'status'       => $statusCode,
+                'apiCode'      => $apiCode,
+                'tokenExpired' => $tokenExpired,
+                'permError'    => $permError,
+            ));
+        }
+
+        $decoded = json_decode($body, true);
+        if (!is_array($decoded)) {
+            return new \WP_Error(
+                'mj_social_invalid_response',
+                __('Réponse API invalide.', 'mj-member')
+            );
+        }
+
+        return $decoded;
     }
 
     /**

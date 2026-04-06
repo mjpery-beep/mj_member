@@ -426,6 +426,47 @@
     color: var(--mj-event-text);
 }
 
+.mj-event-page__hero-mini-gallery {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.85rem;
+}
+
+.mj-event-page__hero-mini-thumb {
+    width: 80px;
+    height: 80px;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--mj-event-border) 80%, #ffffff 20%);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+.mj-event-page__hero-mini-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.mj-event-page__hero-mini-more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    height: 30px;
+    border-radius: 999px;
+    padding: 0 0.6rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--mj-event-text-muted);
+    background: var(--mj-event-surface-alt);
+    border: 1px solid var(--mj-event-border);
+}
+
 
 .mj-event-page__hero-cover {
     position: relative;

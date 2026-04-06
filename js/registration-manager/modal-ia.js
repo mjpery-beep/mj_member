@@ -29,6 +29,8 @@
         var isOpen = props.isOpen;
         var onClose = props.onClose;
         var onGenerate = props.onGenerate;
+        var initialHint = typeof props.initialHint === 'string' ? props.initialHint : '';
+        var onHintChange = typeof props.onHintChange === 'function' ? props.onHintChange : null;
         var type = props.type || 'description';
         var contextData = props.contextData || {};
         var strings = props.strings || {};
@@ -59,6 +61,7 @@
             { key: 'event_type', description: 'Type d\'evenement', lineLabel: 'Type' },
             { key: 'event_date_deadline', description: 'Date limite d\'inscription', lineLabel: 'Date limite d\'inscription' },
             { key: 'event_price', description: 'Tarif', lineLabel: 'Tarif' },
+            { key: 'event_url', description: 'URL de l\'evenement', lineLabel: 'URL de l\'evenement' },
             { key: 'event_location', description: 'Lieu', lineLabel: 'Lieu' },
             { key: 'event_location_address', description: 'Adresse du lieu', lineLabel: 'Adresse du lieu' },
             { key: 'event_age_min', description: 'Age minimum', lineLabel: 'Age minimum' },
@@ -100,7 +103,7 @@
 
         useEffect(function () {
             if (isOpen) {
-                setNote('');
+                setNote(initialHint);
                 setError('');
                 setGenerating(false);
                 setPromptOpen(false);
@@ -111,7 +114,7 @@
                 });
                 setSelectedFields(initialSelection);
             }
-        }, [isOpen, type]);
+        }, [isOpen, type, initialHint]);
 
         var toggleField = useCallback(function (fieldKey) {
             setSelectedFields(function (prev) {
@@ -148,7 +151,9 @@
 
         var typeLabel = type === 'description'
             ? getString(strings, 'aiModalDescriptionTitle', 'Generer une description')
-            : getString(strings, 'aiModalRegDocTitle', "Generer un document d'inscription");
+            : (type === 'social_description'
+                ? getString(strings, 'aiModalSocialDescriptionTitle', 'Generer une description de partage')
+                : getString(strings, 'aiModalRegDocTitle', "Generer un document d'inscription"));
 
         var footer = h(Fragment, null, [
             h('button', {
@@ -210,6 +215,13 @@
             }
             systemPromptBase += '\n\nFormat de sortie obligatoire: retourne uniquement du HTML valide (pas de Markdown, pas de triple backticks). Utilise des balises simples adaptees au rendu web (ex: <p>, <strong>, <ul>, <li>).';
             userPromptPreview = 'Redige une description attrayante en HTML pour l\'evenement suivant:\n\n' + contextBlock;
+        } else if (type === 'social_description') {
+            systemPromptBase = config.aiSocialDescriptionPrompt || config.aiDescriptionPrompt || '';
+            if (!systemPromptBase && siteName) {
+                systemPromptBase = 'Tu es un assistant redacteur pour une association jeunesse (' + siteName + '). Tu rediges des messages courts de publication reseaux sociaux en francais, clairs, engageants et adaptes aux familles. Reponds uniquement avec le message pret a publier.';
+            }
+            systemPromptBase += '\n\nFormat de sortie obligatoire: retourne uniquement du texte brut (pas de Markdown, pas de HTML, pas de triple backticks).';
+            userPromptPreview = 'Redige un message de publication reseaux sociaux pour l\'evenement suivant:\n\n' + contextBlock;
         } else {
             systemPromptBase = config.aiRegDocPrompt || '';
             if (!systemPromptBase && siteName) {
@@ -272,7 +284,13 @@
                         class: 'mj-regmgr-textarea',
                         placeholder: getString(strings, 'aiNoteHint', 'Ex: Mettez l\'accent sur les activites en plein air...'),
                         value: note,
-                        onInput: function (e) { setNote(e.target.value); },
+                        onInput: function (e) {
+                            var nextValue = e && e.target ? e.target.value : '';
+                            setNote(nextValue);
+                            if (onHintChange) {
+                                onHintChange(nextValue);
+                            }
+                        },
                         rows: 3,
                         disabled: generating,
                     }),

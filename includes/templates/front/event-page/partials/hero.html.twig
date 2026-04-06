@@ -12,6 +12,8 @@
 {% set inline_days = hero.inline_schedule_days|default([]) %}
 {% set next_occurrence = hero.next_occurrence|default({}) %}
 {% set next_occurrence_label = hero.next_occurrence_label|default('') %}
+{% set photo_items = photos.items|default([]) %}
+{% set photo_total = photos.total|default(photo_items|length) %}
 
 <section class="mj-event-page__hero">
     <div class="mj-event-page__hero-content">
@@ -76,6 +78,24 @@
                 <div class="mj-event-page__price">
                     <svg class="mj-event-page__price-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>
                     <span class="mj-event-page__price-text">{{ price_label }}</span>
+                </div>
+            {% endif %}
+
+            {% if photo_items|length > 0 %}
+                <div class="mj-event-page__hero-mini-gallery" aria-label="{{ __('Aperçu des photos de l\'événement', 'mj-member') }}">
+                    {% for photo in photo_items|slice(0, 14) %}
+                        {% set thumb = photo.thumb|default(photo.url|default('')) %}
+                        {% set full = photo.full|default(photo.url|default('')) %}
+                        {% set caption = photo.caption|default(__('Photo de l\'événement', 'mj-member')) %}
+                        {% if thumb %}
+                            <a class="mj-event-page__hero-mini-thumb" href="{{ full|esc_url }}" target="_blank" rel="noopener" title="{{ caption|esc_attr }}">
+                                <img src="{{ thumb|esc_url }}" alt="{{ caption|esc_attr }}" loading="lazy" decoding="async" />
+                            </a>
+                        {% endif %}
+                    {% endfor %}
+                    {% if photo_total > 14 %}
+                        <span class="mj-event-page__hero-mini-more">+{{ photo_total - 14 }}</span>
+                    {% endif %}
                 </div>
             {% endif %}
         </div>

@@ -3700,13 +3700,22 @@
         var aiGenerateModalContext = _aiGenerateModalContext[0];
         var setAiGenerateModalContext = _aiGenerateModalContext[1];
 
+        var _aiModalHints = useState({});
+        var aiModalHints = _aiModalHints[0];
+        var setAiModalHints = _aiModalHints[1];
+
         var _regDocPreviewState = useState({
             isOpen: false,
             title: '',
             html: '',
+            registrationId: 0,
         });
         var regDocPreviewState = _regDocPreviewState[0];
         var setRegDocPreviewState = _regDocPreviewState[1];
+
+        var _regDocPreviewDownloading = useState(false);
+        var regDocPreviewDownloading = _regDocPreviewDownloading[0];
+        var setRegDocPreviewDownloading = _regDocPreviewDownloading[1];
 
         // Event photos state
         var _eventPhotos = useState([]);
@@ -3773,6 +3782,22 @@
         var _publishHistoryLoading = useState(false);
         var publishHistoryLoading = _publishHistoryLoading[0];
         var setPublishHistoryLoading = _publishHistoryLoading[1];
+
+        var _publishNextcloudMedia = useState([]);
+        var publishNextcloudMedia = _publishNextcloudMedia[0];
+        var setPublishNextcloudMedia = _publishNextcloudMedia[1];
+
+        var _publishNextcloudLoading = useState(false);
+        var publishNextcloudLoading = _publishNextcloudLoading[0];
+        var setPublishNextcloudLoading = _publishNextcloudLoading[1];
+
+        var _publishNextcloudError = useState('');
+        var publishNextcloudError = _publishNextcloudError[0];
+        var setPublishNextcloudError = _publishNextcloudError[1];
+
+        var _publishMediaSelection = useState({});
+        var publishMediaSelection = _publishMediaSelection[0];
+        var setPublishMediaSelection = _publishMediaSelection[1];
 
         var _pagination = useState({ page: 1, totalPages: 1 });
         var pagination = _pagination[0];
@@ -4016,6 +4041,69 @@
             return 'mj_regmgr_selected_member_' + suffix;
         }, [config.widgetId]);
 
+        var aiHintStoragePrefix = useMemo(function () {
+            var suffix = config && config.widgetId ? config.widgetId : 'default';
+            return 'mj_regmgr_ai_hint_' + suffix + '_';
+        }, [config.widgetId]);
+
+        var getAiHintKey = useCallback(function (eventId, type) {
+            var safeEventId = eventId && !isNaN(parseInt(eventId, 10)) ? String(parseInt(eventId, 10)) : '0';
+            var safeType = (typeof type === 'string' && type !== '') ? type : 'description';
+            return safeEventId + ':' + safeType;
+        }, []);
+
+        var readAiHint = useCallback(function (eventId, type) {
+            var key = getAiHintKey(eventId, type);
+            if (Object.prototype.hasOwnProperty.call(aiModalHints, key)) {
+                return typeof aiModalHints[key] === 'string' ? aiModalHints[key] : '';
+            }
+
+            var storageKey = aiHintStoragePrefix + key;
+            var stored = '';
+            try {
+                var raw = localStorage.getItem(storageKey);
+                stored = typeof raw === 'string' ? raw : '';
+            } catch (e) {
+                stored = '';
+            }
+
+            setAiModalHints(function (prev) {
+                if (Object.prototype.hasOwnProperty.call(prev, key)) {
+                    return prev;
+                }
+                var next = Object.assign({}, prev);
+                next[key] = stored;
+                return next;
+            });
+
+            return stored;
+        }, [aiModalHints, aiHintStoragePrefix, getAiHintKey]);
+
+        var persistAiHint = useCallback(function (eventId, type, hintValue) {
+            var key = getAiHintKey(eventId, type);
+            var safeHint = typeof hintValue === 'string' ? hintValue : '';
+
+            setAiModalHints(function (prev) {
+                if (prev[key] === safeHint) {
+                    return prev;
+                }
+                var next = Object.assign({}, prev);
+                next[key] = safeHint;
+                return next;
+            });
+
+            try {
+                localStorage.setItem(aiHintStoragePrefix + key, safeHint);
+            } catch (e) {
+                // localStorage peut être indisponible (mode privé, quota, etc.)
+            }
+        }, [aiHintStoragePrefix, getAiHintKey]);
+
+        var aiGenerateModalInitialHint = useMemo(function () {
+            var eventId = selectedEvent && selectedEvent.id ? selectedEvent.id : 0;
+            return readAiHint(eventId, aiGenerateModalType);
+        }, [selectedEvent ? selectedEvent.id : null, aiGenerateModalType, readAiHint]);
+
         var prefillHandledRef = useRef(prefillEventId === null);
         var urlMemberHandledRef = useRef(urlMemberId === null);
         var urlTabHandledRef = useRef(urlTab === null);
@@ -4235,6 +4323,7 @@
                 event_date_end: (details.dateFinFormatted || details.dateFin || selectedEvent.end_date || '').toString(),
                 event_date_deadline: (details.dateFinInscription || '').toString(),
                 event_price: ((details.prix !== undefined && details.prix !== null) ? details.prix : (selectedEvent.fee || '0')).toString(),
+                event_url: (details.eventPageUrl || details.frontUrl || '').toString(),
                 event_location: (eventLocation.name || details.locationName || selectedEvent.location_name || '').toString(),
                 event_location_address: (eventLocation.address || details.locationAddress || '').toString(),
                 event_age_min: ((details.ageMin !== undefined && details.ageMin !== null) ? details.ageMin : '').toString(),
@@ -4438,6 +4527,7 @@
                 event_date_end: eventDetails.dateFinFormatted || eventDetails.dateFin || '',
                 event_date_deadline: eventDetails.dateFinInscription || '',
                 event_price: (eventDetails.prix || 0) + ' €',
+                event_url: eventDetails.eventPageUrl || eventDetails.frontUrl || '',
                 event_location: eventDetails.location ? eventDetails.location.name : '',
                 event_location_address: eventDetails.location ? eventDetails.location.address : '',
                 event_age_min: (eventDetails.ageMin || '').toString(),
@@ -4626,6 +4716,7 @@
                 event_date_end: eventDetails.dateFinFormatted || eventDetails.dateFin || '',
                 event_date_deadline: eventDetails.dateFinInscription || '',
                 event_price: (eventDetails.prix || 0) + ' €',
+                event_url: eventDetails.eventPageUrl || eventDetails.frontUrl || '',
                 event_location: eventDetails.location ? eventDetails.location.name : '',
                 event_location_address: eventDetails.location ? eventDetails.location.address : '',
                 event_age_min: (eventDetails.ageMin || '').toString(),
@@ -4752,8 +4843,118 @@
                 isOpen: true,
                 title: getString(strings, 'registrationDocPreviewTitle', "Aperçu du document d'inscription"),
                 html: htmlDoc,
+                registrationId: registration.id,
             });
         }, [selectedEvent, eventDetails, regDocState, config, strings, showError, setRegDocPreviewState]);
+
+        var handleDownloadRegDocPreviewPdf = useCallback(function () {
+            var registrationId = regDocPreviewState && regDocPreviewState.registrationId
+                ? parseInt(regDocPreviewState.registrationId, 10)
+                : 0;
+
+            if (!registrationId || registrationId <= 0) {
+                showError(getString(strings, 'regDocPreviewDownloadUnavailable', 'Impossible de télécharger ce contrat.'));
+                return;
+            }
+
+            if (regDocPreviewDownloading) {
+                return;
+            }
+
+            setRegDocPreviewDownloading(true);
+
+            api.downloadRegistrationContractPdf(registrationId)
+                .then(function (data) {
+                    var fileName = data && typeof data.filename === 'string' && data.filename
+                        ? data.filename
+                        : ('contrat-inscription-' + registrationId + '.pdf');
+                    var downloadUrl = data && typeof data.downloadUrl === 'string' ? data.downloadUrl : '';
+                    var pdfBase64 = data && typeof data.pdfBase64 === 'string' ? data.pdfBase64 : '';
+
+                    if (downloadUrl) {
+                        var directLink = document.createElement('a');
+                        directLink.href = downloadUrl;
+                        directLink.download = fileName;
+                        directLink.target = '_blank';
+                        directLink.rel = 'noopener noreferrer';
+                        document.body.appendChild(directLink);
+                        directLink.click();
+                        document.body.removeChild(directLink);
+                        return;
+                    }
+
+                    if (!pdfBase64) {
+                        throw new Error(getString(strings, 'regDocDownloadError', 'Impossible de générer le PDF (réponse vide).'));
+                    }
+
+                    var binary = window.atob(pdfBase64);
+                    var bytes = new Uint8Array(binary.length);
+                    for (var i = 0; i < binary.length; i++) {
+                        bytes[i] = binary.charCodeAt(i);
+                    }
+
+                    var blob = new Blob([bytes], { type: 'application/pdf' });
+                    var url = window.URL.createObjectURL(blob);
+                    var link = document.createElement('a');
+                    link.href = url;
+                    link.download = fileName;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(url);
+                })
+                .catch(function (error) {
+                    var message = (error && error.message) || getString(strings, 'regDocDownloadError', 'Impossible de télécharger le PDF.');
+                    showError(message);
+                })
+                .finally(function () {
+                    setRegDocPreviewDownloading(false);
+                });
+        }, [regDocPreviewState, regDocPreviewDownloading, api, strings, showError]);
+
+        var handleSendRegistrationContract = useCallback(function (registration, recipientType) {
+            if (!registration || !registration.id) {
+                return Promise.resolve();
+            }
+
+            return api.sendRegistrationContract(registration.id, recipientType)
+                .then(function (response) {
+                    var status = response && response.contractEmailStatus ? response.contractEmailStatus : null;
+                    if (status) {
+                        setRegistrations(function (current) {
+                            if (!Array.isArray(current)) {
+                                return current;
+                            }
+                            return current.map(function (item) {
+                                if (!item || item.id !== registration.id) {
+                                    return item;
+                                }
+                                return Object.assign({}, item, {
+                                    contractEmailStatus: status,
+                                });
+                            });
+                        });
+                    }
+
+                    showSuccess(
+                        (response && response.message)
+                            || getString(strings, 'contractEmailSent', 'Contrat envoyé par email.')
+                    );
+                    return response;
+                })
+                .catch(function (err) {
+                    showError((err && err.message) || getString(strings, 'contractEmailSendError', 'Impossible d\'envoyer le contrat.'));
+                    throw err;
+                });
+        }, [api, setRegistrations, showSuccess, showError, strings]);
+
+        var handleSendContractToYoung = useCallback(function (registration) {
+            return handleSendRegistrationContract(registration, 'young');
+        }, [handleSendRegistrationContract]);
+
+        var handleSendContractToGuardian = useCallback(function (registration) {
+            return handleSendRegistrationContract(registration, 'guardian');
+        }, [handleSendRegistrationContract]);
 
         var loadEventEditor = useCallback(function (eventId) {
             if (!EventEditor) {
@@ -4874,6 +5075,10 @@
             setEventPhotos([]);
             setEventPhotosLoading(false);
             setEventPhotoUpdating(null);
+            setPublishNextcloudMedia([]);
+            setPublishNextcloudLoading(false);
+            setPublishNextcloudError('');
+            setPublishMediaSelection({});
             eventPhotosLoadedRef.current = null;
             eventEditorLoadedRef.current = null;
             var defaultTab = 'registrations';
@@ -5048,6 +5253,8 @@
                 includedFields = Array.isArray(payload.includedFields) ? payload.includedFields : [];
             }
 
+            persistAiHint(eventId, type, hint);
+
             // Set appropriate generating flag
             if (type === 'description') {
                 setAiDescriptionGenerating(true);
@@ -5055,6 +5262,9 @@
             } else if (type === 'regdoc') {
                 setAiRegDocGenerating(true);
                 setRegDocError('');
+            } else if (type === 'social_description') {
+                setAiPublishDescriptionGenerating(true);
+                setPublishDescriptionError('');
             }
 
             return api.generateAiText(eventId, type, hint, includedFields, contextData)
@@ -5069,6 +5279,11 @@
                         if (result && result.text) {
                             handleRegDocChange(result.text);
                         }
+                    } else if (type === 'social_description') {
+                        setAiPublishDescriptionGenerating(false);
+                        if (result && result.text) {
+                            setPublishDescription(result.text);
+                        }
                     }
                 })
                 .catch(function (err) {
@@ -5080,10 +5295,26 @@
                         setAiRegDocGenerating(false);
                         var msgRegDoc = (err && err.message) ? err.message : getString(strings, 'aiGenerateError', 'Impossible de générer le texte.');
                         setRegDocError(msgRegDoc);
+                    } else if (type === 'social_description') {
+                        setAiPublishDescriptionGenerating(false);
+                        var msgPublish = (err && err.message) ? err.message : getString(strings, 'aiGenerateError', 'Impossible de générer le texte.');
+                        setPublishDescriptionError(msgPublish);
                     }
                     return Promise.reject(err);
                 });
-        }, [selectedEvent, aiGenerateModalType, aiGenerateModalContext, api, handleDescriptionChange, handleRegDocChange, strings]);
+        }, [
+            selectedEvent,
+            aiGenerateModalType,
+            aiGenerateModalContext,
+            api,
+            handleDescriptionChange,
+            handleRegDocChange,
+            persistAiHint,
+            strings,
+            setPublishDescription,
+            setAiPublishDescriptionGenerating,
+            setPublishDescriptionError,
+        ]);
 
         var handleDeleteEvent = useCallback(function (target) {
             if (deletingEvent) {
@@ -7119,6 +7350,25 @@
             ? config.socialPublish
             : {};
 
+        var isImageMimeType = useCallback(function (mimeType) {
+            return typeof mimeType === 'string' && mimeType.indexOf('image/') === 0;
+        }, []);
+
+        var isVideoMimeType = useCallback(function (mimeType) {
+            return typeof mimeType === 'string' && mimeType.indexOf('video/') === 0;
+        }, []);
+
+        var normalizePublishMediaUrl = useCallback(function (url) {
+            var value = typeof url === 'string' ? url.trim() : '';
+            if (!value) {
+                return '';
+            }
+            if (value.indexOf('http://') === 0 || value.indexOf('https://') === 0) {
+                return value;
+            }
+            return '';
+        }, []);
+
         var eventShareUrl = useMemo(function () {
             if (eventDetails && typeof eventDetails.eventPageUrl === 'string' && eventDetails.eventPageUrl !== '') {
                 return eventDetails.eventPageUrl;
@@ -7142,32 +7392,166 @@
             return parts.join('\n\n');
         }, [publishDescription, eventShareUrl]);
 
+        var publishSelectableMedia = useMemo(function () {
+            var items = [];
+
+            var coverUrl = normalizePublishMediaUrl(
+                (eventDetails && (eventDetails.coverFullUrl || eventDetails.coverUrl))
+                || (selectedEvent && (selectedEvent.coverFullUrl || selectedEvent.coverUrl))
+                || ''
+            );
+            if (coverUrl) {
+                items.push({
+                    key: 'cover:' + coverUrl,
+                    source: 'event_cover',
+                    sourceLabel: 'Image de l\'événement',
+                    name: 'Image de couverture',
+                    mimeType: 'image/*',
+                    isImage: true,
+                    isVideo: false,
+                    url: coverUrl,
+                    thumbnailUrl: coverUrl,
+                });
+            }
+
+            (eventPhotos || []).forEach(function (photo) {
+                if (!photo) {
+                    return;
+                }
+                var fullUrl = normalizePublishMediaUrl(photo.fullUrl || photo.thumbnailUrl || '');
+                if (!fullUrl) {
+                    return;
+                }
+                var photoId = typeof photo.id !== 'undefined' ? String(photo.id) : fullUrl;
+                var photoName = (photo.caption && String(photo.caption).trim()) || ('Photo #' + photoId);
+                var photoLabel = photo.memberName ? (photoName + ' (' + photo.memberName + ')') : photoName;
+                items.push({
+                    key: 'event-photo:' + photoId,
+                    source: 'event_photo',
+                    sourceLabel: 'Photo de l\'événement',
+                    name: photoLabel,
+                    mimeType: 'image/*',
+                    isImage: true,
+                    isVideo: false,
+                    url: fullUrl,
+                    thumbnailUrl: normalizePublishMediaUrl(photo.thumbnailUrl || fullUrl),
+                });
+            });
+
+            (publishNextcloudMedia || []).forEach(function (file) {
+                if (!file || file.type !== 'file') {
+                    return;
+                }
+                var ncUrl = normalizePublishMediaUrl(file.webUrl || file.downloadUrl || '');
+                if (!ncUrl) {
+                    return;
+                }
+                var mimeType = typeof file.mimeType === 'string' ? file.mimeType : '';
+                var isImage = isImageMimeType(mimeType);
+                var isVideo = isVideoMimeType(mimeType);
+                var ncName = typeof file.name === 'string' && file.name !== '' ? file.name : 'Fichier Nextcloud';
+                var ncPath = typeof file.path === 'string' ? file.path : ncUrl;
+                items.push({
+                    key: 'nc-file:' + ncPath,
+                    source: 'nextcloud_photo',
+                    sourceLabel: 'Fichier Nextcloud',
+                    name: ncName,
+                    mimeType: mimeType,
+                    isImage: isImage,
+                    isVideo: isVideo,
+                    path: ncPath,
+                    url: ncUrl,
+                    thumbnailUrl: isImage ? normalizePublishMediaUrl(file.thumbnailUrl || file.downloadUrl || '') : '',
+                });
+            });
+
+            return items;
+        }, [eventDetails, selectedEvent, eventPhotos, publishNextcloudMedia, normalizePublishMediaUrl, isImageMimeType, isVideoMimeType]);
+
+        var selectedPublishMedia = useMemo(function () {
+            if (!publishSelectableMedia.length) {
+                return [];
+            }
+            return publishSelectableMedia.filter(function (item) {
+                return !!publishMediaSelection[item.key];
+            });
+        }, [publishSelectableMedia, publishMediaSelection]);
+
+        var selectedPublishMediaImageUrl = useMemo(function () {
+            for (var i = 0; i < selectedPublishMedia.length; i++) {
+                if (selectedPublishMedia[i].isImage && selectedPublishMedia[i].url) {
+                    return selectedPublishMedia[i].url;
+                }
+            }
+            return '';
+        }, [selectedPublishMedia]);
+
+        var handleTogglePublishMedia = useCallback(function (mediaKey) {
+            if (!mediaKey) {
+                return;
+            }
+            setPublishMediaSelection(function (prev) {
+                var next = Object.assign({}, prev);
+                if (next[mediaKey]) {
+                    delete next[mediaKey];
+                } else {
+                    next[mediaKey] = true;
+                }
+                return next;
+            });
+        }, []);
+
+        var handleSelectAllPublishMedia = useCallback(function () {
+            setPublishMediaSelection(function () {
+                var next = {};
+                publishSelectableMedia.forEach(function (item) {
+                    next[item.key] = true;
+                });
+                return next;
+            });
+        }, [publishSelectableMedia]);
+
+        var handleClearPublishMediaSelection = useCallback(function () {
+            setPublishMediaSelection({});
+        }, []);
+
+        var loadPublishNextcloudMedia = useCallback(function (eventId) {
+            if (!eventId || !config.hasNextcloudIntegration) {
+                setPublishNextcloudMedia([]);
+                setPublishNextcloudLoading(false);
+                setPublishNextcloudError('');
+                return;
+            }
+
+            setPublishNextcloudLoading(true);
+            setPublishNextcloudError('');
+
+            api.ncListFolder('event', eventId, 'photos', '')
+                .then(function (data) {
+                    setPublishNextcloudLoading(false);
+                    var items = data && Array.isArray(data.items) ? data.items : [];
+                    setPublishNextcloudMedia(items.filter(function (item) {
+                        return item && item.type === 'file';
+                    }));
+                })
+                .catch(function (err) {
+                    setPublishNextcloudLoading(false);
+                    setPublishNextcloudMedia([]);
+                    if (err && !err.aborted) {
+                        setPublishNextcloudError(err.message || 'Impossible de charger les fichiers Nextcloud.');
+                    }
+                });
+        }, [api, config.hasNextcloudIntegration]);
+
         var handleGenerateAiPublishDescription = useCallback(function () {
             if (!selectedEvent || !selectedEvent.id || !config.aiEnabled) {
                 return;
             }
 
-            var eventId = selectedEvent.id;
-            var contextData = buildAiContextData();
-
-            setAiPublishDescriptionGenerating(true);
-            setPublishDescriptionError('');
-
-            api.generateAiText(eventId, 'social_description', '', [], contextData)
-                .then(function (result) {
-                    setAiPublishDescriptionGenerating(false);
-                    var generated = result && typeof result.text === 'string' ? result.text : '';
-                    setPublishDescription(generated);
-                })
-                .catch(function (err) {
-                    setAiPublishDescriptionGenerating(false);
-                    var fallback = getString(strings, 'aiGenerateError', 'Impossible de générer le texte.');
-                    var messages = collectErrorMessages(err, fallback);
-                    var message = messages && messages.length > 0 ? messages[0] : fallback;
-                    setPublishDescriptionError(message);
-                    showError(message);
-                });
-        }, [selectedEvent, config.aiEnabled, buildAiContextData, api, strings, collectErrorMessages, showError]);
+            setAiGenerateModalContext(buildAiContextData());
+            setAiGenerateModalType('social_description');
+            setAiGenerateModalOpen(true);
+        }, [selectedEvent, config.aiEnabled, buildAiContextData]);
 
         var handleSavePublishDescription = useCallback(function () {
             if (!selectedEvent || !selectedEvent.id) {
@@ -7261,6 +7645,25 @@
             }
         }, [publishMessage, showSuccess, showError, strings]);
 
+        var handleAppendEventUrlToPost = useCallback(function () {
+            var url = typeof eventShareUrl === 'string' ? eventShareUrl.trim() : '';
+            if (!url) {
+                showError(getString(strings, 'publishNoEventLink', 'Aucun lien événement disponible pour le moment.'));
+                return;
+            }
+
+            setPublishDescription(function (prev) {
+                var current = typeof prev === 'string' ? prev : '';
+                if (current.indexOf(url) !== -1) {
+                    return current;
+                }
+                var trimmedCurrent = current.trim();
+                return trimmedCurrent ? (trimmedCurrent + '\n\n' + url) : url;
+            });
+
+            showSuccess(getString(strings, 'publishAppendEventUrlSuccess', 'Lien de l\'événement ajouté au post.'));
+        }, [eventShareUrl, showError, showSuccess, strings]);
+
         var handleOpenExternalPublishTarget = useCallback(function (url) {
             if (!url) {
                 return;
@@ -7289,22 +7692,28 @@
             api.post('mj_regmgr_publish_event', {
                 eventId: selectedEvent.id,
                 message: publishDescription,
+                mediaItems: selectedPublishMedia.map(function (item) {
+                    return {
+                        source: item.source,
+                        sourceLabel: item.sourceLabel,
+                        name: item.name,
+                        mimeType: item.mimeType,
+                        isImage: !!item.isImage,
+                        isVideo: !!item.isVideo,
+                        path: item.path || '',
+                        url: item.url,
+                    };
+                }),
             }).then(function (response) {
                 setPublishSubmitting(false);
-                if (response && response.success) {
-                    showSuccess((response.data && response.data.message) || getString(strings, 'publishActionSuccess', 'Publication envoyée au workflow n8n.'));
-                } else {
-                    var msg = (response && response.data && response.data.message) || getString(strings, 'publishError', 'Erreur lors de la publication.');
-                    setPublishRequestError(msg);
-                    showError(msg);
-                }
+                showSuccess((response && response.message) || getString(strings, 'publishActionSuccess', 'Publication envoyée au workflow n8n.'));
             }).catch(function (err) {
                 setPublishSubmitting(false);
                 var msg = (err && err.message) || getString(strings, 'publishError', 'Erreur lors de la publication.');
                 setPublishRequestError(msg);
                 showError(msg);
             });
-        }, [selectedEvent, publishDescription, api, showSuccess, showError, strings]);
+        }, [selectedEvent, publishDescription, selectedPublishMedia, api, showSuccess, showError, strings]);
 
         var handleLoadPublishHistory = useCallback(function (eventId) {
             if (!eventId) return;
@@ -7312,8 +7721,8 @@
             api.post('mj_regmgr_get_social_publications', { eventId: eventId })
                 .then(function (response) {
                     setPublishHistoryLoading(false);
-                    if (response && response.success && response.data && Array.isArray(response.data.publications)) {
-                        setPublishHistory(response.data.publications);
+                    if (response && Array.isArray(response.publications)) {
+                        setPublishHistory(response.publications);
                     }
                 })
                 .catch(function () {
@@ -7332,30 +7741,34 @@
             });
             setPublishLogs([{
                 type: 'info',
-                text: 'Préparation de la requête…',
+                text: 'Préparation de la requête…' + (selectedPublishMedia.length > 0 ? (' (' + selectedPublishMedia.length + ' média sélectionné' + (selectedPublishMedia.length > 1 ? 's' : '') + ')') : ''),
                 time: new Date().toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
             }]);
 
             api.post('mj_regmgr_publish_event_direct', {
                 eventId: selectedEvent.id,
                 platform: platform,
-                message: publishDescription,
+                message: publishMessage,
+                eventUrl: eventShareUrl,
+                imageUrl: selectedPublishMediaImageUrl,
+                mediaItems: selectedPublishMedia.map(function (item) {
+                    return {
+                        source: item.source,
+                        sourceLabel: item.sourceLabel,
+                        name: item.name,
+                        mimeType: item.mimeType,
+                        isImage: !!item.isImage,
+                        isVideo: !!item.isVideo,
+                        path: item.path || '',
+                        url: item.url,
+                    };
+                }),
             }).then(function (response) {
                 setPublishDirectSubmitting('');
-                var logs = (response && response.data && Array.isArray(response.data.logs)) ? response.data.logs : [];
+                var logs = (response && Array.isArray(response.logs)) ? response.logs : [];
                 if (logs.length > 0) setPublishLogs(logs);
-                if (response && response.success) {
-                    showSuccess((response.data && response.data.message) || getString(strings, 'publishActionSuccess', 'Publication réussie !'));
-                    handleLoadPublishHistory(selectedEvent.id);
-                } else {
-                    var msg = (response && response.data && response.data.message) || getString(strings, 'publishError', 'Erreur lors de la publication.');
-                    setPublishDirectError(function (prev) {
-                        var next = Object.assign({}, prev);
-                        next[platform] = msg;
-                        return next;
-                    });
-                    showError(msg);
-                }
+                showSuccess((response && response.message) || getString(strings, 'publishActionSuccess', 'Publication réussie !'));
+                handleLoadPublishHistory(selectedEvent.id);
             }).catch(function (err) {
                 setPublishDirectSubmitting('');
                 var msg = (err && err.message) || getString(strings, 'publishError', 'Erreur lors de la publication.');
@@ -7369,7 +7782,49 @@
                 });
                 showError(msg);
             });
-        }, [selectedEvent, publishDescription, api, showSuccess, showError, strings, handleLoadPublishHistory]);
+        }, [selectedEvent, publishMessage, eventShareUrl, selectedPublishMediaImageUrl, selectedPublishMedia, api, showSuccess, showError, strings, handleLoadPublishHistory]);
+
+        useEffect(function () {
+            if (!selectedEvent || !selectedEvent.id || activeTab !== 'publish') {
+                return;
+            }
+            loadEventPhotos(selectedEvent.id);
+            loadPublishNextcloudMedia(selectedEvent.id);
+        }, [activeTab, selectedEvent ? selectedEvent.id : null, loadEventPhotos, loadPublishNextcloudMedia]);
+
+        useEffect(function () {
+            if (!publishSelectableMedia.length) {
+                if (Object.keys(publishMediaSelection).length > 0) {
+                    setPublishMediaSelection({});
+                }
+                return;
+            }
+
+            var hasChanged = false;
+            var next = {};
+            publishSelectableMedia.forEach(function (item) {
+                if (publishMediaSelection[item.key]) {
+                    next[item.key] = true;
+                }
+            });
+
+            var prevKeys = Object.keys(publishMediaSelection);
+            var nextKeys = Object.keys(next);
+            if (prevKeys.length !== nextKeys.length) {
+                hasChanged = true;
+            } else {
+                for (var i = 0; i < prevKeys.length; i++) {
+                    if (!next[prevKeys[i]]) {
+                        hasChanged = true;
+                        break;
+                    }
+                }
+            }
+
+            if (hasChanged) {
+                setPublishMediaSelection(next);
+            }
+        }, [publishSelectableMedia, publishMediaSelection]);
 
         useEffect(function () {
             if (activeTab === 'publish' && selectedEvent && selectedEvent.id) {
@@ -7674,6 +8129,8 @@
                                 onChangeOccurrences: handleChangeOccurrences,
                                 onViewMember: handleViewMemberFromRegistration,
                                 onDownloadDoc: (regDocState.draft || (eventDetails && eventDetails.registrationDocument)) ? handleDownloadMemberDoc : null,
+                                onSendContractToYoung: (regDocState.draft || (eventDetails && eventDetails.registrationDocument)) ? handleSendContractToYoung : null,
+                                onSendContractToGuardian: (regDocState.draft || (eventDetails && eventDetails.registrationDocument)) ? handleSendContractToGuardian : null,
                                 strings: strings,
                                 config: config,
                                 eventRequiresPayment: eventRequiresPayment,
@@ -7770,6 +8227,7 @@
                                                         h('li', null, [h('code', null, '[event_date_end]'), ' - Date de fin']),
                                                         h('li', null, [h('code', null, '[event_date_deadline]'), ' - Date limite d\'inscription']),
                                                         h('li', null, [h('code', null, '[event_price]'), ' - Tarif']),
+                                                        h('li', null, [h('code', null, '[event_url]'), ' - URL de l\'événement']),
                                                         h('li', null, [h('code', null, '[event_location]'), ' - Lieu']),
                                                         h('li', null, [h('code', null, '[event_location_address]'), ' - Adresse du lieu']),
                                                         h('li', null, [h('code', null, '[event_age_min]'), ' - Âge minimum']),
@@ -7923,6 +8381,71 @@
                                             rel: 'noopener noreferrer',
                                         }, eventShareUrl)
                                         : h('span', { class: 'mj-regmgr-publish-tab__missing' }, getString(strings, 'publishNoEventLink', 'Aucun lien événement disponible pour le moment.')),
+                                    h('div', { class: 'mj-regmgr-publish-tab__editor-actions' }, [
+                                        h('button', {
+                                            type: 'button',
+                                            class: 'mj-btn mj-btn--secondary',
+                                            disabled: !eventShareUrl,
+                                            onClick: handleAppendEventUrlToPost,
+                                        }, getString(strings, 'publishAppendEventUrlButton', 'Ajouter l\'URL au post')),
+                                    ]),
+                                ]),
+                                h('div', { class: 'mj-regmgr-publish-media' }, [
+                                    h('div', { class: 'mj-regmgr-publish-media__header' }, [
+                                        h('h4', { class: 'mj-regmgr-publish-media__title' }, 'Médias à joindre au post'),
+                                        h('div', { class: 'mj-regmgr-publish-media__actions' }, [
+                                            h('button', {
+                                                type: 'button',
+                                                class: 'mj-btn mj-btn--ghost',
+                                                disabled: publishSelectableMedia.length === 0,
+                                                onClick: handleSelectAllPublishMedia,
+                                            }, 'Tout cocher'),
+                                            h('button', {
+                                                type: 'button',
+                                                class: 'mj-btn mj-btn--ghost',
+                                                disabled: Object.keys(publishMediaSelection).length === 0,
+                                                onClick: handleClearPublishMediaSelection,
+                                            }, 'Tout décocher'),
+                                        ]),
+                                    ]),
+                                    h('p', { class: 'mj-regmgr-field-hint' },
+                                        'Sélectionne les photos/vidéos à inclure. Les liens des fichiers sélectionnés sont ajoutés au message, et la première image est utilisée pour Instagram.'
+                                    ),
+                                    publishNextcloudLoading && h('p', { class: 'mj-regmgr-field-hint' }, 'Chargement des fichiers Nextcloud…'),
+                                    publishNextcloudError && h('p', { class: 'mj-regmgr-alert mj-regmgr-alert--error' }, publishNextcloudError),
+                                    publishSelectableMedia.length === 0
+                                        ? h('p', { class: 'mj-regmgr-field-hint' }, 'Aucun média disponible pour cet événement.')
+                                        : h('div', { class: 'mj-regmgr-publish-media__list' },
+                                            publishSelectableMedia.map(function (media) {
+                                                return h('label', {
+                                                    key: media.key,
+                                                    class: 'mj-regmgr-publish-media__item',
+                                                }, [
+                                                    h('input', {
+                                                        type: 'checkbox',
+                                                        checked: !!publishMediaSelection[media.key],
+                                                        onChange: function () {
+                                                            handleTogglePublishMedia(media.key);
+                                                        },
+                                                    }),
+                                                    media.thumbnailUrl
+                                                        ? h('img', {
+                                                            class: 'mj-regmgr-publish-media__thumb',
+                                                            src: media.thumbnailUrl,
+                                                            alt: media.name,
+                                                            loading: 'lazy',
+                                                        })
+                                                        : h('span', { class: 'mj-regmgr-publish-media__icon', 'aria-hidden': 'true' }, media.isVideo ? '🎬' : '📎'),
+                                                    h('span', { class: 'mj-regmgr-publish-media__meta' }, [
+                                                        h('strong', { class: 'mj-regmgr-publish-media__name' }, media.name),
+                                                        h('span', { class: 'mj-regmgr-publish-media__source' }, media.sourceLabel + (media.isVideo ? ' • vidéo' : (media.isImage ? ' • image' : ''))),
+                                                    ]),
+                                                ]);
+                                            })
+                                        ),
+                                    selectedPublishMedia.length > 0 && h('p', { class: 'mj-regmgr-publish-media__count' },
+                                        selectedPublishMedia.length + ' média sélectionné' + (selectedPublishMedia.length > 1 ? 's' : '')
+                                    ),
                                 ]),
                                 h('div', { class: 'mj-regmgr-publish-tab__actions' }, [
                                     // Facebook
@@ -8274,11 +8797,14 @@
                             isOpen: false,
                             title: '',
                             html: '',
+                            registrationId: 0,
                         };
                     });
                 },
                 title: regDocPreviewState.title,
                 htmlContent: regDocPreviewState.html,
+                onDownload: handleDownloadRegDocPreviewPdf,
+                isDownloadLoading: regDocPreviewDownloading,
                 strings: strings,
             }),
 
@@ -8286,6 +8812,11 @@
                 isOpen: aiGenerateModalOpen,
                 onClose: function () { setAiGenerateModalOpen(false); },
                 onGenerate: handleAiGenerateFromModal,
+                initialHint: aiGenerateModalInitialHint,
+                onHintChange: function (nextHint) {
+                    var eventId = selectedEvent && selectedEvent.id ? selectedEvent.id : 0;
+                    persistAiHint(eventId, aiGenerateModalType, nextHint);
+                },
                 type: aiGenerateModalType,
                 contextData: aiGenerateModalContext,
                 strings: strings,

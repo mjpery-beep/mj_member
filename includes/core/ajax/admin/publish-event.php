@@ -80,6 +80,239 @@ function mj_regmgr_save_social_publication($event_id, $platform, $message, $stat
 }
 
 /**
+ * Parse media items sent by the publish tab.
+ *
+ * @return array<int,array<string,mixed>>
+ */
+function mj_regmgr_parse_publish_media_items() {
+    $raw = isset($_POST['mediaItems']) ? wp_unslash($_POST['mediaItems']) : null;
+    $items = array();
+
+    if (is_string($raw) && $raw !== '') {
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            $items = $decoded;
+        }
+    } elseif (is_array($raw)) {
+        $items = $raw;
+    }
+
+    if (!is_array($items)) {
+        return array();
+    }
+
+    $normalized = array();
+    foreach ($items as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+
+        $url = isset($item['url']) ? esc_url_raw((string) $item['url']) : '';
+        if ($url === '' || !wp_http_validate_url($url)) {
+            continue;
+        }
+
+        $mime_type = isset($item['mimeType']) ? sanitize_text_field((string) $item['mimeType']) : '';
+        $is_image = (isset($item['isImage']) && ($item['isImage'] === true || $item['isImage'] === '1' || $item['isImage'] === 1));
+            $path = isset($item['path']) ? trim(str_replace('\\', '/', sanitize_text_field((string) $item['path'])), '/') : '';
+            if (!$is_image && $mime_type !== '' && strpos($mime_type, 'image/') === 0) {
+            $is_image = true;
+        }
+
+        $normalized[] = array(
+            'source' => isset($item['source']) ? sanitize_key((string) $item['source']) : '',
+            'sourceLabel' => isset($item['sourceLabel']) ? sanitize_text_field((string) $item['sourceLabel']) : '',
+            'name' => isset($item['name']) ? sanitize_text_field((string) $item['name']) : '',
+            'mimeType' => $mime_type,
+            'isImage' => $is_image,
+            'path' => $path,
+            'url' => $url,
+        );
+    }
+
+    return array_slice($normalized, 0, 20);
+}
+
+/**
+ * @param array<int,array<string,mixed>> $media_items
+ * @return array<int,string>
+ */
+function mj_regmgr_collect_publish_media_urls($media_items) {
+    $urls = array();
+    if (!is_array($media_items)) {
+        return $urls;
+    }
+
+    foreach ($media_items as $item) {
+        if (!is_array($item) || empty($item['url']) || !is_string($item['url'])) {
+            continue;
+        }
+        $url = esc_url_raw($item['url']);
+        if ($url !== '' && wp_http_validate_url($url) && !in_array($url, $urls, true)) {
+            $urls[] = $url;
+        }
+    }
+
+    return $urls;
+}
+
+/**
+ * @param array<int,array<string,mixed>> $media_items
+ * @return array<int,string>
+ */
+function mj_regmgr_collect_publish_image_media_urls($media_items) {
+    $urls = array();
+    if (!is_array($media_items)) {
+        return $urls;
+    }
+
+    foreach ($media_items as $item) {
+        if (!is_array($item) || empty($item['url']) || !is_string($item['url'])) {
+            continue;
+        }
+
+        $is_image = !empty($item['isImage']) || (isset($item['mimeType']) && is_string($item['mimeType']) && strpos($item['mimeType'], 'image/') === 0);
+        if (!$is_image) {
+            continue;
+        }
+
+        $url = esc_url_raw($item['url']);
+        if ($url !== '' && wp_http_validate_url($url) && !in_array($url, $urls, true)) {
+            $urls[] = $url;
+        }
+    }
+
+    return $urls;
+}
+
+/**
+ * @param array<int,array<string,mixed>> $media_items
+ * @return array<int,string>
+ */
+function mj_regmgr_collect_publish_non_image_media_urls($media_items) {
+    $urls = array();
+    if (!is_array($media_items)) {
+        return $urls;
+    }
+
+    foreach ($media_items as $item) {
+        if (!is_array($item) || empty($item['url']) || !is_string($item['url'])) {
+            continue;
+        }
+
+        $is_image = !empty($item['isImage']) || (isset($item['mimeType']) && is_string($item['mimeType']) && strpos($item['mimeType'], 'image/') === 0);
+        if ($is_image) {
+            continue;
+        }
+
+        $url = esc_url_raw($item['url']);
+        if ($url !== '' && wp_http_validate_url($url) && !in_array($url, $urls, true)) {
+            $urls[] = $url;
+        }
+    }
+
+    return $urls;
+}
+
+/**
+ * Resolve media URL for social APIs.
+ * For Nextcloud photos, generate a temporary signed public proxy URL so Meta can fetch the binary.
+ *
+ * @param array<string,mixed> $item
+ * @return string
+ */
+function mj_regmgr_resolve_publish_media_item_url($item) {
+    if (!is_array($item)) {
+        return '';
+    }
+
+    $url = (isset($item['url']) && is_string($item['url'])) ? esc_url_raw($item['url']) : '';
+    if ($url !== '' && !wp_http_validate_url($url)) {
+        $url = '';
+    }
+
+    $source = isset($item['source']) ? sanitize_key((string) $item['source']) : '';
+    if ($source !== 'nextcloud_photo') {
+        return $url;
+    }
+
+    $path = isset($item['path']) ? trim(str_replace('\\', '/', sanitize_text_field((string) $item['path'])), '/') : '';
+    if ($path !== '' && function_exists('mj_nc_build_signed_public_download_url')) {
+        $signed = mj_nc_build_signed_public_download_url($path, 900);
+        if (is_string($signed) && $signed !== '' && wp_http_validate_url($signed)) {
+            return $signed;
+        }
+    }
+
+    return $url;
+}
+
+/**
+ * Build a final message body with optional event link and selected media links.
+ *
+ * @param string            $message Base message.
+ * @param array<int,string> $media_urls Selected media URLs.
+ * @param string            $event_url Event URL.
+ * @return string
+ */
+function mj_regmgr_build_publish_message_with_links($message, $media_urls, $event_url = '') {
+    $parts = array();
+    $message = trim((string) $message);
+    if ($message !== '') {
+        $parts[] = $message;
+    }
+
+    $event_url = trim((string) $event_url);
+    if ($event_url !== '') {
+        $parts[] = $event_url;
+    }
+
+    if (is_array($media_urls) && !empty($media_urls)) {
+        $unique_media = array();
+        foreach ($media_urls as $url) {
+            $candidate = trim((string) $url);
+            if ($candidate === '' || in_array($candidate, $unique_media, true)) {
+                continue;
+            }
+            $unique_media[] = $candidate;
+        }
+        if (!empty($unique_media)) {
+            $parts[] = implode("\n", $unique_media);
+        }
+    }
+
+    return trim(implode("\n\n", $parts));
+}
+
+/**
+ * Pick first image URL from selected media items.
+ *
+ * @param array<int,array<string,mixed>> $media_items
+ * @param string                         $fallback
+ * @return string
+ */
+function mj_regmgr_pick_instagram_image_url($media_items, $fallback = '') {
+    if (is_array($media_items)) {
+        foreach ($media_items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $is_image = !empty($item['isImage']) || (isset($item['mimeType']) && is_string($item['mimeType']) && strpos($item['mimeType'], 'image/') === 0);
+            if (!$is_image) {
+                continue;
+            }
+            $url = mj_regmgr_resolve_publish_media_item_url($item);
+            if ($url !== '' && wp_http_validate_url($url)) {
+                return $url;
+            }
+        }
+    }
+
+    $fallback = esc_url_raw((string) $fallback);
+    return ($fallback !== '' && wp_http_validate_url($fallback)) ? $fallback : '';
+}
+
+/**
  * AJAX handler for publishing an event directly to Facebook, Instagram, or WhatsApp.
  *
  * POST params:
@@ -87,6 +320,7 @@ function mj_regmgr_save_social_publication($event_id, $platform, $message, $stat
  *   platform   (string) – 'facebook', 'instagram', or 'whatsapp'.
  *   message    (string) – Message/caption to publish.
  *   imageUrl   (string) – Optional image URL for Instagram.
+ *   mediaItems (array)  – Optional selected media objects from the UI.
  */
 function mj_regmgr_publish_event_direct() {
     if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'mj-registration-manager')) {
@@ -124,6 +358,35 @@ function mj_regmgr_publish_event_direct() {
     }
 
     $image_url = isset($_POST['imageUrl']) ? esc_url_raw(wp_unslash($_POST['imageUrl'])) : '';
+    $media_items = mj_regmgr_parse_publish_media_items();
+    $media_urls = mj_regmgr_collect_publish_media_urls($media_items);
+    $image_media_urls = array();
+    $non_image_media_urls = array();
+    if (is_array($media_items)) {
+        foreach ($media_items as $media_item) {
+            if (!is_array($media_item)) {
+                continue;
+            }
+
+            $candidate_url = mj_regmgr_resolve_publish_media_item_url($media_item);
+            if ($candidate_url === '' || !wp_http_validate_url($candidate_url)) {
+                continue;
+            }
+
+            $is_image = !empty($media_item['isImage']) || (isset($media_item['mimeType']) && is_string($media_item['mimeType']) && strpos($media_item['mimeType'], 'image/') === 0);
+
+            if ($is_image) {
+                if (!in_array($candidate_url, $image_media_urls, true)) {
+                    $image_media_urls[] = $candidate_url;
+                }
+            } else {
+                if (!in_array($candidate_url, $non_image_media_urls, true)) {
+                    $non_image_media_urls[] = $candidate_url;
+                }
+            }
+        }
+    }
+    $selected_image_url = mj_regmgr_pick_instagram_image_url($media_items, $image_url);
 
     $event = \Mj\Member\Classes\Crud\MjEvents::find($event_id);
     if (!$event) {
@@ -137,6 +400,12 @@ function mj_regmgr_publish_event_direct() {
     } elseif (!empty($event->front_url)) {
         $event_url = esc_url_raw((string) $event->front_url);
     }
+    if ($event_url === '') {
+        $event_url = isset($_POST['eventUrl']) ? esc_url_raw(wp_unslash((string) $_POST['eventUrl'])) : '';
+        if ($event_url !== '' && !wp_http_validate_url($event_url)) {
+            $event_url = '';
+        }
+    }
 
     $logs = array();
     $publisher = new \Mj\Member\Classes\MjSocialMediaPublisher();
@@ -147,6 +416,16 @@ function mj_regmgr_publish_event_direct() {
         'time' => gmdate('H:i:s'),
     );
 
+    if (!empty($media_urls)) {
+        $logs[] = array(
+            'type' => 'info',
+            'text' => sprintf(__('%d média(s) sélectionné(s) seront ajoutés à la publication.', 'mj-member'), count($media_urls)),
+            'time' => gmdate('H:i:s'),
+        );
+    }
+
+    $published_message = $message;
+
     switch ($platform) {
         case 'facebook':
             $logs[] = array(
@@ -154,7 +433,8 @@ function mj_regmgr_publish_event_direct() {
                 'text' => sprintf(__('Envoi vers l\'API Graph Facebook (page %s)…', 'mj-member'), get_option('mj_social_facebook_page_id', '?')),
                 'time' => gmdate('H:i:s'),
             );
-            $result = $publisher->publishToFacebook($message, $event_url);
+            $published_message = mj_regmgr_build_publish_message_with_links($message, $non_image_media_urls);
+            $result = $publisher->publishToFacebook($published_message, $event_url, $image_media_urls);
             break;
 
         case 'instagram':
@@ -163,7 +443,8 @@ function mj_regmgr_publish_event_direct() {
                 'text' => sprintf(__('Envoi vers l\'API Instagram Business (compte %s)…', 'mj-member'), get_option('mj_social_instagram_business_id', '?')),
                 'time' => gmdate('H:i:s'),
             );
-            $result = $publisher->publishToInstagram($message, $event_url, $image_url);
+            $published_message = mj_regmgr_build_publish_message_with_links($message, $media_urls);
+            $result = $publisher->publishToInstagram($published_message, $event_url, $selected_image_url);
             break;
 
         case 'whatsapp':
@@ -174,7 +455,8 @@ function mj_regmgr_publish_event_direct() {
                 'text' => sprintf(__('Envoi via l\'API WhatsApp Business (Phone Number ID : %s)…', 'mj-member'), $group_id !== '' ? $group_id : '?'),
                 'time' => gmdate('H:i:s'),
             );
-            $result = $publisher->publishToWhatsApp($group_id, $message);
+            $published_message = mj_regmgr_build_publish_message_with_links($message, $media_urls, $event_url);
+            $result = $publisher->publishToWhatsApp($group_id, $published_message);
             break;
 
         default:
@@ -218,7 +500,7 @@ function mj_regmgr_publish_event_direct() {
         mj_regmgr_save_social_publication(
             $event_id,
             $platform,
-            $message,
+            $published_message,
             'error',
             '',
             array('error' => $error_msg, 'data' => $error_data),
@@ -246,7 +528,7 @@ function mj_regmgr_publish_event_direct() {
     $saved_id = mj_regmgr_save_social_publication(
         $event_id,
         $platform,
-        $message,
+        $published_message,
         'success',
         $post_id,
         $result,
@@ -266,6 +548,7 @@ function mj_regmgr_publish_event_direct() {
         'postId'     => $post_id,
         'platform'   => $platform,
         'logs'       => $logs,
+        'mediaCount' => count($media_urls),
         'savedId'    => $saved_id !== false ? $saved_id : null,
     ));
 }

@@ -4,7 +4,10 @@
 
 <main class="{{ page.class|default('mj-event-page')|esc_attr }}" style="{{ page.style|default('')|esc_attr }}" data-event-id="{{ page.data_event_id|default(0) }}">
     <div class="mj-event-page__wrapper">
-        {% include 'event-page/partials/hero.html.twig' with { hero: partials.hero|default({}) } only %}
+        {% include 'event-page/partials/hero.html.twig' with {
+            hero: partials.hero|default({}),
+            photos: partials.photos|default({})
+        } only %}
 
         <div class="mj-event-page__actions">
             <a class="mj-event-page__back" href="{{ '/evenements/'|esc_url }}" aria-label="Retour vers la liste des évènements">

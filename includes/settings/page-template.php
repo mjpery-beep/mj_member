@@ -1793,6 +1793,22 @@ if (!defined('ABSPATH')) {
                         </div>
 
                         <p style="margin-bottom:18px;">
+                            <label for="mj-ai-priority-rules"><strong><?php esc_html_e("Règles de hiérarchie IA", "mj-member"); ?></strong></label><br>
+                            <textarea name="mj_ai_priority_rules" id="mj-ai-priority-rules" rows="4" class="large-text" placeholder="<?php echo esc_attr__('Ex: La consigne organisateur prime toujours sur le style marketing.', 'mj-member'); ?>"><?php echo esc_textarea($ai_priority_rules_option); ?></textarea>
+                            <small style="color:#6b7280; display:block; margin-top:4px;">
+                                <?php esc_html_e("Ces règles sont ajoutées automatiquement au prompt système pour forcer la priorité des consignes organisateur.", "mj-member"); ?>
+                            </small>
+                        </p>
+
+                        <p style="margin-bottom:18px;">
+                            <label for="mj-ai-closure-rules"><strong><?php esc_html_e("Règles anti-contradiction (inscriptions clôturées)", "mj-member"); ?></strong></label><br>
+                            <textarea name="mj_ai_closure_rules" id="mj-ai-closure-rules" rows="4" class="large-text" placeholder="<?php echo esc_attr__('Ex: ne jamais inclure d\'appel à l\'inscription si les inscriptions sont clôturées.', 'mj-member'); ?>"><?php echo esc_textarea($ai_closure_rules_option); ?></textarea>
+                            <small style="color:#6b7280; display:block; margin-top:4px;">
+                                <?php esc_html_e("Appliqué quand l'instruction complémentaire mentionne une fermeture/clôture/complet.", "mj-member"); ?>
+                            </small>
+                        </p>
+
+                        <p style="margin-bottom:18px;">
                             <label for="mj-ai-description-prompt"><strong><?php esc_html_e("Prompt – Description d'événement", "mj-member"); ?></strong></label><br>
                             <textarea name="mj_ai_description_prompt" id="mj-ai-description-prompt" rows="4" class="large-text" placeholder="<?php echo esc_attr__('Laissez vide pour utiliser le prompt par défaut.', 'mj-member'); ?>"><?php echo esc_textarea($ai_description_prompt_option); ?></textarea>
                             <small style="color:#6b7280; display:block; margin-top:4px;">

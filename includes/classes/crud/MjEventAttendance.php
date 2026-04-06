@@ -533,17 +533,22 @@ class MjEventAttendance {
             $payload['assignments'] = self::get_default_assignments();
         }
 
+        if (!isset($payload['meta']) || !is_array($payload['meta'])) {
+            $payload['meta'] = array();
+        }
+
         return $payload;
     }
 
     /**
      * @param string|null $raw
-     * @return array{occurrences:array<string,array<string,mixed>>,assignments:array{mode:string,occurrences:array<int,string>}}
+     * @return array{occurrences:array<string,array<string,mixed>>,assignments:array{mode:string,occurrences:array<int,string>},meta:array<string,mixed>}
      */
     private static function decode_payload($raw) {
         $payload = array(
             'occurrences' => array(),
             'assignments' => self::get_default_assignments(),
+            'meta' => array(),
         );
 
         if (!is_string($raw) || $raw === '') {
@@ -565,11 +570,15 @@ class MjEventAttendance {
             $payload['assignments'] = self::normalize_assignments($decoded['assignments']);
         }
 
+        if (isset($decoded['meta']) && is_array($decoded['meta'])) {
+            $payload['meta'] = $decoded['meta'];
+        }
+
         return $payload;
     }
 
     /**
-     * @param array{occurrences:array<string,array<string,mixed>>,assignments?:array{mode:string,occurrences:array<int,string>}} $payload
+     * @param array{occurrences:array<string,array<string,mixed>>,assignments?:array{mode:string,occurrences:array<int,string>},meta?:array<string,mixed>} $payload
      * @return string|null
      */
     private static function encode_payload(array $payload) {
@@ -582,6 +591,10 @@ class MjEventAttendance {
 
         if (!empty($payload['assignments']) && $payload['assignments']['mode'] === 'custom' && !empty($payload['assignments']['occurrences'])) {
             $data['assignments'] = $payload['assignments'];
+        }
+
+        if (!empty($payload['meta']) && is_array($payload['meta'])) {
+            $data['meta'] = $payload['meta'];
         }
 
         if (empty($data)) {

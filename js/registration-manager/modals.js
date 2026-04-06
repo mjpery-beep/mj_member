@@ -190,6 +190,8 @@
     function RegistrationDocumentPreviewModal(props) {
         var isOpen = !!props.isOpen;
         var onClose = typeof props.onClose === 'function' ? props.onClose : function () {};
+        var onDownload = typeof props.onDownload === 'function' ? props.onDownload : null;
+        var isDownloadLoading = !!props.isDownloadLoading;
         var htmlContent = typeof props.htmlContent === 'string' ? props.htmlContent : '';
         var title = props.title || 'Apercu du document';
         var strings = props.strings || {};
@@ -219,6 +221,15 @@
         }, [
             h('div', { class: 'mj-regmgr-doc-preview' }, [
                 h('div', { class: 'mj-regmgr-doc-preview__actions' }, [
+                    onDownload && h('button', {
+                        type: 'button',
+                        class: 'mj-btn mj-btn--secondary mj-btn--small',
+                        onClick: onDownload,
+                        disabled: isDownloadLoading,
+                    }, isDownloadLoading
+                        ? getString(strings, 'downloading', 'Téléchargement...')
+                        : getString(strings, 'download', 'Télécharger')
+                    ),
                     h('button', {
                         type: 'button',
                         class: 'mj-btn mj-btn--primary mj-btn--small',

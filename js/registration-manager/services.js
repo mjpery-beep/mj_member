@@ -346,6 +346,25 @@
             },
 
             /**
+             * Envoie le contrat d'inscription par email
+             */
+            sendRegistrationContract: function (registrationId, recipientType) {
+                return post('mj_regmgr_send_registration_contract', {
+                    registrationId: registrationId,
+                    recipientType: recipientType,
+                });
+            },
+
+            /**
+             * Génère puis retourne le contrat d'inscription d'une inscription en PDF.
+             */
+            downloadRegistrationContractPdf: function (registrationId) {
+                return post('mj_regmgr_download_registration_contract_pdf', {
+                    registrationId: registrationId,
+                });
+            },
+
+            /**
              * Met à jour la présence
              */
             updateAttendance: function (eventId, memberId, occurrence, status) {

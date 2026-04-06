@@ -39,12 +39,24 @@ if (defined('ABSPATH')) {
     $pluginAutoload = __DIR__ . '/vendor/autoload.php';
     $globalAutoload = trailingslashit(ABSPATH) . 'vendor/autoload.php';
 
-    if (is_readable($pluginAutoload)) {
-        require_once $pluginAutoload;
-    }
+    $loadComposerAutoload = static function (string $path): bool {
+        if (!is_readable($path)) {
+            return false;
+        }
 
-    if (!class_exists('Twig\\Environment') && is_readable($globalAutoload)) {
-        require_once $globalAutoload;
+        try {
+            require_once $path;
+            return true;
+        } catch (\Throwable $e) {
+            error_log('[MJ Member] Composer autoload failed at ' . $path . ': ' . $e->getMessage());
+            return false;
+        }
+    };
+
+    $pluginAutoloadLoaded = $loadComposerAutoload($pluginAutoload);
+
+    if ((!$pluginAutoloadLoaded || !class_exists('Twig\\Environment')) && is_readable($globalAutoload)) {
+        $loadComposerAutoload($globalAutoload);
     }
 }
 

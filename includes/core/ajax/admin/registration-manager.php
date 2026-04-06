@@ -121,6 +121,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         add_action('wp_ajax_mj_regmgr_update_member_trusted_status', [$this, 'updateMemberTrustedStatus']);
         add_action('wp_ajax_mj_regmgr_get_member_registrations', [$this, 'getMemberRegistrations']);
         add_action('wp_ajax_mj_regmgr_update_registration_occurrences', [$this, 'updateRegistrationOccurrences']);
+        add_action('wp_ajax_mj_regmgr_send_registration_contract', [$this, 'sendRegistrationContract']);
+        add_action('wp_ajax_mj_regmgr_download_registration_contract_pdf', [$this, 'downloadRegistrationContractPdf']);
         add_action('wp_ajax_mj_regmgr_mark_membership_paid', [$this, 'markMembershipPaid']);
         add_action('wp_ajax_mj_regmgr_create_membership_payment_link', [$this, 'createMembershipPaymentLink']);
         add_action('wp_ajax_mj_regmgr_update_member_idea', [$this, 'updateMemberIdea']);
@@ -1792,6 +1794,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'dateFinInscription' => $event->date_fin_inscription,
                 'coverId' => $event->cover_id,
                 'coverUrl' => $this->getEventCoverUrl($event, 'medium'),
+                'coverFullUrl' => $this->getEventCoverUrl($event, 'full'),
                 'accentColor' => $event->accent_color,
                 'prix' => (float) $event->prix,
                 'freeParticipation' => !empty($event->free_participation),
@@ -2381,6 +2384,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 );
             }
 
+            $contract_email_status = $this->extractContractEmailStatus(isset($reg->attendance_payload) ? $reg->attendance_payload : null);
+
             $data[] = array(
                 'id' => $reg->id,
                 'eventId' => $reg->event_id,
@@ -2401,6 +2406,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'assignedOccurrences' => $assigned_occurrences,
                 'notesCount' => $notes_count,
                 'dynFieldsCount' => $dyn_fields_count,
+                'contractEmailStatus' => $contract_email_status,
             );
         }
 
@@ -4844,8 +4850,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
 
         $accent_color = isset($form_values['accent_color']) ? $this->normalizeHexColor($form_values['accent_color']) : '';
         $cover_id = isset($form_values['cover_id']) ? (int) $form_values['cover_id'] : 0;
-        $description = isset($form_values['description']) ? wp_kses_post($form_values['description']) : '';
-        $registration_document = isset($form_values['registration_document']) ? wp_kses_post($form_values['registration_document']) : '';
+        $description = isset($form_values['description']) ? $this->sanitizeRichHtmlForPdfTemplates($form_values['description']) : '';
+        $registration_document = isset($form_values['registration_document']) ? $this->sanitizeRichHtmlForPdfTemplates($form_values['registration_document']) : '';
 
         $age_min = isset($form_values['age_min']) ? (int) $form_values['age_min'] : 0;
         $age_max = isset($form_values['age_max']) ? (int) $form_values['age_max'] : 0;
@@ -5098,6 +5104,90 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         );
     }
 
+    /**
+     * Sanitize rich HTML while preserving table/layout styles needed for PDF templates.
+     */
+    private function sanitizeRichHtmlForPdfTemplates($html): string {
+        $raw = is_string($html) ? $html : (string) $html;
+        if ($raw === '') {
+            return '';
+        }
+
+        $allowed_tags = wp_kses_allowed_html('post');
+        $table_tags = array('table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'colgroup', 'col', 'caption');
+        foreach ($table_tags as $tag) {
+            if (!isset($allowed_tags[$tag]) || !is_array($allowed_tags[$tag])) {
+                $allowed_tags[$tag] = array();
+            }
+            $allowed_tags[$tag] = array_merge($allowed_tags[$tag], array(
+                'class' => true,
+                'id' => true,
+                'style' => true,
+                'align' => true,
+                'valign' => true,
+                'width' => true,
+                'height' => true,
+            ));
+        }
+
+        if (!isset($allowed_tags['td'])) {
+            $allowed_tags['td'] = array();
+        }
+        $allowed_tags['td']['colspan'] = true;
+        $allowed_tags['td']['rowspan'] = true;
+
+        if (!isset($allowed_tags['th'])) {
+            $allowed_tags['th'] = array();
+        }
+        $allowed_tags['th']['colspan'] = true;
+        $allowed_tags['th']['rowspan'] = true;
+        $allowed_tags['th']['scope'] = true;
+
+        if (!isset($allowed_tags['img'])) {
+            $allowed_tags['img'] = array();
+        }
+        $allowed_tags['img'] = array_merge($allowed_tags['img'], array(
+            'class' => true,
+            'id' => true,
+            'style' => true,
+            'src' => true,
+            'srcset' => true,
+            'sizes' => true,
+            'alt' => true,
+            'title' => true,
+            'width' => true,
+            'height' => true,
+            'loading' => true,
+            'data-src' => true,
+            'data-lazy-src' => true,
+            'data-original' => true,
+        ));
+
+        $extra_safe_css = array(
+            'float', 'clear', 'display',
+            'width', 'height', 'min-width', 'min-height', 'max-width', 'max-height',
+            'margin', 'margin-left', 'margin-right', 'margin-top', 'margin-bottom',
+            'padding', 'padding-left', 'padding-right', 'padding-top', 'padding-bottom',
+            'border', 'border-width', 'border-style', 'border-color',
+            'border-collapse', 'border-spacing', 'table-layout', 'vertical-align',
+            'text-align', 'font-size', 'font-weight', 'line-height',
+            'background', 'background-color', 'color'
+        );
+
+        $safe_css_filter = static function ($styles) use ($extra_safe_css) {
+            if (!is_array($styles)) {
+                $styles = array();
+            }
+            return array_values(array_unique(array_merge($styles, $extra_safe_css)));
+        };
+
+        add_filter('safe_style_css', $safe_css_filter, 999);
+        $sanitized = wp_kses($raw, $allowed_tags);
+        remove_filter('safe_style_css', $safe_css_filter, 999);
+
+        return is_string($sanitized) ? $sanitized : '';
+    }
+
     private function serializeEventSummary($event) {
         if (!$event) {
             return array();
@@ -5127,6 +5217,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'articleId' => isset($event->article_id) ? (int) $event->article_id : 0,
             'coverId' => isset($event->cover_id) ? (int) $event->cover_id : 0,
             'coverUrl' => $this->getEventCoverUrl($event, 'medium'),
+            'coverFullUrl' => $this->getEventCoverUrl($event, 'full'),
             'capacityTotal' => isset($event->capacity_total) ? (int) $event->capacity_total : 0,
             'capacityWaitlist' => isset($event->capacity_waitlist) ? (int) $event->capacity_waitlist : 0,
             'prix' => isset($event->prix) ? (float) $event->prix : 0.0,
@@ -5464,6 +5555,1627 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         wp_send_json_success(array(
             'message' => __('Séances mises à jour.', 'mj-member'),
         ));
+    }
+
+    /**
+     * Send the registration contract by email to the selected recipient.
+     */
+    public function sendRegistrationContract() {
+        $auth = $this->verifyRequest();
+        if (!$auth) return;
+
+        $registration_id = isset($_POST['registrationId']) ? (int) $_POST['registrationId'] : 0;
+        $recipient_type = isset($_POST['recipientType']) ? sanitize_key((string) $_POST['recipientType']) : '';
+
+        if (!in_array($recipient_type, array('young', 'guardian'), true)) {
+            wp_send_json_error(array('message' => __('Destinataire invalide.', 'mj-member')), 400);
+            return;
+        }
+
+        if ($registration_id <= 0) {
+            wp_send_json_error(array('message' => __('ID inscription invalide.', 'mj-member')), 400);
+            return;
+        }
+
+        global $wpdb;
+        $registrations_table = function_exists('mj_member_get_event_registrations_table_name')
+            ? mj_member_get_event_registrations_table_name()
+            : '';
+        if ($registrations_table === '') {
+            wp_send_json_error(array('message' => __('Table des inscriptions introuvable.', 'mj-member')), 500);
+            return;
+        }
+
+        $registration = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$registrations_table} WHERE id = %d", $registration_id));
+        if (!$registration) {
+            wp_send_json_error(array('message' => __('Inscription introuvable.', 'mj-member')), 404);
+            return;
+        }
+
+        $event = MjEvents::find((int) $registration->event_id);
+        if (!$event) {
+            wp_send_json_error(array('message' => __('Événement introuvable.', 'mj-member')), 404);
+            return;
+        }
+
+        $registration_document = isset($event->registration_document) ? (string) $event->registration_document : '';
+        if ($registration_document === '') {
+            wp_send_json_error(array('message' => __('Aucun contrat n\'est configuré pour cet événement.', 'mj-member')), 400);
+            return;
+        }
+
+        $member = MjMembers::getById((int) $registration->member_id);
+        if (!$member) {
+            wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')), 404);
+            return;
+        }
+
+        $guardian_id = !empty($member->guardian_id) ? (int) $member->guardian_id : (int) ($registration->guardian_id ?? 0);
+        $guardian = $guardian_id > 0 ? MjMembers::getById($guardian_id) : null;
+
+        $recipient_email = '';
+        $recipient_name = '';
+        if ($recipient_type === 'young') {
+            $recipient_email = isset($member->email) ? sanitize_email((string) $member->email) : '';
+            $recipient_name = trim(((string) ($member->first_name ?? '')) . ' ' . ((string) ($member->last_name ?? '')));
+        } else {
+            $recipient_email = $guardian ? sanitize_email((string) ($guardian->email ?? '')) : '';
+            $recipient_name = $guardian
+                ? trim(((string) ($guardian->first_name ?? '')) . ' ' . ((string) ($guardian->last_name ?? '')))
+                : '';
+        }
+
+        if ($recipient_email === '' || !is_email($recipient_email)) {
+            wp_send_json_error(array('message' => __('Adresse email du destinataire introuvable ou invalide.', 'mj-member')), 400);
+            return;
+        }
+
+        $variables = $this->buildRegistrationDocumentVariables($event, $member, $guardian);
+        $processed_header = $this->interpolateRegistrationDocumentTemplate((string) get_option('mj_regdoc_header', ''), $variables);
+        $processed_content = $this->interpolateRegistrationDocumentTemplate($registration_document, $variables);
+        $processed_footer = $this->interpolateRegistrationDocumentTemplate((string) get_option('mj_regdoc_footer', ''), $variables);
+
+        $event_title = isset($event->title) ? (string) $event->title : __('Événement', 'mj-member');
+        $member_name_for_contract = trim(((string) ($member->first_name ?? '')) . ' ' . ((string) ($member->last_name ?? '')));
+
+        $pdf_result = $this->buildRegistrationContractPdf(
+            $processed_header,
+            $processed_content,
+            $processed_footer,
+            $event_title,
+            $member_name_for_contract
+        );
+
+        if (is_wp_error($pdf_result)) {
+            wp_send_json_error(array('message' => $pdf_result->get_error_message()), 500);
+            return;
+        }
+
+        $tmp_file = wp_tempnam('mj-reg-contract-' . $registration_id);
+        if (!is_string($tmp_file) || $tmp_file === '') {
+            wp_send_json_error(array('message' => __('Impossible de préparer le fichier PDF.', 'mj-member')), 500);
+            return;
+        }
+
+        $tmp_dir = dirname($tmp_file);
+        if (file_exists($tmp_file)) {
+            @unlink($tmp_file);
+        }
+        $attachment_name = isset($pdf_result['filename']) ? (string) $pdf_result['filename'] : '';
+        if ($attachment_name === '') {
+            $attachment_name = 'contrat-inscription-' . date_i18n('Ymd') . '.pdf';
+        }
+        $attachment_name = wp_unique_filename($tmp_dir, $attachment_name);
+        $tmp_file = trailingslashit($tmp_dir) . $attachment_name;
+
+        if (file_put_contents($tmp_file, (string) $pdf_result['content']) === false) {
+            if (file_exists($tmp_file)) {
+                @unlink($tmp_file);
+            }
+            wp_send_json_error(array('message' => __('Impossible de générer le fichier PDF.', 'mj-member')), 500);
+            return;
+        }
+
+        $recipient_label = $recipient_type === 'young'
+            ? __('au jeune', 'mj-member')
+            : __('au tuteur', 'mj-member');
+
+        $subject = sprintf(__('Contrat d\'inscription - %s', 'mj-member'), $event_title);
+        $message = sprintf(
+            '<p>%s</p><p>%s</p><p>%s</p>',
+            esc_html(sprintf(__('Bonjour %s,', 'mj-member'), $recipient_name !== '' ? $recipient_name : __('à vous', 'mj-member'))),
+            esc_html(sprintf(__('Vous trouverez en pièce jointe le contrat d\'inscription pour %s.', 'mj-member'), $event_title)),
+            esc_html__('Cordialement,', 'mj-member')
+        );
+
+        $sender_email = 'site@mj-pery.be';
+        $site_name = wp_specialchars_decode((string) get_bloginfo('name'), ENT_QUOTES);
+        if ($site_name === '') {
+            $site_name = 'MJ Pery';
+        }
+
+        $headers = array(
+            'Content-Type: text/html; charset=UTF-8',
+            'From: ' . $site_name . ' <' . $sender_email . '>',
+            'Reply-To: ' . $sender_email,
+        );
+        $mail_sent = wp_mail($recipient_email, $subject, $message, $headers, array($tmp_file));
+
+        if (file_exists($tmp_file)) {
+            @unlink($tmp_file);
+        }
+
+        if (!$mail_sent) {
+            wp_send_json_error(array('message' => __('Impossible d\'envoyer l\'email.', 'mj-member')), 500);
+            return;
+        }
+
+        $payload = $this->decodeRegistrationPayloadForStorage(isset($registration->attendance_payload) ? $registration->attendance_payload : null);
+        if (!isset($payload['meta']) || !is_array($payload['meta'])) {
+            $payload['meta'] = array();
+        }
+        if (!isset($payload['meta']['contract_emails']) || !is_array($payload['meta']['contract_emails'])) {
+            $payload['meta']['contract_emails'] = array();
+        }
+
+        $now = current_time('mysql');
+        $payload['meta']['contract_emails'][$recipient_type . '_sent_at'] = $now;
+        $payload['meta']['contract_emails'][$recipient_type . '_sent_by'] = get_current_user_id();
+
+        $encoded_payload = wp_json_encode($payload);
+        if ($encoded_payload === false || $encoded_payload === null) {
+            wp_send_json_error(array('message' => __('Impossible de sauvegarder l\'état d\'envoi du contrat.', 'mj-member')), 500);
+            return;
+        }
+
+        $updated = $wpdb->update(
+            $registrations_table,
+            array(
+                'attendance_payload' => $encoded_payload,
+                'attendance_updated_at' => $now,
+            ),
+            array('id' => $registration_id),
+            array('%s', '%s'),
+            array('%d')
+        );
+
+        if ($updated === false) {
+            wp_send_json_error(array('message' => __('Email envoyé, mais impossible de sauvegarder son statut.', 'mj-member')), 500);
+            return;
+        }
+
+        wp_send_json_success(array(
+            'message' => sprintf(__('Contrat envoyé %s.', 'mj-member'), $recipient_label),
+            'registrationId' => $registration_id,
+            'recipientType' => $recipient_type,
+            'contractEmailStatus' => $this->extractContractEmailStatus($encoded_payload),
+        ));
+    }
+
+    /**
+     * Generate a registration contract PDF and return it for direct download.
+     */
+    public function downloadRegistrationContractPdf() {
+        try {
+            $auth = $this->verifyRequest();
+            if (!$auth) return;
+
+            $registration_id = isset($_POST['registrationId']) ? (int) $_POST['registrationId'] : 0;
+            if ($registration_id <= 0) {
+                wp_send_json_error(array('message' => __('ID inscription invalide.', 'mj-member')), 400);
+                return;
+            }
+
+            global $wpdb;
+            $registrations_table = function_exists('mj_member_get_event_registrations_table_name')
+                ? mj_member_get_event_registrations_table_name()
+                : '';
+            if ($registrations_table === '') {
+                wp_send_json_error(array('message' => __('Table des inscriptions introuvable.', 'mj-member')), 500);
+                return;
+            }
+
+            $registration = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$registrations_table} WHERE id = %d", $registration_id));
+            if (!$registration) {
+                wp_send_json_error(array('message' => __('Inscription introuvable.', 'mj-member')), 404);
+                return;
+            }
+
+            $event = MjEvents::find((int) $registration->event_id);
+            if (!$event) {
+                wp_send_json_error(array('message' => __('Événement introuvable.', 'mj-member')), 404);
+                return;
+            }
+
+            $registration_document = isset($event->registration_document) ? (string) $event->registration_document : '';
+            if ($registration_document === '') {
+                wp_send_json_error(array('message' => __('Aucun contrat n\'est configuré pour cet événement.', 'mj-member')), 400);
+                return;
+            }
+
+            $member = MjMembers::getById((int) $registration->member_id);
+            if (!$member) {
+                wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')), 404);
+                return;
+            }
+
+            $guardian_id = !empty($member->guardian_id) ? (int) $member->guardian_id : (int) ($registration->guardian_id ?? 0);
+            $guardian = $guardian_id > 0 ? MjMembers::getById($guardian_id) : null;
+
+            $variables = $this->buildRegistrationDocumentVariables($event, $member, $guardian);
+            $processed_header = $this->interpolateRegistrationDocumentTemplate((string) get_option('mj_regdoc_header', ''), $variables);
+            $processed_content = $this->interpolateRegistrationDocumentTemplate($registration_document, $variables);
+            $processed_footer = $this->interpolateRegistrationDocumentTemplate((string) get_option('mj_regdoc_footer', ''), $variables);
+
+            $event_title = isset($event->title) ? (string) $event->title : __('Événement', 'mj-member');
+            $member_name_for_contract = trim(((string) ($member->first_name ?? '')) . ' ' . ((string) ($member->last_name ?? '')));
+
+            $pdf_result = $this->buildRegistrationContractPdf(
+                $processed_header,
+                $processed_content,
+                $processed_footer,
+                $event_title,
+                $member_name_for_contract
+            );
+
+            if (is_wp_error($pdf_result)) {
+                error_log('[MjRegMgr] PDF download generation failed for registration #' . $registration_id . ': ' . $pdf_result->get_error_message());
+                wp_send_json_error(array('message' => $pdf_result->get_error_message()), 500);
+                return;
+            }
+
+            $filename = isset($pdf_result['filename']) ? (string) $pdf_result['filename'] : '';
+            if ($filename === '') {
+                $filename = 'contrat-inscription-' . date_i18n('Ymd') . '.pdf';
+            }
+
+            $content = isset($pdf_result['content']) ? (string) $pdf_result['content'] : '';
+            if ($content === '') {
+                wp_send_json_error(array('message' => __('Impossible de générer le PDF.', 'mj-member')), 500);
+                return;
+            }
+
+            $renderer = isset($pdf_result['renderer']) ? (string) $pdf_result['renderer'] : 'unknown';
+            error_log('[MjRegMgr] PDF download renderer for registration #' . $registration_id . ': ' . $renderer);
+
+            $upload_dir = wp_upload_dir();
+            if (!is_array($upload_dir) || !empty($upload_dir['error'])) {
+                wp_send_json_error(array('message' => __('Impossible de préparer le dossier de téléchargement.', 'mj-member')), 500);
+                return;
+            }
+
+            $subdir = '/mj-member/reg-contracts';
+            $target_dir = trailingslashit($upload_dir['basedir']) . ltrim($subdir, '/');
+            if (!wp_mkdir_p($target_dir)) {
+                wp_send_json_error(array('message' => __('Impossible de créer le dossier de téléchargement.', 'mj-member')), 500);
+                return;
+            }
+
+            $stored_name = wp_unique_filename($target_dir, $filename);
+            $stored_path = trailingslashit($target_dir) . $stored_name;
+            $write_result = file_put_contents($stored_path, $content);
+            if ($write_result === false) {
+                wp_send_json_error(array('message' => __('Impossible d\'écrire le fichier PDF.', 'mj-member')), 500);
+                return;
+            }
+
+            $download_url = trailingslashit($upload_dir['baseurl']) . ltrim($subdir, '/') . '/' . rawurlencode($stored_name);
+
+            wp_send_json_success(array(
+                'message' => __('PDF généré.', 'mj-member'),
+                'registrationId' => $registration_id,
+                'filename' => $stored_name,
+                'downloadUrl' => $download_url,
+                'renderer' => $renderer,
+            ));
+        } catch (\Throwable $e) {
+            error_log('[MjRegMgr] downloadRegistrationContractPdf fatal: ' . $e->getMessage());
+            wp_send_json_error(array('message' => __('Erreur interne lors de la génération du PDF.', 'mj-member')), 500);
+        }
+    }
+
+    /**
+     * Extract contract email status flags from attendance payload.
+     */
+    private function extractContractEmailStatus($payload_raw): array {
+        $payload = $this->decodeRegistrationPayloadForStorage($payload_raw);
+        $meta = isset($payload['meta']) && is_array($payload['meta']) ? $payload['meta'] : array();
+
+        $contracts = array();
+        if (isset($meta['contract_emails']) && is_array($meta['contract_emails'])) {
+            $contracts = $meta['contract_emails'];
+        } elseif (isset($payload['contract_emails']) && is_array($payload['contract_emails'])) {
+            $contracts = $payload['contract_emails'];
+        }
+
+        $young_sent_at = isset($contracts['young_sent_at']) ? (string) $contracts['young_sent_at'] : '';
+        $guardian_sent_at = isset($contracts['guardian_sent_at']) ? (string) $contracts['guardian_sent_at'] : '';
+
+        return array(
+            'youngSent' => $young_sent_at !== '',
+            'youngSentAt' => $young_sent_at,
+            'guardianSent' => $guardian_sent_at !== '',
+            'guardianSentAt' => $guardian_sent_at,
+        );
+    }
+
+    /**
+     * Decode registration payload while preserving custom meta keys.
+     */
+    private function decodeRegistrationPayloadForStorage($payload_raw): array {
+        if (!is_string($payload_raw) || $payload_raw === '') {
+            return array(
+                'occurrences' => array(),
+                'assignments' => array('mode' => 'all', 'occurrences' => array()),
+                'meta' => array(),
+            );
+        }
+
+        $decoded = json_decode($payload_raw, true);
+        if (!is_array($decoded)) {
+            return array(
+                'occurrences' => array(),
+                'assignments' => array('mode' => 'all', 'occurrences' => array()),
+                'meta' => array(),
+            );
+        }
+
+        $payload = array(
+            'occurrences' => array(),
+            'assignments' => array('mode' => 'all', 'occurrences' => array()),
+            'meta' => array(),
+        );
+
+        if (isset($decoded['occurrences']) && is_array($decoded['occurrences'])) {
+            $payload['occurrences'] = $decoded['occurrences'];
+        } elseif (!isset($decoded['assignments']) && !isset($decoded['meta'])) {
+            // Legacy payload format where occurrences were stored at root level.
+            $payload['occurrences'] = $decoded;
+        }
+
+        if (isset($decoded['assignments']) && is_array($decoded['assignments'])) {
+            $mode = isset($decoded['assignments']['mode']) && $decoded['assignments']['mode'] === 'custom' ? 'custom' : 'all';
+            $occurrences = array();
+            if ($mode === 'custom' && isset($decoded['assignments']['occurrences']) && is_array($decoded['assignments']['occurrences'])) {
+                foreach ($decoded['assignments']['occurrences'] as $occurrence) {
+                    $normalized = MjEventAttendance::normalize_occurrence($occurrence);
+                    if ($normalized !== '') {
+                        $occurrences[$normalized] = true;
+                    }
+                }
+            }
+            $payload['assignments'] = array(
+                'mode' => $mode,
+                'occurrences' => array_values(array_keys($occurrences)),
+            );
+        }
+
+        if (isset($decoded['meta']) && is_array($decoded['meta'])) {
+            $payload['meta'] = $decoded['meta'];
+        }
+
+        return $payload;
+    }
+
+    /**
+     * Replace [variable_name] tokens in registration templates.
+     */
+    private function interpolateRegistrationDocumentTemplate(string $text, array $variables): string {
+        if ($text === '') {
+            return '';
+        }
+
+        $replaced = $text;
+        foreach ($variables as $key => $value) {
+            $replaced = str_ireplace('[' . $key . ']', (string) $value, $replaced);
+        }
+
+        return $replaced;
+    }
+
+    /**
+     * Build template variables for a registration document.
+     */
+    private function buildRegistrationDocumentVariables($event, $member, $guardian): array {
+        $event_name = isset($event->title) ? (string) $event->title : '';
+        $event_type = isset($event->event_type) ? (string) $event->event_type : '';
+        $event_status = isset($event->statut) ? (string) $event->statut : '';
+        $event_price = isset($event->prix) ? (string) $event->prix : '0';
+
+        $event_url = '';
+        if (!empty($event->article_id)) {
+            $permalink = get_permalink((int) $event->article_id);
+            if (is_string($permalink) && $permalink !== '') {
+                $event_url = $permalink;
+            }
+        }
+        $event_page_url = apply_filters('mj_member_event_permalink', '', $event);
+        if (is_string($event_page_url) && $event_page_url !== '') {
+            $event_url = $event_page_url;
+        }
+
+        $event_location = '';
+        $event_location_address = '';
+        if (!empty($event->location_name)) {
+            $event_location = (string) $event->location_name;
+        } elseif (!empty($event->location_id)) {
+            $location = MjEventLocations::find((int) $event->location_id);
+            if ($location) {
+                $event_location = isset($location->name) ? (string) $location->name : '';
+                $event_location_address = isset($location->address) ? (string) $location->address : '';
+            }
+        }
+
+        $member_first_name = isset($member->first_name) ? (string) $member->first_name : '';
+        $member_last_name = isset($member->last_name) ? (string) $member->last_name : '';
+        $member_name = trim($member_first_name . ' ' . $member_last_name);
+        $member_address_line = isset($member->address) ? (string) $member->address : '';
+        $member_postal_code = isset($member->postal_code) ? (string) $member->postal_code : '';
+        $member_city = isset($member->city) ? (string) $member->city : '';
+        $member_address = trim($member_address_line . ($member_postal_code !== '' || $member_city !== '' ? ', ' : '') . trim($member_postal_code . ' ' . $member_city));
+
+        $guardian_first_name = $guardian ? (string) ($guardian->first_name ?? '') : '';
+        $guardian_last_name = $guardian ? (string) ($guardian->last_name ?? '') : '';
+        $guardian_name = trim($guardian_first_name . ' ' . $guardian_last_name);
+        $guardian_address_line = $guardian ? (string) ($guardian->address ?? '') : '';
+        $guardian_postal_code = $guardian ? (string) ($guardian->postal_code ?? '') : '';
+        $guardian_city = $guardian ? (string) ($guardian->city ?? '') : '';
+        $guardian_address = trim($guardian_address_line . ($guardian_postal_code !== '' || $guardian_city !== '' ? ', ' : '') . trim($guardian_postal_code . ' ' . $guardian_city));
+
+        if ($guardian_name === '') {
+            $guardian_first_name = $member_first_name;
+            $guardian_last_name = $member_last_name;
+            $guardian_name = $member_name;
+            $guardian_address_line = $member_address_line;
+            $guardian_postal_code = $member_postal_code;
+            $guardian_city = $member_city;
+            $guardian_address = $member_address;
+        }
+
+        return array(
+            'event_name' => $event_name,
+            'event_type' => $event_type,
+            'event_status' => $event_status,
+            'event_date_start' => $this->formatDate(isset($event->date_debut) ? (string) $event->date_debut : '', true),
+            'event_date_end' => $this->formatDate(isset($event->date_fin) ? (string) $event->date_fin : '', true),
+            'event_date_deadline' => $this->formatDate(isset($event->date_fin_inscription) ? (string) $event->date_fin_inscription : '', true),
+            'event_price' => $event_price . ' €',
+            'event_url' => $event_url,
+            'event_location' => $event_location,
+            'event_location_address' => $event_location_address,
+            'event_age_min' => isset($event->age_min) ? (string) $event->age_min : '',
+            'event_age_max' => isset($event->age_max) ? (string) $event->age_max : '',
+            'event_capacity' => isset($event->capacity) ? (string) $event->capacity : '',
+            'member_name' => $member_name,
+            'member_first_name' => $member_first_name,
+            'member_last_name' => $member_last_name,
+            'member_email' => isset($member->email) ? (string) $member->email : '',
+            'member_phone' => isset($member->phone) ? (string) $member->phone : '',
+            'member_birth_date' => $this->formatDate(isset($member->birth_date) ? (string) $member->birth_date : '', false),
+            'member_address' => $member_address,
+            'member_address_line' => $member_address_line,
+            'member_postal_code' => $member_postal_code,
+            'member_city' => $member_city,
+            'guardian_name' => $guardian_name,
+            'guardian_first_name' => $guardian_first_name,
+            'guardian_last_name' => $guardian_last_name,
+            'guardian_email' => $guardian ? (string) ($guardian->email ?? '') : (string) ($member->email ?? ''),
+            'guardian_phone' => $guardian ? (string) ($guardian->phone ?? '') : (string) ($member->phone ?? ''),
+            'guardian_address' => $guardian_address,
+            'guardian_address_line' => $guardian_address_line,
+            'guardian_postal_code' => $guardian_postal_code,
+            'guardian_city' => $guardian_city,
+            'site_name' => (string) get_bloginfo('name'),
+            'site_url' => (string) home_url('/'),
+            'current_date' => date_i18n('d/m/Y'),
+            'current_year' => date_i18n('Y'),
+        );
+    }
+
+    /**
+     * Build a PDF file content from registration contract HTML fragments.
+     *
+     * @return array<string,string>|\WP_Error
+     */
+    private function buildRegistrationContractPdf(string $header_html, string $content_html, string $footer_html, string $event_title, string $member_name) {
+        $render_errors = array();
+
+        $dompdf_result = $this->buildRegistrationContractPdfWithDompdf($header_html, $content_html, $footer_html, $event_title, $member_name);
+        if (is_array($dompdf_result)) {
+            $dompdf_result['renderer'] = 'dompdf';
+            return $dompdf_result;
+        }
+        if (is_wp_error($dompdf_result)) {
+            error_log('[MjRegMgr] Dompdf render failed: ' . $dompdf_result->get_error_message());
+            $render_errors[] = 'Dompdf: ' . $dompdf_result->get_error_message();
+        }
+
+        $allow_mpdf_fallback = (bool) apply_filters('mj_member_regdoc_allow_mpdf_fallback', true);
+        if ($allow_mpdf_fallback) {
+            $mpdf_result = $this->buildRegistrationContractPdfWithMpdf($header_html, $content_html, $footer_html, $event_title, $member_name);
+            if (is_array($mpdf_result)) {
+                $mpdf_result['renderer'] = 'mpdf';
+                return $mpdf_result;
+            }
+            if (is_wp_error($mpdf_result)) {
+                error_log('[MjRegMgr] mPDF render failed: ' . $mpdf_result->get_error_message());
+                $render_errors[] = 'mPDF: ' . $mpdf_result->get_error_message();
+            }
+        }
+
+        // FPDF fallback flattens rich HTML. Keep it disabled by default.
+        $allow_fpdf_fallback = (bool) apply_filters('mj_member_regdoc_allow_fpdf_fallback', false);
+        if (!$allow_fpdf_fallback) {
+            $suffix = !empty($render_errors) ? ' ' . implode(' | ', $render_errors) : '';
+            return new \WP_Error(
+                'mj_regmgr_contract_pdf_html_renderer_unavailable',
+                __('Impossible de rendre le HTML du contrat (Dompdf indisponible). Vérifiez le déploiement de vendor/autoload.php (composer install dans le plugin).', 'mj-member') . $suffix
+            );
+        }
+
+        error_log('[MjRegMgr] Falling back to FPDF for contract PDF rendering.');
+
+        if (!defined('FPDF_FONTPATH')) {
+            define('FPDF_FONTPATH', Config::path() . 'includes/vendor/font/');
+        }
+
+        if (!class_exists('FPDF')) {
+            require_once Config::path() . 'includes/vendor/fpdf.php';
+        }
+
+        if (!class_exists('FPDF')) {
+            return new \WP_Error('mj_regmgr_contract_pdf_lib_missing', __('La bibliothèque PDF est introuvable.', 'mj-member'));
+        }
+
+        $pdf = new \FPDF('P', 'mm', 'A4');
+        $pdf->SetAutoPageBreak(true, 15);
+        $pdf->AddPage();
+        $pdf->SetFont('Arial', '', 11);
+
+        $pdf->SetFont('Arial', '', 10);
+        $header_rendered = $this->renderPdfHtmlSection($pdf, $header_html, 5.0);
+        if ($header_rendered) {
+            $pdf->Ln(2);
+            $y = $pdf->GetY();
+            $pdf->Line(10, $y, 200, $y);
+            $pdf->Ln(4);
+        }
+
+        $title = trim($event_title . ($member_name !== '' ? ' - ' . $member_name : ''));
+        if ($title !== '') {
+            $pdf->SetFont('Arial', 'B', 14);
+            $pdf->MultiCell(0, 8, $this->toPdfText($title));
+            $pdf->Ln(2);
+            $pdf->SetFont('Arial', '', 11);
+        }
+
+        $content_rendered = $this->renderPdfHtmlSection($pdf, $content_html, 6.0);
+        if (!$content_rendered) {
+            return new \WP_Error('mj_regmgr_contract_pdf_empty', __('Le contrat est vide.', 'mj-member'));
+        }
+
+        if (trim($footer_html) !== '') {
+            $pdf->Ln(4);
+            $y = $pdf->GetY();
+            $pdf->Line(10, $y, 200, $y);
+            $pdf->Ln(3);
+            $pdf->SetFont('Arial', '', 9);
+            $this->renderPdfHtmlSection($pdf, $footer_html, 4.5);
+        }
+        $pdf->SetFont('Arial', '', 11);
+
+        $content = $pdf->Output('S');
+        if (!is_string($content) || $content === '') {
+            return new \WP_Error('mj_regmgr_contract_pdf_failed', __('Impossible de générer le PDF du contrat.', 'mj-member'));
+        }
+
+        $event_part = $this->buildContractFilenamePart($event_title !== '' ? $event_title : 'evenement', 36);
+        $member_part = $this->buildContractFilenamePart($member_name !== '' ? $member_name : 'membre', 26);
+        $date_part = date_i18n('Ymd');
+
+        $filename_base = trim($event_part . '-' . $member_part . '-' . $date_part, '-');
+        if ($filename_base === '') {
+            $filename_base = 'contrat-inscription-' . $date_part;
+        }
+
+        return array(
+            'filename' => $filename_base . '.pdf',
+            'content' => $content,
+            'renderer' => 'fpdf',
+        );
+    }
+
+    /**
+     * Build contract PDF using mPDF when available for robust HTML/CSS rendering.
+     *
+     * @return array{filename:string,content:string}|\WP_Error|null
+     */
+    private function buildRegistrationContractPdfWithMpdf(string $header_html, string $content_html, string $footer_html, string $event_title, string $member_name) {
+        if (!$this->ensureMpdfLoaded()) {
+            return null;
+        }
+
+        if (!class_exists('Mpdf\\Mpdf')) {
+            return new \WP_Error('mj_regmgr_contract_pdf_mpdf_missing', __('La bibliothèque mPDF est introuvable.', 'mj-member'));
+        }
+
+        $header_html = $this->normalizeHtmlFragmentForPdf($header_html);
+        $body_html = $this->normalizeHtmlFragmentForPdf($content_html);
+        $footer_html = $this->normalizeHtmlFragmentForPdf($footer_html);
+
+        if ($body_html === '') {
+            return null;
+        }
+
+        $title = trim($event_title . ($member_name !== '' ? ' - ' . $member_name : ''));
+        $base_href = esc_url(home_url('/'));
+
+        $composed_html = '<!doctype html><html><head><meta charset="utf-8">'
+            . '<base href="' . $base_href . '">'
+            . '<style>'
+            . '@page{size:A4;margin:14mm 12mm 14mm 12mm;}'
+            . 'body{font-family:dejavusans,Arial,sans-serif;font-size:12px;line-height:1.45;color:#111;margin:0;padding:0;}'
+            . '.mj-regdoc{margin:0;padding:0;}'
+            . '.mj-regdoc-header{font-size:11px;color:#333;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #ddd;}'
+            . '.mj-regdoc-title{font-size:18px;font-weight:700;margin:0 0 12px 0;}'
+            . '.mj-regdoc-content{font-size:12px;}'
+            . '.mj-regdoc-footer{font-size:10px;color:#444;margin-top:14px;padding-top:8px;border-top:1px solid #ddd;}'
+            . '.mj-regdoc img{max-width:100%;height:auto;}'
+            . '.mj-regdoc table{width:100%;border-collapse:collapse;margin:8px 0;}'
+            . '.mj-regdoc th,.mj-regdoc td{border:1px solid #d1d5db;padding:6px;vertical-align:top;text-align:left;}'
+            . '.mj-regdoc th{background:#f3f4f6;font-weight:700;}'
+            . '.mj-regdoc .regdoc-page{page-break-before:auto !important;page-break-after:auto !important;break-before:auto !important;break-after:auto !important;}'
+            . '</style></head><body><div class="mj-regdoc">'
+            . '<div class="mj-regdoc-header">' . $header_html . '</div>'
+            . ($title !== '' ? '<h1 class="mj-regdoc-title">' . esc_html($title) . '</h1>' : '')
+            . '<div class="mj-regdoc-content">' . $body_html . '</div>'
+            . '<div class="mj-regdoc-footer">' . $footer_html . '</div>'
+            . '</div></body></html>';
+
+        try {
+            $temp_dir = wp_normalize_path(get_temp_dir());
+            if (!is_string($temp_dir) || $temp_dir === '') {
+                $temp_dir = wp_normalize_path(sys_get_temp_dir());
+            }
+
+            $mpdf = new \Mpdf\Mpdf(array(
+                'mode' => 'utf-8',
+                'format' => 'A4',
+                'tempDir' => $temp_dir,
+            ));
+            $mpdf->showImageErrors = false;
+            $mpdf->WriteHTML($composed_html);
+            $content = $mpdf->Output('', 'S');
+        } catch (\Throwable $e) {
+            return new \WP_Error('mj_regmgr_contract_pdf_mpdf_failed', __('Le rendu HTML en PDF a échoué (mPDF).', 'mj-member') . ' ' . $e->getMessage());
+        }
+
+        if (!is_string($content) || $content === '') {
+            return new \WP_Error('mj_regmgr_contract_pdf_mpdf_empty', __('Le rendu mPDF a retourné un PDF vide.', 'mj-member'));
+        }
+
+        $event_part = $this->buildContractFilenamePart($event_title !== '' ? $event_title : 'evenement', 36);
+        $member_part = $this->buildContractFilenamePart($member_name !== '' ? $member_name : 'membre', 26);
+        $date_part = date_i18n('Ymd');
+
+        $filename_base = trim($event_part . '-' . $member_part . '-' . $date_part, '-');
+        if ($filename_base === '') {
+            $filename_base = 'contrat-inscription-' . $date_part;
+        }
+
+        return array(
+            'filename' => $filename_base . '.pdf',
+            'content' => $content,
+        );
+    }
+
+    /**
+     * Build contract PDF using Dompdf when available for robust HTML/CSS rendering.
+     *
+     * @return array{filename:string,content:string}|\WP_Error|null
+     */
+    private function buildRegistrationContractPdfWithDompdf(string $header_html, string $content_html, string $footer_html, string $event_title, string $member_name) {
+        if (!$this->ensureDompdfLoaded()) {
+            return null;
+        }
+
+        if (!class_exists('Dompdf\\Dompdf') || !class_exists('Dompdf\\Options')) {
+            return new \WP_Error('mj_regmgr_contract_pdf_dompdf_missing', __('La bibliothèque Dompdf est introuvable.', 'mj-member'));
+        }
+
+        if (!class_exists('Masterminds\\HTML5')) {
+            return new \WP_Error(
+                'mj_regmgr_contract_pdf_dompdf_html5_missing',
+                __('Dompdf est installé mais la dépendance Masterminds\\HTML5 est manquante.', 'mj-member')
+            );
+        }
+
+        $header_html = $this->normalizeHtmlFragmentForPdf($header_html);
+        $body_html = $this->normalizeHtmlFragmentForPdf($content_html);
+        $footer_html = $this->normalizeHtmlFragmentForPdf($footer_html);
+
+        if ($body_html === '') {
+            return null;
+        }
+
+        $title = trim($event_title . ($member_name !== '' ? ' - ' . $member_name : ''));
+        $base_href = esc_url(home_url('/'));
+
+        $composed_html = '<!doctype html><html><head><meta charset="utf-8">'
+            . '<base href="' . $base_href . '">'
+            . '<style>'
+            . 'body{font-family:DejaVu Sans,Arial,sans-serif;font-size:12px;line-height:1.45;color:#111;margin:0;padding:0;}'
+            . '.mj-regdoc{padding:24px 28px;}'
+            . '.mj-regdoc-header{font-size:11px;color:#333;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #ddd;}'
+            . '.mj-regdoc-title{font-size:18px;font-weight:700;margin:0 0 12px 0;}'
+            . '.mj-regdoc-content{font-size:12px;}'
+            . '.mj-regdoc-footer{font-size:10px;color:#444;margin-top:14px;padding-top:8px;border-top:1px solid #ddd;}'
+            . '.mj-regdoc img{max-width:100%;height:auto;}'
+            . '.mj-regdoc table{width:100%;border-collapse:collapse;margin:8px 0;}'
+            . '.mj-regdoc th,.mj-regdoc td{border:1px solid #d1d5db;padding:6px;vertical-align:top;text-align:left;}'
+            . '.mj-regdoc th{background:#f3f4f6;font-weight:700;}'
+            . '</style></head><body><div class="mj-regdoc">'
+            . '<div class="mj-regdoc-header">' . $header_html . '</div>'
+            . ($title !== '' ? '<h1 class="mj-regdoc-title">' . esc_html($title) . '</h1>' : '')
+            . '<div class="mj-regdoc-content">' . $body_html . '</div>'
+            . '<div class="mj-regdoc-footer">' . $footer_html . '</div>'
+            . '</div></body></html>';
+
+        try {
+            $options = new \Dompdf\Options();
+            $options->set('isRemoteEnabled', true);
+            // Some production installs miss Masterminds\\HTML5 dependency.
+            // Disable HTML5 parser to use Dompdf internal parser instead.
+            $options->set('isHtml5ParserEnabled', false);
+            $options->set('isPhpEnabled', false);
+            $options->set('isFontSubsettingEnabled', true);
+            $options->set('defaultPaperSize', 'a4');
+            $options->set('defaultFont', 'DejaVu Sans');
+            $options->set('chroot', wp_normalize_path(ABSPATH));
+            $options->set('tempDir', wp_normalize_path(get_temp_dir()));
+
+            $dompdf = new \Dompdf\Dompdf($options);
+            $dompdf->loadHtml($composed_html, 'UTF-8');
+            $dompdf->setPaper('A4', 'portrait');
+            $dompdf->render();
+            $content = $dompdf->output();
+        } catch (\Throwable $e) {
+            error_log('[MJ Member] Dompdf render error: ' . $e->getMessage());
+            return new \WP_Error('mj_regmgr_contract_pdf_dompdf_failed', __('Le rendu HTML en PDF a échoué (Dompdf).', 'mj-member'));
+        }
+
+        if (!is_string($content) || $content === '') {
+            return new \WP_Error('mj_regmgr_contract_pdf_dompdf_empty', __('Le rendu Dompdf a retourné un PDF vide.', 'mj-member'));
+        }
+
+        $event_part = $this->buildContractFilenamePart($event_title !== '' ? $event_title : 'evenement', 36);
+        $member_part = $this->buildContractFilenamePart($member_name !== '' ? $member_name : 'membre', 26);
+        $date_part = date_i18n('Ymd');
+
+        $filename_base = trim($event_part . '-' . $member_part . '-' . $date_part, '-');
+        if ($filename_base === '') {
+            $filename_base = 'contrat-inscription-' . $date_part;
+        }
+
+        return array(
+            'filename' => $filename_base . '.pdf',
+            'content' => $content,
+        );
+    }
+
+    /**
+     * Normalize HTML fragment for Dompdf rendering.
+     */
+    private function normalizeHtmlFragmentForPdf(string $html): string {
+        $html = trim($html);
+        if ($html === '') {
+            return '';
+        }
+
+        // Some editors/store paths keep HTML entity-encoded tags (&lt;table&gt;...)
+        // which must be decoded before Dompdf can render them as real elements.
+        $decoded = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if ($decoded !== '') {
+            $has_real_tags = preg_match('/<\s*(table|tr|td|th|p|div|span|strong|img|h[1-6])\b/i', $html) === 1;
+            $has_encoded_tags = preg_match('/&lt;\s*(table|tr|td|th|p|div|span|strong|img|h[1-6])\b/i', $html) === 1;
+            if ($has_encoded_tags || !$has_real_tags) {
+                $html = $decoded;
+            }
+        }
+
+        // If a full HTML document is provided, keep only <body> content.
+        if (preg_match('/<body\b[^>]*>(.*?)<\/body>/is', $html, $match)) {
+            $html = isset($match[1]) ? (string) $match[1] : $html;
+        }
+
+        $html = $this->sanitizeHtmlForPredictablePdfLayout($html);
+
+        $html = $this->neutralizeAggressivePageBreaksForPdf($html);
+
+        $html = $this->normalizeImgSourcesForPdf($html);
+
+        return $html;
+    }
+
+    /**
+     * Remove risky constructs from rich HTML that can explode page count in PDF engines.
+     */
+    private function sanitizeHtmlForPredictablePdfLayout(string $html): string {
+        if (trim($html) === '') {
+            return '';
+        }
+
+        // Remove control characters that may be interpreted as hard page breaks by PDF engines (notably form-feed \f).
+        $html = (string) preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $html);
+        $html = str_replace(array("\u{2028}", "\u{2029}"), "\n", $html);
+
+        // mPDF custom explicit page breaks.
+        $html = (string) preg_replace('/<\s*pagebreak\b[^>]*>/i', '', $html);
+
+        // Remove mPDF-specific control tags that can create runaway pagination.
+        $html = (string) preg_replace('/<\/?\s*(?:htmlpageheader|sethtmlpageheader|htmlpagefooter|sethtmlpagefooter|tocpagebreak|columns|columnbreak|newcolumn)\b[^>]*>/i', '', $html);
+
+        // Remove embedded style/script blocks from user content; keep predictable base CSS in renderer.
+        $html = (string) preg_replace('/<style\b[^>]*>.*?<\/style>/is', '', $html);
+        $html = (string) preg_replace('/<script\b[^>]*>.*?<\/script>/is', '', $html);
+
+        // Remove huge height declarations that can generate thousands of blank pages.
+        $huge_height_pattern = '/(?:^|;)\s*(?:height|min-height)\s*:\s*([0-9]{4,})(?:\s*(?:px|pt|mm|cm|in|pc))?/i';
+        $html = (string) preg_replace_callback('/\bstyle\s*=\s*("|\')(.*?)\1/is', function (array $matches) use ($huge_height_pattern): string {
+            $quote = isset($matches[1]) ? (string) $matches[1] : '"';
+            $style = isset($matches[2]) ? (string) $matches[2] : '';
+
+            $clean = preg_replace($huge_height_pattern, '', $style);
+            $clean = is_string($clean) ? $clean : $style;
+            $clean = preg_replace('/;\s*;/', ';', $clean);
+            $clean = trim((string) $clean, " \t\n\r\0\x0B;");
+
+            if ($clean === '') {
+                return '';
+            }
+
+            return 'style=' . $quote . $clean . $quote;
+        }, $html);
+
+        // Keep semantic HTML but drop attributes that commonly destabilize PDF layout.
+        $allowed = array(
+            'h1' => array(),
+            'h2' => array(),
+            'h3' => array(),
+            'h4' => array(),
+            'h5' => array(),
+            'h6' => array(),
+            'p' => array(),
+            'br' => array(),
+            'strong' => array(),
+            'b' => array(),
+            'em' => array(),
+            'i' => array(),
+            'u' => array(),
+            'ul' => array(),
+            'ol' => array(),
+            'li' => array(),
+            'table' => array(),
+            'thead' => array(),
+            'tbody' => array(),
+            'tfoot' => array(),
+            'tr' => array(),
+            'th' => array('colspan' => true, 'rowspan' => true),
+            'td' => array('colspan' => true, 'rowspan' => true),
+            'a' => array('href' => true, 'target' => true),
+            'img' => array('src' => true, 'alt' => true, 'width' => true, 'height' => true),
+            'blockquote' => array(),
+            'hr' => array(),
+        );
+        $html = wp_kses($html, $allowed);
+
+        // Collapse empty blocks and repeated line breaks that can create thousands of blank PDF pages.
+        $html = (string) preg_replace('/<p>\s*(?:&nbsp;|\xC2\xA0|<br\s*\/?\s*>|\s)*<\/p>/iu', '', $html);
+        $html = (string) preg_replace('/(?:<br\s*\/?\s*>\s*){3,}/i', '<br><br>', $html);
+        $html = (string) preg_replace('/(?:<p>\s*<\/p>\s*){2,}/i', '', $html);
+
+        // Reduce oversized whitespace in text nodes.
+        $html = str_replace('&nbsp;', ' ', $html);
+        $html = (string) preg_replace('/[ \t\x{00A0}]{3,}/u', '  ', $html);
+        $html = (string) preg_replace('/(?:\r?\n\s*){4,}/', "\n\n\n", $html);
+
+        // Heuristic safety mode: if content still contains extreme amounts of line-break wrappers,
+        // simplify structure to avoid thousands of PDF pages with near-empty lines.
+        $br_count = preg_match_all('/<br\b/i', $html, $matches_br);
+        $p_count = preg_match_all('/<p\b/i', $html, $matches_p);
+        $h_count = preg_match_all('/<h[1-6]\b/i', $html, $matches_h);
+
+        $br_count = is_int($br_count) ? $br_count : 0;
+        $p_count = is_int($p_count) ? $p_count : 0;
+        $h_count = is_int($h_count) ? $h_count : 0;
+
+        if ($br_count > 300 || $p_count > 800) {
+            // Flatten pathological wrapping while preserving semantic tags.
+            $html = (string) preg_replace('/<br\s*\/?\s*>/i', ' ', $html);
+            $html = (string) preg_replace('/<\/p>\s*<p\b[^>]*>/i', ' ', $html);
+            $html = str_replace(array('<p>', '</p>'), ' ', $html);
+            $html = (string) preg_replace('/\s{2,}/', ' ', $html);
+            $html = trim($html);
+
+            error_log('[MjRegMgr] PDF HTML safety mode enabled: br=' . $br_count . ' p=' . $p_count . ' h=' . $h_count);
+        }
+
+        // Final trim keeps only meaningful content boundaries.
+        $html = trim($html);
+
+        return $html;
+    }
+
+    /**
+     * Neutralize inline/style-based forced page breaks that can generate hundreds of blank pages.
+     */
+    private function neutralizeAggressivePageBreaksForPdf(string $html): string {
+        if (trim($html) === '') {
+            return '';
+        }
+
+        $style_decl_pattern = '/(?:^|;)\s*(?:page-break-(?:before|after|inside)|break-(?:before|after|inside))\s*:\s*[^;]+/i';
+
+        // Clean forced breaks in inline style attributes.
+        $html = (string) preg_replace_callback('/\bstyle\s*=\s*("|\')(.*?)\1/is', function (array $matches) use ($style_decl_pattern): string {
+            $quote = isset($matches[1]) ? (string) $matches[1] : '"';
+            $style = isset($matches[2]) ? (string) $matches[2] : '';
+
+            $clean = preg_replace($style_decl_pattern, '', $style);
+            $clean = is_string($clean) ? $clean : $style;
+            $clean = preg_replace('/;\s*;/', ';', $clean);
+            $clean = trim((string) $clean, " \t\n\r\0\x0B;");
+
+            if ($clean === '') {
+                return '';
+            }
+
+            return 'style=' . $quote . $clean . $quote;
+        }, $html);
+
+        // Clean forced breaks in <style> blocks.
+        $html = (string) preg_replace_callback('/<style\b[^>]*>(.*?)<\/style>/is', function (array $matches) use ($style_decl_pattern): string {
+            $css = isset($matches[1]) ? (string) $matches[1] : '';
+            $clean_css = preg_replace($style_decl_pattern, '', $css);
+            $clean_css = is_string($clean_css) ? $clean_css : $css;
+            return '<style>' . $clean_css . '</style>';
+        }, $html);
+
+        return $html;
+    }
+
+    /**
+     * Replace lazy image attributes by src when needed.
+     */
+    private function normalizeImgSourcesForPdf(string $html): string {
+        return (string) preg_replace_callback('/<img\b[^>]*>/i', function (array $matches): string {
+            $tag = isset($matches[0]) ? (string) $matches[0] : '';
+            if ($tag === '') {
+                return $tag;
+            }
+
+            $src = $this->extractHtmlTagAttribute($tag, 'src');
+            if ($src !== '' && strpos($src, 'data:image/svg+xml') !== 0) {
+                return $tag;
+            }
+
+            $candidate = $this->extractHtmlTagAttribute($tag, 'data-src');
+            if ($candidate === '') {
+                $candidate = $this->extractHtmlTagAttribute($tag, 'data-lazy-src');
+            }
+            if ($candidate === '') {
+                $candidate = $this->extractHtmlTagAttribute($tag, 'data-original');
+            }
+            if ($candidate === '') {
+                $srcset = $this->extractHtmlTagAttribute($tag, 'srcset');
+                if ($srcset !== '') {
+                    $candidate = $this->extractFirstSrcFromSrcset($srcset);
+                }
+            }
+
+            if ($candidate === '') {
+                return $tag;
+            }
+
+            if ($src !== '') {
+                return preg_replace('/\bsrc\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)/i', 'src="' . esc_attr($candidate) . '"', $tag, 1) ?: $tag;
+            }
+
+            return rtrim($tag, '>') . ' src="' . esc_attr($candidate) . '">';
+        }, $html);
+    }
+
+    /**
+     * Build a list of Composer autoload candidates for this plugin environment.
+     *
+     * @return array<int,string>
+     */
+    private function getPdfComposerAutoloadCandidates(): array {
+        $candidates = array(
+            Config::path() . 'vendor/autoload.php',
+            dirname(__DIR__, 4) . '/vendor/autoload.php',
+            trailingslashit(ABSPATH) . 'wp-content/plugins/mj-member/vendor/autoload.php',
+            trailingslashit(ABSPATH) . 'vendor/autoload.php',
+        );
+
+        if (defined('WP_PLUGIN_DIR') && is_string(WP_PLUGIN_DIR) && WP_PLUGIN_DIR !== '') {
+            $candidates[] = trailingslashit(WP_PLUGIN_DIR) . 'mj-member/vendor/autoload.php';
+        }
+
+        $normalized = array();
+        foreach ($candidates as $path) {
+            if (!is_string($path) || $path === '') {
+                continue;
+            }
+            $normalized[] = wp_normalize_path($path);
+        }
+
+        return array_values(array_unique($normalized));
+    }
+
+    /**
+     * Try to load Dompdf from plugin or global Composer autoloaders.
+     */
+    private function ensureMpdfLoaded(): bool {
+        if (class_exists('Mpdf\\Mpdf')) {
+            return true;
+        }
+
+        $autoload_candidates = $this->getPdfComposerAutoloadCandidates();
+        $checked_paths = array();
+
+        foreach ($autoload_candidates as $autoload_path) {
+            if (!is_string($autoload_path) || $autoload_path === '' || !is_readable($autoload_path)) {
+                continue;
+            }
+            $checked_paths[] = $autoload_path;
+            require_once $autoload_path;
+            if (class_exists('Mpdf\\Mpdf')) {
+                return true;
+            }
+        }
+
+        if (!empty($checked_paths)) {
+            error_log('[MjRegMgr] mPDF unavailable after loading candidates: ' . implode(' | ', $checked_paths));
+        } else {
+            error_log('[MjRegMgr] mPDF autoload candidates not readable.');
+        }
+
+        return false;
+    }
+
+    /**
+     * Try to load Dompdf from plugin or global Composer autoloaders.
+     */
+    private function ensureDompdfLoaded(): bool {
+        if (class_exists('Dompdf\\Dompdf') && class_exists('Dompdf\\Options')) {
+            return true;
+        }
+
+        $autoload_candidates = array_merge(
+            $this->getPdfComposerAutoloadCandidates(),
+            array(
+            Config::path() . 'vendor/dompdf/dompdf/autoload.inc.php',
+            trailingslashit(ABSPATH) . 'wp-content/plugins/mj-member/vendor/dompdf/dompdf/autoload.inc.php',
+            )
+        );
+
+        $checked_paths = array();
+
+        foreach ($autoload_candidates as $autoload_path) {
+            if (!is_string($autoload_path) || $autoload_path === '' || !is_readable($autoload_path)) {
+                continue;
+            }
+            $checked_paths[] = $autoload_path;
+            require_once $autoload_path;
+            if (class_exists('Dompdf\\Dompdf') && class_exists('Dompdf\\Options')) {
+                return true;
+            }
+        }
+
+        if (!empty($checked_paths)) {
+            error_log('[MjRegMgr] Dompdf unavailable after loading candidates: ' . implode(' | ', $checked_paths));
+        } else {
+            error_log('[MjRegMgr] Dompdf autoload candidates not readable.');
+        }
+
+        return false;
+    }
+
+    /**
+     * Convert UTF-8 text for FPDF.
+     */
+    private function toPdfText(string $text): string {
+        if ($text === '') {
+            return '';
+        }
+
+        $converted = @iconv('UTF-8', 'windows-1252//TRANSLIT//IGNORE', $text);
+        if ($converted === false || $converted === null) {
+            return $text;
+        }
+
+        return $converted;
+    }
+
+    /**
+     * Convert a small HTML fragment into printable PDF lines.
+     * Keeps paragraph structure to preserve header/content/footer readability.
+     *
+     * @return array<int,string>
+     */
+    private function extractPdfLinesFromHtml(string $html): array {
+        if (trim($html) === '') {
+            return array();
+        }
+
+        $normalized = $html;
+
+        // Keep non-textual images traceable in PDF output.
+        $normalized = preg_replace_callback(
+            '/<img[^>]*alt=["\']?([^"\'>]*)["\']?[^>]*>/i',
+            function (array $matches): string {
+                $alt = isset($matches[1]) ? trim((string) $matches[1]) : '';
+                if ($alt === '') {
+                    $alt = __('Image', 'mj-member');
+                }
+                return "\n[" . $alt . "]\n";
+            },
+            $normalized
+        );
+
+        $normalized = preg_replace('/<br\s*\/?\s*>/i', "\n", $normalized);
+        // Keep HTML tables readable in PDF without changing global rendering flow.
+        $normalized = preg_replace('/<\/t[dh]\s*>/i', ' | ', $normalized);
+        $normalized = preg_replace('/<t[dh]\b[^>]*>/i', '', $normalized);
+        $normalized = preg_replace('/<\/tr\s*>/i', "\n", $normalized);
+        $normalized = preg_replace('/<tr\b[^>]*>/i', '', $normalized);
+        $normalized = preg_replace('/<\/?(?:table|thead|tbody|tfoot)\b[^>]*>/i', "\n", $normalized);
+        $normalized = preg_replace('/<\/(p|div|h1|h2|h3|h4|h5|h6|li|tr|table|section|article)\s*>/i', "\n", $normalized);
+        $normalized = preg_replace('/<(ul|ol)\b[^>]*>/i', "\n", $normalized);
+        $normalized = preg_replace('/<li\b[^>]*>/i', "\n- ", $normalized);
+
+        $text = html_entity_decode(wp_strip_all_tags($normalized), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace("/\r\n|\r/", "\n", $text);
+        $text = preg_replace("/\t+/", ' ', (string) $text);
+        $text = preg_replace("/\n{3,}/", "\n\n", (string) $text);
+
+        $chunks = preg_split('/\n/', (string) $text);
+        if (!is_array($chunks)) {
+            return array();
+        }
+
+        $lines = array();
+        foreach ($chunks as $chunk) {
+            $line = trim(preg_replace('/\s{2,}/', ' ', (string) $chunk));
+            if ($line === '') {
+                // Preserve readable spacing between paragraphs.
+                if (!empty($lines) && end($lines) !== '') {
+                    $lines[] = '';
+                }
+                continue;
+            }
+            $lines[] = $line;
+        }
+
+        // Remove trailing blank lines.
+        while (!empty($lines) && end($lines) === '') {
+            array_pop($lines);
+        }
+
+        return $lines;
+    }
+
+    /**
+     * Render an HTML fragment into the PDF, including images.
+     */
+    private function renderPdfHtmlSection($pdf, string $html, float $line_height = 6.0): bool {
+        $segments = $this->extractPdfHtmlSegments($html);
+        if (empty($segments)) {
+            return false;
+        }
+
+        $rendered = false;
+        foreach ($segments as $segment) {
+            $type = isset($segment['type']) ? (string) $segment['type'] : 'text';
+            if ($type === 'image') {
+                $src = isset($segment['src']) ? (string) $segment['src'] : '';
+                $alt = isset($segment['alt']) ? (string) $segment['alt'] : '';
+                $width_hint = isset($segment['widthHint']) && is_array($segment['widthHint']) ? $segment['widthHint'] : null;
+                $height_hint = isset($segment['heightHint']) && is_array($segment['heightHint']) ? $segment['heightHint'] : null;
+                $image_rendered = $this->renderPdfImageFromSrc($pdf, $src, $alt, $width_hint, $height_hint);
+                if ($image_rendered) {
+                    $rendered = true;
+                } elseif ($alt !== '') {
+                    $pdf->MultiCell(0, $line_height, $this->toPdfText('[' . $alt . ']'));
+                    $rendered = true;
+                }
+                continue;
+            }
+
+            $text_html = isset($segment['html']) ? (string) $segment['html'] : '';
+            $lines = $this->extractPdfLinesFromHtml($text_html);
+            foreach ($lines as $line) {
+                if (trim($line) === '') {
+                    $pdf->Ln(max(2.0, $line_height - 2.0));
+                    continue;
+                }
+                $pdf->MultiCell(0, $line_height, $this->toPdfText($line));
+                $rendered = true;
+            }
+        }
+
+        return $rendered;
+    }
+
+    /**
+     * Split HTML into text and image segments in source order.
+     *
+    * @return array<int,array<string,mixed>>
+     */
+    private function extractPdfHtmlSegments(string $html): array {
+        $segments = array();
+        if (trim($html) === '') {
+            return $segments;
+        }
+
+        if (!preg_match_all('/<img\b[^>]*>/i', $html, $matches, PREG_OFFSET_CAPTURE)) {
+            return array(array('type' => 'text', 'html' => $html));
+        }
+
+        $offset = 0;
+        foreach ($matches[0] as $match) {
+            $tag = (string) ($match[0] ?? '');
+            $pos = (int) ($match[1] ?? 0);
+
+            if ($pos > $offset) {
+                $before = substr($html, $offset, $pos - $offset);
+                if ($before !== false && trim((string) $before) !== '') {
+                    $segments[] = array('type' => 'text', 'html' => (string) $before);
+                }
+            }
+
+            $alt = $this->extractHtmlTagAttribute($tag, 'alt');
+            $style_attr = $this->extractHtmlTagAttribute($tag, 'style');
+            $style_dimensions = $this->extractPdfImageStyleDimensions($style_attr);
+            $width_hint = $style_dimensions['width'] ?? $this->parsePdfImageDimensionHint($this->extractHtmlTagAttribute($tag, 'width'));
+            $height_hint = $style_dimensions['height'] ?? $this->parsePdfImageDimensionHint($this->extractHtmlTagAttribute($tag, 'height'));
+
+            // Support lazy-load/image optimization attributes often used in editors.
+            $src = $this->extractHtmlTagAttribute($tag, 'src');
+            if ($src === '' || strpos($src, 'data:image/svg+xml') === 0) {
+                $src = $this->extractHtmlTagAttribute($tag, 'data-src');
+            }
+            if ($src === '' || strpos($src, 'data:image/svg+xml') === 0) {
+                $src = $this->extractHtmlTagAttribute($tag, 'data-lazy-src');
+            }
+            if ($src === '' || strpos($src, 'data:image/svg+xml') === 0) {
+                $src = $this->extractHtmlTagAttribute($tag, 'data-original');
+            }
+            if ($src === '' || strpos($src, 'data:image/svg+xml') === 0) {
+                $srcset = $this->extractHtmlTagAttribute($tag, 'srcset');
+                if ($srcset !== '') {
+                    $src = $this->extractFirstSrcFromSrcset($srcset);
+                }
+            }
+
+            if ($src !== '') {
+                $segments[] = array(
+                    'type' => 'image',
+                    'src' => html_entity_decode($src, ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                    'alt' => html_entity_decode($alt, ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                    'widthHint' => $width_hint,
+                    'heightHint' => $height_hint,
+                );
+            }
+
+            $offset = $pos + strlen($tag);
+        }
+
+        if ($offset < strlen($html)) {
+            $after = substr($html, $offset);
+            if ($after !== false && trim((string) $after) !== '') {
+                $segments[] = array('type' => 'text', 'html' => (string) $after);
+            }
+        }
+
+        return $segments;
+    }
+
+    /**
+     * Extract a single attribute value from an HTML tag.
+     */
+    private function extractHtmlTagAttribute(string $tag, string $attr): string {
+        $pattern = "/\\b" . preg_quote($attr, '/') . "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))/i";
+        if (!preg_match($pattern, $tag, $match)) {
+            return '';
+        }
+
+        $value1 = isset($match[1]) ? (string) $match[1] : '';
+        $value2 = isset($match[2]) ? (string) $match[2] : '';
+        $value3 = isset($match[3]) ? (string) $match[3] : '';
+
+        if ($value1 !== '') {
+            return $value1;
+        }
+        if ($value2 !== '') {
+            return $value2;
+        }
+
+        return $value3;
+    }
+
+    /**
+     * Extract first usable URL from a srcset attribute value.
+     */
+    private function extractFirstSrcFromSrcset(string $srcset): string {
+        $srcset = trim($srcset);
+        if ($srcset === '') {
+            return '';
+        }
+
+        $parts = explode(',', $srcset);
+        foreach ($parts as $part) {
+            $candidate = trim($part);
+            if ($candidate === '') {
+                continue;
+            }
+
+            // srcset item format: "url 300w" or "url 2x"
+            $tokens = preg_split('/\s+/', $candidate);
+            if (!is_array($tokens) || empty($tokens[0])) {
+                continue;
+            }
+
+            $url = trim((string) $tokens[0]);
+            if ($url !== '') {
+                return $url;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Parse width/height declarations from inline style.
+     *
+     * @return array<string,array<string,mixed>>
+     */
+    private function extractPdfImageStyleDimensions(string $style): array {
+        $dimensions = array();
+        $style = trim($style);
+        if ($style === '') {
+            return $dimensions;
+        }
+
+        foreach (array('width', 'height') as $property) {
+            $pattern = '/(?:^|;)\s*' . preg_quote($property, '/') . '\s*:\s*([^;]+)/i';
+            if (!preg_match($pattern, $style, $match)) {
+                continue;
+            }
+
+            $parsed = $this->parsePdfImageDimensionToken((string) ($match[1] ?? ''));
+            if ($parsed !== null) {
+                $dimensions[$property] = $parsed;
+            }
+        }
+
+        return $dimensions;
+    }
+
+    /**
+     * Parse an img width/height attribute or style token.
+     *
+     * @return array<string,mixed>|null
+     */
+    private function parsePdfImageDimensionHint(string $value): ?array {
+        $value = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return $this->parsePdfImageDimensionToken($value);
+    }
+
+    /**
+     * Parse a single dimension token (e.g. 120, 120px, 80%).
+     *
+     * @return array<string,mixed>|null
+     */
+    private function parsePdfImageDimensionToken(string $value): ?array {
+        $value = strtolower(trim($value));
+        if ($value === '' || in_array($value, array('auto', 'initial', 'inherit', 'unset', 'none'), true)) {
+            return null;
+        }
+
+        if (!preg_match('/^([0-9]+(?:\.[0-9]+)?)\s*(px|%)?$/i', $value, $match)) {
+            return null;
+        }
+
+        $amount = (float) ($match[1] ?? 0.0);
+        if ($amount <= 0) {
+            return null;
+        }
+
+        $unit = isset($match[2]) && $match[2] !== '' ? strtolower((string) $match[2]) : 'px';
+
+        return array(
+            'value' => $amount,
+            'unit' => $unit,
+        );
+    }
+
+    /**
+     * Convert parsed dimension hint to mm.
+     */
+    private function pdfImageHintToMm(?array $hint, float $base_mm): ?float {
+        if (!is_array($hint)) {
+            return null;
+        }
+
+        $value = isset($hint['value']) ? (float) $hint['value'] : 0.0;
+        $unit = isset($hint['unit']) ? strtolower((string) $hint['unit']) : 'px';
+        if ($value <= 0) {
+            return null;
+        }
+
+        if ($unit === '%') {
+            return ($base_mm * $value) / 100.0;
+        }
+
+        // Assume px when unit is omitted or explicitly set to px.
+        return $value * 0.2645833333;
+    }
+
+    /**
+     * Render an image from src URL or data URI into the PDF.
+     */
+    private function renderPdfImageFromSrc($pdf, string $src, string $alt = '', ?array $width_hint = null, ?array $height_hint = null): bool {
+        $src = trim($src);
+        if ($src === '') {
+            return false;
+        }
+
+        $tmp_file = '';
+        $cleanup = false;
+
+        // 1) data:image/...;base64,...
+        if (strpos($src, 'data:image/') === 0) {
+            if (!preg_match('/^data:image\/(png|jpe?g|gif|webp);base64,(.+)$/i', $src, $m)) {
+                return false;
+            }
+            $ext = strtolower((string) $m[1]);
+            $raw = base64_decode((string) $m[2], true);
+            if (!is_string($raw) || $raw === '') {
+                return false;
+            }
+            $tmp = wp_tempnam('mj-regdoc-img');
+            if (!is_string($tmp) || $tmp === '') {
+                return false;
+            }
+            $tmp_file = $tmp . '.' . ($ext === 'jpeg' ? 'jpg' : $ext);
+            if (@file_put_contents($tmp_file, $raw) === false) {
+                return false;
+            }
+            $cleanup = true;
+        } else {
+            $normalized = $src;
+            if (strpos($normalized, '//') === 0) {
+                $normalized = 'https:' . $normalized;
+            } elseif (strpos($normalized, '/') === 0) {
+                $normalized = home_url($normalized);
+            } elseif (!preg_match('#^https?://#i', $normalized)) {
+                $normalized = home_url('/' . ltrim($normalized, './'));
+            }
+
+            // Try local path first for this WP install.
+            $path = wp_parse_url($normalized, PHP_URL_PATH);
+            if (is_string($path) && $path !== '') {
+                $local_candidate = wp_normalize_path(untrailingslashit(ABSPATH) . $path);
+                if (file_exists($local_candidate) && is_readable($local_candidate)) {
+                    $tmp_file = $local_candidate;
+                }
+            }
+
+            if ($tmp_file === '') {
+                $resp = wp_remote_get($normalized, array('timeout' => 20, 'redirection' => 3));
+                if (is_wp_error($resp)) {
+                    return false;
+                }
+                $body = wp_remote_retrieve_body($resp);
+                if (!is_string($body) || $body === '') {
+                    return false;
+                }
+
+                $tmp = wp_tempnam('mj-regdoc-img');
+                if (!is_string($tmp) || $tmp === '') {
+                    return false;
+                }
+                $tmp_file = $tmp . '.img';
+                if (@file_put_contents($tmp_file, $body) === false) {
+                    return false;
+                }
+                $cleanup = true;
+            }
+        }
+
+        $info = @getimagesize($tmp_file);
+        if (!is_array($info) || empty($info[0]) || empty($info[1])) {
+            if ($cleanup && file_exists($tmp_file)) {
+                @unlink($tmp_file);
+            }
+            return false;
+        }
+
+        $width_px = (float) $info[0];
+        $height_px = (float) $info[1];
+        $width_mm = max(10.0, $width_px * 0.2645833333);
+        $height_mm = max(8.0, $height_px * 0.2645833333);
+        $max_width = 170.0;
+        $max_height = 90.0;
+
+        $target_w = $width_mm;
+        $target_h = $height_mm;
+
+        $hint_w_mm = $this->pdfImageHintToMm($width_hint, $max_width);
+        $hint_h_mm = $this->pdfImageHintToMm($height_hint, $max_height);
+
+        if ($hint_w_mm !== null && $hint_h_mm !== null) {
+            $target_w = max(5.0, $hint_w_mm);
+            $target_h = max(5.0, $hint_h_mm);
+        } elseif ($hint_w_mm !== null) {
+            $target_w = max(5.0, $hint_w_mm);
+            $target_h = max(5.0, $target_w * ($height_mm / $width_mm));
+        } elseif ($hint_h_mm !== null) {
+            $target_h = max(5.0, $hint_h_mm);
+            $target_w = max(5.0, $target_h * ($width_mm / $height_mm));
+        }
+
+        $scale = min(1.0, $max_width / $target_w, $max_height / $target_h);
+        $draw_w = $target_w * $scale;
+        $draw_h = $target_h * $scale;
+
+        if ((float) $pdf->GetY() + $draw_h > 275.0) {
+            $pdf->AddPage();
+        }
+
+        $x = max(10.0, (210.0 - $draw_w) / 2.0);
+        try {
+            $pdf->Image($tmp_file, $x, null, $draw_w, $draw_h);
+            $pdf->Ln($draw_h + 2.0);
+        } catch (\Throwable $e) {
+            if ($cleanup && file_exists($tmp_file)) {
+                @unlink($tmp_file);
+            }
+            return false;
+        }
+
+        if ($cleanup && file_exists($tmp_file)) {
+            @unlink($tmp_file);
+        }
+
+        return true;
+    }
+
+    /**
+     * Build a short, filesystem-safe filename segment.
+     */
+    private function buildContractFilenamePart(string $value, int $max_chars = 30): string {
+        $value = trim(wp_strip_all_tags($value));
+        if ($value === '') {
+            return '';
+        }
+
+        if ($max_chars > 0) {
+            if (function_exists('mb_substr')) {
+                $value = (string) mb_substr($value, 0, $max_chars, 'UTF-8');
+            } else {
+                $value = substr($value, 0, $max_chars);
+            }
+        }
+
+        $slug = sanitize_title($value);
+        if ($slug === '') {
+            $slug = 'part';
+        }
+
+        return $slug;
     }
 
     /**
@@ -10027,6 +11739,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'event_date_end',
             'event_date_deadline',
             'event_price',
+            'event_url',
             'event_location',
             'event_location_address',
             'event_age_min',
@@ -10129,6 +11842,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'event_date_end' => $normalize_scalar(isset($event->date_fin) ? $event->date_fin : (isset($event->date_end) ? $event->date_end : '')),
             'event_date_deadline' => $normalize_scalar(isset($event->date_fin_inscription) ? $event->date_fin_inscription : ''),
             'event_price' => $normalize_scalar(isset($event->prix) ? $event->prix : (isset($event->price) ? $event->price : '')),
+            'event_url' => $normalize_scalar(isset($event->event_page_url) ? $event->event_page_url : (isset($event->front_url) ? $event->front_url : '')),
             'event_location' => $event_location_name,
             'event_location_address' => $event_location_address,
             'event_age_min' => $normalize_scalar(isset($event->age_min) ? $event->age_min : ''),
@@ -10146,6 +11860,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'event_date_end' => 'Date de fin',
             'event_date_deadline' => 'Date limite d\'inscription',
             'event_price' => 'Tarif',
+            'event_url' => 'URL de l\'événement',
             'event_location' => 'Lieu',
             'event_location_address' => 'Adresse du lieu',
             'event_age_min' => 'Âge minimum',
@@ -10218,6 +11933,33 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         }
 
         $event_context = implode("\n", $context_parts);
+        $hint_directive = '';
+        if ($hint !== '') {
+            $hint_directive = sprintf(
+                "\n\nConsigne prioritaire de l'organisateur (à respecter en priorité) : %s\nAdapte explicitement la réponse à cette consigne.",
+                $hint
+            );
+        }
+
+        $priority_rules_raw = (string) get_option('mj_member_ai_priority_rules', '');
+        if ($priority_rules_raw === '') {
+            $priority_rules_raw = "Hiérarchie stricte des consignes :\n"
+                . "1) La consigne prioritaire de l'organisateur prévaut sur toute autre consigne de style/marketing.\n"
+                . "2) Ne produis jamais de phrase qui contredit la consigne prioritaire.\n"
+                . "3) En cas de conflit, applique la consigne prioritaire et adapte le reste du texte.";
+        }
+        $priority_rules = "\n\n" . trim($priority_rules_raw);
+
+        $closure_rules = '';
+        if ($hint !== '' && preg_match('/(cl[oô]tur|ferm[ée]e|close|termin[ée]e|complet)/iu', $hint)) {
+            $closure_rules_raw = (string) get_option('mj_member_ai_closure_rules', '');
+            if ($closure_rules_raw === '') {
+                $closure_rules_raw = "Contrainte de cohérence importante : si la consigne indique que les inscriptions sont clôturées/fermées, "
+                    . "n'utilise aucun appel à l'action d'inscription (ex: participez, inscrivez-vous, rejoignez-nous). "
+                    . "Privilégie un message informatif (ex: inscriptions clôturées, restez informés des prochaines dates).";
+            }
+            $closure_rules = "\n\n" . trim($closure_rules_raw);
+        }
 
         if ($type === 'description') {
             $default_description_prompt = (string) get_option('mj_member_ai_description_prompt', get_option('mj_ai_description_prompt', ''));
@@ -10229,9 +11971,12 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             }
             $system_prompt = apply_filters('mj_member_ai_description_system_prompt', $default_description_prompt);
             $system_prompt .= "\n\n" . 'Format de sortie obligatoire: retourne uniquement du HTML valide (pas de Markdown, pas de triple backticks). Utilise des balises simples adaptées au rendu web (ex: <p>, <strong>, <ul>, <li>).';
+            $system_prompt .= $priority_rules;
+            $system_prompt .= $closure_rules;
             $user_prompt = sprintf(
-                "Rédige une description attrayante en HTML pour l'événement suivant:\n\n%s",
-                $event_context
+                "Rédige une description attrayante en HTML pour l'événement suivant:\n\n%s%s",
+                $event_context,
+                $hint_directive
             );
         } elseif ($type === 'regdoc') {
             $default_regdoc_prompt = (string) get_option('mj_member_ai_regdoc_prompt', get_option('mj_ai_regdoc_prompt', ''));
@@ -10243,9 +11988,12 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             }
             $system_prompt = apply_filters('mj_member_ai_regdoc_system_prompt', $default_regdoc_prompt);
             $system_prompt .= "\n\n" . 'Format de sortie obligatoire: retourne uniquement du HTML valide (pas de Markdown, pas de triple backticks). Structure le document avec des balises HTML (<h2>, <p>, <ul>, <li>, <strong>) sans code fence.';
+            $system_prompt .= $priority_rules;
+            $system_prompt .= $closure_rules;
             $user_prompt = sprintf(
-                "Rédige un document d'inscription en HTML pour l'événement suivant:\n\n%s",
-                $event_context
+                "Rédige un document d'inscription en HTML pour l'événement suivant:\n\n%s%s",
+                $event_context,
+                $hint_directive
             );
         } else {
             $default_social_prompt = (string) get_option('mj_member_ai_social_description_prompt', get_option('mj_ai_social_description_prompt', ''));
@@ -10258,9 +12006,12 @@ final class RegistrationManagerController implements AjaxHandlerInterface
 
             $system_prompt = apply_filters('mj_member_ai_social_description_system_prompt', $default_social_prompt);
             $system_prompt .= "\n\n" . 'Format de sortie obligatoire: texte brut uniquement (pas de HTML, pas de Markdown, pas de guillemets autour du texte). 2 à 5 phrases maximum.';
+            $system_prompt .= $priority_rules;
+            $system_prompt .= $closure_rules;
             $user_prompt = sprintf(
-                "Rédige une description de publication réseaux sociaux pour l'événement suivant:\n\n%s",
-                $event_context
+                "Rédige une description de publication réseaux sociaux pour l'événement suivant:\n\n%s%s",
+                $event_context,
+                $hint_directive
             );
         }
 

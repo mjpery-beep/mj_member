@@ -12,6 +12,7 @@
 use Mj\Member\Classes\MjNextcloud;
 use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\Config;
 
 if (!defined('ABSPATH')) {
@@ -59,6 +60,48 @@ function mj_nc_encode_dav_path(string $path): string
 // -----------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------
+
+/**
+ * Verify nonce and user permissions for Nextcloud media admin AJAX handlers.
+ *
+ * @return array|false
+ */
+function mj_nc_verify_request()
+{
+    if (function_exists('mj_regmgr_verify_request')) {
+        return mj_regmgr_verify_request();
+    }
+
+    if (!isset($_POST['nonce']) || !wp_verify_nonce((string) $_POST['nonce'], 'mj-registration-manager')) {
+        wp_send_json_error(['message' => __('Vérification de sécurité échouée.', 'mj-member')], 403);
+        return false;
+    }
+
+    if (!is_user_logged_in()) {
+        wp_send_json_error(['message' => __('Vous devez être connecté.', 'mj-member')], 401);
+        return false;
+    }
+
+    $member = MjMembers::getByWpUserId(get_current_user_id());
+    if (!$member) {
+        wp_send_json_error(['message' => __('Profil membre introuvable.', 'mj-member')], 403);
+        return false;
+    }
+
+    $memberRole = isset($member->role) ? (string) $member->role : '';
+    $allowedRoles = [MjRoles::ANIMATEUR, MjRoles::BENEVOLE, MjRoles::COORDINATEUR];
+    if (!in_array($memberRole, $allowedRoles, true) && !current_user_can('manage_options')) {
+        wp_send_json_error(['message' => __('Permissions insuffisantes.', 'mj-member')], 403);
+        return false;
+    }
+
+    return [
+        'member'          => $member,
+        'member_id'       => isset($member->id) ? (int) $member->id : 0,
+        'role'            => $memberRole,
+        'is_coordinateur' => $memberRole === MjRoles::COORDINATEUR || current_user_can('manage_options'),
+    ];
+}
 
 /**
  * Build the Nextcloud folder path for an event + media type.
@@ -350,7 +393,7 @@ add_action('wp_ajax_mj_regmgr_nc_list', 'mj_regmgr_nc_list');
 
 function mj_regmgr_nc_list()
 {
-    if (!mj_regmgr_verify_request()) {
+    if (!mj_nc_verify_request()) {
         return;
     }
 
@@ -424,7 +467,7 @@ add_action('wp_ajax_mj_regmgr_nc_upload', 'mj_regmgr_nc_upload');
 
 function mj_regmgr_nc_upload()
 {
-    if (!mj_regmgr_verify_request()) {
+    if (!mj_nc_verify_request()) {
         return;
     }
 
@@ -487,7 +530,7 @@ add_action('wp_ajax_mj_regmgr_nc_create_folder', 'mj_regmgr_nc_create_folder');
 
 function mj_regmgr_nc_create_folder()
 {
-    if (!mj_regmgr_verify_request()) {
+    if (!mj_nc_verify_request()) {
         return;
     }
 
@@ -539,7 +582,7 @@ add_action('wp_ajax_mj_regmgr_nc_delete', 'mj_regmgr_nc_delete');
 
 function mj_regmgr_nc_delete()
 {
-    if (!mj_regmgr_verify_request()) {
+    if (!mj_nc_verify_request()) {
         return;
     }
 
@@ -577,7 +620,7 @@ add_action('wp_ajax_mj_regmgr_nc_rename', 'mj_regmgr_nc_rename');
 
 function mj_regmgr_nc_rename()
 {
-    if (!mj_regmgr_verify_request()) {
+    if (!mj_nc_verify_request()) {
         return;
     }
 
@@ -617,7 +660,7 @@ add_action('wp_ajax_mj_regmgr_nc_move', 'mj_regmgr_nc_move');
 
 function mj_regmgr_nc_move()
 {
-    if (!mj_regmgr_verify_request()) {
+    if (!mj_nc_verify_request()) {
         return;
     }
 
@@ -656,6 +699,139 @@ function mj_regmgr_nc_move()
 
 add_action('wp_ajax_mj_regmgr_nc_download', 'mj_regmgr_nc_download');
 add_action('wp_ajax_mj_regmgr_nc_thumbnail', 'mj_regmgr_nc_thumbnail');
+add_action('wp_ajax_mj_regmgr_nc_public_download', 'mj_regmgr_nc_public_download');
+add_action('wp_ajax_nopriv_mj_regmgr_nc_public_download', 'mj_regmgr_nc_public_download');
+
+/**
+ * Restrict public signed download URLs to known media roots.
+ */
+function mj_nc_is_allowed_public_path(string $filePath): bool
+{
+    $filePath = mj_nc_sanitize_relative_path($filePath);
+    if ($filePath === '') {
+        return false;
+    }
+
+    $root = trim(str_replace('\\', '/', (string) Config::nextcloudRootFolder()), '/');
+    $prefix = $root !== '' ? ($root . '/') : '';
+
+    return strpos($filePath, $prefix . 'evenements/') === 0 || strpos($filePath, $prefix . 'membres/') === 0;
+}
+
+/**
+ * Build a temporary signed public proxy URL for a Nextcloud file.
+ */
+function mj_nc_build_signed_public_download_url(string $filePath, int $ttlSeconds = 600): string
+{
+    $safePath = mj_nc_sanitize_relative_path($filePath);
+    if ($safePath === '' || !mj_nc_is_allowed_public_path($safePath)) {
+        return '';
+    }
+
+    $ttl = max(60, min(3600, $ttlSeconds));
+    $expires = time() + $ttl;
+    $signature = hash_hmac('sha256', $safePath . '|' . $expires, wp_salt('auth'));
+
+    return add_query_arg([
+        'action' => 'mj_regmgr_nc_public_download',
+        'path' => rawurlencode($safePath),
+        'expires' => (string) $expires,
+        'sig' => $signature,
+    ], admin_url('admin-ajax.php'));
+}
+
+/**
+ * Validate temporary signed public proxy URL for Nextcloud file.
+ */
+function mj_nc_validate_public_download_signature(string $filePath, int $expires, string $signature): bool
+{
+    if ($filePath === '' || $expires <= 0 || $signature === '') {
+        return false;
+    }
+
+    if ($expires < (time() - 15)) {
+        return false;
+    }
+
+    if (!mj_nc_is_allowed_public_path($filePath)) {
+        return false;
+    }
+
+    $expected = hash_hmac('sha256', $filePath . '|' . $expires, wp_salt('auth'));
+    return hash_equals($expected, $signature);
+}
+
+/**
+ * Stream a Nextcloud file through this server.
+ */
+function mj_regmgr_nc_stream_file(string $filePath, bool $publicCache = false): void
+{
+    if (!MjNextcloud::isAvailable()) {
+        wp_die(__('Nextcloud non configuré.', 'mj-member'), '', ['response' => 503]);
+        return;
+    }
+
+    $nc = MjNextcloud::make();
+    if (is_wp_error($nc)) {
+        wp_die($nc->get_error_message(), '', ['response' => 503]);
+        return;
+    }
+
+    $download = mj_nc_fetch_remote_file_to_temp($filePath);
+    if (is_wp_error($download)) {
+        $status = (int) ($download->get_error_data()['status'] ?? 500);
+        wp_die($download->get_error_message(), '', ['response' => $status > 0 ? $status : 500]);
+        return;
+    }
+
+    $tempFile = $download['tempFile'];
+    $mimeType = $download['mimeType'];
+    $code     = $download['httpCode'];
+    $fileSize = file_exists($tempFile) ? filesize($tempFile) : false;
+    $fileName = basename($filePath);
+
+    mj_nc_debug_log('Streaming proxied file', [
+        'path' => $filePath,
+        'httpCode' => $code,
+        'mimeType' => $mimeType,
+        'bytes' => (int) $fileSize,
+        'public' => $publicCache,
+    ]);
+
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    status_header(200);
+    if ($publicCache) {
+        header('Cache-Control: public, max-age=300');
+        header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 300) . ' GMT');
+    } else {
+        nocache_headers();
+        header('Cache-Control: private, no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+    }
+
+    header('Content-Type: ' . $mimeType);
+    header('Content-Disposition: inline; filename="' . esc_attr($fileName) . '"');
+    header('Content-Length: ' . (string) $fileSize);
+    header('X-MJ-NC-Code: ' . (string) $code);
+    header('X-MJ-NC-Bytes: ' . (string) $fileSize);
+
+    $streamed = readfile($tempFile);
+    if (file_exists($tempFile)) {
+        @unlink($tempFile);
+    }
+    if ($streamed === false) {
+        mj_nc_debug_log('readfile failed while streaming response', [
+            'path' => $filePath,
+            'tempFile' => $tempFile,
+            'bytes' => (int) $fileSize,
+        ]);
+    }
+    exit;
+}
 
 function mj_regmgr_nc_thumbnail()
 {
@@ -763,63 +939,24 @@ function mj_regmgr_nc_download()
         return;
     }
 
-    if (!MjNextcloud::isAvailable()) {
-        wp_die(__('Nextcloud non configuré.', 'mj-member'), '', ['response' => 503]);
+    mj_regmgr_nc_stream_file($filePath, false);
+}
+
+function mj_regmgr_nc_public_download()
+{
+    $filePath = mj_nc_get_requested_file_path();
+    if ($filePath === '') {
+        wp_die(__('Chemin manquant.', 'mj-member'), '', ['response' => 400]);
         return;
     }
 
-    $nc = MjNextcloud::make();
-    if (is_wp_error($nc)) {
-        wp_die($nc->get_error_message(), '', ['response' => 503]);
+    $expires = isset($_GET['expires']) ? (int) $_GET['expires'] : 0;
+    $signature = isset($_GET['sig']) ? sanitize_text_field((string) $_GET['sig']) : '';
+
+    if (!mj_nc_validate_public_download_signature($filePath, $expires, $signature)) {
+        wp_die(__('Signature invalide ou expirée.', 'mj-member'), '', ['response' => 403]);
         return;
     }
 
-    $download = mj_nc_fetch_remote_file_to_temp($filePath);
-    if (is_wp_error($download)) {
-        $status = (int) ($download->get_error_data()['status'] ?? 500);
-        wp_die($download->get_error_message(), '', ['response' => $status > 0 ? $status : 500]);
-        return;
-    }
-
-    $tempFile = $download['tempFile'];
-    $mimeType = $download['mimeType'];
-    $code     = $download['httpCode'];
-    $fileSize = file_exists($tempFile) ? filesize($tempFile) : false;
-
-    $fileName = basename($filePath);
-
-    mj_nc_debug_log('Streaming proxied file', [
-        'path' => $filePath,
-        'httpCode' => $code,
-        'mimeType' => $mimeType,
-        'bytes' => (int) $fileSize,
-    ]);
-
-    while (ob_get_level() > 0) {
-        ob_end_clean();
-    }
-
-    status_header(200);
-    nocache_headers();
-    header('Content-Type: ' . $mimeType);
-    header('Content-Disposition: inline; filename="' . esc_attr($fileName) . '"');
-    header('Content-Length: ' . (string) $fileSize);
-    header('Cache-Control: private, no-cache, no-store, must-revalidate');
-    header('Pragma: no-cache');
-    header('Expires: 0');
-    header('X-MJ-NC-Code: ' . (string) $code);
-    header('X-MJ-NC-Bytes: ' . (string) $fileSize);
-
-    $streamed = readfile($tempFile);
-    if (file_exists($tempFile)) {
-        @unlink($tempFile);
-    }
-    if ($streamed === false) {
-        mj_nc_debug_log('readfile failed while streaming response', [
-            'path' => $filePath,
-            'tempFile' => $tempFile,
-            'bytes' => (int) $fileSize,
-        ]);
-    }
-    exit;
+    mj_regmgr_nc_stream_file($filePath, true);
 }
