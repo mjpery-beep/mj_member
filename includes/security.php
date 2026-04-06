@@ -4,16 +4,30 @@
  * Protège les données sensibles d'être exposées
  */
 
-// Empêcher l'accès direct au fichier
-if ( ! defined( 'ABSPATH' ) ) {
-    exit;
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
+
+    final class SecurityModule implements ModuleInterface {
+        public function register(): void {
+            add_filter('rest_prepare_wp_option', 'mj_rest_prepare_wp_option', 10, 2);
+            add_filter('wp_send_json', 'mj_sanitize_json_response', 10, 2);
+            add_action('wp_headers', 'mj_add_security_headers');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                add_action('shutdown', 'mj_check_for_exposed_keys');
+            }
+            add_action('plugins_loaded', 'mj_init_security');
+        }
+    }
 }
 
-/**
- * Bloquer l'export des options WordPress via l'API REST
- * Les clés Stripe ne doivent JAMAIS être accessibles au frontend
- */
-add_filter('rest_prepare_wp_option', 'mj_rest_prepare_wp_option', 10, 2);
+namespace {
+    if (!defined('ABSPATH')) { exit; }
+
+    /**
+     * Bloquer l'export des options WordPress via l'API REST
+     * Les clés Stripe ne doivent JAMAIS être accessibles au frontend
+     */
 function mj_rest_prepare_wp_option($response, $post) {
     $option_name = $response->data['option_name'] ?? '';
     
@@ -124,4 +138,4 @@ function mj_init_security() {
         ),
     ));
 }
-?>
+} // end namespace {

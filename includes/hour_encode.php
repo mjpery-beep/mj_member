@@ -1,43 +1,49 @@
 <?php
 
-use Mj\Member\Classes\Crud\MjEventAnimateurs;
-use Mj\Member\Classes\Crud\MjEventClosures;
-use Mj\Member\Classes\Crud\MjEventVolunteers;
-use Mj\Member\Classes\Crud\MjEvents;
-use Mj\Member\Classes\Crud\MjLeaveRequests;
-use Mj\Member\Classes\Crud\MjLeaveTypes;
-use Mj\Member\Classes\Crud\MjMemberHours;
-use Mj\Member\Classes\Crud\MjMembers;
-use Mj\Member\Classes\Crud\MjTodoProjects;
-use Mj\Member\Classes\MjEventSchedule;
-use Mj\Member\Core\Config;
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
 
-if (!defined('ABSPATH')) {
-    exit;
+    final class HourEncodeModule implements ModuleInterface {
+        public function register(): void {
+            add_action('wp_ajax_mj_member_hour_encode_week', 'mj_member_ajax_hour_encode_week');
+            add_action('wp_ajax_mj_member_hour_encode_create', 'mj_member_ajax_hour_encode_create');
+            add_action('wp_ajax_mj_member_hour_encode_update', 'mj_member_ajax_hour_encode_update');
+            add_action('wp_ajax_mj_member_hour_encode_delete', 'mj_member_ajax_hour_encode_delete');
+            add_action('wp_ajax_mj_member_hour_encode_rename_project', 'mj_member_ajax_hour_encode_rename_project');
+            add_action('wp_ajax_mj_member_hour_encode_rename_task', 'mj_member_ajax_hour_encode_rename_task');
+            add_action('wp_ajax_mj_member_hour_encode_move_task_to_project', 'mj_member_ajax_hour_encode_move_task_to_project');
+            add_action('wp_ajax_mj_member_hour_encode_toggle_fav_task', 'mj_member_ajax_hour_encode_toggle_fav_task');
+            add_action('wp_ajax_mj_member_hour_encode_update_project_color', 'mj_member_ajax_hour_encode_update_project_color');
+            // Apply project color from MjTodoProjects to each entry
+            add_filter('mj_member_hour_encode_entry_color', function ($color, $record) {
+                $project = isset($record['notes']) ? trim((string) $record['notes']) : '';
+                if ($project === '') {
+                    return $color;
+                }
+                $map = mj_member_hour_encode_get_project_color_map();
+                if (isset($map[$project]) && $map[$project] !== '') {
+                    return $map[$project];
+                }
+                return $color;
+            }, 10, 2);
+        }
+    }
 }
 
-add_action('wp_ajax_mj_member_hour_encode_week', 'mj_member_ajax_hour_encode_week');
-add_action('wp_ajax_mj_member_hour_encode_create', 'mj_member_ajax_hour_encode_create');
-add_action('wp_ajax_mj_member_hour_encode_update', 'mj_member_ajax_hour_encode_update');
-add_action('wp_ajax_mj_member_hour_encode_delete', 'mj_member_ajax_hour_encode_delete');
-add_action('wp_ajax_mj_member_hour_encode_rename_project', 'mj_member_ajax_hour_encode_rename_project');
-add_action('wp_ajax_mj_member_hour_encode_rename_task', 'mj_member_ajax_hour_encode_rename_task');
-add_action('wp_ajax_mj_member_hour_encode_move_task_to_project', 'mj_member_ajax_hour_encode_move_task_to_project');
-add_action('wp_ajax_mj_member_hour_encode_toggle_fav_task', 'mj_member_ajax_hour_encode_toggle_fav_task');
-add_action('wp_ajax_mj_member_hour_encode_update_project_color', 'mj_member_ajax_hour_encode_update_project_color');
-
-// Apply project color from MjTodoProjects to each entry
-add_filter('mj_member_hour_encode_entry_color', function ($color, $record) {
-    $project = isset($record['notes']) ? trim((string) $record['notes']) : '';
-    if ($project === '') {
-        return $color;
-    }
-    $map = mj_member_hour_encode_get_project_color_map();
-    if (isset($map[$project]) && $map[$project] !== '') {
-        return $map[$project];
-    }
-    return $color;
-}, 10, 2);
+namespace {
+    use Mj\Member\Classes\Crud\MjEventAnimateurs;
+    use Mj\Member\Classes\Crud\MjEventClosures;
+    use Mj\Member\Classes\Crud\MjEventVolunteers;
+    use Mj\Member\Classes\Crud\MjEvents;
+    use Mj\Member\Classes\Crud\MjLeaveRequests;
+    use Mj\Member\Classes\Crud\MjLeaveTypes;
+    use Mj\Member\Classes\Crud\MjMemberHours;
+    use Mj\Member\Classes\Crud\MjMembers;
+    use Mj\Member\Classes\Crud\MjTodoProjects;
+    use Mj\Member\Classes\MjEventSchedule;
+    use Mj\Member\Core\Config;
+    if (!defined('ABSPATH')) { exit; }
 
 function mj_member_hour_encode_user_can_manage_others() {
     if (current_user_can('manage_options')) {
@@ -1924,3 +1930,5 @@ function mj_member_hour_encode_format_hour_entry(array $record, DateTimeZone $ti
 
     return is_array($entry) ? $entry : null;
 }
+
+} // end namespace {

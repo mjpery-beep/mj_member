@@ -1,5 +1,8 @@
 <?php
 
+namespace Mj\Member\Core\Ajax\Front;
+
+use Mj\Member\Core\Contracts\AjaxHandlerInterface;
 use Mj\Member\Classes\Crud\MjTodoMedia;
 use Mj\Member\Classes\Crud\MjTodoNotes;
 use Mj\Member\Classes\Crud\MjTodoProjects;
@@ -10,8 +13,25 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-if (!function_exists('mj_member_ajax_todos_fetch_my')) {
-    function mj_member_ajax_todos_fetch_my(): void
+final class TodosController implements AjaxHandlerInterface {
+
+    public function registerHooks(): void {
+        add_action('wp_ajax_mj_member_todos_fetch_my', [$this, 'fetchMy']);
+        add_action('wp_ajax_mj_member_todos_toggle', [$this, 'toggle']);
+        add_action('wp_ajax_mj_member_todos_create', [$this, 'create']);
+        add_action('wp_ajax_mj_member_todo_project_create_front', [$this, 'projectCreate']);
+        add_action('wp_ajax_mj_member_todo_update_front', [$this, 'update']);
+        add_action('wp_ajax_mj_member_todo_note_create', [$this, 'noteCreate']);
+        add_action('wp_ajax_mj_member_todo_note_delete', [$this, 'noteDelete']);
+        add_action('wp_ajax_mj_member_todo_archive', [$this, 'archive']);
+        add_action('wp_ajax_mj_member_todo_unarchive', [$this, 'unarchive']);
+        add_action('wp_ajax_mj_member_todos_fetch_archived', [$this, 'fetchArchived']);
+        add_action('wp_ajax_mj_member_todo_media_attach', [$this, 'mediaAttach']);
+        add_action('wp_ajax_mj_member_todo_media_detach', [$this, 'mediaDetach']);
+        add_action('wp_ajax_mj_member_todo_delete_front', [$this, 'delete']);
+    }
+
+    public function fetchMy(): void
     {
         check_ajax_referer('mj_member_todo_widget', 'nonce');
 
@@ -110,11 +130,8 @@ if (!function_exists('mj_member_ajax_todos_fetch_my')) {
             ),
         ));
     }
-}
 
-
-if (!function_exists('mj_member_ajax_todos_toggle')) {
-    function mj_member_ajax_todos_toggle(): void
+    public function toggle(): void
     {
         check_ajax_referer('mj_member_todo_widget', 'nonce');
 
@@ -170,10 +187,8 @@ if (!function_exists('mj_member_ajax_todos_toggle')) {
 
         wp_send_json_success(array('todo' => $payload));
     }
-}
 
-if (!function_exists('mj_member_ajax_todos_create')) {
-    function mj_member_ajax_todos_create(): void
+    public function create(): void
     {
         check_ajax_referer('mj_member_todo_widget', 'nonce');
 
@@ -301,10 +316,8 @@ if (!function_exists('mj_member_ajax_todos_create')) {
 
         wp_send_json_success(array('todo' => $payload));
     }
-}
 
-if (!function_exists('mj_member_ajax_todo_project_create_front')) {
-    function mj_member_ajax_todo_project_create_front(): void
+    public function projectCreate(): void
     {
         check_ajax_referer('mj_member_todo_widget', 'nonce');
 
@@ -353,10 +366,8 @@ if (!function_exists('mj_member_ajax_todo_project_create_front')) {
 
         wp_send_json_success(array('project' => $responseProject));
     }
-}
 
-if (!function_exists('mj_member_ajax_todo_update_front')) {
-    function mj_member_ajax_todo_update_front(): void
+    public function update(): void
     {
         check_ajax_referer('mj_member_todo_widget', 'nonce');
 
@@ -447,10 +458,8 @@ if (!function_exists('mj_member_ajax_todo_update_front')) {
 
         wp_send_json_success(array('todo' => $payloadTodo));
     }
-}
 
-if (!function_exists('mj_member_ajax_todo_note_create')) {
-    function mj_member_ajax_todo_note_create(): void
+    public function noteCreate(): void
     {
         check_ajax_referer('mj_member_todo_widget', 'nonce');
 
@@ -512,10 +521,8 @@ if (!function_exists('mj_member_ajax_todo_note_create')) {
             'todoId' => $todoId,
         ));
     }
-}
 
-if (!function_exists('mj_member_ajax_todo_note_delete')) {
-    function mj_member_ajax_todo_note_delete(): void
+    public function noteDelete(): void
     {
         check_ajax_referer('mj_member_todo_widget', 'nonce');
 
@@ -556,10 +563,8 @@ if (!function_exists('mj_member_ajax_todo_note_delete')) {
             'noteId' => $noteId,
         ));
     }
-}
 
-if (!function_exists('mj_member_ajax_todo_archive')) {
-    function mj_member_ajax_todo_archive(): void
+    public function archive(): void
     {
         check_ajax_referer('mj_member_todo_widget', 'nonce');
 
@@ -602,10 +607,8 @@ if (!function_exists('mj_member_ajax_todo_archive')) {
 
         wp_send_json_success(array('todo' => $payload));
     }
-}
 
-if (!function_exists('mj_member_ajax_todo_unarchive')) {
-    function mj_member_ajax_todo_unarchive(): void
+    public function unarchive(): void
     {
         check_ajax_referer('mj_member_todo_widget', 'nonce');
 
@@ -668,10 +671,8 @@ if (!function_exists('mj_member_ajax_todo_unarchive')) {
 
         wp_send_json_success(array('todo' => $payload));
     }
-}
 
-if (!function_exists('mj_member_ajax_todos_fetch_archived')) {
-    function mj_member_ajax_todos_fetch_archived(): void
+    public function fetchArchived(): void
     {
         check_ajax_referer('mj_member_todo_widget', 'nonce');
 
@@ -762,10 +763,8 @@ if (!function_exists('mj_member_ajax_todos_fetch_archived')) {
             'projects' => $payloadProjects,
         ));
     }
-}
 
-if (!function_exists('mj_member_ajax_todo_media_attach')) {
-    function mj_member_ajax_todo_media_attach(): void
+    public function mediaAttach(): void
     {
         check_ajax_referer('mj_member_todo_widget', 'nonce');
 
@@ -850,10 +849,8 @@ if (!function_exists('mj_member_ajax_todo_media_attach')) {
 
         wp_send_json_success(array('todo' => $payloadTodo));
     }
-}
 
-if (!function_exists('mj_member_ajax_todo_media_detach')) {
-    function mj_member_ajax_todo_media_detach(): void
+    public function mediaDetach(): void
     {
         check_ajax_referer('mj_member_todo_widget', 'nonce');
 
@@ -902,10 +899,8 @@ if (!function_exists('mj_member_ajax_todo_media_detach')) {
 
         wp_send_json_success(array('todo' => $payloadTodo));
     }
-}
 
-if (!function_exists('mj_member_ajax_todo_delete_front')) {
-    function mj_member_ajax_todo_delete_front(): void
+    public function delete(): void
     {
         check_ajax_referer('mj_member_todo_widget', 'nonce');
 
@@ -932,17 +927,3 @@ if (!function_exists('mj_member_ajax_todo_delete_front')) {
         wp_send_json_success(array('todoId' => $todoId));
     }
 }
-
-add_action('wp_ajax_mj_member_todos_fetch_my', 'mj_member_ajax_todos_fetch_my');
-add_action('wp_ajax_mj_member_todos_toggle', 'mj_member_ajax_todos_toggle');
-add_action('wp_ajax_mj_member_todos_create', 'mj_member_ajax_todos_create');
-add_action('wp_ajax_mj_member_todo_project_create_front', 'mj_member_ajax_todo_project_create_front');
-add_action('wp_ajax_mj_member_todo_update_front', 'mj_member_ajax_todo_update_front');
-add_action('wp_ajax_mj_member_todo_note_create', 'mj_member_ajax_todo_note_create');
-add_action('wp_ajax_mj_member_todo_note_delete', 'mj_member_ajax_todo_note_delete');
-add_action('wp_ajax_mj_member_todo_archive', 'mj_member_ajax_todo_archive');
-add_action('wp_ajax_mj_member_todo_unarchive', 'mj_member_ajax_todo_unarchive');
-add_action('wp_ajax_mj_member_todos_fetch_archived', 'mj_member_ajax_todos_fetch_archived');
-add_action('wp_ajax_mj_member_todo_media_attach', 'mj_member_ajax_todo_media_attach');
-add_action('wp_ajax_mj_member_todo_media_detach', 'mj_member_ajax_todo_media_detach');
-add_action('wp_ajax_mj_member_todo_delete_front', 'mj_member_ajax_todo_delete_front');

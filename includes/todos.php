@@ -1,4 +1,16 @@
 <?php
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
+
+    final class TodosModule implements ModuleInterface {
+        public function register(): void {
+        }
+    }
+}
+
+namespace {
+    if (!defined('ABSPATH')) { exit; }
 
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Crud\MjTodoMedia;
@@ -7,10 +19,6 @@ use Mj\Member\Classes\Crud\MjTodoProjects;
 use Mj\Member\Classes\Crud\MjTodos;
 use Mj\Member\Classes\Value\MemberData;
 use Mj\Member\Core\Config;
-
-if (!defined('ABSPATH')) {
-    exit;
-}
 
 if (!function_exists('mj_member_todo_user_has_access')) {
     function mj_member_todo_user_has_access(): bool
@@ -574,3 +582,4 @@ if (!function_exists('mj_member_todo_prepare_payload')) {
         );
     }
 }
+} // end namespace

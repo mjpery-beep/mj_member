@@ -1,15 +1,38 @@
 <?php
 
-use Mj\Member\Core\Config;
-use Mj\Member\Core\Logger;
-use Mj\Member\Classes\MjRoles;
-use Mj\Member\Classes\MjPayments;
-use Mj\Member\Classes\MjTrophyService;
-use Mj\Member\Classes\Crud\MjEventLocations;
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
 
-if (!defined('ABSPATH')) {
-    exit;
+    final class MemberAccountsModule implements ModuleInterface {
+        public function register(): void {
+            add_action('admin_post_mj_member_generate_payment_link', 'mj_member_handle_payment_link_request');
+            add_action('admin_post_nopriv_mj_member_generate_payment_link', 'mj_member_handle_payment_link_request');
+            add_action('wp_ajax_mj_member_create_payment_link', 'mj_member_ajax_create_payment_link');
+            add_action('wp_ajax_nopriv_mj_member_create_payment_link', 'mj_member_ajax_create_payment_link');
+            add_action('wp_ajax_mj_member_create_child_payment_link', 'mj_member_ajax_create_child_payment_link');
+            add_action('wp_ajax_mj_member_update_child_profile', 'mj_member_ajax_update_child_profile');
+            add_action('wp_ajax_mj_member_update_notification_preferences', 'mj_member_ajax_update_notification_preferences');
+            add_filter('mj_member_member_registrations', 'mj_member_collect_member_registration_entries', 10, 3);
+            add_action('init', 'mj_member_maybe_process_card_claim_form');
+            add_filter('template_include', 'mj_member_maybe_override_card_template', 80);
+            add_action('wp_login', 'mj_member_track_last_login', 10, 2);
+            add_action('init', 'mj_member_track_last_activity', 99);
+        }
+    }
 }
+
+namespace {
+    use Mj\Member\Core\Config;
+    use Mj\Member\Core\Logger;
+    use Mj\Member\Classes\MjRoles;
+    use Mj\Member\Classes\MjPayments;
+    use Mj\Member\Classes\MjTrophyService;
+    use Mj\Member\Classes\Crud\MjEventLocations;
+
+    if (!defined('ABSPATH')) {
+        exit;
+    }
 
 if (!function_exists('mj_member_get_current_url')) {
     function mj_member_get_current_url() {
@@ -918,8 +941,6 @@ if (!function_exists('mj_member_handle_payment_link_request')) {
         exit;
     }
 
-    add_action('admin_post_mj_member_generate_payment_link', 'mj_member_handle_payment_link_request');
-    add_action('admin_post_nopriv_mj_member_generate_payment_link', 'mj_member_handle_payment_link_request');
 }
 
 if (!function_exists('mj_member_ajax_create_payment_link')) {
@@ -975,8 +996,6 @@ if (!function_exists('mj_member_ajax_create_payment_link')) {
         ));
     }
 
-    add_action('wp_ajax_mj_member_create_payment_link', 'mj_member_ajax_create_payment_link');
-    add_action('wp_ajax_nopriv_mj_member_create_payment_link', 'mj_member_ajax_create_payment_link');
 }
 
 if (!function_exists('mj_member_ajax_create_child_payment_link')) {
@@ -1036,7 +1055,6 @@ if (!function_exists('mj_member_ajax_create_child_payment_link')) {
         ));
     }
 
-    add_action('wp_ajax_mj_member_create_child_payment_link', 'mj_member_ajax_create_child_payment_link');
 }
 
 if (!function_exists('mj_member_ajax_update_child_profile')) {
@@ -1203,7 +1221,6 @@ if (!function_exists('mj_member_ajax_update_child_profile')) {
         ));
     }
 
-    add_action('wp_ajax_mj_member_update_child_profile', 'mj_member_ajax_update_child_profile');
 }
 
 if (!function_exists('mj_member_ajax_update_notification_preferences')) {
@@ -1255,7 +1272,6 @@ if (!function_exists('mj_member_ajax_update_notification_preferences')) {
         ));
     }
 
-    add_action('wp_ajax_mj_member_update_notification_preferences', 'mj_member_ajax_update_notification_preferences');
 }
 
 if (!function_exists('mj_member_collect_member_registration_entries')) {
@@ -1895,7 +1911,6 @@ if (!function_exists('mj_member_collect_member_registration_entries')) {
         return $combined;
     }
 
-    add_filter('mj_member_member_registrations', 'mj_member_collect_member_registration_entries', 10, 3);
 }
 
 // --- Gestion des liens QR des cartes de visite ---
@@ -2175,7 +2190,6 @@ if (!function_exists('mj_member_maybe_process_card_claim_form')) {
         exit;
     }
 
-    add_action('init', 'mj_member_maybe_process_card_claim_form');
 }
 
 if (!function_exists('mj_member_maybe_override_card_template')) {
@@ -2223,7 +2237,6 @@ if (!function_exists('mj_member_maybe_override_card_template')) {
         return $template_path;
     }
 
-    add_filter('template_include', 'mj_member_maybe_override_card_template', 80);
 }
 
 /**
@@ -2254,7 +2267,6 @@ if (!function_exists('mj_member_track_last_login')) {
         );
     }
 
-    add_action('wp_login', 'mj_member_track_last_login', 10, 2);
 }
 
 /**
@@ -2303,5 +2315,6 @@ if (!function_exists('mj_member_track_last_activity')) {
         wp_cache_set($cache_key, true, 'mj_member', 60);
     }
 
-    add_action('init', 'mj_member_track_last_activity', 99);
 }
+
+} // end namespace {

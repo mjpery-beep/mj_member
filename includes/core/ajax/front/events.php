@@ -6,24 +6,36 @@
  * @subpackage Core\Ajax\Front
  */
 
+namespace Mj\Member\Core\Ajax\Front;
+
+use Mj\Member\Core\Contracts\AjaxHandlerInterface;
+
 if (!defined('ABSPATH')) {
     exit;
 }
 
-/**
- * AJAX: Get event reservations for current user.
- *
- * Retrieves all active registrations for the current member and their dependents
- * for a specific event, including occurrence assignments and status information.
- *
- * POST Parameters:
- * - event_id (int): Event identifier
- * - nonce (string): Security token (mj-member-event-register)
- *
- * Response: JSON with reservations array
- */
-if (!function_exists('mj_member_ajax_get_event_reservations')) {
-    function mj_member_ajax_get_event_reservations() {
+final class EventsController implements AjaxHandlerInterface {
+
+    public function registerHooks(): void {
+        add_action('wp_ajax_mj_member_get_event_reservations', [$this, 'getReservations']);
+        add_action('wp_ajax_mj_member_register_event', [$this, 'registerEvent']);
+        add_action('wp_ajax_mj_member_unregister_event', [$this, 'unregisterEvent']);
+        add_action('wp_ajax_nopriv_mj_member_ajax_login', [$this, 'login']);
+    }
+
+    /**
+     * AJAX: Get event reservations for current user.
+     *
+     * Retrieves all active registrations for the current member and their dependents
+     * for a specific event, including occurrence assignments and status information.
+     *
+     * POST Parameters:
+     * - event_id (int): Event identifier
+     * - nonce (string): Security token (mj-member-event-register)
+     *
+     * Response: JSON with reservations array
+     */
+    public function getReservations() {
         if (!wp_doing_ajax()) {
             return;
         }
@@ -418,12 +430,8 @@ if (!function_exists('mj_member_ajax_get_event_reservations')) {
 
         wp_send_json_success($response);
     }
-}
 
-add_action('wp_ajax_mj_member_get_event_reservations', 'mj_member_ajax_get_event_reservations');
-
-if (!function_exists('mj_member_ajax_register_event')) {
-    function mj_member_ajax_register_event() {
+    public function registerEvent() {
         if (!wp_doing_ajax()) {
             return;
         }
@@ -1042,12 +1050,8 @@ if (!function_exists('mj_member_ajax_register_event')) {
         echo $encoded;
         wp_die();
     }
-}
 
-add_action('wp_ajax_mj_member_register_event', 'mj_member_ajax_register_event');
-
-if (!function_exists('mj_member_ajax_unregister_event')) {
-    function mj_member_ajax_unregister_event() {
+    public function unregisterEvent() {
         if (!wp_doing_ajax()) {
             return;
         }
@@ -1136,22 +1140,20 @@ if (!function_exists('mj_member_ajax_unregister_event')) {
             array('message' => __('Inscription annulée.', 'mj-member'))
         );
     }
-}
 
-/**
- * AJAX: Login from event page.
- *
- * Handles user login directly from the event registration form.
- *
- * POST Parameters:
- * - username (string): Username or email
- * - password (string): User password
- * - nonce (string): Security token (mj-member-event-register)
- *
- * Response: JSON with success/error message
- */
-if (!function_exists('mj_member_ajax_login')) {
-    function mj_member_ajax_login() {
+    /**
+     * AJAX: Login from event page.
+     *
+     * Handles user login directly from the event registration form.
+     *
+     * POST Parameters:
+     * - username (string): Username or email
+     * - password (string): User password
+     * - nonce (string): Security token (mj-member-event-register)
+     *
+     * Response: JSON with success/error message
+     */
+    public function login() {
         if (!wp_doing_ajax()) {
             return;
         }
@@ -1199,6 +1201,3 @@ if (!function_exists('mj_member_ajax_login')) {
         );
     }
 }
-
-add_action('wp_ajax_nopriv_mj_member_ajax_login', 'mj_member_ajax_login');
-add_action('wp_ajax_mj_member_unregister_event', 'mj_member_ajax_unregister_event');

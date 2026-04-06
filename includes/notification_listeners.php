@@ -1,4 +1,47 @@
 <?php
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
+
+    final class NotificationListenersModule implements ModuleInterface {
+        public function register(): void {
+            add_action('mj_member_event_registration_created', 'mj_member_notification_on_registration_created', 10, 4);
+            add_action('mj_member_event_registration_cancelled', 'mj_member_notification_on_registration_cancelled', 10, 4);
+            add_action('mj_member_event_registration_payment_confirmed', 'mj_member_notification_on_payment_confirmed', 10, 3);
+            add_action('mj_member_quick_member_created', 'mj_member_notification_on_member_created', 10, 3);
+            add_action('mj_member_event_photo_created', 'mj_member_notification_on_photo_uploaded', 10, 4);
+            add_action('mj_member_event_photo_status_changed', 'mj_member_notification_on_photo_approved', 10, 4);
+            add_action('mj_member_profile_updated', 'mj_member_notification_on_profile_updated', 10, 3);
+            add_action('mj_member_idea_published', 'mj_member_notification_on_idea_published', 10, 4);
+            add_action('mj_member_idea_voted', 'mj_member_notification_on_idea_voted', 10, 4);
+            add_action('mj_member_trophy_awarded', 'mj_member_notification_on_trophy_earned', 10, 4);
+            add_action('mj_member_badge_criteria_awarded', 'mj_member_notification_on_criterion_earned', 10, 3);
+            add_action('mj_member_grimlins_avatar_applied', 'mj_member_notification_on_avatar_applied', 10, 2);
+            add_action('mj_member_todo_assigned', 'mj_member_notification_on_todo_assigned', 10, 4);
+            add_action('mj_member_todo_note_added', 'mj_member_notification_on_todo_note_added', 10, 5);
+            add_action('mj_member_todo_media_added', 'mj_member_notification_on_todo_media_added', 10, 5);
+            add_action('mj_member_todo_completed', 'mj_member_notification_on_todo_completed', 10, 4);
+            add_action('mj_member_event_published', 'mj_member_notification_on_event_published', 10, 2);
+            add_action('mj_member_testimonial_approved', 'mj_member_notification_on_testimonial_approved', 10, 2);
+            add_action('mj_member_testimonial_rejected', 'mj_member_notification_on_testimonial_rejected', 10, 3);
+            add_action('mj_member_testimonial_reaction', 'mj_member_notification_on_testimonial_reaction', 10, 4);
+            add_action('mj_member_testimonial_comment', 'mj_member_notification_on_testimonial_comment', 10, 4);
+            add_action('mj_member_testimonial_comment_reply', 'mj_member_notification_on_testimonial_comment_reply', 10, 4);
+            add_action('mj_member_testimonial_created', 'mj_member_notification_on_testimonial_new_pending', 10, 2);
+            add_action('mj_member_expense_created', 'mj_member_notification_on_expense_created', 10, 3);
+            add_action('mj_member_expense_reimbursed', 'mj_member_notification_on_expense_reimbursed', 10, 3);
+            add_action('mj_member_expense_rejected', 'mj_member_notification_on_expense_rejected', 10, 4);
+            add_action('mj_member_mileage_created', 'mj_member_notification_on_mileage_created', 10, 3);
+            add_action('mj_member_mileage_approved', 'mj_member_notification_on_mileage_approved', 10, 3);
+            add_action('mj_member_mileage_reimbursed', 'mj_member_notification_on_mileage_reimbursed', 10, 3);
+            add_action('mj_member_employee_document_uploaded', 'mj_member_notification_on_employee_document_uploaded', 10, 5);
+        }
+    }
+}
+
+namespace {
+    if (!defined('ABSPATH')) { exit; }
+
 /**
  * Notification Listeners
  *
@@ -16,10 +59,6 @@ use Mj\Member\Classes\Crud\MjEmployeeDocuments;
 use Mj\Member\Classes\MjNotificationManager;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\Value\MemberData;
-
-if (!defined('ABSPATH')) {
-    exit;
-}
 
 /**
  * Types de notifications supportés.
@@ -397,7 +436,6 @@ if (!function_exists('mj_member_notification_on_registration_created')) {
         }
     }
 
-    add_action('mj_member_event_registration_created', 'mj_member_notification_on_registration_created', 10, 4);
 }
 
 // ============================================================================
@@ -460,7 +498,6 @@ if (!function_exists('mj_member_notification_on_registration_cancelled')) {
         ));
     }
 
-    add_action('mj_member_event_registration_cancelled', 'mj_member_notification_on_registration_cancelled', 10, 4);
 }
 
 // ============================================================================
@@ -540,7 +577,6 @@ if (!function_exists('mj_member_notification_on_payment_confirmed')) {
         }
     }
 
-    add_action('mj_member_event_registration_payment_confirmed', 'mj_member_notification_on_payment_confirmed', 10, 3);
 }
 
 // ============================================================================
@@ -617,7 +653,6 @@ if (!function_exists('mj_member_notification_on_member_created')) {
         ));
     }
 
-    add_action('mj_member_quick_member_created', 'mj_member_notification_on_member_created', 10, 3);
 }
 
 // ============================================================================
@@ -693,7 +728,6 @@ if (!function_exists('mj_member_notification_on_photo_uploaded')) {
         ));
     }
 
-    add_action('mj_member_event_photo_created', 'mj_member_notification_on_photo_uploaded', 10, 4);
 }
 
 // ============================================================================
@@ -765,7 +799,6 @@ if (!function_exists('mj_member_notification_on_photo_approved')) {
         ));
     }
 
-    add_action('mj_member_event_photo_status_changed', 'mj_member_notification_on_photo_approved', 10, 4);
 }
 
 // ============================================================================
@@ -827,7 +860,6 @@ if (!function_exists('mj_member_notification_on_profile_updated')) {
         ));
     }
 
-    add_action('mj_member_profile_updated', 'mj_member_notification_on_profile_updated', 10, 3);
 }
 
 // ============================================================================
@@ -894,7 +926,6 @@ if (!function_exists('mj_member_notification_on_idea_published')) {
         ));
     }
 
-    add_action('mj_member_idea_published', 'mj_member_notification_on_idea_published', 10, 4);
 }
 
 // ============================================================================
@@ -964,7 +995,6 @@ if (!function_exists('mj_member_notification_on_idea_voted')) {
         ));
     }
 
-    add_action('mj_member_idea_voted', 'mj_member_notification_on_idea_voted', 10, 4);
 }
 
 // ============================================================================
@@ -1071,7 +1101,6 @@ if (!function_exists('mj_member_notification_on_trophy_earned')) {
         ));
     }
 
-    add_action('mj_member_trophy_awarded', 'mj_member_notification_on_trophy_earned', 10, 4);
 }
 
 // ============================================================================
@@ -1166,7 +1195,6 @@ if (!function_exists('mj_member_notification_on_criterion_earned')) {
         ));
     }
 
-    add_action('mj_member_badge_criteria_awarded', 'mj_member_notification_on_criterion_earned', 10, 3);
 }
 
 // ============================================================================
@@ -1237,7 +1265,6 @@ if (!function_exists('mj_member_notification_on_avatar_applied')) {
         ));
     }
 
-    add_action('mj_member_grimlins_avatar_applied', 'mj_member_notification_on_avatar_applied', 10, 2);
 }
 
 // ============================================================================
@@ -1318,7 +1345,6 @@ if (!function_exists('mj_member_notification_on_todo_assigned')) {
         ));
     }
 
-    add_action('mj_member_todo_assigned', 'mj_member_notification_on_todo_assigned', 10, 4);
 }
 
 // ============================================================================
@@ -1401,7 +1427,6 @@ if (!function_exists('mj_member_notification_on_todo_note_added')) {
         ));
     }
 
-    add_action('mj_member_todo_note_added', 'mj_member_notification_on_todo_note_added', 10, 5);
 }
 
 // ============================================================================
@@ -1488,7 +1513,6 @@ if (!function_exists('mj_member_notification_on_todo_media_added')) {
         ));
     }
 
-    add_action('mj_member_todo_media_added', 'mj_member_notification_on_todo_media_added', 10, 5);
 }
 
 // ============================================================================
@@ -1567,7 +1591,6 @@ if (!function_exists('mj_member_notification_on_todo_completed')) {
         ));
     }
 
-    add_action('mj_member_todo_completed', 'mj_member_notification_on_todo_completed', 10, 4);
 }
 
 // ============================================================================
@@ -1650,7 +1673,6 @@ if (!function_exists('mj_member_notification_on_event_published')) {
         ));
     }
 
-    add_action('mj_member_event_published', 'mj_member_notification_on_event_published', 10, 2);
 }
 
 
@@ -1717,7 +1739,6 @@ if (!function_exists('mj_member_notification_on_testimonial_approved')) {
         ));
     }
 
-    add_action('mj_member_testimonial_approved', 'mj_member_notification_on_testimonial_approved', 10, 2);
 }
 
 if (!function_exists('mj_member_notification_on_testimonial_rejected')) {
@@ -1761,7 +1782,6 @@ if (!function_exists('mj_member_notification_on_testimonial_rejected')) {
         ));
     }
 
-    add_action('mj_member_testimonial_rejected', 'mj_member_notification_on_testimonial_rejected', 10, 3);
 }
 
 if (!function_exists('mj_member_notification_on_testimonial_reaction')) {
@@ -1821,7 +1841,6 @@ if (!function_exists('mj_member_notification_on_testimonial_reaction')) {
         ));
     }
 
-    add_action('mj_member_testimonial_reaction', 'mj_member_notification_on_testimonial_reaction', 10, 4);
 }
 
 if (!function_exists('mj_member_notification_on_testimonial_comment')) {
@@ -1871,7 +1890,6 @@ if (!function_exists('mj_member_notification_on_testimonial_comment')) {
         ));
     }
 
-    add_action('mj_member_testimonial_comment', 'mj_member_notification_on_testimonial_comment', 10, 4);
 }
 
 if (!function_exists('mj_member_notification_on_testimonial_comment_reply')) {
@@ -1921,7 +1939,6 @@ if (!function_exists('mj_member_notification_on_testimonial_comment_reply')) {
         ));
     }
 
-    add_action('mj_member_testimonial_comment_reply', 'mj_member_notification_on_testimonial_comment_reply', 10, 4);
 }
 
 if (!function_exists('mj_member_notification_on_testimonial_new_pending')) {
@@ -1979,7 +1996,6 @@ if (!function_exists('mj_member_notification_on_testimonial_new_pending')) {
         ));
     }
 
-    add_action('mj_member_testimonial_created', 'mj_member_notification_on_testimonial_new_pending', 10, 2);
 }
 
 // ============================================================================
@@ -2045,7 +2061,6 @@ if (!function_exists('mj_member_notification_on_expense_created')) {
         ));
     }
 
-    add_action('mj_member_expense_created', 'mj_member_notification_on_expense_created', 10, 3);
 }
 
 // ============================================================================
@@ -2092,7 +2107,6 @@ if (!function_exists('mj_member_notification_on_expense_reimbursed')) {
         ));
     }
 
-    add_action('mj_member_expense_reimbursed', 'mj_member_notification_on_expense_reimbursed', 10, 3);
 }
 // ============================================================================
 // LISTENER: Note de frais refusée → Notifier le membre
@@ -2145,7 +2159,6 @@ if (!function_exists('mj_member_notification_on_expense_rejected')) {
         ));
     }
 
-    add_action('mj_member_expense_rejected', 'mj_member_notification_on_expense_rejected', 10, 4);
 }
 
 // ============================================================================
@@ -2211,7 +2224,6 @@ if (!function_exists('mj_member_notification_on_mileage_created')) {
         ));
     }
 
-    add_action('mj_member_mileage_created', 'mj_member_notification_on_mileage_created', 10, 3);
 }
 
 // ============================================================================
@@ -2258,7 +2270,6 @@ if (!function_exists('mj_member_notification_on_mileage_approved')) {
         ));
     }
 
-    add_action('mj_member_mileage_approved', 'mj_member_notification_on_mileage_approved', 10, 3);
 }
 
 // ============================================================================
@@ -2305,7 +2316,6 @@ if (!function_exists('mj_member_notification_on_mileage_reimbursed')) {
         ));
     }
 
-    add_action('mj_member_mileage_reimbursed', 'mj_member_notification_on_mileage_reimbursed', 10, 3);
 }
 
 // ============================================================================
@@ -2401,5 +2411,5 @@ if (!function_exists('mj_member_notification_on_employee_document_uploaded')) {
         ));
     }
 
-    add_action('mj_member_employee_document_uploaded', 'mj_member_notification_on_employee_document_uploaded', 10, 5);
 }
+} // end namespace

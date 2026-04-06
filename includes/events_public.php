@@ -1,11 +1,34 @@
 <?php
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
+
+    final class EventsPublicModule implements ModuleInterface {
+        public function register(): void {
+            add_action('wp_ajax_mj_member_update_event_assignments', 'mj_member_ajax_update_event_assignments');
+            add_action('wp_ajax_nopriv_mj_member_update_event_assignments', 'mj_member_ajax_update_event_assignments');
+            add_action('init', 'mj_member_register_event_routes', 12);
+            add_filter('query_vars', 'mj_member_event_query_vars');
+            add_filter('mj_member_event_permalink', 'mj_member_resolve_event_permalink', 10, 2);
+            add_action('template_redirect', 'mj_member_event_page_preload_for_admin_bar', 5);
+            add_filter('template_include', 'mj_member_event_page_template_include', 98);
+            add_action('admin_bar_menu', 'mj_member_event_admin_bar_edit_link', 90);
+            add_action('admin_bar_menu', 'mj_member_admin_bar_push_debug', 999);
+            add_action('wp_head', 'mj_member_admin_bar_push_debug_css');
+            add_action('admin_head', 'mj_member_admin_bar_push_debug_css');
+            add_action('wp_ajax_mj_member_get_event_reservations', 'mj_member_ajax_get_event_reservations');
+            add_action('wp_ajax_mj_member_register_event', 'mj_member_ajax_register_event');
+            add_action('wp_ajax_nopriv_mj_member_register_event', 'mj_member_ajax_register_event');
+            add_action('wp_ajax_mj_member_unregister_event', 'mj_member_ajax_unregister_event');
+        }
+    }
+}
+
+namespace {
+    if (!defined('ABSPATH')) { exit; }
 
 use Mj\Member\Core\Config;
 use Mj\Member\Classes\MjRoles;
-
-if (!defined('ABSPATH')) {
-    exit;
-}
 
 if (!function_exists('mj_member_normalize_json_payload')) {
     function mj_member_normalize_json_payload($value) {
@@ -280,8 +303,6 @@ if (!function_exists('mj_member_ajax_update_event_assignments')) {
         );
     }
 
-    add_action('wp_ajax_mj_member_update_event_assignments', 'mj_member_ajax_update_event_assignments');
-    add_action('wp_ajax_nopriv_mj_member_update_event_assignments', 'mj_member_ajax_update_event_assignments');
 }
 if (!function_exists('mj_member_output_events_widget_styles')) {
     function mj_member_output_events_widget_styles() {
@@ -1344,7 +1365,6 @@ if (!function_exists('mj_member_register_event_routes')) {
         add_rewrite_tag('%mj_event_page_slug%', '([^&]+)');
         add_rewrite_rule('evenement/([^/]+)/?$', 'index.php?mj_event_page_slug=$matches[1]', 'top');
     }
-    add_action('init', 'mj_member_register_event_routes', 12);
 }
 
 if (!function_exists('mj_member_event_query_vars')) {
@@ -1355,7 +1375,6 @@ if (!function_exists('mj_member_event_query_vars')) {
 
         return $vars;
     }
-    add_filter('query_vars', 'mj_member_event_query_vars');
 }
 
 if (!function_exists('mj_member_get_public_events')) {
@@ -2460,7 +2479,6 @@ if (!function_exists('mj_member_resolve_event_permalink')) {
         return mj_member_build_event_permalink($slug_reference);
     }
 
-    add_filter('mj_member_event_permalink', 'mj_member_resolve_event_permalink', 10, 2);
 }
 
 if (!function_exists('mj_member_normalize_hex_color_value')) {
@@ -3034,7 +3052,6 @@ if (!function_exists('mj_member_event_page_preload_for_admin_bar')) {
             );
         }
     }
-    add_action('template_redirect', 'mj_member_event_page_preload_for_admin_bar', 5);
 }
 
 if (!function_exists('mj_member_user_can_view_draft_events')) {
@@ -3145,7 +3162,6 @@ if (!function_exists('mj_member_event_page_template_include')) {
         return Config::path() . 'includes/templates/front/event-page/context.php';
     }
 
-    add_filter('template_include', 'mj_member_event_page_template_include', 98);
 }
 
 if (!function_exists('mj_member_event_admin_bar_edit_link')) {
@@ -3208,7 +3224,6 @@ if (!function_exists('mj_member_event_admin_bar_edit_link')) {
         );
     }
 
-    add_action('admin_bar_menu', 'mj_member_event_admin_bar_edit_link', 90);
 }
 
 /* ── Push Debug link in admin bar ────────────────────────────────────── */
@@ -3244,9 +3259,6 @@ if (!function_exists('mj_member_admin_bar_push_debug')) {
 </style>' . "\n";
     }
 
-    add_action('admin_bar_menu', 'mj_member_admin_bar_push_debug', 999);
-    add_action('wp_head', 'mj_member_admin_bar_push_debug_css');
-    add_action('admin_head', 'mj_member_admin_bar_push_debug_css');
 }
 
 if (!function_exists('mj_member_ajax_get_event_reservations')) {
@@ -3646,7 +3658,6 @@ if (!function_exists('mj_member_ajax_get_event_reservations')) {
         wp_send_json_success($response);
     }
 
-    add_action('wp_ajax_mj_member_get_event_reservations', 'mj_member_ajax_get_event_reservations');
 }
 
 if (!function_exists('mj_member_ajax_register_event')) {
@@ -4204,8 +4215,6 @@ if (!function_exists('mj_member_ajax_register_event')) {
         wp_die('', '', array('response' => null));
     }
 
-    add_action('wp_ajax_mj_member_register_event', 'mj_member_ajax_register_event');
-    add_action('wp_ajax_nopriv_mj_member_register_event', 'mj_member_ajax_register_event');
 }
 
 if (!function_exists('mj_member_ajax_unregister_event')) {
@@ -4315,5 +4324,5 @@ if (!function_exists('mj_member_ajax_unregister_event')) {
         );
     }
 
-    add_action('wp_ajax_mj_member_unregister_event', 'mj_member_ajax_unregister_event');
 }
+} // end namespace

@@ -1,15 +1,29 @@
 <?php
-declare(strict_types=1);
-use Mj\Member\Admin\Page\TodoProjectsPage;
-use Mj\Member\Admin\Page\TodosPage;
-use Mj\Member\Classes\Crud\MjTodoMedia;
-use Mj\Member\Classes\Crud\MjTodoProjects;
-use Mj\Member\Classes\Crud\MjTodos;
-use Mj\Member\Core\Config;
+namespace Mj\Member\Module\Admin {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
 
-if (!defined('ABSPATH')) {
-    exit;
+    final class TodosAdminModule implements ModuleInterface {
+        public function register(): void {
+            add_action('admin_post_mj_member_todo_project_create', 'mj_member_todos_handle_project_create');
+            add_action('admin_post_mj_member_todo_project_update', 'mj_member_todos_handle_project_update');
+            add_action('admin_post_mj_member_todo_project_delete', 'mj_member_todos_handle_project_delete');
+            add_action('admin_post_mj_member_todo_create', 'mj_member_todos_handle_todo_create');
+            add_action('admin_post_mj_member_todo_update', 'mj_member_todos_handle_todo_update');
+            add_action('admin_post_mj_member_todo_delete', 'mj_member_todos_handle_todo_delete');
+        }
+    }
 }
+
+namespace {
+    use Mj\Member\Admin\Page\TodoProjectsPage;
+    use Mj\Member\Admin\Page\TodosPage;
+    use Mj\Member\Classes\Crud\MjTodoMedia;
+    use Mj\Member\Classes\Crud\MjTodoProjects;
+    use Mj\Member\Classes\Crud\MjTodos;
+    use Mj\Member\Core\Config;
+
+    if (!defined('ABSPATH')) { exit; }
 
 if (!function_exists('mj_member_todos_admin_require_capability')) {
     function mj_member_todos_admin_require_capability(): void
@@ -181,7 +195,6 @@ if (!function_exists('mj_member_todos_handle_project_create')) {
         ));
     }
 }
-add_action('admin_post_mj_member_todo_project_create', 'mj_member_todos_handle_project_create');
 
 if (!function_exists('mj_member_todos_handle_project_update')) {
     function mj_member_todos_handle_project_update(): void
@@ -231,7 +244,6 @@ if (!function_exists('mj_member_todos_handle_project_update')) {
         ));
     }
 }
-add_action('admin_post_mj_member_todo_project_update', 'mj_member_todos_handle_project_update');
 
 if (!function_exists('mj_member_todos_handle_project_delete')) {
     function mj_member_todos_handle_project_delete(): void
@@ -266,7 +278,6 @@ if (!function_exists('mj_member_todos_handle_project_delete')) {
         ));
     }
 }
-add_action('admin_post_mj_member_todo_project_delete', 'mj_member_todos_handle_project_delete');
 
 if (!function_exists('mj_member_todos_handle_todo_create')) {
     function mj_member_todos_handle_todo_create(): void
@@ -357,7 +368,6 @@ if (!function_exists('mj_member_todos_handle_todo_create')) {
         ));
     }
 }
-add_action('admin_post_mj_member_todo_create', 'mj_member_todos_handle_todo_create');
 
 if (!function_exists('mj_member_todos_handle_todo_update')) {
     function mj_member_todos_handle_todo_update(): void
@@ -476,7 +486,6 @@ if (!function_exists('mj_member_todos_handle_todo_update')) {
         ));
     }
 }
-add_action('admin_post_mj_member_todo_update', 'mj_member_todos_handle_todo_update');
 
 if (!function_exists('mj_member_todos_handle_todo_delete')) {
     function mj_member_todos_handle_todo_delete(): void
@@ -511,4 +520,4 @@ if (!function_exists('mj_member_todos_handle_todo_delete')) {
         ));
     }
 }
-add_action('admin_post_mj_member_todo_delete', 'mj_member_todos_handle_todo_delete');
+} // end namespace {

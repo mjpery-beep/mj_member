@@ -748,8 +748,8 @@ final class AssetsManager
                 wp_enqueue_style('mj-member-components');
                 wp_enqueue_style('mj-member-expenses');
                 wp_enqueue_script('mj-member-expenses');
-                if (function_exists('mj_member_expenses_localize')) {
-                    mj_member_expenses_localize();
+                if (class_exists('\\Mj\\Member\\Core\\Ajax\\Front\\ExpensesController')) {
+                    \Mj\Member\Core\Ajax\Front\ExpensesController::localize();
                 }
                 break;
 

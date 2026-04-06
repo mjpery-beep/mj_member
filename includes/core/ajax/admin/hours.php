@@ -1,25 +1,34 @@
 <?php
 
+namespace Mj\Member\Core\Ajax\Admin;
+
 use Mj\Member\Admin\Page\HoursPage;
 use Mj\Member\Classes\Crud\MjMemberHours;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\Value\MemberData;
 use Mj\Member\Core\Config;
+use Mj\Member\Core\Contracts\AjaxHandlerInterface;
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-add_action('wp_ajax_mj_member_hours_create', 'mj_member_ajax_hours_create');
-add_action('wp_ajax_mj_member_hours_calendar', 'mj_member_ajax_hours_calendar');
-add_action('wp_ajax_mj_member_hours_list', 'mj_member_ajax_hours_list');
-add_action('wp_ajax_mj_member_hours_rename_task', 'mj_member_ajax_hours_rename_task');
-add_action('wp_ajax_mj_member_hours_rename_project', 'mj_member_ajax_hours_rename_project');
-add_action('wp_ajax_mj_member_project_hours_list', 'mj_member_ajax_project_hours_list');
-add_action('wp_ajax_mj_member_project_hours_reassign', 'mj_member_ajax_project_hours_reassign');
-add_action('wp_ajax_mj_member_project_hours_rename_task', 'mj_member_ajax_project_hours_rename_task');
+final class HoursController implements AjaxHandlerInterface
+{
+    public function registerHooks(): void
+    {
+        add_action('wp_ajax_mj_member_hours_create', [$this, 'hoursCreate']);
+        add_action('wp_ajax_mj_member_hours_calendar', [$this, 'hoursCalendar']);
+        add_action('wp_ajax_mj_member_hours_list', [$this, 'hoursList']);
+        add_action('wp_ajax_mj_member_hours_rename_task', [$this, 'hoursRenameTask']);
+        add_action('wp_ajax_mj_member_hours_rename_project', [$this, 'hoursRenameProject']);
+        add_action('wp_ajax_mj_member_project_hours_list', [$this, 'projectHoursList']);
+        add_action('wp_ajax_mj_member_project_hours_reassign', [$this, 'projectHoursReassign']);
+        add_action('wp_ajax_mj_member_project_hours_rename_task', [$this, 'projectHoursRenameTask']);
+    }
 
-function mj_member_ajax_hours_create() {
+    public function hoursCreate(): void
+    {
     check_ajax_referer('mj_member_hours', 'nonce');
 
     $capability = Config::hoursCapability();
@@ -147,7 +156,8 @@ function mj_member_ajax_hours_create() {
     ));
 }
 
-function mj_member_ajax_hours_calendar() {
+    public function hoursCalendar(): void
+    {
     check_ajax_referer('mj_member_hours', 'nonce');
 
     $capability = Config::hoursCapability();
@@ -193,7 +203,8 @@ function mj_member_ajax_hours_calendar() {
     ));
 }
 
-function mj_member_ajax_hours_list() {
+    public function hoursList(): void
+    {
     check_ajax_referer('mj_member_hours', 'nonce');
 
     $capability = Config::hoursCapability();
@@ -266,7 +277,8 @@ function mj_member_ajax_hours_list() {
     ));
 }
 
-function mj_member_ajax_hours_rename_task() {
+    public function hoursRenameTask(): void
+    {
     check_ajax_referer('mj_member_hours', 'nonce');
 
     $capability = Config::hoursCapability();
@@ -324,7 +336,8 @@ function mj_member_ajax_hours_rename_task() {
     wp_send_json_success(array('updated' => (int) $result));
 }
 
-function mj_member_ajax_hours_rename_project() {
+    public function hoursRenameProject(): void
+    {
     check_ajax_referer('mj_member_hours', 'nonce');
 
     $capability = Config::hoursCapability();
@@ -403,7 +416,8 @@ function mj_member_ajax_hours_rename_project() {
 /**
  * AJAX handler: list hour entries for a given project_id.
  */
-function mj_member_ajax_project_hours_list() {
+    public function projectHoursList(): void
+    {
     check_ajax_referer('mj_member_project_hours', 'nonce');
 
     $capability = Config::capability();
@@ -479,7 +493,8 @@ function mj_member_ajax_project_hours_list() {
 /**
  * AJAX handler: reassign an hour entry to a different project.
  */
-function mj_member_ajax_project_hours_reassign() {
+    public function projectHoursReassign(): void
+    {
     check_ajax_referer('mj_member_project_hours', 'nonce');
 
     $capability = Config::capability();
@@ -512,7 +527,8 @@ function mj_member_ajax_project_hours_reassign() {
 /**
  * AJAX handler: rename the task label of an hour entry.
  */
-function mj_member_ajax_project_hours_rename_task() {
+    public function projectHoursRenameTask(): void
+    {
     check_ajax_referer('mj_member_project_hours', 'nonce');
 
     $capability = Config::capability();
@@ -543,4 +559,5 @@ function mj_member_ajax_project_hours_rename_task() {
         'message' => __('Tâche renommée.', 'mj-member'),
         'task_label' => $newLabel,
     ));
+    }
 }

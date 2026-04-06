@@ -1,19 +1,28 @@
 <?php
 
+namespace Mj\Member\Core\Ajax\Admin;
+
 use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\Crud\MjEventOccurrences;
 use Mj\Member\Classes\Table\MjEvents_List_Table;
 use Mj\Member\Core\Config;
+use Mj\Member\Core\Contracts\AjaxHandlerInterface;
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-add_action('wp_ajax_mj_fetch_events_table', 'mj_member_ajax_fetch_events_table');
-add_action('wp_ajax_mj_inline_edit_event', 'mj_inline_edit_event_callback');
-add_action('wp_ajax_mj_calendar_delete_occurrence', 'mj_calendar_delete_occurrence');
+final class EventsController implements AjaxHandlerInterface
+{
+    public function registerHooks(): void
+    {
+        add_action('wp_ajax_mj_fetch_events_table', [$this, 'fetchEventsTable']);
+        add_action('wp_ajax_mj_inline_edit_event', [$this, 'inlineEditEvent']);
+        add_action('wp_ajax_mj_calendar_delete_occurrence', [$this, 'calendarDeleteOccurrence']);
+    }
 
-function mj_member_ajax_fetch_events_table() {
+    public function fetchEventsTable(): void
+    {
     if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'mj_events_list')) {
         wp_send_json_error(array('message' => __('Vérification de sécurité échouée.', 'mj-member')), 403);
     }
@@ -67,7 +76,8 @@ function mj_member_ajax_fetch_events_table() {
     wp_send_json_success($response);
 }
 
-function mj_inline_edit_event_callback() {
+    public function inlineEditEvent(): void
+    {
     if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'mj_inline_edit_nonce')) {
         wp_send_json_error(array('message' => __('Vérification de sécurité échouée', 'mj-member')));
     }
@@ -184,15 +194,16 @@ function mj_inline_edit_event_callback() {
     ));
 }
 
-/**
- * Delete (or soft-delete) a single event occurrence from the calendar.
- *
- * Expects:
- *  - nonce  : mj_calendar_delete_occurrence
- *  - event_id : int
- *  - start_ts : int (Unix timestamp of the occurrence start)
- */
-function mj_calendar_delete_occurrence() {
+    /**
+     * Delete (or soft-delete) a single event occurrence from the calendar.
+     *
+     * Expects:
+     *  - nonce  : mj_calendar_delete_occurrence
+     *  - event_id : int
+     *  - start_ts : int (Unix timestamp of the occurrence start)
+     */
+    public function calendarDeleteOccurrence(): void
+    {
     if (!check_ajax_referer('mj_calendar_delete_occurrence', 'nonce', false)) {
         wp_send_json_error(array('message' => __('Nonce invalide.', 'mj-member')));
         return;
@@ -273,4 +284,5 @@ function mj_calendar_delete_occurrence() {
     wp_send_json_error(array(
         'message' => __('Occurrence introuvable dans la base de données. S\'il s\'agit d\'un événement non-récurrent, supprimez-le via le gestionnaire.', 'mj-member'),
     ));
+    }
 }

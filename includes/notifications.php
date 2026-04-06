@@ -1,10 +1,17 @@
 <?php
 
-use Mj\Member\Classes\MjNotificationManager;
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
 
-if (!defined('ABSPATH')) {
-    exit;
+    final class NotificationsModule implements ModuleInterface {
+        public function register(): void {}
+    }
 }
+
+namespace {
+    use Mj\Member\Classes\MjNotificationManager;
+    if (!defined('ABSPATH')) { exit; }
 
 if (!function_exists('mj_member_record_notification')) {
     /**
@@ -96,3 +103,4 @@ if (!function_exists('mj_member_mark_user_notifications_read')) {
         return MjNotificationManager::mark_user_notifications_read((int) $user_id, $notification_ids, $timestamp);
     }
 }
+} // end namespace {

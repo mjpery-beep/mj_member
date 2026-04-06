@@ -1,17 +1,26 @@
 <?php
 
-use Mj\Member\Admin\Page\HoursPage;
-use Mj\Member\Core\Config;
-use Mj\Member\Classes\Crud\MjEvents;
-use Mj\Member\Classes\Crud\MjMembers;
-use Mj\Member\Classes\Crud\MjMemberHours;
-use Mj\Member\Classes\Crud\MjDynamicFields;
-use Mj\Member\Classes\Crud\MjDynamicFieldValues;
-use Mj\Member\Classes\MjRoles;
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
 
-if (!defined('ABSPATH')) {
-    exit;
+    final class DashboardModule implements ModuleInterface {
+        public function register(): void {
+            add_action('wp_dashboard_setup', 'mj_member_register_wp_dashboard_widget');
+        }
+    }
 }
+
+namespace {
+    use Mj\Member\Admin\Page\HoursPage;
+    use Mj\Member\Core\Config;
+    use Mj\Member\Classes\Crud\MjEvents;
+    use Mj\Member\Classes\Crud\MjMembers;
+    use Mj\Member\Classes\Crud\MjMemberHours;
+    use Mj\Member\Classes\Crud\MjDynamicFields;
+    use Mj\Member\Classes\Crud\MjDynamicFieldValues;
+    use Mj\Member\Classes\MjRoles;
+    if (!defined('ABSPATH')) { exit; }
 
 function mj_member_dashboard_page() {
     if (!current_user_can(Config::capability())) {
@@ -2086,3 +2095,4 @@ function mj_member_dashboard_compute_dynfield_stats(array $field_ids): array {
 
     return $result;
 }
+} // end namespace {

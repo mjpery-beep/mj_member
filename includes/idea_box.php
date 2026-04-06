@@ -1,14 +1,26 @@
 <?php
 
-use Mj\Member\Classes\Crud\MjIdeas;
-use Mj\Member\Classes\Crud\MjIdeaVotes;
-use Mj\Member\Classes\Crud\MjMembers;
-use Mj\Member\Classes\MjRoles;
-use Mj\Member\Classes\Value\MemberData;
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
 
-if (!defined('ABSPATH')) {
-    exit;
+    final class IdeaBoxModule implements ModuleInterface {
+        public function register(): void {
+            add_action('wp_ajax_mj_member_idea_box_fetch', 'mj_member_ajax_idea_box_fetch');
+            add_action('wp_ajax_mj_member_idea_box_create', 'mj_member_ajax_idea_box_create');
+            add_action('wp_ajax_mj_member_idea_box_vote', 'mj_member_ajax_idea_box_vote');
+            add_action('wp_ajax_mj_member_idea_box_delete', 'mj_member_ajax_idea_box_delete');
+        }
+    }
 }
+
+namespace {
+    use Mj\Member\Classes\Crud\MjIdeas;
+    use Mj\Member\Classes\Crud\MjIdeaVotes;
+    use Mj\Member\Classes\Crud\MjMembers;
+    use Mj\Member\Classes\MjRoles;
+    use Mj\Member\Classes\Value\MemberData;
+    if (!defined('ABSPATH')) { exit; }
 
 if (!function_exists('mj_member_idea_box_resolve_member')) {
     function mj_member_idea_box_resolve_member(): ?MemberData
@@ -329,7 +341,4 @@ if (!function_exists('mj_member_ajax_idea_box_delete')) {
     }
 }
 
-add_action('wp_ajax_mj_member_idea_box_fetch', 'mj_member_ajax_idea_box_fetch');
-add_action('wp_ajax_mj_member_idea_box_create', 'mj_member_ajax_idea_box_create');
-add_action('wp_ajax_mj_member_idea_box_vote', 'mj_member_ajax_idea_box_vote');
-add_action('wp_ajax_mj_member_idea_box_delete', 'mj_member_ajax_idea_box_delete');
+} // end namespace {

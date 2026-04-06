@@ -205,20 +205,39 @@ final class MjSocialMediaPublisher
         $body = wp_remote_retrieve_body($response);
 
         if ($statusCode < 200 || $statusCode >= 300) {
-            $errorMsg = __('Erreur inconnue lors de la publication.', 'mj-member');
+            $errorMsg     = __('Erreur inconnue lors de la publication.', 'mj-member');
+            $apiCode      = 0;
+            $tokenExpired = false;
+            $permError    = false;
 
             if ($body !== '') {
                 $decoded = json_decode($body, true);
                 if (is_array($decoded)) {
-                    if (isset($decoded['error']['message'])) {
-                        $errorMsg = sanitize_text_field((string) $decoded['error']['message']);
-                    } elseif (isset($decoded['message'])) {
-                        $errorMsg = sanitize_text_field((string) $decoded['message']);
+                    $apiError = isset($decoded['error']) && is_array($decoded['error']) ? $decoded['error'] : array();
+                    $apiCode  = isset($apiError['code']) ? (int) $apiError['code'] : 0;
+                    $rawMsg   = isset($apiError['message']) ? (string) $apiError['message']
+                              : (isset($decoded['message']) ? (string) $decoded['message'] : '');
+
+                    if ($apiCode === 190 || strpos($rawMsg, 'Session has expired') !== false || strpos($rawMsg, 'access token') !== false) {
+                        // Token expired or invalid
+                        $tokenExpired = true;
+                        $errorMsg = __('Le token d\'accès a expiré ou est invalide. Renouvelez-le dans Paramètres → Publier sur les réseaux.', 'mj-member');
+                    } elseif ($apiCode === 200) {
+                        // Insufficient permissions
+                        $permError = true;
+                        $errorMsg = __('Permissions insuffisantes sur le token. Pour une Page Facebook, le token doit être un Page Access Token avec les permissions pages_read_engagement et pages_manage_posts. Obtenez-le via Graph API Explorer → Génerer → Open in Access Token Tool → "Get Page Access Token".', 'mj-member');
+                    } elseif ($rawMsg !== '') {
+                        $errorMsg = sanitize_text_field($rawMsg);
                     }
                 }
             }
 
-            return new \WP_Error('mj_social_api_error', $errorMsg, array('status' => $statusCode));
+            return new \WP_Error('mj_social_api_error', $errorMsg, array(
+                'status'       => $statusCode,
+                'apiCode'      => $apiCode,
+                'tokenExpired' => $tokenExpired,
+                'permError'    => $permError,
+            ));
         }
 
         $decoded = json_decode($body, true);

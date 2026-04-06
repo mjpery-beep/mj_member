@@ -1,21 +1,29 @@
 <?php
 
+namespace Mj\Member\Core\Ajax\Admin;
+
 use Mj\Member\Core\Config;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\MjMail;
 use Mj\Member\Classes\MjSms;
 use Mj\Member\Classes\MjWhatsapp;
+use Mj\Member\Core\Contracts\AjaxHandlerInterface;
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Admin AJAX handlers dedicated to bulk and single email flows.
-add_action('wp_ajax_mj_get_email_template', 'mj_member_get_email_template_callback');
-add_action('wp_ajax_mj_member_prepare_email_send', 'mj_member_prepare_email_send_callback');
-add_action('wp_ajax_mj_member_send_single_email', 'mj_member_send_single_email_callback');
+final class EmailsController implements AjaxHandlerInterface
+{
+    public function registerHooks(): void
+    {
+        add_action('wp_ajax_mj_get_email_template', [$this, 'getEmailTemplate']);
+        add_action('wp_ajax_mj_member_prepare_email_send', [$this, 'prepareEmailSend']);
+        add_action('wp_ajax_mj_member_send_single_email', [$this, 'sendSingleEmail']);
+    }
 
-function mj_member_get_email_template_callback() {
+    public function getEmailTemplate(): void
+    {
     $capability = Config::capability();
 
     if (!current_user_can($capability)) {
@@ -47,7 +55,8 @@ function mj_member_get_email_template_callback() {
     ));
 }
 
-function mj_member_prepare_email_send_callback() {
+    public function prepareEmailSend(): void
+    {
     check_ajax_referer('mj_send_emails', 'nonce');
 
     $capability = Config::capability();
@@ -158,7 +167,7 @@ function mj_member_prepare_email_send_callback() {
 
     foreach ($recipients as $member) {
         $member_id = isset($member->id) ? (int) $member->id : 0;
-        $label     = mj_member_format_send_label($member);
+        $label     = $this->formatSendLabel($member);
 
         $emails = $send_email ? mj_member_collect_email_targets($member, false) : array();
         $phones = $send_sms ? mj_member_collect_sms_targets($member) : array();
@@ -262,7 +271,8 @@ function mj_member_prepare_email_send_callback() {
     ));
 }
 
-function mj_member_send_single_email_callback() {
+    public function sendSingleEmail(): void
+    {
     check_ajax_referer('mj_send_emails', 'nonce');
 
     $capability = Config::capability();
@@ -333,7 +343,7 @@ function mj_member_send_single_email_callback() {
     if ($force_test_mode) {
         $context['force_test_mode'] = true;
     }
-    $label = mj_member_format_send_label($member);
+    $label = $this->formatSendLabel($member);
 
     $email_result = array(
         'status' => $send_email ? 'pending' : 'disabled',
@@ -701,25 +711,27 @@ function mj_member_send_single_email_callback() {
             'whatsapp' => $whatsapp_result['status'],
         ),
     ));
-}
-
-function mj_member_format_send_label($member) {
-    if (!is_object($member)) {
-        return '';
     }
 
-    $name_parts = array();
-    if (!empty($member->last_name)) {
-        $name_parts[] = (string) $member->last_name;
-    }
-    if (!empty($member->first_name)) {
-        $name_parts[] = (string) $member->first_name;
-    }
+    private function formatSendLabel($member): string
+    {
+        if (!is_object($member)) {
+            return '';
+        }
 
-    if (!empty($name_parts)) {
-        return trim(implode(' ', $name_parts));
-    }
+        $name_parts = array();
+        if (!empty($member->last_name)) {
+            $name_parts[] = (string) $member->last_name;
+        }
+        if (!empty($member->first_name)) {
+            $name_parts[] = (string) $member->first_name;
+        }
 
-    $member_id = isset($member->id) ? (int) $member->id : 0;
-    return $member_id > 0 ? sprintf(__('Membre #%d', 'mj-member'), $member_id) : __('Membre', 'mj-member');
+        if (!empty($name_parts)) {
+            return trim(implode(' ', $name_parts));
+        }
+
+        $member_id = isset($member->id) ? (int) $member->id : 0;
+        return $member_id > 0 ? sprintf(__('Membre #%d', 'mj-member'), $member_id) : __('Membre', 'mj-member');
+    }
 }

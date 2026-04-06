@@ -1,17 +1,30 @@
 <?php
 
-use Mj\Member\Classes\MjBackupProfile;
-use Mj\Member\Classes\MjDatabaseBackup;
-use Mj\Member\Classes\MjManualActionLog;
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
 
-if (!defined('ABSPATH')) {
-    exit;
+    final class BackupModule implements ModuleInterface {
+        public function register(): void {
+            add_filter('cron_schedules', 'mj_member_backup_add_cron_schedules');
+            add_action('init', 'mj_member_backup_maybe_schedule');
+            add_action('init', 'mj_member_backup_sync_profile_schedules', 20);
+            add_action('mj_backup_run_profile', 'mj_member_handle_scheduled_profile_backup', 10, 1);
+            add_action('mj_member_run_backup', 'mj_member_handle_scheduled_backup');
+            add_action('wp_ajax_mj_member_run_backup_now', 'mj_member_ajax_run_backup_now');
+        }
+    }
 }
 
-/* ------------------------------------------------------------------
- * Register the 'weekly' cron schedule (not built-in to WordPress)
- * ----------------------------------------------------------------*/
-add_filter('cron_schedules', 'mj_member_backup_add_cron_schedules');
+namespace {
+    use Mj\Member\Classes\MjBackupProfile;
+    use Mj\Member\Classes\MjDatabaseBackup;
+    use Mj\Member\Classes\MjManualActionLog;
+    if (!defined('ABSPATH')) { exit; }
+
+    /* ------------------------------------------------------------------
+     * Register the 'weekly' cron schedule (not built-in to WordPress)
+     * ----------------------------------------------------------------*/
 function mj_member_backup_add_cron_schedules(array $schedules): array
 {
     if (!isset($schedules['weekly'])) {
@@ -262,3 +275,4 @@ function mj_member_ajax_run_backup_now(): void
         'last_run' => MjDatabaseBackup::getLastRun(),
     ]);
 }
+} // end namespace {

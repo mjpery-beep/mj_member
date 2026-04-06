@@ -1,20 +1,28 @@
 <?php
 
+namespace Mj\Member\Core\Ajax\Admin;
+
+use Mj\Member\Core\Contracts\AjaxHandlerInterface;
 use Mj\Member\Classes\MjNextcloudPhotoImporter;
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-add_action('wp_ajax_mj_member_photo_import_tags', 'mj_member_photo_import_tags_callback');
-add_action('wp_ajax_mj_member_run_photo_import', 'mj_member_run_photo_import_callback');
-add_action('wp_ajax_mj_member_photo_import_logs', 'mj_member_photo_import_logs_callback');
-add_action('wp_ajax_mj_member_photo_import_progress', 'mj_member_photo_import_progress_callback');
-add_action('wp_ajax_mj_member_photo_import_start', 'mj_member_photo_import_start_callback');
-add_action('wp_ajax_mj_member_photo_import_worker', 'mj_member_photo_import_worker_callback');
-add_action('wp_ajax_nopriv_mj_member_photo_import_worker', 'mj_member_photo_import_worker_callback');
+final class PhotoImportController implements AjaxHandlerInterface
+{
+    public function registerHooks(): void
+    {
+        add_action('wp_ajax_mj_member_photo_import_tags', [$this, 'memberPhotoImportTags']);
+        add_action('wp_ajax_mj_member_run_photo_import', [$this, 'memberRunPhotoImport']);
+        add_action('wp_ajax_mj_member_photo_import_logs', [$this, 'memberPhotoImportLogs']);
+        add_action('wp_ajax_mj_member_photo_import_progress', [$this, 'memberPhotoImportProgress']);
+        add_action('wp_ajax_mj_member_photo_import_start', [$this, 'memberPhotoImportStart']);
+        add_action('wp_ajax_mj_member_photo_import_worker', [$this, 'memberPhotoImportWorker']);
+        add_action('wp_ajax_nopriv_mj_member_photo_import_worker', [$this, 'memberPhotoImportWorker']);
+    }
 
-function mj_member_photo_import_tags_callback(): void
+    public function memberPhotoImportTags(): void
 {
     if (!current_user_can('manage_options')) {
         wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
@@ -32,7 +40,7 @@ function mj_member_photo_import_tags_callback(): void
     ));
 }
 
-function mj_member_run_photo_import_callback(): void
+    public function memberRunPhotoImport(): void
 {
     if (!current_user_can('manage_options')) {
         wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
@@ -61,7 +69,7 @@ function mj_member_run_photo_import_callback(): void
     wp_send_json_success($result);
 }
 
-function mj_member_photo_import_start_callback(): void
+    public function memberPhotoImportStart(): void
 {
     if (!current_user_can('manage_options')) {
         wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
@@ -133,7 +141,7 @@ function mj_member_photo_import_start_callback(): void
     ));
 }
 
-function mj_member_photo_import_worker_callback(): void
+    public function memberPhotoImportWorker(): void
 {
     if (function_exists('ignore_user_abort')) {
         ignore_user_abort(true);
@@ -167,7 +175,7 @@ function mj_member_photo_import_worker_callback(): void
     wp_die('ok');
 }
 
-function mj_member_photo_import_progress_callback(): void
+    public function memberPhotoImportProgress(): void
 {
     if (!current_user_can('manage_options')) {
         wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
@@ -186,7 +194,7 @@ function mj_member_photo_import_progress_callback(): void
     ));
 }
 
-function mj_member_photo_import_logs_callback(): void
+    public function memberPhotoImportLogs(): void
 {
     if (!current_user_can('manage_options')) {
         wp_send_json_error(array('message' => __('Accès refusé.', 'mj-member')), 403);
@@ -206,7 +214,7 @@ function mj_member_photo_import_logs_callback(): void
         ));
     }
 
-    $tail = mj_member_photo_import_tail_log($logPath, 3000);
+    $tail = $this->tailLog($logPath, 3000);
     if (!is_array($tail)) {
         $tail = array();
     }
@@ -229,7 +237,7 @@ function mj_member_photo_import_logs_callback(): void
     ));
 }
 
-function mj_member_photo_import_tail_log(string $path, int $maxLines = 3000): array
+    private function tailLog(string $path, int $maxLines = 3000): array
 {
     $handle = @fopen($path, 'rb');
     if ($handle === false) {
@@ -270,4 +278,5 @@ function mj_member_photo_import_tail_log(string $path, int $maxLines = 3000): ar
     fclose($handle);
 
     return array_reverse($lines);
+    }
 }

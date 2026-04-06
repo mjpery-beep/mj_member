@@ -1,11 +1,21 @@
 <?php
 
-use Mj\Member\Classes\Crud\MjMembers;
-use Mj\Member\Core\Config;
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
 
-if (!defined('ABSPATH')) {
-    exit;
+    final class DataRetentionModule implements ModuleInterface {
+        public function register(): void {
+            add_action('init', 'mj_member_schedule_data_retention_event');
+            add_action('mj_member_purge_expired_members', 'mj_member_handle_data_retention');
+        }
+    }
 }
+
+namespace {
+    use Mj\Member\Classes\Crud\MjMembers;
+    use Mj\Member\Core\Config;
+    if (!defined('ABSPATH')) { exit; }
 
 if (!function_exists('mj_member_schedule_data_retention_event')) {
     function mj_member_schedule_data_retention_event(): void
@@ -134,3 +144,4 @@ if (!function_exists('mj_member_get_data_retention_candidates')) {
         return array_map('intval', $results);
     }
 }
+} // end namespace {

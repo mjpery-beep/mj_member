@@ -1,4 +1,17 @@
 <?php
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
+
+    final class ShortcodeInscriptionModule implements ModuleInterface {
+        public function register(): void {
+        }
+    }
+}
+
+namespace {
+    if (!defined('ABSPATH')) { exit; }
+
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Classes\Crud\MjDynamicFields;
 use Mj\Member\Classes\Crud\MjDynamicFieldValues;
@@ -4053,3 +4066,4 @@ if (!function_exists('mj_member_render_registration_form')) {
         return ob_get_clean();
     }
 }
+} // end namespace

@@ -438,7 +438,7 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                                 <!-- Contenu texte -->
                                 <div class="mj-carousel-card__content">
                                     <?php if (isset($testimonial->content) && $testimonial->content): ?>
-                                        <?php echo wp_kses_post(wpautop(mj_member_testimonial_linkify_event_mentions($testimonial->content))); ?>
+                                        <?php echo wp_kses_post(wpautop(\Mj\Member\Core\Ajax\Front\TestimonialsController::linkifyEventMentions($testimonial->content))); ?>
                                     <?php endif; ?>
                                 </div>
 
@@ -605,7 +605,7 @@ wp_localize_script('mj-member-testimonials', 'mjTestimonialsData', $localize_dat
                         
                         <?php if (isset($testimonial->content) && $testimonial->content): ?>
                             <div class="mj-feed-post__content" data-raw-content="<?php echo esc_attr($testimonial->content); ?>">
-                                <?php echo wp_kses_post(wpautop(mj_member_testimonial_linkify_event_mentions($testimonial->content))); ?>
+                                <?php echo wp_kses_post(wpautop(\Mj\Member\Core\Ajax\Front\TestimonialsController::linkifyEventMentions($testimonial->content))); ?>
                             </div>
                         <?php elseif ($can_manage): ?>
                             <div class="mj-feed-post__content" data-raw-content=""></div>

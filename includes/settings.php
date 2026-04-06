@@ -1,11 +1,26 @@
 <?php
 
-use Mj\Member\Classes\MjBackupProfile;
-use Mj\Member\Classes\MjDatabaseBackup;
-use Mj\Member\Classes\MjManualActionLog;
-use Mj\Member\Classes\MjMediaBackup;
-use Mj\Member\Classes\MjNextcloudPhotoImporter;
-use Mj\Member\Core\Config;
+namespace Mj\Member\Module\Admin {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
+
+    final class SettingsModule implements ModuleInterface {
+        public function register(): void {
+            add_action('wp_ajax_mj_member_run_manual_backup_action', 'mj_member_ajax_run_manual_backup_action');
+            add_action('wp_ajax_mj_member_save_media_backup_settings_ajax', 'mj_member_save_media_backup_settings_ajax');
+        }
+    }
+}
+
+namespace {
+    use Mj\Member\Classes\MjBackupProfile;
+    use Mj\Member\Classes\MjDatabaseBackup;
+    use Mj\Member\Classes\MjManualActionLog;
+    use Mj\Member\Classes\MjMediaBackup;
+    use Mj\Member\Classes\MjNextcloudPhotoImporter;
+    use Mj\Member\Core\Config;
+
+    if (!defined('ABSPATH')) { exit; }
 
 require_once __DIR__ . '/settings/editor-tools.php';
 require_once __DIR__ . '/settings/ajax-account-pages.php';
@@ -1127,8 +1142,6 @@ function mj_member_ajax_run_manual_backup_action(): void
 
     wp_send_json_error(array('message' => 'Type d\'action non supporté.'));
 }
-add_action('wp_ajax_mj_member_run_manual_backup_action', 'mj_member_ajax_run_manual_backup_action');
-
 /**
  * AJAX: save media backup settings from backup panel (avoids nonce issues from nested forms).
  */
@@ -1178,5 +1191,5 @@ function mj_member_save_media_backup_settings_ajax(): void
 
     wp_send_json_success(array('message' => 'Options médias enregistrées.'));
 }
-add_action('wp_ajax_mj_member_save_media_backup_settings_ajax', 'mj_member_save_media_backup_settings_ajax');
 
+} // end namespace {

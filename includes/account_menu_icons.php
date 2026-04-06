@@ -1,10 +1,24 @@
 <?php
 
-use Mj\Member\Core\Config;
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
 
-if (!defined('ABSPATH')) {
-    exit;
+    final class AccountMenuIconsModule implements ModuleInterface {
+        public function register(): void {
+            if (is_admin()) {
+                add_filter('manage_nav-menus_columns', 'mj_member_account_menu_icon_add_column', 20);
+                add_action('wp_nav_menu_item_custom_fields', 'mj_member_account_menu_icon_render_field', 10, 5);
+                add_action('wp_update_nav_menu_item', 'mj_member_account_menu_icon_save', 10, 3);
+                add_action('admin_enqueue_scripts', 'mj_member_account_menu_icon_admin_assets');
+            }
+        }
+    }
 }
+
+namespace {
+    use Mj\Member\Core\Config;
+    if (!defined('ABSPATH')) { exit; }
 
 if (!function_exists('mj_member_account_menu_icon_meta_key')) {
     function mj_member_account_menu_icon_meta_key() {
@@ -271,14 +285,7 @@ if (!function_exists('mj_member_account_menu_icon_enqueue_assets')) {
     }
 }
 
-if (is_admin()) {
-    add_filter('manage_nav-menus_columns', 'mj_member_account_menu_icon_add_column', 20);
-    add_action('wp_nav_menu_item_custom_fields', 'mj_member_account_menu_icon_render_field', 10, 5);
-    add_action('wp_update_nav_menu_item', 'mj_member_account_menu_icon_save', 10, 3);
-    add_action('admin_enqueue_scripts', 'mj_member_account_menu_icon_admin_assets');
-}
-
-if (!function_exists('mj_member_account_menu_icon_add_column')) {
+if (!function_exists('mj_member_account_menu_icon_add_column')){
     function mj_member_account_menu_icon_add_column($columns) {
         if (!is_array($columns)) {
             $columns = array();
@@ -361,3 +368,4 @@ if (!function_exists('mj_member_account_menu_icon_admin_assets')) {
         mj_member_account_menu_icon_enqueue_assets();
     }
 }
+} // end namespace {

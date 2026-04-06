@@ -1,13 +1,29 @@
 <?php
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
+
+    final class PhotoGrimlinsModule implements ModuleInterface {
+        public function register(): void {
+            add_action('wp_ajax_mj_member_generate_grimlins', 'mj_member_photo_grimlins_ajax_generate');
+            add_action('wp_ajax_nopriv_mj_member_generate_grimlins', 'mj_member_photo_grimlins_ajax_generate');
+            add_action('wp_ajax_mj_member_apply_grimlins_avatar', 'mj_member_photo_grimlins_ajax_apply_avatar');
+            add_action('wp_ajax_mj_member_delete_grimlins_avatar', 'mj_member_photo_grimlins_ajax_delete_avatar');
+            add_action('wp_ajax_mj_member_photo_grimlins_search_young', 'mj_member_photo_grimlins_ajax_search_young');
+            add_filter('wp_get_attachment_url', 'mj_member_photo_grimlins_override_attachment_url', 20, 2);
+            add_filter('wp_get_attachment_image_src', 'mj_member_photo_grimlins_override_image_src', 20, 3);
+            add_filter('wp_calculate_image_srcset', 'mj_member_photo_grimlins_override_srcset', 20, 5);
+        }
+    }
+}
+
+namespace {
+    if (!defined('ABSPATH')) { exit; }
 
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Classes\MjOpenAIClient;
 use Mj\Member\Classes\MjRoles;
 use Mj\Member\Core\Config;
-
-if (!defined('ABSPATH')) {
-    exit;
-}
 
 if (!function_exists('mj_member_photo_grimlins_default_prompt')) {
     function mj_member_photo_grimlins_default_prompt(): string
@@ -786,8 +802,6 @@ if (!function_exists('mj_member_photo_grimlins_ajax_generate')) {
         wp_send_json_success($payload);
     }
 
-    add_action('wp_ajax_mj_member_generate_grimlins', 'mj_member_photo_grimlins_ajax_generate');
-    add_action('wp_ajax_nopriv_mj_member_generate_grimlins', 'mj_member_photo_grimlins_ajax_generate');
 }
 
 if (!function_exists('mj_member_photo_grimlins_ajax_apply_avatar')) {
@@ -895,7 +909,6 @@ if (!function_exists('mj_member_photo_grimlins_ajax_apply_avatar')) {
         ));
     }
 
-    add_action('wp_ajax_mj_member_apply_grimlins_avatar', 'mj_member_photo_grimlins_ajax_apply_avatar');
 }
 
 if (!function_exists('mj_member_photo_grimlins_ajax_delete_avatar')) {
@@ -967,7 +980,6 @@ if (!function_exists('mj_member_photo_grimlins_ajax_delete_avatar')) {
         ));
     }
 
-    add_action('wp_ajax_mj_member_delete_grimlins_avatar', 'mj_member_photo_grimlins_ajax_delete_avatar');
 }
 
 if (!function_exists('mj_member_photo_grimlins_ajax_search_young')) {
@@ -1056,7 +1068,6 @@ if (!function_exists('mj_member_photo_grimlins_ajax_search_young')) {
         wp_send_json_success(array('items' => $items));
     }
 
-    add_action('wp_ajax_mj_member_photo_grimlins_search_young', 'mj_member_photo_grimlins_ajax_search_young');
 }
 
 if (!function_exists('mj_member_photo_grimlins_get_storage_context')) {
@@ -1110,7 +1121,6 @@ if (!function_exists('mj_member_photo_grimlins_override_attachment_url')) {
         return $override !== '' ? $override : $url;
     }
 
-    add_filter('wp_get_attachment_url', 'mj_member_photo_grimlins_override_attachment_url', 20, 2);
 }
 
 if (!function_exists('mj_member_photo_grimlins_override_image_src')) {
@@ -1158,7 +1168,6 @@ if (!function_exists('mj_member_photo_grimlins_override_image_src')) {
         return $image;
     }
 
-    add_filter('wp_get_attachment_image_src', 'mj_member_photo_grimlins_override_image_src', 20, 3);
 }
 
 if (!function_exists('mj_member_photo_grimlins_override_srcset')) {
@@ -1216,9 +1225,9 @@ if (!function_exists('mj_member_photo_grimlins_override_srcset')) {
         return $sources;
     }
 
-    add_filter('wp_calculate_image_srcset', 'mj_member_photo_grimlins_override_srcset', 20, 5);
 }
 
 // Localization is triggered explicitly when the asset package is required.
 
 // Localization is triggered explicitly when the asset package is required.
+} // end namespace

@@ -1,10 +1,20 @@
 <?php
 
-use Mj\Member\Core\Config;
+namespace Mj\Member\Module\Admin {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
 
-if (!defined('ABSPATH')) {
-    exit;
+    final class ContactMessagesAdminModule implements ModuleInterface {
+        public function register(): void {
+            add_action('wp_mail_failed', 'mj_member_contact_messages_store_mail_error');
+        }
+    }
 }
+
+namespace {
+    use Mj\Member\Core\Config;
+
+    if (!defined('ABSPATH')) { exit; }
 
 if (!function_exists('mj_member_contact_messages_is_admin_url')) {
     function mj_member_contact_messages_is_admin_url($url) {
@@ -78,8 +88,6 @@ if (!function_exists('mj_member_contact_messages_store_mail_error')) {
         set_transient($cache_key, $payload, MINUTE_IN_SECONDS * 5);
     }
 }
-
-add_action('wp_mail_failed', 'mj_member_contact_messages_store_mail_error');
 
 if (!function_exists('mj_member_contact_messages_consume_mail_error')) {
     /**
@@ -1265,3 +1273,5 @@ if (!function_exists('mj_member_contact_messages_get_notice')) {
         }
     }
 }
+
+} // end namespace {

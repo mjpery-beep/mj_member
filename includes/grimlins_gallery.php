@@ -1,10 +1,19 @@
 <?php
 
-use Mj\Member\Core\Config;
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
 
-if (!defined('ABSPATH')) {
-    exit;
+    final class GrimlinsGalleryModule implements ModuleInterface {
+        public function register(): void {
+            add_action('wp_ajax_mj_member_delete_grimlins_session', 'mj_member_grimlins_gallery_handle_delete_session');
+        }
+    }
 }
+
+namespace {
+    use Mj\Member\Core\Config;
+    if (!defined('ABSPATH')) { exit; }
 
 if (!function_exists('mj_member_grimlins_gallery_get_storage_paths')) {
     /**
@@ -256,7 +265,6 @@ if (!function_exists('mj_member_grimlins_gallery_handle_delete_session')) {
 
         wp_send_json_success(array('session' => $session));
     }
-    add_action('wp_ajax_mj_member_delete_grimlins_session', 'mj_member_grimlins_gallery_handle_delete_session');
 }
 
 if (!function_exists('mj_member_grimlins_gallery_localize')) {
@@ -283,3 +291,5 @@ if (!function_exists('mj_member_grimlins_gallery_localize')) {
         $localized = true;
     }
 }
+
+} // end namespace {

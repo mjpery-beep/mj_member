@@ -1,8 +1,23 @@
 <?php
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
 
-if (!defined('ABSPATH')) {
-    exit;
+    final class EventPhotosModule implements ModuleInterface {
+        public function register(): void {
+            add_action('after_setup_theme', 'mj_member_event_photos_register_image_sizes');
+            add_filter('image_size_names_choose', 'mj_member_event_photos_filter_library_sizes');
+            add_filter('mj_member_event_page_context', 'mj_member_event_photos_extend_context', 20, 2);
+            add_action('admin_post_mj_member_submit_event_photo', 'mj_member_event_photos_submission_handler');
+            add_action('admin_post_nopriv_mj_member_submit_event_photo', 'mj_member_event_photos_submission_handler');
+            add_action('admin_post_mj_member_delete_event_photo', 'mj_member_event_photos_delete_handler');
+            add_action('admin_post_nopriv_mj_member_delete_event_photo', 'mj_member_event_photos_delete_handler');
+        }
+    }
 }
+
+namespace {
+    if (!defined('ABSPATH')) { exit; }
 
 if (!class_exists('Mj\Member\Classes\Crud\MjEventPhotos')) {
     return;
@@ -25,7 +40,6 @@ if (!function_exists('mj_member_event_photos_register_image_sizes')) {
         add_image_size($sizes['display'], 1600, 1200, false);
     }
 
-    add_action('after_setup_theme', 'mj_member_event_photos_register_image_sizes');
 }
 
 if (!function_exists('mj_member_event_photos_filter_library_sizes')) {
@@ -37,7 +51,6 @@ if (!function_exists('mj_member_event_photos_filter_library_sizes')) {
         return $sizes;
     }
 
-    add_filter('image_size_names_choose', 'mj_member_event_photos_filter_library_sizes');
 }
 
 if (!function_exists('mj_member_event_photos_is_staff_member')) {
@@ -239,7 +252,6 @@ if (!function_exists('mj_member_event_photos_extend_context')) {
 
         return $context;
     }
-    add_filter('mj_member_event_page_context', 'mj_member_event_photos_extend_context', 20, 2);
 }
 
 if (!function_exists('mj_member_event_photos_get_notice_map')) {
@@ -1164,8 +1176,6 @@ if (!function_exists('mj_member_event_photos_submission_handler')) {
         $redirect_with_notice($should_auto_approve ? 'success_auto' : 'success');
     }
 
-    add_action('admin_post_mj_member_submit_event_photo', 'mj_member_event_photos_submission_handler');
-    add_action('admin_post_nopriv_mj_member_submit_event_photo', 'mj_member_event_photos_submission_handler');
 }
 
 if (!function_exists('mj_member_event_photos_delete_handler')) {
@@ -1240,9 +1250,6 @@ if (!function_exists('mj_member_event_photos_delete_handler')) {
 
         $redirect_with_notice('deleted');
     }
-
-    add_action('admin_post_mj_member_delete_event_photo', 'mj_member_event_photos_delete_handler');
-    add_action('admin_post_nopriv_mj_member_delete_event_photo', 'mj_member_event_photos_delete_handler');
 }
 
 if (!function_exists('mj_member_event_photos_format_member_name')) {
@@ -1306,3 +1313,4 @@ if (!function_exists('mj_member_event_photos_get_attachment_sources')) {
         );
     }
 }
+} // end namespace

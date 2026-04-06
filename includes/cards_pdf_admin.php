@@ -1,11 +1,20 @@
 <?php
+namespace Mj\Member\Module\Admin {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
 
-use Mj\Member\Core\Config;
-use Mj\Member\Classes\Crud\MjMembers;
-
-if (!defined('ABSPATH')) {
-    exit;
+    final class CardsPdfAdminModule implements ModuleInterface {
+        public function register(): void {
+            add_action('admin_post_mj_member_cards_pdf_generate', 'mj_member_cards_pdf_handle_generate');
+        }
+    }
 }
+
+namespace {
+    use Mj\Member\Core\Config;
+    use Mj\Member\Classes\Crud\MjMembers;
+
+    if (!defined('ABSPATH')) { exit; }
 
 function mj_member_cards_pdf_default_values() {
     $stored_background_id = (int) get_option('mj_cards_pdf_background_image_id', 0);
@@ -41,8 +50,6 @@ function mj_member_cards_pdf_consume_state() {
 
     return $state;
 }
-
-add_action('admin_post_mj_member_cards_pdf_generate', 'mj_member_cards_pdf_handle_generate');
 
 function mj_member_cards_pdf_handle_generate() {
     $capability = Config::capability();
@@ -600,3 +607,4 @@ function mj_member_cards_pdf_page() {
     </script>
     <?php
 }
+} // end namespace {

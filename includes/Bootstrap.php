@@ -3,6 +3,8 @@
 namespace Mj\Member;
 
 use Mj\Member\Core\Config;
+use Mj\Member\Core\Contracts\AjaxHandlerInterface;
+use Mj\Member\Core\Contracts\ModuleInterface;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -132,7 +134,15 @@ final class Bootstrap
                 continue;
             }
 
+            $classesBefore = get_declared_classes();
             require_once $resolved;
+            foreach (array_diff(get_declared_classes(), $classesBefore) as $className) {
+                if (is_a($className, AjaxHandlerInterface::class, true)) {
+                    (new $className())->registerHooks();
+                } elseif (is_a($className, ModuleInterface::class, true)) {
+                    (new $className())->register();
+                }
+            }
         }
 
         self::$loaded = true;

@@ -9,14 +9,30 @@
  * @package MjMember
  */
 
-use Mj\Member\Core\Config;
-use Mj\Member\Classes\Crud\MjPushSubscriptions;
-use Mj\Member\Classes\Crud\MjMembers;
-use Mj\Member\Classes\MjWebPush;
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
 
-if (!defined('ABSPATH')) {
-    exit;
+    final class WebPushModule implements ModuleInterface {
+        public function register(): void {
+            add_action('init', 'mj_member_web_push_sw_rewrite', 5);
+            add_filter('query_vars', 'mj_member_web_push_sw_query_var');
+            add_action('template_redirect', 'mj_member_web_push_sw_template_redirect', 1);
+            add_action('wp_ajax_mj_push_subscribe', 'mj_member_ajax_push_subscribe');
+            add_action('wp_ajax_mj_push_unsubscribe', 'mj_member_ajax_push_unsubscribe');
+            add_filter('mj_member_notification_recorded', 'mj_member_web_push_on_notification_recorded', 10, 3);
+            add_action('mj_member_process_push_batch', 'mj_member_process_push_batch_handler');
+            add_action('wp_ajax_mj_generate_vapid_keys', 'mj_member_ajax_generate_vapid_keys');
+        }
+    }
 }
+
+namespace {
+    use Mj\Member\Core\Config;
+    use Mj\Member\Classes\Crud\MjPushSubscriptions;
+    use Mj\Member\Classes\Crud\MjMembers;
+    use Mj\Member\Classes\MjWebPush;
+    if (!defined('ABSPATH')) { exit; }
 
 // ============================================================================
 // Service Worker registration endpoint (rootscope obligatoire pour push)
@@ -316,3 +332,4 @@ if (!function_exists('mj_member_web_push_activation')) {
     }
     register_activation_hook(Config::mainFile(), 'mj_member_web_push_activation');
 }
+} // end namespace {

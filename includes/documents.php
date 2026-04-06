@@ -1,12 +1,27 @@
 <?php
 
-use Mj\Member\Classes\MjGoogleDrive;
-use Mj\Member\Classes\MjNextcloud;
-use Mj\Member\Core\Config;
+namespace Mj\Member\Module {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
 
-if (!defined('ABSPATH')) {
-    exit;
+    final class DocumentsModule implements ModuleInterface {
+        public function register(): void {
+            add_action('wp_ajax_mj_member_documents_list', 'mj_member_documents_handle_list');
+            add_action('wp_ajax_mj_member_documents_rename', 'mj_member_documents_handle_rename');
+            add_action('wp_ajax_mj_member_documents_create_folder', 'mj_member_documents_handle_create_folder');
+            add_action('wp_ajax_mj_member_documents_upload', 'mj_member_documents_handle_upload');
+            add_action('wp_ajax_mj_member_documents_delete', 'mj_member_documents_handle_delete');
+            add_action('wp_ajax_mj_member_documents_direct_edit', 'mj_member_documents_handle_direct_edit');
+            add_action('wp_ajax_mj_member_documents_create_document', 'mj_member_documents_handle_create_document');
+        }
+    }
 }
+
+namespace {
+    use Mj\Member\Classes\MjGoogleDrive;
+    use Mj\Member\Classes\MjNextcloud;
+    use Mj\Member\Core\Config;
+    if (!defined('ABSPATH')) { exit; }
 
 if (!function_exists('mj_member_documents_user_has_access')) {
     function mj_member_documents_user_has_access(): bool
@@ -435,10 +450,7 @@ if (!function_exists('mj_member_documents_handle_upload')) {
     }
 }
 
-add_action('wp_ajax_mj_member_documents_list', 'mj_member_documents_handle_list');
-add_action('wp_ajax_mj_member_documents_rename', 'mj_member_documents_handle_rename');
-add_action('wp_ajax_mj_member_documents_create_folder', 'mj_member_documents_handle_create_folder');
-add_action('wp_ajax_mj_member_documents_upload', 'mj_member_documents_handle_upload');
+
 
 /* ------------------------------------------------------------------ *
  * Nextcloud-specific AJAX endpoints                                  *
@@ -549,10 +561,6 @@ if (!function_exists('mj_member_documents_handle_create_document')) {
         wp_send_json_success($result);
     }
 }
-
-add_action('wp_ajax_mj_member_documents_delete', 'mj_member_documents_handle_delete');
-add_action('wp_ajax_mj_member_documents_direct_edit', 'mj_member_documents_handle_direct_edit');
-add_action('wp_ajax_mj_member_documents_create_document', 'mj_member_documents_handle_create_document');
 
 if (!function_exists('mj_member_documents_localize')) {
     function mj_member_documents_localize(): void
@@ -769,3 +777,4 @@ if (!function_exists('mj_member_documents_get_nc_members_list')) {
         return $list;
     }
 }
+} // end namespace {

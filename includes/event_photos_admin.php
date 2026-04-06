@@ -1,10 +1,17 @@
 <?php
+namespace Mj\Member\Module\Admin {
+    use Mj\Member\Core\Contracts\ModuleInterface;
+    if (!defined('ABSPATH')) { exit; }
 
-use Mj\Member\Core\Config;
-
-if (!defined('ABSPATH')) {
-    exit;
+    final class EventPhotosAdminModule implements ModuleInterface {
+        public function register(): void {}
+    }
 }
+
+namespace {
+    use Mj\Member\Core\Config;
+
+    if (!defined('ABSPATH')) { exit; }
 
 if (!class_exists('MjEventPhotos')) {
     require_once plugin_dir_path(__FILE__) . 'classes/crud/MjEventPhotos.php';
@@ -419,3 +426,4 @@ if (!function_exists('mj_member_get_event_public_link')) {
         return trailingslashit($base) . rawurlencode($slug);
     }
 }
+} // end namespace {

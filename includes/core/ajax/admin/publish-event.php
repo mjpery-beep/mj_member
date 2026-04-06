@@ -183,8 +183,10 @@ function mj_regmgr_publish_event_direct() {
     }
 
     if (is_wp_error($result)) {
-        $error_msg = $result->get_error_message();
-        $error_data = $result->get_error_data();
+        $error_msg     = $result->get_error_message();
+        $error_data    = $result->get_error_data();
+        $token_expired = is_array($error_data) && !empty($error_data['tokenExpired']);
+        $perm_error    = is_array($error_data) && !empty($error_data['permError']);
 
         $logs[] = array(
             'type' => 'error',
@@ -195,6 +197,20 @@ function mj_regmgr_publish_event_direct() {
             $logs[] = array(
                 'type' => 'error',
                 'text' => sprintf(__('Code HTTP retourné : %d', 'mj-member'), (int) $error_data['status']),
+                'time' => gmdate('H:i:s'),
+            );
+        }
+        if ($token_expired) {
+            $logs[] = array(
+                'type' => 'warn',
+                'text' => __('→ Renouvelez le token dans Paramètres → Publier sur les réseaux.', 'mj-member'),
+                'time' => gmdate('H:i:s'),
+            );
+        }
+        if ($perm_error) {
+            $logs[] = array(
+                'type' => 'warn',
+                'text' => __('→ Utilisez un Page Access Token (pas un User Token) avec pages_read_engagement + pages_manage_posts. Générez-le via Graph API Explorer.', 'mj-member'),
                 'time' => gmdate('H:i:s'),
             );
         }
@@ -210,8 +226,10 @@ function mj_regmgr_publish_event_direct() {
         );
 
         wp_send_json_error(array(
-            'message' => $error_msg,
-            'logs'    => $logs,
+            'message'      => $error_msg,
+            'logs'         => $logs,
+            'tokenExpired' => $token_expired,
+            'permError'    => $perm_error,
         ), 200);
         return;
     }
