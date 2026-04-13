@@ -45,7 +45,7 @@
                     <figure class="mj-event-page__photo">
                         <div class="mj-event-page__photo-img">
                             {% if full %}
-                                <a href="{{ full|esc_url }}" target="_blank" rel="noopener" class="mj-event-page__photo-link">
+                                <a href="{{ full|esc_url }}" target="_blank" rel="noopener" class="mj-event-page__photo-link" data-mj-event-preview="1" data-mj-event-preview-group="photos" data-mj-event-preview-caption="{{ caption|esc_attr }}" data-elementor-open-lightbox="no" data-lightbox="none" data-fancybox="">
                                     <img 
                                         src="{{ thumb|esc_url }}" 
                                         alt="{{ caption|esc_attr }}" 

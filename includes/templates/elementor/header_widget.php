@@ -146,9 +146,41 @@ function mj_header_svg_icon(string $name): string {
                     <a href="<?php echo esc_url($gest_url); ?>" class="mj-header-dropdown__header-link"><?php esc_html_e('Ouvrir', 'mj-member'); ?></a>
                     <button type="button" class="mj-header-dropdown__close" aria-label="<?php esc_attr_e('Fermer', 'mj-member'); ?>"><?php echo mj_header_svg_icon('close'); ?></button>
                 </div>
+                <?php
+                $member_action_meta = array(
+                    'information'   => array('title' => __('Informations', 'mj-member'), 'icon' => '&#128100;'),
+                    'dyndata'       => array('title' => __('Données dynamiques', 'mj-member'), 'icon' => '&#128202;'),
+                    'membership'    => array('title' => __('Cotisation', 'mj-member'), 'icon' => '&#128179;'),
+                    'badges'        => array('title' => __('Badges', 'mj-member'), 'icon' => '&#127942;'),
+                    'photos'        => array('title' => __('Photos', 'mj-member'), 'icon' => '&#128247;'),
+                    'ideas'         => array('title' => __('Idées', 'mj-member'), 'icon' => '&#128161;'),
+                    'messages'      => array('title' => __('Messages', 'mj-member'), 'icon' => '&#128172;'),
+                    'notifications' => array('title' => __('Notifications', 'mj-member'), 'icon' => '&#128276;'),
+                    'testimonials'  => array('title' => __('Témoignages', 'mj-member'), 'icon' => '&#11088;'),
+                    'notes'         => array('title' => __('Notes', 'mj-member'), 'icon' => '&#128203;'),
+                    'history'       => array('title' => __('Historique', 'mj-member'), 'icon' => '&#128220;'),
+                );
+
+                $event_action_meta = array(
+                    'event-page'        => array('title' => __('Page événement', 'mj-member'), 'icon' => '&#127760;'),
+                    'registrations'     => array('title' => __('Inscriptions', 'mj-member'), 'icon' => '&#128203;'),
+                    'attendance'        => array('title' => __('Présence', 'mj-member'), 'icon' => '&#9989;'),
+                    'description'       => array('title' => __('Description', 'mj-member'), 'icon' => '&#128221;'),
+                    'regdoc'            => array('title' => __('Contrat', 'mj-member'), 'icon' => '&#128196;'),
+                    'publish'           => array('title' => __('Publier', 'mj-member'), 'icon' => '&#128227;'),
+                    'details'           => array('title' => __('Détails', 'mj-member'), 'icon' => '&#9432;'),
+                    'photos'            => array('title' => __('Photos', 'mj-member'), 'icon' => '&#128247;'),
+                    'documents'         => array('title' => __('Documents', 'mj-member'), 'icon' => '&#128194;'),
+                    'occurrence-encoder'=> array('title' => __('Occurrence', 'mj-member'), 'icon' => '&#128197;'),
+                    'editor'            => array('title' => __('Éditer', 'mj-member'), 'icon' => '&#9998;'),
+                );
+                ?>
                 <div class="mj-header-gest-favs-grid">
                     <div class="mj-header-gest-favs-col">
-                        <a class="mj-header-gest-favs-col__title mj-header-gest-favs-col__title--link" href="<?php echo esc_url(add_query_arg('main-tab', 'member', $gest_url)); ?>"><?php esc_html_e('Membres', 'mj-member'); ?></a>
+                        <a class="mj-header-gest-favs-col__title mj-header-gest-favs-col__title--link" href="<?php echo esc_url(add_query_arg('main-tab', 'member', $gest_url)); ?>">
+                            <span class="mj-header-gest-favs-col__title-icon" aria-hidden="true"><?php echo mj_header_svg_icon('user'); ?></span>
+                            <span><?php esc_html_e('Membres', 'mj-member'); ?></span>
+                        </a>
                         <?php if (!empty($gest_fav_member_items)): ?>
                         <ul class="mj-header-gest-fav-list">
                             <?php foreach ($gest_fav_member_items as $fi): ?>
@@ -164,12 +196,13 @@ function mj_header_svg_icon(string $name): string {
                                     <span class="mj-header-gest-fav-label"><?php echo esc_html((string)$fi['label']); ?></span>
                                 </a>
                                 <div class="mj-header-gest-fav-actions">
-                                    <a href="<?php echo esc_url((string)$fi['tab_urls']['info']); ?>" title="<?php esc_attr_e('Infos', 'mj-member'); ?>">&#128100;</a>
-                                    <a href="<?php echo esc_url((string)$fi['tab_urls']['edit']); ?>" title="<?php esc_attr_e('Modifier', 'mj-member'); ?>">&#9998;</a>
-                                    <a href="<?php echo esc_url((string)$fi['tab_urls']['badge']); ?>" title="<?php esc_attr_e('Badges', 'mj-member'); ?>">&#127942;</a>
-                                    <a href="<?php echo esc_url((string)$fi['tab_urls']['testimonials']); ?>" title="<?php esc_attr_e('Témoignages', 'mj-member'); ?>">&#11088;</a>
-                                    <a href="<?php echo esc_url((string)$fi['tab_urls']['notes']); ?>" title="<?php esc_attr_e('Notes', 'mj-member'); ?>">&#128203;</a>
-                                    <a href="<?php echo esc_url((string)$fi['tab_urls']['ideas']); ?>" title="<?php esc_attr_e('Idées', 'mj-member'); ?>">&#128161;</a>
+                                    <?php if (!empty($fi['tab_urls']) && is_array($fi['tab_urls'])): ?>
+                                        <?php foreach ($fi['tab_urls'] as $tab_key => $tab_url): ?>
+                                            <?php if (empty($tab_url)) { continue; } ?>
+                                            <?php $tab_meta = $member_action_meta[$tab_key] ?? array('title' => (string) $tab_key, 'icon' => '&#128279;'); ?>
+                                            <a href="<?php echo esc_url((string) $tab_url); ?>" title="<?php echo esc_attr((string) $tab_meta['title']); ?>"><?php echo $tab_meta['icon']; ?></a>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
                                 </div>
                             </li>
                             <?php endforeach; ?>
@@ -179,7 +212,10 @@ function mj_header_svg_icon(string $name): string {
                         <?php endif; ?>
                     </div>
                     <div class="mj-header-gest-favs-col">
-                        <a class="mj-header-gest-favs-col__title mj-header-gest-favs-col__title--link" href="<?php echo esc_url(add_query_arg('main-tab', 'event', $gest_url)); ?>"><?php esc_html_e('Événements', 'mj-member'); ?></a>
+                        <a class="mj-header-gest-favs-col__title mj-header-gest-favs-col__title--link" href="<?php echo esc_url(add_query_arg('main-tab', 'event', $gest_url)); ?>">
+                            <span class="mj-header-gest-favs-col__title-icon" aria-hidden="true"><?php echo mj_header_svg_icon('calendar'); ?></span>
+                            <span><?php esc_html_e('Événements', 'mj-member'); ?></span>
+                        </a>
                         <?php if (!empty($gest_fav_event_items)): ?>
                         <ul class="mj-header-gest-fav-list">
                             <?php foreach ($gest_fav_event_items as $fe): ?>
@@ -189,9 +225,13 @@ function mj_header_svg_icon(string $name): string {
                                     <span class="mj-header-gest-fav-label"><?php echo esc_html((string)$fe['label']); ?></span>
                                 </a>
                                 <div class="mj-header-gest-fav-actions">
-                                    <a href="<?php echo esc_url((string)$fe['tab_urls']['inscription']); ?>" title="<?php esc_attr_e('Inscriptions', 'mj-member'); ?>">&#128203;</a>
-                                    <a href="<?php echo esc_url((string)$fe['tab_urls']['presence']); ?>" title="<?php esc_attr_e('Présences', 'mj-member'); ?>">&#10003;</a>
-                                    <a href="<?php echo esc_url((string)$fe['tab_urls']['edit']); ?>" title="<?php esc_attr_e('Modifier', 'mj-member'); ?>">&#9998;</a>
+                                    <?php if (!empty($fe['tab_urls']) && is_array($fe['tab_urls'])): ?>
+                                        <?php foreach ($fe['tab_urls'] as $tab_key => $tab_url): ?>
+                                            <?php if (empty($tab_url)) { continue; } ?>
+                                            <?php $tab_meta = $event_action_meta[$tab_key] ?? array('title' => (string) $tab_key, 'icon' => '&#128279;'); ?>
+                                            <a href="<?php echo esc_url((string) $tab_url); ?>" title="<?php echo esc_attr((string) $tab_meta['title']); ?>"><?php echo $tab_meta['icon']; ?></a>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
                                 </div>
                             </li>
                             <?php endforeach; ?>

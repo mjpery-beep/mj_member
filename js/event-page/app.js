@@ -69,6 +69,262 @@
         return div.innerHTML;
     }
 
+    /**
+     * Initialise la mini galerie du hero avec navigation flèches
+     * @param {ParentNode} root
+     */
+    function initHeroMiniGalleries(root = document) {
+        const galleries = root.querySelectorAll('[data-mj-event-mini-gallery]');
+
+        galleries.forEach((gallery) => {
+            const track = gallery.querySelector('[data-mj-event-mini-gallery-track]');
+            const prevButton = gallery.querySelector('[data-mj-event-mini-prev]');
+            const nextButton = gallery.querySelector('[data-mj-event-mini-next]');
+
+            if (!track || !prevButton || !nextButton) {
+                return;
+            }
+
+            const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            const getStep = () => {
+                const firstThumb = track.querySelector('.mj-event-page__hero-mini-thumb');
+                const thumbWidth = firstThumb ? firstThumb.getBoundingClientRect().width : 80;
+                const computed = window.getComputedStyle(track);
+                const gap = parseFloat(computed.columnGap || computed.gap || '0') || 0;
+                const itemWidth = Math.max(1, thumbWidth + gap);
+                const visibleItems = Math.max(1, Math.floor(track.clientWidth / itemWidth));
+                return itemWidth * Math.max(1, visibleItems - 1);
+            };
+
+            const scrollByDirection = (direction) => {
+                const step = getStep();
+                track.scrollBy({
+                    left: direction * step,
+                    behavior: prefersReducedMotion ? 'auto' : 'smooth',
+                });
+            };
+
+            const updateControls = () => {
+                const maxScroll = Math.max(0, track.scrollWidth - track.clientWidth);
+                const canScroll = maxScroll > 2;
+                const scrollLeft = track.scrollLeft;
+
+                gallery.classList.toggle('mj-event-page__hero-mini-track-empty', !canScroll);
+                prevButton.disabled = !canScroll || scrollLeft <= 2;
+                nextButton.disabled = !canScroll || scrollLeft >= (maxScroll - 2);
+            };
+
+            if (gallery.dataset.mjEventMiniGalleryReady === '1') {
+                updateControls();
+                return;
+            }
+
+            gallery.dataset.mjEventMiniGalleryReady = '1';
+
+            prevButton.addEventListener('click', () => {
+                scrollByDirection(-1);
+            });
+
+            nextButton.addEventListener('click', () => {
+                scrollByDirection(1);
+            });
+
+            track.addEventListener('scroll', updateControls, { passive: true });
+
+            gallery.addEventListener('keydown', (event) => {
+                if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+                    return;
+                }
+
+                const target = event.target;
+                if (
+                    target &&
+                    target.matches &&
+                    target.matches('input, textarea, select, [contenteditable="true"]')
+                ) {
+                    return;
+                }
+
+                event.preventDefault();
+                scrollByDirection(event.key === 'ArrowLeft' ? -1 : 1);
+            });
+
+            window.addEventListener('resize', updateControls);
+            updateControls();
+        });
+    }
+
+    /**
+     * Initialise la modal de prévisualisation des photos avec navigation
+     * @param {ParentNode} root
+     */
+    function initPhotoPreviewModal(root = document) {
+        const previewLinks = root.querySelectorAll('a[data-mj-event-preview="1"]');
+        if (!previewLinks.length) {
+            return;
+        }
+
+        const ensureModal = () => {
+            let modal = document.querySelector('[data-mj-event-preview-modal]');
+            if (modal) {
+                return modal;
+            }
+
+            modal = document.createElement('div');
+            modal.className = 'mj-event-page__photo-modal';
+            modal.setAttribute('hidden', 'hidden');
+            modal.setAttribute('data-mj-event-preview-modal', '1');
+            modal.innerHTML = [
+                '<div class="mj-event-page__photo-modal-backdrop" data-mj-event-preview-close="1"></div>',
+                '<div class="mj-event-page__photo-modal-dialog" role="dialog" aria-modal="true" aria-label="Aperçu de la photo">',
+                '  <button type="button" class="mj-event-page__photo-modal-close" data-mj-event-preview-close="1" aria-label="Fermer">×</button>',
+                '  <button type="button" class="mj-event-page__photo-modal-nav mj-event-page__photo-modal-nav--prev" data-mj-event-preview-prev="1" aria-label="Photo précédente">‹</button>',
+                '  <figure class="mj-event-page__photo-modal-figure">',
+                '    <img class="mj-event-page__photo-modal-image" data-mj-event-preview-image="1" alt="" />',
+                '    <figcaption class="mj-event-page__photo-modal-caption" data-mj-event-preview-caption></figcaption>',
+                '  </figure>',
+                '  <button type="button" class="mj-event-page__photo-modal-nav mj-event-page__photo-modal-nav--next" data-mj-event-preview-next="1" aria-label="Photo suivante">›</button>',
+                '  <div class="mj-event-page__photo-modal-count" data-mj-event-preview-count></div>',
+                '</div>'
+            ].join('');
+
+            document.body.appendChild(modal);
+            return modal;
+        };
+
+        const modal = ensureModal();
+        const image = modal.querySelector('[data-mj-event-preview-image]');
+        const caption = modal.querySelector('[data-mj-event-preview-caption]');
+        const count = modal.querySelector('[data-mj-event-preview-count]');
+        const prevButton = modal.querySelector('[data-mj-event-preview-prev="1"]');
+        const nextButton = modal.querySelector('[data-mj-event-preview-next="1"]');
+        const closeButtons = modal.querySelectorAll('[data-mj-event-preview-close="1"]');
+
+        if (!image || !caption || !count || !prevButton || !nextButton) {
+            return;
+        }
+
+        const state = modal.__mjEventPreviewState || {
+            items: [],
+            index: -1,
+            lastTrigger: null,
+        };
+        modal.__mjEventPreviewState = state;
+
+        const getGroupItems = (group) => {
+            return Array.from(document.querySelectorAll('a[data-mj-event-preview="1"][data-mj-event-preview-group="' + group + '"]'));
+        };
+
+        const renderCurrent = () => {
+            if (state.index < 0 || state.index >= state.items.length) {
+                return;
+            }
+
+            const link = state.items[state.index];
+            const src = link.getAttribute('href') || '';
+            const text = link.getAttribute('data-mj-event-preview-caption') || link.getAttribute('title') || '';
+
+            image.src = src;
+            image.alt = text;
+            caption.textContent = text;
+            count.textContent = state.items.length > 1
+                ? (state.index + 1) + ' / ' + state.items.length
+                : '';
+
+            const hasMany = state.items.length > 1;
+            prevButton.disabled = !hasMany;
+            nextButton.disabled = !hasMany;
+        };
+
+        const openAt = (group, index, trigger) => {
+            const items = getGroupItems(group);
+            if (!items.length) {
+                return;
+            }
+
+            state.items = items;
+            state.index = Math.max(0, Math.min(index, items.length - 1));
+            state.lastTrigger = trigger || null;
+            renderCurrent();
+
+            modal.removeAttribute('hidden');
+            document.body.classList.add('mj-event-page__photo-modal-open');
+            prevButton.focus();
+        };
+
+        const close = () => {
+            modal.setAttribute('hidden', 'hidden');
+            document.body.classList.remove('mj-event-page__photo-modal-open');
+            if (state.lastTrigger && typeof state.lastTrigger.focus === 'function') {
+                state.lastTrigger.focus();
+            }
+        };
+
+        const move = (delta) => {
+            if (!state.items.length) {
+                return;
+            }
+
+            const total = state.items.length;
+            state.index = (state.index + delta + total) % total;
+            renderCurrent();
+        };
+
+        if (modal.dataset.mjEventPreviewReady !== '1') {
+            modal.dataset.mjEventPreviewReady = '1';
+
+            closeButtons.forEach((button) => {
+                button.addEventListener('click', close);
+            });
+
+            prevButton.addEventListener('click', () => move(-1));
+            nextButton.addEventListener('click', () => move(1));
+
+            document.addEventListener('keydown', (event) => {
+                if (modal.hasAttribute('hidden')) {
+                    return;
+                }
+
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    close();
+                    return;
+                }
+
+                if (event.key === 'ArrowLeft') {
+                    event.preventDefault();
+                    move(-1);
+                    return;
+                }
+
+                if (event.key === 'ArrowRight') {
+                    event.preventDefault();
+                    move(1);
+                }
+            });
+        }
+
+        previewLinks.forEach((link) => {
+            if (link.dataset.mjEventPreviewBound === '1') {
+                return;
+            }
+
+            link.dataset.mjEventPreviewBound = '1';
+            link.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (typeof event.stopImmediatePropagation === 'function') {
+                    event.stopImmediatePropagation();
+                }
+                const group = link.getAttribute('data-mj-event-preview-group') || 'photos';
+                const items = getGroupItems(group);
+                const index = items.indexOf(link);
+                openAt(group, index >= 0 ? index : 0, link);
+            }, true);
+        });
+    }
+
     // =========================================================================
     // Services AJAX
     // =========================================================================
@@ -802,6 +1058,8 @@
     // =========================================================================
 
     function init() {
+        initPhotoPreviewModal();
+
         const containers = document.querySelectorAll('[data-mj-event-registration-app]');
 
         containers.forEach(container => {

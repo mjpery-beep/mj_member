@@ -273,6 +273,7 @@ final class EventPageModel
             $timestamp = isset($occ['timestamp']) ? (int) $occ['timestamp'] : 0;
             $isPast = $timestamp > 0 && $timestamp < $now;
             $isToday = $timestamp > 0 && date('Y-m-d', $timestamp) === date('Y-m-d', $now);
+            $isAllDay = $this->isOccurrenceAllDay(is_array($occ) ? $occ : array());
 
             // Générer le label si absent
             $label = $this->buildOccurrenceLabel($occ, $mode);
@@ -301,6 +302,7 @@ final class EventPageModel
                 'timestamp' => $timestamp,
                 'is_past' => $isPast,
                 'is_today' => $isToday,
+                'is_all_day' => $isAllDay,
                 'day_name' => $dayName,
                 'day_num' => $dayNum,
                 'month_name' => $monthName,
@@ -353,11 +355,17 @@ final class EventPageModel
             }
 
             if (is_array($candidate) && !empty($candidate['start'])) {
+                $startRaw = isset($candidate['start']) ? (string) $candidate['start'] : '';
+                $endRaw = isset($candidate['end']) ? (string) $candidate['end'] : '';
                 $start = $this->parseEventDate((string) $candidate['start']);
                 if ($start instanceof DateTime) {
                     $end = !empty($candidate['end']) ? $this->parseEventDate((string) $candidate['end']) : null;
                     if (!$end instanceof DateTime || $end <= $start) {
                         $end = (clone $start)->modify('+1 hour');
+                    }
+
+                    if ($this->isOccurrenceAllDay($candidate, $startRaw, $endRaw)) {
+                        return wp_date('l j F Y', $start->getTimestamp(), $this->getSiteTimezone()) . ' · ' . __('Toute la journée', 'mj-member');
                     }
 
                     return $this->formatDateRangeLabel($start, $end, true);
@@ -424,6 +432,10 @@ final class EventPageModel
         $end = $this->parseEventDate($endRaw);
         if (!$end instanceof DateTime || $end <= $start) {
             $end = (clone $start)->modify('+1 hour');
+        }
+
+        if ($this->isOccurrenceAllDay($occ, $startRaw, $endRaw)) {
+            return wp_date('l j F Y', $start->getTimestamp(), $this->getSiteTimezone()) . ' · ' . __('Toute la journée', 'mj-member');
         }
 
         $forceTime = ($mode === 'fixed');
@@ -604,16 +616,12 @@ final class EventPageModel
         // Option d'affichage des dates de début/fin (true = masquer)
         $showDateRange = isset($payload['show_date_range']) ? !empty($payload['show_date_range']) : false;
 
-        // Série de dates personnalisées
-        if ($mode === 'series') {
-            return $this->buildSeriesSchedule($payload, $showDateRange);
-        }
-        
-        // Seulement pour les récurrences
-        if ($mode !== 'recurring') {
-            return $this->buildEmptyWeeklySchedule($showDateRange);
-        }
+        // DEBUG
+        error_log('DEBUG buildWeeklySchedule: mode=' . $mode);
+        error_log('DEBUG buildWeeklySchedule: generatorPlan=' . (empty($generatorPlan) ? 'EMPTY' : json_encode(array_keys($generatorPlan))));
+        error_log('DEBUG buildWeeklySchedule: payload keys=' . json_encode(array_keys($payload)));
 
+        // Si un plan générateur est présent, l'utiliser EN PRIORITÉ quelle que soit le mode
         if (!empty($generatorPlan)) {
             $planMode = isset($generatorPlan['mode']) ? (string) $generatorPlan['mode'] : 'weekly';
 
@@ -622,6 +630,16 @@ final class EventPageModel
             }
 
             return $this->buildWeeklyScheduleFromGenerator($generatorPlan, $showDateRange);
+        }
+
+        // Série de dates personnalisées
+        if ($mode === 'series') {
+            return $this->buildSeriesSchedule($payload, $showDateRange);
+        }
+
+        // Seulement pour les récurrences sans plan générateur
+        if ($mode !== 'recurring') {
+            return $this->buildEmptyWeeklySchedule($showDateRange);
         }
 
         $frequency = isset($payload['frequency']) ? (string) $payload['frequency'] : '';
@@ -657,13 +675,7 @@ final class EventPageModel
 
             $startFormatted = $this->formatTimeForDisplay($startTime);
             $endFormatted = $this->formatTimeForDisplay($endTime);
-
-            $timeRange = '';
-            if ($startFormatted !== '' && $endFormatted !== '') {
-                $timeRange = $startFormatted . ' - ' . $endFormatted;
-            } elseif ($startFormatted !== '') {
-                $timeRange = __('à partir de', 'mj-member') . ' ' . $startFormatted;
-            }
+            $timeRange = $this->buildTimeRangeLabel($startTime, $endTime);
 
             // Ex: "1er Samedi du mois"
             $monthlyLabel = sprintf('%s %s %s', $ordinalLabel, $weekdayLabel, __('du mois', 'mj-member'));
@@ -672,6 +684,7 @@ final class EventPageModel
                 'is_weekly' => false,
                 'is_monthly' => true,
                 'is_series' => false,
+                'from_generator' => false,
                 'show_date_range' => $showDateRange,
                 'monthly_label' => $monthlyLabel,
                 'time_range' => $timeRange,
@@ -717,13 +730,7 @@ final class EventPageModel
             // Formater les heures pour l'affichage (HH:MM -> HHhMM)
             $startFormatted = $this->formatTimeForDisplay($startTime);
             $endFormatted = $this->formatTimeForDisplay($endTime);
-
-            $timeRange = '';
-            if ($startFormatted !== '' && $endFormatted !== '') {
-                $timeRange = $startFormatted . ' - ' . $endFormatted;
-            } elseif ($startFormatted !== '') {
-                $timeRange = __('à partir de', 'mj-member') . ' ' . $startFormatted;
-            }
+            $timeRange = $this->buildTimeRangeLabel($startTime, $endTime);
 
             $days[] = array(
                 'key' => $dayKey,
@@ -740,6 +747,7 @@ final class EventPageModel
             'is_weekly' => count($days) > 0,
             'is_monthly' => false,
             'is_series' => false,
+            'from_generator' => false,
             'show_date_range' => $showDateRange,
             'days' => $days,
             'series_items' => array(),
@@ -752,6 +760,7 @@ final class EventPageModel
             'is_weekly' => false,
             'is_monthly' => false,
             'is_series' => false,
+            'from_generator' => false,
             'show_date_range' => $showDateRange,
             'monthly_label' => '',
             'time_range' => '',
@@ -840,6 +849,7 @@ final class EventPageModel
             'is_weekly' => true,
             'is_monthly' => false,
             'is_series' => false,
+            'from_generator' => true,
             'show_date_range' => $showDateRange,
             'monthly_label' => '',
             'time_range' => '',
@@ -902,17 +912,9 @@ final class EventPageModel
             }
         }
 
-        $startFormatted = $this->formatTimeForDisplay($defaultStart);
-        $endFormatted = $this->formatTimeForDisplay($defaultEnd);
-
-        $timeRange = '';
-        if ($startFormatted !== '' && $endFormatted !== '') {
-            $timeRange = $startFormatted . ' - ' . $endFormatted;
-        } elseif ($startFormatted !== '') {
-            $timeRange = __('à partir de', 'mj-member') . ' ' . $startFormatted;
-        } elseif ($endFormatted !== '') {
-            $timeRange = $endFormatted;
-        }
+            $startFormatted = $this->formatTimeForDisplay($defaultStart);
+            $endFormatted = $this->formatTimeForDisplay($defaultEnd);
+            $timeRange = $this->buildTimeRangeLabel($defaultStart, $defaultEnd);
 
         $monthlyLabel = trim(implode(' ', array_filter(array($ordinalLabel, $weekdayLabel, __('du mois', 'mj-member')))));
 
@@ -924,6 +926,7 @@ final class EventPageModel
             'is_weekly' => false,
             'is_monthly' => true,
             'is_series' => false,
+            'from_generator' => true,
             'show_date_range' => $showDateRange,
             'monthly_label' => $monthlyLabel,
             'time_range' => $timeRange,
@@ -1213,6 +1216,7 @@ final class EventPageModel
                 'is_weekly' => false,
                 'is_monthly' => false,
                 'is_series' => false,
+                'from_generator' => false,
                 'show_date_range' => $showDateRange,
                 'days' => array(),
                 'series_items' => array(),
@@ -1241,13 +1245,7 @@ final class EventPageModel
             // Formater les heures
             $startFormatted = $this->formatTimeForDisplay($startTime);
             $endFormatted = $this->formatTimeForDisplay($endTime);
-
-            $timeRange = '';
-            if ($startFormatted !== '' && $endFormatted !== '') {
-                $timeRange = $startFormatted . ' - ' . $endFormatted;
-            } elseif ($startFormatted !== '') {
-                $timeRange = __('à partir de', 'mj-member') . ' ' . $startFormatted;
-            }
+            $timeRange = $this->buildTimeRangeLabel($startTime, $endTime);
 
             $seriesItems[] = array(
                 'date' => $dateStr,
@@ -1268,6 +1266,7 @@ final class EventPageModel
             'is_weekly' => false,
             'is_monthly' => false,
             'is_series' => count($seriesItems) > 0,
+            'from_generator' => false,
             'show_date_range' => $showDateRange,
             'days' => array(),
             'series_items' => $seriesItems,
@@ -1303,6 +1302,99 @@ final class EventPageModel
         }
 
         return $hours . 'h' . $minutes;
+    }
+
+    private function buildTimeRangeLabel(string $startTime, string $endTime): string
+    {
+        if ($this->isAllDayTimeRange($startTime, $endTime)) {
+            return __('Toute la journée', 'mj-member');
+        }
+
+        $startFormatted = $this->formatTimeForDisplay($startTime);
+        $endFormatted = $this->formatTimeForDisplay($endTime);
+
+        if ($startFormatted !== '' && $endFormatted !== '') {
+            return $startFormatted . ' - ' . $endFormatted;
+        }
+
+        if ($startFormatted !== '') {
+            return __('à partir de', 'mj-member') . ' ' . $startFormatted;
+        }
+
+        if ($endFormatted !== '') {
+            return $endFormatted;
+        }
+
+        return '';
+    }
+
+    private function isOccurrenceAllDay(array $occurrence, string $startRaw = '', string $endRaw = ''): bool
+    {
+        if (array_key_exists('isAllDay', $occurrence)) {
+            return $this->toBool($occurrence['isAllDay']);
+        }
+        if (array_key_exists('is_all_day', $occurrence)) {
+            return $this->toBool($occurrence['is_all_day']);
+        }
+        if (array_key_exists('all_day', $occurrence)) {
+            return $this->toBool($occurrence['all_day']);
+        }
+        if (isset($occurrence['meta']) && is_array($occurrence['meta'])) {
+            if (array_key_exists('all_day', $occurrence['meta'])) {
+                return $this->toBool($occurrence['meta']['all_day']);
+            }
+            if (array_key_exists('is_all_day', $occurrence['meta'])) {
+                return $this->toBool($occurrence['meta']['is_all_day']);
+            }
+        }
+
+        if ($startRaw === '' && isset($occurrence['start'])) {
+            $startRaw = (string) $occurrence['start'];
+        }
+        if ($endRaw === '' && isset($occurrence['end'])) {
+            $endRaw = (string) $occurrence['end'];
+        }
+
+        $startTime = $this->extractTimePart($startRaw);
+        $endTime = $this->extractTimePart($endRaw);
+        if (!$this->isAllDayTimeRange($startTime, $endTime)) {
+            return false;
+        }
+
+        if ($endTime !== '00:00') {
+            return true;
+        }
+
+        $startDate = $this->parseEventDate($startRaw);
+        $endDate = $this->parseEventDate($endRaw);
+        if (!($startDate instanceof DateTime) || !($endDate instanceof DateTime)) {
+            return true;
+        }
+
+        return $endDate->getTimestamp() > $startDate->getTimestamp();
+    }
+
+    private function extractTimePart(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+
+        if (preg_match('/(\d{2}:\d{2})/', $value, $match)) {
+            return $match[1];
+        }
+
+        return '';
+    }
+
+    private function isAllDayTimeRange(string $startTime, string $endTime): bool
+    {
+        if ($startTime !== '00:00') {
+            return false;
+        }
+
+        return in_array($endTime, array('23:59', '23:59:59', '24:00', '00:00'), true);
     }
 
     /**
@@ -2049,6 +2141,15 @@ final class EventPageModel
             return array();
         }
 
+        $cacheTtl = (int) apply_filters('mj_member_event_page_nextcloud_items_cache_ttl', 600, $eventId);
+        if ($cacheTtl > 0) {
+            $itemsCacheKey = 'mj_member_event_nc_items_' . $eventId;
+            $cachedItems = get_transient($itemsCacheKey);
+            if (is_array($cachedItems)) {
+                return $cachedItems;
+            }
+        }
+
         $eventSlug = isset($eventArray['slug']) ? sanitize_title((string) $eventArray['slug']) : '';
         if ($eventSlug === '') {
             $eventTitle = isset($eventArray['title']) ? (string) $eventArray['title'] : '';
@@ -2066,7 +2167,21 @@ final class EventPageModel
             return array();
         }
 
-        $files = $nextcloud->listFolder($folderPath, false);
+        $filesCacheKey = 'mj_member_event_nc_files_' . $eventId;
+        $filesCacheTtl = (int) apply_filters('mj_member_event_page_nextcloud_files_cache_ttl', 600, $eventId);
+        $filesFailureTtl = (int) apply_filters('mj_member_event_page_nextcloud_files_failure_cache_ttl', 60, $eventId);
+        $files = get_transient($filesCacheKey);
+        if (!is_array($files)) {
+            $files = $nextcloud->listFolder($folderPath, false);
+            if (is_array($files)) {
+                if ($filesCacheTtl > 0) {
+                    set_transient($filesCacheKey, $files, $filesCacheTtl);
+                }
+            } elseif ($filesFailureTtl > 0) {
+                // Back off briefly when Nextcloud is failing to avoid repeating remote calls on each page hit.
+                set_transient($filesCacheKey, array(), $filesFailureTtl);
+            }
+        }
         if (is_wp_error($files) || !is_array($files) || empty($files)) {
             return array();
         }
@@ -2100,13 +2215,19 @@ final class EventPageModel
             return $rightTs <=> $leftTs;
         });
 
-        $maxItems = (int) apply_filters('mj_member_event_page_nextcloud_photos_limit', 120, $eventId);
+        $maxItems = (int) apply_filters('mj_member_event_page_nextcloud_photos_limit', 48, $eventId);
         if ($maxItems <= 0) {
-            $maxItems = 120;
+            $maxItems = 48;
+        }
+
+        $coldBuildLimit = (int) apply_filters('mj_member_event_page_nextcloud_cold_build_limit', 8, $eventId);
+        if ($coldBuildLimit < 0) {
+            $coldBuildLimit = 0;
         }
 
         $items = array();
         $count = 0;
+        $coldBuildCount = 0;
 
         foreach ($imageFiles as $file) {
             if ($count >= $maxItems) {
@@ -2123,7 +2244,17 @@ final class EventPageModel
             $size = isset($file['size']) ? (int) $file['size'] : 0;
             $cacheId = md5($sourcePath . '|' . $modified . '|' . $size);
 
-            $cached = $this->ensureNextcloudPhotoCached($nextcloud, $eventId, $cacheId, $sourcePath, $sourceName);
+            $cached = $this->getCachedNextcloudPhotoUrls($eventId, $cacheId);
+            if (empty($cached['thumb']) || empty($cached['cover'])) {
+                if ($coldBuildCount >= $coldBuildLimit) {
+                    continue;
+                }
+
+                $cached = $this->ensureNextcloudPhotoCached($nextcloud, $eventId, $cacheId, $sourcePath, $sourceName);
+                if (!empty($cached['thumb']) && !empty($cached['cover'])) {
+                    $coldBuildCount++;
+                }
+            }
             if (empty($cached['thumb']) || empty($cached['cover'])) {
                 continue;
             }
@@ -2149,7 +2280,33 @@ final class EventPageModel
             $count++;
         }
 
+        if ($cacheTtl > 0) {
+            set_transient($itemsCacheKey, $items, $cacheTtl);
+        }
+
         return $items;
+    }
+
+    /**
+     * @return array{thumb:string,cover:string}
+     */
+    private function getCachedNextcloudPhotoUrls(int $eventId, string $cacheId): array
+    {
+        $baseRelative = 'data/event/' . $eventId;
+        $thumbRelative = $baseRelative . '/thumbnail/' . $cacheId . '.jpg';
+        $coverRelative = $baseRelative . '/cover/' . $cacheId . '.jpg';
+
+        $thumbAbsolute = Config::path() . $thumbRelative;
+        $coverAbsolute = Config::path() . $coverRelative;
+
+        if (!$this->isUsableImageFile($thumbAbsolute) || !$this->isUsableImageFile($coverAbsolute)) {
+            return array('thumb' => '', 'cover' => '');
+        }
+
+        return array(
+            'thumb' => Config::url() . $thumbRelative,
+            'cover' => Config::url() . $coverRelative,
+        );
     }
 
     /**

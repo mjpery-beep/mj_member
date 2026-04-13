@@ -240,6 +240,14 @@
                         ],
                     ]),
 
+                    // Indicateur de générateur d'occurrences
+                    event.isFromGenerator && h('div', { class: 'mj-regmgr-event-detail__row mj-regmgr-event-detail__row--generator' }, [
+                        h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
+                            h('path', { d: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z' }),
+                        ]),
+                        h('span', { class: 'mj-regmgr-event-detail__generator-label' }, getString(strings, 'eventGeneratedOccurrences', 'Occurrences générées')),
+                    ]),
+
                     // Lieu
                     event.location && h('div', { class: 'mj-regmgr-event-detail__row' }, [
                         h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
@@ -828,7 +836,7 @@
                             'mj-regmgr-occurrence__occurrence-chip--active': item.id === selectedOccurrenceId,
                         }, chipStatus ? 'mj-regmgr-occurrence__occurrence-chip--status-' + chipStatus : null),
                         onClick: function () { setSelectedOccurrenceId(item.id); },
-                    }, item.startTime + ' - ' + item.endTime);
+                    }, formatPreviewRange(item.startTime, item.endTime, !!item.isAllDay, getString(strings, 'occurrenceAllDayLabel', 'Toute la journée')));
                 })),
                 h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
                     h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceDateLabel', 'Date')),
@@ -859,7 +867,28 @@
                         onInput: function (event) { handleEditorChange('reason', event.currentTarget.value); },
                     }),
                 ]),
-                h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
+                h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                    h('label', { class: 'mj-regmgr-occurrence__label' }, [
+                        h('input', {
+                            type: 'checkbox',
+                            checked: !!editorState.isAllDay,
+                            onChange: function (event) {
+                                var checked = !!event.currentTarget.checked;
+                                setEditorState(function (prev) {
+                                    var next = Object.assign({}, prev, { isAllDay: checked });
+                                    if (checked) {
+                                        next.startTime = '00:00';
+                                        next.endTime = '23:59';
+                                    }
+                                    return next;
+                                });
+                            },
+                        }),
+                        ' ',
+                        getString(strings, 'occurrenceAllDayCheckbox', 'Toute la journée'),
+                    ]),
+                ]),
+                !editorState.isAllDay && h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
                     h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
                         h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceStartLabel', 'Heure de début')),
                         h('input', {
@@ -1097,14 +1126,14 @@
             setSchedulePreviewAutoSync(true);
         }, [buildGeneratorPlan, computeSchedulePreview]);
 
-        var persistOccurrences = useCallback(function (nextList, rollback, previewOverride) {
+        var persistOccurrences = useCallback(function (nextList, rollback, previewOverride, clearGenerator) {
             if (!onPersistOccurrences) {
                 return Promise.resolve();
             }
             setIsPersisting(true);
             var summaryPayload = typeof previewOverride === 'string' ? previewOverride : schedulePreview;
             var planResult = buildGeneratorPlan();
-            var generatorPayload = serializeGeneratorPlan(planResult, generatorState);
+            var generatorPayload = clearGenerator === true ? {} : serializeGeneratorPlan(planResult, generatorState);
             return Promise.resolve(onPersistOccurrences(nextList, summaryPayload, generatorPayload))
                 .then(function (result) {
                     setIsPersisting(false);
@@ -1151,6 +1180,9 @@
             if (!editorState || !editorState.date) {
                 return;
             }
+            var isAllDayOccurrence = !!editorState.isAllDay;
+            var resolvedStartTime = isAllDayOccurrence ? '00:00' : editorState.startTime;
+            var resolvedEndTime = isAllDayOccurrence ? '23:59' : editorState.endTime;
             var previousList = cloneOccurrenceList(localOccurrences);
             var previousSelection = selectedOccurrenceId;
             if (editorState.id) {
@@ -1160,8 +1192,9 @@
                     }
                     return Object.assign({}, occ, {
                         date: editorState.date,
-                        startTime: editorState.startTime,
-                        endTime: editorState.endTime,
+                        startTime: resolvedStartTime,
+                        endTime: resolvedEndTime,
+                        isAllDay: isAllDayOccurrence,
                         status: editorState.status,
                         reason: editorState.reason,
                     });
@@ -1178,8 +1211,9 @@
                 var newOccurrence = {
                     id: newId,
                     date: editorState.date,
-                    startTime: editorState.startTime,
-                    endTime: editorState.endTime,
+                    startTime: resolvedStartTime,
+                    endTime: resolvedEndTime,
+                    isAllDay: isAllDayOccurrence,
                     status: editorState.status,
                     reason: editorState.reason,
                 };
@@ -1335,7 +1369,7 @@
                 setSchedulePreview(previousPreviewValue);
                 setSchedulePreviewVisible(previousPreviewVisible);
                 setSchedulePreviewAutoSync(previousPreviewAutoSync);
-            }).catch(function () {
+            }, '', true).catch(function () {
                 // Parent handles notification
             });
         }, [localOccurrences, strings, selectedOccurrenceId, editorState, persistOccurrences, schedulePreview, schedulePreviewVisible, schedulePreviewAutoSync]);
@@ -1740,7 +1774,12 @@
                                             }
                                             var statusKey = occurrence.status ? normalizeOccurrenceStatus(occurrence.status) : 'planned';
                                             var isSelectedBlock = selectedOccurrenceId === occurrence.id;
-                                            var ariaLabel = formatTimeRange(occurrence.startTime, occurrence.endTime);
+                                            var ariaLabel = formatTimeRange(
+                                                occurrence.startTime,
+                                                occurrence.endTime,
+                                                !!occurrence.isAllDay,
+                                                getString(strings, 'occurrenceAllDayLabel', 'Toute la journée')
+                                            );
                                             return h('button', {
                                                 key: occurrence.id,
                                                 type: 'button',
@@ -1760,7 +1799,12 @@
                                                 },
                                                 'aria-label': ariaLabel,
                                             }, [
-                                                h('span', { class: 'mj-regmgr-occurrence__week-block-time' }, formatPreviewRange(occurrence.startTime, occurrence.endTime)),
+                                                h('span', { class: 'mj-regmgr-occurrence__week-block-time' }, formatPreviewRange(
+                                                    occurrence.startTime,
+                                                    occurrence.endTime,
+                                                    !!occurrence.isAllDay,
+                                                    getString(strings, 'occurrenceAllDayLabel', 'Toute la journée')
+                                                )),
                                                 statusLabelMap[statusKey] && h('span', { class: 'mj-regmgr-occurrence__week-block-status' }, statusLabelMap[statusKey]),
                                                 occurrence.status === 'cancelled' && occurrence.reason && h('span', { class: 'mj-regmgr-occurrence__week-block-reason' }, occurrence.reason),
                                             ]);
@@ -1882,7 +1926,10 @@
         return padNumber(hours) + ':' + padNumber(mins);
     }
 
-    function formatTimeRange(start, end) {
+    function formatTimeRange(start, end, isAllDay, allDayLabel) {
+        if (isAllDay) {
+            return allDayLabel || 'Toute la journée';
+        }
         var startValue = typeof start === 'string' ? start.trim() : '';
         var endValue = typeof end === 'string' ? end.trim() : '';
         if (!startValue && !endValue) {
@@ -1912,7 +1959,10 @@
         return parts[0] + 'h' + parts[1];
     }
 
-    function formatPreviewRange(start, end) {
+    function formatPreviewRange(start, end, isAllDay, allDayLabel) {
+        if (isAllDay) {
+            return allDayLabel || 'Toute la journée';
+        }
         var startLabel = formatPreviewTime(start);
         var endLabel = formatPreviewTime(end);
         if (startLabel && endLabel) {
@@ -2308,6 +2358,7 @@
         if (!Array.isArray(list) || list.length === 0) {
             return '';
         }
+        var onlyAllDayOccurrences = true;
         var minStart = null;
         var maxEnd = null;
         var fallbackStart = '';
@@ -2315,6 +2366,9 @@
         list.forEach(function (occurrence) {
             if (!occurrence) {
                 return;
+            }
+            if (!occurrence.isAllDay) {
+                onlyAllDayOccurrences = false;
             }
             var startStr = typeof occurrence.startTime === 'string' ? occurrence.startTime : '';
             var endStr = typeof occurrence.endTime === 'string' ? occurrence.endTime : '';
@@ -2333,6 +2387,9 @@
                 maxEnd = endMinutes;
             }
         });
+        if (onlyAllDayOccurrences) {
+            return 'Toute la journée';
+        }
         var startText = minStart !== null ? minutesToTime(minStart) : fallbackStart;
         var endText = maxEnd !== null ? minutesToTime(maxEnd) : fallbackEnd;
         return formatTimeRange(startText, endText);
@@ -2413,6 +2470,24 @@
         var dateValue = start ? formatISODate(start) : (occurrence && typeof occurrence.date === 'string' ? occurrence.date : formatISODate(new Date()));
         var startTime = start ? formatTimeFromDate(start) : (occurrence && typeof occurrence.startTime === 'string' ? occurrence.startTime : '09:00');
         var endTime = end ? formatTimeFromDate(end) : (occurrence && typeof occurrence.endTime === 'string' ? occurrence.endTime : addMinutesToTime(startTime, 60));
+        var isAllDay = false;
+        if (occurrence && typeof occurrence.isAllDay === 'boolean') {
+            isAllDay = occurrence.isAllDay;
+        } else if (occurrence && typeof occurrence.allDay === 'boolean') {
+            isAllDay = occurrence.allDay;
+        } else if (occurrence && occurrence.meta && typeof occurrence.meta === 'object' && occurrence.meta !== null) {
+            var metaAllDay = occurrence.meta.all_day;
+            if (metaAllDay === true || metaAllDay === 1 || metaAllDay === '1' || metaAllDay === 'true') {
+                isAllDay = true;
+            }
+        }
+        if (!isAllDay && startTime === '00:00' && (endTime === '23:59' || endTime === '23:58')) {
+            isAllDay = true;
+        }
+        if (isAllDay) {
+            startTime = '00:00';
+            endTime = '23:59';
+        }
         var statusValue = normalizeOccurrenceStatus(occurrence && occurrence.status);
         var reasonValue = '';
         if (occurrence && typeof occurrence.reason === 'string') {
@@ -2428,6 +2503,7 @@
             date: dateValue,
             startTime: startTime || '09:00',
             endTime: endTime || addMinutesToTime(startTime || '09:00', 60),
+            isAllDay: !!isAllDay,
             status: statusValue,
             reason: reasonValue,
         };
@@ -2634,6 +2710,7 @@
                 date: '',
                 startTime: '09:00',
                 endTime: '10:00',
+                isAllDay: false,
                 status: 'planned',
                 reason: '',
             };
@@ -2643,6 +2720,7 @@
             date: occurrence.date,
             startTime: occurrence.startTime || '09:00',
             endTime: occurrence.endTime || '10:00',
+            isAllDay: !!occurrence.isAllDay,
             status: occurrence.status || 'planned',
             reason: occurrence.reason || '',
         };
@@ -6922,6 +7000,7 @@
                     date: occ && typeof occ.date === 'string' ? occ.date : '',
                     startTime: occ && typeof occ.startTime === 'string' ? occ.startTime : '',
                     endTime: occ && typeof occ.endTime === 'string' ? occ.endTime : '',
+                    isAllDay: !!(occ && occ.isAllDay),
                     status: occ && typeof occ.status === 'string' ? occ.status : 'planned',
                     reason: occ && typeof occ.reason === 'string' ? occ.reason : '',
                 };

@@ -26,7 +26,15 @@
                         </div>
                         <div class="mj-event-page__next-date-info">
                             <span class="mj-event-page__next-date-full">{{ next_occurrence.full_date }}</span>
-                            {% if next_occurrence.time_start %}
+                            {% if next_occurrence.is_all_day|default(false) %}
+                                <span class="mj-event-page__next-date-time">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"/>
+                                        <polyline points="12 6 12 12 16 14"/>
+                                    </svg>
+                                    {{ next_occurrence.all_day_label|default(__('Toute la journée', 'mj-member')) }}
+                                </span>
+                            {% elseif next_occurrence.time_start %}
                                 <span class="mj-event-page__next-date-time">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <circle cx="12" cy="12" r="10"/>

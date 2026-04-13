@@ -639,6 +639,32 @@
         return formatIsoDate(date);
     }
 
+    function formatWeekdayFromKey(weekdayKey) {
+        var weekdayNum = weekdayToNumber(weekdayKey);
+        if (weekdayNum === null) {
+            return String(weekdayKey || '').trim();
+        }
+        var baseMonday = new Date(2024, 0, 1); // Monday reference
+        var date = addDays(baseMonday, weekdayNum - 1);
+        return formatWeekdayDisplay(date) || String(weekdayKey || '').trim();
+    }
+
+    function formatWeekdayDisplay(date) {
+        if (!(date instanceof Date) || isNaN(date.getTime())) {
+            return '';
+        }
+        if (typeof date.toLocaleDateString === 'function') {
+            try {
+                return date.toLocaleDateString(undefined, {
+                    weekday: 'long',
+                });
+            } catch (localeError) {
+                return '';
+            }
+        }
+        return '';
+    }
+
     function formatTimeValue(value) {
         if (!value) {
             return '';
@@ -754,7 +780,7 @@
 
         var entry = {
             date: isoDate,
-            dateLabel: formatDateDisplay(dateObj),
+            dateLabel: formatWeekdayDisplay(dateObj),
             timeLabel: formatTimeRange(startTime, endTime),
             disabled: isExcluded,
         };
@@ -1026,6 +1052,66 @@
         return {
             groups: groups,
             stats: stats,
+        };
+    }
+
+    function buildWeeklyEncodedDaysAgenda(schedulePayload, strings) {
+        var weekdays = ensureArray(schedulePayload.weekdays);
+        if (!weekdays.length) {
+            return {
+                groups: [],
+                stats: { total: 0, cancelled: 0, excluded: 0 },
+            };
+        }
+
+        var weekdayTimes = schedulePayload.weekday_times && typeof schedulePayload.weekday_times === 'object'
+            ? schedulePayload.weekday_times
+            : {};
+
+        var entries = weekdays.map(function (weekdayKey, index) {
+            var key = String(weekdayKey || '').toLowerCase();
+            var timeOverride = weekdayTimes[key] || {};
+            var startTime = timeOverride.start || schedulePayload.start_time || '';
+            var endTime = timeOverride.end || schedulePayload.end_time || '';
+
+            return {
+                key: key || ('weekday-' + index),
+                date: '',
+                dateLabel: formatWeekdayFromKey(key),
+                timeLabel: formatTimeRange(startTime, endTime),
+                disabled: false,
+            };
+        }).sort(function (left, right) {
+            var l = weekdayToNumber(left.key);
+            var r = weekdayToNumber(right.key);
+            if (l === null && r === null) {
+                return left.key.localeCompare(right.key);
+            }
+            if (l === null) {
+                return 1;
+            }
+            if (r === null) {
+                return -1;
+            }
+            return l - r;
+        });
+
+        var groupLabel = getString(strings, 'recurringWeekdays', 'Jours de semaine');
+        var groupSummary = formatTemplate(
+            getString(strings, 'recurringAgendaWeekOccurrences', '{count} occurrence(s)'),
+            { count: entries.length }
+        );
+
+        return {
+            groups: [{
+                key: 'encoded-weekdays',
+                label: groupLabel,
+                summary: groupSummary,
+                entries: entries,
+                cancelled: 0,
+                excluded: 0,
+            }],
+            stats: { total: entries.length, cancelled: 0, excluded: 0 },
         };
     }
 
@@ -3082,6 +3168,9 @@
             if (scheduleMode !== 'recurring') {
                 return null;
             }
+            if ((schedulePayload.frequency || 'weekly') === 'weekly') {
+                return buildWeeklyEncodedDaysAgenda(schedulePayload, strings);
+            }
             var agendaConfig = {
                 startDate: schedulePayload.start_date || '',
                 untilDate: schedulePayload.until || '',
@@ -3407,20 +3496,21 @@
                                 h('div', { class: 'mj-regmgr-recurring-agenda__items' }, group.entries.map(function (entry, entryIndex) {
                                     var isCancelled = !!entry.reason;
                                     var isDisabled = !!entry.disabled;
+                                    var hasDate = !!entry.date;
                                     var statusLabel = '';
                                     if (isDisabled) {
                                         statusLabel = isCancelled
                                             ? getString(strings, 'recurringAgendaCancelled', 'Annule')
                                             : getString(strings, 'recurringAgendaDisabled', 'Exclu');
                                     }
-                                    return h('button', {
+                                    return h(hasDate ? 'button' : 'div', {
                                         key: group.key + '-' + entryIndex,
-                                        type: 'button',
+                                        type: hasDate ? 'button' : undefined,
                                         class: classNames('mj-regmgr-recurring-agenda__item', {
                                             'mj-regmgr-recurring-agenda__item--disabled': isDisabled,
                                             'mj-regmgr-recurring-agenda__item--cancelled': isCancelled,
                                         }),
-                                        onClick: function () { onOpenExceptionDialog(entry); },
+                                        onClick: hasDate ? function () { onOpenExceptionDialog(entry); } : undefined,
                                     }, [
                                         h('span', { class: 'mj-regmgr-recurring-agenda__item-date' }, entry.dateLabel || entry.date),
                                         entry.timeLabel ? h('span', { class: 'mj-regmgr-recurring-agenda__item-time' }, entry.timeLabel) : null,

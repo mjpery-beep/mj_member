@@ -1005,6 +1005,28 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 $end_time = $start_time;
             }
 
+            $is_all_day = false;
+            if (isset($item['isAllDay'])) {
+                $raw_all_day = $item['isAllDay'];
+            } elseif (isset($item['allDay'])) {
+                $raw_all_day = $item['allDay'];
+            } elseif (isset($item['all_day'])) {
+                $raw_all_day = $item['all_day'];
+            } else {
+                $raw_all_day = null;
+            }
+            if (is_bool($raw_all_day)) {
+                $is_all_day = $raw_all_day;
+            } elseif (is_numeric($raw_all_day)) {
+                $is_all_day = ((int) $raw_all_day) === 1;
+            } elseif (is_string($raw_all_day)) {
+                $is_all_day = in_array(strtolower(trim($raw_all_day)), array('1', 'true', 'yes', 'on'), true);
+            }
+            if ($is_all_day) {
+                $start_time = '00:00';
+                $end_time = '23:59';
+            }
+
             $start_string = $date . ' ' . $start_time . ':00';
             $end_string = $date . ' ' . $end_time . ':00';
 
@@ -1050,6 +1072,9 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             }
             if ($status !== '') {
                 $meta['status'] = $status;
+            }
+            if ($is_all_day) {
+                $meta['all_day'] = 1;
             }
 
             $start_formatted = $start_dt->format('Y-m-d H:i:s');
@@ -1105,6 +1130,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $end = isset($occurrence['end']) ? (string) $occurrence['end'] : '';
             $status = isset($occurrence['status']) ? $this->occurrenceStatusToFront($occurrence['status']) : 'planned';
             $reason = '';
+            $is_all_day = false;
             if (isset($occurrence['meta'])) {
                 $meta = $occurrence['meta'];
                 if (is_string($meta)) {
@@ -1115,6 +1141,16 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 }
                 if (is_array($meta) && isset($meta['reason'])) {
                     $reason = sanitize_text_field((string) $meta['reason']);
+                }
+                if (is_array($meta) && isset($meta['all_day'])) {
+                    $raw_all_day = $meta['all_day'];
+                    if (is_bool($raw_all_day)) {
+                        $is_all_day = $raw_all_day;
+                    } elseif (is_numeric($raw_all_day)) {
+                        $is_all_day = ((int) $raw_all_day) === 1;
+                    } elseif (is_string($raw_all_day)) {
+                        $is_all_day = in_array(strtolower(trim($raw_all_day)), array('1', 'true', 'yes', 'on'), true);
+                    }
                 }
             }
 
@@ -1129,6 +1165,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'date' => substr($start, 0, 10),
                 'startTime' => preg_match('/^\d{2}:\d{2}$/', $start_time) ? $start_time : '',
                 'endTime' => preg_match('/^\d{2}:\d{2}$/', $end_time) ? $end_time : '',
+                'isAllDay' => $is_all_day,
                 'status' => $status,
                 'reason' => $reason,
                 'startFormatted' => $this->formatDate($start, true),
@@ -1810,6 +1847,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'scheduleDetail' => isset($schedule_info['detail']) ? $schedule_info['detail'] : '',
                 'occurrences' => $occurrences,
                 'occurrenceGenerator' => $occurrence_generator_plan,
+                'isFromGenerator' => !empty($occurrence_generator_plan),
                 'location' => $location,
                 'locationLinks' => $location_links,
                 'animateurs' => $animateurs,
@@ -5201,6 +5239,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $schedule_mode = 'fixed';
         }
         $schedule_info = $this->buildEventScheduleInfo($event, $schedule_mode);
+        $occurrence_generator = $this->extractOccurrenceGeneratorFromEvent($event);
 
         return array(
             'id' => isset($event->id) ? (int) $event->id : 0,
@@ -5221,7 +5260,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'capacityTotal' => isset($event->capacity_total) ? (int) $event->capacity_total : 0,
             'capacityWaitlist' => isset($event->capacity_waitlist) ? (int) $event->capacity_waitlist : 0,
             'prix' => isset($event->prix) ? (float) $event->prix : 0.0,
-            'occurrenceGenerator' => $this->extractOccurrenceGeneratorFromEvent($event),
+            'occurrenceGenerator' => $occurrence_generator,
+            'isFromGenerator' => !empty($occurrence_generator),
             'scheduleMode' => $schedule_mode,
             'scheduleSummary' => isset($schedule_info['summary']) ? $schedule_info['summary'] : '',
             'scheduleDetail' => isset($schedule_info['detail']) ? $schedule_info['detail'] : '',
@@ -5468,6 +5508,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'date' => substr((string) $refreshed_event->date_debut, 0, 10),
                 'startTime' => substr((string) $refreshed_event->date_debut, 11, 5),
                 'endTime' => $fallback_end !== '' ? substr($fallback_end, 11, 5) : '',
+                'isAllDay' => false,
                 'status' => 'planned',
                 'reason' => '',
                 'startFormatted' => $this->formatDate((string) $refreshed_event->date_debut, true),
@@ -6090,6 +6131,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $render_errors[] = 'Dompdf: ' . $dompdf_result->get_error_message();
         }
 
+        // Prefer mPDF fallback to keep rich HTML when Dompdf is unavailable.
         $allow_mpdf_fallback = (bool) apply_filters('mj_member_regdoc_allow_mpdf_fallback', true);
         if ($allow_mpdf_fallback) {
             $mpdf_result = $this->buildRegistrationContractPdfWithMpdf($header_html, $content_html, $footer_html, $event_title, $member_name);
@@ -6103,13 +6145,13 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             }
         }
 
-        // FPDF fallback flattens rich HTML. Keep it disabled by default.
+        // Keep FPDF fallback opt-in: default is HTML-first rendering only.
         $allow_fpdf_fallback = (bool) apply_filters('mj_member_regdoc_allow_fpdf_fallback', false);
         if (!$allow_fpdf_fallback) {
             $suffix = !empty($render_errors) ? ' ' . implode(' | ', $render_errors) : '';
             return new \WP_Error(
                 'mj_regmgr_contract_pdf_html_renderer_unavailable',
-                __('Impossible de rendre le HTML du contrat (Dompdf indisponible). Vérifiez le déploiement de vendor/autoload.php (composer install dans le plugin).', 'mj-member') . $suffix
+                __('Impossible de rendre le HTML du contrat avec les moteurs disponibles.', 'mj-member') . $suffix
             );
         }
 
@@ -6139,14 +6181,6 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $y = $pdf->GetY();
             $pdf->Line(10, $y, 200, $y);
             $pdf->Ln(4);
-        }
-
-        $title = trim($event_title . ($member_name !== '' ? ' - ' . $member_name : ''));
-        if ($title !== '') {
-            $pdf->SetFont('Arial', 'B', 14);
-            $pdf->MultiCell(0, 8, $this->toPdfText($title));
-            $pdf->Ln(2);
-            $pdf->SetFont('Arial', '', 11);
         }
 
         $content_rendered = $this->renderPdfHtmlSection($pdf, $content_html, 6.0);
@@ -6207,7 +6241,6 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             return null;
         }
 
-        $title = trim($event_title . ($member_name !== '' ? ' - ' . $member_name : ''));
         $base_href = esc_url(home_url('/'));
 
         $composed_html = '<!doctype html><html><head><meta charset="utf-8">'
@@ -6217,7 +6250,6 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             . 'body{font-family:dejavusans,Arial,sans-serif;font-size:12px;line-height:1.45;color:#111;margin:0;padding:0;}'
             . '.mj-regdoc{margin:0;padding:0;}'
             . '.mj-regdoc-header{font-size:11px;color:#333;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #ddd;}'
-            . '.mj-regdoc-title{font-size:18px;font-weight:700;margin:0 0 12px 0;}'
             . '.mj-regdoc-content{font-size:12px;}'
             . '.mj-regdoc-footer{font-size:10px;color:#444;margin-top:14px;padding-top:8px;border-top:1px solid #ddd;}'
             . '.mj-regdoc img{max-width:100%;height:auto;}'
@@ -6227,7 +6259,6 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             . '.mj-regdoc .regdoc-page{page-break-before:auto !important;page-break-after:auto !important;break-before:auto !important;break-after:auto !important;}'
             . '</style></head><body><div class="mj-regdoc">'
             . '<div class="mj-regdoc-header">' . $header_html . '</div>'
-            . ($title !== '' ? '<h1 class="mj-regdoc-title">' . esc_html($title) . '</h1>' : '')
             . '<div class="mj-regdoc-content">' . $body_html . '</div>'
             . '<div class="mj-regdoc-footer">' . $footer_html . '</div>'
             . '</div></body></html>';
@@ -6245,6 +6276,13 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             ));
             $mpdf->showImageErrors = false;
             $mpdf->WriteHTML($composed_html);
+
+            // Emergency guard: reject pathological pagination explosions.
+            $page_count = isset($mpdf->page) ? (int) $mpdf->page : 0;
+            if ($page_count > 40) {
+                throw new \RuntimeException('Pagination runaway detected in mPDF (' . $page_count . ' pages).');
+            }
+
             $content = $mpdf->Output('', 'S');
         } catch (\Throwable $e) {
             return new \WP_Error('mj_regmgr_contract_pdf_mpdf_failed', __('Le rendu HTML en PDF a échoué (mPDF).', 'mj-member') . ' ' . $e->getMessage());
@@ -6267,6 +6305,35 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'filename' => $filename_base . '.pdf',
             'content' => $content,
         );
+    }
+
+    /**
+     * Emergency simplification for mPDF runaway pagination cases.
+     */
+    private function simplifyHtmlForMpdfSafeMode(string $html): string {
+        $html = trim($html);
+        if ($html === '') {
+            return '';
+        }
+
+        // Last-resort mode: strip to plain text to prevent pathological pagination loops.
+        $text = html_entity_decode(wp_strip_all_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = (string) preg_replace('/\r\n|\r/', "\n", $text);
+        $text = (string) preg_replace('/[ \t\x{00A0}]+/u', ' ', $text);
+        $text = (string) preg_replace('/\n{3,}/', "\n\n", $text);
+        $text = trim($text);
+
+        if ($text === '') {
+            return '';
+        }
+
+        if (function_exists('mb_substr')) {
+            $text = mb_substr($text, 0, 20000);
+        } else {
+            $text = substr($text, 0, 20000);
+        }
+
+        return '<p>' . nl2br(esc_html($text)) . '</p>';
     }
 
     /**
@@ -6298,7 +6365,6 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             return null;
         }
 
-        $title = trim($event_title . ($member_name !== '' ? ' - ' . $member_name : ''));
         $base_href = esc_url(home_url('/'));
 
         $composed_html = '<!doctype html><html><head><meta charset="utf-8">'
@@ -6307,7 +6373,6 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             . 'body{font-family:DejaVu Sans,Arial,sans-serif;font-size:12px;line-height:1.45;color:#111;margin:0;padding:0;}'
             . '.mj-regdoc{padding:24px 28px;}'
             . '.mj-regdoc-header{font-size:11px;color:#333;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #ddd;}'
-            . '.mj-regdoc-title{font-size:18px;font-weight:700;margin:0 0 12px 0;}'
             . '.mj-regdoc-content{font-size:12px;}'
             . '.mj-regdoc-footer{font-size:10px;color:#444;margin-top:14px;padding-top:8px;border-top:1px solid #ddd;}'
             . '.mj-regdoc img{max-width:100%;height:auto;}'
@@ -6316,7 +6381,6 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             . '.mj-regdoc th{background:#f3f4f6;font-weight:700;}'
             . '</style></head><body><div class="mj-regdoc">'
             . '<div class="mj-regdoc-header">' . $header_html . '</div>'
-            . ($title !== '' ? '<h1 class="mj-regdoc-title">' . esc_html($title) . '</h1>' : '')
             . '<div class="mj-regdoc-content">' . $body_html . '</div>'
             . '<div class="mj-regdoc-footer">' . $footer_html . '</div>'
             . '</div></body></html>';
@@ -6388,13 +6452,114 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $html = isset($match[1]) ? (string) $match[1] : $html;
         }
 
+        $html = $this->canonicalizeHtmlFragmentWithDomDocument($html);
+
         $html = $this->sanitizeHtmlForPredictablePdfLayout($html);
+        $html = $this->normalizeTableMarkupForPdf($html);
+
+        // Rebalance malformed markup emitted by rich-text editors.
+        if (function_exists('force_balance_tags')) {
+            $html = force_balance_tags($html);
+        }
 
         $html = $this->neutralizeAggressivePageBreaksForPdf($html);
 
         $html = $this->normalizeImgSourcesForPdf($html);
 
         return $html;
+    }
+
+    /**
+     * Normalize malformed fragments through DOM parsing to rebalance broken HTML.
+     */
+    private function canonicalizeHtmlFragmentWithDomDocument(string $html): string {
+        if (trim($html) === '' || !class_exists('DOMDocument') || !class_exists('DOMXPath')) {
+            return $html;
+        }
+
+        $wrapped = '<!doctype html><html><body><div id="mj-regdoc-root">' . $html . '</div></body></html>';
+        $dom = new \DOMDocument('1.0', 'UTF-8');
+
+        $previous_use_internal_errors = libxml_use_internal_errors(true);
+        $loaded = $dom->loadHTML(
+            '<?xml encoding="utf-8" ?>' . $wrapped,
+            LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NONET
+        );
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous_use_internal_errors);
+
+        if (!$loaded) {
+            return $html;
+        }
+
+        $xpath = new \DOMXPath($dom);
+        $root_nodes = $xpath->query('//*[@id="mj-regdoc-root"]');
+        if (!$root_nodes || $root_nodes->length < 1) {
+            return $html;
+        }
+
+        $root = $root_nodes->item(0);
+        if (!$root) {
+            return $html;
+        }
+
+        $normalized = '';
+        foreach ($root->childNodes as $child) {
+            $normalized .= (string) $dom->saveHTML($child);
+        }
+
+        $normalized = trim($normalized);
+        return $normalized !== '' ? $normalized : $html;
+    }
+
+    /**
+     * Normalize malformed table markup that can crash HTML-to-PDF engines.
+     */
+    private function normalizeTableMarkupForPdf(string $html): string {
+        if (trim($html) === '') {
+            return '';
+        }
+
+        $has_table = preg_match('/<\s*table\b/i', $html) === 1;
+        $has_cells = preg_match('/<\s*\/?\s*(?:tr|td|th)\b/i', $html) === 1;
+
+        if ($has_cells && !$has_table) {
+            // Convert orphan table tags into plain spacing when no table container exists.
+            $html = (string) preg_replace('/<\s*\/?\s*(?:tr|td|th|tbody|thead|tfoot)\b[^>]*>/i', ' ', $html);
+        }
+
+        // If table markup is structurally inconsistent, flatten it to block content
+        // to avoid Dompdf/mPDF crashes on orphan td/tr elements.
+        if ($has_table && $this->hasBrokenTableMarkup($html)) {
+            $html = (string) preg_replace('/<\s*\/?\s*(?:table|tbody|thead|tfoot|tr|td|th|colgroup|col|caption)\b[^>]*>/i', ' ', $html);
+        }
+
+        // Remove empty table shells.
+        $html = (string) preg_replace('/<table\b[^>]*>\s*<\/table>/i', '', $html);
+
+        return $html;
+    }
+
+    /**
+     * Heuristic detection of malformed table markup.
+     */
+    private function hasBrokenTableMarkup(string $html): bool {
+        $open_tables = preg_match_all('/<\s*table\b/i', $html);
+        $close_tables = preg_match_all('/<\s*\/\s*table\s*>/i', $html);
+        if ($open_tables !== $close_tables) {
+            return true;
+        }
+
+        $open_rows = preg_match_all('/<\s*tr\b/i', $html);
+        $close_rows = preg_match_all('/<\s*\/\s*tr\s*>/i', $html);
+        if ($open_rows !== $close_rows) {
+            return true;
+        }
+
+        $open_cells = preg_match_all('/<\s*(?:td|th)\b/i', $html);
+        $close_cells = preg_match_all('/<\s*\/\s*(?:td|th)\s*>/i', $html);
+
+        return $open_cells !== $close_cells;
     }
 
     /**

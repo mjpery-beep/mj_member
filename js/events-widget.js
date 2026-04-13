@@ -1676,6 +1676,92 @@
         return String(value).trim();
     }
 
+    function toBooleanLike(value) {
+        if (typeof value === 'boolean') {
+            return value;
+        }
+        if (typeof value === 'number') {
+            return value === 1;
+        }
+        if (typeof value === 'string') {
+            var normalized = value.trim().toLowerCase();
+            return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+        }
+        return false;
+    }
+
+    function extractOccurrenceTime(value) {
+        var normalized = normalizeOccurrenceValue(value);
+        if (!normalized) {
+            return '';
+        }
+
+        var match = normalized.match(/(\d{1,2})[:h](\d{2})/);
+        if (!match) {
+            return '';
+        }
+
+        return String(match[1]).padStart(2, '0') + ':' + match[2];
+    }
+
+    function parseOccurrenceDateTime(value) {
+        var normalized = normalizeOccurrenceValue(value);
+        if (!normalized) {
+            return null;
+        }
+
+        var prepared = normalized.replace(' ', 'T');
+        var parsed = Date.parse(prepared);
+        if (!Number.isNaN(parsed)) {
+            return parsed;
+        }
+
+        parsed = Date.parse(normalized);
+        if (!Number.isNaN(parsed)) {
+            return parsed;
+        }
+
+        return null;
+    }
+
+    function isOccurrenceAllDay(entry) {
+        if (!entry || typeof entry !== 'object') {
+            return false;
+        }
+
+        if (toBooleanLike(entry.isAllDay) || toBooleanLike(entry.is_all_day) || toBooleanLike(entry.all_day)) {
+            return true;
+        }
+
+        if (entry.meta && typeof entry.meta === 'object') {
+            if (toBooleanLike(entry.meta.all_day) || toBooleanLike(entry.meta.is_all_day)) {
+                return true;
+            }
+        }
+
+        var startTime = extractOccurrenceTime(entry.start);
+        var endTime = extractOccurrenceTime(entry.end);
+
+        if (startTime !== '00:00') {
+            return false;
+        }
+
+        if (endTime === '23:59' || endTime === '24:00') {
+            return true;
+        }
+
+        if (endTime === '00:00') {
+            var startDate = parseOccurrenceDateTime(entry.start);
+            var endDate = parseOccurrenceDateTime(entry.end);
+            if (startDate !== null && endDate !== null) {
+                return endDate > startDate;
+            }
+            return true;
+        }
+
+        return false;
+    }
+
     function resolveFormatterLocale() {
         if (strings && typeof strings.locale === 'string' && strings.locale) {
             var prepared = strings.locale.replace(/_/g, '-');
@@ -1690,6 +1776,10 @@
     function getOccurrenceTimeKey(entry) {
         if (!entry) {
             return '';
+        }
+
+        if (isOccurrenceAllDay(entry)) {
+            return 'all-day';
         }
 
         var timestamp = entry.timestamp !== undefined ? parseInt(entry.timestamp, 10) : NaN;
@@ -1712,6 +1802,10 @@
     }
 
     function formatOccurrenceTime(entry) {
+        if (isOccurrenceAllDay(entry)) {
+            return strings.occurrenceCalendarAllDay || 'Toute la journée';
+        }
+
         var timestamp = entry.timestamp !== undefined ? parseInt(entry.timestamp, 10) : NaN;
         if (!Number.isNaN(timestamp) && timestamp > 0) {
             try {
@@ -1726,15 +1820,7 @@
             }
         }
 
-        var start = entry.start ? String(entry.start) : '';
-        if (start) {
-            var match = start.match(/(\d{1,2})[:h](\d{2})/);
-            if (match) {
-                return String(match[1]).padStart(2, '0') + ':' + match[2];
-            }
-        }
-
-        return '';
+        return extractOccurrenceTime(entry.start);
     }
 
     function formatOccurrenceLabel(entry, includeTime) {

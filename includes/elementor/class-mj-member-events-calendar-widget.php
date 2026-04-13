@@ -3362,6 +3362,19 @@ class Mj_Member_Elementor_Events_Calendar_Widget extends Widget_Base {
             $timezone = new \DateTimeZone('UTC');
         }
 
+        // Check if this is an all-day occurrence (00:00 → 23:59 or 00:00→next day 00:00)
+        $startRaw = wp_date('H:i', $start->getTimestamp(), $timezone);
+        if ($startRaw === '00:00' && $end instanceof \DateTimeImmutable) {
+            $endRaw = wp_date('H:i', $end->getTimestamp(), $timezone);
+            // Check for 23:59, 24:00, or next-day 00:00
+            if ($endRaw === '23:59' || $endRaw === '24:00') {
+                return __('Toute la journée', 'mj-member');
+            }
+            if ($endRaw === '00:00' && $end->getTimestamp() > $start->getTimestamp()) {
+                return __('Toute la journée', 'mj-member');
+            }
+        }
+
         $time_format = get_option('time_format', 'H:i');
         $start_label = self::normalize_time_label(wp_date($time_format, $start->getTimestamp(), $timezone));
 
