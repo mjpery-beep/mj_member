@@ -52,6 +52,7 @@ use Mj\Member\Core\Config;
 use Mj\Member\Classes\Value\EventLocationData;
 use Mj\Member\Classes\MjOpenAIClient;
 use Mj\Member\Classes\MjSocialMediaPublisher;
+use Mj\Member\Classes\View\EventPage\EventPageViewBuilder;
 use DateTime;
 
 if (!defined('ABSPATH')) {
@@ -1176,6 +1177,99 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         return $formatted;
     }
 
+    /**
+     * @param array<int, array<string, mixed>> $occurrences
+     * @return array<int, array<string, mixed>>
+     */
+    private function normalizeOccurrencesForInlineSchedule(array $occurrences): array
+    {
+        $normalized = array();
+
+        foreach ($occurrences as $occurrence) {
+            if (!is_array($occurrence)) {
+                continue;
+            }
+
+            $start = isset($occurrence['start']) ? trim((string) $occurrence['start']) : '';
+            if ($start === '' && !empty($occurrence['date'])) {
+                $time = isset($occurrence['startTime']) && preg_match('/^\d{2}:\d{2}$/', (string) $occurrence['startTime'])
+                    ? (string) $occurrence['startTime']
+                    : '00:00';
+                $start = trim((string) $occurrence['date']) . ' ' . $time . ':00';
+            }
+
+            if ($start === '') {
+                continue;
+            }
+
+            $end = isset($occurrence['end']) ? trim((string) $occurrence['end']) : '';
+            if ($end === '' && !empty($occurrence['date'])) {
+                $endTime = isset($occurrence['endTime']) && preg_match('/^\d{2}:\d{2}$/', (string) $occurrence['endTime'])
+                    ? (string) $occurrence['endTime']
+                    : '';
+                if ($endTime !== '') {
+                    $end = trim((string) $occurrence['date']) . ' ' . $endTime . ':00';
+                }
+            }
+
+            $timestamp = isset($occurrence['timestamp']) ? (int) $occurrence['timestamp'] : 0;
+            if ($timestamp <= 0) {
+                $timestamp = strtotime($start);
+            }
+
+            $entry = array(
+                'start' => $start,
+                'end' => $end,
+            );
+
+            if ($timestamp > 0) {
+                $entry['timestamp'] = $timestamp;
+            }
+
+            $normalized[] = $entry;
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $occurrences
+     * @param array<string, mixed> $schedule_info
+     * @param array<string, mixed> $occurrence_generator_plan
+     * @return array{html:string,schedule:array<string,mixed>}
+     */
+    private function buildInlineSchedulePreviewData($event, array $occurrences, array $schedule_info = array(), array $occurrence_generator_plan = array()): array
+    {
+        if (is_object($event)) {
+            if (method_exists($event, 'toArray')) {
+                $event = $event->toArray();
+            } else {
+                $event = get_object_vars($event);
+            }
+        }
+
+        if (!is_array($event)) {
+            $event = array();
+        }
+
+        $schedule = array(
+            'mode' => isset($event['schedule_mode']) ? sanitize_key((string) $event['schedule_mode']) : 'fixed',
+            'schedule_summary' => isset($schedule_info['summary']) ? (string) $schedule_info['summary'] : '',
+            'display_label' => isset($schedule_info['detail']) ? (string) $schedule_info['detail'] : '',
+            'date_debut' => isset($event['date_debut']) ? (string) $event['date_debut'] : '',
+            'date_fin' => isset($event['date_fin']) ? (string) $event['date_fin'] : '',
+            'occurrences' => $this->normalizeOccurrencesForInlineSchedule($occurrences),
+            'weekly_schedule' => array(
+                'from_generator' => !empty($occurrence_generator_plan),
+            ),
+        );
+
+        return array(
+            'html' => EventPageViewBuilder::renderInlineScheduleHtml($schedule),
+            'schedule' => $schedule,
+        );
+    }
+
     private function findNextOccurrence(array $occurrences) {
         if (empty($occurrences)) {
             return null;
@@ -1696,6 +1790,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
 
         // Get occurrences
         $occurrences = array();
+        $occurrence_source = array();
         $schedule_mode = isset($event->schedule_mode) && $event->schedule_mode !== ''
             ? sanitize_key((string) $event->schedule_mode)
             : 'fixed';
@@ -1709,6 +1804,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                     'include_cancelled' => true,
                 )
             );
+            $occurrence_source = is_array($raw_occurrences) ? $raw_occurrences : array();
             $occurrences = $this->formatEventOccurrencesForFront($raw_occurrences);
         }
 
@@ -1727,10 +1823,17 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'startFormatted' => $this->formatDate((string) $event->date_debut, true),
                 'endFormatted' => $fallback_end !== '' ? $this->formatDate($fallback_end, true) : '',
             );
+            $fallback_timestamp = strtotime((string) $event->date_debut);
+            $occurrence_source[] = array(
+                'start' => (string) $event->date_debut,
+                'end' => $fallback_end,
+                'timestamp' => $fallback_timestamp > 0 ? $fallback_timestamp : null,
+            );
         }
 
         $schedule_info = $this->buildEventScheduleInfo($event, $schedule_mode);
         $occurrence_generator_plan = $this->extractOccurrenceGeneratorFromEvent($event);
+        $inline_schedule_preview = $this->buildInlineSchedulePreviewData($event, $occurrence_source, $schedule_info, $occurrence_generator_plan);
 
         // Get location
         $location = null;
@@ -1848,6 +1951,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'occurrences' => $occurrences,
                 'occurrenceGenerator' => $occurrence_generator_plan,
                 'isFromGenerator' => !empty($occurrence_generator_plan),
+                'inlineScheduleHtml' => $inline_schedule_preview['html'],
                 'location' => $location,
                 'locationLinks' => $location_links,
                 'animateurs' => $animateurs,
@@ -5240,6 +5344,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         }
         $schedule_info = $this->buildEventScheduleInfo($event, $schedule_mode);
         $occurrence_generator = $this->extractOccurrenceGeneratorFromEvent($event);
+        $inline_schedule_preview = $this->buildInlineSchedulePreviewData($event, array(), $schedule_info, $occurrence_generator);
 
         return array(
             'id' => isset($event->id) ? (int) $event->id : 0,
@@ -5262,6 +5367,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'prix' => isset($event->prix) ? (float) $event->prix : 0.0,
             'occurrenceGenerator' => $occurrence_generator,
             'isFromGenerator' => !empty($occurrence_generator),
+            'inlineScheduleHtml' => $inline_schedule_preview['html'],
             'scheduleMode' => $schedule_mode,
             'scheduleSummary' => isset($schedule_info['summary']) ? $schedule_info['summary'] : '',
             'scheduleDetail' => isset($schedule_info['detail']) ? $schedule_info['detail'] : '',
@@ -5516,6 +5622,9 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             );
         }
 
+        $updated_generator_plan = $this->extractOccurrenceGeneratorFromEvent($refreshed_event);
+        $inline_schedule_preview = $this->buildInlineSchedulePreviewData($refreshed_event, $occurrence_rows, $schedule_info, $updated_generator_plan);
+
         $response_event = array(
             'id' => isset($refreshed_event->id) ? (int) $refreshed_event->id : $event_id,
             'occurrences' => $occurrence_payload,
@@ -5528,7 +5637,9 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'occurrenceScheduleSummary' => $submitted_schedule_summary !== ''
                 ? $submitted_schedule_summary
                 : (isset($schedule_info['summary']) ? $schedule_info['summary'] : ''),
-            'occurrenceGenerator' => $this->extractOccurrenceGeneratorFromEvent($refreshed_event),
+            'occurrenceGenerator' => $updated_generator_plan,
+            'isFromGenerator' => !empty($updated_generator_plan),
+            'inlineScheduleHtml' => $inline_schedule_preview['html'],
         );
 
         if (!empty($normalized['stats']['min_start'])) {

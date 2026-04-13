@@ -1,0 +1,64 @@
+{% set schedule_summary = schedule_summary|default('') %}
+{% set display_label = display_label|default('') %}
+{% set weekly_schedule = weekly_schedule|default({}) %}
+{% set inline_days = inline_days|default([]) %}
+{% set inline_schedule_compact = inline_schedule_compact|default('') %}
+{% set inline_schedule_manual = inline_schedule_manual|default([]) %}
+{% set next_occurrence = next_occurrence|default({}) %}
+{% set next_occurrence_label = next_occurrence_label|default('') %}
+{% set schedule_component = schedule_component|default('') %}
+
+{% if inline_schedule_compact %}
+    <p class="mj-event-page__date">{{ inline_schedule_compact|raw }}</p>
+{% elseif inline_schedule_manual|length > 0 %}
+    <div class="mj-event-page__schedule-manual">
+        {% for item in inline_schedule_manual %}
+            <p class="mj-event-page__date">{{ item.display }}</p>
+        {% endfor %}
+    </div>
+{% elseif inline_days|length > 0 %}
+    <p class="mj-event-page__schedule-inline">
+        {% for day in inline_days %}
+            <span class="mj-event-page__schedule-inline-item">
+                <span class="mj-event-page__schedule-inline-day">{{ day.label }}</span>
+                {% if day.time_range %}
+                    <svg class="mj-event-page__schedule-inline-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span class="mj-event-page__schedule-inline-time">{{ day.time_range }}</span>
+                {% endif %}
+            </span>
+        {% endfor %}
+    </p>
+{% elseif weekly_schedule.days is defined and weekly_schedule.days|length > 0 %}
+    <p class="mj-event-page__schedule-inline">
+        {% for day in weekly_schedule.days %}
+            <span class="mj-event-page__schedule-inline-item">
+                <span class="mj-event-page__schedule-inline-day">{{ day.label }}</span>
+                {% if day.time_range %}
+                    <svg class="mj-event-page__schedule-inline-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span class="mj-event-page__schedule-inline-time">{{ day.time_range }}</span>
+                {% endif %}
+            </span>
+        {% endfor %}
+    </p>
+{% elseif schedule_component %}
+    {{ schedule_component|raw }}
+{% elseif schedule_summary %}
+    <p class="mj-event-page__date">{{ schedule_summary }}</p>
+{% elseif display_label %}
+    <p class="mj-event-page__date">{{ display_label }}</p>
+{% elseif next_occurrence_label %}
+    <p class="mj-event-page__date">{{ next_occurrence_label }}</p>
+{% elseif next_occurrence.full_date %}
+    {% set time_range = '' %}
+    {% if next_occurrence.is_all_day|default(false) %}
+        {% set time_range = next_occurrence.all_day_label|default(__('Toute la journée', 'mj-member')) %}
+    {% elseif next_occurrence.time_start %}
+        {% set time_range = next_occurrence.time_start %}
+        {% if next_occurrence.time_end and next_occurrence.time_end != next_occurrence.time_start %}
+            {% set time_range = time_range ~ ' - ' ~ next_occurrence.time_end %}
+        {% endif %}
+    {% endif %}
+    <p class="mj-event-page__date">
+        {{ next_occurrence_label|default('') ?: (next_occurrence.full_date ~ (time_range ? ' - ' ~ time_range : '')) }}
+    </p>
+{% endif %}

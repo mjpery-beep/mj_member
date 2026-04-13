@@ -4,6 +4,7 @@ namespace Mj\Member\Classes\View\EventPage;
 
 use DateTime;
 use Mj\Member\Classes\View\Schedule\ScheduleDisplayHelper;
+use Mj\Member\Core\TemplateEngine;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -37,6 +38,56 @@ final class EventPageViewBuilder
     {
         $this->model = $model;
         $this->context = $context;
+    }
+
+    /**
+     * @param array<string, mixed> $schedule
+     */
+    public static function renderInlineScheduleHtml(array $schedule): string
+    {
+        $builder = new self(array(), array());
+        $weeklySchedule = $builder->resolveWeeklySchedule($schedule);
+        $inlineSchedule = $builder->buildWeeklyScheduleFromOccurrences($schedule, false);
+        $inlineScheduleDays = isset($inlineSchedule['days']) && is_array($inlineSchedule['days'])
+            ? $inlineSchedule['days']
+            : array();
+
+        $isFromGenerator = !empty($weeklySchedule['from_generator']);
+        $inlineScheduleCompact = $isFromGenerator
+            ? $builder->buildInlineScheduleCompactLabel($schedule)
+            : '';
+        $inlineScheduleManual = !$isFromGenerator
+            ? $builder->buildManualOccurrencesDisplay($schedule)
+            : array();
+
+        $scheduleComponent = '';
+        if (!empty($schedule)) {
+            $scheduleComponent = ScheduleDisplayHelper::render($schedule, array(
+                'variant' => 'event-page',
+            ));
+        }
+
+        try {
+            return TemplateEngine::render('components/schedule/shared/event-page-inline.html.twig', array(
+                'schedule_summary' => isset($schedule['schedule_summary']) ? (string) $schedule['schedule_summary'] : '',
+                'display_label' => isset($schedule['display_label']) ? (string) $schedule['display_label'] : '',
+                'weekly_schedule' => $weeklySchedule,
+                'inline_days' => $inlineScheduleDays,
+                'inline_schedule_compact' => $inlineScheduleCompact,
+                'inline_schedule_manual' => $inlineScheduleManual,
+                'next_occurrence' => isset($schedule['next_occurrence']) && is_array($schedule['next_occurrence'])
+                    ? $schedule['next_occurrence']
+                    : array(),
+                'next_occurrence_label' => isset($schedule['next_occurrence_label']) ? (string) $schedule['next_occurrence_label'] : '',
+                'schedule_component' => $scheduleComponent,
+            ));
+        } catch (\Throwable $throwable) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('EventPageViewBuilder inline schedule render error: ' . $throwable->getMessage());
+            }
+
+            return '';
+        }
     }
 
     /**
@@ -153,28 +204,7 @@ final class EventPageViewBuilder
         $nextOccurrenceLabel = $nextOccurrenceDetails['label'];
 
         $weeklySchedule = $this->resolveWeeklySchedule($schedule);
-        $inlineSchedule = $this->buildWeeklyScheduleFromOccurrences($schedule, false);
-        $inlineScheduleDays = isset($inlineSchedule['days']) && is_array($inlineSchedule['days'])
-            ? $inlineSchedule['days']
-            : array();
-        
-        // Build appropriate display based on occurrence source
-        $isFromGenerator = !empty($weeklySchedule['from_generator']);
-        $inlineScheduleCompact = '';
-        $inlineScheduleManual = array();
-        
-        // DEBUG
-        error_log('DEBUG buildHeroData: isFromGenerator=' . ($isFromGenerator ? 'true' : 'false'));
-        error_log('DEBUG buildHeroData: from_generator value=' . ($weeklySchedule['from_generator'] ?? 'NOT SET'));
-        error_log('DEBUG buildHeroData: occurrences count=' . count($schedule['occurrences'] ?? array()));
-        
-        if ($isFromGenerator) {
-            $inlineScheduleCompact = $this->buildInlineScheduleCompactLabel($schedule);
-            error_log('DEBUG buildHeroData: compact label result=' . ($inlineScheduleCompact ?: 'EMPTY'));
-        } else {
-            $inlineScheduleManual = $this->buildManualOccurrencesDisplay($schedule);
-            error_log('DEBUG buildHeroData: manual display count=' . count($inlineScheduleManual));
-        }
+        $inlineScheduleHtml = self::renderInlineScheduleHtml($schedule);
 
         return array(
             'title' => isset($event['title']) ? (string) $event['title'] : '',
@@ -187,13 +217,11 @@ final class EventPageViewBuilder
             'schedule_summary' => isset($schedule['schedule_summary']) ? (string) $schedule['schedule_summary'] : '',
             'display_label' => isset($schedule['display_label']) ? (string) $schedule['display_label'] : '',
             'weekly_schedule' => $weeklySchedule,
-            'inline_schedule_compact' => $inlineScheduleCompact,
-            'inline_schedule_manual' => $inlineScheduleManual,
+            'inline_schedule_html' => $inlineScheduleHtml,
             'schedule_component' => $scheduleComponent,
             'next_occurrence' => $nextOccurrenceData,
             'next_occurrence_label' => $nextOccurrenceLabel,
             'price_label' => isset($registration['price_display']) ? (string) $registration['price_display'] : '',
-            'inline_schedule_days' => $inlineScheduleDays,
         );
     }
 
@@ -223,7 +251,9 @@ final class EventPageViewBuilder
 
         $fallback = $this->buildWeeklyScheduleFromOccurrences($schedule, (bool) $weeklySchedule['show_date_range']);
         if (!empty($fallback['days'])) {
-            return $fallback;
+            return array_merge($weeklySchedule, $fallback, array(
+                'from_generator' => !empty($weeklySchedule['from_generator']),
+            ));
         }
 
         return $weeklySchedule;

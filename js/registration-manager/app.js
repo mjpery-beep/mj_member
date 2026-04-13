@@ -800,6 +800,17 @@
         var schedulePreview = _schedulePreview[0];
         var setSchedulePreview = _schedulePreview[1];
 
+        var initialSchedulePreviewHtml = useMemo(function () {
+            if (event && typeof event.inlineScheduleHtml === 'string' && event.inlineScheduleHtml.trim() !== '') {
+                return event.inlineScheduleHtml;
+            }
+            return '';
+        }, [event]);
+
+        var _schedulePreviewHtml = useState(initialSchedulePreviewHtml);
+        var schedulePreviewHtml = _schedulePreviewHtml[0];
+        var setSchedulePreviewHtml = _schedulePreviewHtml[1];
+
         var _schedulePreviewVisible = useState(initialSchedulePreview !== '');
         var schedulePreviewVisible = _schedulePreviewVisible[0];
         var setSchedulePreviewVisible = _schedulePreviewVisible[1];
@@ -814,6 +825,10 @@
             setSchedulePreviewAutoSync(initialSchedulePreview !== '');
         }, [initialSchedulePreview]);
 
+        useEffect(function () {
+            setSchedulePreviewHtml(initialSchedulePreviewHtml);
+        }, [initialSchedulePreviewHtml]);
+
         var selectedDayOccurrences = useMemo(function () {
             if (!selectedOccurrence || !selectedOccurrence.date) {
                 return [];
@@ -821,7 +836,40 @@
             return occurrencesByDate[selectedOccurrence.date] || [selectedOccurrence];
         }, [selectedOccurrence, occurrencesByDate]);
 
+        var eventUsesGenerator = !!(event && event.isFromGenerator);
+        var hasManualOccurrences = hasExistingOccurrences && !eventUsesGenerator;
+        var canShowGeneratorForm = !eventUsesGenerator && !hasExistingOccurrences;
+        var canShowGeneratedPreview = eventUsesGenerator;
+        var shouldShowDangerZone = localOccurrences.length > 0;
+
+        var planningModeLabel = eventUsesGenerator
+            ? getString(strings, 'occurrenceModeGenerated', 'Générateur actif')
+            : (hasExistingOccurrences
+                ? getString(strings, 'occurrenceModeManual', 'Saisie manuelle')
+                : getString(strings, 'occurrenceModeUnset', 'Aucun mode appliqué'));
+
+        var planningModeDescription = eventUsesGenerator
+            ? getString(strings, 'occurrenceModeGeneratedDescription', 'Les occurrences proviennent du générateur. Le formulaire est masqué et seul l’aperçu front est affiché.')
+            : (hasManualOccurrences
+                ? getString(strings, 'occurrenceModeManualDescription', 'Les dates ont été encodées manuellement. Le générateur est masqué pour éviter des règles contradictoires.')
+                : getString(strings, 'occurrenceModeUnsetDescription', 'Vous pouvez encoder une date manuellement dans le calendrier, ou générer une série d’occurrences ci-dessous.'));
+
         var sidebarContent = h('div', { class: 'mj-regmgr-occurrence__sidebar' }, [
+            h('div', { class: 'mj-regmgr-occurrence__card mj-regmgr-occurrence__card--mode' }, [
+                h('div', { class: 'mj-regmgr-occurrence__mode-header' }, [
+                    h('div', null, [
+                        h('h2', null, getString(strings, 'occurrenceModeCardTitle', 'Mode d’occurrence')),
+                        h('p', { class: 'mj-regmgr-occurrence__description' }, planningModeDescription),
+                    ]),
+                    h('span', {
+                        class: classNames('mj-regmgr-occurrence__mode-badge', {
+                            'mj-regmgr-occurrence__mode-badge--generated': eventUsesGenerator,
+                            'mj-regmgr-occurrence__mode-badge--manual': hasManualOccurrences,
+                            'mj-regmgr-occurrence__mode-badge--empty': !eventUsesGenerator && !hasManualOccurrences,
+                        }),
+                    }, planningModeLabel),
+                ]),
+            ]),
             !shouldShowEditorCard && h('p', { class: 'mj-regmgr-occurrence__hint mj-regmgr-occurrence__hint--empty' },
                 getString(strings, 'occurrenceEmptySelection', 'Sélectionnez une date dans le calendrier pour commencer.')
             ),
@@ -930,170 +978,196 @@
                         disabled: isPersisting,
                     }, getString(strings, 'occurrenceDeleteButton', 'Supprimer')),
                 ]),
-                localOccurrences.length > 0 && h('div', { class: 'mj-regmgr-occurrence__delete-all' }, [
+            ]),
+            canShowGeneratorForm && h('details', {
+                class: 'mj-regmgr-occurrence__card mj-regmgr-occurrence__card--fold',
+                open: true,
+            }, [
+                h('summary', { class: 'mj-regmgr-occurrence__fold-summary' }, [
+                    h('div', { class: 'mj-regmgr-occurrence__fold-heading' }, [
+                        h('span', { class: 'mj-regmgr-occurrence__fold-eyebrow' }, getString(strings, 'occurrenceGeneratorEyebrow', 'Récurrence automatique')),
+                        h('strong', null, getString(strings, 'occurrenceGeneratorTitle', 'Générer des occurrences')),
+                    ]),
+                    h('span', { class: 'mj-regmgr-occurrence__fold-toggle', 'aria-hidden': true }, '⌄'),
+                ]),
+                h('div', { class: 'mj-regmgr-occurrence__fold-body' }, [
+                    h('p', { class: 'mj-regmgr-occurrence__description' },
+                        getString(strings, 'occurrenceGeneratorDescription', 'Planifiez la récurrence automatique de cet événement.')
+                    ),
+                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorModeLabel', 'Mode')),
+                        h('select', {
+                            class: 'mj-regmgr-occurrence__input',
+                            value: generatorMode,
+                            onInput: function (event) { handleGeneratorChange('mode', event.currentTarget.value); },
+                        }, [
+                            h('option', { value: 'weekly' }, getString(strings, 'occurrenceGeneratorModeWeekly', 'Hebdomadaire')),
+                            h('option', { value: 'monthly' }, getString(strings, 'occurrenceGeneratorModeMonthly', 'Mensuel')),
+                            h('option', { value: 'custom' }, getString(strings, 'occurrenceGeneratorModeCustom', 'Personnalisé')),
+                        ]),
+                    ]),
+                    generatorMode === 'weekly' && h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorFrequencyLabel', 'Fréquence')),
+                        h('select', {
+                            class: 'mj-regmgr-occurrence__input',
+                            value: generatorFrequency,
+                            onInput: function (event) { handleGeneratorChange('frequency', event.currentTarget.value); },
+                        }, [
+                            h('option', { value: 'every_week' }, getString(strings, 'occurrenceGeneratorEveryWeek', 'Chaque semaine')),
+                            h('option', { value: 'every_two_weeks' }, getString(strings, 'occurrenceGeneratorEveryTwoWeeks', 'Toutes les deux semaines')),
+                        ]),
+                    ]),
+                    generatorMode === 'monthly' && h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
+                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorMonthlyOrdinalLabel', 'Ordre dans le mois')),
+                            h('select', {
+                                class: 'mj-regmgr-occurrence__input',
+                                value: generatorMonthlyOrdinal,
+                                onInput: function (event) { handleGeneratorChange('monthlyOrdinal', event.currentTarget.value); },
+                            }, monthlyOrdinalOptions.map(function (option) {
+                                return h('option', { key: option.value, value: option.value }, option.label);
+                            })),
+                        ]),
+                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorMonthlyWeekdayLabel', 'Jour de la semaine')),
+                            h('select', {
+                                class: 'mj-regmgr-occurrence__input',
+                                value: generatorMonthlyWeekday,
+                                onInput: function (event) { handleGeneratorChange('monthlyWeekday', event.currentTarget.value); },
+                            }, OCCURRENCE_WEEKDAY_KEYS.map(function (dayKey, index) {
+                                return h('option', { key: dayKey, value: dayKey }, weekdayFullLabels[index] || weekdayLabels[index]);
+                            })),
+                        ]),
+                    ]),
+                    h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
+                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorStartDate', 'Date de début')),
+                            h('input', {
+                                type: 'date',
+                                class: 'mj-regmgr-occurrence__input',
+                                value: generatorStartDate,
+                                onInput: function (event) { handleGeneratorChange('startDate', event.currentTarget.value); },
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorEndDate', 'Date de fin')),
+                            h('input', {
+                                type: 'date',
+                                class: 'mj-regmgr-occurrence__input',
+                                value: generatorEndDate,
+                                min: generatorStartDate || undefined,
+                                onInput: function (event) { handleGeneratorChange('endDate', event.currentTarget.value); },
+                            }),
+                        ]),
+                    ]),
+                    h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
+                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceStartLabel', 'Heure de début')),
+                            h('input', {
+                                type: 'time',
+                                class: 'mj-regmgr-occurrence__input',
+                                value: generatorStartTime,
+                                onInput: function (event) { handleGeneratorChange('startTime', event.currentTarget.value); },
+                            }),
+                        ]),
+                        h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
+                            h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceEndLabel', 'Heure de fin')),
+                            h('input', {
+                                type: 'time',
+                                class: 'mj-regmgr-occurrence__input',
+                                value: generatorEndTime,
+                                onInput: function (event) { handleGeneratorChange('endTime', event.currentTarget.value); },
+                            }),
+                        ]),
+                    ]),
+                    generatorMode === 'weekly' && h('div', { class: 'mj-regmgr-occurrence__days' }, OCCURRENCE_WEEKDAY_KEYS.map(function (dayKey, index) {
+                        var isActive = !!generatorDays[dayKey];
+                        var override = generatorOverrides[dayKey] || null;
+                        var startValue = override && override.start ? override.start : generatorStartTime;
+                        var endValue = override && override.end ? override.end : generatorEndTime;
+                        var hasOverride = !!(override && (override.start || override.end));
+                        return h('label', {
+                            key: dayKey,
+                            class: classNames('mj-regmgr-occurrence__day-row', {
+                                'mj-regmgr-occurrence__day-row--active': isActive,
+                                'mj-regmgr-occurrence__day-row--override': hasOverride,
+                            }),
+                        }, [
+                            h('input', {
+                                type: 'checkbox',
+                                class: 'mj-regmgr-occurrence__day-row-checkbox',
+                                checked: isActive,
+                                onChange: function () { handleGeneratorDayToggle(dayKey); },
+                            }),
+                            h('span', { class: 'mj-regmgr-occurrence__day-row-label' }, weekdayLabels[index]),
+                            h('span', { class: 'mj-regmgr-occurrence__day-row-times' }, [
+                                h('input', {
+                                    type: 'time',
+                                    class: classNames('mj-regmgr-occurrence__day-row-input', 'mj-regmgr-occurrence__day-row-input--start', {
+                                        'mj-regmgr-occurrence__day-row-input--override': hasOverride && !!(override && override.start),
+                                    }),
+                                    value: startValue || '',
+                                    disabled: !isActive,
+                                    onInput: function (event) { handleGeneratorTimeChange(dayKey, 'start', event.currentTarget.value); },
+                                }),
+                                h('span', { class: 'mj-regmgr-occurrence__day-row-separator' }, ' - '),
+                                h('input', {
+                                    type: 'time',
+                                    class: classNames('mj-regmgr-occurrence__day-row-input', 'mj-regmgr-occurrence__day-row-input--end', {
+                                        'mj-regmgr-occurrence__day-row-input--override': hasOverride && !!(override && override.end),
+                                    }),
+                                    value: endValue || '',
+                                    disabled: !isActive,
+                                    onInput: function (event) { handleGeneratorTimeChange(dayKey, 'end', event.currentTarget.value); },
+                                }),
+                            ]),
+                        ]);
+                    })),
+                    h('div', { class: 'mj-regmgr-occurrence__generator-actions' }, [
+                        h('button', {
+                            type: 'button',
+                            class: 'mj-btn mj-btn--primary',
+                            onClick: function (e) { handleAddOccurrences(e); },
+                            disabled: isPersisting,
+                        }, getString(strings, 'occurrenceGeneratorAddButton', 'Ajouter les occurrences')),
+                    ]),
+                ]),
+            ]),
+            canShowGeneratedPreview && h('details', {
+                class: 'mj-regmgr-occurrence__card mj-regmgr-occurrence__card--fold mj-regmgr-occurrence__card--generated-preview',
+                open: true,
+            }, [
+                h('summary', { class: 'mj-regmgr-occurrence__fold-summary' }, [
+                    h('div', { class: 'mj-regmgr-occurrence__fold-heading' }, [
+                        h('span', { class: 'mj-regmgr-occurrence__fold-eyebrow' }, getString(strings, 'occurrencePreviewEyebrow', 'Rendu front partagé')),
+                        h('strong', null, getString(strings, 'occurrenceGeneratorPreviewLabel', 'Aperçu de l’horaire')),
+                    ]),
+                    h('span', { class: 'mj-regmgr-occurrence__fold-toggle', 'aria-hidden': true }, '⌄'),
+                ]),
+                h('div', { class: 'mj-regmgr-occurrence__fold-body' }, [
+                    h('p', { class: 'mj-regmgr-occurrence__description' },
+                        getString(strings, 'occurrencePreviewDescription', 'Cet aperçu réutilise exactement le rendu de la page événement.')
+                    ),
+                    schedulePreviewHtml && schedulePreviewHtml.trim() !== ''
+                        ? h('div', {
+                            class: 'mj-regmgr-occurrence__preview mj-regmgr-occurrence__preview--shared',
+                            dangerouslySetInnerHTML: { __html: schedulePreviewHtml },
+                        })
+                        : h('p', { class: 'mj-regmgr-occurrence__hint' }, getString(strings, 'occurrenceSchedulePreviewEmpty', 'Aucun horaire détecté')),
+                ]),
+            ]),
+            shouldShowDangerZone && h('div', { class: 'mj-regmgr-occurrence__card mj-regmgr-occurrence__card--danger-zone' }, [
+                h('h2', null, getString(strings, 'occurrenceDangerZoneTitle', 'Zone sensible')),
+                h('p', { class: 'mj-regmgr-occurrence__danger-text' },
+                    getString(strings, 'occurrenceDeleteAllWarning', 'Supprimer toutes les occurrences efface aussi la règle de génération enregistrée et retire l’horaire affiché sur la page événement tant que rien n’est recréé.')
+                ),
+                h('div', { class: 'mj-regmgr-occurrence__danger-actions' }, [
                     h('button', {
                         type: 'button',
                         class: 'mj-btn mj-btn--danger',
                         onClick: function (e) { handleDeleteAllOccurrences(e); },
                         disabled: isPersisting,
                     }, getString(strings, 'occurrenceDeleteAllButton', 'Supprimer toutes les occurrences')),
-                ]),
-            ]),
-            h('div', { class: 'mj-regmgr-occurrence__card' }, [
-                h('h2', null, getString(strings, 'occurrenceGeneratorTitle', 'Générer des occurrences')),
-                h('p', { class: 'mj-regmgr-occurrence__description' },
-                    getString(strings, 'occurrenceGeneratorDescription', 'Planifiez la récurrence automatique de cet événement.')
-                ),
-                h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                    h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorModeLabel', 'Mode')),
-                    h('select', {
-                        class: 'mj-regmgr-occurrence__input',
-                        value: generatorMode,
-                        onInput: function (event) { handleGeneratorChange('mode', event.currentTarget.value); },
-                    }, [
-                        h('option', { value: 'weekly' }, getString(strings, 'occurrenceGeneratorModeWeekly', 'Hebdomadaire')),
-                        h('option', { value: 'monthly' }, getString(strings, 'occurrenceGeneratorModeMonthly', 'Mensuel')),
-                        h('option', { value: 'custom' }, getString(strings, 'occurrenceGeneratorModeCustom', 'Personnalisé')),
-                    ]),
-                ]),
-                generatorMode === 'weekly' && h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                    h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorFrequencyLabel', 'Fréquence')),
-                    h('select', {
-                        class: 'mj-regmgr-occurrence__input',
-                        value: generatorFrequency,
-                        onInput: function (event) { handleGeneratorChange('frequency', event.currentTarget.value); },
-                    }, [
-                        h('option', { value: 'every_week' }, getString(strings, 'occurrenceGeneratorEveryWeek', 'Chaque semaine')),
-                        h('option', { value: 'every_two_weeks' }, getString(strings, 'occurrenceGeneratorEveryTwoWeeks', 'Toutes les deux semaines')),
-                    ]),
-                ]),
-                generatorMode === 'monthly' && h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
-                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorMonthlyOrdinalLabel', 'Ordre dans le mois')),
-                        h('select', {
-                            class: 'mj-regmgr-occurrence__input',
-                            value: generatorMonthlyOrdinal,
-                            onInput: function (event) { handleGeneratorChange('monthlyOrdinal', event.currentTarget.value); },
-                        }, monthlyOrdinalOptions.map(function (option) {
-                            return h('option', { key: option.value, value: option.value }, option.label);
-                        })),
-                    ]),
-                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorMonthlyWeekdayLabel', 'Jour de la semaine')),
-                        h('select', {
-                            class: 'mj-regmgr-occurrence__input',
-                            value: generatorMonthlyWeekday,
-                            onInput: function (event) { handleGeneratorChange('monthlyWeekday', event.currentTarget.value); },
-                        }, OCCURRENCE_WEEKDAY_KEYS.map(function (dayKey, index) {
-                            return h('option', { key: dayKey, value: dayKey }, weekdayFullLabels[index] || weekdayLabels[index]);
-                        })),
-                    ]),
-                ]),
-                h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
-                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorStartDate', 'Date de début')),
-                        h('input', {
-                            type: 'date',
-                            class: 'mj-regmgr-occurrence__input',
-                            value: generatorStartDate,
-                            onInput: function (event) { handleGeneratorChange('startDate', event.currentTarget.value); },
-                        }),
-                    ]),
-                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceGeneratorEndDate', 'Date de fin')),
-                        h('input', {
-                            type: 'date',
-                            class: 'mj-regmgr-occurrence__input',
-                            value: generatorEndDate,
-                            min: generatorStartDate || undefined,
-                            onInput: function (event) { handleGeneratorChange('endDate', event.currentTarget.value); },
-                        }),
-                    ]),
-                ]),
-                h('div', { class: 'mj-regmgr-occurrence__form-row' }, [
-                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceStartLabel', 'Heure de début')),
-                        h('input', {
-                            type: 'time',
-                            class: 'mj-regmgr-occurrence__input',
-                            value: generatorStartTime,
-                            onInput: function (event) { handleGeneratorChange('startTime', event.currentTarget.value); },
-                        }),
-                    ]),
-                    h('div', { class: 'mj-regmgr-occurrence__form-field' }, [
-                        h('label', { class: 'mj-regmgr-occurrence__label' }, getString(strings, 'occurrenceEndLabel', 'Heure de fin')),
-                        h('input', {
-                            type: 'time',
-                            class: 'mj-regmgr-occurrence__input',
-                            value: generatorEndTime,
-                            onInput: function (event) { handleGeneratorChange('endTime', event.currentTarget.value); },
-                        }),
-                    ]),
-                ]),
-                generatorMode === 'weekly' && h('div', { class: 'mj-regmgr-occurrence__days' }, OCCURRENCE_WEEKDAY_KEYS.map(function (dayKey, index) {
-                    var isActive = !!generatorDays[dayKey];
-                    var override = generatorOverrides[dayKey] || null;
-                    var startValue = override && override.start ? override.start : generatorStartTime;
-                    var endValue = override && override.end ? override.end : generatorEndTime;
-                    var hasOverride = !!(override && (override.start || override.end));
-                    return h('label', {
-                        key: dayKey,
-                        class: classNames('mj-regmgr-occurrence__day-row', {
-                            'mj-regmgr-occurrence__day-row--active': isActive,
-                            'mj-regmgr-occurrence__day-row--override': hasOverride,
-                        }),
-                    }, [
-                        h('input', {
-                            type: 'checkbox',
-                            class: 'mj-regmgr-occurrence__day-row-checkbox',
-                            checked: isActive,
-                            onChange: function () { handleGeneratorDayToggle(dayKey); },
-                        }),
-                        h('span', { class: 'mj-regmgr-occurrence__day-row-label' }, weekdayLabels[index]),
-                        h('span', { class: 'mj-regmgr-occurrence__day-row-times' }, [
-                            h('input', {
-                                type: 'time',
-                                class: classNames('mj-regmgr-occurrence__day-row-input', 'mj-regmgr-occurrence__day-row-input--start', {
-                                    'mj-regmgr-occurrence__day-row-input--override': hasOverride && !!(override && override.start),
-                                }),
-                                value: startValue || '',
-                                disabled: !isActive,
-                                onInput: function (event) { handleGeneratorTimeChange(dayKey, 'start', event.currentTarget.value); },
-                            }),
-                            h('span', { class: 'mj-regmgr-occurrence__day-row-separator' }, ' - '),
-                            h('input', {
-                                type: 'time',
-                                class: classNames('mj-regmgr-occurrence__day-row-input', 'mj-regmgr-occurrence__day-row-input--end', {
-                                    'mj-regmgr-occurrence__day-row-input--override': hasOverride && !!(override && override.end),
-                                }),
-                                value: endValue || '',
-                                disabled: !isActive,
-                                onInput: function (event) { handleGeneratorTimeChange(dayKey, 'end', event.currentTarget.value); },
-                            }),
-                        ]),
-                    ]);
-                })),
-                h('div', { class: 'mj-regmgr-occurrence__generator-actions' }, [
-                    h('button', {
-                        type: 'button',
-                        class: 'mj-btn mj-btn--primary',
-                        onClick: function (e) { handleAddOccurrences(e); },
-                        disabled: isPersisting,
-                    }, getString(strings, 'occurrenceGeneratorAddButton', 'Ajouter les occurrences')),
-                    h('button', {
-                        type: 'button',
-                        class: 'mj-btn mj-btn--secondary',
-                        onClick: function (e) { handleUpdateSchedulePreview(e); },
-                        disabled: isPersisting,
-                        style: { marginLeft: '0.75rem' },
-                    }, getString(strings, 'occurrenceGeneratorPreviewButton', 'Mettre à jour l\'horaire')),
-                ]),
-                schedulePreviewVisible && h('div', { class: 'mj-regmgr-occurrence__preview' }, [
-                    h('span', { class: 'mj-regmgr-occurrence__preview-label' }, getString(strings, 'occurrenceGeneratorPreviewLabel', 'Aperçu de l\'horaire')),
-                    h('p', { class: 'mj-regmgr-occurrence__preview-value' }, schedulePreview && schedulePreview.trim() !== ''
-                        ? schedulePreview
-                        : getString(strings, 'occurrenceSchedulePreviewEmpty', 'Aucun horaire détecté')
-                    ),
                 ]),
             ]),
         ]);
@@ -1318,14 +1392,15 @@
             var firstNew = additions[0];
             setSelectedOccurrenceId(firstNew.id);
             setEditorState(createEditorState(firstNew));
+            var previewText = computeSchedulePreview(planResult);
             persistOccurrences(updatedList, function () {
                 setLocalOccurrences(previousList);
                 setSelectedOccurrenceId(previousSelection);
                 setEditorState(previousEditorState);
-            }).catch(function () {
+            }, previewText).catch(function () {
                 // Parent handles error notification
             });
-        }, [buildGeneratorPlan, localOccurrences, selectedOccurrenceId, editorState, persistOccurrences]);
+        }, [buildGeneratorPlan, computeSchedulePreview, localOccurrences, selectedOccurrenceId, editorState, persistOccurrences]);
 
         var handleShiftPivot = useCallback(function (offset) {
             setPivotDate(function (current) {
@@ -7050,6 +7125,12 @@
                             }
                             if (typeof responseEvent.occurrenceScheduleSummary === 'string') {
                                 nextEvent.occurrenceScheduleSummary = responseEvent.occurrenceScheduleSummary;
+                            }
+                            if (typeof responseEvent.inlineScheduleHtml === 'string') {
+                                nextEvent.inlineScheduleHtml = responseEvent.inlineScheduleHtml;
+                            }
+                            if (typeof responseEvent.isFromGenerator !== 'undefined') {
+                                nextEvent.isFromGenerator = !!responseEvent.isFromGenerator;
                             }
                             if (responseEvent.occurrenceGenerator && typeof responseEvent.occurrenceGenerator === 'object') {
                                 nextEvent.occurrenceGenerator = responseEvent.occurrenceGenerator;
