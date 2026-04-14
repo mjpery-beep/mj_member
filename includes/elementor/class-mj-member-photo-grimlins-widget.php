@@ -275,6 +275,19 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
             )
         );
 
+        $this->add_control(
+            'show_avatars_section',
+            array(
+                'label'        => __('Afficher "Mes avatars Grimlins"', 'mj-member'),
+                'type'         => Controls_Manager::SWITCHER,
+                'label_on'     => __('Oui', 'mj-member'),
+                'label_off'    => __('Non', 'mj-member'),
+                'return_value' => 'yes',
+                'default'      => 'yes',
+                'description'  => __('Affiche ou masque la section listant les avatars générés du membre.', 'mj-member'),
+            )
+        );
+
         $this->end_controls_section();
 
         /* ── Style : Container contenu ── */
@@ -864,6 +877,7 @@ class Mj_Member_Elementor_Photo_Grimlins_Widget extends Widget_Base {
             'cta_register_enabled' => $cta_register_enabled,
             'cta_register_label' => $cta_register_label,
             'cta_register_url' => $cta_register_url,
+            'show_avatars_section' => !array_key_exists('show_avatars_section', $settings) || $settings['show_avatars_section'] === 'yes',
         );
 
         /**

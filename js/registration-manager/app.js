@@ -1382,7 +1382,10 @@
                             line.label && h('div', { class: 'mj-regmgr-occurrence__history-item-header' }, [
                                 h('strong', null, line.label),
                             ]),
-                            h('div', { class: 'mj-regmgr-occurrence__history-item-preview' }, line.text),
+                            h('div', {
+                                class: 'mj-regmgr-occurrence__history-item-preview',
+                                dangerouslySetInnerHTML: { __html: formatPreviewTextWithBoldWeekdays(line.text) },
+                            }),
                             line.assignment && h('div', { class: 'mj-regmgr-occurrence__history-item-meta' }, line.assignment),
                             line.dates && h('div', { class: 'mj-regmgr-occurrence__history-item-meta' }, line.dates),
                         ]);
@@ -2736,6 +2739,22 @@
             return startLabel + ' > ' + endLabel;
         }
         return startLabel || endLabel || '';
+    }
+
+    function formatPreviewTextWithBoldWeekdays(text) {
+        if (typeof text !== 'string' || text === '') {
+            return '';
+        }
+
+        var escaped = text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+
+        var withBoldDays = escaped.replace(/\b(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\b/gi, '<strong>$1</strong>');
+        return withBoldDays.replace(/\n/g, '<br />');
     }
 
     function resolveWeekdayKeyFromDate(date) {

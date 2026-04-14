@@ -345,7 +345,7 @@ button.mj-header__burger:hover {
     right: 0;
     z-index: 500;
     width: 320px;
-    max-height: 680px !important;
+    max-height: min(680px, calc(100dvh - 80px)) !important;
     background: #ffffff;
     border-radius: 12px;
     border: 1px solid rgba(0, 0, 0, 0.07);

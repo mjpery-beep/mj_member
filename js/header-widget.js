@@ -75,38 +75,42 @@
             var directHref  = headerLink ? headerLink.getAttribute('href') : '';
             var isDirectLink = !!(directHref && directHref !== '#' && directHref !== '');
 
-            // Touch : single tap → dropdown, double-tap → navigate
-            var lastTap = 0;
-            btn.addEventListener('touchend', function (e) {
-                if (!isDirectLink) {
-                    // No direct link — behave like a normal toggle
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (self.activeDropdown === name) {
-                        self._closeAll();
-                    } else {
-                        self._closeAll();
-                        self._openDropdown(name);
-                    }
-                    return;
-                }
-                var now = Date.now();
-                var delta = now - lastTap;
-                lastTap = now;
-                if (delta < 350) {
-                    // Double-tap → follow the link
-                    e.stopPropagation();
+            // Touch : tap → dropdown, long press (500ms) → navigate
+            var longPressTimer = null;
+            var longPressFired = false;
+
+            btn.addEventListener('touchstart', function (e) {
+                if (!isDirectLink) return;
+                longPressFired = false;
+                longPressTimer = setTimeout(function () {
+                    longPressFired = true;
                     window.location.href = directHref;
+                }, 500);
+            }, { passive: true });
+
+            btn.addEventListener('touchmove', function () {
+                // Cancel long press if the finger moves (scroll intent)
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }, { passive: true });
+
+            btn.addEventListener('touchend', function (e) {
+                // Always prevent the synthetic click that follows touchend
+                e.preventDefault();
+                e.stopPropagation();
+
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+
+                // Long press already triggered navigation — do nothing
+                if (longPressFired) return;
+
+                // Short tap → toggle dropdown
+                if (self.activeDropdown === name) {
+                    self._closeAll();
                 } else {
-                    // Single tap → open dropdown only
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (self.activeDropdown === name) {
-                        self._closeAll();
-                    } else {
-                        self._closeAll();
-                        self._openDropdown(name);
-                    }
+                    self._closeAll();
+                    self._openDropdown(name);
                 }
             });
 
@@ -122,6 +126,15 @@
                 } else {
                     self._closeAll();
                     self._openDropdown(name);
+                }
+            });
+
+            // Middle-click → open link in new tab
+            btn.addEventListener('mousedown', function (e) {
+                if (e.button === 1 && isDirectLink) {
+                    e.preventDefault(); // prevent auto-scroll
+                    e.stopPropagation();
+                    window.open(directHref, '_blank', 'noopener');
                 }
             });
 

@@ -17,6 +17,7 @@ $placeholder_preview = isset($template_data['preview_image']) ? esc_url($templat
 $placeholder_result = isset($template_data['result_image']) ? esc_url($template_data['result_image']) : '';
 $feature_enabled = function_exists('mj_member_photo_grimlins_is_enabled') ? mj_member_photo_grimlins_is_enabled() : false;
 $members_only = !empty($template_data['members_only']);
+$show_avatars_section = !array_key_exists('show_avatars_section', $template_data) || !empty($template_data['show_avatars_section']);
 $can_apply_avatar = false;
 $can_delete_avatar = false;
 $show_history = false;
@@ -323,7 +324,7 @@ if ($fullscreen) {
 
     <div class="mj-photo-grimlins__status" id="<?php echo esc_attr($status_id); ?>" data-photo-grimlins="status" aria-live="polite"></div>
 
-    <?php if ($show_history) : ?>
+    <?php if ($show_history && $show_avatars_section) : ?>
         <section class="mj-photo-grimlins__history" data-photo-grimlins="history">
             <header class="mj-photo-grimlins__history-header">
                 <h3 class="mj-photo-grimlins__history-title" data-photo-grimlins="history-title" data-history-title-default="<?php esc_attr_e('Mes avatars Grimlins', 'mj-member'); ?>">
@@ -336,7 +337,7 @@ if ($fullscreen) {
             </p>
             <div class="mj-photo-grimlins__history-list" data-photo-grimlins="history-list" role="list"></div>
         </section>
-    <?php elseif ($is_preview) : ?>
+    <?php elseif ($is_preview && $show_avatars_section) : ?>
         <section class="mj-photo-grimlins__history mj-photo-grimlins__history--preview">
             <header class="mj-photo-grimlins__history-header">
                 <h3 class="mj-photo-grimlins__history-title">
