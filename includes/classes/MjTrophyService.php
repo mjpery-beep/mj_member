@@ -4,6 +4,8 @@ namespace Mj\Member\Classes;
 
 use Mj\Member\Classes\Crud\MjTrophies;
 use Mj\Member\Classes\Crud\MjMemberTrophies;
+use Mj\Member\Classes\Crud\MjActionTrophyTriggers;
+use Mj\Member\Classes\Crud\MjMemberActions;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -211,5 +213,65 @@ final class MjTrophyService
             self::MEMBERSHIP_PAID => __('Cotisation réglée', 'mj-member'),
             self::FIRST_PHOTO_PUBLISHED => __('Première photo publiée', 'mj-member'),
         );
+    }
+
+    /**
+     * Évalue les règles action->trophée et applique les promotions Bronze/Argent/Or.
+     *
+     * @param int $memberId
+     * @param int $actionTypeId
+     * @return array<int,array<string,mixed>>
+     */
+    public static function processActionProgress(int $memberId, int $actionTypeId): array
+    {
+        $memberId = (int) $memberId;
+        $actionTypeId = (int) $actionTypeId;
+
+        if ($memberId <= 0 || $actionTypeId <= 0) {
+            return array();
+        }
+
+        $triggers = MjActionTrophyTriggers::get_for_action($actionTypeId);
+        if (empty($triggers)) {
+            return array();
+        }
+
+        $count = MjMemberActions::count_for_member_action($memberId, $actionTypeId);
+        if ($count <= 0) {
+            return array();
+        }
+
+        $changes = array();
+
+        foreach ($triggers as $trigger) {
+            $trophyId = isset($trigger['trophy_id']) ? (int) $trigger['trophy_id'] : 0;
+            if ($trophyId <= 0) {
+                continue;
+            }
+
+            $trophy = MjTrophies::get($trophyId);
+            if (!$trophy || $trophy['status'] !== MjTrophies::STATUS_ACTIVE || empty($trophy['tier_enabled'])) {
+                continue;
+            }
+
+            $result = MjMemberTrophies::promote_from_action_count(
+                $memberId,
+                $trophyId,
+                $count,
+                (int) ($trigger['bronze_threshold'] ?? 0),
+                (int) ($trigger['silver_threshold'] ?? 0),
+                (int) ($trigger['gold_threshold'] ?? 0)
+            );
+
+            if (!empty($result['changed'])) {
+                $changes[] = array(
+                    'trophy_id' => $trophyId,
+                    'level' => (string) ($result['level'] ?? ''),
+                    'assignment_id' => (int) ($result['assignment_id'] ?? 0),
+                );
+            }
+        }
+
+        return $changes;
     }
 }

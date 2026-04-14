@@ -165,6 +165,14 @@ class MjEventSchedule {
             $occurrence = self::format_occurrence($start, $end, $source, $status, $now_ts);
             $occurrence['id'] = isset($row['id']) ? (int) $row['id'] : 0;
             $occurrence['event_id'] = isset($row['event_id']) ? (int) $row['event_id'] : 0;
+            $occurrence['generation_batch_id'] = isset($row['generation_batch_id']) && $row['generation_batch_id'] !== ''
+                ? (string) $row['generation_batch_id']
+                : (isset($meta['generation_batch_id']) ? (string) $meta['generation_batch_id'] : '');
+            $occurrence['visibility'] = isset($row['audience_visibility']) && $row['audience_visibility'] !== ''
+                ? sanitize_key((string) $row['audience_visibility'])
+                : (isset($meta['visibility']) ? sanitize_key((string) $meta['visibility']) : MjEventOccurrences::VISIBILITY_TOUS);
+            $occurrence['note_schedule'] = isset($meta['note_schedule']) ? (string) $meta['note_schedule'] : '';
+            $occurrence['note_calendar'] = isset($meta['note_calendar']) ? (string) $meta['note_calendar'] : '';
             if (!empty($meta)) {
                 $occurrence['meta'] = $meta;
             }

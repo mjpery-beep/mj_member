@@ -100,7 +100,7 @@ final class MjTrophies extends MjTools implements CrudRepositoryInterface
             $builder->where_like_any(array('title', 'description'), (string) $args['search']);
         }
 
-        $allowedOrderBy = array('display_order', 'title', 'xp', 'created_at', 'updated_at', 'status', 'id', 'auto_mode');
+        $allowedOrderBy = array('display_order', 'title', 'xp', 'created_at', 'updated_at', 'status', 'id', 'auto_mode', 'tier_enabled');
         $orderby = sanitize_key((string) $args['orderby']);
         if (!in_array($orderby, $allowedOrderBy, true)) {
             $orderby = 'display_order';
@@ -241,6 +241,7 @@ final class MjTrophies extends MjTools implements CrudRepositoryInterface
             'auto_mode' => isset($row['auto_mode']) ? (bool) $row['auto_mode'] : false,
             'auto_hook' => isset($row['auto_hook']) ? sanitize_key((string) $row['auto_hook']) : '',
             'auto_threshold' => isset($row['auto_threshold']) ? (int) $row['auto_threshold'] : 0,
+            'tier_enabled' => isset($row['tier_enabled']) ? (bool) $row['tier_enabled'] : false,
             'image_id' => isset($row['image_id']) ? max(0, (int) $row['image_id']) : 0,
             'display_order' => isset($row['display_order']) ? (int) $row['display_order'] : 0,
             'status' => self::normalize_status($row['status'] ?? self::STATUS_ACTIVE) ?: self::STATUS_ACTIVE,
@@ -318,6 +319,10 @@ final class MjTrophies extends MjTools implements CrudRepositoryInterface
 
         if (isset($data['auto_threshold'])) {
             $payload['auto_threshold'] = max(0, (int) $data['auto_threshold']);
+        }
+
+        if (isset($data['tier_enabled'])) {
+            $payload['tier_enabled'] = !empty($data['tier_enabled']) ? 1 : 0;
         }
 
         if (isset($data['image_id'])) {
@@ -448,7 +453,7 @@ final class MjTrophies extends MjTools implements CrudRepositoryInterface
     {
         $formats = array();
         foreach ($payload as $key => $value) {
-            if (in_array($key, array('id', 'xp', 'coins', 'auto_mode', 'auto_threshold', 'image_id', 'display_order'), true)) {
+            if (in_array($key, array('id', 'xp', 'coins', 'auto_mode', 'auto_threshold', 'tier_enabled', 'image_id', 'display_order'), true)) {
                 $formats[] = '%d';
             } else {
                 $formats[] = '%s';

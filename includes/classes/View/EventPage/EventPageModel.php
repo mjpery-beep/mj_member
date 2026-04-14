@@ -263,6 +263,27 @@ final class EventPageModel
         $scheduleSummary = $occurrenceSummary !== ''
             ? $occurrenceSummary
             : $this->buildScheduleSummary($mode, count($occurrences));
+        $occurrenceSummary = '';
+        if (isset($schedulePayload['occurrence_summary']) && !is_array($schedulePayload['occurrence_summary'])) {
+            $occurrenceSummary = trim((string) $schedulePayload['occurrence_summary']);
+            if ($occurrenceSummary !== '') {
+                $occurrenceSummary = wp_strip_all_tags($occurrenceSummary);
+            }
+        }
+
+        $schedulePreview = '';
+        if (isset($eventArray['schedule_preview']) && is_string($eventArray['schedule_preview'])) {
+            $schedulePreview = trim(wp_strip_all_tags((string) $eventArray['schedule_preview']));
+        }
+
+        // MjEventSchedule utilise des méthodes statiques
+        $occurrences = MjEventSchedule::get_occurrences($eventArray);
+        $occurrences = $this->filterActiveOccurrences($occurrences);
+        $scheduleSummary = $schedulePreview !== ''
+            ? $schedulePreview
+            : ($occurrenceSummary !== ''
+                ? $occurrenceSummary
+                : $this->buildScheduleSummary($mode, count($occurrences)));
 
         $now = current_time('timestamp');
         $timezone = $this->getSiteTimezone();
@@ -328,6 +349,7 @@ final class EventPageModel
             'date_fin' => $dateFin,
             'display_label' => $displayLabel,
             'schedule_summary' => $scheduleSummary,
+            'schedule_preview' => $schedulePreview,
             'occurrence_schedule_summary' => $occurrenceSummary,
             'occurrences' => $occurrenceItems,
             'has_multiple_occurrences' => $showCalendar,

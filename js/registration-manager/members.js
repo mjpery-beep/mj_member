@@ -361,6 +361,86 @@
             canToggle = !autoMode;
         }
 
+        var linkedActionsRaw = [];
+        if (Array.isArray(entry.linkedActions)) {
+            linkedActionsRaw = entry.linkedActions;
+        } else if (Array.isArray(entry.linked_actions)) {
+            linkedActionsRaw = entry.linked_actions;
+        }
+
+        var linkedActions = linkedActionsRaw.map(function (action) {
+            if (!action || typeof action !== 'object') {
+                return null;
+            }
+
+            var actionId = 0;
+            if (typeof action.id === 'number') {
+                actionId = action.id;
+            } else if (typeof action.id === 'string' && action.id !== '') {
+                var parsedActionId = parseInt(action.id, 10);
+                actionId = isNaN(parsedActionId) ? 0 : parsedActionId;
+            }
+
+            var actionCount = 0;
+            if (typeof action.count === 'number') {
+                actionCount = action.count;
+            } else if (typeof action.count === 'string' && action.count !== '') {
+                var parsedActionCount = parseInt(action.count, 10);
+                actionCount = isNaN(parsedActionCount) ? 0 : parsedActionCount;
+            }
+
+            var bronzeThreshold = 0;
+            if (typeof action.bronzeThreshold === 'number') {
+                bronzeThreshold = action.bronzeThreshold;
+            } else if (typeof action.bronze_threshold === 'number') {
+                bronzeThreshold = action.bronze_threshold;
+            } else if (typeof action.bronzeThreshold === 'string' && action.bronzeThreshold !== '') {
+                var parsedBronze = parseInt(action.bronzeThreshold, 10);
+                bronzeThreshold = isNaN(parsedBronze) ? 0 : parsedBronze;
+            } else if (typeof action.bronze_threshold === 'string' && action.bronze_threshold !== '') {
+                var parsedBronzeLegacy = parseInt(action.bronze_threshold, 10);
+                bronzeThreshold = isNaN(parsedBronzeLegacy) ? 0 : parsedBronzeLegacy;
+            }
+
+            var silverThreshold = 0;
+            if (typeof action.silverThreshold === 'number') {
+                silverThreshold = action.silverThreshold;
+            } else if (typeof action.silver_threshold === 'number') {
+                silverThreshold = action.silver_threshold;
+            } else if (typeof action.silverThreshold === 'string' && action.silverThreshold !== '') {
+                var parsedSilver = parseInt(action.silverThreshold, 10);
+                silverThreshold = isNaN(parsedSilver) ? 0 : parsedSilver;
+            } else if (typeof action.silver_threshold === 'string' && action.silver_threshold !== '') {
+                var parsedSilverLegacy = parseInt(action.silver_threshold, 10);
+                silverThreshold = isNaN(parsedSilverLegacy) ? 0 : parsedSilverLegacy;
+            }
+
+            var goldThreshold = 0;
+            if (typeof action.goldThreshold === 'number') {
+                goldThreshold = action.goldThreshold;
+            } else if (typeof action.gold_threshold === 'number') {
+                goldThreshold = action.gold_threshold;
+            } else if (typeof action.goldThreshold === 'string' && action.goldThreshold !== '') {
+                var parsedGold = parseInt(action.goldThreshold, 10);
+                goldThreshold = isNaN(parsedGold) ? 0 : parsedGold;
+            } else if (typeof action.gold_threshold === 'string' && action.gold_threshold !== '') {
+                var parsedGoldLegacy = parseInt(action.gold_threshold, 10);
+                goldThreshold = isNaN(parsedGoldLegacy) ? 0 : parsedGoldLegacy;
+            }
+
+            return {
+                id: actionId,
+                title: typeof action.title === 'string' ? action.title : '',
+                emoji: typeof action.emoji === 'string' ? action.emoji : '',
+                count: actionCount,
+                bronzeThreshold: bronzeThreshold,
+                silverThreshold: silverThreshold,
+                goldThreshold: goldThreshold,
+            };
+        }).filter(function (action) {
+            return !!action;
+        });
+
         return {
             id: trophyId,
             title: typeof entry.title === 'string' ? entry.title : '',
@@ -372,6 +452,9 @@
             autoMode: autoMode,
             awarded: !!entry.awarded,
             awardedAt: typeof entry.awardedAt === 'string' ? entry.awardedAt : (typeof entry.awarded_at === 'string' ? entry.awarded_at : ''),
+            currentLevel: typeof entry.currentLevel === 'string' ? entry.currentLevel : (typeof entry.current_level === 'string' ? entry.current_level : ''),
+            tierEnabled: !!entry.tierEnabled,
+            linkedActions: linkedActions,
             canToggle: canToggle,
         };
     }
@@ -463,6 +546,7 @@
             count: count,
             isAuto: isAuto,
             canAward: canAward,
+            linkedTrophies: Array.isArray(entry.linkedTrophies) ? entry.linkedTrophies : [],
         };
     }
 
@@ -6077,7 +6161,11 @@
                                     var isSaving = !!trophySaving[trophy.id];
                                     var hasTrophyImage = typeof trophy.imageUrl === 'string' && trophy.imageUrl !== '';
                                     var isAwarded = trophy.awarded;
-                                    var canToggle = trophy.canToggle && !trophy.autoMode;
+                                    var linkedActions = Array.isArray(trophy.linkedActions) ? trophy.linkedActions : [];
+                                    var currentLevel = trophy.currentLevel || '';
+                                    var levelLabel = currentLevel === 'gold'
+                                        ? 'Or'
+                                        : (currentLevel === 'silver' ? 'Argent' : (currentLevel === 'bronze' ? 'Bronze' : 'Non obtenu'));
 
                                     return h('article', {
                                         key: trophy.id ? 'trophy-' + trophy.id : 'trophy-' + trophy.title,
@@ -6087,20 +6175,9 @@
                                             'mj-regmgr-member-trophy--saving': isSaving,
                                         }),
                                     }, [
-                                        h('label', {
-                                            class: classNames('mj-regmgr-member-trophy__container', {
-                                                'mj-regmgr-member-trophy__container--disabled': !canToggle,
-                                            }),
+                                        h('div', {
+                                            class: 'mj-regmgr-member-trophy__container',
                                         }, [
-                                            canToggle && h('input', {
-                                                type: 'checkbox',
-                                                class: 'mj-regmgr-member-trophy__checkbox',
-                                                checked: isAwarded,
-                                                disabled: isSaving,
-                                                onChange: function (event) {
-                                                    handleToggleTrophy(trophy.id, event.target.checked);
-                                                },
-                                            }),
                                             h('div', { class: 'mj-regmgr-member-trophy__visual' }, [
                                                 hasTrophyImage
                                                     ? h('img', {
@@ -6127,7 +6204,43 @@
                                                     trophy.xp > 0 && h('span', { class: 'mj-regmgr-member-trophy__xp' }, '+' + trophy.xp + ' XP'),
                                                     trophy.coins > 0 && h('span', { class: 'mj-regmgr-member-trophy__coins' }, '🪙 +' + trophy.coins),
                                                     trophy.autoMode && h('span', { class: 'mj-regmgr-member-trophy__auto-badge' }, getString(strings, 'memberTrophyAuto', 'Automatique')),
-                                                    isAwarded && !trophy.autoMode && h('span', { class: 'mj-regmgr-member-trophy__awarded-badge' }, getString(strings, 'memberTrophyAwarded', 'Obtenu')),
+                                                    isAwarded && h('span', { class: 'mj-regmgr-member-trophy__awarded-badge' }, getString(strings, 'memberTrophyAwarded', 'Obtenu')),
+                                                    h('span', { class: 'mj-regmgr-member-trophy__awarded-badge' }, 'Niveau: ' + levelLabel),
+                                                ]),
+                                                linkedActions.length > 0 && h('div', { class: 'mj-regmgr-member-trophy__linked-actions' }, [
+                                                    h('p', { class: 'mj-regmgr-member-trophy__description', style: { marginTop: '6px' } }, 'Actions liées :'),
+                                                    h('ul', { style: { margin: '0 0 0 16px', padding: 0 } }, linkedActions.map(function (linkedAction) {
+                                                        var actionCount = typeof linkedAction.count === 'number' ? linkedAction.count : 0;
+                                                        return h('li', {
+                                                            key: 'trophy-linked-action-' + trophy.id + '-' + linkedAction.id,
+                                                            style: { fontSize: '12px' },
+                                                        }, [
+                                                            (linkedAction.emoji ? linkedAction.emoji + ' ' : '') + (linkedAction.title || 'Action'),
+                                                            ' (' + actionCount + ')',
+                                                            ' - Bronze ' + (linkedAction.bronzeThreshold || 0),
+                                                            ' / Argent ' + (linkedAction.silverThreshold || 0),
+                                                            ' / Or ' + (linkedAction.goldThreshold || 0),
+                                                        ]);
+                                                    })),
+                                                    h('div', { style: { marginTop: '6px', fontSize: '12px', opacity: 0.9 } }, [
+                                                        h('strong', null, 'Niveaux possibles : '),
+                                                        'Bronze',
+                                                        ' • ',
+                                                        'Argent',
+                                                        ' • ',
+                                                        'Or',
+                                                    ]),
+                                                ]),
+                                                linkedActions.length === 0 && h('div', { class: 'mj-regmgr-member-trophy__linked-actions' }, [
+                                                    h('p', { class: 'mj-regmgr-member-trophy__description', style: { marginTop: '6px' } }, 'Aucune action liée pour ce trophée.'),
+                                                    h('div', { style: { marginTop: '4px', fontSize: '12px', opacity: 0.9 } }, [
+                                                        h('strong', null, 'Niveaux possibles : '),
+                                                        'Bronze',
+                                                        ' • ',
+                                                        'Argent',
+                                                        ' • ',
+                                                        'Or',
+                                                    ]),
                                                 ]),
                                             ]),
                                         ]),
@@ -6159,6 +6272,7 @@
                                             h('div', { class: 'mj-regmgr-member-actions__list' }, group.actions.map(function (action) {
                                                 var isSaving = !!actionSaving[action.id];
                                                 var hasCount = action.count > 0;
+                                                var linkedTrophies = Array.isArray(action.linkedTrophies) ? action.linkedTrophies : [];
 
                                                 return h('button', {
                                                     key: 'action-' + action.id,
@@ -6183,6 +6297,16 @@
                                                         action.xp > 0 && h('span', { class: 'mj-regmgr-member-action__xp' }, '+' + action.xp + ' XP'),
                                                         action.coins > 0 && h('span', { class: 'mj-regmgr-member-action__coins' }, '🪙'),
                                                     ]),
+                                                    linkedTrophies.length > 0 && h('span', { class: 'mj-regmgr-member-action__rewards', style: { display: 'block', fontSize: '11px', opacity: 0.85 } },
+                                                        linkedTrophies.map(function (linkedTrophy) {
+                                                            var level = linkedTrophy.currentLevel || 'none';
+                                                            return (linkedTrophy.title || 'Trophée')
+                                                                + ' [B' + (linkedTrophy.bronzeThreshold || 0)
+                                                                + '/A' + (linkedTrophy.silverThreshold || 0)
+                                                                + '/O' + (linkedTrophy.goldThreshold || 0)
+                                                                + ', niveau: ' + level + ']';
+                                                        }).join(' · ')
+                                                    ),
                                                     action.isAuto && h('span', { class: 'mj-regmgr-member-action__auto-badge' }, getString(strings, 'memberActionAuto', 'Auto')),
                                                     isSaving && h('span', { class: 'mj-regmgr-spinner mj-regmgr-spinner--inline mj-regmgr-member-action__spinner' }),
                                                 ]);

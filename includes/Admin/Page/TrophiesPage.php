@@ -4,6 +4,8 @@ namespace Mj\Member\Admin\Page;
 
 use Mj\Member\Classes\Crud\MjTrophies;
 use Mj\Member\Classes\Crud\MjMemberTrophies;
+use Mj\Member\Classes\Crud\MjActionTrophyTriggers;
+use Mj\Member\Classes\Crud\MjActionTypes;
 use Mj\Member\Classes\Crud\MjMembers;
 use Mj\Member\Core\Config;
 
@@ -161,6 +163,7 @@ final class TrophiesPage
                         <th style="width: 80px;"><?php esc_html_e('Coins', 'mj-member'); ?></th>
                         <th style="width: 100px;"><?php esc_html_e('Mode', 'mj-member'); ?></th>
                         <th style="width: 100px;"><?php esc_html_e('Statut', 'mj-member'); ?></th>
+                        <th style="width: 100px;"><?php esc_html_e('Niveaux', 'mj-member'); ?></th>
                         <th style="width: 80px;"><?php esc_html_e('Ordre', 'mj-member'); ?></th>
                         <th style="width: 200px;"><?php esc_html_e('Actions', 'mj-member'); ?></th>
                     </tr>
@@ -168,7 +171,7 @@ final class TrophiesPage
                 <tbody>
                     <?php if (empty($trophies)): ?>
                         <tr>
-                            <td colspan="8"><?php esc_html_e('Aucun trophée trouvé.', 'mj-member'); ?></td>
+                            <td colspan="9"><?php esc_html_e('Aucun trophée trouvé.', 'mj-member'); ?></td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($trophies as $trophy): ?>
@@ -239,6 +242,13 @@ final class TrophiesPage
                                         <span style="background: #f8d7da; color: #721c24; padding: 2px 8px; border-radius: 3px; font-size: 12px;">Archivé</span>
                                     <?php endif; ?>
                                 </td>
+                                <td>
+                                    <?php if (!empty($trophy['tier_enabled'])): ?>
+                                        <span style="background: #d1ecf1; color: #0c5460; padding: 2px 8px; border-radius: 3px; font-size: 12px;">Bronze/Argent/Or</span>
+                                    <?php else: ?>
+                                        <span style="color: #999;">—</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?php echo esc_html($trophy['display_order']); ?></td>
                                 <td>
                                     <a href="<?php echo esc_url($editUrl); ?>" class="button button-small"><?php esc_html_e('Modifier', 'mj-member'); ?></a>
@@ -272,6 +282,7 @@ final class TrophiesPage
             'auto_mode' => false,
             'auto_hook' => '',
             'auto_threshold' => 1,
+            'tier_enabled' => false,
             'image_id' => 0,
             'display_order' => 0,
             'status' => MjTrophies::STATUS_ACTIVE,
@@ -371,6 +382,47 @@ final class TrophiesPage
                             <p class="description"><?php esc_html_e('Nombre requis pour déclencher l\'attribution (ex: 5 photos)', 'mj-member'); ?></p>
                         </td>
                     </tr>
+                    <tr>
+                        <th scope="row"><label for="tier_enabled"><?php esc_html_e('Trophée évolutif', 'mj-member'); ?></label></th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="tier_enabled" id="tier_enabled" value="1" <?php checked(!empty($trophy['tier_enabled'])); ?>>
+                                <?php esc_html_e('Activer les niveaux Bronze/Argent/Or', 'mj-member'); ?>
+                            </label>
+                        </td>
+                    </tr>
+                    <?php if ($isEdit): ?>
+                        <?php
+                        $linkedTriggers = MjActionTrophyTriggers::get_for_trophy($trophyId);
+                        $actionsById = array();
+                        ?>
+                        <tr>
+                            <th scope="row"><?php esc_html_e('Actions liées', 'mj-member'); ?></th>
+                            <td>
+                                <?php if (empty($linkedTriggers)): ?>
+                                    <p class="description"><?php esc_html_e('Aucune action liée. Configure-les depuis MJ Gamification > Actions.', 'mj-member'); ?></p>
+                                <?php else: ?>
+                                    <ul style="margin:0; padding-left: 18px;">
+                                        <?php foreach ($linkedTriggers as $trigger): ?>
+                                            <?php
+                                            $actionTypeId = (int) ($trigger['action_type_id'] ?? 0);
+                                            if (!isset($actionsById[$actionTypeId])) {
+                                                $actionsById[$actionTypeId] = MjActionTypes::get($actionTypeId);
+                                            }
+                                            $actionType = $actionsById[$actionTypeId] ?? null;
+                                            ?>
+                                            <li>
+                                                <strong><?php echo esc_html((string) ($actionType['title'] ?? __('Action inconnue', 'mj-member'))); ?></strong>
+                                                — Bronze <?php echo esc_html((string) (int) ($trigger['bronze_threshold'] ?? 0)); ?>,
+                                                Argent <?php echo esc_html((string) (int) ($trigger['silver_threshold'] ?? 0)); ?>,
+                                                Or <?php echo esc_html((string) (int) ($trigger['gold_threshold'] ?? 0)); ?>
+                                            </li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endif; ?>
                     <tr>
                         <th scope="row"><label for="display_order"><?php esc_html_e('Ordre d\'affichage', 'mj-member'); ?></label></th>
                         <td><input type="number" name="display_order" id="display_order" value="<?php echo esc_attr($trophy['display_order']); ?>" min="0" class="small-text"></td>
@@ -591,6 +643,7 @@ final class TrophiesPage
             'auto_mode' => isset($_POST['auto_mode']) ? 1 : 0,
             'auto_hook' => isset($_POST['auto_hook']) ? sanitize_key(wp_unslash((string) $_POST['auto_hook'])) : '',
             'auto_threshold' => isset($_POST['auto_threshold']) ? (int) $_POST['auto_threshold'] : 1,
+            'tier_enabled' => isset($_POST['tier_enabled']) ? 1 : 0,
             'image_id' => isset($_POST['image_id']) ? (int) $_POST['image_id'] : 0,
             'display_order' => isset($_POST['display_order']) ? (int) $_POST['display_order'] : 0,
             'status' => isset($_POST['status']) ? sanitize_key(wp_unslash((string) $_POST['status'])) : 'active',

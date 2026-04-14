@@ -187,6 +187,29 @@ function mj_member_get_event_occurrences_table_name() {
     return mj_member_get_event_date_occurrences_table_name();
 }
 
+function mj_member_get_event_occurrence_generation_batches_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_event_occurrence_generation_batches',
+        $wpdb->prefix . 'event_occurrence_generation_batches',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
 function mj_member_get_event_locations_table_name() {
     static $cached = null;
     if ($cached !== null) {
@@ -858,6 +881,28 @@ function mj_member_get_member_actions_table_name() {
     global $wpdb;
     $candidates = array(
         $wpdb->prefix . 'mj_member_actions',
+    );
+
+    foreach ($candidates as $candidate) {
+        if (mj_member_table_exists($candidate)) {
+            $cached = $candidate;
+            return $cached;
+        }
+    }
+
+    $cached = $candidates[0];
+    return $cached;
+}
+
+function mj_member_get_action_trophy_triggers_table_name() {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $wpdb;
+    $candidates = array(
+        $wpdb->prefix . 'mj_action_trophy_triggers',
     );
 
     foreach ($candidates as $candidate) {
@@ -1994,6 +2039,8 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_79($wpdb);
     mj_member_upgrade_to_2_80($wpdb);
     mj_member_upgrade_to_2_81($wpdb);
+    mj_member_upgrade_to_2_82($wpdb);
+    mj_member_upgrade_to_2_83($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -2566,6 +2613,7 @@ function mj_member_upgrade_to_2_2($wpdb) {
         article_id bigint(20) unsigned DEFAULT NULL,
         schedule_mode varchar(20) NOT NULL DEFAULT 'fixed',
         schedule_payload longtext DEFAULT NULL,
+        schedule_preview longtext DEFAULT NULL,
         occurrence_selection_mode varchar(20) NOT NULL DEFAULT 'member_choice',
         recurrence_until datetime DEFAULT NULL,
         capacity_total int unsigned NOT NULL DEFAULT 0,
@@ -4592,7 +4640,8 @@ function mj_member_upgrade_to_2_6($wpdb) {
         $columns_to_add = array(
             'schedule_mode' => "ALTER TABLE {$events_table} ADD COLUMN schedule_mode varchar(20) NOT NULL DEFAULT 'fixed' AFTER allow_guardian_registration",
             'schedule_payload' => "ALTER TABLE {$events_table} ADD COLUMN schedule_payload longtext DEFAULT NULL AFTER schedule_mode",
-            'recurrence_until' => "ALTER TABLE {$events_table} ADD COLUMN recurrence_until datetime DEFAULT NULL AFTER schedule_payload",
+            'schedule_preview' => "ALTER TABLE {$events_table} ADD COLUMN schedule_preview longtext DEFAULT NULL AFTER schedule_payload",
+            'recurrence_until' => "ALTER TABLE {$events_table} ADD COLUMN recurrence_until datetime DEFAULT NULL AFTER schedule_preview",
             'capacity_total' => "ALTER TABLE {$events_table} ADD COLUMN capacity_total int unsigned NOT NULL DEFAULT 0 AFTER recurrence_until",
             'capacity_waitlist' => "ALTER TABLE {$events_table} ADD COLUMN capacity_waitlist int unsigned NOT NULL DEFAULT 0 AFTER capacity_total",
             'capacity_notify_threshold' => "ALTER TABLE {$events_table} ADD COLUMN capacity_notify_threshold int unsigned NOT NULL DEFAULT 0 AFTER capacity_waitlist",
@@ -6212,4 +6261,96 @@ function mj_member_upgrade_to_2_81($wpdb) {
     if (!mj_member_column_exists($members_table, 'nextcloud_last_connexion_date')) {
         $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN nextcloud_last_connexion_date DATETIME DEFAULT NULL AFTER nextcloud_last_creation_date");
     }
+}
+
+function mj_member_upgrade_to_2_82($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $occurrences_table = mj_member_get_event_occurrences_table_name();
+    if ($occurrences_table && mj_member_table_exists($occurrences_table)) {
+        if (!mj_member_column_exists($occurrences_table, 'generation_batch_id')) {
+            $wpdb->query("ALTER TABLE {$occurrences_table} ADD COLUMN generation_batch_id varchar(64) DEFAULT NULL AFTER source");
+        }
+
+        if (!mj_member_column_exists($occurrences_table, 'audience_visibility')) {
+            $wpdb->query("ALTER TABLE {$occurrences_table} ADD COLUMN audience_visibility varchar(20) NOT NULL DEFAULT 'tous' AFTER generation_batch_id");
+        }
+
+        $wpdb->query("UPDATE {$occurrences_table} SET audience_visibility = 'tous' WHERE audience_visibility IS NULL OR audience_visibility = '' OR audience_visibility = 'all'");
+
+        if (!mj_member_index_exists($occurrences_table, 'idx_event_batch')) {
+            $wpdb->query("ALTER TABLE {$occurrences_table} ADD KEY idx_event_batch (event_id, generation_batch_id)");
+        }
+
+        if (!mj_member_index_exists($occurrences_table, 'idx_event_visibility')) {
+            $wpdb->query("ALTER TABLE {$occurrences_table} ADD KEY idx_event_visibility (event_id, audience_visibility)");
+        }
+    }
+
+    $batches_table = mj_member_get_event_occurrence_generation_batches_table_name();
+    $charset_collate = $wpdb->get_charset_collate();
+    $sql = "CREATE TABLE {$batches_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        batch_uuid varchar(64) NOT NULL,
+        event_id bigint(20) unsigned NOT NULL,
+        status varchar(20) NOT NULL DEFAULT 'active',
+        generated_by_member_id bigint(20) unsigned DEFAULT NULL,
+        config_snapshot longtext DEFAULT NULL,
+        summary longtext DEFAULT NULL,
+        occurrences_count int(10) unsigned NOT NULL DEFAULT 0,
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        deleted_at datetime DEFAULT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_batch_uuid (batch_uuid),
+        KEY idx_event_created (event_id, created_at),
+        KEY idx_event_status (event_id, status)
+    ) {$charset_collate};";
+    dbDelta($sql);
+}
+
+/**
+ * Migration 2.83: Add trophy tiers and action-trigger mapping.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_83($wpdb) {
+    if (!function_exists('dbDelta')) {
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    }
+
+    $trophies_table = mj_member_get_trophies_table_name();
+    if ($trophies_table && mj_member_table_exists($trophies_table)) {
+        if (!mj_member_column_exists($trophies_table, 'tier_enabled')) {
+            $wpdb->query("ALTER TABLE {$trophies_table} ADD COLUMN tier_enabled tinyint(1) NOT NULL DEFAULT 0 AFTER auto_threshold");
+        }
+    }
+
+    $member_trophies_table = mj_member_get_member_trophies_table_name();
+    if ($member_trophies_table && mj_member_table_exists($member_trophies_table)) {
+        if (!mj_member_column_exists($member_trophies_table, 'current_level')) {
+            $wpdb->query("ALTER TABLE {$member_trophies_table} ADD COLUMN current_level varchar(20) NOT NULL DEFAULT '' AFTER status");
+        }
+    }
+
+    $triggers_table = mj_member_get_action_trophy_triggers_table_name();
+    $charset_collate = $wpdb->get_charset_collate();
+    $sql = "CREATE TABLE {$triggers_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        action_type_id bigint(20) unsigned NOT NULL,
+        trophy_id bigint(20) unsigned NOT NULL,
+        bronze_threshold int(10) unsigned NOT NULL DEFAULT 1,
+        silver_threshold int(10) unsigned NOT NULL DEFAULT 5,
+        gold_threshold int(10) unsigned NOT NULL DEFAULT 10,
+        status varchar(20) NOT NULL DEFAULT 'active',
+        created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_action_trophy (action_type_id, trophy_id),
+        KEY idx_action (action_type_id),
+        KEY idx_trophy (trophy_id),
+        KEY idx_status (status)
+    ) {$charset_collate};";
+    dbDelta($sql);
 }

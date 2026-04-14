@@ -204,7 +204,8 @@ final class EventPageViewBuilder
         $nextOccurrenceLabel = $nextOccurrenceDetails['label'];
 
         $weeklySchedule = $this->resolveWeeklySchedule($schedule);
-        $inlineScheduleHtml = self::renderInlineScheduleHtml($schedule);
+        $schedulePreview = isset($schedule['schedule_preview']) ? (string) $schedule['schedule_preview'] : '';
+        $inlineScheduleHtml = $schedulePreview !== '' ? '' : self::renderInlineScheduleHtml($schedule);
 
         return array(
             'title' => isset($event['title']) ? (string) $event['title'] : '',
@@ -215,6 +216,7 @@ final class EventPageViewBuilder
             'cover_url' => isset($event['cover_url']) ? (string) $event['cover_url'] : '',
             'cover_thumb' => isset($event['cover_thumb']) ? (string) $event['cover_thumb'] : '',
             'schedule_summary' => isset($schedule['schedule_summary']) ? (string) $schedule['schedule_summary'] : '',
+            'schedule_preview' => $schedulePreview,
             'display_label' => isset($schedule['display_label']) ? (string) $schedule['display_label'] : '',
             'weekly_schedule' => $weeklySchedule,
             'inline_schedule_html' => $inlineScheduleHtml,

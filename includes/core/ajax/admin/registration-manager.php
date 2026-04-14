@@ -12,6 +12,7 @@ use Mj\Member\Classes\Crud\MjEvents;
 use Mj\Member\Classes\Crud\MjEventRegistrations;
 use Mj\Member\Classes\Crud\MjEventAttendance;
 use Mj\Member\Classes\Crud\MjEventOccurrences;
+use Mj\Member\Classes\Crud\MjEventOccurrenceGenerationBatches;
 use Mj\Member\Classes\Crud\MjEventAnimateurs;
 use Mj\Member\Classes\Crud\MjEventVolunteers;
 use Mj\Member\Classes\Crud\MjEventLocations;
@@ -35,6 +36,7 @@ use Mj\Member\Classes\Crud\MjMemberCoins;
 use Mj\Member\Classes\Crud\MjTrophies;
 use Mj\Member\Classes\Crud\MjMemberTrophies;
 use Mj\Member\Classes\Crud\MjActionTypes;
+use Mj\Member\Classes\Crud\MjActionTrophyTriggers;
 use Mj\Member\Classes\Crud\MjMemberActions;
 use Mj\Member\Classes\Crud\MjLevels;
 use Mj\Member\Classes\Crud\MjLeaveTypes;
@@ -112,6 +114,12 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         add_action('wp_ajax_mj_regmgr_get_payment_qr', [$this, 'getPaymentQr']);
         add_action('wp_ajax_mj_regmgr_update_occurrences', [$this, 'updateOccurrences']);
         add_action('wp_ajax_mj_regmgr_save_event_occurrences', [$this, 'saveEventOccurrences']);
+        add_action('wp_ajax_mj_regmgr_delete_occurrence_batch', [$this, 'deleteOccurrenceBatch']);
+        add_action('wp_ajax_mj_regmgr_update_batch_schedule_flag', [$this, 'updateBatchScheduleFlag']);
+        add_action('wp_ajax_mj_regmgr_update_batch_preview_dates_flag', [$this, 'updateBatchPreviewDatesFlag']);
+        add_action('wp_ajax_mj_regmgr_save_event_schedule_preview', [$this, 'saveEventSchedulePreview']);
+        add_action('wp_ajax_mj_regmgr_update_batch_title', [$this, 'updateBatchTitle']);
+        add_action('wp_ajax_mj_regmgr_update_batch_assignment', [$this, 'updateBatchAssignment']);
         add_action('wp_ajax_mj_regmgr_get_location', [$this, 'getLocation']);
         add_action('wp_ajax_mj_regmgr_save_location', [$this, 'saveLocation']);
 
@@ -1071,11 +1079,53 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             if (!empty($item['id'])) {
                 $meta['client_id'] = sanitize_text_field((string) $item['id']);
             }
+            if (!empty($item['noteSchedule'])) {
+                $meta['note_schedule'] = sanitize_textarea_field((string) $item['noteSchedule']);
+            } elseif (!empty($item['note_schedule'])) {
+                $meta['note_schedule'] = sanitize_textarea_field((string) $item['note_schedule']);
+            }
+            if (!empty($item['noteCalendar'])) {
+                $meta['note_calendar'] = sanitize_textarea_field((string) $item['noteCalendar']);
+            } elseif (!empty($item['note_calendar'])) {
+                $meta['note_calendar'] = sanitize_textarea_field((string) $item['note_calendar']);
+            }
             if ($status !== '') {
                 $meta['status'] = $status;
             }
             if ($is_all_day) {
                 $meta['all_day'] = 1;
+            }
+
+            $generation_batch_id = '';
+            if (!empty($item['generationBatchId'])) {
+                $generation_batch_id = sanitize_text_field((string) $item['generationBatchId']);
+            } elseif (!empty($item['generation_batch_id'])) {
+                $generation_batch_id = sanitize_text_field((string) $item['generation_batch_id']);
+            }
+
+            $create_manual_batch = false;
+            if (isset($item['createAsManualLot'])) {
+                $raw_create_manual_batch = $item['createAsManualLot'];
+            } elseif (isset($item['create_as_manual_lot'])) {
+                $raw_create_manual_batch = $item['create_as_manual_lot'];
+            } else {
+                $raw_create_manual_batch = null;
+            }
+            if (is_bool($raw_create_manual_batch)) {
+                $create_manual_batch = $raw_create_manual_batch;
+            } elseif (is_numeric($raw_create_manual_batch)) {
+                $create_manual_batch = ((int) $raw_create_manual_batch) === 1;
+            } elseif (is_string($raw_create_manual_batch)) {
+                $create_manual_batch = in_array(strtolower(trim($raw_create_manual_batch)), array('1', 'true', 'yes', 'on'), true);
+            }
+
+            $visibility = MjEventOccurrences::VISIBILITY_TOUS;
+            if (isset($item['visibility'])) {
+                $visibility = sanitize_key((string) $item['visibility']);
+            } elseif (isset($item['audienceVisibility'])) {
+                $visibility = sanitize_key((string) $item['audienceVisibility']);
+            } elseif (isset($item['audience_visibility'])) {
+                $visibility = sanitize_key((string) $item['audience_visibility']);
             }
 
             $start_formatted = $start_dt->format('Y-m-d H:i:s');
@@ -1086,6 +1136,9 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'end' => $end_formatted,
                 'status' => $status,
                 'source' => $source,
+                'generation_batch_id' => $generation_batch_id,
+                'create_manual_batch' => $create_manual_batch,
+                'visibility' => $visibility,
                 'meta' => !empty($meta) ? $meta : null,
             );
 
@@ -1132,6 +1185,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $status = isset($occurrence['status']) ? $this->occurrenceStatusToFront($occurrence['status']) : 'planned';
             $reason = '';
             $is_all_day = false;
+            $note_schedule = '';
+            $note_calendar = '';
             if (isset($occurrence['meta'])) {
                 $meta = $occurrence['meta'];
                 if (is_string($meta)) {
@@ -1153,6 +1208,12 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                         $is_all_day = in_array(strtolower(trim($raw_all_day)), array('1', 'true', 'yes', 'on'), true);
                     }
                 }
+                if (is_array($meta) && isset($meta['note_schedule'])) {
+                    $note_schedule = sanitize_textarea_field((string) $meta['note_schedule']);
+                }
+                if (is_array($meta) && isset($meta['note_calendar'])) {
+                    $note_calendar = sanitize_textarea_field((string) $meta['note_calendar']);
+                }
             }
 
             $id = isset($occurrence['id']) ? $occurrence['id'] : (isset($occurrence['timestamp']) ? $occurrence['timestamp'] : md5($start));
@@ -1169,12 +1230,67 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'isAllDay' => $is_all_day,
                 'status' => $status,
                 'reason' => $reason,
+                'source' => isset($occurrence['source']) ? sanitize_key((string) $occurrence['source']) : MjEventOccurrences::SOURCE_MANUAL,
+                'visibility' => isset($occurrence['visibility']) ? sanitize_key((string) $occurrence['visibility']) : MjEventOccurrences::VISIBILITY_TOUS,
+                'generationBatchId' => isset($occurrence['generation_batch_id']) ? sanitize_text_field((string) $occurrence['generation_batch_id']) : '',
+                'noteSchedule' => $note_schedule,
+                'noteCalendar' => $note_calendar,
                 'startFormatted' => $this->formatDate($start, true),
                 'endFormatted' => $end !== '' ? $this->formatDate($end, true) : '',
             );
         }
 
         return $formatted;
+    }
+
+    private function getOccurrenceGenerationBatchesForEvent(int $event_id): array
+    {
+        if ($event_id <= 0 || !class_exists(MjEventOccurrenceGenerationBatches::class)) {
+            return array();
+        }
+
+        $rows = MjEventOccurrenceGenerationBatches::get_for_event($event_id, false);
+        if (!is_array($rows)) {
+            return array();
+        }
+
+        $formatted = array();
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $summary_raw = isset($row['summary']) ? $row['summary'] : null;
+            $summary_arr = is_array($summary_raw) ? $summary_raw : (is_string($summary_raw) && $summary_raw !== '' ? json_decode($summary_raw, true) : null);
+            $config_raw = isset($row['config_snapshot']) ? $row['config_snapshot'] : null;
+            $config_arr = is_array($config_raw) ? $config_raw : (is_string($config_raw) && $config_raw !== '' ? json_decode($config_raw, true) : null);
+
+            $formatted[] = array(
+                'id' => isset($row['id']) ? (int) $row['id'] : 0,
+                'batchId' => isset($row['batch_uuid']) ? sanitize_text_field((string) $row['batch_uuid']) : '',
+                'status' => isset($row['status']) ? sanitize_key((string) $row['status']) : '',
+                'generatedByMemberId' => isset($row['generated_by_member_id']) ? (int) $row['generated_by_member_id'] : 0,
+                'occurrencesCount' => isset($row['occurrences_count']) ? (int) $row['occurrences_count'] : 0,
+                'summary' => is_array($summary_arr) ? $summary_arr : array(),
+                'configSnapshot' => is_array($config_arr) ? $config_arr : array(),
+                'createdAt' => isset($row['created_at']) ? (string) $row['created_at'] : '',
+                'deletedAt' => isset($row['deleted_at']) ? (string) $row['deleted_at'] : '',
+            );
+        }
+
+        return $formatted;
+    }
+
+    private function createOccurrenceGenerationBatchId(): string
+    {
+        if (function_exists('wp_generate_uuid4')) {
+            $uuid = (string) wp_generate_uuid4();
+            if ($uuid !== '') {
+                return $uuid;
+            }
+        }
+
+        return 'gen-' . gmdate('YmdHis') . '-' . wp_generate_password(8, false, false);
     }
 
     /**
@@ -1818,8 +1934,14 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'date' => substr((string) $event->date_debut, 0, 10),
                 'startTime' => substr((string) $event->date_debut, 11, 5),
                 'endTime' => $fallback_end !== '' ? substr($fallback_end, 11, 5) : '',
+                'isAllDay' => false,
                 'status' => 'planned',
                 'reason' => '',
+                'source' => MjEventOccurrences::SOURCE_MANUAL,
+                'visibility' => MjEventOccurrences::VISIBILITY_TOUS,
+                'generationBatchId' => '',
+                'noteSchedule' => '',
+                'noteCalendar' => '',
                 'startFormatted' => $this->formatDate((string) $event->date_debut, true),
                 'endFormatted' => $fallback_end !== '' ? $this->formatDate($fallback_end, true) : '',
             );
@@ -1951,6 +2073,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'occurrences' => $occurrences,
                 'occurrenceGenerator' => $occurrence_generator_plan,
                 'isFromGenerator' => !empty($occurrence_generator_plan),
+                'occurrenceGenerationBatches' => $this->getOccurrenceGenerationBatchesForEvent((int) $event->id),
                 'inlineScheduleHtml' => $inline_schedule_preview['html'],
                 'location' => $location,
                 'locationLinks' => $location_links,
@@ -5367,6 +5490,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'prix' => isset($event->prix) ? (float) $event->prix : 0.0,
             'occurrenceGenerator' => $occurrence_generator,
             'isFromGenerator' => !empty($occurrence_generator),
+            'occurrenceGenerationBatches' => isset($event->id) ? $this->getOccurrenceGenerationBatchesForEvent((int) $event->id) : array(),
             'inlineScheduleHtml' => $inline_schedule_preview['html'],
             'scheduleMode' => $schedule_mode,
             'scheduleSummary' => isset($schedule_info['summary']) ? $schedule_info['summary'] : '',
@@ -5487,6 +5611,84 @@ final class RegistrationManagerController implements AjaxHandlerInterface
 
         $normalized = $this->prepareEventOccurrenceRows($raw_occurrences);
 
+        $created_batches = array();
+        if (!empty($normalized['rows']) && $generator_plan_provided && !empty($sanitized_generator_plan)) {
+            $rows_needing_batch = array();
+            foreach ($normalized['rows'] as $index => $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $source = isset($row['source']) ? sanitize_key((string) $row['source']) : '';
+                $batch_id = isset($row['generation_batch_id']) ? sanitize_text_field((string) $row['generation_batch_id']) : '';
+                if ($source === MjEventOccurrences::SOURCE_GENERATED && $batch_id === '') {
+                    $rows_needing_batch[] = $index;
+                }
+            }
+
+            if (!empty($rows_needing_batch)) {
+                $created_generation_batch_id = $this->createOccurrenceGenerationBatchId();
+                foreach ($rows_needing_batch as $index) {
+                    $normalized['rows'][$index]['generation_batch_id'] = $created_generation_batch_id;
+                }
+                $created_batches[] = array(
+                    'batch_id' => $created_generation_batch_id,
+                    'config_snapshot' => $sanitized_generator_plan,
+                    'summary' => array(
+                        'schedule_summary' => $submitted_schedule_summary,
+                        'schedule_mode' => isset($event->schedule_mode) && $event->schedule_mode !== ''
+                            ? sanitize_key((string) $event->schedule_mode)
+                            : 'fixed',
+                    ),
+                    'occurrences_count' => count($rows_needing_batch),
+                );
+            }
+        }
+
+        if (!empty($normalized['rows'])) {
+            foreach ($normalized['rows'] as $index => $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+
+                $source = isset($row['source']) ? sanitize_key((string) $row['source']) : '';
+                $batch_id = isset($row['generation_batch_id']) ? sanitize_text_field((string) $row['generation_batch_id']) : '';
+                $create_manual_batch = !empty($row['create_manual_batch']);
+                if ($source !== MjEventOccurrences::SOURCE_MANUAL || $batch_id !== '' || !$create_manual_batch) {
+                    continue;
+                }
+
+                $manual_batch_id = $this->createOccurrenceGenerationBatchId();
+                $normalized['rows'][$index]['generation_batch_id'] = $manual_batch_id;
+
+                $start_value = isset($row['start']) ? (string) $row['start'] : '';
+                $end_value = isset($row['end']) ? (string) $row['end'] : '';
+                $manual_summary = $this->formatManualOccurrenceSummary($start_value, $end_value);
+
+                $created_batches[] = array(
+                    'batch_id' => $manual_batch_id,
+                    'config_snapshot' => array(
+                        'mode' => 'manual_single',
+                        'start' => $start_value,
+                        'end' => $end_value,
+                    ),
+                    'summary' => array(
+                        'schedule_summary' => $manual_summary,
+                        'schedule_mode' => 'manual',
+                    ),
+                    'occurrences_count' => 1,
+                );
+            }
+        }
+
+        if (!empty($normalized['rows'])) {
+            foreach ($normalized['rows'] as $index => $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                unset($normalized['rows'][$index]['create_manual_batch']);
+            }
+        }
+
         $schedule_mode = isset($event->schedule_mode) && $event->schedule_mode !== ''
             ? sanitize_key((string) $event->schedule_mode)
             : 'fixed';
@@ -5590,6 +5792,25 @@ final class RegistrationManagerController implements AjaxHandlerInterface
 
         MjEventOccurrences::replace_for_event($event_id, $normalized['rows']);
 
+        if (!empty($created_batches) && class_exists(MjEventOccurrenceGenerationBatches::class)) {
+            foreach ($created_batches as $batch_data) {
+                if (!is_array($batch_data) || empty($batch_data['batch_id'])) {
+                    continue;
+                }
+                MjEventOccurrenceGenerationBatches::create(
+                    $event_id,
+                    (string) $batch_data['batch_id'],
+                    array(
+                        'status' => MjEventOccurrenceGenerationBatches::STATUS_ACTIVE,
+                        'generated_by_member_id' => isset($auth['member_id']) ? (int) $auth['member_id'] : 0,
+                        'config_snapshot' => isset($batch_data['config_snapshot']) ? $batch_data['config_snapshot'] : null,
+                        'summary' => isset($batch_data['summary']) && is_array($batch_data['summary']) ? $batch_data['summary'] : array(),
+                        'occurrences_count' => isset($batch_data['occurrences_count']) ? (int) $batch_data['occurrences_count'] : 0,
+                    )
+                );
+            }
+        }
+
         $refreshed_event = MjEvents::find($event_id);
         if (!$refreshed_event) {
             $refreshed_event = $event;
@@ -5617,6 +5838,11 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'isAllDay' => false,
                 'status' => 'planned',
                 'reason' => '',
+                'source' => MjEventOccurrences::SOURCE_MANUAL,
+                'visibility' => MjEventOccurrences::VISIBILITY_TOUS,
+                'generationBatchId' => '',
+                'noteSchedule' => '',
+                'noteCalendar' => '',
                 'startFormatted' => $this->formatDate((string) $refreshed_event->date_debut, true),
                 'endFormatted' => $fallback_end !== '' ? $this->formatDate($fallback_end, true) : '',
             );
@@ -5639,6 +5865,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 : (isset($schedule_info['summary']) ? $schedule_info['summary'] : ''),
             'occurrenceGenerator' => $updated_generator_plan,
             'isFromGenerator' => !empty($updated_generator_plan),
+            'occurrenceGenerationBatches' => $this->getOccurrenceGenerationBatchesForEvent((int) $event_id),
             'inlineScheduleHtml' => $inline_schedule_preview['html'],
         );
 
@@ -5664,6 +5891,378 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'message' => __('Occurrences mises à jour.', 'mj-member'),
             'event' => $response_event,
             'eventSummary' => $event_summary,
+        ));
+    }
+
+    /**
+     * Delete all occurrences belonging to a generation batch and mark the batch as deleted.
+     */
+    public function deleteOccurrenceBatch() {
+        $auth = $this->verifyRequest();
+        if (!$auth) {
+            return;
+        }
+
+        if (!$auth['is_coordinateur'] && !current_user_can(Config::capability())) {
+            wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+            return;
+        }
+
+        $event_id = isset($_POST['eventId']) ? (int) $_POST['eventId'] : 0;
+        $batch_id = isset($_POST['batchId']) ? sanitize_text_field((string) $_POST['batchId']) : '';
+
+        if ($event_id <= 0 || $batch_id === '') {
+            wp_send_json_error(array('message' => __('Paramètres invalides.', 'mj-member')));
+            return;
+        }
+
+        MjEventOccurrences::delete_for_generation_batch($event_id, $batch_id);
+        MjEventOccurrenceGenerationBatches::mark_deleted($event_id, $batch_id);
+
+        $updated_batches = $this->getOccurrenceGenerationBatchesForEvent($event_id);
+
+        wp_send_json_success(array(
+            'message' => __('Lot supprimé.', 'mj-member'),
+            'occurrenceGenerationBatches' => $updated_batches,
+        ));
+    }
+
+    /**
+     * Update the "include in global schedule" flag on a generation batch summary.
+     */
+    public function updateBatchScheduleFlag() {
+        $auth = $this->verifyRequest();
+        if (!$auth) {
+            return;
+        }
+
+        if (!$auth['is_coordinateur'] && !current_user_can(Config::capability())) {
+            wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+            return;
+        }
+
+        $event_id = isset($_POST['eventId']) ? (int) $_POST['eventId'] : 0;
+        $batch_id = isset($_POST['batchId']) ? sanitize_text_field((string) $_POST['batchId']) : '';
+        $include   = isset($_POST['includeInGlobalSchedule']) && $_POST['includeInGlobalSchedule'] === '1';
+
+        if ($event_id <= 0 || $batch_id === '') {
+            wp_send_json_error(array('message' => __('Paramètres invalides.', 'mj-member')));
+            return;
+        }
+
+        $existing = MjEventOccurrenceGenerationBatches::find_by_batch_uuid($batch_id);
+        if (!$existing) {
+            wp_send_json_error(array('message' => __('Lot introuvable.', 'mj-member')), 404);
+            return;
+        }
+
+        $summary_raw = isset($existing['summary']) ? $existing['summary'] : null;
+        $summary_arr = is_array($summary_raw) ? $summary_raw : (is_string($summary_raw) && $summary_raw !== '' ? json_decode($summary_raw, true) : null);
+        $summary_arr = is_array($summary_arr) ? $summary_arr : array();
+        $summary_arr['include_in_global_schedule'] = $include;
+
+        $config_raw = isset($existing['config_snapshot']) ? $existing['config_snapshot'] : null;
+        $config_arr = is_array($config_raw) ? $config_raw : (is_string($config_raw) && $config_raw !== '' ? json_decode($config_raw, true) : null);
+
+        MjEventOccurrenceGenerationBatches::create($event_id, $batch_id, array(
+            'status' => isset($existing['status']) ? (string) $existing['status'] : MjEventOccurrenceGenerationBatches::STATUS_ACTIVE,
+            'generated_by_member_id' => isset($existing['generated_by_member_id']) ? (int) $existing['generated_by_member_id'] : null,
+            'config_snapshot' => is_array($config_arr) ? $config_arr : null,
+            'summary' => $summary_arr,
+            'occurrences_count' => isset($existing['occurrences_count']) ? (int) $existing['occurrences_count'] : 0,
+        ));
+
+        $updated_batches = $this->getOccurrenceGenerationBatchesForEvent($event_id);
+
+        wp_send_json_success(array(
+            'message' => __('Paramètre mis à jour.', 'mj-member'),
+            'occurrenceGenerationBatches' => $updated_batches,
+        ));
+    }
+
+    /**
+     * Update the "include dates in schedule preview" flag on a generation batch summary.
+     */
+    public function updateBatchPreviewDatesFlag() {
+        $auth = $this->verifyRequest();
+        if (!$auth) {
+            return;
+        }
+
+        if (!$auth['is_coordinateur'] && !current_user_can(Config::capability())) {
+            wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+            return;
+        }
+
+        $event_id = isset($_POST['eventId']) ? (int) $_POST['eventId'] : 0;
+        $batch_id = isset($_POST['batchId']) ? sanitize_text_field((string) $_POST['batchId']) : '';
+        $include = isset($_POST['includeDatesInSchedulePreview'])
+            && in_array((string) $_POST['includeDatesInSchedulePreview'], array('1', 'true'), true);
+
+        if ($event_id <= 0 || $batch_id === '') {
+            wp_send_json_error(array('message' => __('Paramètres invalides.', 'mj-member')));
+            return;
+        }
+
+        $existing = MjEventOccurrenceGenerationBatches::find_by_batch_uuid($batch_id);
+        if (!$existing) {
+            wp_send_json_error(array('message' => __('Lot introuvable.', 'mj-member')), 404);
+            return;
+        }
+
+        $summary_raw = isset($existing['summary']) ? $existing['summary'] : null;
+        $summary_arr = is_array($summary_raw) ? $summary_raw : (is_string($summary_raw) && $summary_raw !== '' ? json_decode($summary_raw, true) : null);
+        $summary_arr = is_array($summary_arr) ? $summary_arr : array();
+        $summary_arr['include_dates_in_schedule_preview'] = $include;
+
+        $config_raw = isset($existing['config_snapshot']) ? $existing['config_snapshot'] : null;
+        $config_arr = is_array($config_raw) ? $config_raw : (is_string($config_raw) && $config_raw !== '' ? json_decode($config_raw, true) : null);
+
+        MjEventOccurrenceGenerationBatches::create($event_id, $batch_id, array(
+            'status' => isset($existing['status']) ? (string) $existing['status'] : MjEventOccurrenceGenerationBatches::STATUS_ACTIVE,
+            'generated_by_member_id' => isset($existing['generated_by_member_id']) ? (int) $existing['generated_by_member_id'] : null,
+            'config_snapshot' => is_array($config_arr) ? $config_arr : null,
+            'summary' => $summary_arr,
+            'occurrences_count' => isset($existing['occurrences_count']) ? (int) $existing['occurrences_count'] : 0,
+        ));
+
+        $updated_batches = $this->getOccurrenceGenerationBatchesForEvent($event_id);
+
+        wp_send_json_success(array(
+            'message' => __('Paramètre mis à jour.', 'mj-member'),
+            'occurrenceGenerationBatches' => $updated_batches,
+        ));
+    }
+
+    /**
+     * Save the global schedule preview text to the event's schedule_preview column.
+     */
+    public function saveEventSchedulePreview() {
+        $auth = $this->verifyRequest();
+        if (!$auth) {
+            return;
+        }
+
+        if (!$auth['is_coordinateur'] && !current_user_can(Config::capability())) {
+            wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+            return;
+        }
+
+        $event_id = isset($_POST['eventId']) ? (int) $_POST['eventId'] : 0;
+        if ($event_id <= 0) {
+            wp_send_json_error(array('message' => __('ID événement invalide.', 'mj-member')), 400);
+            return;
+        }
+
+        $event = MjEvents::find($event_id);
+        if (!$event) {
+            wp_send_json_error(array('message' => __('Événement introuvable.', 'mj-member')), 404);
+            return;
+        }
+
+        $preview_raw = isset($_POST['schedulePreview']) ? (string) wp_unslash($_POST['schedulePreview']) : '';
+        $preview = trim(wp_strip_all_tags($preview_raw));
+        if (function_exists('mb_substr')) {
+            $preview = mb_substr($preview, 0, 2000);
+        } else {
+            $preview = substr($preview, 0, 2000);
+        }
+
+        $update_result = MjEvents::update($event_id, array('schedule_preview' => $preview !== '' ? $preview : null));
+        if (is_wp_error($update_result)) {
+            wp_send_json_error(array('message' => $update_result->get_error_message()), 500);
+            return;
+        }
+
+        wp_send_json_success(array('message' => __('Aperçu de l\'horaire sauvegardé.', 'mj-member')));
+    }
+
+    /**
+     * Update batch title stored in summary payload.
+     */
+    public function updateBatchTitle() {
+        $auth = $this->verifyRequest();
+        if (!$auth) {
+            return;
+        }
+
+        if (!$auth['is_coordinateur'] && !current_user_can(Config::capability())) {
+            wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+            return;
+        }
+
+        $event_id = isset($_POST['eventId']) ? (int) $_POST['eventId'] : 0;
+        $batch_id = isset($_POST['batchId']) ? sanitize_text_field((string) $_POST['batchId']) : '';
+        $title_raw = isset($_POST['title']) ? (string) wp_unslash($_POST['title']) : '';
+        $title = trim(wp_strip_all_tags($title_raw));
+        if (function_exists('mb_substr')) {
+            $title = mb_substr($title, 0, 120);
+        } else {
+            $title = substr($title, 0, 120);
+        }
+
+        if ($event_id <= 0 || $batch_id === '') {
+            wp_send_json_error(array('message' => __('Paramètres invalides.', 'mj-member')));
+            return;
+        }
+
+        $existing = MjEventOccurrenceGenerationBatches::find_by_batch_uuid($batch_id);
+        if (!$existing) {
+            wp_send_json_error(array('message' => __('Lot introuvable.', 'mj-member')), 404);
+            return;
+        }
+
+        $summary_raw = isset($existing['summary']) ? $existing['summary'] : null;
+        $summary_arr = is_array($summary_raw) ? $summary_raw : (is_string($summary_raw) && $summary_raw !== '' ? json_decode($summary_raw, true) : null);
+        $summary_arr = is_array($summary_arr) ? $summary_arr : array();
+
+        if ($title === '') {
+            unset($summary_arr['batch_title']);
+        } else {
+            $summary_arr['batch_title'] = $title;
+        }
+
+        $config_raw = isset($existing['config_snapshot']) ? $existing['config_snapshot'] : null;
+        $config_arr = is_array($config_raw) ? $config_raw : (is_string($config_raw) && $config_raw !== '' ? json_decode($config_raw, true) : null);
+
+        MjEventOccurrenceGenerationBatches::create($event_id, $batch_id, array(
+            'status' => isset($existing['status']) ? (string) $existing['status'] : MjEventOccurrenceGenerationBatches::STATUS_ACTIVE,
+            'generated_by_member_id' => isset($existing['generated_by_member_id']) ? (int) $existing['generated_by_member_id'] : null,
+            'config_snapshot' => is_array($config_arr) ? $config_arr : null,
+            'summary' => $summary_arr,
+            'occurrences_count' => isset($existing['occurrences_count']) ? (int) $existing['occurrences_count'] : 0,
+        ));
+
+        $updated_batches = $this->getOccurrenceGenerationBatchesForEvent($event_id);
+
+        wp_send_json_success(array(
+            'message' => __('Titre du lot mis à jour.', 'mj-member'),
+            'occurrenceGenerationBatches' => $updated_batches,
+        ));
+    }
+
+    /**
+     * Update per-batch location/member assignment stored in summary payload.
+     */
+    public function updateBatchAssignment() {
+        $auth = $this->verifyRequest();
+        if (!$auth) {
+            return;
+        }
+
+        if (!$auth['is_coordinateur'] && !current_user_can(Config::capability())) {
+            wp_send_json_error(array('message' => __('Permissions insuffisantes.', 'mj-member')), 403);
+            return;
+        }
+
+        $event_id = isset($_POST['eventId']) ? (int) $_POST['eventId'] : 0;
+        $batch_id = isset($_POST['batchId']) ? sanitize_text_field((string) $_POST['batchId']) : '';
+        $location_id = isset($_POST['locationId']) ? (int) $_POST['locationId'] : 0;
+        $member_ids = array();
+        if (isset($_POST['memberIds'])) {
+            $raw_member_ids = wp_unslash($_POST['memberIds']);
+            if (is_array($raw_member_ids)) {
+                foreach ($raw_member_ids as $raw_member_id) {
+                    $candidate = (int) $raw_member_id;
+                    if ($candidate > 0) {
+                        $member_ids[] = $candidate;
+                    }
+                }
+            } elseif (is_string($raw_member_ids) && $raw_member_ids !== '') {
+                $decoded_member_ids = json_decode($raw_member_ids, true);
+                if (is_array($decoded_member_ids)) {
+                    foreach ($decoded_member_ids as $raw_member_id) {
+                        $candidate = (int) $raw_member_id;
+                        if ($candidate > 0) {
+                            $member_ids[] = $candidate;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (empty($member_ids) && isset($_POST['memberId'])) {
+            $fallback_member_id = (int) $_POST['memberId'];
+            if ($fallback_member_id > 0) {
+                $member_ids[] = $fallback_member_id;
+            }
+        }
+        $member_ids = array_values(array_unique(array_map('intval', $member_ids)));
+
+        if ($event_id <= 0 || $batch_id === '') {
+            wp_send_json_error(array('message' => __('Paramètres invalides.', 'mj-member')));
+            return;
+        }
+
+        $existing = MjEventOccurrenceGenerationBatches::find_by_batch_uuid($batch_id);
+        if (!$existing) {
+            wp_send_json_error(array('message' => __('Lot introuvable.', 'mj-member')), 404);
+            return;
+        }
+
+        $summary_raw = isset($existing['summary']) ? $existing['summary'] : null;
+        $summary_arr = is_array($summary_raw) ? $summary_raw : (is_string($summary_raw) && $summary_raw !== '' ? json_decode($summary_raw, true) : null);
+        $summary_arr = is_array($summary_arr) ? $summary_arr : array();
+
+        if ($location_id > 0) {
+            $summary_arr['assigned_location_id'] = $location_id;
+            $summary_arr['assigned_location_name'] = '';
+            if (class_exists(MjEventLocations::class)) {
+                $location = MjEventLocations::find($location_id);
+                if ($location && isset($location->name)) {
+                    $summary_arr['assigned_location_name'] = sanitize_text_field((string) $location->name);
+                }
+            }
+        } else {
+            unset($summary_arr['assigned_location_id']);
+            unset($summary_arr['assigned_location_name']);
+        }
+
+        if (!empty($member_ids)) {
+            $summary_arr['assigned_member_ids'] = $member_ids;
+            $summary_arr['assigned_member_names'] = array();
+
+            foreach ($member_ids as $member_id) {
+                $member = MjMembers::getById((int) $member_id);
+                if (!$member) {
+                    continue;
+                }
+
+                $member_name = trim(((string) ($member->first_name ?? '')) . ' ' . ((string) ($member->last_name ?? '')));
+                if ($member_name === '') {
+                    $member_name = sprintf(__('Membre #%d', 'mj-member'), (int) $member_id);
+                }
+                $summary_arr['assigned_member_names'][] = sanitize_text_field($member_name);
+            }
+
+            // Backward compatibility for code still reading singular keys.
+            $summary_arr['assigned_member_id'] = (int) $member_ids[0];
+            $summary_arr['assigned_member_name'] = !empty($summary_arr['assigned_member_names'])
+                ? (string) $summary_arr['assigned_member_names'][0]
+                : '';
+        } else {
+            unset($summary_arr['assigned_member_ids']);
+            unset($summary_arr['assigned_member_names']);
+            unset($summary_arr['assigned_member_id']);
+            unset($summary_arr['assigned_member_name']);
+        }
+
+        $config_raw = isset($existing['config_snapshot']) ? $existing['config_snapshot'] : null;
+        $config_arr = is_array($config_raw) ? $config_raw : (is_string($config_raw) && $config_raw !== '' ? json_decode($config_raw, true) : null);
+
+        MjEventOccurrenceGenerationBatches::create($event_id, $batch_id, array(
+            'status' => isset($existing['status']) ? (string) $existing['status'] : MjEventOccurrenceGenerationBatches::STATUS_ACTIVE,
+            'generated_by_member_id' => isset($existing['generated_by_member_id']) ? (int) $existing['generated_by_member_id'] : null,
+            'config_snapshot' => is_array($config_arr) ? $config_arr : null,
+            'summary' => $summary_arr,
+            'occurrences_count' => isset($existing['occurrences_count']) ? (int) $existing['occurrences_count'] : 0,
+        ));
+
+        $updated_batches = $this->getOccurrenceGenerationBatchesForEvent($event_id);
+
+        wp_send_json_success(array(
+            'message' => __('Attribution du lot mise à jour.', 'mj-member'),
+            'occurrenceGenerationBatches' => $updated_batches,
         ));
     }
 
@@ -7470,6 +8069,63 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         }
 
         return date_i18n($format, $timestamp);
+    }
+
+    /**
+     * Build readable summary for a manual occurrence.
+     */
+    private function formatManualOccurrenceSummary($start, $end) {
+        $start_timestamp = !empty($start) ? strtotime((string) $start) : false;
+        $end_timestamp = !empty($end) ? strtotime((string) $end) : false;
+
+        if (!$start_timestamp || !$end_timestamp) {
+            return __('Occurrence manuelle', 'mj-member');
+        }
+
+        $day_label = date_i18n('l j F Y', $start_timestamp);
+        if (function_exists('mb_convert_case')) {
+            $day_label = (string) mb_convert_case($day_label, MB_CASE_TITLE, 'UTF-8');
+        } else {
+            $day_label = ucfirst((string) $day_label);
+        }
+        $start_time = $this->formatFrenchHourLabel($start_timestamp);
+        $end_time = $this->formatFrenchHourLabel($end_timestamp);
+
+        $same_day = date_i18n('Y-m-d', $start_timestamp) === date_i18n('Y-m-d', $end_timestamp);
+        if ($same_day) {
+            return sprintf(
+                __('%1$s de %2$s à %3$s', 'mj-member'),
+                $day_label,
+                $start_time,
+                $end_time
+            );
+        }
+
+        return sprintf(
+            __('Du %1$s %2$s au %3$s %4$s', 'mj-member'),
+            $day_label,
+            $start_time,
+            date_i18n('l j F Y', $end_timestamp),
+            $end_time
+        );
+    }
+
+    /**
+     * Format a time like 9h or 9h30.
+     */
+    private function formatFrenchHourLabel($timestamp) {
+        $hours = (int) date_i18n('G', $timestamp);
+        $minutes = (int) date_i18n('i', $timestamp);
+
+        if ($minutes <= 0) {
+            return sprintf(__('%sh', 'mj-member'), (string) $hours);
+        }
+
+        return sprintf(
+            __('%1$sh%2$02d', 'mj-member'),
+            (string) $hours,
+            $minutes
+        );
     }
 
     /**
@@ -10929,6 +11585,38 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             }
 
             $is_auto = !empty($action['attribution']) && $action['attribution'] === MjActionTypes::ATTRIBUTION_AUTO;
+            if ($is_auto) {
+                continue;
+            }
+
+            $linked_trophies = array();
+            $triggers = MjActionTrophyTriggers::get_for_action($action_id);
+            foreach ($triggers as $trigger) {
+                $trophy_id = isset($trigger['trophy_id']) ? (int) $trigger['trophy_id'] : 0;
+                if ($trophy_id <= 0) {
+                    continue;
+                }
+
+                $trophy = MjTrophies::get($trophy_id);
+                if (!$trophy || $trophy['status'] !== MjTrophies::STATUS_ACTIVE) {
+                    continue;
+                }
+
+                $assignment = MjMemberTrophies::get_assignment($member_id, $trophy_id);
+                $current_level = '';
+                if (is_array($assignment) && isset($assignment['current_level'])) {
+                    $current_level = (string) $assignment['current_level'];
+                }
+
+                $linked_trophies[] = array(
+                    'id' => $trophy_id,
+                    'title' => isset($trophy['title']) ? (string) $trophy['title'] : '',
+                    'bronzeThreshold' => (int) ($trigger['bronze_threshold'] ?? 0),
+                    'silverThreshold' => (int) ($trigger['silver_threshold'] ?? 0),
+                    'goldThreshold' => (int) ($trigger['gold_threshold'] ?? 0),
+                    'currentLevel' => $current_level,
+                );
+            }
 
             $payload[] = array(
                 'id' => $action_id,
@@ -10944,6 +11632,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'count' => isset($action['count']) ? (int) $action['count'] : 0,
                 'isAuto' => $is_auto,
                 'canAward' => !$is_auto,
+                'linkedTrophies' => $linked_trophies,
             );
         }
 
@@ -10997,10 +11686,12 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $assignment = isset($assignment_map[$trophy_id]) ? $assignment_map[$trophy_id] : null;
             $assignment_status = '';
             $awarded_at = '';
+            $current_level = '';
 
             if (is_array($assignment)) {
                 $assignment_status = isset($assignment['status']) ? (string) $assignment['status'] : '';
                 $awarded_at = isset($assignment['awarded_at']) ? (string) $assignment['awarded_at'] : '';
+                $current_level = isset($assignment['current_level']) ? (string) $assignment['current_level'] : '';
             }
 
             $image_id = isset($trophy['image_id']) ? (int) $trophy['image_id'] : 0;
@@ -11015,6 +11706,32 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             $is_auto = !empty($trophy['auto_mode']);
             $is_awarded = $assignment_status === MjMemberTrophies::STATUS_AWARDED;
 
+            $linked_actions = array();
+            $triggers = MjActionTrophyTriggers::get_for_trophy($trophy_id);
+            foreach ($triggers as $trigger) {
+                $action_type_id = isset($trigger['action_type_id']) ? (int) $trigger['action_type_id'] : 0;
+                if ($action_type_id <= 0) {
+                    continue;
+                }
+
+                $action_type = MjActionTypes::get($action_type_id);
+                if (!$action_type || $action_type['status'] === MjActionTypes::STATUS_ARCHIVED) {
+                    continue;
+                }
+
+                $action_count = MjMemberActions::count_for_member_action($member_id, $action_type_id);
+
+                $linked_actions[] = array(
+                    'id' => $action_type_id,
+                    'title' => isset($action_type['title']) ? (string) $action_type['title'] : '',
+                    'emoji' => isset($action_type['emoji']) ? (string) $action_type['emoji'] : '',
+                    'count' => (int) $action_count,
+                    'bronzeThreshold' => (int) ($trigger['bronze_threshold'] ?? 0),
+                    'silverThreshold' => (int) ($trigger['silver_threshold'] ?? 0),
+                    'goldThreshold' => (int) ($trigger['gold_threshold'] ?? 0),
+                );
+            }
+
             $payload[] = array(
                 'id' => $trophy_id,
                 'title' => isset($trophy['title']) ? (string) $trophy['title'] : '',
@@ -11026,7 +11743,10 @@ final class RegistrationManagerController implements AjaxHandlerInterface
                 'autoMode' => $is_auto,
                 'awarded' => $is_awarded,
                 'awardedAt' => $awarded_at,
-                'canToggle' => !$is_auto,
+                'currentLevel' => $current_level,
+                'tierEnabled' => !empty($trophy['tier_enabled']),
+                'linkedActions' => $linked_actions,
+                'canToggle' => false,
             );
         }
 
@@ -11040,59 +11760,8 @@ final class RegistrationManagerController implements AjaxHandlerInterface
         $current_member = $this->verifyRequest();
         if (!$current_member) return;
 
-        $member_id = isset($_POST['memberId']) ? absint($_POST['memberId']) : 0;
-        $trophy_id = isset($_POST['trophyId']) ? absint($_POST['trophyId']) : 0;
-        $awarded = isset($_POST['awarded']) && $_POST['awarded'] === 'true';
-
-        if ($member_id <= 0 || $trophy_id <= 0) {
-            wp_send_json_error(array('message' => __('Paramètres invalides.', 'mj-member')));
-            return;
-        }
-
-        $target_member = MjMembers::getById($member_id);
-        if (!$target_member) {
-            wp_send_json_error(array('message' => __('Membre introuvable.', 'mj-member')));
-            return;
-        }
-
-        $trophy = MjTrophies::get($trophy_id);
-        if (!$trophy || (isset($trophy['status']) && $trophy['status'] === MjTrophies::STATUS_ARCHIVED)) {
-            wp_send_json_error(array('message' => __('Trophée introuvable ou archivé.', 'mj-member')));
-            return;
-        }
-
-        // Check if trophy is manual (not auto_mode)
-        if (!empty($trophy['auto_mode'])) {
-            wp_send_json_error(array('message' => __('Ce trophée est automatique et ne peut pas être attribué manuellement.', 'mj-member')));
-            return;
-        }
-
-        if ($awarded) {
-            $result = MjMemberTrophies::award($member_id, $trophy_id);
-        } else {
-            $result = MjMemberTrophies::revoke($member_id, $trophy_id);
-        }
-
-        if (is_wp_error($result)) {
-            wp_send_json_error(array('message' => $result->get_error_message()));
-            return;
-        }
-
-        // Build updated trophy entry
-        $updated_trophy = $this->getMemberTrophiesPayload($member_id);
-        $updated_entry = null;
-        foreach ($updated_trophy as $entry) {
-            if ((int) $entry['id'] === $trophy_id) {
-                $updated_entry = $entry;
-                break;
-            }
-        }
-
-        wp_send_json_success(array(
-            'trophy' => $updated_entry,
-            'message' => $awarded
-                ? __('Trophée attribué.', 'mj-member')
-                : __('Trophée retiré.', 'mj-member'),
+        wp_send_json_error(array(
+            'message' => __('L\'attribution manuelle des trophées est désactivée. Utilisez les actions pour faire progresser les niveaux.', 'mj-member'),
         ));
     }
 

@@ -118,6 +118,9 @@ function mj_member_render_event_page_fallback(array $payload): string
     $description = $partials['description'] ?? array();
     $registration = $partials['registration'] ?? array();
     $location = $partials['location'] ?? array();
+    $schedulePreview = isset($hero['schedule_preview']) ? (string) $hero['schedule_preview'] : '';
+    $inlineScheduleHtml = isset($hero['inline_schedule_html']) ? (string) $hero['inline_schedule_html'] : '';
+    $scheduleSummary = isset($hero['schedule_summary']) ? (string) $hero['schedule_summary'] : '';
 
     ob_start();
     ?>
@@ -125,16 +128,21 @@ function mj_member_render_event_page_fallback(array $payload): string
     <main class="<?php echo esc_attr($page['class'] ?? 'mj-event-page'); ?>" style="<?php echo esc_attr($page['style'] ?? ''); ?>">
         <div class="mj-event-page__wrapper">
             <section class="mj-event-page__hero">
-                <h1>NO TWIG !! </h1>
                 <?php if (!empty($hero['type_label'])) : ?>
                     <span class="mj-event-page__badge"><?php echo esc_html($hero['type_label']); ?></span>
                 <?php endif; ?>
                 <h1 class="mj-event-page__title"><?php echo esc_html($hero['title'] ?? ''); ?></h1>
-                    <?php if (!empty($hero['schedule_component'])) : ?>
-                        <?php echo $hero['schedule_component']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-                    <?php elseif (!empty($hero['display_label'])) : ?>
-                        <p class="mj-event-page__date"><?php echo esc_html($hero['display_label'] ?? ''); ?></p>
-                    <?php endif; ?>
+                <?php if ($schedulePreview !== '') : ?>
+                    <p class="mj-event-page__date mj-event-page__date--preview"><?php echo nl2br(esc_html($schedulePreview)); ?></p>
+                <?php elseif ($inlineScheduleHtml !== '') : ?>
+                    <?php echo $inlineScheduleHtml; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                <?php elseif (!empty($hero['schedule_component'])) : ?>
+                    <?php echo $hero['schedule_component']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                <?php elseif ($scheduleSummary !== '') : ?>
+                    <p class="mj-event-page__date"><?php echo esc_html($scheduleSummary); ?></p>
+                <?php elseif (!empty($hero['display_label'])) : ?>
+                    <p class="mj-event-page__date"><?php echo esc_html($hero['display_label'] ?? ''); ?></p>
+                <?php endif; ?>
                 <?php if (!empty($hero['cover_url'])) : ?>
                     <div class="mj-event-page__hero-cover">
                         <img src="<?php echo esc_url($hero['cover_url']); ?>" alt="<?php echo esc_attr($hero['title'] ?? ''); ?>" />

@@ -19,6 +19,10 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
     public const STATUS_AWARDED = 'awarded';
     public const STATUS_REVOKED = 'revoked';
 
+    public const LEVEL_BRONZE = 'bronze';
+    public const LEVEL_SILVER = 'silver';
+    public const LEVEL_GOLD = 'gold';
+
     /**
      * @return array<int,string>
      */
@@ -35,6 +39,18 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
         return array(
             self::STATUS_AWARDED => __('Attribué', 'mj-member'),
             self::STATUS_REVOKED => __('Révoqué', 'mj-member'),
+        );
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    public static function get_level_labels(): array
+    {
+        return array(
+            self::LEVEL_BRONZE => __('Bronze', 'mj-member'),
+            self::LEVEL_SILVER => __('Argent', 'mj-member'),
+            self::LEVEL_GOLD => __('Or', 'mj-member'),
         );
     }
 
@@ -195,6 +211,7 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
             'member_id' => isset($row['member_id']) ? (int) $row['member_id'] : 0,
             'trophy_id' => isset($row['trophy_id']) ? (int) $row['trophy_id'] : 0,
             'status' => self::normalize_status($row['status'] ?? self::STATUS_AWARDED) ?: self::STATUS_AWARDED,
+            'current_level' => self::normalize_level($row['current_level'] ?? '') ?: '',
             'notes' => isset($row['notes']) ? sanitize_textarea_field((string) $row['notes']) : '',
             'awarded_by_user_id' => isset($row['awarded_by_user_id']) ? (int) $row['awarded_by_user_id'] : 0,
             'awarded_at' => isset($row['awarded_at']) ? (string) $row['awarded_at'] : '',
@@ -220,6 +237,38 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
         }
 
         return $candidate === '' ? '' : self::STATUS_AWARDED;
+    }
+
+    /**
+     * @param mixed $value
+     * @return string
+     */
+    private static function normalize_level($value): string
+    {
+        $candidate = sanitize_key((string) $value);
+        if (in_array($candidate, array(self::LEVEL_BRONZE, self::LEVEL_SILVER, self::LEVEL_GOLD), true)) {
+            return $candidate;
+        }
+
+        return '';
+    }
+
+    /**
+     * @param string $level
+     * @return int
+     */
+    private static function level_rank(string $level): int
+    {
+        if ($level === self::LEVEL_GOLD) {
+            return 3;
+        }
+        if ($level === self::LEVEL_SILVER) {
+            return 2;
+        }
+        if ($level === self::LEVEL_BRONZE) {
+            return 1;
+        }
+        return 0;
     }
 
     /**
@@ -255,13 +304,27 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
         $now = current_time('mysql');
         $awardedBy = isset($options['awarded_by_user_id']) ? (int) $options['awarded_by_user_id'] : get_current_user_id();
         $notes = isset($options['notes']) ? sanitize_textarea_field((string) $options['notes']) : '';
+        $requestedLevel = isset($options['level']) ? self::normalize_level($options['level']) : '';
+
+        $trophy = MjTrophies::get($trophyId);
+        $level = '';
+        if ($trophy && !empty($trophy['tier_enabled'])) {
+            $level = $requestedLevel !== '' ? $requestedLevel : self::LEVEL_BRONZE;
+        }
 
         if ($existing) {
+            $existingLevel = self::normalize_level($existing['current_level'] ?? '');
+            $nextLevel = $existingLevel;
+            if (self::level_rank($level) > self::level_rank($existingLevel)) {
+                $nextLevel = $level;
+            }
+
             // Réactiver un trophée révoqué
             $wpdb->update(
                 $table,
                 array(
                     'status' => self::STATUS_AWARDED,
+                    'current_level' => $nextLevel,
                     'notes' => $notes,
                     'awarded_by_user_id' => $awardedBy,
                     'awarded_at' => $now,
@@ -269,7 +332,7 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
                     'updated_at' => $now,
                 ),
                 array('id' => $existing['id']),
-                array('%s', '%s', '%d', '%s', '%s', '%s'),
+                array('%s', '%s', '%s', '%d', '%s', '%s', '%s'),
                 array('%d')
             );
 
@@ -286,6 +349,10 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
              */
             do_action('mj_member_trophy_awarded', $memberId, $trophyId, (int) $existing['id'], true);
 
+            if ($nextLevel !== '' && self::level_rank($nextLevel) > self::level_rank($existingLevel)) {
+                do_action('mj_member_trophy_level_up', $memberId, $trophyId, $nextLevel, $existingLevel);
+            }
+
             return (int) $existing['id'];
         }
 
@@ -295,13 +362,14 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
                 'member_id' => $memberId,
                 'trophy_id' => $trophyId,
                 'status' => self::STATUS_AWARDED,
+                'current_level' => $level,
                 'notes' => $notes,
                 'awarded_by_user_id' => $awardedBy,
                 'awarded_at' => $now,
                 'created_at' => $now,
                 'updated_at' => $now,
             ),
-            array('%d', '%d', '%s', '%s', '%d', '%s', '%s', '%s')
+            array('%d', '%d', '%s', '%s', '%s', '%d', '%s', '%s', '%s')
         );
 
         if ($result === false) {
@@ -322,6 +390,10 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
          * @param bool $isReactivation True si c'est une réactivation
          */
         do_action('mj_member_trophy_awarded', $memberId, $trophyId, $insertId, false);
+
+        if ($level !== '') {
+            do_action('mj_member_trophy_level_up', $memberId, $trophyId, $level, '');
+        }
 
         return $insertId;
     }
@@ -348,11 +420,12 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
             $table,
             array(
                 'status' => self::STATUS_REVOKED,
+                'current_level' => '',
                 'revoked_at' => $now,
                 'updated_at' => $now,
             ),
             array('id' => $existing['id']),
-            array('%s', '%s', '%s'),
+            array('%s', '%s', '%s', '%s'),
             array('%d')
         );
 
@@ -409,6 +482,80 @@ final class MjMemberTrophies extends MjTools implements CrudRepositoryInterface
     {
         $assignment = self::get_assignment($memberId, $trophyId);
         return $assignment !== null && $assignment['status'] === self::STATUS_AWARDED;
+    }
+
+    /**
+     * @param int $memberId
+     * @param int $trophyId
+     * @param int $actionCount
+     * @param int $bronzeThreshold
+     * @param int $silverThreshold
+     * @param int $goldThreshold
+     * @return array<string,mixed>
+     */
+    public static function promote_from_action_count(
+        int $memberId,
+        int $trophyId,
+        int $actionCount,
+        int $bronzeThreshold,
+        int $silverThreshold,
+        int $goldThreshold
+    ): array {
+        $nextLevel = self::resolve_level_for_count($actionCount, $bronzeThreshold, $silverThreshold, $goldThreshold);
+        if ($nextLevel === '') {
+            return array(
+                'changed' => false,
+                'level' => '',
+                'assignment_id' => 0,
+            );
+        }
+
+        $assignment = self::get_assignment($memberId, $trophyId);
+        $previousLevel = $assignment ? self::normalize_level($assignment['current_level'] ?? '') : '';
+        if (self::level_rank($nextLevel) <= self::level_rank($previousLevel)) {
+            return array(
+                'changed' => false,
+                'level' => $previousLevel,
+                'assignment_id' => $assignment ? (int) $assignment['id'] : 0,
+            );
+        }
+
+        $result = self::award($memberId, $trophyId, array('level' => $nextLevel));
+        if (is_wp_error($result)) {
+            return array(
+                'changed' => false,
+                'level' => $previousLevel,
+                'assignment_id' => 0,
+                'error' => $result,
+            );
+        }
+
+        return array(
+            'changed' => true,
+            'level' => $nextLevel,
+            'assignment_id' => (int) $result,
+        );
+    }
+
+    /**
+     * @param int $count
+     * @param int $bronze
+     * @param int $silver
+     * @param int $gold
+     * @return string
+     */
+    private static function resolve_level_for_count(int $count, int $bronze, int $silver, int $gold): string
+    {
+        if ($count >= $gold && $gold > 0) {
+            return self::LEVEL_GOLD;
+        }
+        if ($count >= $silver && $silver > 0) {
+            return self::LEVEL_SILVER;
+        }
+        if ($count >= $bronze && $bronze > 0) {
+            return self::LEVEL_BRONZE;
+        }
+        return '';
     }
 
     /**

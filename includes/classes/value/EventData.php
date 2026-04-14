@@ -35,6 +35,7 @@ if (!defined('ABSPATH')) {
  * @property-read float|null $prix
  * @property-read string|null $schedule_mode
  * @property-read string|null $schedule_payload
+ * @property-read string|null $schedule_preview
  * @property-read string|null $schedule_timezone
  * @property-read string|null $recurrence_until
  * @property-read string|null $recurrence_frequency
@@ -76,6 +77,7 @@ final class EventData implements JsonSerializable {
         'prix',
         'schedule_mode',
         'schedule_payload',
+            'schedule_preview',
         'occurrence_selection_mode',
         'schedule_timezone',
         'recurrence_until',

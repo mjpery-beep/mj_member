@@ -52,6 +52,7 @@ class MjEvents implements CrudRepositoryInterface {
         'prix' => '%f',
         'schedule_mode' => '%s',
         'schedule_payload' => '%s',
+        'schedule_preview' => '%s',
         'occurrence_selection_mode' => '%s',
         'recurrence_until' => '%s',
         'capacity_total' => '%d',

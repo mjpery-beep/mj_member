@@ -412,6 +412,14 @@
         var strings = props.strings || {};
         var locale = props.locale || 'fr';
         var onPersistOccurrences = typeof props.onPersistOccurrences === 'function' ? props.onPersistOccurrences : null;
+        var apiPost = typeof props.apiPost === 'function' ? props.apiPost : null;
+        var onBatchesUpdate = typeof props.onBatchesUpdate === 'function' ? props.onBatchesUpdate : null;
+        var globalLocationOptions = Array.isArray(props.globalLocationOptions) ? props.globalLocationOptions : [];
+        var globalMemberOptions = Array.isArray(props.globalMemberOptions) ? props.globalMemberOptions : [];
+
+        var _loadedGlobalOptions = useState({ locations: [], members: [] });
+        var loadedGlobalOptions = _loadedGlobalOptions[0];
+        var setLoadedGlobalOptions = _loadedGlobalOptions[1];
 
         var _isPersisting = useState(false);
         var isPersisting = _isPersisting[0];
@@ -838,38 +846,740 @@
 
         var eventUsesGenerator = !!(event && event.isFromGenerator);
         var hasManualOccurrences = hasExistingOccurrences && !eventUsesGenerator;
-        var canShowGeneratorForm = !eventUsesGenerator && !hasExistingOccurrences;
-        var canShowGeneratedPreview = eventUsesGenerator;
+        var canShowGeneratorForm = true;
+        var hasSchedulePreviewHtml = typeof schedulePreviewHtml === 'string' && schedulePreviewHtml.trim() !== '';
+        var canShowGeneratedPreview = localOccurrences.length > 0 || hasSchedulePreviewHtml;
         var shouldShowDangerZone = localOccurrences.length > 0;
+        var _localBatches = useState(null);
+        var localBatches = _localBatches[0];
+        var setLocalBatches = _localBatches[1];
 
-        var planningModeLabel = eventUsesGenerator
-            ? getString(strings, 'occurrenceModeGenerated', 'Générateur actif')
-            : (hasExistingOccurrences
-                ? getString(strings, 'occurrenceModeManual', 'Saisie manuelle')
-                : getString(strings, 'occurrenceModeUnset', 'Aucun mode appliqué'));
+        var _batchProcessingId = useState('');
+        var batchProcessingId = _batchProcessingId[0];
+        var setBatchProcessingId = _batchProcessingId[1];
 
-        var planningModeDescription = eventUsesGenerator
-            ? getString(strings, 'occurrenceModeGeneratedDescription', 'Les occurrences proviennent du générateur. Le formulaire est masqué et seul l’aperçu front est affiché.')
-            : (hasManualOccurrences
-                ? getString(strings, 'occurrenceModeManualDescription', 'Les dates ont été encodées manuellement. Le générateur est masqué pour éviter des règles contradictoires.')
-                : getString(strings, 'occurrenceModeUnsetDescription', 'Vous pouvez encoder une date manuellement dans le calendrier, ou générer une série d’occurrences ci-dessous.'));
+        var generationHistory = (localBatches !== null
+            ? localBatches
+            : (event && Array.isArray(event.occurrenceGenerationBatches)
+                ? event.occurrenceGenerationBatches
+                : [])
+        ).filter(function (batch) {
+            return batch && batch.status !== 'deleted';
+        });
+
+        var lotLocationOptions = useMemo(function () {
+            var rawOptions = globalLocationOptions.length > 0 ? globalLocationOptions : loadedGlobalOptions.locations;
+            if (Array.isArray(rawOptions) && rawOptions.length > 0) {
+                return rawOptions
+                    .map(function (option) {
+                        if (!option || typeof option !== 'object') {
+                            return null;
+                        }
+                        var locId = option.id !== undefined ? parseInt(option.id, 10) : parseInt(option.value || option.location_id || '0', 10);
+                        var locName = option.name || option.label || option.text || '';
+                        if (locId <= 0 || !locName) {
+                            return null;
+                        }
+                        return { id: locId, name: String(locName) };
+                    })
+                    .filter(function (option) { return !!option; });
+            }
+
+            var map = {};
+            var options = [];
+
+            if (event && Array.isArray(event.locationLinks)) {
+                event.locationLinks.forEach(function (link) {
+                    var loc = link && link.location ? link.location : link;
+                    var locId = loc && loc.id ? parseInt(loc.id, 10) : 0;
+                    var locName = loc && loc.name ? String(loc.name) : '';
+                    if (locId > 0 && locName && !map[locId]) {
+                        map[locId] = true;
+                        options.push({ id: locId, name: locName });
+                    }
+                });
+            }
+
+            if (event && event.location && event.location.id && event.location.name) {
+                var fallbackId = parseInt(event.location.id, 10);
+                if (fallbackId > 0 && !map[fallbackId]) {
+                    map[fallbackId] = true;
+                    options.push({ id: fallbackId, name: String(event.location.name) });
+                }
+            }
+
+            return options;
+        }, [globalLocationOptions, loadedGlobalOptions.locations, event && event.locationLinks, event && event.location]);
+
+        var lotMemberOptions = useMemo(function () {
+            var rawMembers = globalMemberOptions.length > 0 ? globalMemberOptions : loadedGlobalOptions.members;
+            if (Array.isArray(rawMembers) && rawMembers.length > 0) {
+                return rawMembers
+                    .map(function (member) {
+                        if (!member || typeof member !== 'object') {
+                            return null;
+                        }
+                        var memberId = member.id !== undefined ? parseInt(member.id, 10) : parseInt(member.value || member.member_id || '0', 10);
+                        var memberName = member.name || member.label || member.text || '';
+                        if (memberId <= 0 || !memberName) {
+                            return null;
+                        }
+                        return { id: memberId, name: String(memberName) };
+                    })
+                    .filter(function (member) { return !!member; });
+            }
+
+            if (!event || !Array.isArray(event.animateurs)) {
+                return [];
+            }
+            return event.animateurs
+                .map(function (member) {
+                    var memberId = member && member.id ? parseInt(member.id, 10) : 0;
+                    var memberName = member && member.name ? String(member.name) : '';
+                    if (memberId <= 0 || !memberName) {
+                        return null;
+                    }
+                    return { id: memberId, name: memberName };
+                })
+                .filter(function (member) { return !!member; });
+        }, [globalMemberOptions, loadedGlobalOptions.members, event && event.animateurs]);
+
+        var locationNameById = useMemo(function () {
+            var map = {};
+            lotLocationOptions.forEach(function (option) {
+                if (!option || !option.id) {
+                    return;
+                }
+                map[option.id] = option.name || '';
+            });
+            return map;
+        }, [lotLocationOptions]);
+
+        var memberNameById = useMemo(function () {
+            var map = {};
+            lotMemberOptions.forEach(function (option) {
+                if (!option || !option.id) {
+                    return;
+                }
+                map[option.id] = option.name || '';
+            });
+            return map;
+        }, [lotMemberOptions]);
+
+        var formatFrenchHourLabel = useCallback(function (dateObj) {
+            if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) {
+                return '';
+            }
+            var hours = dateObj.getHours();
+            var minutes = dateObj.getMinutes();
+            if (minutes === 0) {
+                return String(hours) + 'h';
+            }
+            return String(hours) + 'h' + String(minutes).padStart(2, '0');
+        }, []);
+
+        var normalizeLegacyManualSummary = useCallback(function (value) {
+            if (typeof value !== 'string') {
+                return '';
+            }
+            var text = value.trim();
+            var legacyMatch = text.match(/^Occurrence manuelle\s*:\s*(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})\s*-\s*(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/i);
+            if (!legacyMatch) {
+                return text;
+            }
+
+            var startDate = new Date(
+                parseInt(legacyMatch[3], 10),
+                parseInt(legacyMatch[2], 10) - 1,
+                parseInt(legacyMatch[1], 10),
+                parseInt(legacyMatch[4], 10),
+                parseInt(legacyMatch[5], 10),
+                0,
+                0
+            );
+            var endDate = new Date(
+                parseInt(legacyMatch[8], 10),
+                parseInt(legacyMatch[7], 10) - 1,
+                parseInt(legacyMatch[6], 10),
+                parseInt(legacyMatch[9], 10),
+                parseInt(legacyMatch[10], 10),
+                0,
+                0
+            );
+
+            if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+                return text;
+            }
+
+            var dayLabel = startDate.toLocaleDateString('fr-BE', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+            });
+            if (dayLabel) {
+                dayLabel = dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1);
+            }
+
+            var startHour = formatFrenchHourLabel(startDate);
+            var endHour = formatFrenchHourLabel(endDate);
+            return dayLabel + ' de ' + startHour + ' à ' + endHour;
+        }, [formatFrenchHourLabel]);
+
+        var formatBatchPreviewDate = useCallback(function (value) {
+            if (typeof value !== 'string') {
+                return '';
+            }
+
+            var raw = value.trim();
+            if (!raw) {
+                return '';
+            }
+
+            var hasTime = /\d{2}:\d{2}/.test(raw);
+            var candidate = raw;
+            if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+                candidate = raw + 'T00:00:00';
+            } else if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?$/.test(raw)) {
+                candidate = raw.replace(' ', 'T');
+            }
+
+            var parsed = new Date(candidate);
+            if (isNaN(parsed.getTime())) {
+                return raw;
+            }
+
+            var dateLabel = parsed.toLocaleDateString('fr-BE', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+            });
+
+            if (hasTime) {
+                dateLabel += ' ' + formatFrenchHourLabel(parsed);
+            }
+
+            return dateLabel;
+        }, [formatFrenchHourLabel]);
+
+        var selectedGlobalLotLines = generationHistory.reduce(function (acc, batch, index) {
+            if (!batch || typeof batch !== 'object') {
+                return acc;
+            }
+            var summary = batch.summary && typeof batch.summary === 'object' ? batch.summary : {};
+            if (!summary.include_in_global_schedule) {
+                return acc;
+            }
+
+            var defaultLotLabel = getString(strings, 'occurrenceGenerationHistoryLot', 'Lot #{{n}}').replace('{{n}}', String(generationHistory.length - index));
+            var batchTitle = typeof summary.batch_title === 'string' ? summary.batch_title.trim() : '';
+            var lotLabel = batchTitle !== '' ? batchTitle : defaultLotLabel;
+            var previewLabel = batchTitle !== '' ? lotLabel : '';
+            var text = typeof summary.schedule_summary === 'string' ? summary.schedule_summary : '';
+            if (!text) {
+                text = getString(strings, 'occurrenceGenerationSchedulePreviewFallback', 'Aucun résumé disponible pour ce lot.');
+            }
+            text = normalizeLegacyManualSummary(text);
+
+            var assignedLocationName = '';
+            if (typeof summary.assigned_location_name === 'string' && summary.assigned_location_name.trim() !== '') {
+                assignedLocationName = summary.assigned_location_name.trim();
+            } else if (summary.assigned_location_id) {
+                var assignedLocId = parseInt(summary.assigned_location_id, 10);
+                if (assignedLocId > 0 && locationNameById[assignedLocId]) {
+                    assignedLocationName = locationNameById[assignedLocId];
+                }
+            }
+
+            var assignedMemberNames = [];
+            if (Array.isArray(summary.assigned_member_names)) {
+                assignedMemberNames = summary.assigned_member_names
+                    .map(function (name) { return String(name || '').trim(); })
+                    .filter(function (name) { return name !== ''; });
+            }
+            if (assignedMemberNames.length === 0) {
+                var assignedMemberIds = Array.isArray(summary.assigned_member_ids)
+                    ? summary.assigned_member_ids
+                    : (summary.assigned_member_id ? [summary.assigned_member_id] : []);
+                assignedMemberNames = assignedMemberIds
+                    .map(function (id) {
+                        var parsed = parseInt(id, 10);
+                        return parsed > 0 && memberNameById[parsed] ? memberNameById[parsed] : '';
+                    })
+                    .filter(function (name) { return name !== ''; });
+            }
+
+            var assignmentParts = [];
+            if (assignedLocationName) {
+                assignmentParts.push(
+                    getString(strings, 'occurrenceGenerationPreviewLocationPrefix', 'Lieu : {{value}}')
+                        .replace('{{value}}', assignedLocationName)
+                );
+            }
+            if (assignedMemberNames.length > 0) {
+                assignmentParts.push(
+                    getString(strings, 'occurrenceGenerationPreviewMembersPrefix', 'Animateur : {{value}}')
+                        .replace('{{value}}', assignedMemberNames.join(', '))
+                );
+            }
+
+            var dateParts = [];
+            if (summary.include_dates_in_schedule_preview) {
+                var batchConfig = batch.configSnapshot && typeof batch.configSnapshot === 'object' ? batch.configSnapshot : {};
+                var lotStartRaw = '';
+                var lotEndRaw = '';
+                if (typeof batchConfig.startDate === 'string' && batchConfig.startDate !== '') {
+                    lotStartRaw = batchConfig.startDate;
+                } else if (typeof batchConfig.startDateISO === 'string' && batchConfig.startDateISO !== '') {
+                    lotStartRaw = batchConfig.startDateISO;
+                } else if (typeof batchConfig.start === 'string' && batchConfig.start !== '') {
+                    lotStartRaw = batchConfig.start;
+                }
+                if (typeof batchConfig.endDate === 'string' && batchConfig.endDate !== '') {
+                    lotEndRaw = batchConfig.endDate;
+                } else if (typeof batchConfig.endDateISO === 'string' && batchConfig.endDateISO !== '') {
+                    lotEndRaw = batchConfig.endDateISO;
+                } else if (typeof batchConfig.end === 'string' && batchConfig.end !== '') {
+                    lotEndRaw = batchConfig.end;
+                }
+
+                var lotStartLabel = formatBatchPreviewDate(lotStartRaw);
+                var lotEndLabel = formatBatchPreviewDate(lotEndRaw);
+                if (lotStartLabel) {
+                    dateParts.push(
+                        getString(strings, 'occurrenceGenerationPreviewStartDate', 'Date de début : {{value}}').replace('{{value}}', lotStartLabel)
+                    );
+                }
+                if (lotEndLabel) {
+                    dateParts.push(
+                        getString(strings, 'occurrenceGenerationPreviewEndDate', 'Date de fin : {{value}}').replace('{{value}}', lotEndLabel)
+                    );
+                }
+            }
+
+            acc.push({
+                key: (batch.batchId || batch.batch_uuid || 'lot-' + index),
+                label: previewLabel,
+                text: text,
+                assignment: assignmentParts.join(' | '),
+                dates: dateParts.join(' | '),
+            });
+            return acc;
+        }, []);
+
+        if (selectedGlobalLotLines.length > 0) {
+            canShowGeneratedPreview = true;
+        }
+
+        useEffect(function () {
+            setLocalBatches(null);
+            setBatchProcessingId('');
+        }, [event && event.id]);
+
+        useEffect(function () {
+            var eventId = event && event.id ? parseInt(event.id, 10) : 0;
+            if (!apiPost || eventId <= 0) {
+                return;
+            }
+            if (globalLocationOptions.length > 0 || globalMemberOptions.length > 0) {
+                return;
+            }
+
+            apiPost('mj_regmgr_get_event_editor', { eventId: eventId })
+                .then(function (data) {
+                    var options = data && data.form && data.form.options ? data.form.options : {};
+                    setLoadedGlobalOptions({
+                        locations: Array.isArray(options.locations) ? options.locations : [],
+                        members: Array.isArray(options.animateurs) ? options.animateurs : [],
+                    });
+                })
+                .catch(function () {
+                    // Keep graceful fallback to event-specific options.
+                });
+        }, [apiPost, event && event.id, globalLocationOptions, globalMemberOptions]);
+
+        var lastSavedSchedulePreviewRef = useRef(null);
+        useEffect(function () {
+            var eventId = event && event.id ? parseInt(event.id, 10) : 0;
+            if (!apiPost || eventId <= 0) { return; }
+            var lines = [];
+            for (var _i = 0; _i < selectedGlobalLotLines.length; _i++) {
+                var _line = selectedGlobalLotLines[_i];
+                var _parts = [];
+                var _header = _line.label
+                    ? (_line.label + (_line.text ? ' : ' + _line.text : ''))
+                    : (_line.text || '');
+                if (_header) { _parts.push(_header); }
+                if (_line.assignment) { _parts.push(_line.assignment); }
+                if (_line.dates) { _parts.push(_line.dates); }
+                if (_parts.length > 0) { lines.push(_parts.join('\n')); }
+            }
+            var previewText = lines.join('\n\n');
+            if (previewText === lastSavedSchedulePreviewRef.current) { return; }
+            lastSavedSchedulePreviewRef.current = previewText;
+            apiPost('mj_regmgr_save_event_schedule_preview', {
+                eventId: eventId,
+                schedulePreview: previewText,
+            }).catch(function (err) {
+                console.warn('[MjRegMgr] saveEventSchedulePreview error', err && err.message ? err.message : err);
+            });
+        }, [localBatches, event && event.id, apiPost]);
+
+        var handleDeleteBatch = useCallback(function (batchId) {
+            if (!apiPost || !event || !batchId) { return; }
+            var eventId = event.id;
+            setBatchProcessingId(batchId + ':delete');
+            apiPost('mj_regmgr_delete_occurrence_batch', { eventId: eventId, batchId: batchId })
+                .then(function (data) {
+                    setBatchProcessingId('');
+                    var nextBatches = data && Array.isArray(data.occurrenceGenerationBatches)
+                        ? data.occurrenceGenerationBatches.filter(function (batch) { return batch && batch.status !== 'deleted'; })
+                        : null;
+                    if (nextBatches) {
+                        setLocalBatches(nextBatches);
+                        if (onBatchesUpdate) { onBatchesUpdate(nextBatches); }
+                    }
+                    setLocalOccurrences(function (prev) {
+                        if (!Array.isArray(prev)) {
+                            return prev;
+                        }
+                        return prev.filter(function (occ) {
+                            if (!occ || typeof occ !== 'object') {
+                                return true;
+                            }
+                            var occBatchId = occ.generationBatchId || occ.generation_batch_id || '';
+                            return occBatchId !== batchId;
+                        });
+                    });
+                })
+                .catch(function (err) {
+                    setBatchProcessingId('');
+                    if (typeof window !== 'undefined' && window.alert) {
+                        window.alert(err && err.message ? err.message : 'Erreur lors de la suppression du lot.');
+                    }
+                    console.warn('[MjRegMgr] deleteOccurrenceBatch error', err && err.message ? err.message : err);
+                });
+        }, [apiPost, event, onBatchesUpdate]);
+
+        var handleToggleBatchScheduleFlag = useCallback(function (batchId, include) {
+            if (!apiPost || !event) { return; }
+            var eventId = event.id;
+            setBatchProcessingId(batchId + ':flag');
+            apiPost('mj_regmgr_update_batch_schedule_flag', { eventId: eventId, batchId: batchId, includeInGlobalSchedule: include })
+                .then(function (data) {
+                    setBatchProcessingId('');
+                    if (data && Array.isArray(data.occurrenceGenerationBatches)) {
+                        setLocalBatches(data.occurrenceGenerationBatches);
+                        if (onBatchesUpdate) { onBatchesUpdate(data.occurrenceGenerationBatches); }
+                    }
+                })
+                .catch(function (err) {
+                    setBatchProcessingId('');
+                    console.warn('[MjRegMgr] updateBatchScheduleFlag error', err && err.message ? err.message : err);
+                });
+        }, [apiPost, event, onBatchesUpdate]);
+
+        var handleToggleBatchPreviewDatesFlag = useCallback(function (batchId, include) {
+            if (!apiPost || !event) { return; }
+            var eventId = event.id;
+            setBatchProcessingId(batchId + ':preview-dates');
+            apiPost('mj_regmgr_update_batch_preview_dates_flag', { eventId: eventId, batchId: batchId, includeDatesInSchedulePreview: include })
+                .then(function (data) {
+                    setBatchProcessingId('');
+                    if (data && Array.isArray(data.occurrenceGenerationBatches)) {
+                        setLocalBatches(data.occurrenceGenerationBatches);
+                        if (onBatchesUpdate) { onBatchesUpdate(data.occurrenceGenerationBatches); }
+                    }
+                })
+                .catch(function (err) {
+                    setBatchProcessingId('');
+                    console.warn('[MjRegMgr] updateBatchPreviewDatesFlag error', err && err.message ? err.message : err);
+                });
+        }, [apiPost, event, onBatchesUpdate]);
+
+        var handleRenameBatch = useCallback(function (batchId, currentTitle) {
+            if (!apiPost || !event || !batchId) {
+                return;
+            }
+
+            var promptLabel = getString(strings, 'occurrenceGenerationRenameBatchPrompt', 'Titre du lot');
+            var nextTitle = window.prompt(promptLabel, currentTitle || '');
+            if (nextTitle === null) {
+                return;
+            }
+
+            var eventId = event.id;
+            setBatchProcessingId(batchId + ':title');
+            apiPost('mj_regmgr_update_batch_title', { eventId: eventId, batchId: batchId, title: nextTitle })
+                .then(function (data) {
+                    setBatchProcessingId('');
+                    if (data && Array.isArray(data.occurrenceGenerationBatches)) {
+                        setLocalBatches(data.occurrenceGenerationBatches);
+                        if (onBatchesUpdate) { onBatchesUpdate(data.occurrenceGenerationBatches); }
+                    }
+                })
+                .catch(function (err) {
+                    setBatchProcessingId('');
+                    if (typeof window !== 'undefined' && window.alert) {
+                        window.alert(err && err.message ? err.message : 'Erreur lors de la mise à jour du titre.');
+                    }
+                    console.warn('[MjRegMgr] updateBatchTitle error', err && err.message ? err.message : err);
+                });
+        }, [apiPost, event, onBatchesUpdate, strings]);
+
+        var handleUpdateBatchAssignment = useCallback(function (batchId, locationId, memberIds) {
+            if (!apiPost || !event || !batchId) {
+                return;
+            }
+
+            var eventId = event.id;
+            setBatchProcessingId(batchId + ':assignment');
+            apiPost('mj_regmgr_update_batch_assignment', {
+                eventId: eventId,
+                batchId: batchId,
+                locationId: locationId > 0 ? locationId : 0,
+                memberIds: Array.isArray(memberIds) ? memberIds : [],
+            })
+                .then(function (data) {
+                    setBatchProcessingId('');
+                    if (data && Array.isArray(data.occurrenceGenerationBatches)) {
+                        setLocalBatches(data.occurrenceGenerationBatches);
+                        if (onBatchesUpdate) { onBatchesUpdate(data.occurrenceGenerationBatches); }
+                    }
+                })
+                .catch(function (err) {
+                    setBatchProcessingId('');
+                    if (typeof window !== 'undefined' && window.alert) {
+                        window.alert(err && err.message ? err.message : 'Erreur lors de la mise à jour de l\'attribution du lot.');
+                    }
+                    console.warn('[MjRegMgr] updateBatchAssignment error', err && err.message ? err.message : err);
+                });
+        }, [apiPost, event, onBatchesUpdate]);
+
+        var generatedPreviewCard = canShowGeneratedPreview && h('details', {
+            class: 'mj-regmgr-occurrence__card mj-regmgr-occurrence__card--fold mj-regmgr-occurrence__card--generated-preview',
+            open: true,
+        }, [
+            h('summary', { class: 'mj-regmgr-occurrence__fold-summary' }, [
+                h('div', { class: 'mj-regmgr-occurrence__fold-heading' }, [
+                    h('span', { class: 'mj-regmgr-occurrence__fold-eyebrow' }, getString(strings, 'occurrencePreviewEyebrow', 'Rendu front partagé')),
+                    h('strong', null, getString(strings, 'occurrenceGeneratorPreviewLabel', 'Aperçu de l’horaire')),
+                ]),
+                selectedGlobalLotLines.length > 0 && h('span', { class: 'mj-regmgr-occurrence__history-item-count' },
+                    getString(strings, 'occurrenceGenerationSelectedLotsCount', '{{count}} lot(s) sélectionné(s)').replace('{{count}}', String(selectedGlobalLotLines.length))
+                ),
+                h('span', { class: 'mj-regmgr-occurrence__fold-toggle', 'aria-hidden': true }, '⌄'),
+            ]),
+            h('div', { class: 'mj-regmgr-occurrence__fold-body' }, [
+                h('p', { class: 'mj-regmgr-occurrence__description' },
+                    eventUsesGenerator
+                        ? getString(strings, 'occurrencePreviewDescriptionGenerated', 'Cet aperçu réutilise exactement le rendu de la page événement (mode générateur).')
+                        : getString(strings, 'occurrencePreviewDescriptionManual', 'Cet aperçu réutilise exactement le rendu de la page événement (mode manuel).')
+                ),
+                selectedGlobalLotLines.length > 0
+                    ? h('ul', { class: 'mj-regmgr-occurrence__history-list' }, selectedGlobalLotLines.map(function (line) {
+                        return h('li', { key: line.key, class: 'mj-regmgr-occurrence__history-item' }, [
+                            line.label && h('div', { class: 'mj-regmgr-occurrence__history-item-header' }, [
+                                h('strong', null, line.label),
+                            ]),
+                            h('div', { class: 'mj-regmgr-occurrence__history-item-preview' }, line.text),
+                            line.assignment && h('div', { class: 'mj-regmgr-occurrence__history-item-meta' }, line.assignment),
+                            line.dates && h('div', { class: 'mj-regmgr-occurrence__history-item-meta' }, line.dates),
+                        ]);
+                    }))
+                    : hasSchedulePreviewHtml
+                    ? h('div', {
+                        class: 'mj-regmgr-occurrence__preview mj-regmgr-occurrence__preview--shared',
+                        dangerouslySetInnerHTML: { __html: schedulePreviewHtml },
+                    })
+                    : h('p', { class: 'mj-regmgr-occurrence__hint' }, getString(strings, 'occurrenceSchedulePreviewEmpty', 'Aucun horaire détecté')),
+            ]),
+        ]);
 
         var sidebarContent = h('div', { class: 'mj-regmgr-occurrence__sidebar' }, [
-            h('div', { class: 'mj-regmgr-occurrence__card mj-regmgr-occurrence__card--mode' }, [
-                h('div', { class: 'mj-regmgr-occurrence__mode-header' }, [
-                    h('div', null, [
-                        h('h2', null, getString(strings, 'occurrenceModeCardTitle', 'Mode d’occurrence')),
-                        h('p', { class: 'mj-regmgr-occurrence__description' }, planningModeDescription),
+            h('details', { class: 'mj-regmgr-occurrence__card mj-regmgr-occurrence__card--fold mj-regmgr-occurrence__card--generation-history', open: true }, [
+                h('summary', { class: 'mj-regmgr-occurrence__fold-summary' }, [
+                    h('div', { class: 'mj-regmgr-occurrence__fold-heading' }, [
+                        h('strong', null, getString(strings, 'occurrenceGenerationHistoryTitle', 'Lot d\'occurrences')),
                     ]),
-                    h('span', {
-                        class: classNames('mj-regmgr-occurrence__mode-badge', {
-                            'mj-regmgr-occurrence__mode-badge--generated': eventUsesGenerator,
-                            'mj-regmgr-occurrence__mode-badge--manual': hasManualOccurrences,
-                            'mj-regmgr-occurrence__mode-badge--empty': !eventUsesGenerator && !hasManualOccurrences,
-                        }),
-                    }, planningModeLabel),
+                    h('span', { class: 'mj-regmgr-occurrence__fold-toggle', 'aria-hidden': true }, '⌄'),
+                ]),
+                h('div', { class: 'mj-regmgr-occurrence__fold-body' }, [
+                    generationHistory.length === 0
+                    ? h('p', { class: 'mj-regmgr-occurrence__hint' }, getString(strings, 'occurrenceGenerationHistoryEmpty', 'Aucune génération enregistrée pour cet événement.'))
+                    : h('ul', { class: 'mj-regmgr-occurrence__history-list' }, generationHistory.map(function (batch, index) {
+                        if (!batch || typeof batch !== 'object') {
+                            return null;
+                        }
+                        var batchId = batch.batchId || batch.batch_uuid || '';
+                        var shortId = batchId.length >= 8 ? batchId.slice(0, 8) : batchId;
+                        var count = typeof batch.occurrencesCount === 'number' ? batch.occurrencesCount : 0;
+                        var rawDate = typeof batch.createdAt === 'string' && batch.createdAt !== '' ? batch.createdAt : '';
+                        var createdAtLabel = '';
+                        if (rawDate) {
+                            try {
+                                var d = new Date(rawDate.replace(' ', 'T'));
+                                createdAtLabel = d.toLocaleDateString('fr-BE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                    + ' ' + d.toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' });
+                            } catch (e) {
+                                createdAtLabel = rawDate;
+                            }
+                        } else {
+                            createdAtLabel = getString(strings, 'occurrenceGenerationHistoryUnknownDate', 'date inconnue');
+                        }
+                        var batchSummary = batch.summary && typeof batch.summary === 'object' ? batch.summary : {};
+                        var defaultLotLabel = getString(strings, 'occurrenceGenerationHistoryLot', 'Lot #{{n}}').replace('{{n}}', String(generationHistory.length - index));
+                        var batchTitle = typeof batchSummary.batch_title === 'string' ? batchSummary.batch_title.trim() : '';
+                        var lotLabel = batchTitle !== '' ? batchTitle : defaultLotLabel;
+                        var countLabel = getString(strings, 'occurrenceGenerationHistoryCount', '{{count}} occurrence(s)').replace('{{count}}', String(count));
+                        var lotSchedulePreview = typeof batchSummary.schedule_summary === 'string' ? batchSummary.schedule_summary : '';
+                        if (!lotSchedulePreview) {
+                            lotSchedulePreview = getString(strings, 'occurrenceGenerationSchedulePreviewFallback', 'Aucun résumé disponible pour ce lot.');
+                        }
+                        lotSchedulePreview = normalizeLegacyManualSummary(lotSchedulePreview);
+                        var batchConfig = batch.configSnapshot && typeof batch.configSnapshot === 'object' ? batch.configSnapshot : {};
+                        var lotStartRaw = '';
+                        var lotEndRaw = '';
+                        if (typeof batchConfig.startDate === 'string' && batchConfig.startDate !== '') {
+                            lotStartRaw = batchConfig.startDate;
+                        } else if (typeof batchConfig.startDateISO === 'string' && batchConfig.startDateISO !== '') {
+                            lotStartRaw = batchConfig.startDateISO;
+                        } else if (typeof batchConfig.start === 'string' && batchConfig.start !== '') {
+                            lotStartRaw = batchConfig.start;
+                        }
+                        if (typeof batchConfig.endDate === 'string' && batchConfig.endDate !== '') {
+                            lotEndRaw = batchConfig.endDate;
+                        } else if (typeof batchConfig.endDateISO === 'string' && batchConfig.endDateISO !== '') {
+                            lotEndRaw = batchConfig.endDateISO;
+                        } else if (typeof batchConfig.end === 'string' && batchConfig.end !== '') {
+                            lotEndRaw = batchConfig.end;
+                        }
+                        var lotStartLabel = formatBatchPreviewDate(lotStartRaw);
+                        var lotEndLabel = formatBatchPreviewDate(lotEndRaw);
+                        var includeInGlobalSchedule = !!batchSummary.include_in_global_schedule;
+                        var includeDatesInSchedulePreview = !!batchSummary.include_dates_in_schedule_preview;
+                        var assignedLocationId = batchSummary.assigned_location_id ? parseInt(batchSummary.assigned_location_id, 10) : 0;
+                        var assignedMemberIds = Array.isArray(batchSummary.assigned_member_ids)
+                            ? batchSummary.assigned_member_ids.map(function (id) { return parseInt(id, 10); }).filter(function (id) { return id > 0; })
+                            : (batchSummary.assigned_member_id ? [parseInt(batchSummary.assigned_member_id, 10)] : []);
+                        var isProcessing = batchProcessingId !== '';
+                        return h('li', {
+                            key: batchId || ('batch-' + index),
+                            class: 'mj-regmgr-occurrence__history-item',
+                        }, [
+                            h('div', { class: 'mj-regmgr-occurrence__history-item-header' }, [
+                                h('strong', null, lotLabel),
+                                h('span', { class: 'mj-regmgr-occurrence__history-item-count' }, countLabel),
+                                apiPost && h('button', {
+                                    type: 'button',
+                                    class: 'mj-regmgr-occurrence__history-item-rename',
+                                    disabled: isProcessing,
+                                    title: getString(strings, 'occurrenceGenerationRenameBatch', 'Renommer le lot'),
+                                    onClick: function () { handleRenameBatch(batchId, batchTitle); },
+                                }, getString(strings, 'occurrenceGenerationRenameBatch', 'Renommer')),
+                                apiPost && h('button', {
+                                    type: 'button',
+                                    class: 'mj-regmgr-occurrence__history-item-delete',
+                                    disabled: isProcessing,
+                                    title: getString(strings, 'occurrenceGenerationDeleteBatch', 'Supprimer ce lot'),
+                                    onClick: function () {
+                                        var confirmMsg = getString(strings, 'occurrenceGenerationDeleteConfirm', 'Supprimer les {{count}} occurrence(s) de ce lot ?').replace('{{count}}', String(count));
+                                        if (window.confirm(confirmMsg)) {
+                                            handleDeleteBatch(batchId);
+                                        }
+                                    },
+                                }, getString(strings, 'occurrenceGenerationDeleteBatch', 'Supprimer')),
+                            ]),
+                            h('div', { class: 'mj-regmgr-occurrence__history-item-meta' }, [
+                                h('span', { class: 'mj-regmgr-occurrence__history-item-id', title: batchId }, shortId ? shortId + '…' : getString(strings, 'occurrenceGenerationHistoryUnknownBatch', 'Lot sans identifiant')),
+                                h('span', { class: 'mj-regmgr-occurrence__history-item-date' }, createdAtLabel),
+                            ]),
+                            h('div', { class: 'mj-regmgr-occurrence__history-item-preview' }, lotSchedulePreview),
+                            (lotStartLabel || lotEndLabel) && h('div', { class: 'mj-regmgr-occurrence__history-item-meta' }, [
+                                lotStartLabel && h('span', null,
+                                    getString(strings, 'occurrenceGenerationPreviewStartDate', 'Date de début : {{value}}').replace('{{value}}', lotStartLabel)
+                                ),
+                                lotEndLabel && h('span', null,
+                                    getString(strings, 'occurrenceGenerationPreviewEndDate', 'Date de fin : {{value}}').replace('{{value}}', lotEndLabel)
+                                ),
+                            ]),
+                            apiPost && h('label', { class: 'mj-regmgr-occurrence__history-item-flag' }, [
+                                h('input', {
+                                    type: 'checkbox',
+                                    checked: includeInGlobalSchedule,
+                                    disabled: isProcessing,
+                                    onChange: function (e) {
+                                        handleToggleBatchScheduleFlag(batchId, e.currentTarget.checked);
+                                    },
+                                }),
+                                h('span', null, getString(strings, 'occurrenceGenerationAddToGlobalSchedule', 'Ajouter à l\'horaire global')),
+                            ]),
+                            apiPost && h('label', { class: 'mj-regmgr-occurrence__history-item-flag' }, [
+                                h('input', {
+                                    type: 'checkbox',
+                                    checked: includeDatesInSchedulePreview,
+                                    disabled: isProcessing,
+                                    onChange: function (e) {
+                                        handleToggleBatchPreviewDatesFlag(batchId, e.currentTarget.checked);
+                                    },
+                                }),
+                                h('span', null, getString(strings, 'occurrenceGenerationIncludeDatesInPreview', 'Ajouter date début/fin dans l\'aperçu horaire')),
+                            ]),
+                            apiPost && h('div', { class: 'mj-regmgr-occurrence__history-item-assignments' }, [
+                                h('label', { class: 'mj-regmgr-occurrence__history-item-assignment' }, [
+                                    h('span', null, getString(strings, 'occurrenceGenerationAssignLocation', 'Lieu du lot')),
+                                    h('select', {
+                                        class: 'mj-regmgr-occurrence__history-item-assignment-select',
+                                        value: assignedLocationId > 0 ? String(assignedLocationId) : '',
+                                        disabled: isProcessing,
+                                        onChange: function (e) {
+                                            var nextLocationId = parseInt(e.currentTarget.value || '0', 10);
+                                            handleUpdateBatchAssignment(batchId, nextLocationId, assignedMemberIds);
+                                        },
+                                    }, [
+                                        h('option', { value: '' }, getString(strings, 'occurrenceGenerationAssignLocationPlaceholder', 'Choisir un lieu...')),
+                                    ].concat(lotLocationOptions.map(function (option) {
+                                        return h('option', { key: 'loc-' + option.id, value: String(option.id) }, option.name);
+                                    }))),
+                                ]),
+                                h('div', { class: 'mj-regmgr-occurrence__history-item-assignment' }, [
+                                    h('span', null, getString(strings, 'occurrenceGenerationAssignMember', 'Membre assigné (optionnel)')),
+                                    h('div', { class: 'mj-regmgr-occurrence__history-item-assignment-checkboxes' },
+                                        lotMemberOptions.length === 0
+                                            ? h('span', { class: 'mj-regmgr-occurrence__hint' }, getString(strings, 'occurrenceGenerationAssignMemberPlaceholder', 'Aucun membre'))
+                                            : lotMemberOptions.map(function (option) {
+                                                var checked = assignedMemberIds.indexOf(option.id) !== -1;
+                                                return h('label', {
+                                                    key: 'mem-check-' + option.id,
+                                                    class: 'mj-regmgr-occurrence__history-item-assignment-check',
+                                                }, [
+                                                    h('input', {
+                                                        type: 'checkbox',
+                                                        checked: checked,
+                                                        disabled: isProcessing,
+                                                        onChange: function (e) {
+                                                            var next = assignedMemberIds.slice();
+                                                            if (e.currentTarget.checked) {
+                                                                if (next.indexOf(option.id) === -1) {
+                                                                    next.push(option.id);
+                                                                }
+                                                            } else {
+                                                                next = next.filter(function (id) { return id !== option.id; });
+                                                            }
+                                                            handleUpdateBatchAssignment(batchId, assignedLocationId, next);
+                                                        },
+                                                    }),
+                                                    h('span', null, option.name),
+                                                ]);
+                                            })
+                                    ),
+                                ]),
+                            ]),
+                        ]);
+                    })),
                 ]),
             ]),
+            generatedPreviewCard,
             !shouldShowEditorCard && h('p', { class: 'mj-regmgr-occurrence__hint mj-regmgr-occurrence__hint--empty' },
                 getString(strings, 'occurrenceEmptySelection', 'Sélectionnez une date dans le calendrier pour commencer.')
             ),
@@ -1133,29 +1843,6 @@
                     ]),
                 ]),
             ]),
-            canShowGeneratedPreview && h('details', {
-                class: 'mj-regmgr-occurrence__card mj-regmgr-occurrence__card--fold mj-regmgr-occurrence__card--generated-preview',
-                open: true,
-            }, [
-                h('summary', { class: 'mj-regmgr-occurrence__fold-summary' }, [
-                    h('div', { class: 'mj-regmgr-occurrence__fold-heading' }, [
-                        h('span', { class: 'mj-regmgr-occurrence__fold-eyebrow' }, getString(strings, 'occurrencePreviewEyebrow', 'Rendu front partagé')),
-                        h('strong', null, getString(strings, 'occurrenceGeneratorPreviewLabel', 'Aperçu de l’horaire')),
-                    ]),
-                    h('span', { class: 'mj-regmgr-occurrence__fold-toggle', 'aria-hidden': true }, '⌄'),
-                ]),
-                h('div', { class: 'mj-regmgr-occurrence__fold-body' }, [
-                    h('p', { class: 'mj-regmgr-occurrence__description' },
-                        getString(strings, 'occurrencePreviewDescription', 'Cet aperçu réutilise exactement le rendu de la page événement.')
-                    ),
-                    schedulePreviewHtml && schedulePreviewHtml.trim() !== ''
-                        ? h('div', {
-                            class: 'mj-regmgr-occurrence__preview mj-regmgr-occurrence__preview--shared',
-                            dangerouslySetInnerHTML: { __html: schedulePreviewHtml },
-                        })
-                        : h('p', { class: 'mj-regmgr-occurrence__hint' }, getString(strings, 'occurrenceSchedulePreviewEmpty', 'Aucun horaire détecté')),
-                ]),
-            ]),
             shouldShowDangerZone && h('div', { class: 'mj-regmgr-occurrence__card mj-regmgr-occurrence__card--danger-zone' }, [
                 h('h2', null, getString(strings, 'occurrenceDangerZoneTitle', 'Zone sensible')),
                 h('p', { class: 'mj-regmgr-occurrence__danger-text' },
@@ -1271,13 +1958,14 @@
                         isAllDay: isAllDayOccurrence,
                         status: editorState.status,
                         reason: editorState.reason,
+                        source: occ && occ.source ? occ.source : 'manual',
                     });
                 });
                 setLocalOccurrences(updatedList);
                 persistOccurrences(updatedList, function () {
                     setLocalOccurrences(previousList);
                     setSelectedOccurrenceId(previousSelection);
-                }).catch(function () {
+                }, '', true).catch(function () {
                     // Already handled by parent notifications
                 });
             } else {
@@ -1290,6 +1978,8 @@
                     isAllDay: isAllDayOccurrence,
                     status: editorState.status,
                     reason: editorState.reason,
+                    source: 'manual',
+                    createAsManualLot: true,
                 };
                 var updatedList = localOccurrences.concat([newOccurrence]);
                 setLocalOccurrences(updatedList);
@@ -1298,7 +1988,7 @@
                 persistOccurrences(updatedList, function () {
                     setLocalOccurrences(previousList);
                     setSelectedOccurrenceId(previousSelection);
-                }).catch(function () {
+                }, '', true).catch(function () {
                     // Already handled by parent notifications
                 });
             }
@@ -1328,7 +2018,7 @@
                 setLocalOccurrences(previousList);
                 setSelectedOccurrenceId(previousSelection);
                 setEditorState(previousEditorState);
-            }).catch(function () {
+            }, '', true).catch(function () {
                 // Notification already handled upstream
             });
         }, [selectedOccurrenceId, strings, editorState, localOccurrences, persistOccurrences]);
@@ -1531,6 +2221,7 @@
                                 endTime: timeEnd,
                                 status: 'planned',
                                 reason: '',
+                                source: 'generated',
                             });
                         }
                     }
@@ -1600,6 +2291,7 @@
                             endTime: dayEnd,
                             status: 'planned',
                             reason: '',
+                            source: 'generated',
                         });
                     }
 
@@ -2581,6 +3273,11 @@
             isAllDay: !!isAllDay,
             status: statusValue,
             reason: reasonValue,
+            source: occurrence && typeof occurrence.source === 'string' ? occurrence.source : 'manual',
+            generationBatchId: occurrence && typeof occurrence.generationBatchId === 'string' ? occurrence.generationBatchId : '',
+            visibility: occurrence && typeof occurrence.visibility === 'string' ? occurrence.visibility : 'tous',
+            noteSchedule: occurrence && typeof occurrence.noteSchedule === 'string' ? occurrence.noteSchedule : '',
+            noteCalendar: occurrence && typeof occurrence.noteCalendar === 'string' ? occurrence.noteCalendar : '',
         };
     }
 
@@ -7078,6 +7775,12 @@
                     isAllDay: !!(occ && occ.isAllDay),
                     status: occ && typeof occ.status === 'string' ? occ.status : 'planned',
                     reason: occ && typeof occ.reason === 'string' ? occ.reason : '',
+                    source: occ && typeof occ.source === 'string' ? occ.source : 'manual',
+                    createAsManualLot: !!(occ && occ.createAsManualLot),
+                    generationBatchId: occ && typeof occ.generationBatchId === 'string' ? occ.generationBatchId : '',
+                    visibility: occ && typeof occ.visibility === 'string' ? occ.visibility : 'tous',
+                    noteSchedule: occ && typeof occ.noteSchedule === 'string' ? occ.noteSchedule : '',
+                    noteCalendar: occ && typeof occ.noteCalendar === 'string' ? occ.noteCalendar : '',
                 };
             }) : [];
 
@@ -7135,6 +7838,9 @@
                             if (responseEvent.occurrenceGenerator && typeof responseEvent.occurrenceGenerator === 'object') {
                                 nextEvent.occurrenceGenerator = responseEvent.occurrenceGenerator;
                             }
+                            if (Array.isArray(responseEvent.occurrenceGenerationBatches)) {
+                                nextEvent.occurrenceGenerationBatches = responseEvent.occurrenceGenerationBatches;
+                            }
                             return nextEvent;
                         });
                     }
@@ -7157,6 +7863,9 @@
                             if (response && response.event && response.event.occurrenceGenerator && typeof response.event.occurrenceGenerator === 'object') {
                                 nextEvent.occurrenceGenerator = response.event.occurrenceGenerator;
                             }
+                            if (response && response.event && Array.isArray(response.event.occurrenceGenerationBatches)) {
+                                nextEvent.occurrenceGenerationBatches = response.event.occurrenceGenerationBatches;
+                            }
                             return nextEvent;
                         });
                         setEvents(function (prev) {
@@ -7171,6 +7880,9 @@
                                     var nextEvent = Object.assign({}, evt, response.eventSummary || {});
                                     if (response && response.event && response.event.occurrenceGenerator && typeof response.event.occurrenceGenerator === 'object') {
                                         nextEvent.occurrenceGenerator = response.event.occurrenceGenerator;
+                                    }
+                                    if (response && response.event && Array.isArray(response.event.occurrenceGenerationBatches)) {
+                                        nextEvent.occurrenceGenerationBatches = response.event.occurrenceGenerationBatches;
                                     }
                                     return nextEvent;
                                 }
@@ -8728,6 +9440,18 @@
                                         strings: strings,
                                         locale: config.locale || 'fr',
                                         onPersistOccurrences: handlePersistEventOccurrences,
+                                        apiPost: api.post,
+                                        globalLocationOptions: eventEditorData && eventEditorData.options && Array.isArray(eventEditorData.options.locations)
+                                            ? eventEditorData.options.locations
+                                            : [],
+                                        globalMemberOptions: eventEditorData && eventEditorData.options && Array.isArray(eventEditorData.options.animateurs)
+                                            ? eventEditorData.options.animateurs
+                                            : [],
+                                        onBatchesUpdate: function (batches) {
+                                            setEventDetails(function (prev) {
+                                                return prev ? Object.assign({}, prev, { occurrenceGenerationBatches: batches }) : prev;
+                                            });
+                                        },
                                     })
                                     : h('div', { class: 'mj-regmgr__tab-placeholder' },
                                         getString(strings, 'occurrenceNoEventSelected', 'Sélectionnez un événement pour gérer ses occurrences.')

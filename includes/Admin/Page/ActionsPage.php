@@ -3,8 +3,10 @@
 namespace Mj\Member\Admin\Page;
 
 use Mj\Member\Classes\Crud\MjActionTypes;
+use Mj\Member\Classes\Crud\MjActionTrophyTriggers;
 use Mj\Member\Classes\Crud\MjMemberActions;
 use Mj\Member\Classes\Crud\MjMembers;
+use Mj\Member\Classes\Crud\MjTrophies;
 use Mj\Member\Core\Config;
 
 if (!defined('ABSPATH')) {
@@ -282,6 +284,19 @@ final class ActionsPage
         $backUrl = add_query_arg('page', static::slug(), admin_url('admin.php'));
 
         $categoryLabels = MjActionTypes::get_category_labels();
+        $availableTrophies = MjTrophies::get_all(array(
+            'status' => MjTrophies::STATUS_ACTIVE,
+            'orderby' => 'display_order',
+            'order' => 'ASC',
+        ));
+        $existingTriggers = $isEdit ? MjActionTrophyTriggers::get_for_action($actionTypeId) : array();
+        $triggersByTrophy = array();
+        foreach ($existingTriggers as $trigger) {
+            $trophyId = isset($trigger['trophy_id']) ? (int) $trigger['trophy_id'] : 0;
+            if ($trophyId > 0) {
+                $triggersByTrophy[$trophyId] = $trigger;
+            }
+        }
         ?>
         <div class="wrap">
             <h1><?php echo $isEdit ? esc_html__('Modifier l\'action', 'mj-member') : esc_html__('Nouvelle action', 'mj-member'); ?></h1>
@@ -377,6 +392,53 @@ final class ActionsPage
                                 <option value="active" <?php selected($actionType['status'], 'active'); ?>><?php esc_html_e('Actif', 'mj-member'); ?></option>
                                 <option value="archived" <?php selected($actionType['status'], 'archived'); ?>><?php esc_html_e('Archivé', 'mj-member'); ?></option>
                             </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e('Déclencheurs trophées', 'mj-member'); ?></th>
+                        <td>
+                            <?php if (empty($availableTrophies)): ?>
+                                <p class="description"><?php esc_html_e('Aucun trophée actif disponible.', 'mj-member'); ?></p>
+                            <?php else: ?>
+                                <p class="description" style="margin-bottom: 8px;"><?php esc_html_e('Associez cette action à un ou plusieurs trophées évolutifs.', 'mj-member'); ?></p>
+                                <table class="widefat striped" style="max-width: 820px;">
+                                    <thead>
+                                        <tr>
+                                            <th><?php esc_html_e('Actif', 'mj-member'); ?></th>
+                                            <th><?php esc_html_e('Trophée', 'mj-member'); ?></th>
+                                            <th><?php esc_html_e('Bronze', 'mj-member'); ?></th>
+                                            <th><?php esc_html_e('Argent', 'mj-member'); ?></th>
+                                            <th><?php esc_html_e('Or', 'mj-member'); ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($availableTrophies as $trophy): ?>
+                                            <?php
+                                            $trophyId = (int) ($trophy['id'] ?? 0);
+                                            if ($trophyId <= 0) {
+                                                continue;
+                                            }
+                                            $trigger = $triggersByTrophy[$trophyId] ?? null;
+                                            $isLinked = is_array($trigger);
+                                            ?>
+                                            <tr>
+                                                <td>
+                                                    <input type="checkbox" name="trigger_enabled[<?php echo esc_attr($trophyId); ?>]" value="1" <?php checked($isLinked); ?>>
+                                                </td>
+                                                <td>
+                                                    <strong><?php echo esc_html((string) ($trophy['title'] ?? '')); ?></strong>
+                                                    <?php if (empty($trophy['tier_enabled'])): ?>
+                                                        <br><small style="color:#946200;"><?php esc_html_e('Le mode niveaux sera activé automatiquement.', 'mj-member'); ?></small>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td><input type="number" min="1" class="small-text" name="trigger_bronze[<?php echo esc_attr($trophyId); ?>]" value="<?php echo esc_attr((int) ($trigger['bronze_threshold'] ?? 1)); ?>"></td>
+                                                <td><input type="number" min="1" class="small-text" name="trigger_silver[<?php echo esc_attr($trophyId); ?>]" value="<?php echo esc_attr((int) ($trigger['silver_threshold'] ?? 5)); ?>"></td>
+                                                <td><input type="number" min="1" class="small-text" name="trigger_gold[<?php echo esc_attr($trophyId); ?>]" value="<?php echo esc_attr((int) ($trigger['gold_threshold'] ?? 10)); ?>"></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            <?php endif; ?>
                         </td>
                     </tr>
                 </table>
@@ -523,10 +585,48 @@ final class ActionsPage
         } else {
             $result = MjActionTypes::create($data);
             $notice = 'created';
+            if (!is_wp_error($result)) {
+                $actionTypeId = (int) $result;
+            }
         }
 
         if (is_wp_error($result)) {
             wp_die(esc_html($result->get_error_message()));
+        }
+
+        $triggerRows = array();
+        $enabled = isset($_POST['trigger_enabled']) && is_array($_POST['trigger_enabled']) ? $_POST['trigger_enabled'] : array();
+        $bronze = isset($_POST['trigger_bronze']) && is_array($_POST['trigger_bronze']) ? $_POST['trigger_bronze'] : array();
+        $silver = isset($_POST['trigger_silver']) && is_array($_POST['trigger_silver']) ? $_POST['trigger_silver'] : array();
+        $gold = isset($_POST['trigger_gold']) && is_array($_POST['trigger_gold']) ? $_POST['trigger_gold'] : array();
+
+        foreach ($enabled as $rawTrophyId => $rawEnabled) {
+            if (empty($rawEnabled)) {
+                continue;
+            }
+
+            $trophyId = (int) $rawTrophyId;
+            if ($trophyId <= 0) {
+                continue;
+            }
+
+            $bronzeValue = isset($bronze[$rawTrophyId]) ? (int) $bronze[$rawTrophyId] : 1;
+            $silverValue = isset($silver[$rawTrophyId]) ? (int) $silver[$rawTrophyId] : 5;
+            $goldValue = isset($gold[$rawTrophyId]) ? (int) $gold[$rawTrophyId] : 10;
+
+            $triggerRows[] = array(
+                'trophy_id' => $trophyId,
+                'bronze_threshold' => max(1, $bronzeValue),
+                'silver_threshold' => max(1, $silverValue),
+                'gold_threshold' => max(1, $goldValue),
+            );
+
+            // Toute association action->trophée active le mode niveau côté trophée.
+            MjTrophies::update($trophyId, array('tier_enabled' => 1));
+        }
+
+        if ($actionTypeId > 0) {
+            MjActionTrophyTriggers::replace_for_action($actionTypeId, $triggerRows);
         }
 
         $redirectUrl = add_query_arg(

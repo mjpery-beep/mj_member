@@ -3,6 +3,7 @@
 namespace Mj\Member\Classes\Crud;
 
 use Mj\Member\Classes\MjTools;
+use Mj\Member\Classes\MjTrophyService;
 use WP_Error;
 
 if (!defined('ABSPATH')) {
@@ -373,6 +374,11 @@ final class MjMemberActions extends MjTools implements CrudRepositoryInterface
 
         // Notifier le membre
         self::notify_member($member_id, $action_type);
+
+        // Appliquer les progressions de trophées liées à cette action.
+        MjTrophyService::processActionProgress($member_id, $action_type_id);
+
+        do_action('mj_member_action_awarded', $member_id, $action_type_id, $action_id);
 
         return $action_id;
     }

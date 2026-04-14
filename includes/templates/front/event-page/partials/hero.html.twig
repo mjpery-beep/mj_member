@@ -10,6 +10,7 @@
 {% set weekly_schedule = hero.weekly_schedule|default({}) %}
 {% set price_label = hero.price_label|default('') %}
 {% set inline_schedule_html = hero.inline_schedule_html|default('') %}
+{% set schedule_preview = hero.schedule_preview|default('') %}
 {% set next_occurrence = hero.next_occurrence|default({}) %}
 {% set next_occurrence_label = hero.next_occurrence_label|default('') %}
 {% set photo_items = photos.items|default([]) %}
@@ -30,6 +31,8 @@
 
             {% if inline_schedule_html %}
                 {{ inline_schedule_html|raw }}
+            {% elseif schedule_preview %}
+                <p class="mj-event-page__date mj-event-page__date--preview">{{ schedule_preview|nl2br }}</p>
             {% elseif schedule_summary %}
                 <p class="mj-event-page__date">{{ schedule_summary }}</p>
             {% elseif display_label %}
