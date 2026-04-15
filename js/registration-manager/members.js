@@ -5231,6 +5231,10 @@
         var memberRegistrationDate = member.dateInscription || member.createdAt || '';
         var memberLastLoginDate = member.lastLoginAt || '';
         var memberLastActivityDate = member.lastActivityAt || '';
+        var avatarOriginalUrl = member && typeof member.avatarOriginalUrl === 'string'
+            ? member.avatarOriginalUrl.trim()
+            : '';
+        var hasOriginalGrimlinsAvatar = avatarOriginalUrl !== '';
 
         var tabsNav = null;
         if (memberTabs.length > 0) {
@@ -5492,7 +5496,23 @@
                     class: 'mj-regmgr-member-detail__avatar-wrapper',
                     'aria-busy': avatarSaving ? 'true' : 'false',
                 }, [
-                    h(MemberAvatar, { member: member, size: 'large' }),
+                    h('div', { class: 'mj-regmgr-member-detail__avatar-compare' }, [
+                        h(MemberAvatar, { member: member, size: 'large' }),
+                        hasOriginalGrimlinsAvatar && h('figure', {
+                            class: 'mj-regmgr-member-detail__avatar-original',
+                            title: getString(strings, 'grimlinsOriginalAvatar', 'Photo originale avant Grimlinator'),
+                        }, [
+                            h('img', {
+                                src: avatarOriginalUrl,
+                                alt: getString(strings, 'grimlinsOriginalAvatar', 'Photo originale avant Grimlinator'),
+                                class: 'mj-regmgr-member-detail__avatar-original-image',
+                                loading: 'lazy',
+                            }),
+                            h('figcaption', { class: 'mj-regmgr-member-detail__avatar-original-label' },
+                                getString(strings, 'grimlinsOriginalShort', 'Originale')
+                            ),
+                        ]),
+                    ]),
                     renderAvatarActions(),
                 ]),
                 h('div', { class: 'mj-regmgr-member-detail__identity' }, [

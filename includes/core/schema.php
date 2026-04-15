@@ -2041,6 +2041,7 @@ function mj_member_run_schema_upgrade() {
     mj_member_upgrade_to_2_81($wpdb);
     mj_member_upgrade_to_2_82($wpdb);
     mj_member_upgrade_to_2_83($wpdb);
+    mj_member_upgrade_to_2_84($wpdb);
     
     $registrations_table = mj_member_get_event_registrations_table_name();
     if ($registrations_table && mj_member_table_exists($registrations_table)) {
@@ -5060,6 +5061,7 @@ function mj_install()
         date_last_payement datetime DEFAULT NULL,
         status varchar(50) NOT NULL DEFAULT 'active',
         photo_id bigint(20) DEFAULT NULL,
+        avatar_original_url varchar(1024) DEFAULT NULL,
         photo_usage_consent tinyint(1) DEFAULT 0,
         newsletter_opt_in tinyint(1) NOT NULL DEFAULT 1,
         sms_opt_in tinyint(1) NOT NULL DEFAULT 1,
@@ -6353,4 +6355,24 @@ function mj_member_upgrade_to_2_83($wpdb) {
         KEY idx_status (status)
     ) {$charset_collate};";
     dbDelta($sql);
+}
+
+/**
+ * Migration 2.84: Persist original avatar URL for Grimlins assignments.
+ *
+ * @param wpdb $wpdb
+ */
+function mj_member_upgrade_to_2_84($wpdb) {
+    $members_table = $wpdb->prefix . 'mj_members';
+    if (!$members_table || !mj_member_table_exists($members_table)) {
+        return;
+    }
+
+    if (!mj_member_column_exists($members_table, 'avatar_original_url')) {
+        $after_clause = '';
+        if (mj_member_column_exists($members_table, 'photo_id')) {
+            $after_clause = ' AFTER photo_id';
+        }
+        $wpdb->query("ALTER TABLE {$members_table} ADD COLUMN avatar_original_url varchar(1024) DEFAULT NULL{$after_clause}");
+    }
 }

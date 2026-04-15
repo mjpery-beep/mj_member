@@ -198,6 +198,12 @@
         var fallbackTitle = getString(strings, 'eventUntitled', 'Sans titre');
         var displayTitle = event.title && event.title !== '' ? event.title : fallbackTitle;
         var detailTitleLabel = emoji ? (emoji + ' ' + displayTitle).trim() : displayTitle;
+        var eventPageHref = '';
+        if (event && typeof event.eventPageUrl === 'string' && event.eventPageUrl !== '') {
+            eventPageHref = event.eventPageUrl;
+        } else if (event && typeof event.frontUrl === 'string' && event.frontUrl !== '') {
+            eventPageHref = event.frontUrl;
+        }
 
         return h('div', { class: 'mj-regmgr-event-detail' }, [
             // Header avec image
@@ -211,15 +217,25 @@
                     event.typeLabel && h('span', { class: 'mj-regmgr-badge mj-regmgr-badge--type-' + event.type },
                         event.typeLabel
                     ),
-                    h('h2', {
-                        class: 'mj-regmgr-event-detail__title',
-                        'aria-label': detailTitleLabel,
-                    }, [
-                        emoji && h('span', {
-                            class: 'mj-regmgr-event-detail__emoji',
-                            'aria-hidden': 'true',
-                        }, emoji),
-                        h('span', { class: 'mj-regmgr-event-detail__title-text' }, displayTitle),
+                    h('div', { class: 'mj-regmgr-event-detail__title-row' }, [
+                        h('h2', {
+                            class: 'mj-regmgr-event-detail__title',
+                            'aria-label': detailTitleLabel,
+                        }, [
+                            emoji && h('span', {
+                                class: 'mj-regmgr-event-detail__emoji',
+                                'aria-hidden': 'true',
+                            }, emoji),
+                            h('span', { class: 'mj-regmgr-event-detail__title-text' }, displayTitle),
+                        ]),
+                        eventPageHref && h('a', {
+                            href: eventPageHref,
+                            target: '_blank',
+                            rel: 'noopener noreferrer',
+                            class: 'mj-regmgr-event-detail__title-link',
+                            title: getString(strings, 'openEventPage', 'Voir la page événement'),
+                            'aria-label': getString(strings, 'openEventPage', 'Voir la page événement'),
+                        }, '🔗'),
                     ]),
                 ]),
 
@@ -8927,6 +8943,14 @@
         if (!editorHeadingTitle) {
             editorHeadingTitle = getString(strings, 'editorTitleFallback', "Modifier l'événement");
         }
+        var editorHeadingUrl = '';
+        if (editorHeadingSource && typeof editorHeadingSource.eventPageUrl === 'string' && editorHeadingSource.eventPageUrl !== '') {
+            editorHeadingUrl = editorHeadingSource.eventPageUrl;
+        } else if (editorHeadingSource && typeof editorHeadingSource.frontUrl === 'string' && editorHeadingSource.frontUrl !== '') {
+            editorHeadingUrl = editorHeadingSource.frontUrl;
+        } else if (editorHeadingSource && typeof editorHeadingSource.event_url === 'string' && editorHeadingSource.event_url !== '') {
+            editorHeadingUrl = editorHeadingSource.event_url;
+        }
         var editorHeadingMeta = '';
         var statusSource = editorHeadingSource || selectedEvent || null;
         if (statusSource) {
@@ -9080,7 +9104,17 @@
                     // Contenu événement sélectionné
                     sidebarMode === 'events' && selectedEvent && h('div', { class: 'mj-regmgr__content' }, [
                         editorHeadingTitle && h('div', { class: 'mj-regmgr__event-heading' }, [
-                            h('h2', { class: 'mj-regmgr__event-heading-title' }, editorHeadingTitle),
+                            h('div', { class: 'mj-regmgr__event-heading-main' }, [
+                                h('h2', { class: 'mj-regmgr__event-heading-title' }, editorHeadingTitle),
+                                editorHeadingUrl && h('a', {
+                                    href: editorHeadingUrl,
+                                    target: '_blank',
+                                    rel: 'noopener noreferrer',
+                                    class: 'mj-regmgr__event-heading-link',
+                                    title: getString(strings, 'openEventPage', 'Voir la page événement'),
+                                    'aria-label': getString(strings, 'openEventPage', 'Voir la page événement'),
+                                }, '🔗'),
+                            ]),
                             editorHeadingMeta && h('p', { class: 'mj-regmgr__event-heading-meta' }, editorHeadingMeta),
                         ]),
                         // Onglets

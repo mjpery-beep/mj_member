@@ -75,6 +75,7 @@
 
         this.dom = {
             dropzone: root.querySelector('[data-photo-grimlins="dropzone"]'),
+            dropzonePlaceholder: root.querySelector('[data-photo-grimlins="dropzone-placeholder"]'),
             fileInput: root.querySelector('[data-photo-grimlins="file"]'),
             cameraInput: root.querySelector('[data-photo-grimlins="camera-input"]'),
             form: root.querySelector('[data-photo-grimlins="form"]'),
@@ -1263,12 +1264,17 @@
         if (!this.dom.cameraModal) {
             return;
         }
+        if (this.dom.dropzone) {
+            this.dom.dropzone.classList.add('is-camera-active');
+            this.dom.dropzone.setAttribute('aria-disabled', 'true');
+            this.dom.dropzone.setAttribute('tabindex', '-1');
+        }
+        if (this.dom.dropzonePlaceholder) {
+            this.dom.dropzonePlaceholder.hidden = true;
+        }
         this.dom.cameraModal.hidden = false;
         this.dom.cameraModal.setAttribute('aria-hidden', 'false');
         this.dom.cameraModal.classList.add('is-visible');
-        if (this.dom.dropzone) {
-            this.dom.dropzone.classList.add('is-hidden');
-        }
         if (this.dom.cameraBtn) {
             this.dom.cameraBtn.classList.add('is-hidden');
         }
@@ -1283,7 +1289,16 @@
         this.dom.cameraModal.setAttribute('aria-hidden', 'true');
         this.dom.cameraModal.hidden = true;
         if (this.dom.dropzone) {
-            this.dom.dropzone.classList.remove('is-hidden');
+            this.dom.dropzone.classList.remove('is-camera-active');
+            if (this.file || this.limitReached) {
+                this.dom.dropzone.setAttribute('aria-disabled', 'true');
+            } else {
+                this.dom.dropzone.removeAttribute('aria-disabled');
+            }
+            this.dom.dropzone.setAttribute('tabindex', '0');
+        }
+        if (this.dom.dropzonePlaceholder) {
+            this.dom.dropzonePlaceholder.hidden = false;
         }
         if (this.dom.cameraBtn) {
             this.dom.cameraBtn.classList.remove('is-hidden');

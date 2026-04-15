@@ -569,9 +569,37 @@ if (!function_exists('mj_member_photo_grimlins_ajax_generate')) {
             : 0;
         $existing_generations = 0;
 
-        if ($enforce_limit && $limit > 0 && $target_member_id > 0) {
-            if ($member && $target_member_id !== (int) $member->id) {
-                $existing_generations = mj_member_photo_grimlins_count_member_generations(get_current_user_id(), $target_member_id, $limit);
+        if ($enforce_limit && $limit > 0) {
+            if ($target_member_id > 0) {
+                $existing_items = mj_member_photo_grimlins_list_member_generations(
+                    get_current_user_id(),
+                    array(
+                        'limit' => $limit,
+                        'size' => $history_size,
+                        'user_id' => get_current_user_id(),
+                        'member_id' => $target_member_id,
+                    )
+                );
+
+                if ($member && $target_member_id === (int) $member->id) {
+                    // For self history, keep legacy unlinked generations visible and counted.
+                    $existing_items = array_values(array_filter($existing_items, static function ($item) use ($target_member_id) {
+                        if (!is_array($item)) {
+                            return false;
+                        }
+                        $linked = isset($item['linkedMemberId']) ? (int) $item['linkedMemberId'] : 0;
+                        return $linked === 0 || $linked === $target_member_id;
+                    }));
+                } else {
+                    $existing_items = array_values(array_filter($existing_items, static function ($item) use ($target_member_id) {
+                        if (!is_array($item)) {
+                            return false;
+                        }
+                        return isset($item['linkedMemberId']) && (int) $item['linkedMemberId'] === $target_member_id;
+                    }));
+                }
+
+                $existing_generations = count($existing_items);
             } else {
                 $existing_generations = mj_member_photo_grimlins_count_user_generations(get_current_user_id(), $limit);
             }
@@ -892,7 +920,14 @@ if (!function_exists('mj_member_photo_grimlins_ajax_apply_avatar')) {
             $member_to_update = $target_member;
         }
 
-        $update = MjMembers::update((int) $member_to_update->id, array('photo_id' => $attachment_id));
+        $original_url = function_exists('mj_member_photo_grimlins_get_original_url_for_attachment')
+            ? mj_member_photo_grimlins_get_original_url_for_attachment($attachment_id)
+            : '';
+
+        $update_payload = array('photo_id' => $attachment_id);
+        $update_payload['avatar_original_url'] = $original_url !== '' ? $original_url : null;
+
+        $update = MjMembers::update((int) $member_to_update->id, $update_payload);
         if (is_wp_error($update)) {
             wp_send_json_error(array('message' => $update->get_error_message()), 500);
         }
@@ -905,6 +940,7 @@ if (!function_exists('mj_member_photo_grimlins_ajax_apply_avatar')) {
             'message' => __('Avatar mis à jour pour ton profil.', 'mj-member'),
             'attachmentId' => $attachment_id,
             'imageUrl' => wp_get_attachment_url($attachment_id),
+            'originalUrl' => $original_url,
             'nonce' => wp_create_nonce('mj_member_photo_grimlins_apply_avatar'),
         ));
     }
@@ -963,7 +999,7 @@ if (!function_exists('mj_member_photo_grimlins_ajax_delete_avatar')) {
             if ($linked_member_id > 0) {
                 $linked_member = MjMembers::getById($linked_member_id);
                 if ($linked_member && (int) ($linked_member->photo_id ?? 0) === $attachment_id) {
-                    MjMembers::update($linked_member_id, array('photo_id' => 0));
+                    MjMembers::update($linked_member_id, array('photo_id' => 0, 'avatar_original_url' => null));
                 }
             }
         }
@@ -1097,6 +1133,60 @@ if (!function_exists('mj_member_photo_grimlins_build_file_url')) {
         $relative = ltrim($file, '/');
 
         return trailingslashit($context['url']) . $relative;
+    }
+}
+
+if (!function_exists('mj_member_photo_grimlins_get_original_url_for_attachment')) {
+    function mj_member_photo_grimlins_get_original_url_for_attachment(int $attachment_id): string
+    {
+        if ($attachment_id <= 0) {
+            return '';
+        }
+
+        $is_grimlins = (bool) get_post_meta($attachment_id, '_mj_member_photo_grimlins', true);
+        if (!$is_grimlins) {
+            return '';
+        }
+
+        $session_slug = (string) get_post_meta($attachment_id, '_mj_member_photo_grimlins_session', true);
+        $original_file = (string) get_post_meta($attachment_id, '_mj_member_photo_grimlins_original', true);
+
+        if ($original_file === '' && $session_slug !== '' && function_exists('mj_member_grimlins_gallery_get_storage_paths') && function_exists('mj_member_grimlins_gallery_locate_file')) {
+            $paths = mj_member_grimlins_gallery_get_storage_paths();
+            $storage_dir = is_array($paths) && !empty($paths['dir']) ? (string) $paths['dir'] : '';
+            if ($storage_dir !== '') {
+                $session_path = trailingslashit($storage_dir) . $session_slug;
+                $located = mj_member_grimlins_gallery_locate_file($session_path, 'photo-original');
+                if (is_string($located) && $located !== '') {
+                    $original_file = basename($located);
+                }
+            }
+        }
+
+        if ($original_file === '') {
+            return '';
+        }
+
+        $relative = '';
+        if (strpos($original_file, '/') !== false || strpos($original_file, '\\') !== false) {
+            $relative = ltrim(str_replace('\\', '/', $original_file), '/');
+        } elseif ($session_slug !== '') {
+            $relative = ltrim($session_slug, '/') . '/' . ltrim($original_file, '/');
+        } else {
+            $attached_file = (string) get_post_meta($attachment_id, '_wp_attached_file', true);
+            $attached_dir = trim((string) dirname($attached_file), './\\');
+            $relative = $attached_dir !== '' && $attached_dir !== '.'
+                ? $attached_dir . '/' . ltrim($original_file, '/')
+                : ltrim($original_file, '/');
+        }
+
+        if ($relative === '') {
+            return '';
+        }
+
+        $url = mj_member_photo_grimlins_build_file_url($attachment_id, $relative);
+
+        return $url !== '' ? $url : '';
     }
 }
 

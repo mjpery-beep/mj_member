@@ -277,6 +277,340 @@ final class RegistrationManagerController implements AjaxHandlerInterface
     }
 
     /**
+     * Get original source image URL when the current avatar is a Grimlins generation.
+     *
+     * @param int $member_id Member ID
+     * @return string Original image URL or empty string
+     */
+    private function getMemberAvatarOriginalUrl($member_id) {
+        $member = MjMembers::getById($member_id);
+        if (!$member) {
+            return '';
+        }
+
+        $stored_original = isset($member->avatar_original_url) ? trim((string) $member->avatar_original_url) : '';
+        if ($stored_original !== '') {
+            return esc_url_raw($stored_original);
+        }
+
+        $photo_id = isset($member->photo_id) ? (int) $member->photo_id : 0;
+        $avatar_id = isset($member->avatar_id) ? (int) $member->avatar_id : 0;
+        $attachment_id = $photo_id > 0 ? $photo_id : $avatar_id;
+
+        if ($attachment_id <= 0) {
+            return '';
+        }
+
+        $original_file = (string) get_post_meta($attachment_id, '_mj_member_photo_grimlins_original', true);
+        $attached_file = (string) get_post_meta($attachment_id, '_wp_attached_file', true);
+        $attachment_url = (string) wp_get_attachment_url($attachment_id);
+        $is_grimlins = (bool) get_post_meta($attachment_id, '_mj_member_photo_grimlins', true);
+
+        $relative_original = '';
+        $session_slug = (string) get_post_meta($attachment_id, '_mj_member_photo_grimlins_session', true);
+
+        $candidate_sessions = array();
+        if ($session_slug !== '') {
+            $candidate_sessions[] = $session_slug;
+        }
+
+        // Legacy fallback: infer session slug from attached file path.
+        if ($session_slug === '' && $attached_file !== '') {
+            $attached_file = ltrim($attached_file, '/');
+            $first_slash = strpos($attached_file, '/');
+            if ($first_slash !== false) {
+                $session_slug = substr($attached_file, 0, $first_slash);
+                if ($session_slug !== '') {
+                    $candidate_sessions[] = $session_slug;
+                }
+            }
+
+            $attached_dir_basename = basename((string) dirname($attached_file));
+            if (is_string($attached_dir_basename) && $attached_dir_basename !== '' && $attached_dir_basename !== '.') {
+                $candidate_sessions[] = $attached_dir_basename;
+            }
+        }
+
+        // Legacy fallback: infer session slug from attachment URL (/user-grimlins/{session}/file).
+        if ($attachment_url !== '') {
+            $path = (string) parse_url($attachment_url, PHP_URL_PATH);
+            if ($path !== '') {
+                $parts = array_values(array_filter(explode('/', trim($path, '/')), static function ($part) {
+                    return is_string($part) && $part !== '';
+                }));
+                $pivot = array_search('user-grimlins', $parts, true);
+                if ($pivot !== false && isset($parts[$pivot + 1]) && is_string($parts[$pivot + 1]) && $parts[$pivot + 1] !== '') {
+                    $candidate_sessions[] = $parts[$pivot + 1];
+                }
+            }
+        }
+
+        // Ultimate fallback: derive session slug from the avatar URL that is effectively rendered.
+        $current_avatar_url = (string) $this->getMemberAvatarUrl((int) $member_id);
+        if ($current_avatar_url !== '') {
+            $avatar_path = (string) parse_url($current_avatar_url, PHP_URL_PATH);
+            if ($avatar_path !== '') {
+                $avatar_parts = array_values(array_filter(explode('/', trim($avatar_path, '/')), static function ($part) {
+                    return is_string($part) && $part !== '';
+                }));
+                $avatar_pivot = array_search('user-grimlins', $avatar_parts, true);
+                if ($avatar_pivot !== false && isset($avatar_parts[$avatar_pivot + 1]) && is_string($avatar_parts[$avatar_pivot + 1]) && $avatar_parts[$avatar_pivot + 1] !== '') {
+                    $candidate_sessions[] = $avatar_parts[$avatar_pivot + 1];
+                }
+            }
+        }
+
+        $candidate_sessions = array_values(array_unique(array_filter($candidate_sessions, static function ($session) {
+            return is_string($session) && $session !== '';
+        })));
+
+        if (!$is_grimlins && $original_file === '' && empty($candidate_sessions)) {
+            return $this->findFallbackOriginalUrlByMemberHistory((int) $member_id, (int) $attachment_id);
+        }
+
+        // Gallery-like fallback: scan session folder for photo-original.* when meta is missing.
+        if ($original_file === '' && !empty($candidate_sessions)) {
+            $storage_dir = '';
+            if (function_exists('mj_member_grimlins_gallery_get_storage_paths')) {
+                $paths = mj_member_grimlins_gallery_get_storage_paths();
+                $storage_dir = is_array($paths) && !empty($paths['dir']) ? (string) $paths['dir'] : '';
+            }
+            if ($storage_dir === '' && function_exists('mj_member_photo_grimlins_get_storage_context')) {
+                $context = mj_member_photo_grimlins_get_storage_context();
+                $storage_dir = is_array($context) && !empty($context['dir']) ? (string) $context['dir'] : '';
+            }
+
+            if ($storage_dir !== '') {
+                foreach ($candidate_sessions as $candidate_session) {
+                    $session_path = trailingslashit($storage_dir) . $candidate_session;
+                    $located = null;
+
+                    if (function_exists('mj_member_grimlins_gallery_locate_file')) {
+                        $located = mj_member_grimlins_gallery_locate_file($session_path, 'photo-original');
+                    } else {
+                        $fallback_pattern = trailingslashit($session_path) . 'photo-original.*';
+                        $fallback_candidates = glob($fallback_pattern);
+                        if (is_array($fallback_candidates) && !empty($fallback_candidates)) {
+                            foreach ($fallback_candidates as $fallback_candidate) {
+                                if (!is_string($fallback_candidate) || $fallback_candidate === '' || is_dir($fallback_candidate) || !is_readable($fallback_candidate)) {
+                                    continue;
+                                }
+                                $located = $fallback_candidate;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (is_string($located) && $located !== '') {
+                        $original_file = basename($located);
+                        $session_slug = $candidate_session;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($original_file === '') {
+            return $this->findFallbackOriginalUrlByMemberHistory((int) $member_id, (int) $attachment_id);
+        }
+
+        if (strpos($original_file, '/') !== false || strpos($original_file, '\\') !== false) {
+            $relative_original = ltrim(str_replace('\\', '/', $original_file), '/');
+        } elseif ($session_slug !== '') {
+            $relative_original = ltrim($session_slug, '/') . '/' . ltrim($original_file, '/');
+        } else {
+            $attached_dir = trim((string) dirname($attached_file), './\\');
+            $relative_original = $attached_dir !== '' && $attached_dir !== '.'
+                ? $attached_dir . '/' . ltrim($original_file, '/')
+                : ltrim($original_file, '/');
+        }
+
+        if ($relative_original === '') {
+            return $this->findFallbackOriginalUrlByMemberHistory((int) $member_id, (int) $attachment_id);
+        }
+
+        if (function_exists('mj_member_photo_grimlins_build_file_url')) {
+            $url = (string) mj_member_photo_grimlins_build_file_url($attachment_id, $relative_original);
+            if ($url !== '') {
+                return $url;
+            }
+        }
+
+        if (function_exists('mj_member_photo_grimlins_get_storage_context')) {
+            $context = mj_member_photo_grimlins_get_storage_context();
+            if (is_array($context) && !empty($context['url']) && is_string($context['url'])) {
+                return trailingslashit($context['url']) . ltrim($relative_original, '/');
+            }
+        }
+
+        return $this->findFallbackOriginalUrlByMemberHistory((int) $member_id, (int) $attachment_id);
+    }
+
+    /**
+     * Fallback lookup: recover original image from Grimlins attachments linked to the member,
+     * even when current avatar points to a derivative in uploads.
+     */
+    private function findFallbackOriginalUrlByMemberHistory(int $member_id, int $exclude_attachment_id = 0): string {
+        if ($member_id <= 0) {
+            return '';
+        }
+
+        $query = new \WP_Query(array(
+            'post_type' => 'attachment',
+            'post_status' => array('private', 'inherit'),
+            'fields' => 'ids',
+            'no_found_rows' => true,
+            'orderby' => 'date',
+            'order' => 'DESC',
+            'posts_per_page' => 20,
+            'meta_query' => array(
+                'relation' => 'AND',
+                array(
+                    'key' => '_mj_member_photo_grimlins',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'relation' => 'OR',
+                    array(
+                        'key' => '_mj_member_photo_grimlins_member',
+                        'value' => (string) $member_id,
+                        'compare' => '=',
+                    ),
+                    array(
+                        'key' => '_mj_member_photo_grimlins_member_id',
+                        'value' => (string) $member_id,
+                        'compare' => '=',
+                    ),
+                ),
+            ),
+        ));
+
+        if (empty($query->posts) || !is_array($query->posts)) {
+            return '';
+        }
+
+        $storage_url = '';
+        if (function_exists('mj_member_photo_grimlins_get_storage_context')) {
+            $context = mj_member_photo_grimlins_get_storage_context();
+            if (is_array($context) && !empty($context['url']) && is_string($context['url'])) {
+                $storage_url = (string) $context['url'];
+            }
+        }
+        if ($storage_url === '' && function_exists('mj_member_grimlins_gallery_get_storage_paths')) {
+            $paths = mj_member_grimlins_gallery_get_storage_paths();
+            if (is_array($paths) && !empty($paths['url']) && is_string($paths['url'])) {
+                $storage_url = (string) $paths['url'];
+            }
+        }
+
+        $reference_timestamp = null;
+        if ($exclude_attachment_id > 0) {
+            $reference_post = get_post($exclude_attachment_id);
+            if ($reference_post && $reference_post instanceof \WP_Post) {
+                $reference_raw = !empty($reference_post->post_date_gmt) && $reference_post->post_date_gmt !== '0000-00-00 00:00:00'
+                    ? $reference_post->post_date_gmt
+                    : $reference_post->post_date;
+                if (is_string($reference_raw) && $reference_raw !== '' && $reference_raw !== '0000-00-00 00:00:00') {
+                    $parsed_reference = strtotime($reference_raw . (strpos($reference_raw, 'GMT') !== false ? '' : ' UTC'));
+                    if ($parsed_reference !== false) {
+                        $reference_timestamp = (int) $parsed_reference;
+                    }
+                }
+            }
+        }
+
+        $candidate_ids = array_values(array_filter(array_map('intval', $query->posts), static function ($candidate_id) use ($exclude_attachment_id) {
+            return $candidate_id > 0 && $candidate_id !== $exclude_attachment_id;
+        }));
+
+        if (empty($candidate_ids)) {
+            return '';
+        }
+
+        if ($reference_timestamp !== null) {
+            usort($candidate_ids, static function ($left, $right) use ($reference_timestamp) {
+                $left_post = get_post((int) $left);
+                $right_post = get_post((int) $right);
+
+                $left_raw = ($left_post && !empty($left_post->post_date_gmt) && $left_post->post_date_gmt !== '0000-00-00 00:00:00')
+                    ? $left_post->post_date_gmt
+                    : (($left_post && !empty($left_post->post_date)) ? $left_post->post_date : '');
+                $right_raw = ($right_post && !empty($right_post->post_date_gmt) && $right_post->post_date_gmt !== '0000-00-00 00:00:00')
+                    ? $right_post->post_date_gmt
+                    : (($right_post && !empty($right_post->post_date)) ? $right_post->post_date : '');
+
+                $left_ts = is_string($left_raw) && $left_raw !== '' && $left_raw !== '0000-00-00 00:00:00'
+                    ? strtotime($left_raw . (strpos($left_raw, 'GMT') !== false ? '' : ' UTC'))
+                    : false;
+                $right_ts = is_string($right_raw) && $right_raw !== '' && $right_raw !== '0000-00-00 00:00:00'
+                    ? strtotime($right_raw . (strpos($right_raw, 'GMT') !== false ? '' : ' UTC'))
+                    : false;
+
+                $left_diff = $left_ts !== false ? abs(((int) $left_ts) - $reference_timestamp) : PHP_INT_MAX;
+                $right_diff = $right_ts !== false ? abs(((int) $right_ts) - $reference_timestamp) : PHP_INT_MAX;
+
+                if ($left_diff === $right_diff) {
+                    // Tie-breaker: most recent first.
+                    return ((int) $right) <=> ((int) $left);
+                }
+
+                return $left_diff <=> $right_diff;
+            });
+        }
+
+        foreach ($candidate_ids as $candidate_id) {
+
+            $candidate_original = (string) get_post_meta($candidate_id, '_mj_member_photo_grimlins_original', true);
+            $candidate_session = (string) get_post_meta($candidate_id, '_mj_member_photo_grimlins_session', true);
+
+            if ($candidate_original === '' && $candidate_session !== '' && function_exists('mj_member_grimlins_gallery_get_storage_paths') && function_exists('mj_member_grimlins_gallery_locate_file')) {
+                $paths = mj_member_grimlins_gallery_get_storage_paths();
+                $storage_dir = is_array($paths) && !empty($paths['dir']) ? (string) $paths['dir'] : '';
+                if ($storage_dir !== '') {
+                    $session_path = trailingslashit($storage_dir) . $candidate_session;
+                    $located = mj_member_grimlins_gallery_locate_file($session_path, 'photo-original');
+                    if (is_string($located) && $located !== '') {
+                        $candidate_original = basename($located);
+                    }
+                }
+            }
+
+            if ($candidate_original === '') {
+                continue;
+            }
+
+            if (strpos($candidate_original, '/') !== false || strpos($candidate_original, '\\') !== false) {
+                $relative = ltrim(str_replace('\\', '/', $candidate_original), '/');
+            } elseif ($candidate_session !== '') {
+                $relative = ltrim($candidate_session, '/') . '/' . ltrim($candidate_original, '/');
+            } else {
+                $candidate_attached = (string) get_post_meta($candidate_id, '_wp_attached_file', true);
+                $candidate_dir = trim((string) dirname($candidate_attached), './\\');
+                $relative = $candidate_dir !== '' && $candidate_dir !== '.'
+                    ? $candidate_dir . '/' . ltrim($candidate_original, '/')
+                    : ltrim($candidate_original, '/');
+            }
+
+            if ($relative === '') {
+                continue;
+            }
+
+            if (function_exists('mj_member_photo_grimlins_build_file_url')) {
+                $url = (string) mj_member_photo_grimlins_build_file_url($candidate_id, $relative);
+                if ($url !== '') {
+                    return $url;
+                }
+            }
+
+            if ($storage_url !== '') {
+                return trailingslashit($storage_url) . ltrim($relative, '/');
+            }
+        }
+
+        return '';
+    }
+
+    /**
      * Normalize a boolean-like value coming from the frontend payload.
      *
      * @param mixed $value Raw value
@@ -8909,6 +9243,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             'city' => $memberData->city ?? '',
             'postalCode' => $memberData->postal_code ?? '',
             'avatarUrl' => $this->getMemberAvatarUrl((int) $memberData->id),
+            'avatarOriginalUrl' => $this->getMemberAvatarOriginalUrl((int) $memberData->id),
             'userId' => $memberData->wp_user_id ?? null,
             'hasLinkedAccount' => !empty($memberData->wp_user_id),
             'accountLogin' => isset($memberData->member_account_login) ? (string) $memberData->member_account_login : '',
@@ -10834,7 +11169,7 @@ final class RegistrationManagerController implements AjaxHandlerInterface
             wp_update_attachment_metadata($attachment_id, $metadata);
         }
 
-        $update = MjMembers::update($member_id, array('photo_id' => $attachment_id));
+        $update = MjMembers::update($member_id, array('photo_id' => $attachment_id, 'avatar_original_url' => null));
         if (is_wp_error($update)) {
             wp_delete_attachment($attachment_id, true);
             wp_send_json_error(array('message' => $update->get_error_message()));

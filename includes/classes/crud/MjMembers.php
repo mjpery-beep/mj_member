@@ -434,6 +434,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             'status' => $status,
             'date_last_payement' => self::sanitizeDateTime($data['date_last_payement'] ?? ''),
             'photo_id' => isset($data['photo_id']) ? intval($data['photo_id']) : null,
+            'avatar_original_url' => self::sanitizeOptionalText($data['avatar_original_url'] ?? ''),
             'photo_usage_consent' => !empty($data['photo_usage_consent']) ? 1 : 0,
             'newsletter_opt_in' => array_key_exists('newsletter_opt_in', $data) ? (!empty($data['newsletter_opt_in']) ? 1 : 0) : 1,
             'sms_opt_in' => array_key_exists('sms_opt_in', $data) ? (!empty($data['sms_opt_in']) ? 1 : 0) : 1,
@@ -515,6 +516,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
             'guardian_id' => null,
             'wp_user_id' => null,
             'photo_id' => null,
+            'avatar_original_url' => null,
             'notification_preferences' => null,
             'anonymized_at' => $now,
             'status' => self::STATUS_INACTIVE,
@@ -559,7 +561,7 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
         $updates = array();
 
         $allowed_fields = array(
-            'first_name','last_name','nickname','email','phone','phone_secondary','birth_date','role','guardian_id','is_autonomous','is_volunteer', 'is_trusted_member','requires_payment','address','city','postal_code','school','birth_country','nationality','notes','description_courte','description_longue','why_mj','how_mj','work_schedule','leave_quota_paid','leave_quota_unpaid','leave_quota_exceptional','leave_quota_recovery','status','date_inscription','date_last_payement','photo_id','photo_usage_consent','newsletter_opt_in','sms_opt_in','whatsapp_opt_in','notification_preferences','wp_user_id','card_access_key','anonymized_at','last_login_at','last_activity_at','job_title','work_regime','funding_source','job_description','signature_message'
+            'first_name','last_name','nickname','email','phone','phone_secondary','birth_date','role','guardian_id','is_autonomous','is_volunteer', 'is_trusted_member','requires_payment','address','city','postal_code','school','birth_country','nationality','notes','description_courte','description_longue','why_mj','how_mj','work_schedule','leave_quota_paid','leave_quota_unpaid','leave_quota_exceptional','leave_quota_recovery','status','date_inscription','date_last_payement','photo_id','avatar_original_url','photo_usage_consent','newsletter_opt_in','sms_opt_in','whatsapp_opt_in','notification_preferences','wp_user_id','card_access_key','anonymized_at','last_login_at','last_activity_at','job_title','work_regime','funding_source','job_description','signature_message'
         );
 
         foreach ($data as $field => $value) {
@@ -632,6 +634,9 @@ class MjMembers extends MjTools implements CrudRepositoryInterface {
                     break;
                 case 'photo_id':
                     $updates[$field] = intval($value);
+                    break;
+                case 'avatar_original_url':
+                    $updates[$field] = self::sanitizeOptionalText($value);
                     break;
                 case 'wp_user_id':
                     $updates[$field] = self::sanitizeUserId($value);

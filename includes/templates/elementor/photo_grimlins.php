@@ -263,14 +263,27 @@ if ($fullscreen) {
         <div class="mj-photo-grimlins__dropzone" data-photo-grimlins="dropzone" role="button" tabindex="0" aria-labelledby="<?php echo esc_attr($dropzone_label_id); ?>">
             <input type="file" name="mj-photo-grimlins-source" accept="image/jpeg,image/png,image/webp,image/*" data-photo-grimlins="file" aria-hidden="true">
             <input type="file" accept="image/*" capture="environment" data-photo-grimlins="camera-input" aria-hidden="true" class="mj-photo-grimlins__camera-input" tabindex="-1">
-            <p id="<?php echo esc_attr($dropzone_label_id); ?>">
-                <strong><?php esc_html_e('Dépose ta photo ici', 'mj-member'); ?></strong>
-                <br>
-                <span><?php esc_html_e('JPG, PNG ou WebP – 5 Mo max.', 'mj-member'); ?></span>
-            </p>
-            <p>
-                <button type="button" class="mj-photo-grimlins__choose" data-photo-grimlins="choose"><?php esc_html_e('Choisir une image', 'mj-member'); ?></button>
-            </p>
+            <div class="mj-photo-grimlins__dropzone-placeholder" data-photo-grimlins="dropzone-placeholder">
+                <p id="<?php echo esc_attr($dropzone_label_id); ?>">
+                    <strong><?php esc_html_e('Dépose ta photo ici', 'mj-member'); ?></strong>
+                    <br>
+                    <span><?php esc_html_e('JPG, PNG ou WebP – 5 Mo max.', 'mj-member'); ?></span>
+                </p>
+                <p>
+                    <button type="button" class="mj-photo-grimlins__choose" data-photo-grimlins="choose"><?php esc_html_e('Choisir une image', 'mj-member'); ?></button>
+                </p>
+            </div>
+
+            <div class="mj-photo-grimlins__camera-inline" data-photo-grimlins="camera-modal" role="group" aria-labelledby="<?php echo esc_attr($component_id); ?>-camera-title" hidden>
+                <div class="mj-photo-grimlins__camera-content">
+                    <h3 id="<?php echo esc_attr($component_id); ?>-camera-title" class="screen-reader-text"><?php esc_html_e('Prévisualisation caméra', 'mj-member'); ?></h3>
+                    <video class="mj-photo-grimlins__camera-video" data-photo-grimlins="camera-video" autoplay playsinline muted></video>
+                    <div class="mj-photo-grimlins__camera-actions">
+                        <button type="button" class="mj-photo-grimlins__camera-capture" data-photo-grimlins="camera-capture"><?php esc_html_e('Capturer', 'mj-member'); ?></button>
+                        <button type="button" class="mj-photo-grimlins__camera-cancel" data-photo-grimlins="camera-cancel"><?php esc_html_e('Annuler', 'mj-member'); ?></button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="mj-photo-grimlins__actions">
@@ -279,17 +292,6 @@ if ($fullscreen) {
             <button type="button" class="mj-photo-grimlins__reset" data-photo-grimlins="reset" hidden><?php esc_html_e('Réinitialiser', 'mj-member'); ?></button>
         </div>
     </form>
-
-    <div class="mj-photo-grimlins__camera-modal" data-photo-grimlins="camera-modal" role="dialog" aria-modal="true" aria-labelledby="<?php echo esc_attr($component_id); ?>-camera-title" hidden>
-        <div class="mj-photo-grimlins__camera-content">
-            <h3 id="<?php echo esc_attr($component_id); ?>-camera-title" class="screen-reader-text"><?php esc_html_e('Prévisualisation caméra', 'mj-member'); ?></h3>
-            <video class="mj-photo-grimlins__camera-video" data-photo-grimlins="camera-video" autoplay playsinline muted></video>
-            <div class="mj-photo-grimlins__camera-actions">
-                <button type="button" class="mj-photo-grimlins__camera-capture" data-photo-grimlins="camera-capture"><?php esc_html_e('Capturer', 'mj-member'); ?></button>
-                <button type="button" class="mj-photo-grimlins__camera-cancel" data-photo-grimlins="camera-cancel"><?php esc_html_e('Annuler', 'mj-member'); ?></button>
-            </div>
-        </div>
-    </div>
 
     <div class="mj-photo-grimlins__preview" data-photo-grimlins="preview-box" <?php echo $is_preview && $placeholder_preview ? '' : 'hidden'; ?> data-placeholder="1">
         <h3 class="screen-reader-text"><?php esc_html_e('Aperçu de la photo sélectionnée', 'mj-member'); ?></h3>

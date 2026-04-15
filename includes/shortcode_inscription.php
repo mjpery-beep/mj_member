@@ -748,7 +748,14 @@ if (!function_exists('mj_process_frontend_inscription')) {
             if ($has_grimlins_flag && class_exists(MjMembers::class)) {
                 // Assign to the first created member (primary child or autonomous user)
                 $target_member_id = (int) $created_member_ids[0];
-                MjMembers::update($target_member_id, array('photo_id' => $grimlins_avatar_id));
+                $original_url = function_exists('mj_member_photo_grimlins_get_original_url_for_attachment')
+                    ? mj_member_photo_grimlins_get_original_url_for_attachment($grimlins_avatar_id)
+                    : '';
+
+                MjMembers::update($target_member_id, array(
+                    'photo_id' => $grimlins_avatar_id,
+                    'avatar_original_url' => $original_url !== '' ? $original_url : null,
+                ));
                 update_post_meta($grimlins_avatar_id, '_mj_member_photo_grimlins_member', $target_member_id);
                 do_action('mj_member_grimlins_avatar_applied_on_registration', $target_member_id, $grimlins_avatar_id);
             }
