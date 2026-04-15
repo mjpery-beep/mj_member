@@ -4730,6 +4730,98 @@
         var mobileShowDetails = _mobileShowDetails[0];
         var setMobileShowDetails = _mobileShowDetails[1];
 
+        // Dynamic sticky offset for mobile back button (header height can change on scroll)
+        var _mobileBackBtnTop = useState(0);
+        var mobileBackBtnTop = _mobileBackBtnTop[0];
+        var setMobileBackBtnTop = _mobileBackBtnTop[1];
+
+        var updateMobileBackBtnTop = useCallback(function () {
+            if (typeof window === 'undefined' || typeof document === 'undefined') {
+                return;
+            }
+
+            if ((window.innerWidth || 0) > 768) {
+                setMobileBackBtnTop(function (prev) {
+                    return prev === 0 ? prev : 0;
+                });
+                return;
+            }
+
+            var headerHeight = 0;
+            var header = document.querySelector('.mj-header');
+            if (header) {
+                var headerRect = header.getBoundingClientRect();
+                if (headerRect.bottom > 0) {
+                    // Use real bottom position in viewport so sticky offset tracks header transitions exactly.
+                    headerHeight = Math.round(Math.max(0, headerRect.bottom));
+                }
+            }
+
+            var nextTop = Math.max(0, headerHeight);
+            setMobileBackBtnTop(function (prev) {
+                return prev === nextTop ? prev : nextTop;
+            });
+        }, []);
+
+        useEffect(function () {
+            if (typeof window === 'undefined' || typeof document === 'undefined') {
+                return;
+            }
+
+            var rafId = 0;
+            var scheduleUpdate = function () {
+                if (rafId) {
+                    window.cancelAnimationFrame(rafId);
+                }
+                rafId = window.requestAnimationFrame(function () {
+                    rafId = 0;
+                    updateMobileBackBtnTop();
+                });
+            };
+
+            var header = document.querySelector('.mj-header');
+            var mutationObserver = null;
+            var resizeObserver = null;
+
+            scheduleUpdate();
+
+            window.addEventListener('resize', scheduleUpdate, { passive: true });
+            window.addEventListener('orientationchange', scheduleUpdate, { passive: true });
+            window.addEventListener('scroll', scheduleUpdate, { passive: true });
+
+            if (header && typeof MutationObserver !== 'undefined') {
+                mutationObserver = new MutationObserver(scheduleUpdate);
+                mutationObserver.observe(header, {
+                    attributes: true,
+                    attributeFilter: ['class', 'style'],
+                });
+            }
+
+            if (header && typeof ResizeObserver !== 'undefined') {
+                resizeObserver = new ResizeObserver(scheduleUpdate);
+                resizeObserver.observe(header);
+            }
+
+            return function () {
+                if (rafId) {
+                    window.cancelAnimationFrame(rafId);
+                }
+                window.removeEventListener('resize', scheduleUpdate);
+                window.removeEventListener('orientationchange', scheduleUpdate);
+                window.removeEventListener('scroll', scheduleUpdate);
+                if (mutationObserver) {
+                    mutationObserver.disconnect();
+                }
+                if (resizeObserver) {
+                    resizeObserver.disconnect();
+                }
+            };
+        }, [updateMobileBackBtnTop]);
+
+        var mobileBackBtnStyle = mobileBackBtnTop > 0
+            ? { top: mobileBackBtnTop + 'px' }
+            : null;
+
         useEffect(function () {
             var eventId = eventDetails && eventDetails.id ? eventDetails.id : null;
             var descriptionValue = eventDetails && typeof eventDetails.description === 'string'
@@ -8935,6 +9027,7 @@
                     sidebarMode === 'events' && selectedEvent && h('button', {
                         type: 'button',
                         class: 'mj-regmgr__back-btn',
+                        style: mobileBackBtnStyle,
                         onClick: function (e) { handleBackToEvents(e); },
                     }, [
                         h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.5 }, [
@@ -8947,6 +9040,7 @@
                     sidebarMode === 'members' && selectedMember && h('button', {
                         type: 'button',
                         class: 'mj-regmgr__back-btn',
+                        style: mobileBackBtnStyle,
                         onClick: function (e) { handleBackToEvents(e); },
                     }, [
                         h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.5 }, [
