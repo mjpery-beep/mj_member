@@ -494,6 +494,30 @@ a.mj-header-dropdown__header-link:hover {
     padding: 0;
 }
 
+/* Agenda : permet d'afficher les jours très chargés sans couper le contenu */
+.mj-header-dropdown--agenda {
+    max-height: min(760px, calc(100dvh - 40px)) !important;
+    overflow: visible;
+    transform: none;
+}
+
+.mj-header-dropdown--agenda.mj-header-dropdown--open {
+    transform: none;
+}
+
+.mj-header-dropdown--agenda .mj-header-dropdown__content {
+    max-height: calc(100dvh - 132px);
+    overflow-y: auto;
+}
+
+.mj-header-dropdown--agenda .mj-cal-mobile__modal-content {
+    max-height: min(88dvh, 820px);
+}
+
+.mj-header-dropdown--agenda .mj-cal-mobile__modal-body {
+    overflow-y: auto;
+}
+
 /* Pied de page */
 .mj-header-dropdown__footer {
     flex-shrink: 0;

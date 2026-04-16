@@ -741,6 +741,10 @@ final class AssetsManager
                 wp_enqueue_script('mj-member-leave-requests');
                 if (function_exists('mj_member_leave_requests_localize')) {
                     mj_member_leave_requests_localize();
+                } elseif (function_exists('\\Mj\\Member\\Core\\Ajax\\Front\\mj_member_leave_requests_localize')) {
+                    \Mj\Member\Core\Ajax\Front\mj_member_leave_requests_localize();
+                } elseif (class_exists('\\Mj\\Member\\Core\\Ajax\\Front\\LeaveRequestsController')) {
+                    \Mj\Member\Core\Ajax\Front\LeaveRequestsController::localize();
                 }
                 break;
 

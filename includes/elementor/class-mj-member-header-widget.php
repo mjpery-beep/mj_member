@@ -1105,8 +1105,6 @@ $this->add_control('nextcloud_label', array(
         $nc_page_url    = !empty($settings['nextcloud_page_url']['url']) ? $settings['nextcloud_page_url']['url'] : '';
         $nc_label       = $settings['nextcloud_label'] ?? __('Nextcloud', 'mj-member');
         $nc_custom_icon = $settings['nextcloud_custom_icon']['url'] ?? '';
-        $nc_login       = $member ? trim((string) $member->get('member_nextcloud_login', '')) : '';
-        $nc_password    = $member ? trim((string) $member->get('member_nextcloud_password', '')) : '';
 
         // Notifications
         $notif_enabled   = !empty($settings['notifications_enabled']) && $settings['notifications_enabled'] === 'yes';
@@ -1205,8 +1203,6 @@ $this->add_control('nextcloud_label', array(
             'agendaLimit'          => $agenda_limit,
             'ncUrl'                => esc_url($nc_url),
             'ncPageUrl'            => esc_url($nc_page_url),
-            'ncLogin'              => esc_html($nc_login),
-            'ncPassword'           => $nc_password,
             'loginRedirect'        => esc_url($login_redirect),
             'accountGuestRedirect' => esc_url($account_guest_redirect_url),
             'loginBtnText'         => esc_html($acc_label_out),

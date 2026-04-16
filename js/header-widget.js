@@ -1288,78 +1288,51 @@
     MjHeader.prototype._renderNextcloud = function (dropdown) {
         var self      = this;
         var container = dropdown.querySelector('[data-mj-nc-apps]');
-        var ncUrl     = (this.config.ncUrl     || '').replace(/\/$/, '');
-        var ncLogin   = this.config.ncLogin    || '';
-        var ncPass    = this.config.ncPassword || '';
 
-        if (!ncUrl || !ncLogin || !ncPass || !container) {
+        if (!container) {
             this._loaded.nextcloud = true;
+            return;
+        }
+
+        if (this.config.isPreview) {
+            this._loaded.nextcloud = true;
+            return;
+        }
+
+        if (!this.config.isLoggedIn) {
+            this._loaded.nextcloud = true;
+            container.innerHTML = '<div class="mj-header-dropdown__empty"><p>Connectez-vous pour accéder au cloud.</p></div>';
             return;
         }
 
         container.innerHTML = '<div class="mj-header-nc-loading">Chargement\u2026</div>';
 
-        var cacheKey = 'mj_nc_auth_' + ncLogin;
+        var data = new FormData();
+        data.append('action', 'mj_header_nextcloud_navigation');
+        data.append('nonce', this.config.headerNonce || '');
 
-        var cachedAuth = localStorage.getItem(cacheKey);
-        if (cachedAuth) {
-            self._fetchNcNavigation(container, ncUrl, cachedAuth, ncLogin, ncPass, cacheKey, false);
-        } else {
-            self._loginNc(container, ncUrl, ncLogin, ncPass, cacheKey);
-        }
-    };
-
-    MjHeader.prototype._loginNc = function (container, ncUrl, ncLogin, ncPass, cacheKey) {
-        var self = this;
-
-        fetch(ncUrl + '/apps/mj_session_check/login', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ user: ncLogin, password: ncPass }),
-        })
+        fetch(this.config.ajaxUrl, { method: 'POST', body: data, credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
-            .then(function (data) {
-                if (!data.appToken || !data.userId) {
-                    self._loaded.nextcloud = true;
-                    container.innerHTML = '<div class="mj-header-dropdown__empty"><p>Authentification Nextcloud échouée.</p></div>';
-                    return;
-                }
-                var auth = btoa(data.userId + ':' + data.appToken);
-                localStorage.setItem(cacheKey, auth);
-                self._fetchNcNavigation(container, ncUrl, auth, ncLogin, ncPass, cacheKey, false);
-            })
-            .catch(function () {
-                self._loaded.nextcloud = true;
-                container.innerHTML = '<div class="mj-header-dropdown__empty"><p>Erreur de connexion Nextcloud.</p></div>';
-            });
-    };
-
-    MjHeader.prototype._fetchNcNavigation = function (container, ncUrl, auth, ncLogin, ncPass, cacheKey, isRetry) {
-        var self = this;
-
-        fetch(ncUrl + '/apps/mj_session_check/navigation', {
-            headers: {
-                'Authorization':  'Basic ' + auth,
-                'OCS-APIREQUEST': 'true',
-            },
-        })
-            .then(function (r) {
-                if (r.status === 401 && !isRetry) {
-                    // Token expired — re-login once
-                    localStorage.removeItem(cacheKey);
-                    self._loginNc(container, ncUrl, ncLogin, ncPass, cacheKey);
-                    return null;
-                }
-                return r.json();
-            })
             .then(function (res) {
-                if (res === null) return;
                 self._loaded.nextcloud = true;
-                if (!res.success || !Array.isArray(res.apps)) {
+
+                if (!res || !res.success) {
                     container.innerHTML = '<div class="mj-header-dropdown__empty"><p>Impossible de charger les applications.</p></div>';
                     return;
                 }
-                self._renderNcApps(container, res.apps);
+
+                var payload = res.data || {};
+                if (payload.linked === false) {
+                    container.innerHTML = '<div class="mj-header-dropdown__empty"><p>' + esc(payload.message || 'Votre compte Nextcloud n\'est pas lié.') + '</p></div>';
+                    return;
+                }
+
+                if (!Array.isArray(payload.apps)) {
+                    container.innerHTML = '<div class="mj-header-dropdown__empty"><p>Impossible de charger les applications.</p></div>';
+                    return;
+                }
+
+                self._renderNcApps(container, payload.apps);
             })
             .catch(function () {
                 self._loaded.nextcloud = true;

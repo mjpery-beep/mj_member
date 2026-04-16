@@ -1170,16 +1170,12 @@ if ($isNextcloudIframe && !$isPreview && $hasAccess) {
                 name="<?php echo esc_attr($ncSbUid . '-iframe-target'); ?>"
                 class="mj-documents-widget__nextcloud-iframe"
                 src="<?php echo esc_url($nextcloudIframeUrl); ?>"
-<?php 
-/**
- *                 data-base-src="<?php echo esc_url($nextcloudIframeUrl); ?>"
+                data-base-src="<?php echo esc_url($nextcloudIframeUrl); ?>"
                 data-autologin-src="<?php echo esc_attr($nextcloudIframeAutoUrl); ?>"
                 data-autologin-key="<?php echo esc_attr($nextcloudAutoLoginKey); ?>"
                 data-autologin-user="<?php echo esc_attr($nextcloudAutoLoginUser); ?>"
                 data-autologin-password="<?php echo esc_attr($nextcloudAutoLoginPassword); ?>"
                 data-login-post-url="<?php echo esc_url($nextcloudLoginPostUrl); ?>"
- */
-?>
                 title="<?php esc_attr_e('Espace documents Nextcloud', 'mj-member'); ?>"
                 loading="lazy"
                 allow="clipboard-read; clipboard-write"

@@ -11,6 +11,46 @@
     const { h, render, Fragment } = window.preact;
     const { useState, useEffect, useCallback, useMemo } = window.preactHooks;
 
+    const defaultI18n = {
+        error: 'Une erreur est survenue.',
+        weekdays: ['L', 'M', 'M', 'J', 'V', 'S', 'D'],
+    };
+
+    const getTemplateConfig = () => {
+        const root = document.querySelector('[data-mj-leave-requests-widget]');
+        if (!root) {
+            return {};
+        }
+
+        try {
+            const raw = root.getAttribute('data-config');
+            return raw ? JSON.parse(raw) : {};
+        } catch (error) {
+            return {};
+        }
+    };
+
+    const templateConfig = getTemplateConfig();
+    const mjLeaveRequests = Object.assign(
+        {
+            ajaxUrl: templateConfig.ajaxUrl || '',
+            nonce: templateConfig.nonce || '',
+            i18n: Object.assign({}, defaultI18n, templateConfig.i18n || {}),
+            isCoordinator: !!templateConfig.isCoordinator,
+            isAnimateur: !!templateConfig.hasAccess,
+            types: Array.isArray(templateConfig.leaveTypes) ? templateConfig.leaveTypes : [],
+            quotas: templateConfig.quotas || {},
+            usage: templateConfig.usage || {},
+            year: templateConfig.currentYear || new Date().getFullYear(),
+            workSchedule: templateConfig.workSchedule || null,
+            reservedDates: templateConfig.reservedDates || {},
+            ownRequests: (templateConfig.previewData && Array.isArray(templateConfig.previewData.requests)) ? templateConfig.previewData.requests : [],
+            pendingRequests: (templateConfig.previewData && Array.isArray(templateConfig.previewData.pendingRequests)) ? templateConfig.previewData.pendingRequests : [],
+            animateurs: (templateConfig.previewData && Array.isArray(templateConfig.previewData.members)) ? templateConfig.previewData.members : [],
+        },
+        window.mjLeaveRequests || {}
+    );
+
     // Utility functions
     const formatDate = (dateStr) => {
         const date = new Date(dateStr);
