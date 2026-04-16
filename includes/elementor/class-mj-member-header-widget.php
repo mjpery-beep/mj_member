@@ -1135,6 +1135,14 @@ $this->add_control('nextcloud_label', array(
             ? $settings['account_register_label']
             : __('S\'inscrire', 'mj-member');
 
+        $account_guest_redirect_base = $acc_register_url !== ''
+            ? $acc_register_url
+            : home_url('/mon-compte/inscription/');
+        $account_guest_redirect_url = add_query_arg(
+            array('tab' => 'login'),
+            $account_guest_redirect_base
+        );
+
         // Account links — sections depuis la config plugin (MJ Member > Paramètres > Liens Mon compte)
         $acc_link_sections = array();
         if (function_exists('mj_member_login_component_get_account_links_with_sections')) {
@@ -1200,6 +1208,7 @@ $this->add_control('nextcloud_label', array(
             'ncLogin'              => esc_html($nc_login),
             'ncPassword'           => $nc_password,
             'loginRedirect'        => esc_url($login_redirect),
+            'accountGuestRedirect' => esc_url($account_guest_redirect_url),
             'loginBtnText'         => esc_html($acc_label_out),
             'isPreview'            => $is_preview,
             'isLoggedIn'           => $is_logged_in,

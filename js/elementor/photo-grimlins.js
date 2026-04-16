@@ -1373,7 +1373,7 @@
 
         var message = globalConfig && globalConfig.i18n && globalConfig.i18n.youngSearchLoading
             ? globalConfig.i18n.youngSearchLoading
-            : 'Recherche des jeunes…';
+            : 'Recherche des membres…';
         if (this.dom.youngSearchStatus) {
             this.dom.youngSearchStatus.textContent = message;
         }
@@ -1383,10 +1383,14 @@
         }
 
         var formData = new FormData();
+        var searchLimit = parseInt(globalConfig.searchYoungLimit, 10);
+        if (Number.isNaN(searchLimit)) {
+            searchLimit = 0;
+        }
         formData.append('action', 'mj_member_photo_grimlins_search_young');
         formData.append('nonce', globalConfig.searchYoungNonce || '');
         formData.append('search', (query || '').trim());
-        formData.append('limit', '20');
+        formData.append('limit', String(searchLimit));
 
         fetch(globalConfig.ajaxUrl, {
             method: 'POST',
@@ -1410,7 +1414,7 @@
                 if (_this.dom.youngSearchStatus) {
                     _this.dom.youngSearchStatus.textContent = globalConfig && globalConfig.i18n && globalConfig.i18n.youngSearchError
                         ? globalConfig.i18n.youngSearchError
-                        : 'Impossible de charger la recherche des jeunes.';
+                        : 'Impossible de charger la recherche des membres.';
                 }
             })
             .finally(function() {
@@ -1433,7 +1437,7 @@
             if (this.dom.youngSearchStatus) {
                 this.dom.youngSearchStatus.textContent = globalConfig && globalConfig.i18n && globalConfig.i18n.youngSearchNoResult
                     ? globalConfig.i18n.youngSearchNoResult
-                    : 'Aucun jeune trouvé.';
+                    : 'Aucun membre trouvé.';
             }
             return;
         }
@@ -1472,7 +1476,7 @@
             meta.className = 'mj-photo-grimlins-young-search__meta';
             var label = document.createElement('p');
             label.className = 'mj-photo-grimlins-young-search__label';
-            label.textContent = item.label || ('Jeune #' + memberId);
+            label.textContent = item.label || ('Membre #' + memberId);
             meta.appendChild(label);
 
             var pick = document.createElement('button');
@@ -1480,7 +1484,7 @@
             pick.className = 'mj-photo-grimlins-young-search__pick';
             pick.setAttribute('data-photo-grimlins-select-young', '1');
             pick.setAttribute('data-member-id', String(memberId));
-            pick.setAttribute('data-member-label', item.label || ('Jeune #' + memberId));
+            pick.setAttribute('data-member-label', item.label || ('Membre #' + memberId));
             pick.textContent = globalConfig && globalConfig.i18n && globalConfig.i18n.youngSearchPick
                 ? globalConfig.i18n.youngSearchPick
                 : 'Choisir';

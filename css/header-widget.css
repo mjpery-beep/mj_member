@@ -1040,7 +1040,7 @@ a .mj-header-nc-app__icon img {
     margin-bottom: 4px;
 }
 
-.mj-header-login-form__input {
+.mj-header-acc-login-panel input.mj-header-login-form__input {
     display: block;
     width: 100%;
     padding: 8px 12px;
@@ -1055,7 +1055,7 @@ a .mj-header-nc-app__icon img {
     font-family: inherit;
 }
 
-.mj-header-login-form__input:focus {
+.mj-header-acc-login-panel input.mj-header-login-form__input:focus {
     border-color: #6366f1;
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
     background-color: #ffffff;
@@ -1115,6 +1115,40 @@ button.mj-header-login-form__submit:disabled {
 
 .mj-header-login-form__pwd-wrap .mj-header-login-form__input {
     padding-right: 40px;
+}
+
+.mj-header-login-form__options {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: -2px;
+    margin-bottom: 8px;
+}
+
+.mj-header-login-form__remember {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8125rem;
+    color: #475569;
+    cursor: pointer;
+}
+
+.mj-header-login-form__remember input {
+    margin: 0;
+}
+
+.mj-header-login-form__forgot-link {
+    font-size: 0.8125rem;
+    color: #6366f1;
+    text-decoration: none;
+    margin-left: auto;
+}
+
+.mj-header-login-form__forgot-link:hover {
+    color: #4f46e5;
+    text-decoration: underline;
 }
 
 button.mj-header-login-form__toggle-pwd {

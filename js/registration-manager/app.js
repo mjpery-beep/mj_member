@@ -235,7 +235,7 @@
                             class: 'mj-regmgr-event-detail__title-link',
                             title: getString(strings, 'openEventPage', 'Voir la page événement'),
                             'aria-label': getString(strings, 'openEventPage', 'Voir la page événement'),
-                        }, '🔗'),
+                        }, '↗'),
                     ]),
                 ]),
 
@@ -6064,7 +6064,18 @@
                     defaultTab = 'attendance';
                 }
             }
-            setActiveTab(defaultTab, true); // Skip URL update, on le fait après
+
+            // Conserver l'onglet courant quand on passe d'un événement à l'autre.
+            // Si l'onglet courant n'est pas un onglet événement valide, on retombe sur le défaut.
+            var validEventTabs = ['registrations', 'attendance', 'description', 'regdoc', 'publish', 'details', 'editor', OCCURRENCE_TAB_KEY, 'nc-photos', 'nc-documents'];
+            var nextTab = validEventTabs.indexOf(activeTab) !== -1 ? activeTab : defaultTab;
+
+            // Les événements en participation libre n'ont pas d'onglet inscriptions.
+            if (event && event.freeParticipation && nextTab === 'registrations') {
+                nextTab = 'attendance';
+            }
+
+            setActiveTab(nextTab, true); // Skip URL update, on le fait après
             setMobileShowDetails(true); // Afficher les détails sur mobile
             
             // Mémoriser l'événement sélectionné
@@ -6076,11 +6087,11 @@
             }
             
             // Mettre à jour l'URL avec l'événement et l'onglet
-            updateUrlParams({ event: event.id, tab: defaultTab });
+            updateUrlParams({ event: event.id, tab: nextTab });
             
             loadEventDetails(event.id);
             loadRegistrations(event.id);
-        }, [loadEventDetails, loadRegistrations, storageKey, setDescriptionState, setDescriptionSaving, setDescriptionError, setRegDocState, setRegDocSaving, setRegDocError, setActiveTab]);
+        }, [loadEventDetails, loadRegistrations, storageKey, setDescriptionState, setDescriptionSaving, setDescriptionError, setRegDocState, setRegDocSaving, setRegDocError, setActiveTab, activeTab]);
 
         // ── CCM (shared stepper modal) integration ──
         var ccmRef = useRef(null);
@@ -6859,7 +6870,7 @@
                 setSelectedMember(null);
                 setMemberDetails(null);
                 // Nettoyer l'URL - enlever member et tab
-                updateUrlParams({ member: null, tab: null, event: null });
+                updateUrlParams({ member: null, tab: null, event: null, mainTab: 'event' });
             } else {
                 setSelectedEvent(null);
                 setEventDetails(null);
@@ -6871,7 +6882,7 @@
                 setEventEditorLoading(false);
                 setEventEditorSaving(false);
                 // Nettoyer l'URL - enlever event et tab
-                updateUrlParams({ event: null, tab: null, member: null });
+                updateUrlParams({ event: null, tab: null, member: null, mainTab: 'member' });
             }
         }, []);
 
@@ -9113,7 +9124,7 @@
                                     class: 'mj-regmgr__event-heading-link',
                                     title: getString(strings, 'openEventPage', 'Voir la page événement'),
                                     'aria-label': getString(strings, 'openEventPage', 'Voir la page événement'),
-                                }, '🔗'),
+                                }, '↗'),
                             ]),
                             editorHeadingMeta && h('p', { class: 'mj-regmgr__event-heading-meta' }, editorHeadingMeta),
                         ]),
@@ -9872,12 +9883,14 @@
      * - event=ID : ouvre sur un événement spécifique
      * - member=ID : ouvre sur un membre spécifique (active le mode membres)
      * - tab=KEY : ouvre sur un onglet spécifique (registrations, attendance, description, editor, photos, details, occurrence-encoder)
+     * - main-tab=event|member : force le mode sidebar principal
      */
     function parseUrlParams() {
         var params = {
             eventId: null,
             memberId: null,
             tab: null,
+            mainTab: null,
         };
 
         try {
@@ -9903,6 +9916,11 @@
             if (tabParam && typeof tabParam === 'string' && tabParam.trim() !== '') {
                 params.tab = tabParam.trim();
             }
+
+            var mainTabParam = searchParams.get('main-tab');
+            if (mainTabParam === 'event' || mainTabParam === 'member') {
+                params.mainTab = mainTabParam;
+            }
         } catch (e) {
             // URLSearchParams non supporté ou erreur de parsing
         }
@@ -9912,7 +9930,7 @@
 
     /**
      * Met à jour les paramètres URL sans recharger la page
-     * @param {Object} params - Paramètres à mettre à jour { event, member, tab }
+     * @param {Object} params - Paramètres à mettre à jour { event, member, tab, mainTab }
      */
     function updateUrlParams(params) {
         try {
@@ -9923,6 +9941,7 @@
                 if (params.event) {
                     url.searchParams.set('event', params.event);
                     url.searchParams.delete('member'); // Mutuellement exclusif
+                    url.searchParams.set('main-tab', 'event');
                 } else {
                     url.searchParams.delete('event');
                 }
@@ -9933,6 +9952,7 @@
                 if (params.member) {
                     url.searchParams.set('member', params.member);
                     url.searchParams.delete('event'); // Mutuellement exclusif
+                    url.searchParams.set('main-tab', 'member');
                 } else {
                     url.searchParams.delete('member');
                 }
@@ -9944,6 +9964,15 @@
                     url.searchParams.set('tab', params.tab);
                 } else {
                     url.searchParams.delete('tab');
+                }
+            }
+
+            // Gérer le paramètre main-tab
+            if (params.mainTab !== undefined) {
+                if (params.mainTab) {
+                    url.searchParams.set('main-tab', params.mainTab);
+                } else {
+                    url.searchParams.delete('main-tab');
                 }
             }
             
@@ -9986,6 +10015,9 @@
             }
             if (urlParams.tab) {
                 config.urlTab = urlParams.tab;
+            }
+            if (urlParams.mainTab) {
+                config.urlMainTab = urlParams.mainTab;
             }
 
             render(h(RegistrationManagerApp, { config: config }), container);

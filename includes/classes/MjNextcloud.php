@@ -972,7 +972,157 @@ final class MjNextcloud
             'sslverify' => true,
         ]);
 
-        return wp_remote_request($url, $requestArgs);
+        $candidateUrls = $this->buildRequestCandidateUrls($url);
+        $lastError = null;
+        $forceStreams = $this->shouldForceStreamsTransport();
+
+        foreach ($candidateUrls as $attemptUrl) {
+            $response = $forceStreams
+                ? $this->requestViaStreamsTransport($attemptUrl, $requestArgs)
+                : wp_remote_request($attemptUrl, $requestArgs);
+
+            if (is_wp_error($response) && $forceStreams) {
+                // Safety fallback if streams transport is unavailable in this environment.
+                $response = wp_remote_request($attemptUrl, $requestArgs);
+            }
+
+            if (is_wp_error($response) && $this->isDnsResolutionError($response)) {
+                $response = $this->requestViaStreamsTransport($attemptUrl, $requestArgs);
+            }
+
+            if (!is_wp_error($response)) {
+                return $response;
+            }
+
+            $lastError = $response;
+
+            // Retry only DNS resolution failures on alternative base URLs.
+            if (!$this->isDnsResolutionError($response)) {
+                break;
+            }
+        }
+
+        if ($lastError instanceof WP_Error && $this->isDnsResolutionError($lastError)) {
+            return new WP_Error(
+                'mj_nextcloud_dns_unreachable',
+                __('Le serveur Nextcloud est temporairement indisponible (résolution DNS). Réessayez dans quelques instants.', 'mj-member')
+            );
+        }
+
+        return $lastError instanceof WP_Error ? $lastError : new WP_Error(
+            'mj_nextcloud_request_failed',
+            __('Impossible de contacter Nextcloud.', 'mj-member')
+        );
+    }
+
+    /**
+     * Allow forcing Streams transport for Nextcloud calls (useful when cURL DNS threads are saturated).
+     */
+    private function shouldForceStreamsTransport(): bool
+    {
+        $force = false;
+        if (defined('MJ_MEMBER_NEXTCLOUD_FORCE_STREAMS')) {
+            $force = (bool) constant('MJ_MEMBER_NEXTCLOUD_FORCE_STREAMS');
+        }
+
+        if (function_exists('apply_filters')) {
+            $force = (bool) apply_filters('mj_member_nextcloud_force_streams', $force);
+        }
+
+        return $force;
+    }
+
+    /**
+     * Retry a request by preferring the Streams transport over cURL.
+     *
+     * @return array|WP_Error
+     */
+    private function requestViaStreamsTransport(string $url, array $requestArgs)
+    {
+        $preferStreams = static function ($transports) {
+            if (!is_array($transports) || $transports === []) {
+                return $transports;
+            }
+
+            $ordered = [];
+            if (in_array('streams', $transports, true)) {
+                $ordered[] = 'streams';
+            }
+
+            foreach ($transports as $transport) {
+                if (!in_array($transport, $ordered, true)) {
+                    $ordered[] = $transport;
+                }
+            }
+
+            return $ordered;
+        };
+
+        add_filter('http_api_transports', $preferStreams, 999);
+        try {
+            return wp_remote_request($url, $requestArgs);
+        } finally {
+            remove_filter('http_api_transports', $preferStreams, 999);
+        }
+    }
+
+    /**
+     * Build candidate URLs for the same endpoint (public URL, then internal URL fallback).
+     *
+     * @return array<int,string>
+     */
+    private function buildRequestCandidateUrls(string $url): array
+    {
+        $urls = [trim($url)];
+        $fallbackBase = $this->getInternalBaseUrlFallback();
+
+        if ($fallbackBase === '' || strpos($url, $this->baseUrl) !== 0) {
+            return $urls;
+        }
+
+        $suffix = substr($url, strlen($this->baseUrl));
+        $fallbackUrl = rtrim($fallbackBase, '/') . $suffix;
+        if ($fallbackUrl !== $url) {
+            $urls[] = $fallbackUrl;
+        }
+
+        return array_values(array_unique(array_filter($urls, static function ($candidate) {
+            return is_string($candidate) && $candidate !== '';
+        })));
+    }
+
+    /**
+     * Resolve optional Nextcloud internal base URL used for server-to-server requests.
+     */
+    private function getInternalBaseUrlFallback(): string
+    {
+        $fallback = '';
+        if (defined('MJ_MEMBER_NEXTCLOUD_INTERNAL_URL')) {
+            $fallback = (string) constant('MJ_MEMBER_NEXTCLOUD_INTERNAL_URL');
+        }
+
+        if (function_exists('apply_filters')) {
+            $fallback = (string) apply_filters('mj_member_nextcloud_internal_url', $fallback, $this->baseUrl);
+        }
+
+        $fallback = trim((string) $fallback);
+        if ($fallback === '') {
+            return '';
+        }
+
+        return rtrim(esc_url_raw($fallback), '/');
+    }
+
+    /**
+     * Detect DNS/cURL resolution failures eligible for fallback retry.
+     */
+    private function isDnsResolutionError(WP_Error $error): bool
+    {
+        $message = strtolower((string) $error->get_error_message());
+
+        return strpos($message, 'curl error 6') !== false
+            || strpos($message, 'could not resolve host') !== false
+            || strpos($message, 'getaddrinfo') !== false;
     }
 
     /**

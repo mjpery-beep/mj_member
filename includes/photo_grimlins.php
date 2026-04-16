@@ -418,6 +418,7 @@ if (!function_exists('mj_member_photo_grimlins_localize')) {
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('mj_member_photo_grimlins'),
             'searchYoungNonce' => wp_create_nonce('mj_member_photo_grimlins_search_young'),
+            'searchYoungLimit' => max(0, (int) apply_filters('mj_member_photo_grimlins_search_young_limit', 0, $current_member, get_current_user_id())),
             'maxSize' => $maxSize,
             'allowedMimes' => array_values($allowedMimes),
             'enabled' => mj_member_photo_grimlins_is_enabled(),
@@ -468,9 +469,9 @@ if (!function_exists('mj_member_photo_grimlins_localize')) {
                 'historyForMember' => __('Avatars de %name%', 'mj-member'),
                 'historyLimitCounter' => __('%count% / %limit% avatars utilisés', 'mj-member'),
                 'historyLimitReached' => __('Tu as atteint la limite de créations disponibles.', 'mj-member'),
-                'youngSearchLoading' => __('Recherche des jeunes…', 'mj-member'),
-                'youngSearchNoResult' => __('Aucun jeune trouvé.', 'mj-member'),
-                'youngSearchError' => __('Impossible de charger la recherche des jeunes.', 'mj-member'),
+                'youngSearchLoading' => __('Recherche des membres…', 'mj-member'),
+                'youngSearchNoResult' => __('Aucun membre trouvé.', 'mj-member'),
+                'youngSearchError' => __('Impossible de charger la recherche des membres.', 'mj-member'),
                 'youngSearchPick' => __('Choisir', 'mj-member'),
             ),
         ));
@@ -521,8 +522,10 @@ if (!function_exists('mj_member_photo_grimlins_ajax_generate')) {
             }
 
             if ($is_staff_selector) {
-                if (!MjRoles::isJeune((string) ($child_target->role ?? ''))) {
-                    wp_send_json_error(array('message' => __('Seuls les jeunes peuvent être sélectionnés.', 'mj-member')), 403);
+                $allowed_target_roles = array(MjRoles::JEUNE, MjRoles::ANIMATEUR, MjRoles::COORDINATEUR);
+                $child_target_role = (string) ($child_target->role ?? '');
+                if (!in_array($child_target_role, $allowed_target_roles, true)) {
+                    wp_send_json_error(array('message' => __('Seuls les jeunes, animateurs et coordinateurs peuvent être sélectionnés.', 'mj-member')), 403);
                 }
             } else {
                 if (!function_exists('mj_member_get_guardian_children')) {
@@ -893,8 +896,10 @@ if (!function_exists('mj_member_photo_grimlins_ajax_apply_avatar')) {
             }
 
             if ($is_staff_selector) {
-                if (!MjRoles::isJeune((string) ($target_member->role ?? ''))) {
-                    wp_send_json_error(array('message' => __('Seuls les jeunes peuvent être sélectionnés.', 'mj-member')), 403);
+                $allowed_target_roles = array(MjRoles::JEUNE, MjRoles::ANIMATEUR, MjRoles::COORDINATEUR);
+                $target_member_role = (string) ($target_member->role ?? '');
+                if (!in_array($target_member_role, $allowed_target_roles, true)) {
+                    wp_send_json_error(array('message' => __('Seuls les jeunes, animateurs et coordinateurs peuvent être sélectionnés.', 'mj-member')), 403);
                 }
             } else {
                 if (!function_exists('mj_member_get_guardian_children')) {
@@ -1040,17 +1045,18 @@ if (!function_exists('mj_member_photo_grimlins_ajax_search_young')) {
 
         $member_role = isset($member->role) ? (string) $member->role : '';
         if (!MjRoles::isAnimateurOrCoordinateur($member_role)) {
-            wp_send_json_error(array('message' => __('Tu ne peux pas rechercher un jeune ici.', 'mj-member')), 403);
+            wp_send_json_error(array('message' => __('Tu ne peux pas rechercher de membre ici.', 'mj-member')), 403);
         }
 
         $search = isset($_POST['search']) ? sanitize_text_field((string) wp_unslash($_POST['search'])) : '';
-        $limit = isset($_POST['limit']) ? (int) wp_unslash($_POST['limit']) : 20;
-        $limit = max(5, min(40, $limit));
+        $requested_limit = isset($_POST['limit']) ? (int) wp_unslash($_POST['limit']) : 0;
+        $max_limit = max(50, (int) apply_filters('mj_member_photo_grimlins_search_young_max_limit', 500, $member));
+        $limit = $requested_limit > 0 ? min($requested_limit, $max_limit) : 0;
 
         $rows = MjMembers::get_all(array(
             'search' => $search,
             'filters' => array(
-                'role' => MjRoles::JEUNE,
+                'roles' => array(MjRoles::JEUNE, MjRoles::ANIMATEUR, MjRoles::COORDINATEUR),
                 'status' => MjMembers::STATUS_ACTIVE,
             ),
             'limit' => $limit,
@@ -1080,7 +1086,7 @@ if (!function_exists('mj_member_photo_grimlins_ajax_search_young')) {
 
                 $full_name = trim(sprintf('%s %s', (string) ($row->first_name ?? ''), (string) ($row->last_name ?? '')));
                 if ($full_name === '') {
-                    $full_name = sprintf(__('Jeune #%d', 'mj-member'), (int) $row->id);
+                    $full_name = sprintf(__('Membre #%d', 'mj-member'), (int) $row->id);
                 }
 
                 $initials = strtoupper(substr((string) ($row->first_name ?? ''), 0, 1));

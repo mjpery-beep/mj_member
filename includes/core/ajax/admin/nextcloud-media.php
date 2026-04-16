@@ -222,86 +222,253 @@ function mj_nc_build_remote_file_url(string $filePath): string
 }
 
 /**
+ * Build candidate URLs for remote file requests (public URL, then optional internal fallback).
+ *
+ * @return array<int,string>
+ */
+function mj_nc_build_remote_file_candidate_urls(string $filePath): array
+{
+    $primaryUrl = mj_nc_build_remote_file_url($filePath);
+    $urls = [$primaryUrl];
+
+    $fallbackBase = '';
+    if (defined('MJ_MEMBER_NEXTCLOUD_INTERNAL_URL')) {
+        $fallbackBase = (string) constant('MJ_MEMBER_NEXTCLOUD_INTERNAL_URL');
+    }
+
+    $publicBase = rtrim(Config::nextcloudUrl(), '/');
+    if (function_exists('apply_filters')) {
+        $fallbackBase = (string) apply_filters('mj_member_nextcloud_internal_url', $fallbackBase, $publicBase);
+    }
+
+    $fallbackBase = rtrim(esc_url_raw(trim((string) $fallbackBase)), '/');
+    if ($fallbackBase !== '' && $fallbackBase !== $publicBase && strpos($primaryUrl, $publicBase) === 0) {
+        $suffix = substr($primaryUrl, strlen($publicBase));
+        $urls[] = $fallbackBase . $suffix;
+    }
+
+    return array_values(array_unique(array_filter($urls, static function ($candidate) {
+        return is_string($candidate) && $candidate !== '';
+    })));
+}
+
+/**
+ * Detect DNS resolution failures where fallback URL should be attempted.
+ */
+function mj_nc_is_dns_resolution_error(WP_Error $error): bool
+{
+    $message = strtolower((string) $error->get_error_message());
+
+    return strpos($message, 'curl error 6') !== false
+        || strpos($message, 'could not resolve host') !== false
+        || strpos($message, 'getaddrinfo') !== false;
+}
+
+/**
+ * Allow forcing Streams transport for Nextcloud HTTP calls.
+ */
+function mj_nc_should_force_streams_transport(): bool
+{
+    $force = false;
+    if (defined('MJ_MEMBER_NEXTCLOUD_FORCE_STREAMS')) {
+        $force = (bool) constant('MJ_MEMBER_NEXTCLOUD_FORCE_STREAMS');
+    }
+
+    if (function_exists('apply_filters')) {
+        $force = (bool) apply_filters('mj_member_nextcloud_force_streams', $force);
+    }
+
+    return $force;
+}
+
+/**
+ * Execute an HTTP request and retry with Streams transport if cURL DNS resolution fails.
+ *
+ * @return array|WP_Error
+ */
+function mj_nc_http_request_with_transport_fallback(string $method, string $url, array $args = [])
+{
+    $requestArgs = array_merge($args, ['method' => strtoupper($method)]);
+    if (mj_nc_should_force_streams_transport()) {
+        $preferStreams = static function ($transports) {
+            if (!is_array($transports) || $transports === []) {
+                return $transports;
+            }
+
+            $ordered = [];
+            if (in_array('streams', $transports, true)) {
+                $ordered[] = 'streams';
+            }
+
+            foreach ($transports as $transport) {
+                if (!in_array($transport, $ordered, true)) {
+                    $ordered[] = $transport;
+                }
+            }
+
+            return $ordered;
+        };
+
+        add_filter('http_api_transports', $preferStreams, 999);
+        try {
+            $streamResponse = wp_remote_request($url, $requestArgs);
+        } finally {
+            remove_filter('http_api_transports', $preferStreams, 999);
+        }
+
+        if (!is_wp_error($streamResponse)) {
+            return $streamResponse;
+        }
+    }
+
+    $response = wp_remote_request($url, $requestArgs);
+
+    if (!is_wp_error($response) || !mj_nc_is_dns_resolution_error($response)) {
+        return $response;
+    }
+
+    $preferStreams = static function ($transports) {
+        if (!is_array($transports) || $transports === []) {
+            return $transports;
+        }
+
+        $ordered = [];
+        if (in_array('streams', $transports, true)) {
+            $ordered[] = 'streams';
+        }
+
+        foreach ($transports as $transport) {
+            if (!in_array($transport, $ordered, true)) {
+                $ordered[] = $transport;
+            }
+        }
+
+        return $ordered;
+    };
+
+    add_filter('http_api_transports', $preferStreams, 999);
+    try {
+        return wp_remote_request($url, $requestArgs);
+    } finally {
+        remove_filter('http_api_transports', $preferStreams, 999);
+    }
+}
+
+/**
  * Download a Nextcloud file to a temporary file.
  *
  * @return array{tempFile:string,mimeType:string,httpCode:int}|WP_Error
  */
 function mj_nc_fetch_remote_file_to_temp(string $filePath)
 {
-    $url = mj_nc_build_remote_file_url($filePath);
-    $tempFile = wp_tempnam($filePath !== '' ? basename($filePath) : 'mj-nextcloud-download');
-    if (!$tempFile) {
-        return new WP_Error('mj_nc_temp_failed', __('Impossible de créer un fichier temporaire.', 'mj-member'));
+    $cached = mj_nc_try_get_cached_remote_file($filePath);
+    if (is_wp_error($cached)) {
+        return $cached;
+    }
+    if (is_array($cached)) {
+        return $cached;
     }
 
-    $response = wp_remote_get($url, [
-        'headers' => [
-            'Authorization' => 'Basic ' . base64_encode(Config::nextcloudUser() . ':' . Config::nextcloudPassword()),
-        ],
-        'timeout'    => 60,
-        'stream'     => true,
-        'filename'   => $tempFile,
-        'decompress' => false,
-    ]);
+    $candidateUrls = mj_nc_build_remote_file_candidate_urls($filePath);
+    $lastError = null;
 
-    if (is_wp_error($response)) {
-        if (file_exists($tempFile)) {
-            @unlink($tempFile);
+    foreach ($candidateUrls as $url) {
+        $tempFile = wp_tempnam($filePath !== '' ? basename($filePath) : 'mj-nextcloud-download');
+        if (!$tempFile) {
+            return new WP_Error('mj_nc_temp_failed', __('Impossible de créer un fichier temporaire.', 'mj-member'));
         }
 
-        mj_nc_debug_log('Remote request failed', [
-            'path' => $filePath,
-            'url' => $url,
-            'error' => $response->get_error_message(),
+        $response = mj_nc_http_request_with_transport_fallback('GET', $url, [
+            'headers' => [
+                'Authorization' => 'Basic ' . base64_encode(Config::nextcloudUser() . ':' . Config::nextcloudPassword()),
+            ],
+            'timeout'    => 60,
+            'stream'     => true,
+            'filename'   => $tempFile,
+            'decompress' => false,
         ]);
 
-        return $response;
-    }
+        if (is_wp_error($response)) {
+            if (file_exists($tempFile)) {
+                @unlink($tempFile);
+            }
 
-    $code = wp_remote_retrieve_response_code($response);
-    if ($code >= 400) {
-        if (file_exists($tempFile)) {
-            @unlink($tempFile);
+            mj_nc_debug_log('Remote request failed', [
+                'path' => $filePath,
+                'url' => $url,
+                'error' => $response->get_error_message(),
+            ]);
+
+            $lastError = $response;
+            if (!mj_nc_is_dns_resolution_error($response)) {
+                return $response;
+            }
+
+            continue;
         }
 
-        mj_nc_debug_log('Remote request returned HTTP error', [
-            'path' => $filePath,
-            'url' => $url,
-            'httpCode' => $code,
-            'location' => (string) wp_remote_retrieve_header($response, 'location'),
-        ]);
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code >= 400) {
+            if (file_exists($tempFile)) {
+                @unlink($tempFile);
+            }
 
-        return new WP_Error('mj_nc_remote_http', sprintf(__('Fichier introuvable (HTTP %d).', 'mj-member'), $code), ['status' => $code]);
-    }
+            mj_nc_debug_log('Remote request returned HTTP error', [
+                'path' => $filePath,
+                'url' => $url,
+                'httpCode' => $code,
+                'location' => (string) wp_remote_retrieve_header($response, 'location'),
+            ]);
 
-    $mimeTypeHeader = (string) wp_remote_retrieve_header($response, 'content-type');
-    $mimeTypeParts  = explode(';', $mimeTypeHeader);
-    $mimeType       = trim($mimeTypeParts[0] ?? '');
-    if ($mimeType === '') {
-        $mimeType = 'application/octet-stream';
-    }
-
-    $fileSize = file_exists($tempFile) ? filesize($tempFile) : false;
-    if ($fileSize === false || (int) $fileSize <= 0) {
-        if (file_exists($tempFile)) {
-            @unlink($tempFile);
+            return new WP_Error('mj_nc_remote_http', sprintf(__('Fichier introuvable (HTTP %d).', 'mj-member'), $code), ['status' => $code]);
         }
 
-        mj_nc_debug_log('Downloaded file is empty', [
-            'path' => $filePath,
-            'url' => $url,
-            'httpCode' => $code,
+        $mimeTypeHeader = (string) wp_remote_retrieve_header($response, 'content-type');
+        $mimeTypeParts  = explode(';', $mimeTypeHeader);
+        $mimeType       = trim($mimeTypeParts[0] ?? '');
+        if ($mimeType === '') {
+            $mimeType = 'application/octet-stream';
+        }
+
+        $fileSize = file_exists($tempFile) ? filesize($tempFile) : false;
+        if ($fileSize === false || (int) $fileSize <= 0) {
+            if (file_exists($tempFile)) {
+                @unlink($tempFile);
+            }
+
+            mj_nc_debug_log('Downloaded file is empty', [
+                'path' => $filePath,
+                'url' => $url,
+                'httpCode' => $code,
+                'mimeType' => $mimeType,
+            ]);
+
+            $lastError = new WP_Error('mj_nc_empty_remote', __('Réponse vide reçue depuis Nextcloud.', 'mj-member'), ['status' => 502]);
+            continue;
+        }
+
+        mj_nc_store_remote_file_cache($filePath, $tempFile, $mimeType);
+
+        return [
+            'tempFile' => $tempFile,
             'mimeType' => $mimeType,
-        ]);
-
-        return new WP_Error('mj_nc_empty_remote', __('Réponse vide reçue depuis Nextcloud.', 'mj-member'), ['status' => 502]);
+            'httpCode' => $code,
+        ];
     }
 
-    return [
-        'tempFile' => $tempFile,
-        'mimeType' => $mimeType,
-        'httpCode' => $code,
-    ];
+    if ($lastError instanceof WP_Error) {
+        if (mj_nc_is_dns_resolution_error($lastError)) {
+            return new WP_Error(
+                'mj_nc_dns_unreachable',
+                __('Le serveur Nextcloud est temporairement indisponible (résolution DNS). Réessayez dans quelques instants.', 'mj-member'),
+                ['status' => 503]
+            );
+        }
+
+        return $lastError;
+    }
+
+    return new WP_Error('mj_nc_remote_unreachable', __('Impossible de joindre Nextcloud.', 'mj-member'), ['status' => 502]);
 }
 
 /**
@@ -327,6 +494,169 @@ function mj_nc_get_thumbnail_cache_dir()
         'dir' => $dir,
         'url' => $url,
     ];
+}
+
+/**
+ * Return the directory used to cache full-size Nextcloud image files.
+ *
+ * @return string|WP_Error
+ */
+function mj_nc_get_file_cache_dir()
+{
+    $uploads = wp_upload_dir();
+    if (!empty($uploads['error'])) {
+        return new WP_Error('mj_nc_uploads_unavailable', (string) $uploads['error']);
+    }
+
+    $dir = trailingslashit($uploads['basedir']) . 'mj-member/nextcloud-file-cache';
+    if (!wp_mkdir_p($dir)) {
+        return new WP_Error('mj_nc_file_cache_failed', __('Impossible de créer le cache de fichiers Nextcloud.', 'mj-member'));
+    }
+
+    return $dir;
+}
+
+/**
+ * Cache TTL in seconds for full-size image files.
+ */
+function mj_nc_get_file_cache_ttl(): int
+{
+    $ttl = 600;
+    if (defined('MJ_MEMBER_NEXTCLOUD_FILE_CACHE_TTL')) {
+        $ttl = (int) constant('MJ_MEMBER_NEXTCLOUD_FILE_CACHE_TTL');
+    }
+
+    if (function_exists('apply_filters')) {
+        $ttl = (int) apply_filters('mj_member_nextcloud_file_cache_ttl', $ttl);
+    }
+
+    return max(30, min(86400, $ttl));
+}
+
+/**
+ * Compute cache file path for a remote file path.
+ */
+function mj_nc_get_file_cache_path(string $filePath): string
+{
+    $safePath = mj_nc_sanitize_relative_path($filePath);
+    $ext = strtolower((string) pathinfo($safePath, PATHINFO_EXTENSION));
+    $ext = preg_replace('/[^a-z0-9]+/', '', $ext);
+    $suffix = $ext !== '' ? ('.' . $ext) : '.bin';
+
+    return md5($safePath) . $suffix;
+}
+
+/**
+ * Resolve MIME type from a local file path.
+ */
+function mj_nc_detect_local_mime_type(string $filePath): string
+{
+    $mimeType = '';
+    if (function_exists('wp_get_image_mime')) {
+        $mimeType = (string) wp_get_image_mime($filePath);
+    }
+
+    if ($mimeType === '' && function_exists('finfo_open')) {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo) {
+            $mimeType = (string) finfo_file($finfo, $filePath);
+            finfo_close($finfo);
+        }
+    }
+
+    return $mimeType !== '' ? $mimeType : 'application/octet-stream';
+}
+
+/**
+ * Try to hydrate a temp file from local cache.
+ *
+ * @return array{tempFile:string,mimeType:string,httpCode:int}|null|WP_Error
+ */
+function mj_nc_try_get_cached_remote_file(string $filePath)
+{
+    $cacheDir = mj_nc_get_file_cache_dir();
+    if (is_wp_error($cacheDir)) {
+        return $cacheDir;
+    }
+
+    $cacheFile = trailingslashit($cacheDir) . mj_nc_get_file_cache_path($filePath);
+    if (!file_exists($cacheFile) || filesize($cacheFile) <= 0) {
+        return null;
+    }
+
+    $ttl = mj_nc_get_file_cache_ttl();
+    $mtime = (int) @filemtime($cacheFile);
+    if ($mtime <= 0 || (time() - $mtime) > $ttl) {
+        @unlink($cacheFile);
+        return null;
+    }
+
+    $tempFile = wp_tempnam($filePath !== '' ? basename($filePath) : 'mj-nextcloud-download');
+    if (!$tempFile) {
+        return new WP_Error('mj_nc_temp_failed', __('Impossible de créer un fichier temporaire.', 'mj-member'));
+    }
+
+    if (!@copy($cacheFile, $tempFile) || !file_exists($tempFile) || filesize($tempFile) <= 0) {
+        @unlink($tempFile);
+        @unlink($cacheFile);
+        return null;
+    }
+
+    return [
+        'tempFile' => $tempFile,
+        'mimeType' => mj_nc_detect_local_mime_type($tempFile),
+        'httpCode' => 200,
+    ];
+}
+
+/**
+ * Persist downloaded image file to local cache.
+ */
+function mj_nc_store_remote_file_cache(string $filePath, string $tempFile, string $mimeType): void
+{
+    if (strpos($mimeType, 'image/') !== 0) {
+        return;
+    }
+
+    $cacheDir = mj_nc_get_file_cache_dir();
+    if (is_wp_error($cacheDir)) {
+        return;
+    }
+
+    if (!file_exists($tempFile) || filesize($tempFile) <= 0) {
+        return;
+    }
+
+    $cacheFile = trailingslashit($cacheDir) . mj_nc_get_file_cache_path($filePath);
+    @copy($tempFile, $cacheFile);
+}
+
+/**
+ * Invalidate local cache entry for a remote file path.
+ */
+function mj_nc_invalidate_remote_file_cache(string $filePath): void
+{
+    $safePath = mj_nc_sanitize_relative_path($filePath);
+    if ($safePath === '') {
+        return;
+    }
+
+    $cacheDir = mj_nc_get_file_cache_dir();
+    if (is_wp_error($cacheDir)) {
+        return;
+    }
+
+    $hash = md5($safePath);
+    $matches = glob(trailingslashit($cacheDir) . $hash . '.*');
+    if (!is_array($matches)) {
+        return;
+    }
+
+    foreach ($matches as $cached) {
+        if (is_string($cached) && $cached !== '') {
+            @unlink($cached);
+        }
+    }
 }
 
 /**
@@ -519,6 +849,10 @@ function mj_regmgr_nc_upload()
         return;
     }
 
+    if (is_array($result) && !empty($result['path'])) {
+        mj_nc_invalidate_remote_file_cache((string) $result['path']);
+    }
+
     wp_send_json_success(['file' => $result]);
 }
 
@@ -609,6 +943,8 @@ function mj_regmgr_nc_delete()
         return;
     }
 
+    mj_nc_invalidate_remote_file_cache($filePath);
+
     wp_send_json_success(['deleted' => true]);
 }
 
@@ -647,6 +983,11 @@ function mj_regmgr_nc_rename()
     if (is_wp_error($result)) {
         wp_send_json_error(['message' => $result->get_error_message()], 500);
         return;
+    }
+
+    mj_nc_invalidate_remote_file_cache($filePath);
+    if (is_array($result) && !empty($result['path'])) {
+        mj_nc_invalidate_remote_file_cache((string) $result['path']);
     }
 
     wp_send_json_success(['file' => $result]);
@@ -688,6 +1029,11 @@ function mj_regmgr_nc_move()
     if (is_wp_error($result)) {
         wp_send_json_error(['message' => $result->get_error_message()], 500);
         return;
+    }
+
+    mj_nc_invalidate_remote_file_cache($filePath);
+    if (is_array($result) && !empty($result['path'])) {
+        mj_nc_invalidate_remote_file_cache((string) $result['path']);
     }
 
     wp_send_json_success(['file' => $result]);

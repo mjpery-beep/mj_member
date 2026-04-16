@@ -73,6 +73,10 @@
             var dropdown    = self.el.querySelector('[data-mj-header-dropdown="' + name + '"]');
             var headerLink  = dropdown ? dropdown.querySelector('.mj-header-dropdown__header-link') : null;
             var directHref  = headerLink ? headerLink.getAttribute('href') : '';
+            var isGuestAccountTrigger = name === 'account' && !self.config.isLoggedIn && !self.config.isPreview;
+            if (isGuestAccountTrigger && self.config.accountGuestRedirect) {
+                directHref = self.config.accountGuestRedirect;
+            }
             var isDirectLink = !!(directHref && directHref !== '#' && directHref !== '');
 
             // Touch : tap → dropdown, long press (500ms) → navigate
@@ -1400,6 +1404,7 @@
         var errorEl   = form.querySelector('.mj-header-login-form__error');
         var username  = form.querySelector('[name="log"]');
         var password  = form.querySelector('[name="pwd"]');
+        var remember  = form.querySelector('[name="rememberme"]');
 
         if (!username || !password) return;
 
@@ -1412,6 +1417,7 @@
         data.append('nonce',    this.config.loginNonce || '');
         data.append('username', username.value);
         data.append('password', password.value);
+        data.append('remember', (remember && remember.checked) ? '1' : '0');
 
         fetch(this.config.ajaxUrl, { method: 'POST', body: data, credentials: 'same-origin' })
             .then(function (r) { return r.json(); })

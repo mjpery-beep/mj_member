@@ -1169,6 +1169,11 @@ final class EventsController implements AjaxHandlerInterface {
 
         $username = isset($_POST['username']) ? sanitize_text_field($_POST['username']) : '';
         $password = isset($_POST['password']) ? $_POST['password'] : '';
+        $remember = true;
+
+        if (isset($_POST['remember'])) {
+            $remember = wp_validate_boolean(wp_unslash($_POST['remember']));
+        }
 
         if (empty($username) || empty($password)) {
             wp_send_json_error(
@@ -1181,7 +1186,7 @@ final class EventsController implements AjaxHandlerInterface {
         $user_data = array(
             'user_login'    => $username,
             'user_password' => $password,
-            'remember'      => true
+            'remember'      => $remember
         );
 
         $user = wp_signon($user_data, false);

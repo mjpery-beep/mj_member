@@ -230,7 +230,7 @@ if ($fullscreen) {
                     class="mj-photo-grimlins-tabs__search-btn"
                     data-photo-grimlins="open-young-search"
                 >
-                    <?php esc_html_e('Chercher un jeune +', 'mj-member'); ?>
+                    <?php esc_html_e('Chercher un membre +', 'mj-member'); ?>
                 </button>
             <?php endif; ?>
         </nav>
@@ -239,11 +239,11 @@ if ($fullscreen) {
             <div class="mj-photo-grimlins-young-search" data-photo-grimlins="young-search-modal" role="dialog" aria-modal="true" aria-labelledby="<?php echo esc_attr($component_id); ?>-young-search-title" hidden>
                 <div class="mj-photo-grimlins-young-search__content" role="document">
                     <header class="mj-photo-grimlins-young-search__header">
-                        <h3 id="<?php echo esc_attr($component_id); ?>-young-search-title" class="mj-photo-grimlins-young-search__title"><?php esc_html_e('Chercher un jeune', 'mj-member'); ?></h3>
+                        <h3 id="<?php echo esc_attr($component_id); ?>-young-search-title" class="mj-photo-grimlins-young-search__title"><?php esc_html_e('Chercher un membre', 'mj-member'); ?></h3>
                         <button type="button" class="mj-photo-grimlins-young-search__close" data-photo-grimlins="close-young-search" aria-label="<?php esc_attr_e('Fermer', 'mj-member'); ?>">&times;</button>
                     </header>
                     <form class="mj-photo-grimlins-young-search__form" data-photo-grimlins="young-search-form">
-                        <input type="search" data-photo-grimlins="young-search-input" placeholder="<?php esc_attr_e('Nom, prénom ou email du jeune', 'mj-member'); ?>" autocomplete="off" />
+                        <input type="search" data-photo-grimlins="young-search-input" placeholder="<?php esc_attr_e('Nom, prénom ou email (jeune, animateur, coordinateur)', 'mj-member'); ?>" autocomplete="off" />
                         <button type="submit" data-photo-grimlins="young-search-submit"><?php esc_html_e('Rechercher', 'mj-member'); ?></button>
                     </form>
                     <p class="mj-photo-grimlins-young-search__status" data-photo-grimlins="young-search-status" aria-live="polite"></p>
